@@ -10,7 +10,9 @@ Notable in‑progress plans:
 
 - `docs/inProgress/managed-test-data-lifecycle-generic-spec.md` – Managed
   Dataset design specification and implementation proposal.
-- `docs/inProgress/managed-datasets-team-design-overview.md` – plain-language
+- `docs/inProgress/managed-datasets-team-overview-plain-language.md` – short,
+  novice-friendly introduction to the Managed Dataset design.
+- `docs/inProgress/managed-datasets-team-design-overview.md` – detailed team
   design guide and decision summary.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` – concise spec for
   PocketHive-owned runtime debug MCP tools and HiveGate-governed cleanup.

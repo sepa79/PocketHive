@@ -12,61 +12,58 @@ Team introduction:
 This is the normative design specification. It defines what must be built; it
 is not evidence that the current implementation supports the capability.
 
-## 1. Purpose
+## How to use this document
+
+Read sections 1–6 to understand the model and component boundaries. Sections
+7–16 define runtime behavior and operational rules. Sections 17–20 define how
+the feature is delivered, accepted and tested.
+
+The examples illustrate the rules; they are not separate contracts.
+Implementation begins by turning these rules into one canonical executable
+schema and API contract.
+
+## 1. Goal
 
 PocketHive needs durable test data that can be created or obtained by one swarm
 and safely reused by other swarms over long-running simulations.
 
-The MVP must provide:
-
-- standalone, versioned Dataset packages;
-- SUT-scoped authority and access boundaries;
-- durable records, material generations, revisions and supply operations;
-- continuous provision, refresh, validation, replacement and retirement;
-- explicit scenario-to-Dataset bindings without cross-scenario awareness;
-- worker-local selection with no central lookup on the measured request path;
-- deterministic HTTP and TCP source-result classification;
-- PostgreSQL managed-record storage;
-- an explicit, separately qualified Redis adapter extension;
-- real MCP and operator UI authoring/status functions with no fixture fallback;
-- restart-safe, observable and testable lifecycle behavior.
+In one sentence: **a producer swarm creates or maintains records, PocketHive
+stores them durably, and consumer swarms use safe local snapshots without
+becoming aware of one another.**
 
 The terms **must**, **shall**, and **required** are normative. **Should** records
 the preferred implementation where an equivalent design still satisfies the
 acceptance criteria.
 
-## 2. Scope and decisions
+## 2. Delivery boundary
 
 ### 2.1 MVP
 
-The core MVP includes:
-
-- the MANAGED_RECORDS_V1 capability profile using PostgreSQL;
-- reusable SHARED records;
-- package-local Dataset Contracts;
-- explicit Dataset Space registration and scenario binding;
-- source operations for provision, refresh, validate, replace and deprovision;
-- background snapshot hydration and worker-local selection;
-- the DATASET_SUPPLY, DATASET_UPSERT and MANAGED_DATASET worker capabilities;
-- DATASET_UPSERT as the preferred producer output;
-- an opt-in managed-dataset publisher interceptor for workers that must retain
-  another primary output;
-- source-result routing to completed, failed or reconciliation outcomes;
-- authorised package authoring and runtime inspection through product APIs,
-  MCP and UI;
-- Docker deployment using existing PocketHive application containers.
+| Area | MVP decision |
+|---|---|
+| Storage | PostgreSQL through MANAGED_RECORDS_V1 |
+| Allocation | Reusable SHARED records |
+| Definition | Standalone packages with package-local Dataset Contracts |
+| Binding | Explicit Dataset Space registration and per-scenario binding |
+| Lifecycle | Provision, refresh, validate, replace, retire and deprovision |
+| Producer | DATASET_SUPPLY input and preferred DATASET_UPSERT output |
+| Multi-output | Explicit, opt-in shared publisher interceptor |
+| Results | Deterministic completed, failed and reconciliation routing for HTTP and TCP |
+| Consumer | MANAGED_DATASET background hydration and worker-local selection |
+| Operations | Real product APIs, MCP and UI; no fixture fallback |
+| Deployment | Existing PocketHive containers only |
 
 ### 2.2 Deferred
 
-The following are explicit extensions, not implicit MVP behavior:
-
-- REDIS_COLLECTION_V1;
-- exclusive leases, single-use/consumable records and stateful transitions;
-- high-availability or backup-restore claims;
-- multi-region operation;
-- regulated-data profiles and specialised cryptography;
-- autonomous agent mutation of runtime Dataset state;
-- a dedicated Dataset service/container.
+| Deferred profile or capability | MVP behavior |
+|---|---|
+| REDIS_COLLECTION_V1 | Reject until separately implemented and qualified |
+| Exclusive leases or consumable records | Reject unsupported allocation |
+| Stateful record transitions | Reject unsupported operation |
+| Backup restore, high availability or multi-region | Make no support claim |
+| Regulated-data or specialised-cryptography profile | Reject admission |
+| Agent mutation of runtime record state | Deny |
+| Dedicated Dataset service/container | Not introduced |
 
 Selecting an unavailable profile or capability must fail admission. PocketHive
 must not substitute another adapter, allocation mode or transport.
@@ -84,6 +81,21 @@ This design does not:
 - promise exactly-once external side effects when the provider cannot support
   idempotency or reconciliation;
 - claim universal throughput, resilience, security or regulatory compliance.
+
+### 2.4 Short glossary
+
+| Term | Meaning |
+|---|---|
+| Dataset package | Versioned blueprint for one kind of Dataset: a folder published as one unit, containing definitions but no live records or runtime |
+| Dataset Space | SUT-scoped security, ownership and quota boundary |
+| Registration | Deployment link from one package version to one Space and storage adapter |
+| Managed Dataset | Live records and lifecycle state maintained from a registered package |
+| Requirement | What one scenario needs, without choosing a concrete Dataset |
+| Scenario Binding | Explicit selection that satisfies a scenario requirement |
+| Record | Stable logical test entity |
+| Material generation | Immutable refreshable values for a record |
+| Dataset revision | Immutable view of eligible membership at one point |
+| Fitness Contract | Rules that decide whether a Dataset is safe for one declared use |
 
 ## 3. Architectural alignment
 
@@ -143,8 +155,17 @@ Lifecycle: DRAFT -> ACTIVE -> RETIRED.
 
 ### 4.2 Dataset package
 
-A Dataset package is the portable, versioned definition of exactly one
-Dataset. Its source layout is:
+A Dataset package is the portable, versioned blueprint for exactly one kind of
+Dataset. It is a folder of related definition files that Scenario Manager
+validates and publishes as one unit. It is comparable to a scenario bundle,
+but defines reusable data rather than a swarm.
+
+It is not an application, Docker container, database, archive format or
+collection of live records. Publishing a package makes its definition
+available for registration; producer swarms create records only after a
+registration and binding have been admitted.
+
+Its source layout is:
 
 ~~~text
 scenarios/managed-datasets/<datasetPackageId>/
@@ -265,7 +286,7 @@ table partitions, Redis keys, physical shards or wildcards.
 
 ### 4.6 Scenario requirement and binding
 
-A scenario declares only its own requirements:
+A scenario that needs Managed Dataset data declares only its own requirements:
 
 ~~~text
 scenarios/bundles/<scenarioId>/
@@ -278,7 +299,6 @@ scenarios/bundles/<scenarioId>/
 schemaVersion: pockethive.dataset-requirements/v1
 requirements:
   - requirementId: reusableRecords
-    required: true
     requiredFields:
       - accountId
       - cardId
@@ -293,6 +313,16 @@ requirements:
     trustedTimePolicyRef: qualified-host-time@1
     bindingSlotsRef: reusable-records-http-slots@1
 ~~~
+
+The companion file is optional at bundle level. Its rules are:
+
+- absent means the scenario has zero Managed Dataset dependencies, creates no
+  ResolvedDatasetBinding and uses the existing scenario admission/runtime path;
+- present means requirements contains at least one item;
+- every declared MVP requirement is mandatory and must have exactly one valid
+  Scenario Binding mapping;
+- required is not a supported per-item field; optional requirements are
+  deferred until they have an explicit use case and runtime contract.
 
 The requirement contains no concrete Dataset, storage identifier, other
 scenario, swarm or consumer identity. scenario.yaml.requires.datasets is not a
@@ -677,9 +707,9 @@ A required binding is ready only when:
 - trusted time is within policy;
 - no storage, source, quota or security blocker invalidates use.
 
-Scenario start fails closed when a required Dataset is not ready. Runtime
+Scenario start fails closed when a declared Dataset is not ready. Runtime
 depletion pauses or throttles only the dependent input before unsafe data can
-be selected. Optional Dataset absence is explicit and cannot satisfy a required
+be selected. A scenario with no requirements file has no Dataset readiness
 gate.
 
 ## 12. Durability and recovery
@@ -868,9 +898,11 @@ The MVP is releasable only when all of the following have linked evidence.
 
 - Packages under scenarios/managed-datasets validate, publish and remain
   immutable by version/digest.
-- A scenario-local datasets/requirements.yaml maps explicitly through one
-  Scenario Binding; no consumer auto-discovery or cross-scenario configuration
-  exists.
+- A scenario without datasets/requirements.yaml runs without Dataset binding
+  or readiness behavior.
+- When datasets/requirements.yaml exists, it is non-empty and every declaration
+  maps exactly once through a Scenario Binding; no per-item optional flag,
+  consumer auto-discovery or cross-scenario configuration exists.
 - Package-local contracts validate required fields without affecting another
   Dataset.
 - Adapter, settings and capability profile are explicit at registration.
@@ -953,31 +985,7 @@ or self-referential evidence is not a pass.
 | MCP/UI becomes another authority | same product services, least privilege, redacted read models and no raw store access |
 | Scope grows into a new platform | core reusable PostgreSQL MVP; named deferred profiles |
 
-## 21. Decision summary
-
-The implementation direction is:
-
-- standalone Dataset packages under scenarios/managed-datasets/;
-- scenario-local requirements under each bundle's datasets/ directory;
-- explicit per-scenario bindings, never automatic consumer discovery;
-- package-local immutable Dataset Contracts;
-- shared SUT-scoped Dataset Spaces and deployment registrations;
-- an Orchestrator-hosted, hexagonally bounded Dataset module;
-- PostgreSQL MANAGED_RECORDS_V1 as the explicit core profile;
-- Redis as an explicit, separately qualified adapter profile;
-- source swarms for SUT-aware creation and lifecycle work;
-- DATASET_UPSERT preferred, shared interceptor optional;
-- deterministic HTTP/TCP result policies with completed, failed and
-  reconciliation routes;
-- background hydration and worker-local request-path access;
-- existing ph.control lifecycle plus controller-owned WorkItem supply;
-- real product-backed MCP/UI authoring and inspection;
-- evidence-gated capacity, recovery and security claims.
-
-The design is ready for team review. Runtime support may be claimed only after
-the contracts are implemented and section 18 passes.
-
-## 22. References
+## 21. References
 
 - [PocketHive architecture](../ARCHITECTURE.md)
 - [SUT + Dataset + Simulation Model](../architecture/sut-dataset-simulation-model.md)
@@ -985,4 +993,5 @@ the contracts are implemented and section 18 passes.
 - [Scenario variables](../scenarios/SCENARIO_VARIABLES.md)
 - [Correlation and idempotency](../correlation-vs-idempotency.md)
 - [Control-plane testing](../ci/control-plane-testing.md)
+- [Managed Datasets, explained](managed-datasets-team-overview-plain-language.md)
 - [Managed Datasets team design overview](managed-datasets-team-design-overview.md)
