@@ -6,7 +6,9 @@ This directory contains only work that is actively being implemented or is waiti
 
 - `docs/inProgress/managed-test-data-lifecycle-generic-spec.md` – Managed
   Dataset design specification and implementation proposal.
-- `docs/inProgress/managed-datasets-team-design-overview.md` – plain-language
+- `docs/inProgress/managed-datasets-team-overview-plain-language.md` – short,
+  novice-friendly introduction to the Managed Dataset design.
+- `docs/inProgress/managed-datasets-team-design-overview.md` – detailed team
   design guide and decision summary.
 - `docs/inProgress/processor-iso8583-v1-v2-plan.md` — active ISO8583 processor delivery and remaining V2 work.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` — implementation exists; production HiveGate registration remains.
