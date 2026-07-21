@@ -5,7 +5,7 @@ Status: in progress — `G-DESIGN-READY-v1` passed;
 
 Decision target: PocketHive architecture and MVP implementation
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 Assurance document:
 `docs/inProgress/managed-test-data-assurance-strategy.md`
@@ -13,8 +13,8 @@ Assurance document:
 Operator UI design document:
 `docs/inProgress/managed-datasets-operator-ui-design-spec.md`
 
-Team decision brief:
-`docs/inProgress/managed-test-data-team-review-brief.md`
+Team design overview:
+`docs/inProgress/managed-datasets-team-design-overview.md`
 
 This document specifies the target design and the conditions under which a
 PocketHive release may claim the capability. It is not evidence that the
@@ -90,6 +90,10 @@ planning.** Implement Managed Dataset as a bounded module inside
 extension points. Add no PocketHive application container. Runtime release
 remains conditional on the implementation and qualification gates in sections
 27 and 28.
+
+This is the sole approved process co-location exception. It does not authorise
+SUT/source execution, measured-path access, another manager-hosted data-plane
+workload or reuse of the exception by another feature.
 
 Approval conditions:
 
@@ -295,14 +299,10 @@ The existing proposal already establishes these decisions:
 - a Scenario Binding produces an immutable runtime snapshot;
 - PostgreSQL is the source of truth for metadata and version history.
 
-The existing proposal must be amended in one area: a binding snapshot shall
-contain a stable logical runtime reference, not a physical Redis list name or a
-specific material generation. This is a proposed architecture change, not an
-implicit override. Before implementation, the decision and migration semantics
-must be approved and folded into the canonical document and schemas named in
-section 26.1. Until that happens, the canonical document wins and Managed
-Dataset implementation is blocked; no component may choose between the two
-interpretations locally.
+The canonical model now establishes that a binding snapshot contains a stable
+logical Dataset reference, never a physical Redis list name or specific
+material generation. This specification elaborates that decision; it does not
+introduce an alternate reference model or compatibility path.
 
 Each scenario bundle declares only its own logical Dataset requirements in the
 reserved `datasets/requirements.yaml` file. It never lists another scenario,
@@ -322,6 +322,8 @@ must not contain a copied Dataset definition.
 
 The resolved snapshot freezes:
 
+- explicit `sutSourceMode` and the exact immutable SUT identity resolved from
+  the global or embedded definition;
 - Dataset Space identity;
 - Dataset Space policy version and Dataset registration identity/version;
 - Dataset package identity/version/digest and package-local contract ID/digest;
@@ -382,7 +384,9 @@ package or its registration.
 ```yaml
 schemaVersion: pockethive.dataset-space/v1
 datasetSpaceId: performance-test
-sutEnvironmentId: example-environment
+version: 2
+displayName: Performance test data
+sutEnvironmentRef: example-environment
 accessPolicyRef: performance-test-datasets-access@1
 classificationCeiling: INTERNAL
 quotaPolicyRef: performance-test-datasets-quota@1
@@ -424,6 +428,14 @@ forbidden. Paths are normalized, must remain inside the package, and are
 content-digested at validation. Secrets, live records, backend credentials and
 runtime state are forbidden in the package.
 
+The closed authoring DTOs are defined by
+[`docs/spec/managed-dataset-authoring.schema.json`](../spec/managed-dataset-authoring.schema.json).
+The official routes, permissions, ETag/idempotency behavior, normalized ZIP
+format, size/path rules and canonical package digest algorithm are defined by
+[`docs/contracts/managed-dataset-authoring-api.md`](../contracts/managed-dataset-authoring-api.md).
+Those files are the design SSOT; YAML below is illustrative and generated
+language types must not redefine it.
+
 The package lifecycle is `DRAFT -> PUBLISHED -> RETIRED`. PocketHive MCP may
 validate and upload a package to Scenario Manager, and the Dataset UI may
 create or edit a draft. Publishing is a separate authorised operation that
@@ -452,6 +464,10 @@ requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
 supportedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
 sourceBindingPaths:
   - sources/csv-catalog.yaml
+mappingPaths: []
+projectionPaths: []
+policyPaths: []
+assetPaths: []
 ```
 
 The package does not contain `datasetSpaceId`, deployment alias, backend
@@ -470,7 +486,10 @@ capability profile:
 schemaVersion: pockethive.dataset-registration/v1
 registrationId: performance-test-reusable-records
 datasetSpaceId: performance-test
-datasetPackageRef: reusable-records@1
+datasetSpaceVersion: 2
+datasetPackageId: reusable-records
+datasetPackageVersion: 1
+datasetPackageDigest: sha256:4c91d9e2c0a7a8f8b1418398dd2de18290965d06e1a21e70eeaf7dcff14b82ad
 datasetAlias: reusable-records
 storage:
   adapter: POSTGRESQL
@@ -492,6 +511,14 @@ bindings but preserves frozen bindings, records and evidence. An active or
 retired registration is never hard-deleted or overwritten; editing creates the
 next explicit version after optimistic concurrency, authorisation, Space,
 package, adapter and dependency checks.
+
+Replacement is one database transaction guarded by uniqueness of the current
+active `(datasetSpaceId, datasetAlias)`: validate the exact current ETag and all
+new references, create the complete next version, retire the prior current
+version, activate the next version, and append audit/outbox intent atomically.
+Failure changes neither version. Frozen bindings keep their exact prior
+registration and Space versions. The canonical transaction and failure
+contract is owned by `docs/contracts/managed-dataset-authoring-api.md`.
 
 ### 6.2 Dataset definition
 
@@ -780,7 +807,14 @@ in the background. The Orchestrator does not proxy a Dataset call for each
 measured transaction; measured selection and materialisation remain local.
 
 A Simulation Program may compose source producers, traffic, stress, and
-post-processing swarms against one Dataset Space.
+post-processing swarms against exactly one Dataset Space and therefore one SUT
+Environment. Every participating binding must explicitly use
+`sutSourceMode: global`; `scenario-local` bindings fail program admission. A
+standalone `scenario-local` binding may select a Dataset Space only when the
+embedded SUT definition's immutable identity exactly matches the Space's bound
+SUT identity.
+Missing or mismatched identity fails before container creation or runtime
+Dataset mutation.
 
 ### 7.3 Managed Dataset module
 
@@ -822,7 +856,9 @@ been recovered.
 
 Shared code is deliberately narrow:
 
-- `common/dataset-contracts` owns canonical Dataset IDs, package/local-contract,
+- `docs/spec/managed-dataset-authoring.schema.json` owns the design-time
+  authoring wire contract; generated or mechanically verified types in
+  `common/dataset-contracts` own its implementation representation plus Dataset IDs, package/local-contract,
   Dataset Space/registration lifecycle and storage-profile schemas,
   `DatasetContract/v1`,
   `DatasetConsumerRequirement/v1`, `ResolvedDatasetBinding/v1`, projection
@@ -3238,9 +3274,11 @@ An upsert includes source operation, stable external identities, mapping/schema
 version, lifecycle/validity fields, command idempotency key, stable business
 operation/item key, canonical intent digest, and the authorised Dataset
 reference. The shared Dataset upsert contract reports success only after
-PostgreSQL has committed the result and receipt, whether attached as the
-preferred `DATASET_UPSERT` output or the permitted
-`managedDatasetPublisher` interceptor. Its reconciliation invariant is:
+PostgreSQL has committed the result and receipt. For preferred
+`DATASET_UPSERT` that receipt is terminal. For `managedDatasetPublisher`, the
+initial Dataset receipt is a staged ineligible substate and success is reported
+only after primary-output acceptance plus idempotent finalisation. Its
+reconciliation invariant is:
 
 ```text
 received = inserted + updated + duplicate + rejected
@@ -3392,6 +3430,7 @@ config:
   interceptors:
     managedDatasetPublisher:
       enabled: true
+      completionPolicy: BOTH_REQUIRED_RECONCILED
       deliveryMode: IN_PROCESS_DIRECT
       expectedDatasetRef: "{{ vars.datasetRef }}"
       expectedSourceBindingId: "{{ vars.sourceBindingId }}"
@@ -3400,12 +3439,20 @@ config:
 
 The interceptor is an alternative attachment for the same typed
 `DatasetSourceCommitter` port and `DatasetUpsertConfig`; it is not a second
-implementation or a best-effort persistence mode. It runs after successful
-worker processing and before the primary `WorkOutput`. A missing durable receipt
-fails the invocation, so redelivery retries the stable idempotent operation and
-the primary output is not published. Payloads that are sensitive or required to
-terminate at the Dataset boundary must use `DATASET_UPSERT` and cannot select
-the interceptor form.
+implementation or a best-effort persistence mode. The only MVP completion
+policy is the explicit `BOTH_REQUIRED_RECONCILED`. The Worker SDK executes a
+small durable process-manager protocol: stage the idempotent Dataset commit,
+publish the primary output, then finalise the Dataset operation with the
+primary-output acceptance receipt. The staged record is not eligible and does
+not satisfy the primary supply target until finalisation commits. A missing
+Dataset receipt prevents primary publication. A primary-output failure leaves
+the same operation in `PRIMARY_OUTPUT_PENDING`, fails the invocation and is
+retried/reconciled with the same idempotency identity; it never reports Dataset
+completion. RabbitMQ/Redis publication remains at-least-once, so consumers must
+honour its existing idempotency contract. A worker whose primary output cannot
+tolerate that contract must use `DATASET_UPSERT` as its sole output instead.
+Payloads that are sensitive or required to terminate at the Dataset boundary
+must also use `DATASET_UPSERT` and cannot select the interceptor form.
 
 ### 14.3 Traffic input configuration
 
@@ -3939,13 +3986,34 @@ may explicitly enable `config.interceptors.managedDatasetPublisher`. The shared
 Worker SDK interceptor is available to every worker service and reuses the
 exact `DatasetSourceCommitter`, `DatasetUpsertConfig`, idempotency key and
 receipt contract used by `DATASET_UPSERT`. It always runs after the worker and
-before primary-output publication. Commit failure fails the invocation; there
-is no log-and-continue or implicit best-effort mode.
+uses the `BOTH_REQUIRED_RECONCILED` process manager described in section 14.2;
+there is no distributed-transaction claim, log-and-continue path or implicit
+best-effort mode.
 
-The interceptor block is optional, but `enabled` is required when the block is
-present and must be an explicit boolean. Missing or malformed discriminator or
-configuration fields fail scenario admission; runtime does not infer defaults
-or switch publication paths.
+The interceptor block is optional, but `enabled` and `completionPolicy` are
+required when the block is present. `enabled` must be an explicit boolean and
+the only MVP policy is `BOTH_REQUIRED_RECONCILED`. Missing or malformed
+discriminator or configuration fields fail scenario admission; runtime does
+not infer defaults or switch publication paths.
+
+The failure contract is closed:
+
+`PRIMARY_OUTPUT_PENDING` and `PRIMARY_OUTPUT_ACCEPTED_PENDING_FINALISE` are
+closed `DualOutputCoordinationState` substates while the owning source
+operation remains non-terminal `RUNNING` or `UNCERTAIN`; they are not additions
+to the canonical source-operation lifecycle enum.
+
+| Dataset stage | Primary output | Finalise | Durable result |
+|---|---|---|---|
+| fails | not attempted | not attempted | invocation fails; no output or eligible record |
+| succeeds/replays | fails or is unknown | not attempted | `PRIMARY_OUTPUT_PENDING`; record remains ineligible; same operation is reconciled |
+| succeeds/replays | accepted | fails or is unknown | `PRIMARY_OUTPUT_ACCEPTED_PENDING_FINALISE`; retry may republish at-least-once, then idempotently finalise |
+| succeeds/replays | accepted/replayed | succeeds/replays | `COMPLETED`; record may become eligible and primary supply may advance |
+
+The stable operation ID, Dataset idempotency key, primary-output message ID and
+attempt fence are persisted together. Reconciliation never creates a new
+Dataset operation or silently skips a required output. Metrics and the
+operation API expose both component receipts plus the aggregate state.
 
 The interceptor accepts only a schema-allowlisted, size-bounded, non-sensitive
 projection. It is forbidden when the source result must terminate at the
@@ -6114,7 +6182,13 @@ into `common`.
 
 ### 26.3 Scenario Manager
 
+- implement the official package/Space/registration authoring API from
+  `docs/contracts/managed-dataset-authoring-api.md` using generated types from
+  `docs/spec/managed-dataset-authoring.schema.json`;
 - implement DB-backed Dataset Space/definition/source-policy registry;
+- implement normalized atomic package import/export, canonical digest golden
+  vectors, ETag/idempotency handling, CSRF protection, immutable command audit,
+  dependency checks and atomic registration replacement;
 - declare and validate versioned logical partitions and pools, including an
   explicit `default` partition where no subdivision is required;
 - add schema and permissions;
@@ -6199,9 +6273,11 @@ recovery.
   not an alias of `RabbitMessageWorkerAdapter`;
 - require `DATASET_UPSERT` to wait for a durable source receipt and prevent
   sensitive results from falling through to generic Rabbit/debug outputs;
-- require `managedDatasetPublisher` to run after successful worker processing
-  but before primary-output publication, fail the invocation on missing durable
-  receipt, and accept only an allowlisted bounded non-sensitive projection;
+- require `managedDatasetPublisher` to use the explicit
+  `BOTH_REQUIRED_RECONCILED` staged-Dataset/primary-output/finalise process
+  manager and failure matrix in sections 14.2 and 15.2, retain the same
+  operation/idempotency identity across reconciliation, and accept only an
+  allowlisted bounded non-sensitive projection;
 - extend capability catalogue composition and Scenario Manager validation with
   one selected shared interceptor manifest rather than copying the interceptor
   fields into every worker image manifest;
@@ -6377,6 +6453,10 @@ model-check result cannot satisfy a release criterion.
 
 ### 26.12 Production operator UI
 
+- implement the Scenario Manager-backed package, Space and registration
+  list/add/edit/review/export/delete-draft/replace/retire journeys in active
+  `ui-v2`; all actions use real API data, returned permissions, exact ETags and
+  authoritative post-command re-reads;
 - add canonical Dataset inventory, detail, Fitness, operation, consumer, proof,
   capability and swarm-dependency read contracts to
   `common/dataset-contracts`;
@@ -6445,11 +6525,14 @@ problem. Its release scope is:
     creation requiring `dataset:proof:create`. Governed agent access is through
     HiveGate, with product-side cross-ingress authorisation/admission
     convergence;
-11. the read-only production `ui-v2` Managed Datasets inventory, all five
-    linkable detail views, and Swarm Inspector Dataset dependencies, backed only
-    by authorised canonical Orchestrator read models and satisfying the
-    linked UI design specification's `DSUI` requirements; no runtime sample
-    data, Dataset value browser, or lifecycle mutation control is included;
+11. the production `ui-v2` Scenario Manager-backed package, Space and
+    registration authoring inventories and lifecycle-safe list/add/edit/review/
+    export/delete-draft/publish/activate/replace/retire journeys, plus the
+    read-only runtime Managed Datasets inventory, all five linkable detail
+    views and Swarm Inspector Dataset dependencies. Every view is backed only by
+    authorised canonical product APIs and satisfies the linked UI design
+    specification's `DSUI` requirements; no runtime sample data, Dataset value
+    browser, record/business-state mutation or force-delete control is included;
 12. recovery of committed Dataset state, schedules, claims, outbox, module
     activations and worker projections across Orchestrator/worker restarts,
     including logical-slot trusted-time floors, external-entity/deletion ledgers
@@ -6512,6 +6595,23 @@ Milestones are integration checkpoints, not permission to weaken a profile:
    approved first-use-case record and `G-IMPLEMENTATION-READY-v1` in section
    3.1. Any earlier disposable prototype is a spike and supplies no M1
    evidence.
+
+   M1 is delivered in two ordered, independently demonstrable increments to
+   keep the first build small:
+
+   - **M1A authoring-to-shared-use:** canonical package/Space/registration
+     API/UI, PostgreSQL registration and record authority, one
+     `PROVISION_NEW` producer, one explicit `DATASET_UPSERT` path, one
+     `SHARED` immutable snapshot and two consumers through official ingress.
+     It excludes Redis enablement, interceptor dual output, refresh,
+     deprovision, proof creation, sensitive profile and capacity claims.
+   - **M1B recovery and evidence:** add outbox/restart/fence/time/auth faults,
+     refresh, `BOTH_REQUIRED_RECONCILED` interceptor qualification, MCP status/
+     proof and the full `G-M1-INTERNAL-v1` evidence set.
+
+   M1A is useful build feedback but does not pass `G-M1-INTERNAL-v1`; M1B must
+   pass the complete gate before promotion. The split changes delivery order,
+   not contracts or safety requirements.
 3. **M2 qualified core MVP** — `dataset-qualified-core` passes every applicable
    core MVP child assertion plus `Q-MVP-1K-24H`/`Q-KNEE`. This may release the
    reusable non-sensitive Dataset feature; `SENSITIVE_RESTRICTED` remains rejected.
@@ -6657,7 +6757,7 @@ binding; it cannot silently use the core child set.
 | `LIF-012` | MVP (every source with external effects) | Rolling/lifetime external-effect budgets survive restart/binding changes, count late/uncertain outcomes and trip closed. Pause/resume, circuit reset/override and decommission accept only the official, exactly scoped, separately authorised/idempotent command and durable receipt semantics in section 12.3.1; direct infrastructure mutation and denied/stale/conflicting commands change nothing. Reset preserves counters/unresolved effects/audit; decommission drains/tombstones workers and conclusively expires, deprovisions or hands off every external entity before `RETIRED` | official administrative ingress and auth oracle, provider ledger, command/budget/decommission history, worker acknowledgements, denial/idempotency/restart faults |
 | `LIF-013` | MVP | `ActivateSupplyPolicyVersion/v1` and database/controller invariants permit exactly one active stable Supply Policy/version/controller and at most one open fill cycle for each inventory-owning Dataset/partition/pool scope across replay, stale fence, concurrent activation, alias collision, takeover and restart; second identities/overlapping intervals fail closed and rollback requires a new version. Only the five section 12.3 operation kinds execute; display/lowercase/short aliases fail schema/admission, and reserved `REPLENISH` is never emitted or executed and returns `DATASET_OPERATION_KIND_UNSUPPORTED` | canonical command/schema/TCK, activation/fill-cycle rows and constraints, concurrent policy/controller fault model, official admission/activation/operation receipts |
 | `LIF-014` | MVP (every source with external effects) | `CancelSupplyOperation/v1` accepts only the exact authorised/idempotent operation/version/fence intent and never equates local stop with provider cancellation. Before-claim, concurrent-claim, after-provider-call, ambiguous/late-effect, restart, redelivery, stale-fence, duplicate/conflicting-key and denied-scope races serialize on the operation aggregate: new work is blocked after acceptance; only matching conclusive no-effect evidence commits `CANCELLED`; proven effects receive their normal typed accounting; ambiguity remains `UNCERTAIN`; pause/policy change/timeout/shutdown/decommission synthesize no intent. Cancelling deprovision does not advance cleanup | official administrative command/receipt and auth oracle, operation/claim/provider ledgers, deterministic race model and injected boundary faults |
-| `LIF-015` | MVP | Dataset packages follow only `DRAFT -> PUBLISHED -> RETIRED`; Dataset Spaces follow `DRAFT -> ACTIVE -> RETIRED`; registration versions follow `ACTIVE -> RETIRED` and explicitly bind exact package/Space versions, local contract, alias and storage tuple. UI/MCP/API list and mutate the same real Scenario Manager objects through the same commands. Only an exact unreferenced draft may be hard-deleted; editing published/active objects creates a new version and removal retires them without deleting frozen bindings, records or evidence. Published/active replacement in place, force deletion, implicit publish/activation, package-embedded deployment context, missing registration adapter/settings, copied definitions, cross-Dataset contracts, unsupported capabilities and path escape fail with zero runtime/storage mutation. Space policy changes never rewrite packages, retirement blocks new registrations, and referenced Spaces cannot be destructively removed | Scenario Manager API/MCP contract tests, release-bundle fixture scan, authorised list/empty/error UI flows, package/Space/registration version audit, adapter compatibility TCK, concurrency/dependency/retirement faults and filesystem escape suite |
+| `LIF-015` | MVP | Dataset packages follow only `DRAFT -> PUBLISHED -> RETIRED`; Dataset Spaces follow `DRAFT -> ACTIVE -> RETIRED`; registration versions follow `ACTIVE -> RETIRED` and explicitly bind exact package/Space versions, alias and storage tuple. Only a scenario-local binding selects one package-local contract. UI/API and the MCP operations deliberately exposed invoke the same Scenario Manager application commands and canonical DTOs; MCP does not require a second operation for every UI capability. Only an exact unreferenced draft may be hard-deleted; editing published/active objects creates a new version and removal retires them without deleting frozen bindings, records or evidence. Published/active replacement in place, force deletion, implicit publish/activation, package-embedded deployment context, missing registration adapter/settings, copied definitions, cross-Dataset contracts, unsupported capabilities and path escape fail with zero runtime/storage mutation. Space policy changes never rewrite packages, retirement blocks new registrations, and referenced Spaces cannot be destructively removed | Scenario Manager API/MCP contract tests, release-bundle fixture scan, authorised list/empty/error UI flows, package/Space/registration version audit, adapter compatibility TCK, concurrency/dependency/retirement faults and filesystem escape suite |
 
 ### 28.3 Durability/recovery
 
@@ -6702,7 +6802,7 @@ binding; it cannot silently use the core child set.
 | `SEC-005` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | `dataset-qualified-sensitive` enforces TLS, per-workload audience/binding-scoped token issuance/rotation, credential-epoch feed and revocation within 30 seconds (stale feed fails closed), owner-scoped private key rings, closed host data/admin ports, network separation, non-root/read-only/no-new-privileges containers, and disabled diagnostics without insecure fallback. The profile also proves raw Orchestrator Docker control is mediated/removed and the combined JVM TCB is accepted, or uses an extracted independently least-privileged Dataset process | deployment scanner, token/revocation/packet/config inspection, Docker-control denial test, fault injection |
 | `SEC-006` | MVP | Credentials and keys are absent from Git, image history, `docker inspect` environment/command, vars, configs, status, and ordinary logs; file ownership/permissions are restrictive | secret scanner and container/image inspection |
 | `SEC-007` | PROFILE `Q-SENSITIVE-ENTERPRISE-v1` | No sensitive material projection, source-step result, credential, or derived SUT authentication value can serialise to an intermediate/generic WorkItem; `COLOCATED_SEQUENCE` uses the direct committer and final authentication occurs only in processor memory; worker plaintext is bounded and cannot reach a persistent volume, unencrypted swap, hibernation, crash/heap/core dump, or unapproved hypervisor snapshot | serializer/property tests, source/traffic path capture, filesystem/host-memory-artifact policy inspection |
-| `SEC-008` | MVP (profile-split children) | Core registers exactly the five `dataset_package_*` operations in section 22.1 plus `dataset_status`, `dataset_source_operation_status`, and `dataset_prove`. Package writes require separate create/update/publish/retire permissions, exact revision/digest and idempotency; they call Scenario Manager and cannot mutate records or runtime business state. Runtime reads/proof remain bounded and value-free. Governed agents use HiveGate and all tools validate strict schemas and return only authorised metadata. For every Dataset-affecting command, MCP, UI and official API converge on the same product-side authorisation/admission decision; tool metadata grants no authority and every denial produces zero external or product-domain durable effects. The sensitive child additionally requires the frozen sender-constrained ingress and audience/certificate-bound least-privilege exchange with validated `sub`/`act` chain | HiveGate/PocketHive MCP/auth/Dataset contract security suite, package lifecycle/idempotency/concurrency faults, generic-tool/API bypass and zero-effect tests, independent authorization oracle and token/proof introspection as applicable |
+| `SEC-008` | MVP (profile-split children) | Core registers exactly the five `dataset_package_*` operations in section 22.1 plus `dataset_status`, `dataset_source_operation_status`, and `dataset_prove`. Package writes require separate create/update/publish/retire permissions, exact revision/digest and idempotency; they call Scenario Manager and cannot mutate records or runtime business state. Runtime reads/proof remain bounded and value-free. Governed agents use HiveGate and all tools validate strict schemas and return only authorised metadata. Every operation uses the same product-side authorisation/admission service across the ingresses that deliberately expose it; matching package commands converge across MCP/UI/API, while Space/registration authoring is UI/API-only in the MVP. Tool metadata grants no authority and every denial produces zero external or product-domain durable effects. The sensitive child additionally requires the frozen sender-constrained ingress and audience/certificate-bound least-privilege exchange with validated `sub`/`act` chain | HiveGate/PocketHive MCP/auth/Dataset contract security suite, package lifecycle/idempotency/concurrency faults, generic-tool/API bypass and zero-effect tests, independent authorization oracle and token/proof introspection as applicable |
 | `SEC-009` | MVP | Security/proof output makes no regulatory-compliance or out-of-scope claim and separately reports active-store deletion, backup expiry, and cryptographic erasure | schema/content assertions and security review |
 | `SEC-010` | CLAIM `Q-HA-RESTORE-v1` | A restored backup requiring retained historical KEK/DEK versions decrypts only authorised records, meets the deletion/retention record, and fails closed when key custody is incomplete | isolated destructive restore drill and key audit |
 | `SEC-011` | MVP | Source/SUT egress permits only the immutable approved endpoint/proxy path and blocks URL/DNS/IP/redirect/metadata/socket SSRF variants; oversized/deep/compressed/hostile provider content and unsupported request-slot contexts are rejected before staging/send | Network Proxy Manager capture, hostile provider suite, external sink |
@@ -7001,8 +7101,9 @@ The recommended direction for implementation review is:
   Policy per inventory scope, and fenced canonical `SupplyRouteLease` routing;
 - `DATASET_SUPPLY` input for demand and `DATASET_UPSERT` output for commits;
   `DATASET_UPSERT` is preferred, while the shared opt-in
-  `managedDatasetPublisher` interceptor provides the same fail-closed commit
-  contract only when a worker must retain another primary output;
+  `managedDatasetPublisher` interceptor uses the explicit
+  `BOTH_REQUIRED_RECONCILED` stage/publish/finalise contract only when a worker
+  must retain another primary output;
 - one shared `ResultRules` evaluator plus frozen exhaustive
   `SourceResultPolicy/v1` classifies HTTP/TCP source results before publication;
   only `COMPLETED` contributes to primary supply, conclusive failures may use a

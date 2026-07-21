@@ -17,6 +17,14 @@ Notable in‑progress plans:
 - `docs/inProgress/managed-test-data-assurance-strategy.md` – companion Rapid
   Software Testing strategy covering risk heuristics, independent oracles,
   charters, corner cases, debriefs, confidence grades, and release evidence.
+- `docs/inProgress/managed-datasets-team-design-overview.md` – single
+  plain-language design entry point and current design-gate summary.
+- `docs/inProgress/managed-datasets-operator-ui-design-spec.md` – normative
+  operator and authoring UX contract.
+- `docs/contracts/managed-dataset-authoring-api.md` and
+  `docs/spec/managed-dataset-authoring.schema.json` – canonical implementation
+  input for Scenario Manager package, Space and registration authoring; the
+  in-progress prose and wireframes reference these rather than redefining DTOs.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` – concise spec for
   PocketHive-owned runtime debug MCP tools and HiveGate-governed cleanup.
 - `docs/inProgress/db-query-worker-mvp.md` – MVP contract for the DB-only

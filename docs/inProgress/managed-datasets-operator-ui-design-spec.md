@@ -6,7 +6,7 @@ remain pending
 
 Decision target: PocketHive Managed Datasets package authoring and operator experience
 
-Last updated: 2026-07-20
+Last updated: 2026-07-21
 
 Normative architecture parent:
 [Managed Test Data Architecture and Lifecycle Specification](managed-test-data-lifecycle-generic-spec.md)
@@ -17,8 +17,8 @@ Assurance companion:
 Visual reference:
 [Managed Datasets wireframes](managed-datasets-wireframes/README.md)
 
-Team decision brief:
-[Managed Test Data Team Decision Brief](managed-test-data-team-review-brief.md)
+Team design overview:
+[Managed Datasets Team Guide](managed-datasets-team-design-overview.md)
 
 This document turns the visual reference into an actionable product and
 engineering contract. It specifies where every displayed fact comes from, what
@@ -152,11 +152,11 @@ reports a present integer value of zero.
 | Orchestrator Managed Dataset module | Own durable Dataset truth, revisions, operation summaries, activation/continuity inputs, read projections and proof facts; it does not own controller observations or compose a whole-swarm decision |
 | Swarm Controller | Own per-swarm membership, route, current worker-application/readiness aggregation and DatasetGuard contribution through typed contracts; it is not global Dataset authority and does not replace durable Dataset truth |
 | Orchestrator admission service | Compose the exact per-binding `StartDecision` and `RunningDecision` from Managed Dataset truth plus Controller-owned current observations under the canonical admission policy |
-| `common/dataset-contracts` | Own closed JSON schemas/Java DTOs for Dataset packages, package-local contracts, Dataset Spaces, registrations, requirements, storage adapter/profile descriptors, `SourceResultPolicy/v1`, result outcomes/actions, enums, reason codes, compatibility tests and generated TypeScript types |
+| `docs/spec/managed-dataset-authoring.schema.json`, then generated `common/dataset-contracts` types | The schema is the design-time SSOT for closed Dataset package, package-local contract, Dataset Space, registration, page, validation, command-receipt and problem DTOs. Implementation generates/mechanically verifies Java and TypeScript types from it; the module must not redefine the wire contract. Runtime requirement/result/proof schemas remain owned by their named canonical contract files. |
 | Orchestrator REST | Authenticate, authorise, bound and return the application-service read models and composed decisions |
 | `ui-v2` | Render the returned facts and client-only presentation state; never decide readiness or query infrastructure directly |
 | PocketHive MCP | Reuse product-owned services for package list/validate/upload/publish/retire, status reads and bounded proof creation; it is not called by the browser and mutations are governed through HiveGate |
-| Dataset storage port | Select exactly the adapter and capability profile published in the Dataset package; never infer or fall back |
+| Dataset storage port | Use exactly the adapter, capability profile and settings reference selected by the deployment registration, after validating them against the package requirements and Space allowlist; never infer or fall back |
 | PostgreSQL adapter | Full `MANAGED_RECORDS_V1` durable authority and committed read projections |
 | Redis adapter (deferred) | Only declared `REDIS_COLLECTION_V1` operations and receipts after separate qualification; unavailable in core and no undeclared relational/revision/outbox/proof guarantees |
 | Rabbit/runtime debug | Operational mechanisms or diagnostics; never a browser-side Dataset authority |
@@ -302,8 +302,10 @@ and explains the missing qualification until the deployment advertises the
 separately passed Redis profile.
 
 PostgreSQL may be labelled `Recommended`, but neither UI nor server supplies it
-when the field is absent. Save and upload fail on a missing adapter,
-`settingsRef`, capability profile or adapter-specific required setting.
+when a registration field is absent. Registration create/replace fails on a
+missing adapter, `settingsRef`, capability profile or adapter-specific required
+setting. Package save/upload instead validates required capabilities and
+supported profiles; packages contain no concrete adapter or settings choice.
 
 The Dataset Space editor owns only deployment authority policy: Space/SUT
 scope, access policy, classification ceiling, quotas and allowed storage
@@ -355,8 +357,10 @@ Authoring commands are explicit and idempotent:
 | Retire | Prevents new bindings to the exact published version; does not rewrite running bindings |
 | Replace registration | Creates a new explicit registration version; never mutates the active version in place |
 
-The UI calls the same Scenario Manager application commands used by PocketHive
-MCP. It must not call MCP from the browser or maintain a second package parser.
+The UI and the deliberately exposed MCP package operations call the same
+Scenario Manager application commands. MCP does not duplicate every UI
+operation: Dataset Space and registration authoring remain UI/API-only in the
+MVP. The browser must not call MCP or maintain a second package parser.
 Published versions cannot be overwritten, and there is no automatic publish,
 adapter fallback or compatibility import path.
 
@@ -365,6 +369,7 @@ The canonical Scenario Manager API surface is versioned contract-first:
 ```text
 GET  /api/dataset-packages
 POST /api/dataset-packages/drafts
+POST /api/dataset-packages/{packageId}/versions
 GET  /api/dataset-packages/{packageId}/versions/{version}
 PUT  /api/dataset-packages/{packageId}/drafts/{version}
 DELETE /api/dataset-packages/{packageId}/drafts/{version}
@@ -372,8 +377,10 @@ POST /api/dataset-packages/{packageId}/drafts/{version}:validate
 POST /api/dataset-packages/{packageId}/drafts/{version}:publish
 POST /api/dataset-packages/{packageId}/versions/{version}:retire
 POST /api/dataset-packages:import
+GET  /api/dataset-packages/{packageId}/versions/{version}:export
 GET  /api/dataset-spaces
 POST /api/dataset-spaces/drafts
+POST /api/dataset-spaces/{datasetSpaceId}/versions
 GET  /api/dataset-spaces/{datasetSpaceId}/versions/{version}
 PUT  /api/dataset-spaces/{datasetSpaceId}/drafts/{version}
 DELETE /api/dataset-spaces/{datasetSpaceId}/drafts/{version}
@@ -388,12 +395,23 @@ POST /api/dataset-registrations/{registrationId}/versions/{version}:retire
 
 Every list endpoint uses bounded server-side search, lifecycle filtering,
 sorting and opaque cursor pagination under the caller's authorisation scope.
-Create draft, import and registration creation require an idempotency key.
-Draft update, draft replacement and delete-draft additionally require the
-expected draft revision. Publish, activate, registration replacement and
-retire require an idempotency key plus the exact current version/digest.
+Every mutation requires an idempotency key. Draft update, draft replacement
+and delete-draft additionally require the expected draft revision. Publish,
+activate, registration replacement and retire also require the exact current
+version/digest.
 Unknown fields, unknown adapter/profile combinations and incomplete package
 references are rejected. No endpoint accepts raw backend credentials.
+
+The canonical DTOs, headers, status codes, permissions, concurrency,
+idempotency, import/export archive, digest and registration-replacement
+semantics are owned by
+[`docs/contracts/managed-dataset-authoring-api.md`](../contracts/managed-dataset-authoring-api.md)
+and
+[`docs/spec/managed-dataset-authoring.schema.json`](../spec/managed-dataset-authoring.schema.json).
+This route list is an index, not a competing contract. Package import is atomic
+and bounded; package export round-trips the normalized immutable content and
+digest. Space quota is only `quotaPolicyRef`; the UI does not invent inline
+quota fields outside that referenced policy contract.
 
 ### 3.4 Capability gate
 
@@ -2090,6 +2108,14 @@ complete when only its populated success state works.
 | Filter result empty | Successful filtered page with zero items and a non-empty unfiltered authorised scope | `No selections match these filters` and a working Clear action |
 | Detail absent/revoked | Specific-scope `404` | `Not found or no longer accessible`; remove stale detail from cache |
 | Snapshot changed | `409 SNAPSHOT_REQUIRED` | Refresh coherent root/page and announce the change; never merge snapshots |
+| Draft dirty | A package/Space draft differs from its last accepted read | Mark unsaved state; route change, close and identity/scope loss require an accessible discard/stay decision; never autosave or retain draft content after scope loss |
+| Authoring command pending | A save, validate, publish, activate, replace, retire, import or delete command is in flight | Disable only conflicting actions, retain the exact submitted revision/idempotency identity, announce progress once and prevent duplicate submission |
+| Validation failed | Canonical `ValidationResult.valid=false` or `Problem.code=VALIDATION_FAILED` | Show the bounded issue summary and associate each issue path with its field/file/tab; focus the summary, provide keyboard navigation to the first issue and preserve unsaved input |
+| Revision conflict | `412 REVISION_CONFLICT` | Preserve the unsaved local draft in memory, show the current server ETag, and offer explicit `Reload server version` or `Export local draft`; never merge or overwrite automatically |
+| Idempotency conflict | `409 IDEMPOTENCY_CONFLICT` | Preserve the command and explain that the key was used for different content; never generate/retry a new key without a deliberate new submission |
+| Dependency blocked | `409 DEPENDENCY_BLOCKED` | Show only returned bounded dependency facts, provide authorised navigation, and offer no force-delete/retire path |
+| Capability unavailable | `422 CAPABILITY_UNAVAILABLE` | Keep the explicit requested adapter/profile visible, explain the unavailable qualification and require a deliberate supported selection; never switch adapters |
+| Command accepted, re-read failed | Command receipt exists but authoritative re-read fails | Show `Command accepted; current state unavailable`, retain the receipt/correlation ID, and retry only the read; never fabricate the new row or lifecycle state |
 
 ### 15.1 Domain-specific states
 
@@ -2102,6 +2128,7 @@ complete when only its populated success state works.
 | Evidence | proof not requested; proof running only if the API supports asynchronous generation; complete, partial, unknown, failed, expired, and incompatible proof |
 | Swarm dependencies | no Dataset bindings; required and optional bindings; blocked start with running traffic unaffected; continue-until; paused; unknown observation |
 | Runtime Inspector | debug not permitted; compute adapter unavailable; resource list empty; Rabbit manifest unavailable; Rabbit observation unavailable; logs empty; logs/inspect error |
+| Authoring inventories/editors | loading; authorised empty; filtered empty; dirty; save/validate pending; field/file validation failure; stale ETag conflict; import conflict; dependency-blocked delete/retire; capability unavailable; permission lost; accepted command awaiting authoritative re-read; package publish, Space activate and registration replace/retire outcomes |
 
 `DSUI-STATE-002`: Rabbit manifest unavailable, Rabbit observation unavailable,
 and zero returned queues are three different states. None may be rendered as
@@ -2279,8 +2306,11 @@ Exit:
 
 Work:
 
-- create `common/dataset-contracts`;
-- define closed JSON schemas/Java DTOs/enums/reason codes for every endpoint;
+- treat `docs/spec/managed-dataset-authoring.schema.json` and the other named
+  canonical schemas as inputs and create `common/dataset-contracts` generated
+  or mechanically verified types;
+- implement the headers, routes and transaction semantics in
+  `docs/contracts/managed-dataset-authoring-api.md`;
 - generate or mechanically verify TypeScript types; and
 - publish compatibility and hostile-payload TCK vectors.
 
@@ -2338,6 +2368,28 @@ Exit:
   pass through official ingress; and
 - API and MCP facts agree for the same principal/scope/observation.
 
+### Stage 4A — Scenario Manager authoring commands
+
+Work:
+
+- implement the canonical package, Space and registration API contract through
+  official ingress and one Scenario Manager application-command layer;
+- implement atomic normalized package import/export and golden digest vectors;
+- implement ETag/idempotency/dependency/registration-replacement transactions,
+  CSRF protection and immutable audit records; and
+- connect the five MCP package operations to those same package commands and
+  generated DTOs without adding separate Space/registration MCP parsers.
+
+Exit:
+
+- request/response, hostile archive, permission, concurrency, idempotency,
+  dependency and atomic-replacement TCKs pass;
+- UI/API and matching MCP package operations return equivalent outcomes for the
+  same principal and command;
+- archive import/export round-trips every golden package digest; and
+- failed commands and denied requests cause zero partial resource, asset,
+  lifecycle, audit or outbox mutation.
+
 ### Stage 5 — production inventory
 
 Work:
@@ -2354,6 +2406,30 @@ Exit:
 - every field is response-backed;
 - server-side filtering and honest state transitions work; and
 - Firefox verification passes at all required viewports.
+
+### Stage 5A — production authoring journeys
+
+Work:
+
+- implement package, Space and registration list/add/edit/review/remove routes
+  against the Stage 4A API, including complete package file/asset editing and
+  export;
+- implement all authoring states in section 15, unsaved-change protection,
+  validation issue navigation, conflict recovery and command audit/history;
+- render actions only from returned `allowedActions`, while relying on server
+  re-authorisation for every command; and
+- add keyboard, focus, live-region, reflow, security and real-network E2E tests
+  for each lifecycle journey.
+
+Exit:
+
+- list, add, edit, validate, publish/activate, registration replacement,
+  delete-draft and retire work using real Scenario Manager data only;
+- every accepted command is followed by an authoritative re-read, and failed
+  re-read is presented honestly;
+- no prototype fixture or local fallback is present in the production bundle;
+  and
+- the full authoring adverse-state matrix passes through official ingress.
 
 ### Stage 6 — all detail views
 
@@ -2422,7 +2498,7 @@ Exit:
 | `DSUI-API-001` | Canonical Java/JSON/TypeScript contracts and REST docs agree for every endpoint | cross-language TCK, generated drift check |
 | `DSUI-API-002` | Proof creation requires VIEW plus `dataset:proof:create`, enforces request-bound idempotency and quotas, and denied requests create no lifecycle, dispatch or provider effects | auth oracle, proof/database/provider/Rabbit ledgers |
 | `DSUI-API-003` | Search/facets/summary/pagination are authorised server-side and hidden scopes leak no aggregate | multi-principal enumeration suite |
-| `DSUI-API-004` | UI and MCP authoring operations use the same Scenario Manager package/Space/registration list/read/create/update/delete-draft/publish/activate/replace-version/retire contracts, revisions, digests, dependency checks and idempotency outcomes | cross-ingress contract TCK and command audit |
+| `DSUI-API-004` | The UI uses the canonical Scenario Manager package/Space/registration contracts. The five deliberately exposed MCP package operations use the same package commands, DTOs, revisions, digests, dependency checks and idempotency outcomes; Space/registration authoring is explicitly UI/API-only in the MVP and has no second MCP parser | cross-ingress package TCK, UI/API contract TCK and command audit |
 | `DSUI-API-005` | Every package declares storage requirements/supported profiles and every registration explicitly selects an admitted Space/adapter/settings/profile tuple; missing or incompatible capabilities fail with no activation/runtime mutation | schema/Space/adapter compatibility TCK and mutation suite |
 | `DSUI-VIEW-001` | Inventory summary, banner, rows, filters, disclosures and paging each render the exact response field and same-snapshot total | API/UI DOM comparison, independent projection oracle |
 | `DSUI-VIEW-002` | Detail header and Overview preserve independent Dataset admission, consumer impact, supply, validity, Fitness and distribution facts | response/DOM trace, inconsistent-revision mutation suite |
@@ -2443,7 +2519,7 @@ Exit:
 | `DSUI-SEC-003` | Hostile identifiers/reason inputs render only escaped reviewed text and cannot alter DOM/route | XSS/property tests, CSP report |
 | `DSUI-SEC-004` | Dataset response state is not persisted client-side and clears on identity/scope change | browser storage/cache inspection |
 | `DSUI-SEC-005` | UI/API/MCP authorisation outcomes agree and denied paths have zero command effects | cross-ingress differential test |
-| `DSUI-SEC-006` | Authoring accepts no credentials or runtime records, embeds no example authority rows or successful command results, enforces least-privilege list/read/create/update/delete-draft/publish/activate/replace/retire permissions and clears draft content on identity/scope loss | auth matrix, canary and release-bundle scans, browser network/storage and state tests |
+| `DSUI-SEC-006` | Authoring accepts no credentials or runtime records, embeds no example authority rows or successful command results, enforces same-origin CSRF protection and least-privilege list/read/create/update/delete-draft/publish/activate/replace/retire permissions, records actor/command/version/correlation audit facts, scans imported assets, and clears draft content on identity/scope loss | auth/CSRF matrix, archive canary/malware-policy and release-bundle scans, browser network/storage/state tests and immutable command audit |
 | `DSUI-PERF-001` | Measured transaction threads make zero UI/status/proof/central calls | thread I/O detector, network trace |
 | `DSUI-PERF-002` | Fixed SQL/query-plan limits pass at maximum qualified cardinality | DB instrumentation and plans |
 | `DSUI-PERF-003` | API, payload, render and local-interaction SLOs pass on the named reference deployment | browser/server performance report |
@@ -2455,6 +2531,9 @@ Exit:
 
 | View/fact family | Endpoint | Primary projection/authority | Freshness/consistency oracle |
 |---|---|---|---|
+| Package inventory/editor/review | canonical `/api/dataset-packages...` operations | Scenario Manager package registry, normalized package content and immutable version/digest | canonical authoring schema, ETag, idempotency receipt, archive digest golden vectors and authoritative post-command re-read |
+| Dataset Space inventory/editor/review | canonical `/api/dataset-spaces...` operations | Scenario Manager versioned deployment-policy registry; `quotaPolicyRef` is the only quota field | canonical authoring schema, ETag, dependency transaction, command audit and authoritative post-command re-read |
+| Registration inventory/create/replace/retire | canonical `/api/dataset-registrations...` operations | Scenario Manager registration registry and transactional `(Space, alias)` active-version uniqueness | canonical authoring schema, ETag/idempotency receipt, atomic old/new version audit and authoritative post-command re-read |
 | Inventory summary/facets/banner/rows | `GET /datasets/status` | selection + use + bounded consumer aggregates | one observation/snapshot; aggregate recomputation from authorised projection |
 | Detail decisions/Overview | `GET /datasets/status/{id}` | selection/use status and activation ledger | snapshot token; independent admission/continuity oracle |
 | Fitness | `GET .../fitness-evaluations` | immutable evaluations and current/effective receipt pointers | contract/input digest, evaluated revision, trusted time |
@@ -2556,10 +2635,13 @@ Rapid Software Testing evaluation because:
   source across the inventory, five detail tabs and Inspector; fresh responsive
   visual evidence remains an implementation/design-QA gate rather than a
   concept-review claim;
-- every dynamic element has a section 21 authority mapping;
+- every dynamic element, including authoring list/add/edit/review/remove, has a
+  section 21 authority mapping;
 - every interaction and adverse state has a requirement and observable oracle;
-- every API has a specified closed, bounded request/response shape, permission
-  and freshness rule; Stage 1 converts those shapes into executable schemas;
+- every authoring API has a specified closed, bounded request/response shape,
+  permission, concurrency and idempotency rule in the canonical contract and
+  executable design schema; Stage 1 generates/mechanically verifies production
+  Java/TypeScript types from those authorities;
 - delivery stages have explicit exits and no hidden production-fixture step;
 - `DSUI` IDs are linked into the assurance requirement/evidence graph; and
 - remaining questions are recorded as blocking specification defects rather

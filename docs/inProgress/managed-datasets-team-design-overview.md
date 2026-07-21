@@ -16,7 +16,8 @@ A Managed Dataset is a durable, reusable collection of test records that one
 PocketHive swarm can create and other swarms can use.
 
 PocketHive stores each authoritative Dataset through the storage adapter
-explicitly declared by its standalone Dataset package. PostgreSQL provides the
+explicitly selected by its deployment registration. The standalone package
+declares only required capabilities and supported profiles. PostgreSQL provides the
 recommended full managed-records profile; Redis provides an explicit,
 capability-gated collection profile and is never an implicit fallback. A
 reconciler keeps the available supply close to an operator-defined target when
@@ -29,8 +30,10 @@ Dataset API. The preferred Worker SDK integration is the `DATASET_UPSERT`
 primary output. A worker that must retain RabbitMQ, Redis, or no primary output
 may instead opt into the shared `managedDatasetPublisher` side-output
 interceptor. Both forms use the same typed committer, idempotency key and
-durable receipt; the interceptor fails closed and is not the Redis uploader's
-best-effort log-and-continue behaviour.
+durable receipt. The interceptor stages an ineligible Dataset result, publishes
+the primary output, then finalises Dataset eligibility under the explicit
+`BOTH_REQUIRED_RECONCILED` policy. Partial success remains under reconciliation
+and is never reported as completion.
 
 Before either publisher runs, the business-aware producer applies one frozen
 `SourceResultPolicy/v1`. It combines the protocol adapter's conclusive or
@@ -70,11 +73,31 @@ Approve this architecture and its implementation plan:
 - prove the feature against the named functional, recovery, accessibility and
   50,000-record release gates before making a support claim.
 
+## Why the bounded module is inside Orchestrator
+
+Dataset runtime state is shared across swarms and outlives any individual
+Swarm Controller. The team has ruled out another application container for the
+first delivery. Hosting the authority as an isolated Orchestrator module avoids
+per-swarm ownership and another distributed failure boundary while preserving
+one transactional PostgreSQL commit for records, receipts and outbox intent.
+
+This does not make Orchestrator a workload executor. Source/SUT calls,
+generation, validation, migration and refill flows remain worker-owned.
+Measured traffic uses worker-local hydrated views and never calls Orchestrator.
+This is the sole approved co-location exception and creates no precedent for
+another manager-hosted data-plane workload.
+The module requires separate packages, schema, migrations, connection pool,
+bounded executor and dependency tests so Dataset load cannot consume swarm-
+lifecycle resources. Approval of this placement requires only a concise
+architecture-rule clarification; its detailed behavior remains in the feature
+specifications.
+
 ## Where each component sits
 
 ```mermaid
 flowchart LR
-  UI[Operator UI / approved API client]
+  AUI[Authoring UI / approved metadata client]
+  OUI[Operator runtime UI / approved API client]
   SM[Scenario Manager<br/>packages, Spaces, registrations,<br/>local requirements and bindings]
 
   subgraph ORCH[Orchestrator service]
@@ -102,7 +125,8 @@ flowchart LR
   API[Authorised Dataset API]
   STORE[(Explicit storage adapter<br/>PostgreSQL or Redis profile)]
 
-  UI --> DS
+  AUI --> SM
+  OUI --> DS
   SM -->|admitted immutable definition| DS
   DS -->|ensure running| LC
   LC --> LIFE
@@ -252,7 +276,7 @@ The UI allows an authorised author to add a custom field name and validates it
 against that definition's schema.
 
 The record schema is one Dataset's complete canonical field set. Each Dataset
-package owns zero or more `DatasetContract/v1` field subsets under its local
+package owns one or more `DatasetContract/v1` field subsets under its local
 `contracts/` directory. Contracts are versioned with that Dataset package and
 are never shared live objects across Datasets. A scenario's
 `datasets/requirements.yaml` declares its required logical fields and local
@@ -349,7 +373,7 @@ The architecture names two allocation modes so future behavior cannot become
 ambiguous. The MVP requires the first; the second remains deferred unless its
 separate acceptance gates pass:
 
-1. `SHARED` is the default. Many swarms use an immutable published
+1. `SHARED` is the only admitted MVP mode. Many swarms use an immutable published
    revision non-destructively. Records never leave the Dataset, so there is
    nothing to add back.
 2. `EXCLUSIVE_LEASE` is used only where concurrent reuse is unsafe. Acquire and
@@ -456,11 +480,53 @@ approve for implementation planning. Production readiness remains deliberately
 gated on implementation, security, accessibility, recovery and capacity
 evidence; those are testable delivery criteria, not unresolved architecture.
 
+## Gate status
+
+| Gate | Current result | What closes it |
+|---|---|---|
+| `G-DESIGN-READY-v1` | **PASS — green** | Coherent specification, contract, wireframe, assurance and registry baseline |
+| `G-TEAM-APPROVED-v1` | `NOT_EVALUATED` | Product, Architecture, Security, Operations, UX and QA approve placement, ownership and non-claims |
+| `G-IMPLEMENTATION-READY-v1` | `NOT_EVALUATED` | Approve contracts, ports/adapters, first source/SUT profile, measurable outcomes and named owners |
+| `G-M1-INTERNAL-v1` | `NOT_RUN` | Implement and fault-test the official-ingress M1 slice against independent system ledgers |
+| `dataset-qualified-core` | `NOT_RUN` | Pass applicable correctness, capacity, endurance, non-interference, security, recovery, UX and accessibility evidence |
+
+Deterministic design checks currently validate the canonical authoring schema
+and representative DTOs, package-digest vectors, exact UI-registry alignment,
+local documentation links and 18 wireframe source groups. This is design
+evidence only; implementation, browser/accessibility and runtime evidence
+remain `NOT_RUN`.
+
 ## Detailed companions
 
 - [Component, use-case and scenario examples](managed-datasets-use-cases-and-scenario-examples.md)
 - [Lifecycle and architecture specification](managed-test-data-lifecycle-generic-spec.md)
-- [Architecture rationale](managed-test-data-architecture-recommendation.md)
 - [Operator UI design specification](managed-datasets-operator-ui-design-spec.md)
 - [Assurance and release strategy](managed-test-data-assurance-strategy.md)
+- [Canonical authoring API](../contracts/managed-dataset-authoring-api.md)
+- [Canonical authoring schema](../spec/managed-dataset-authoring.schema.json)
 - [Interactive planning wireframe](managed-datasets-wireframes/README.md)
+
+## Research basis
+
+The design applies established patterns rather than treating external guidance
+as a PocketHive contract:
+
+- [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+  for application-owned ports and replaceable infrastructure adapters;
+- [Kubernetes controller pattern](https://kubernetes.io/docs/concepts/architecture/controller/)
+  for durable desired-versus-observed reconciliation;
+- [AWS transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html)
+  for committing domain state and publication intent together;
+- [RabbitMQ confirms and acknowledgements](https://www.rabbitmq.com/docs/confirms)
+  for explicit at-least-once delivery boundaries;
+- [PostgreSQL `SKIP LOCKED`](https://www.postgresql.org/docs/current/sql-select.html)
+  for short, competing scheduler claims without holding locks during external
+  work;
+- [WCAG 2.2 status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)
+  for accessible asynchronous progress and outcome communication; and
+- [Rapid Software Testing foundations](https://rapid-software-testing.com/what-are-the-foundations-of-rst/)
+  for risk-led investigation, independent oracles and evidence confidence.
+
+These references explain the selected patterns. PocketHive architecture,
+canonical schemas and contracts remain authoritative when terminology or
+implementation guidance differs.

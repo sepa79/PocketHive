@@ -14,11 +14,11 @@ The repository-relative visual sources are the existing PocketHive
 [`SideNav`](../../../ui-v2/src/components/SideNav.tsx), and
 [`SwarmRuntimeInspector`](../../../ui-v2/src/pages/hive/SwarmRuntimeInspector.tsx).
 
-The root-level PNGs and `captures/spec-aligned/` set predate the current neutral
-fixture names and supply journey/resize specimens. They contain retired
-business-specific fixture wording and remain historical comparison context
-only. They are excluded from current design evidence. This report makes source-
-level claims for the current change, not visual-capture claims.
+The retained operational PNGs are representative design context only and are
+excluded from current acceptance evidence. Historical contact sheets,
+comparisons and superseded capture sets have been removed. This report makes
+source-level claims for the current change, not production visual-capture
+claims.
 
 This is not a production-data, API, authorisation, security, performance or
 accessibility qualification. Screenshots cannot establish WCAG conformance.
@@ -45,14 +45,15 @@ implemented authoring behavior or accessibility conformance.
 | Supply execution journey | Passed at source level | Ordered steps show deficit reconciliation, canonical control-plane start, fresh readiness, bounded `DATASET_SUPPLY` WorkItem and PostgreSQL-backed receipt; later steps never imply they can bypass an unmet gate |
 | Component and state clarity | Passed at source level | Orchestrator, Swarm Controller, RabbitMQ, producer swarm and PostgreSQL responsibilities are named; Dataset health, swarm runtime, producer workload, convergence and durable-store state remain separate |
 | Reuse and capacity | Passed at source level | `SHARED` explains no-remove/no-add-back reuse, deferred exclusive/ordered modes fail explicitly, and 50,000 is labelled an unproven qualification target |
-| Supply/lifecycle | Partial at source level | All five canonical operation literals are shown with scope, attempt, fence, versions, timestamps and reconciled counters; a read-only `UNCERTAIN` cancellation-intent example retains its reservation and refuses a false `CANCELLED` claim. A follow-up source specimen must add distinct transport outcome, canonical `SourceResultOutcome`, route action, authorised target and primary-supply contribution before this row can pass. |
+| Supply/lifecycle | Passed at source level | All five canonical operation literals are shown with scope, attempt, fence, versions, timestamps and reconciled counters; a read-only `UNCERTAIN` cancellation-intent example retains its reservation and refuses a false `CANCELLED` claim. A conclusive wrong-state specimen keeps transport outcome, canonical `FAILED_WRONG_STATE`, `UPSERT_DATASET`, authorised failure target and `contributesToPrimarySupply=false` distinct. |
 | Consumers | Passed | Six complete bindings are reachable with working Previous/Next pagination; no worker/revision/decision detail is hidden at narrower widths |
 | Evidence | Passed | A bounded proof-level/exact-target/flow-reference form precedes a canonical `DatasetProof/v1`; `BROKER_ACCEPTED` is limited to one `DATASET_SUPPLY` WorkItem attempt and visibly labelled transport-only; `PERSISTED`/PostgreSQL receipt remains completion authority |
 | Inspector | Passed | `Authoritative Dataset` and `This swarm applied` are separate groups with explicit revision, application and worker-coverage facts |
 | Adverse states | Passed at source level | Queryable reconciling, forbidden, authorised-empty and incompatible states suppress fabricated current facts; stale/rate-limited states preserve only clearly historical evidence; supply specimens cover healthy-idle, readiness wait, dispatch failure and uncertain commit |
 | Keyboard/focus model | Passed at source level | Native controls, tabs with Arrow/Home/End, Escape-returning disclosure, route heading focus and live announcements are implemented |
-| Deterministic source QA | Passed | `qa-check.mjs` passed 12 groups covering IDs, ARIA/fragment/route references, labels, tab keyboard tokens, architecture/state copy, the supply-transport proof boundary and regression tokens |
-| Post-change visual fidelity | Not claimed | Existing captures predate this content and are reference-only; deterministic recapture and visual inspection remain required |
+| Authoring journeys | Passed at source level | Package/Space/registration inventories are operable successful-empty views; package sections cover identity/schema/local contracts/storage requirements/all declared content/review; Space uses only `quotaPolicyRef`; registration replacement and remove semantics are explicit; queryable adverse states cover loading, forbidden, unavailable, validation, revision conflict, dependency block and accepted-command/re-read failure |
+| Deterministic source QA | Passed | `qa-check.mjs` passed 18 groups covering both documents' IDs/control names, ARIA/fragment/route references, labels, tab keyboard tokens, architecture/state copy, supply-transport proof, source-result routing, authoring SSOT/journeys/adverse states, package-digest vectors and regression tokens |
+| Post-change authoring desktop fidelity | Reviewed | Current `captures/authoring/` images were regenerated at 1440×1040 from current source and inspected; operational responsive/Firefox captures remain a separate implementation/design-QA gate |
 | Accessibility conformance | Not claimed | Requires contrast, 200% zoom, 320 px reflow, accessibility-tree, keyboard and screen-reader evidence |
 
 ## Contract corrections verified in source
@@ -123,11 +124,11 @@ implemented authoring behavior or accessibility conformance.
 
 ## Team-review visual evidence to refresh
 
-The existing Firefox 140.12.0esr images are historical/reference-only because
-they contain retired fixture language. The approved browser was blocked from
-opening the local prototype in this environment, so no fresh screenshot can be
-accepted as current evidence. A future current-source run must render and
-inspect:
+The existing operational Firefox 140.12.0esr images are historical/reference-
+only because they contain retired fixture language. The authoring desktop set
+was refreshed from current source with local headless Chromium and visually
+inspected. A future production-aligned Firefox run must still render and
+inspect the operational and responsive surfaces below:
 
 1. Inventory at 1920×1080, 1366×768, 1024×768, 390×844, 320×844 and
    1366×768 at 200% zoom.
@@ -172,17 +173,18 @@ node docs/inProgress/managed-datasets-wireframes/qa-check.mjs
 git diff --check
 ```
 
-Observed deterministic result on 2026-07-17:
+Observed deterministic result on 2026-07-21:
 
 ```text
-Managed Datasets wireframe QA passed: 12 deterministic source-level groups.
+Managed Datasets wireframe QA passed: 18 deterministic source-level groups.
 ```
 
 Source-level semantic/design-readiness result: **green**. Cross-functional
 approval remains pending.
 
-Planning visual-fidelity result for the current source: **not claimed; capture
-refresh required**.
+Planning visual-fidelity result for the current authoring desktop source:
+**reviewed; operational responsive refresh still required for implementation
+sign-off**.
 
 Production accessibility/readiness result: **not claimed by this planning
 wireframe**.

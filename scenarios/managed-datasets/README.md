@@ -40,6 +40,11 @@ contractPaths:
   - contracts/traffic.yaml
 requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
 supportedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
+sourceBindingPaths: []
+mappingPaths: []
+projectionPaths: []
+policyPaths: []
+assetPaths: []
 ```
 
 For example:
@@ -62,7 +67,10 @@ The deployment registration is separate from the package:
 schemaVersion: pockethive.dataset-registration/v1
 registrationId: performance-test-reusable-records
 datasetSpaceId: performance-test
-datasetPackageRef: reusable-records@1
+datasetSpaceVersion: 2
+datasetPackageId: reusable-records
+datasetPackageVersion: 1
+datasetPackageDigest: sha256:4c91d9e2c0a7a8f8b1418398dd2de18290965d06e1a21e70eeaf7dcff14b82ad
 datasetAlias: reusable-records
 storage:
   adapter: POSTGRESQL

@@ -726,9 +726,10 @@ sequenceDiagram
 
 ### 12.3 Dataset registry scope
 
-- **Scenario Manager** owns dataset/SUT registry metadata (definitions, contracts, references).
+- **Scenario Manager** owns dataset/SUT registry metadata (versioned Dataset packages, Spaces, registrations, contracts, and references).
 - **Scenario Manager** is not a data-plane executor and must not perform runtime dataset mutations.
-- Seeding, data generation, migrations, and record movement/refill are executed by swarms/workers dedicated to data-plane tasks.
+- **Sole approved co-location exception:** cross-swarm Managed Dataset persistence and reconciliation may be hosted as an isolated bounded module in the Orchestrator process. This does not authorise SUT/source execution, measured-path access, or any other manager-hosted data-plane workload.
+- SUT/source work for seeding, data generation, migrations, and refill is executed by swarms/workers dedicated to data-plane tasks; the bounded module only persists and reconciles typed outcomes.
 
 ### 12.4 Contract version matching
 

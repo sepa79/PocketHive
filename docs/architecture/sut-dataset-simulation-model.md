@@ -41,7 +41,9 @@ Operationally, we need:
    - each scenario's own logical Dataset requirements in its scenario template
      contract,
    - SUT capabilities in SUT environment contract,
-   - dataset registry in dataset space contract.
+   - portable schema/contracts in the Dataset package,
+   - deployment policy in the Dataset Space, and
+   - package-to-Space alias and storage selection in the Dataset registration.
    A scenario bundle never lists another scenario/bundle as a consumer.
 7. Support two explicit SUT sourcing modes:
    - `global` SUT Environment (shared/governed),
@@ -90,7 +92,7 @@ Operationally, we need:
 4. `Dataset Package`
    - Portable SSOT for one Dataset definition, record schema, package-local
      `DatasetContract/v1` field subsets, mappings, projections, policies,
-     sources and storage adapter contract.
+     sources, storage capability requirements and supported profiles.
    - Lives under `scenarios/managed-datasets/<datasetPackageId>/` in source and
      is imported/versioned by Scenario Manager. It contains no deployment
      `datasetSpaceId`, alias, backend settings or credentials.
@@ -186,11 +188,12 @@ instead of a global registry entry.
 1. every `requires.endpoint` has a matching `provides.endpoint`,
 2. protocol/version constraints match,
 3. all required variables are present and valid,
-4. all referenced datasets/aliases exist in dataset space.
+4. all referenced aliases resolve through active registrations in the selected
+   Dataset Space.
 5. every Dataset requirement is mapped exactly once, with no missing, extra,
    duplicate, wildcard or cross-scope mapping.
-6. the mapped Dataset's declared adapter capability profile satisfies every
-   required operation; no adapter substitution or emulation is attempted.
+6. each mapped registration's selected adapter capability profile satisfies
+   every required operation; no adapter substitution or emulation is attempted.
 7. the Dataset registration targets the same active Dataset Space and its
    current authority policy admits the principal, classification and selected
    adapter/profile.
@@ -206,6 +209,9 @@ No partial bind and no fallback chain.
 5. After validation, runtime always consumes one immutable snapshot with normalized `provides`.
 6. If a binding is attached to a `Simulation Program`, `sutSourceMode` must be `global`.
    `scenario-local` bindings are rejected at program composition/validation time.
+7. A `scenario-local` binding that selects a Dataset Space is valid only when
+   the embedded SUT definition's immutable identity exactly matches the Space's
+   bound SUT identity; an absent or mismatched identity fails binding.
 
 ## 5.6 Validation Ownership (decided)
 
@@ -257,9 +263,10 @@ published Dataset-package metadata is database-backed.
 
 ## 5.9 Dataset Registry Scope (decided)
 
-`Scenario Manager` validates, versions, publishes and serves Dataset packages
-(registry/control-plane metadata). Packages follow `DRAFT -> PUBLISHED ->
-RETIRED`; published versions are immutable.
+`Scenario Manager` validates, versions, publishes and serves Dataset packages,
+Dataset Spaces and Dataset registrations (registry/control-plane metadata).
+Packages follow `DRAFT -> PUBLISHED -> RETIRED`; published versions are
+immutable.
 
 Both the UI and PocketHive MCP call the same Scenario Manager application
 services. MCP exposes `dataset_package_list`, `dataset_package_validate`,
@@ -527,28 +534,47 @@ This example is illustrative only (shape may change in implementation).
 6. `scenario/clearing-batch-v1`
 7. `scenario/stress-mastercard-v1`
 
-## 11.2 Example Dataset Space (single SUT scope)
+## 11.2 Example Dataset Space and registrations (single SUT scope)
 
 ```yaml
-datasetSpaceId: ds-acq-prod-sim
-sutEnvironmentId: sut-acq-int-01
-datasets:
-  - id: cards.mastercard.byClient
-    states: [ready, topUp]
-    aliases:
-      ready: ds.cards.mc.{client}.ready
-      topUp: ds.cards.mc.{client}.topup
-  - id: cards.visa.byClient
-    states: [ready, topUp]
-    aliases:
-      ready: ds.cards.visa.{client}.ready
-      topUp: ds.cards.visa.{client}.topup
-  - id: tx.clearing.pending
-    states: [pending, sent, retry]
-    aliases:
-      pending: ds.tx.clearing.pending
-      sent: ds.tx.clearing.sent
-      retry: ds.tx.clearing.retry
+space:
+  schemaVersion: pockethive.dataset-space/v1
+  datasetSpaceId: ds-acq-prod-sim
+  version: 1
+  displayName: Acquirer production simulation
+  sutEnvironmentRef: sut-acq-int-01
+  classificationCeiling: INTERNAL
+  accessPolicyRef: simulation-team@1
+  quotaPolicyRef: simulation-standard@1
+  allowedStorageProfiles: [MANAGED_RECORDS_V1]
+
+registrations:
+  - schemaVersion: pockethive.dataset-registration/v1
+    registrationId: cards-mastercard-ready
+    version: 1
+    datasetSpaceId: ds-acq-prod-sim
+    datasetSpaceVersion: 1
+    datasetPackageId: payment-cards
+    datasetPackageVersion: 1
+    datasetPackageDigest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    datasetAlias: cards-mastercard-ready
+    storage:
+      adapter: POSTGRESQL
+      settingsRef: managed-records-primary@1
+      capabilityProfile: MANAGED_RECORDS_V1
+  - schemaVersion: pockethive.dataset-registration/v1
+    registrationId: clearing-pending
+    version: 1
+    datasetSpaceId: ds-acq-prod-sim
+    datasetSpaceVersion: 1
+    datasetPackageId: clearing-records
+    datasetPackageVersion: 1
+    datasetPackageDigest: sha256:0000000000000000000000000000000000000000000000000000000000000000
+    datasetAlias: clearing-pending
+    storage:
+      adapter: POSTGRESQL
+      settingsRef: managed-records-primary@1
+      capabilityProfile: MANAGED_RECORDS_V1
 ```
 
 ## 11.3 Example bundle-local requirement and Scenario Bindings
@@ -582,14 +608,8 @@ bindings:
     datasetSpaceId: ds-acq-prod-sim
     datasetBindings:
       - requirementId: inputCards
-        datasetAlias: cards.mastercard.byClient.ready
+        datasetAlias: cards-mastercard-ready
         datasetContractId: traffic
-      - requirementId: topUpCards
-        datasetAlias: cards.mastercard.byClient.topUp
-        datasetContractId: supply
-      - requirementId: clearingOut
-        datasetAlias: tx.clearing.pending.pending
-        datasetContractId: clearing-output
 
   - id: bind-onboarding
     scenarioTemplateId: scenario/onboarding-cards-v1
@@ -597,10 +617,7 @@ bindings:
     datasetSpaceId: ds-acq-prod-sim
     datasetBindings:
       - requirementId: refillTargetMc
-        datasetAlias: cards.mastercard.byClient.ready
-        datasetContractId: supply
-      - requirementId: refillTargetVisa
-        datasetAlias: cards.visa.byClient.ready
+        datasetAlias: cards-mastercard-ready
         datasetContractId: supply
 
   - id: bind-clearing
@@ -609,14 +626,8 @@ bindings:
     datasetSpaceId: ds-acq-prod-sim
     datasetBindings:
       - requirementId: clearingIn
-        datasetAlias: tx.clearing.pending.pending
+        datasetAlias: clearing-pending
         datasetContractId: clearing-input
-      - requirementId: clearingSent
-        datasetAlias: tx.clearing.pending.sent
-        datasetContractId: clearing-output
-      - requirementId: clearingRetry
-        datasetAlias: tx.clearing.pending.retry
-        datasetContractId: remediation
 ```
 
 ## 11.3.1 Example Portable Binding (`scenario-local` mode)
@@ -629,14 +640,8 @@ bindings:
     datasetSpaceId: ds-acq-prod-sim
     datasetBindings:
       - requirementId: inputCards
-        datasetAlias: cards.mastercard.byClient.ready
+        datasetAlias: cards-mastercard-ready
         datasetContractId: traffic
-      - requirementId: topUpCards
-        datasetAlias: cards.mastercard.byClient.topUp
-        datasetContractId: supply
-      - requirementId: clearingOut
-        datasetAlias: tx.clearing.pending.pending
-        datasetContractId: clearing-output
 ```
 
 This mode is intended for:

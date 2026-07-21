@@ -1,0 +1,570 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/docs/spec/managed-dataset-authoring.schema.json",
+  "title": "PocketHive Managed Dataset authoring contracts",
+  "description": "Canonical closed DTO and configuration definitions for Dataset package, Dataset Space and Dataset registration authoring. Generated Java and TypeScript types must derive from this file; examples and wireframes are not contract authorities.",
+  "oneOf": [
+    { "$ref": "#/$defs/DatasetPackageWrite" },
+    { "$ref": "#/$defs/DatasetPackageVersion" },
+    { "$ref": "#/$defs/DatasetSpaceWrite" },
+    { "$ref": "#/$defs/DatasetSpaceVersion" },
+    { "$ref": "#/$defs/DatasetRegistrationWrite" },
+    { "$ref": "#/$defs/DatasetRegistrationVersion" },
+    { "$ref": "#/$defs/PackagePage" },
+    { "$ref": "#/$defs/SpacePage" },
+    { "$ref": "#/$defs/RegistrationPage" },
+    { "$ref": "#/$defs/ValidationResult" },
+    { "$ref": "#/$defs/CommandReceipt" },
+    { "$ref": "#/$defs/Problem" }
+  ],
+  "$defs": {
+    "Identifier": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$",
+      "minLength": 1,
+      "maxLength": 96
+    },
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 512
+    },
+    "ReasonCode": {
+      "type": "string",
+      "pattern": "^[A-Z][A-Z0-9_]*$",
+      "minLength": 1,
+      "maxLength": 96
+    },
+    "Digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "ETag": {
+      "type": "string",
+      "pattern": "^\\\"revision:[1-9][0-9]*\\\"$"
+    },
+    "PackageLifecycle": {
+      "enum": ["DRAFT", "PUBLISHED", "RETIRED"]
+    },
+    "SpaceLifecycle": {
+      "enum": ["DRAFT", "ACTIVE", "RETIRED"]
+    },
+    "RegistrationLifecycle": {
+      "enum": ["ACTIVE", "RETIRED"]
+    },
+    "StorageAdapter": {
+      "enum": ["POSTGRESQL", "REDIS"]
+    },
+    "StorageProfile": {
+      "enum": ["MANAGED_RECORDS_V1", "REDIS_COLLECTION_V1"]
+    },
+    "StorageCapability": {
+      "enum": [
+        "SNAPSHOT_READ",
+        "SHARED_SELECTION",
+        "RECORD_UPSERT",
+        "RECORD_TRANSITION",
+        "LEASE_ALLOCATE",
+        "LEASE_ACK"
+      ]
+    },
+    "Classification": {
+      "enum": ["PUBLIC", "INTERNAL", "CONFIDENTIAL", "RESTRICTED"]
+    },
+    "AuthoringAction": {
+      "enum": [
+        "READ",
+        "UPDATE_DRAFT",
+        "DELETE_DRAFT",
+        "VALIDATE",
+        "PUBLISH",
+        "ACTIVATE",
+        "CREATE_REPLACEMENT",
+        "RETIRE",
+        "EXPORT"
+      ]
+    },
+    "FieldType": {
+      "enum": ["STRING", "INTEGER", "DECIMAL", "BOOLEAN", "DATE", "DATE_TIME", "OBJECT"]
+    },
+    "RecordField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "type", "required", "naturalKeyOrder"],
+      "properties": {
+        "name": { "$ref": "#/$defs/Identifier" },
+        "type": { "$ref": "#/$defs/FieldType" },
+        "required": { "type": "boolean" },
+        "naturalKeyOrder": {
+          "oneOf": [
+            { "type": "integer", "minimum": 1 },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "DatasetContract": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schemaVersion", "contractId", "fields"],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-contract/v1" },
+        "contractId": { "$ref": "#/$defs/Identifier" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/Identifier" }
+        }
+      }
+    },
+    "DatasetPackageManifest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "packageId",
+        "version",
+        "recordSchemaPath",
+        "contractPaths",
+        "requiredStorageCapabilities",
+        "supportedStorageProfiles",
+        "sourceBindingPaths",
+        "mappingPaths",
+        "projectionPaths",
+        "policyPaths",
+        "assetPaths"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-package/v1" },
+        "packageId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "recordSchemaPath": { "$ref": "#/$defs/PackagePath" },
+        "contractPaths": { "$ref": "#/$defs/NonEmptyPackagePaths" },
+        "requiredStorageCapabilities": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/StorageCapability" }
+        },
+        "supportedStorageProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/StorageProfile" }
+        },
+        "sourceBindingPaths": { "$ref": "#/$defs/PackagePaths" },
+        "mappingPaths": { "$ref": "#/$defs/PackagePaths" },
+        "projectionPaths": { "$ref": "#/$defs/PackagePaths" },
+        "policyPaths": { "$ref": "#/$defs/PackagePaths" },
+        "assetPaths": { "$ref": "#/$defs/PackagePaths" }
+      }
+    },
+    "PackagePath": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$",
+      "minLength": 1,
+      "maxLength": 240
+    },
+    "PackagePaths": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/PackagePath" }
+    },
+    "NonEmptyPackagePaths": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/PackagePath" }
+    },
+    "PackageFile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "mediaType", "sha256", "contentBase64"],
+      "properties": {
+        "path": { "$ref": "#/$defs/PackagePath" },
+        "mediaType": { "$ref": "#/$defs/NonEmptyString" },
+        "sha256": { "$ref": "#/$defs/Digest" },
+        "contentBase64": { "type": "string", "contentEncoding": "base64", "maxLength": 13981016 }
+      }
+    },
+    "DatasetPackageVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "recordFields",
+        "contracts",
+        "files",
+        "lifecycle",
+        "revision",
+        "digest",
+        "etag",
+        "allowedActions"
+      ],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/DatasetPackageManifest" },
+        "recordFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/RecordField" }
+        },
+        "contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DatasetContract" }
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/PackageFile" }
+        },
+        "lifecycle": { "$ref": "#/$defs/PackageLifecycle" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "digest": {
+          "oneOf": [
+            { "$ref": "#/$defs/Digest" },
+            { "type": "null" }
+          ]
+        },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AuthoringAction" }
+        }
+      }
+    },
+    "DatasetPackageWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["manifest", "recordFields", "contracts", "files"],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/DatasetPackageManifest" },
+        "recordFields": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/RecordField" }
+        },
+        "contracts": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/$defs/DatasetContract" }
+        },
+        "files": {
+          "type": "array",
+          "maxItems": 256,
+          "items": { "$ref": "#/$defs/PackageFile" }
+        }
+      }
+    },
+    "DatasetSpaceWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "datasetSpaceId",
+        "version",
+        "displayName",
+        "sutEnvironmentRef",
+        "classificationCeiling",
+        "accessPolicyRef",
+        "quotaPolicyRef",
+        "allowedStorageProfiles"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-space/v1" },
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "displayName": { "$ref": "#/$defs/NonEmptyString" },
+        "sutEnvironmentRef": { "$ref": "#/$defs/Identifier" },
+        "classificationCeiling": { "$ref": "#/$defs/Classification" },
+        "accessPolicyRef": { "$ref": "#/$defs/NonEmptyString" },
+        "quotaPolicyRef": { "$ref": "#/$defs/NonEmptyString" },
+        "allowedStorageProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/StorageProfile" }
+        }
+      }
+    },
+    "DatasetSpaceVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "datasetSpaceId",
+        "version",
+        "displayName",
+        "sutEnvironmentRef",
+        "classificationCeiling",
+        "accessPolicyRef",
+        "quotaPolicyRef",
+        "allowedStorageProfiles",
+        "lifecycle",
+        "revision",
+        "etag",
+        "allowedActions"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-space/v1" },
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "displayName": { "$ref": "#/$defs/NonEmptyString" },
+        "sutEnvironmentRef": { "$ref": "#/$defs/Identifier" },
+        "classificationCeiling": { "$ref": "#/$defs/Classification" },
+        "accessPolicyRef": { "$ref": "#/$defs/NonEmptyString" },
+        "quotaPolicyRef": { "$ref": "#/$defs/NonEmptyString" },
+        "allowedStorageProfiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/StorageProfile" }
+        },
+        "lifecycle": { "$ref": "#/$defs/SpaceLifecycle" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AuthoringAction" }
+        }
+      }
+    },
+    "StorageSelection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["adapter", "settingsRef", "capabilityProfile"],
+      "properties": {
+        "adapter": { "$ref": "#/$defs/StorageAdapter" },
+        "settingsRef": { "$ref": "#/$defs/NonEmptyString" },
+        "capabilityProfile": { "$ref": "#/$defs/StorageProfile" }
+      }
+    },
+    "DatasetRegistrationVersion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "registrationId",
+        "version",
+        "datasetSpaceId",
+        "datasetSpaceVersion",
+        "datasetPackageId",
+        "datasetPackageVersion",
+        "datasetPackageDigest",
+        "datasetAlias",
+        "storage",
+        "lifecycle",
+        "revision",
+        "etag",
+        "allowedActions"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-registration/v1" },
+        "registrationId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "datasetSpaceVersion": { "type": "integer", "minimum": 1 },
+        "datasetPackageId": { "$ref": "#/$defs/Identifier" },
+        "datasetPackageVersion": { "type": "integer", "minimum": 1 },
+        "datasetPackageDigest": { "$ref": "#/$defs/Digest" },
+        "datasetAlias": { "$ref": "#/$defs/Identifier" },
+        "storage": { "$ref": "#/$defs/StorageSelection" },
+        "lifecycle": { "$ref": "#/$defs/RegistrationLifecycle" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "allowedActions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/AuthoringAction" }
+        }
+      }
+    },
+    "DatasetRegistrationWrite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schemaVersion",
+        "registrationId",
+        "version",
+        "datasetSpaceId",
+        "datasetSpaceVersion",
+        "datasetPackageId",
+        "datasetPackageVersion",
+        "datasetPackageDigest",
+        "datasetAlias",
+        "storage"
+      ],
+      "properties": {
+        "schemaVersion": { "const": "pockethive.dataset-registration/v1" },
+        "registrationId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "datasetSpaceVersion": { "type": "integer", "minimum": 1 },
+        "datasetPackageId": { "$ref": "#/$defs/Identifier" },
+        "datasetPackageVersion": { "type": "integer", "minimum": 1 },
+        "datasetPackageDigest": { "$ref": "#/$defs/Digest" },
+        "datasetAlias": { "$ref": "#/$defs/Identifier" },
+        "storage": { "$ref": "#/$defs/StorageSelection" }
+      }
+    },
+    "PackageSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["packageId", "version", "lifecycle", "digest", "revision", "etag", "dependencyCount", "allowedActions"],
+      "properties": {
+        "packageId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "lifecycle": { "$ref": "#/$defs/PackageLifecycle" },
+        "digest": { "oneOf": [{ "$ref": "#/$defs/Digest" }, { "type": "null" }] },
+        "revision": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "dependencyCount": { "type": "integer", "minimum": 0 },
+        "allowedActions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/AuthoringAction" } }
+      }
+    },
+    "SpaceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["datasetSpaceId", "version", "displayName", "lifecycle", "revision", "etag", "dependencyCount", "allowedActions"],
+      "properties": {
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "displayName": { "$ref": "#/$defs/NonEmptyString" },
+        "lifecycle": { "$ref": "#/$defs/SpaceLifecycle" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "dependencyCount": { "type": "integer", "minimum": 0 },
+        "allowedActions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/AuthoringAction" } }
+      }
+    },
+    "RegistrationSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["registrationId", "version", "datasetAlias", "datasetSpaceId", "datasetPackageId", "datasetPackageVersion", "storage", "lifecycle", "revision", "etag", "dependencyCount", "allowedActions"],
+      "properties": {
+        "registrationId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "datasetAlias": { "$ref": "#/$defs/Identifier" },
+        "datasetSpaceId": { "$ref": "#/$defs/Identifier" },
+        "datasetPackageId": { "$ref": "#/$defs/Identifier" },
+        "datasetPackageVersion": { "type": "integer", "minimum": 1 },
+        "storage": { "$ref": "#/$defs/StorageSelection" },
+        "lifecycle": { "$ref": "#/$defs/RegistrationLifecycle" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "etag": { "$ref": "#/$defs/ETag" },
+        "dependencyCount": { "type": "integer", "minimum": 0 },
+        "allowedActions": { "type": "array", "uniqueItems": true, "items": { "$ref": "#/$defs/AuthoringAction" } }
+      }
+    },
+    "PackagePage": {
+      "allOf": [{ "$ref": "#/$defs/PageBase" }],
+      "properties": {
+        "kind": { "const": "DATASET_PACKAGES" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/PackageSummary" } }
+      }
+    },
+    "SpacePage": {
+      "allOf": [{ "$ref": "#/$defs/PageBase" }],
+      "properties": {
+        "kind": { "const": "DATASET_SPACES" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/SpaceSummary" } }
+      }
+    },
+    "RegistrationPage": {
+      "allOf": [{ "$ref": "#/$defs/PageBase" }],
+      "properties": {
+        "kind": { "const": "DATASET_REGISTRATIONS" },
+        "items": { "type": "array", "items": { "$ref": "#/$defs/RegistrationSummary" } }
+      }
+    },
+    "PageBase": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "items", "nextCursor"],
+      "properties": {
+        "kind": { "enum": ["DATASET_PACKAGES", "DATASET_SPACES", "DATASET_REGISTRATIONS"] },
+        "items": { "type": "array" },
+        "nextCursor": { "oneOf": [{ "type": "string", "minLength": 1, "maxLength": 512 }, { "type": "null" }] }
+      }
+    },
+    "ValidationIssue": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "severity", "path", "message"],
+      "properties": {
+        "code": { "$ref": "#/$defs/ReasonCode" },
+        "severity": { "enum": ["ERROR", "WARNING"] },
+        "path": { "type": "string", "minLength": 1, "maxLength": 512 },
+        "message": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "ValidationResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["valid", "revision", "digest", "issues"],
+      "properties": {
+        "valid": { "type": "boolean" },
+        "revision": { "type": "integer", "minimum": 1 },
+        "digest": { "$ref": "#/$defs/Digest" },
+        "issues": { "type": "array", "items": { "$ref": "#/$defs/ValidationIssue" } }
+      }
+    },
+    "CommandReceipt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commandId", "idempotencyKey", "outcome", "resourceType", "resourceId", "version", "revision", "etag", "digest"],
+      "properties": {
+        "commandId": { "type": "string", "format": "uuid" },
+        "idempotencyKey": { "type": "string", "minLength": 1, "maxLength": 128 },
+        "outcome": { "enum": ["CREATED", "UPDATED", "DELETED", "PUBLISHED", "ACTIVATED", "REPLACED", "RETIRED", "REPLAYED"] },
+        "resourceType": { "enum": ["DATASET_PACKAGE", "DATASET_SPACE", "DATASET_REGISTRATION"] },
+        "resourceId": { "$ref": "#/$defs/Identifier" },
+        "version": { "type": "integer", "minimum": 1 },
+        "revision": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+        "etag": { "oneOf": [{ "$ref": "#/$defs/ETag" }, { "type": "null" }] },
+        "digest": { "oneOf": [{ "$ref": "#/$defs/Digest" }, { "type": "null" }] }
+      }
+    },
+    "Problem": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "correlationId", "currentEtag", "retryAfterSeconds", "issues", "dependencies"],
+      "properties": {
+        "code": {
+          "enum": [
+            "VALIDATION_FAILED",
+            "FORBIDDEN",
+            "NOT_FOUND",
+            "REVISION_CONFLICT",
+            "IDEMPOTENCY_CONFLICT",
+            "DEPENDENCY_BLOCKED",
+            "CAPABILITY_UNAVAILABLE",
+            "PACKAGE_LIMIT_EXCEEDED",
+            "RATE_LIMITED"
+          ]
+        },
+        "message": { "$ref": "#/$defs/NonEmptyString" },
+        "correlationId": { "type": "string", "format": "uuid" },
+        "currentEtag": { "oneOf": [{ "$ref": "#/$defs/ETag" }, { "type": "null" }] },
+        "retryAfterSeconds": { "oneOf": [{ "type": "integer", "minimum": 1 }, { "type": "null" }] },
+        "issues": { "type": "array", "items": { "$ref": "#/$defs/ValidationIssue" } },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "id", "version"],
+            "properties": {
+              "type": { "enum": ["DATASET_SPACE", "DATASET_REGISTRATION", "SCENARIO_BINDING", "RUN_SNAPSHOT"] },
+              "id": { "$ref": "#/$defs/Identifier" },
+              "version": { "type": "integer", "minimum": 1 }
+            }
+          }
+        }
+      }
+    }
+  }
+}
