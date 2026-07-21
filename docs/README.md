@@ -5,18 +5,10 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Architecture
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
-- [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
+- [SUT + Dataset + Simulation Model (proposal)](concepts/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
 - [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
 - [E2E API Framework Mini-Plan](archive/e2e-api-framework-mini-plan.md)
-
-## Contracts
-
-- [Managed Dataset authoring API](contracts/managed-dataset-authoring-api.md)
-- [Managed Dataset authoring JSON Schema](spec/managed-dataset-authoring.schema.json)
-- [Result rules](contracts/result-rules.md)
-- [Control events JSON Schema](spec/control-events.schema.json)
-- [WorkItem envelope JSON Schema](spec/workitem-envelope.schema.json)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)

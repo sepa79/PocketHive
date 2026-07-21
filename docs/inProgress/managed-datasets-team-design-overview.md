@@ -457,8 +457,7 @@ inspection:
 Status changes are announced through a restrained live region; errors include
 plain-language recovery guidance. Keyboard focus remains visible, tables reflow
 or become labelled cards at narrow widths, and color is never the only status
-indicator. The planning wireframe is an interaction contract, not evidence of
-production WCAG conformance.
+indicator. Design review does not constitute production WCAG conformance.
 
 ## Design approval checklist
 
@@ -484,27 +483,19 @@ evidence; those are testable delivery criteria, not unresolved architecture.
 
 | Gate | Current result | What closes it |
 |---|---|---|
-| `G-DESIGN-READY-v1` | **PASS — green** | Coherent specification, contract, wireframe, assurance and registry baseline |
+| `G-DESIGN-READY-v1` | **PASS — green** | Coherent concept, design specification and team review baseline |
 | `G-TEAM-APPROVED-v1` | `NOT_EVALUATED` | Product, Architecture, Security, Operations, UX and QA approve placement, ownership and non-claims |
 | `G-IMPLEMENTATION-READY-v1` | `NOT_EVALUATED` | Approve contracts, ports/adapters, first source/SUT profile, measurable outcomes and named owners |
 | `G-M1-INTERNAL-v1` | `NOT_RUN` | Implement and fault-test the official-ingress M1 slice against independent system ledgers |
 | `dataset-qualified-core` | `NOT_RUN` | Pass applicable correctness, capacity, endurance, non-interference, security, recovery, UX and accessibility evidence |
 
-Deterministic design checks currently validate the canonical authoring schema
-and representative DTOs, package-digest vectors, exact UI-registry alignment,
-local documentation links and 18 wireframe source groups. This is design
-evidence only; implementation, browser/accessibility and runtime evidence
-remain `NOT_RUN`.
+This is design evidence only; executable contracts, implementation,
+browser/accessibility and runtime evidence remain `NOT_RUN`.
 
 ## Detailed companions
 
-- [Component, use-case and scenario examples](managed-datasets-use-cases-and-scenario-examples.md)
 - [Lifecycle and architecture specification](managed-test-data-lifecycle-generic-spec.md)
-- [Operator UI design specification](managed-datasets-operator-ui-design-spec.md)
-- [Assurance and release strategy](managed-test-data-assurance-strategy.md)
-- [Canonical authoring API](../contracts/managed-dataset-authoring-api.md)
-- [Canonical authoring schema](../spec/managed-dataset-authoring.schema.json)
-- [Interactive planning wireframe](managed-datasets-wireframes/README.md)
+- [SUT, Dataset Space and Simulation Program concept](../concepts/sut-dataset-simulation-model.md)
 
 ## Research basis
 

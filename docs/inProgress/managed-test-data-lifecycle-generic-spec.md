@@ -7,12 +7,6 @@ Decision target: PocketHive architecture and MVP implementation
 
 Last updated: 2026-07-21
 
-Assurance document:
-`docs/inProgress/managed-test-data-assurance-strategy.md`
-
-Operator UI design document:
-`docs/inProgress/managed-datasets-operator-ui-design-spec.md`
-
 Team design overview:
 `docs/inProgress/managed-datasets-team-design-overview.md`
 
@@ -287,7 +281,7 @@ The MVP will not:
 ## 5. Alignment with existing PocketHive architecture
 
 This specification completes rather than replaces
-`docs/architecture/sut-dataset-simulation-model.md`.
+`docs/concepts/sut-dataset-simulation-model.md`.
 
 The existing proposal already establishes these decisions:
 
@@ -428,13 +422,11 @@ forbidden. Paths are normalized, must remain inside the package, and are
 content-digested at validation. Secrets, live records, backend credentials and
 runtime state are forbidden in the package.
 
-The closed authoring DTOs are defined by
-[`docs/spec/managed-dataset-authoring.schema.json`](../spec/managed-dataset-authoring.schema.json).
-The official routes, permissions, ETag/idempotency behavior, normalized ZIP
-format, size/path rules and canonical package digest algorithm are defined by
-[`docs/contracts/managed-dataset-authoring-api.md`](../contracts/managed-dataset-authoring-api.md).
-Those files are the design SSOT; YAML below is illustrative and generated
-language types must not redefine it.
+This section owns the design-time authoring shapes and semantics. During
+implementation, PocketHive must define one canonical executable schema and HTTP
+contract from these requirements before writing handlers or clients. Generated
+language types must derive from that contract; prose examples remain
+illustrative and must not become a second definition.
 
 The package lifecycle is `DRAFT -> PUBLISHED -> RETIRED`. PocketHive MCP may
 validate and upload a package to Scenario Manager, and the Dataset UI may
@@ -517,8 +509,9 @@ active `(datasetSpaceId, datasetAlias)`: validate the exact current ETag and all
 new references, create the complete next version, retire the prior current
 version, activate the next version, and append audit/outbox intent atomically.
 Failure changes neither version. Frozen bindings keep their exact prior
-registration and Space versions. The canonical transaction and failure
-contract is owned by `docs/contracts/managed-dataset-authoring-api.md`.
+registration and Space versions. This transaction and failure behavior is
+normative and must be carried into the implementation HTTP contract without
+another variant.
 
 ### 6.2 Dataset definition
 
@@ -856,9 +849,9 @@ been recovered.
 
 Shared code is deliberately narrow:
 
-- `docs/spec/managed-dataset-authoring.schema.json` owns the design-time
-  authoring wire contract; generated or mechanically verified types in
-  `common/dataset-contracts` own its implementation representation plus Dataset IDs, package/local-contract,
+- the implementation's single canonical authoring schema owns the wire
+  contract; generated or mechanically verified types in
+  `common/dataset-contracts` own its language representation plus Dataset IDs, package/local-contract,
   Dataset Space/registration lifecycle and storage-profile schemas,
   `DatasetContract/v1`,
   `DatasetConsumerRequirement/v1`, `ResolvedDatasetBinding/v1`, projection
@@ -4706,7 +4699,7 @@ capacity claim:
 
 | Profile | Gate | Required workload |
 |---|---|---|
-| `Q-MVP-1K-24H` | MVP release | Exactly 50,000 eligible reusable records at the active target, `maximumReady: 55000`, maximum declared selector/material bytes, and at least two concurrent traffic swarms sharing one authoritative Dataset, each carrying a non-zero frozen share of 1,000 aggregate requests/second; repeated paired experiments and an aggregate `Q-KNEE` of at least 1,429 requests/second; live target increase and decrease convergence; then one 24-hour two-swarm active run at 1,000 aggregate requests/second with reusable material, refresh, MCP proof polling and the `DSUI-PERF-004` qualified UI-read workload active |
+| `Q-MVP-1K-24H` | MVP release | Exactly 50,000 eligible reusable records at the active target, `maximumReady: 55000`, maximum declared selector/material bytes, and at least two concurrent traffic swarms sharing one authoritative Dataset, each carrying a non-zero frozen share of 1,000 aggregate requests/second; repeated paired experiments and an aggregate `Q-KNEE` of at least 1,429 requests/second; live target increase and decrease convergence; then one 24-hour two-swarm active run at 1,000 aggregate requests/second with reusable material, refresh, MCP proof polling and the qualified UI-read workload active |
 | `Q-DATA-REFRESH-<sourceProfileVersion>` | MVP for every admitted refreshable Source Operating Profile | Its maximum active records, minimum validity, provider latency/rate/error envelope, aligned due wave, reserve, and distribution fan-out; no traffic denominator is assumed |
 | `Q-SHARED-30K` | Deferred claim | 30 swarms at 1,000 requests/second each, shared reusable Dataset, refresh and proof polling active |
 | `Q-ISOLATED-30K` | Deferred claim | 30 independently scoped Datasets at 1,000 requests/second per swarm with fair supply and bounded background work |
@@ -6139,7 +6132,7 @@ signature verification and stable receipt identity.
 After approval and canonical-doc integration, archive this in-progress plan or
 convert it to a non-authoritative decision record. It must not remain a second
 architecture source of truth beside
-`docs/architecture/sut-dataset-simulation-model.md`.
+`docs/concepts/sut-dataset-simulation-model.md`.
 
 ### 26.2 Shared modules and Orchestrator bounded context
 
@@ -6182,9 +6175,9 @@ into `common`.
 
 ### 26.3 Scenario Manager
 
-- implement the official package/Space/registration authoring API from
-  `docs/contracts/managed-dataset-authoring-api.md` using generated types from
-  `docs/spec/managed-dataset-authoring.schema.json`;
+- define the official package/Space/registration schema and authoring API
+  contract-first from sections 6.1 and 22.1, then implement it using generated
+  or mechanically verified shared types;
 - implement DB-backed Dataset Space/definition/source-policy registry;
 - implement normalized atomic package import/export, canonical digest golden
   vectors, ETag/idempotency handling, CSRF protection, immutable command audit,
@@ -6470,8 +6463,7 @@ model-check result cannot satisfy a release criterion.
 - add the server-composed Dataset-dependencies view above the existing real
   `SwarmRuntimeInspector`; do not recreate runtime diagnostics;
 - implement every state, semantic mapping, responsive/accessibility rule,
-  security boundary, delivery stage and `DSUI` acceptance requirement in the
-  linked operator UI design specification; and
+  security boundary and delivery stage required by `FUN-014`; and
 - document all official reads in `docs/ORCHESTRATOR-REST.md` and add their
   polling workload to Dataset status/proof bulkhead qualification.
 
@@ -6530,8 +6522,7 @@ problem. Its release scope is:
     export/delete-draft/publish/activate/replace/retire journeys, plus the
     read-only runtime Managed Datasets inventory, all five linkable detail
     views and Swarm Inspector Dataset dependencies. Every view is backed only by
-    authorised canonical product APIs and satisfies the linked UI design
-    specification's `DSUI` requirements; no runtime sample data, Dataset value
+    authorised canonical product APIs and satisfies `FUN-014`; no runtime sample data, Dataset value
     browser, record/business-state mutation or force-delete control is included;
 12. recovery of committed Dataset state, schedules, claims, outbox, module
     activations and worker projections across Orchestrator/worker restarts,
@@ -6647,7 +6638,7 @@ capable, regulated-data-qualified, or enterprise-qualified.
 | Dockerised and free, with an enterprise route | No new core application container or hardware security dependency; existing free PostgreSQL/Rabbit, explicit two-vhost connections, Docker-secret key files and separable ports. A later extraction seam remains, and sensitive is still gated by the combined Orchestrator/Docker-control TCB | `OPS-001`--`OPS-008`, `SEC-016`, `EVD-010`; `OPS-009`, `PER-006`--`PER-007` for later claims |
 | Restricted/regulated test data and secrets are controlled | Explicit gate, inherited core encrypted persistence, final-only materialization, stronger service-owned key rings, sender-constrained step-ca identity, canonical requests, bounded final TCB, egress/redaction/canary controls; specialised cryptography deferred | `SEC-001`--`SEC-016` |
 | MCP proves sourcing, readiness and use without becoming authority | Bounded status reads and quota-controlled idempotent proof creation, including Fitness Contract status/digest/reasons, independent oracles, aggregate/sample proof, minimal signed core qualification, signed enterprise export and executable conformance evidence | `FUN-013`, `EVD-001`--`EVD-010` |
-| Operators can understand and diagnose the capability without infrastructure browsing or dummy data | Authorised, bounded Orchestrator read models drive `ui-v2` inventory, Overview, Fitness, Supply/lifecycle, Consumers, Evidence and Swarm Inspector dependencies; all unavailable/stale/partial states fail honestly and values remain hidden | `FUN-014` and all applicable `DSUI-*` requirements in the operator UI design document |
+| Operators can understand and diagnose the capability without infrastructure browsing or dummy data | Authorised, bounded Orchestrator read models drive `ui-v2` inventory, Overview, Fitness, Supply/lifecycle, Consumers, Evidence and Swarm Inspector dependencies; all unavailable/stale/partial states fail honestly and values remain hidden | `FUN-014` |
 
 ## 28. Acceptance criteria
 
@@ -6658,19 +6649,14 @@ Rabbit observers are likewise confined to separately approved component-
 interface qualification; E2E stimulus and product result queries remain on the
 official path.
 
-The linked UI specification
-[Managed Test Data Assurance Strategy](managed-test-data-assurance-strategy.md)
-defines risk charters, corner cases, debrief, and evidence grading. The tables
-below are the normative release contract. `MVP` rows must pass for release;
+Sections 28 through 30 define the acceptance, mandatory test and observability
+requirements. The tables below are the normative release contract. `MVP` rows must pass for release;
 `PROFILE` rows must pass before that named gated profile is admitted, and
 `CLAIM` rows must pass before the named optional capability is advertised.
 Design review, case studies, unit-test counts, and pass percentages cannot
 substitute for the named evidence.
 
-For `FUN-014`, the numbered `DSUI-*` requirements in the
-[Managed Datasets Operator UI Design Specification](managed-datasets-operator-ui-design-spec.md)
-are normative child requirements. Missing, omitted, contradictory or unlinked
-`DSUI` evidence makes `FUN-014` incomplete; a visually polished wireframe or
+`FUN-014` is the normative UI requirement. A visually polished mock-up or
 fixture-backed page is not implementation evidence.
 
 A parenthesised deployment/data/source profile after a class is an applicability
@@ -6736,7 +6722,7 @@ binding; it cannot silently use the core child set.
 | `FUN-011` | MVP (profile-split children) | The frozen Selection Policy produces canonical `ROUND_ROBIN_LOCAL` vectors and bounded distribution without central I/O. Fenced non-overlapping durable occurrence ranges produce restart-stable keys from logical occurrence IDs; bounded uncertain replay retains those keys after crash. Explicit `AT_LEAST_ONCE` never counts duplicate effects as throughput, the applicable `SUT_IDEMPOTENT` child proves at most one sink effect, `EXACTLY_ONCE` fails admission, and request-thread central calls remain zero | deterministic selector/effect-range TCK, crash/replacement/Rabbit redelivery/concurrent-consumer faults, durable range ledger, independent sink ledger and request-thread I/O detector |
 | `FUN-012` | MVP | Supply dispatch requires a current control-plane readiness receipt proving the exact producer `RUNNING`, workloads enabled and target input ready, plus one fenced `SupplyRouteLease` matching exact environment/Dataset/source-binding version/operation kind, controller incarnation, reconciled plan/topology revision and the controller-applied platform WorkItem route-profile reference/digest. A stale/missing readiness receipt or lease/profile/topology invalid at reserve, outbox or publication produces no publish. A validly published delivery whose lease later expires, is revoked/rebound, or no longer matches producer/scope/kind/version/incarnation is rejected atomically at claim with zero provider/SUT effect; the same operation remains safely reconcilable/rebindable. Route replacement fences the old tuple without creating another operation/reservation. Dataset module uses only the lifecycle and dispatch ports plus the opaque lease tuple/shared routing utility and never emits control, declares topology, chooses queue semantics, infers, handcrafts or falls back to a route | official create/start/config/stop/remove/status APIs, control capture, readiness/route-profile/lease/operation/outbox ledger, Rabbit topology capture, start-timeout/claim-vs-rebind/expiry/redelivery faults and route-profile drift mutation tests |
 | `FUN-013` | MVP | Every required binding resolves one exact allowlisted Fitness Contract version/digest before container creation; compile/admission metadata is compatible and cannot be weakened inline. The Dataset module returns runtime `PASS` only when every required environment/use, schema/relationship, cohort/count, freshness/validity and provenance/classification assertion is supported by sufficiently fresh authoritative evidence, and qualification independently verifies that decision. `FAIL` or `UNKNOWN` contributes zero new readiness; `FAIL` invalidates active use, while `UNKNOWN` permits only the exact previously activated local view through its signed prior-`PASS` `safeUntil` and never activates a new view. A contract-version/input-vector change invalidates the prior result until reevaluated. Status/MCP expose only bounded result/reason/evidence metadata and no record value, and evaluation adds zero synchronous transaction-path I/O | official create/start/status/MCP APIs, frozen contract/binding snapshot and `FitnessReceipt`, independent fitness evaluator, source/provider ledger, trusted clock, Dataset invariants, worker I/O detector and traffic sink |
-| `FUN-014` | MVP | The production `ui-v2` inventory, all five Dataset-detail routes, and Swarm Inspector dependencies satisfy every applicable `DSUI-*` requirement in the operator UI design document: every dynamic fact comes from an authorised canonical Orchestrator read model; cross-Dataset inventory uses an opaque authorised snapshot and never synthesizes a highest Dataset revision; Dataset health, use-specific Fitness, prior-PASS continuity, distribution, exact swarm decisions and proof facts remain independent; stale/partial/reconciling/denied/error states never fabricate a value; the UI exposes no Dataset value or mutation control; and runtime diagnostics reuse the real bounded APIs | official Orchestrator APIs, browser DOM/network/storage/accessibility evidence, independent Dataset/binding/operation/proof oracles, release-bundle scan, Firefox all-state captures and non-interference run |
+| `FUN-014` | MVP | The production `ui-v2` inventory, all five Dataset-detail routes, and Swarm Inspector dependencies use authorised canonical Orchestrator read models; cross-Dataset inventory uses an opaque authorised snapshot and never synthesizes a highest Dataset revision; Dataset health, use-specific Fitness, prior-PASS continuity, distribution, exact swarm decisions and proof facts remain independent; stale/partial/reconciling/denied/error states never fabricate a value; the UI exposes no Dataset value or runtime mutation control; authoring uses real Scenario Manager data and commands without fixtures; and runtime diagnostics reuse the real bounded APIs | official Scenario Manager and Orchestrator APIs, browser DOM/network/storage/accessibility evidence, independent Dataset/binding/operation/proof oracles, release-bundle scan, Firefox all-state captures and non-interference run |
 | `FUN-015` | MVP (every external-call source) | One frozen `SourceResultPolicy/v1` exhaustively maps every canonical result outcome to exactly one action and only allowlisted targets/mappings. HTTP and TCP contract vectors prove a transport-success/wrong-business-state result becomes `FAILED_WRONG_STATE`; completed results alone contribute to primary supply; conclusive failures may enter only the declared failure Dataset or operation ledger; `PENDING` and `UNCERTAIN` remain non-terminal reconciliation with no false Dataset commit. Missing/unknown state, malformed or oversized decoding, duplicate/missing route, dynamic target, regex route, unsupported protocol/decoder, output/interceptor semantic drift and 2xx-only success inference all fail closed | shared `ResultRules`/source-result-policy cross-protocol TCK, HTTP/TCP source doubles, output/interceptor contract tests, operation/target Dataset receipts and primary-supply oracle |
 
 ### 28.2 Lifecycle
@@ -6885,7 +6871,7 @@ its own `CLAIM` rows and exact versioned profile.
 | Controllers/liveness | MVP: Scenario Manager and Orchestrator steady-state restart, Dataset `RECONCILING`, durable lifecycle due/fill-cycle recovery, explicit separation from controller-local scenario timeline and worker-local traffic pacer, static running-but-unhealthy self-exit/Docker restart, dependency-readiness loss without crash loop, repeated unhealthy containers, stale route/incarnation denial, and no Dataset mutation during reconciliation. `Q-PLATFORM-RECOVERY-v1` only: create/handoff/config/start/stop/remove crash windows, automatic Swarm Controller replacement, exact desired-plan/topology reconstruction and duplicate-runtime prevention |
 | Redis compatibility | existing Redis dataset demo, TOP/RED/BAL loop, auth proof, sequence generation, debug TTL |
 | MCP/oracles | exact eight-tool Dataset catalogue; package tools can change only definition lifecycle and expose no secret/value, while runtime tools expose no record write/value; Dataset MCP, generic workflow/swarm, UI and official-API bypass/equivalence attempts with mutated principal/scope/policy/tool annotations and zero effects on every denial; package revision/digest/idempotency races, capability mismatch, bounded pagination, extra properties, hostile labels/provider text, strict staged claims, missing/contradictory product, independently implemented authorization and Fitness Contract oracles, canonical replay, bounded aggregate rollover, deterministic sample inclusion/exclusion, no raw data, deployment/environment/Dataset/principal concurrency/rate/cost exhaustion, storage/message ceiling and polling impact; signed evidence missing/extra/path-confused/tampered/rollback-key/RFC3161 timestamp cases and machine-readable child-assertion completeness |
-| Operator UI | every `DSUI` requirement and every inventory/detail/Fitness/supply/consumer/evidence/Swarm-Inspector/runtime view; no-authority, loading, current, background-refresh, stale, partial, reconciling, empty, filtered-empty, denied, revoked, limited, unavailable and incompatible-schema states; authoritative field/DOM comparison, cross-view contradiction injection, server-side authorised facets/totals/pagination, route/back/focus/keyboard/zoom/reflow/Firefox coverage, browser storage/redaction scan, release-bundle no-fixture scan and polling non-interference |
+| Operator UI | `FUN-014` and every inventory/detail/Fitness/supply/consumer/evidence/Swarm-Inspector/runtime view; no-authority, loading, current, background-refresh, stale, partial, reconciling, empty, filtered-empty, denied, revoked, limited, unavailable and incompatible-schema states; authoritative field/DOM comparison, cross-view contradiction injection, server-side authorised facets/totals/pagination, route/back/focus/keyboard/zoom/reflow/Firefox coverage, browser storage/redaction scan, release-bundle no-fixture scan and polling non-interference |
 | Identity/egress | step-ca offline-root/online-intermediate bootstrap, exact SAN/EKU/private-key locality, leaf renewal/revoke and root/intermediate rollover; workload mTLS-bound token and MCP DPoP-to-mTLS token exchange copy/replay/wrong-certificate cases; signing/key-manifest activation/rollback/equivocation/owner mounts, selector/stage-attestation mutation/replay/reorder/key rotation, closed `PreparedRequest/v1` Unicode/duplicate-header/query/body/slot/destination vectors, unresolved auth through request builder and final-only authentication, endpoint allowlist, URL/DNS/IP/redirect/metadata/socket SSRF, DNS rebinding, payload/decompression/parser bounds, unsupported slot context and context-safe encoding |
 | Security | all canary sinks/encodings, prohibited schemas, inline/image/env secrets, cross-scope/wildcard/enumeration, token audience/expiry/revocation/sender binding, KEK/DEK/fingerprint/certificate/credential rotation, nonce reservation and restore, corrupt ciphertext/AAD, final-processor cross-domain co-tenancy/plaintext/egress/spill/debug/plugin bounds, unsafe transport/debug/container rejection, active-store/backup retention purge |
 | Performance | feature-off/idle/active pairs, exact 50,000 eligible/55,000 maximum record-and-byte manifest, live target increase/decrease convergence, open-loop unique-effect-key rate and duplicate-effect failure, 10/20/30/40/50-swarm claim steps, shared versus isolated, maximum full-projection bytes and swap amplification, refresh/validation maximum, hierarchical budget/bulkhead saturation and fairness, proof sampling/polling maximum, queue backlog/recovery, cold-start storm, ten-of-thirty restart wave, 24-hour soak |
@@ -7144,7 +7130,7 @@ supported.
 
 PocketHive repository references:
 
-- `docs/architecture/sut-dataset-simulation-model.md`
+- `docs/concepts/sut-dataset-simulation-model.md`
 - `docs/ARCHITECTURE.md`
 - `docs/scenarios/SCENARIO_VARIABLES.md`
 - `docs/scenarios/SCENARIO_CONTRACT.md`
@@ -7155,7 +7141,6 @@ PocketHive repository references:
 - `tools/pockethive-mcp/server.mjs`
 - `docs/bugs/swarm-plan-handoff-loss.md`
 - `docs/bugs/control-plane-command-lifecycle-gap.md`
-- `docs/inProgress/managed-test-data-assurance-strategy.md`
 
 ### 33.1 Concrete case-study applicability
 
