@@ -401,6 +401,10 @@ contractPaths: [contracts/traffic.yaml]
 requiredStorageCapabilities: [SNAPSHOT_READ, SHARED_SELECTION]
 supportedStorageProfiles: [MANAGED_RECORDS_V1, REDIS_COLLECTION_V1]
 sourceBindingPaths: [sources/csv-catalog-v1.yaml]
+mappingPaths: [mappings/source-to-record-v1.yaml]
+projectionPaths: [projections/traffic-material-v1.yaml]
+policyPaths: [policies/reusable-records-v1.yaml]
+assetPaths: [assets/input.csv]
 ```
 
 ```yaml
@@ -441,7 +445,10 @@ boundary and concrete storage:
 schemaVersion: pockethive.dataset-registration/v1
 registrationId: performance-test-reusable-records
 datasetSpaceId: performance-test
-datasetPackageRef: reusable-records@1
+datasetSpaceVersion: 2
+datasetPackageId: reusable-records
+datasetPackageVersion: 1
+datasetPackageDigest: sha256:4c91d9e2c0a7a8f8b1418398dd2de18290965d06e1a21e70eeaf7dcff14b82ad
 datasetAlias: reusable-records
 storage:
   adapter: POSTGRESQL
@@ -601,6 +608,7 @@ config:
   interceptors:
     managedDatasetPublisher:
       enabled: true
+      completionPolicy: BOTH_REQUIRED_RECONCILED
       deliveryMode: IN_PROCESS_DIRECT
       expectedDatasetRef: "{{ vars.datasetRef }}"
       expectedSourceBindingId: "{{ vars.sourceBindingId }}"
@@ -608,11 +616,14 @@ config:
 ```
 
 This is not a best-effort uploader. It reuses the same typed upsert config,
-committer, stable idempotency key and durable receipt as `DATASET_UPSERT`, runs
-before the Rabbit output is published, and fails the invocation if the Dataset
-commit is not durable. It accepts only an allowlisted bounded non-sensitive
-projection; sensitive producer results must terminate through
-`DATASET_UPSERT`.
+committer and stable idempotency identity as `DATASET_UPSERT`, and its required
+`BOTH_REQUIRED_RECONCILED` process stages an ineligible Dataset result,
+publishes the Rabbit output, then finalises Dataset eligibility/supply
+accounting. Missing or uncertain component receipts fail/reconcile the same
+operation; neither partial success becomes completion. Primary publication is
+at-least-once and must retain its existing idempotency contract. The
+interceptor accepts only an allowlisted bounded non-sensitive projection;
+sensitive producer results must terminate through `DATASET_UPSERT`.
 
 ### 11.4 Producer `variables.yaml` excerpt
 
@@ -980,7 +991,6 @@ answer these questions consistently:
 ## Related design documents
 
 - [Team design overview](managed-datasets-team-design-overview.md)
-- [Architecture recommendation](managed-test-data-architecture-recommendation.md)
 - [Lifecycle specification](managed-test-data-lifecycle-generic-spec.md)
-- [Readiness assessment](managed-test-data-readiness-assessment.md)
 - [Assurance strategy](managed-test-data-assurance-strategy.md)
+- [Operator UI specification](managed-datasets-operator-ui-design-spec.md)

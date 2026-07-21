@@ -16,19 +16,43 @@ It never imports or falls back to this prototype.
 
 ## Included flows
 
-The authoring companion at `authoring.html` adds three contract-aligned,
+The authoring companion at `authoring.html` adds five contract-aligned,
 deterministic planning views:
 
-- `#inventory` — authorised Scenario Manager list/search/filter structure with
-  an honest successful-empty response and no invented row or fallback;
+- `#inventory/packages`, `#inventory/spaces`, and
+  `#inventory/registrations` — keyboard-operable authorised Scenario Manager
+  list/search/filter structures with honest successful-empty responses and no
+  invented row or fallback;
 - `#package` — portable Dataset package schema and package-local Contract
   authoring, with deployment context excluded;
-- `#space` — deployment authority-policy authoring without Dataset schema,
-  Contract or storage-selection editing; and
+- `#space` — deployment authority-policy authoring using the one canonical
+  `quotaPolicyRef`, without Dataset schema, Contract, inline quota schema or
+  storage-selection editing;
 - `#registration` — explicit published-package, active-Space, alias, adapter,
   settings-reference and capability-profile binding; and
 - `#remove` — server-decided exact draft deletion versus version retirement,
   with dependency recheck and no force-delete path.
+
+The canonical authoring DTOs and API behavior live in
+[`docs/spec/managed-dataset-authoring.schema.json`](../../spec/managed-dataset-authoring.schema.json)
+and
+[`docs/contracts/managed-dataset-authoring-api.md`](../../contracts/managed-dataset-authoring-api.md).
+The prototype demonstrates structure and adverse-state requirements only; its
+illustrative editor values are never bundled into production. Production list,
+add, edit, review and remove journeys use authenticated Scenario Manager data,
+returned actions, exact ETags and authoritative post-command re-reads.
+
+Use `authoringState` to inspect the authoring-specific adverse-state banner:
+
+```text
+?authoringState=loading#inventory/packages
+?authoringState=forbidden#inventory/packages
+?authoringState=unavailable#inventory/packages
+?authoringState=validation#package/review
+?authoringState=conflict#package/review
+?authoringState=dependency_blocked#remove
+?authoringState=accepted_read_failed#inventory/registrations
+```
 
 Current desktop review captures live in `captures/authoring/`. They are visual
 planning artifacts, not evidence that the APIs or authoring lifecycle are
@@ -37,10 +61,16 @@ implemented.
 | Authoring capture | Coverage |
 |---|---|
 | `dataset-authoring-inventory-empty-desktop-1440.png` | Real-data list structure and successful authorised-empty state without sample rows |
+| `dataset-authoring-inventory-spaces-empty-desktop-1440.png` | Dataset Space list/add structure and successful authorised-empty state |
+| `dataset-authoring-inventory-registrations-empty-desktop-1440.png` | Registration list/add structure and successful authorised-empty state |
 | `dataset-authoring-remove-desktop-1440.png` | Exact unreferenced-draft deletion and published/active retirement boundary |
 | `dataset-package-authoring-desktop-1440.png` | Record schema, natural key, package-local Contracts and storage compatibility requirements |
+| `dataset-package-content-authoring-desktop-1440.png` | Complete manifest-declared mappings/projections/policies/sources/assets boundary |
+| `dataset-package-review-authoring-desktop-1440.png` | Exact ETag, validation, digest and publish-review boundary |
+| `dataset-package-conflict-authoring-desktop-1440.png` | Stale-ETag conflict with preserved local input and explicit reload/export recovery |
 | `dataset-space-authoring-desktop-1440.png` | Deployment authority/SUT scope, access policy, classification, quotas and allowed profiles |
 | `dataset-registration-authoring-desktop-1440.png` | Exact package/Space binding, alias, explicit adapter, settings reference and capability check |
+| `dataset-authoring-dependency-blocked-desktop-1440.png` | Server-returned dependency block with no destructive action or force path |
 
 - `#datasets` — cross-swarm inventory of authorised operational status scopes;
 - `#dataset/overview` — exact status-scope admission, continuity, supply,
@@ -191,30 +221,17 @@ replacement or false success.
 
 ## Capture evidence status
 
-`captures/spec-aligned/` contains a frozen earlier Firefox 140.12.0esr review
-set. Those images predate the neutral fixture names, retain retired business-
-specific fixture wording, and predate the current supply journey and resize
-specimens. They are historical/reference-only and are excluded from current
-design evidence. Their contact sheets cover:
-
-| Evidence | Coverage |
-|---|---|
-| `00-all-desktop.png` | Inventory, Overview, Fitness, Supply/lifecycle, Consumers page 1, Evidence and Inspector at 1440×1040 |
-| `00-all-mobile.png` | The same primary surfaces at 390×844 |
-| `00-responsive-theme-proof.png` | Inventory at 1920×1080, 1366×768, 1024×768, 320×844 and 200% zoom; dark/light; Consumers page 2; missing and accepted `FLOW_PROVEN` references |
-| `00-adverse-states.png` | Reconciling, stale, rate-limited, forbidden, authorised-empty and incompatible states at 1366×768 |
-| `00-interaction-details.png` | READY and FLOW proof interactions, the opened 320-pixel supply-definition disclosure, and the scrolled alternate cancellation/`UNCERTAIN` specimen |
-
 The current neutral wireframe source and `qa-check.mjs` result are the concept-
-approval artifacts. No capture was refreshed because the approved browser
-could not open the local prototype in this environment. A new deterministic
-render and visual inspection of every named individual and contact sheet is
-required before claiming current-source visual fidelity. The 320-pixel and
-200%-zoom reference images intentionally show only the top of vertically
-scrollable content.
+approval artifacts. The authoring captures were refreshed from current source
+at 1440×1040 using local headless Chromium and visually inspected. They confirm
+desktop planning layout only; Firefox, responsive, keyboard, accessibility-tree
+and production API-backed evidence remains required before implementation or
+release sign-off. A small representative operational desktop/mobile capture
+set is retained for design context; historical contact sheets, comparisons and
+superseded capture sets are intentionally not stored.
 
-Planning visual-fidelity result for the current source: **not claimed; capture
-refresh required**.
+Planning visual-fidelity result for the current authoring desktop source:
+**reviewed, not an implementation or accessibility pass**.
 
 Accessibility sign-off additionally requires automated checks plus manual
 keyboard, accessibility-tree and screen-reader verification. No screenshot set

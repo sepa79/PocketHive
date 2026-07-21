@@ -1,5 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { createHash } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('.', import.meta.url))
@@ -9,6 +10,11 @@ const css = fs.readFileSync(path.join(root, 'styles.css'), 'utf8')
 const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8')
 const designQa = fs.readFileSync(path.join(root, 'design-qa.md'), 'utf8')
 const spec = fs.readFileSync(path.join(root, '..', 'managed-datasets-operator-ui-design-spec.md'), 'utf8')
+const authoringHtml = fs.readFileSync(path.join(root, 'authoring.html'), 'utf8')
+const authoringJs = fs.readFileSync(path.join(root, 'authoring.js'), 'utf8')
+const authoringCss = fs.readFileSync(path.join(root, 'authoring.css'), 'utf8')
+const authoringApi = fs.readFileSync(path.join(root, '..', '..', 'contracts', 'managed-dataset-authoring-api.md'), 'utf8')
+const authoringSchema = fs.readFileSync(path.join(root, '..', '..', 'spec', 'managed-dataset-authoring.schema.json'), 'utf8')
 const failures = []
 let passed = 0
 
@@ -61,6 +67,7 @@ function parse(source) {
 }
 
 const nodes = parse(html)
+const authoringNodes = parse(authoringHtml)
 const byId = new Map()
 for (const node of nodes) {
   const id = node.attrs.get('id')
@@ -68,6 +75,28 @@ for (const node of nodes) {
   if (!byId.has(id)) byId.set(id, [])
   byId.get(id).push(node)
 }
+
+group('Authoring document structure and control names', () => {
+  const authoringIds = new Map()
+  for (const node of authoringNodes) {
+    const id = node.attrs.get('id')
+    if (!id) continue
+    authoringIds.set(id, (authoringIds.get(id) ?? 0) + 1)
+  }
+  for (const [id, count] of authoringIds) check(count === 1, `authoring document has duplicate id="${id}"`)
+  for (const control of authoringNodes.filter((node) => ['input', 'select', 'textarea'].includes(node.tag))) {
+    if (control.attrs.get('type') === 'hidden') continue
+    const id = control.attrs.get('id')
+    const labelFors = new Set(authoringNodes.filter((node) => node.tag === 'label').map((node) => node.attrs.get('for')).filter(Boolean))
+    const named = control.attrs.has('aria-label') || control.attrs.has('aria-labelledby') || hasAncestor(control, 'label') || (id && labelFors.has(id))
+    check(named, `authoring <${control.tag}>${id ? `#${id}` : ''} has no programmatic label`)
+  }
+  for (const match of authoringHtml.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)) {
+    const attrs = attributes(match[1])
+    const visibleText = match[2].replace(/<[^>]+>/g, ' ').replace(/&[a-zA-Z0-9#]+;/g, ' ').replace(/\s+/g, ' ').trim()
+    check(Boolean(attrs.get('aria-label') || attrs.get('aria-labelledby') || visibleText), 'authoring button has no accessible name')
+  }
+})
 
 group('Unique element IDs', () => {
   for (const [id, matches] of byId) check(matches.length === 1, `duplicate id="${id}" (${matches.length} occurrences)`)
@@ -206,6 +235,12 @@ group('Supply WorkItem transport proof boundary', () => {
   check(spec.includes('destinationClass: WORKITEM_SUPPLY'), 'proof target must restrict broker evidence to WORKITEM_SUPPLY')
 })
 
+group('Source-result routing boundaries', () => {
+  for (const token of ['HTTP 201', 'FAILED_WRONG_STATE', 'UPSERT_DATASET', 'failure-results@1', 'contributesToPrimarySupply false', 'raw HTTP/TCP response withheld']) {
+    check(html.includes(token), `operation specimen is missing ${token}`)
+  }
+})
+
 group('No undersized operational text', () => {
   check(!/font-size:\s*[89]px\b/.test(css), 'styles contain 8px or 9px operational text')
 })
@@ -225,6 +260,68 @@ group('No prohibited planning regressions', () => {
   for (const [index, pattern] of nonNeutralPatterns.entries()) {
     check(!pattern.test(currentNeutralSource), `non-neutral fixture term pattern ${index + 1} found`)
   }
+})
+
+group('Authoring contract and complete journeys', () => {
+  for (const kind of ['packages', 'spaces', 'registrations']) {
+    check(authoringHtml.includes(`data-inventory-kind="${kind}"`), `authoring inventory is missing ${kind} control`)
+    check(authoringJs.includes(`${kind}: {`), `authoring inventory has no ${kind} behavior`)
+  }
+  for (const endpoint of ['/api/dataset-packages', '/api/dataset-spaces', '/api/dataset-registrations']) {
+    check(authoringJs.includes(endpoint), `authoring inventory is missing ${endpoint}`)
+    check(authoringApi.includes(endpoint), `canonical authoring API is missing ${endpoint}`)
+  }
+  for (const token of ['Manifest-declared package content', 'Quota policy reference', 'Replacement transaction', 'Expected ETag']) {
+    check(authoringHtml.includes(token), `authoring flow is missing ${token}`)
+  }
+  check(!authoringHtml.includes('Maximum registrations'), 'wireframe duplicates quotaPolicyRef with Maximum registrations')
+  check(!authoringHtml.includes('Maximum records'), 'wireframe duplicates quotaPolicyRef with Maximum records')
+  check(authoringCss.includes('.authoring-tabs>button'), 'authoring inventory controls have no button styling')
+  check(authoringCss.includes('font-size:10px'), 'authoring readability override is missing')
+})
+
+group('Authoring SSOT and no-fallback invariants', () => {
+  for (const token of ['DatasetPackageWrite', 'DatasetPackageVersion', 'DatasetSpaceWrite', 'DatasetRegistrationWrite', 'CommandReceipt', 'Problem']) {
+    check(authoringSchema.includes(`"${token}"`), `canonical authoring schema is missing ${token}`)
+  }
+  for (const token of ['If-Match', 'Idempotency-Key', 'Registration replacement transaction', 'Canonical package archive and digest']) {
+    check(authoringApi.includes(token), `canonical authoring API is missing ${token}`)
+  }
+  check(authoringApi.includes('Space and registration lifecycle are UI/API-only in the MVP'), 'MCP/UI authoring scope is ambiguous')
+  check(!authoringHtml.includes('datasetContractId'), 'registration UI must not select a package-local contract')
+  check(authoringHtml.includes('never switches to Redis'), 'registration UI no-fallback copy is missing')
+})
+
+group('Canonical package digest vectors', () => {
+  function packageDigest(files) {
+    const chunks = []
+    for (const [filePath, content] of files) {
+      const pathBytes = Buffer.from(filePath, 'utf8')
+      const contentBytes = Buffer.from(content, 'utf8')
+      const pathLength = Buffer.alloc(4)
+      pathLength.writeUInt32BE(pathBytes.length)
+      const contentLength = Buffer.alloc(8)
+      contentLength.writeBigUInt64BE(BigInt(contentBytes.length))
+      chunks.push(pathLength, pathBytes, contentLength, contentBytes)
+    }
+    return `sha256:${createHash('sha256').update(Buffer.concat(chunks)).digest('hex')}`
+  }
+  const vectors = [
+    [[['dataset.yaml', '{}\n']], 'sha256:932f7792e72c1211925905e7728361627606767c85949069701bff437a564b89'],
+    [[['dataset.yaml', '{}\n'], ['schema/record.yaml', 'type: object\n']], 'sha256:b2ad187264a84797becbdd60d59f62a020204278ee17286911576f4ca6dc4bd4'],
+  ]
+  for (const [files, expected] of vectors) {
+    check(packageDigest(files) === expected, `package digest vector mismatch for ${files.map(([name]) => name).join(', ')}`)
+    check(authoringApi.includes(expected), `canonical API does not publish digest vector ${expected}`)
+  }
+})
+
+group('Authoring adverse states', () => {
+  for (const state of ['loading', 'forbidden', 'unavailable', 'validation', 'conflict', 'dependency_blocked', 'accepted_read_failed']) {
+    check(authoringJs.includes(`${state}: [`), `authoringState=${state} behavior is missing`)
+    check(readme.includes(`authoringState=${state}`), `README does not document authoringState=${state}`)
+  }
+  check(authoringHtml.includes('id="authoring-state-banner"'), 'authoring adverse-state live region is missing')
 })
 
 if (failures.length) {

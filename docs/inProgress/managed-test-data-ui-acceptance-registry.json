@@ -37,7 +37,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -62,7 +62,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -87,7 +87,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -112,7 +112,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -137,7 +137,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -162,7 +162,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -187,7 +187,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -212,7 +212,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -237,7 +237,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -262,7 +262,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -287,7 +287,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -312,7 +312,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -337,7 +337,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -362,7 +362,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -387,7 +387,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -412,7 +412,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -437,7 +437,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -462,7 +462,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -487,7 +487,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -512,7 +512,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -537,7 +537,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -562,7 +562,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -587,7 +587,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -612,7 +612,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -637,7 +637,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -662,7 +662,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -687,7 +687,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -712,7 +712,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -737,7 +737,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -762,7 +762,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -787,7 +787,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -812,7 +812,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -837,7 +837,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -862,7 +862,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -887,7 +887,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -912,7 +912,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -937,7 +937,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -962,7 +962,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -987,7 +987,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -1012,7 +1012,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -1037,7 +1037,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -1062,7 +1062,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
@@ -1087,7 +1087,7 @@
       "evidenceState": {
         "designReviewGate": "G-DESIGN-READY-v1",
         "designReviewStatus": "PASS",
-        "designEvidenceRefs": ["managed-test-data-readiness-assessment.md#ui-design-review"],
+        "designEvidenceRefs": ["managed-datasets-operator-ui-design-spec.md#21-view-to-authority-traceability"],
         "implementationGate": "G-M1-INTERNAL-v1",
         "implementationStatus": "NOT_RUN",
         "implementationEvidenceRefs": [],
