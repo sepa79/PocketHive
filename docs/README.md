@@ -5,7 +5,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 ## Architecture
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
-- [SUT + Dataset + Simulation Model (proposal)](concepts/sut-dataset-simulation-model.md)
+- [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy Plan](inProgress/network-proxy-plan.md)
 - [Auth API Rollout Plan](archive/auth-api-rollout-plan.md)
 - [E2E API Framework Mini-Plan](archive/e2e-api-framework-mini-plan.md)

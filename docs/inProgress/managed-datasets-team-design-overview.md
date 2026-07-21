@@ -495,7 +495,7 @@ browser/accessibility and runtime evidence remain `NOT_RUN`.
 ## Detailed companions
 
 - [Lifecycle and architecture specification](managed-test-data-lifecycle-generic-spec.md)
-- [SUT, Dataset Space and Simulation Program concept](../concepts/sut-dataset-simulation-model.md)
+- [SUT, Dataset Space and Simulation Program architecture](../architecture/sut-dataset-simulation-model.md)
 
 ## Research basis
 
