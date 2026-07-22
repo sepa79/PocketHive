@@ -252,7 +252,8 @@ Supply follows this order:
 1. Reconciliation observes a durable deficit.
 2. The lifecycle adapter confirms the exact producer swarm, workload, input
    and route are ready through the existing control path.
-3. One PostgreSQL transaction reserves capacity and stores outbox intent.
+3. One connection from the Managed Dataset pool reserves capacity and stores
+   outbox intent in one local PostgreSQL transaction.
 4. The relay publishes DATASET_SUPPLY to the current controller-owned route.
 5. The producer claims the operation and performs the configured SUT flow.
 6. The producer commits a typed result through the Dataset API.
@@ -297,6 +298,10 @@ forbidden on the measured request thread.
 
 MANAGED_RECORDS_V1 uses the existing PostgreSQL deployment with a dedicated
 schema, role and connection pool. Minimum durable state includes:
+
+State changes and their outbox rows use the same connection and local
+transaction. RabbitMQ publication occurs after commit. No other connection
+pool or distributed transaction manager participates.
 
 - stable records and immutable material generations;
 - revisions and revision-visible membership;
@@ -407,6 +412,9 @@ The first release must prove:
 - ambiguous provider results are reconciled before retry;
 - expired, revoked, wrong-Space or unfit data is never selected;
 - restart resumes schedules, operations and outbox intent;
+- state and outbox intent commit or roll back together; the relay cannot
+  publish uncommitted intent, and RabbitMQ failure leaves committed intent
+  pending for retry;
 - stale route, operation and worker fences are rejected;
 - measured request threads perform zero central Dataset calls;
 - 50,000 eligible records, a 55,000 maximum, two consumer swarms and 1,000
