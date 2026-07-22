@@ -1,4 +1,4 @@
-![PocketHive Logo](../ui-v2/public/logo.svg)
+![PocketHive Logo](../docs-site/static/img/logo.svg)
 
 # PocketHive — ARCHITECTURE
 
