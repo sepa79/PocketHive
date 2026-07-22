@@ -475,6 +475,14 @@ schema, least-privilege role, explicit connection budget and separate pool.
 No new database container is introduced. Files may hold disposable caches or
 diagnostics only.
 
+For a state change that requires publication, Managed Dataset state and the
+corresponding `dataset_outbox` row MUST use one connection from this pool and
+commit in one local PostgreSQL transaction.
+RabbitMQ publication occurs only after commit.
+The transaction MUST NOT span another connection pool, RabbitMQ, Redis or the
+system under test.
+No distributed transaction manager is used.
+
 Minimum logical persistence:
 
 | Aggregate/table | Purpose |
@@ -919,6 +927,9 @@ The MVP is releasable only when all of the following have linked evidence.
 ### Lifecycle and correctness
 
 - Only a durable typed receipt completes supply.
+- State and `dataset_outbox` intent commit or roll back together through one
+  connection. The relay cannot publish uncommitted intent; RabbitMQ failure
+  leaves committed intent pending for retry.
 - Duplicate commands and Rabbit redelivery do not duplicate authoritative
   records or external effects.
 - Ambiguous provider results enter UNCERTAIN and are reconciled before retry.
@@ -956,7 +967,7 @@ The MVP is releasable only when all of the following have linked evidence.
 | Binding | missing/duplicate/extra requirement; wrong SUT/Space; retired version; unsupported adapter/capability; no alias discovery |
 | Supply | watermark/target/maximum boundaries; capacity reservation; duplicate and late results; target changes; concurrent producers |
 | Source | HTTP and TCP success/failure/pending/ambiguous evidence; malformed response; provider timeout; idempotency/status reconciliation; completed/failed routing |
-| Storage | revision isolation; concurrent commits; schedule/outbox recovery; database timeout/lock/full disk; retention race |
+| Storage | same-connection state/outbox commit and rollback; post-commit relay; RabbitMQ failure retry; no second pool or distributed transaction; revision isolation; concurrent commits; schedule/outbox recovery; database timeout/lock/full disk; retention race |
 | Rabbit/control | lifecycle-before-supply ordering; canonical routing; stale route fence; return/nack/unknown confirm; duplicate/redelivery; no alternate lane |
 | Workers | snapshot corruption, mixed revision, activation race, memory bound, restart, expiry boundary and central-I/O detector |
 | Readiness | Fitness PASS/FAIL/UNKNOWN; depletion, recovery, trusted-time loss, wrong worker incarnation and optional/required behavior |

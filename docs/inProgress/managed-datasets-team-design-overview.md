@@ -169,8 +169,9 @@ behind a hexagonal boundary:
 - Dataset work uses bounded executors and bulkheads;
 - other Orchestrator packages cannot access Dataset repositories directly.
 
-**Why:** this gives one durable transaction for Dataset state and outbox intent
-without adding another distributed service.
+**Why:** Managed Dataset state and its outbox row commit through one connection
+in one local PostgreSQL transaction. The relay publishes only after commit.
+This avoids another service and a distributed transaction manager.
 
 **Trade-off:** Dataset and Orchestrator share a process and availability
 boundary. Resource isolation and non-interference tests are release

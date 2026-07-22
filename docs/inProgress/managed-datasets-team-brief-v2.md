@@ -115,12 +115,11 @@ without Dataset binding or readiness checks.
 
 ## Main trade-off
 
-Keeping the module inside Orchestrator avoids another container and allows
-Dataset state and publication intent to share one PostgreSQL transaction.
-However, Dataset and Orchestrator then share process resources and
-availability. The implementation must use separate database resources,
-bounded executors and performance gates so Dataset work cannot disrupt swarm
-control.
+Orchestrator co-location avoids another container. Managed
+Dataset state and its outbox record—the message instruction—commit through one
+connection in one local PostgreSQL transaction. A relay sends it after commit.
+The module shares Orchestrator availability. Its dedicated schema, role,
+connection pool and bounded executors isolate load.
 
 ## Next step
 
@@ -134,4 +133,3 @@ and 50,000-record performance criteria pass.
 - [Current normative specification](managed-test-data-lifecycle-generic-spec.md)
 - [Current design decisions](managed-datasets-team-design-overview.md)
 - [Architecture model](../architecture/sut-dataset-simulation-model.md)
-
