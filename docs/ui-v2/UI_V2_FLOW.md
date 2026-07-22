@@ -1,4 +1,6 @@
-# UI v2 — Shell & Flow (WIP)
+# UI v2 — Shell & Flow
+
+Status: living reference
 
 This document is the single place for **UI v2 navigation/layout decisions**.
 
@@ -72,8 +74,8 @@ Two-stage flow:
 
 The 2-column vs 3-column variant is a UX choice to validate in practice.
 
-Detailed implementation planning for the new bundle explorer/editor lives in
-`docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`.
+The implemented bundle explorer/editor baseline is specified in
+`docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md`.
 
 ### Hive
 
@@ -245,7 +247,9 @@ Layout proposal for `/v2/hive/:swarmId/view`:
   - user clicks “Auto-layout”, or
   - topology definition changes (rare).
 
-### Implementation phases (no coding yet)
+### Historical implementation phases
+
+The single-swarm graphical view is implemented in `ui-v2/src/pages/SwarmViewPage.tsx`. The list below records the original delivery sequence and must not be used as the current backlog.
 
 1) **Route + shell**: add new subpage and a button in Hive swarm card to open it.
 2) **Static graph**: render nodes/edges purely from scenario `template + topology` (no metrics).

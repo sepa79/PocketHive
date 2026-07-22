@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-ssl-demo
 name: TCP SSL/TLS Secure Demo
 description: Demonstrates secure TCP communication using TLS with certificate

@@ -146,7 +146,7 @@ export function ConfigUpdatePatchModal({
     }
   }, [activeGroup, groups, open])
 
-  const handleApply = () => {
+  const handleApply = async () => {
     const patch: Record<string, unknown> = {}
     const resolveWhenValue = (path: string): unknown => {
       if (path in form) return form[path]
@@ -169,7 +169,11 @@ export function ConfigUpdatePatchModal({
       return
     }
     setError(null)
-    void onApply(patch)
+    try {
+      await onApply(patch)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to send config update.')
+    }
   }
 
   if (!open) return null
@@ -357,7 +361,7 @@ export function ConfigUpdatePatchModal({
           <button type="button" className="actionButton actionButtonGhost" onClick={onClose} disabled={busy}>
             Cancel
           </button>
-          <button type="button" className="actionButton" onClick={handleApply} disabled={busy}>
+          <button type="button" className="actionButton" onClick={() => void handleApply()} disabled={busy}>
             {busy ? 'Sending…' : 'Send config update'}
           </button>
         </div>

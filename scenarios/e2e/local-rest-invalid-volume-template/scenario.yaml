@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-invalid-volume-template
 name: Local REST - Invalid Volume Template
 description: Intentionally broken e2e scenario. Generator declares an invalid

@@ -141,8 +141,8 @@ class TriggerWorkInputFactory implements WorkInputFactory {
 The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkItemConverter`,
 publishes `WorkItem` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
 snapshots/deltas for every worker. Only workers with unusual transports need to provide factories like the trigger example
-above; generator, moderator, processor, and postprocessor all run on the shared factories described in
-`docs/sdk/worker-autoconfig-plan.md`.
+above; generator, moderator, processor, and postprocessor all run on the shared
+factories documented in `common/worker-sdk/README.md`.
 
 ## 5. Test with control-plane fixtures
 

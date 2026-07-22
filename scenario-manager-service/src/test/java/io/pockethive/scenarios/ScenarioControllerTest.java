@@ -86,6 +86,7 @@ class ScenarioControllerTest {
     void crudOperations() throws Exception {
         String body = """
                 {
+                  "protocolVersion": "2.0.0",
                   "id": "1",
                   "name": "Test",
                   "template": {
@@ -137,6 +138,7 @@ class ScenarioControllerTest {
     @Test
     void yamlSupport() throws Exception {
         String yaml = """
+                protocolVersion: "2.0.0"
                 id: 2
                 name: Yaml
                 template:
@@ -164,6 +166,7 @@ class ScenarioControllerTest {
         Path bundle = scenariosDir.resolve("tcp").resolve("demo");
         Files.createDirectories(bundle.resolve("templates/http"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: tcp-demo
                 name: TCP Demo
                 template:
@@ -214,6 +217,7 @@ class ScenarioControllerTest {
     @Test
     void rawUpdatePreservesYamlLiteralBlockFormatting() throws Exception {
         String initial = """
+                protocolVersion: "2.0.0"
                 id: literal-demo
                 name: Literal demo
                 template:
@@ -224,6 +228,7 @@ class ScenarioControllerTest {
                 .andExpect(status().isCreated());
 
         String raw = """
+                protocolVersion: "2.0.0"
                 id: literal-demo
                 name: Literal demo
                 template:
@@ -267,6 +272,7 @@ class ScenarioControllerTest {
 
         Path healthyBundle = Files.createDirectories(scenariosDir.resolve("healthy-bundle"));
         Files.writeString(healthyBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: healthy-bundle
                 name: Healthy Bundle
                 template:
@@ -287,6 +293,7 @@ class ScenarioControllerTest {
     void schemaListingAndReadAreScopedToBundle() throws Exception {
         String body = """
                 {
+                  "protocolVersion": "2.0.0",
                   "id": "schema-demo",
                   "name": "Schema demo",
                   "template": {
@@ -319,6 +326,7 @@ class ScenarioControllerTest {
     void schemaWriteCreatesOrOverwritesFilesInsideBundle() throws Exception {
         String body = """
                 {
+                  "protocolVersion": "2.0.0",
                   "id": "schema-write-demo",
                   "name": "Schema write demo",
                   "template": {
@@ -359,6 +367,7 @@ class ScenarioControllerTest {
     void templateListingAndUpdateAreScopedToBundle() throws Exception {
         String body = """
                 {
+                  "protocolVersion": "2.0.0",
                   "id": "http-demo",
                   "name": "HTTP demo",
                   "template": {
@@ -420,6 +429,7 @@ class ScenarioControllerTest {
         Path nestedBundleDir = scenariosDir.resolve("tcp").resolve("nested-demo");
         Files.createDirectories(nestedBundleDir);
         Files.writeString(nestedBundleDir.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: nested-demo
                 name: Nested demo
                 template:
@@ -510,6 +520,7 @@ class ScenarioControllerTest {
     @Test
     void dryRunBundleValidationDoesNotImportBundle() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: dry-run-demo
                 name: Dry run demo
                 template:
@@ -535,9 +546,118 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsMissingScenarioProtocolVersion() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                id: missing-protocol-version
+                name: Missing protocol version
+                template:
+                  image: swarm-controller:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                .contentType("application/zip")
+                .content(zip))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.findings[0].path").value("scenario.yaml:protocolVersion"));
+    }
+
+    @Test
+    void bundleValidationRejectsMalformedScenarioProtocolVersion() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0"
+                id: malformed-protocol-version
+                name: Malformed protocol version
+                template:
+                  image: swarm-controller:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                .contentType("application/zip")
+                .content(zip))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.findings[0].message", org.hamcrest.Matchers.containsString("not valid SemVer")));
+    }
+
+    @Test
+    void bundleValidationRejectsIncompatibleScenarioProtocolMajor() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "1.3.0"
+                id: incompatible-protocol-version
+                name: Incompatible protocol version
+                template:
+                  image: swarm-controller:latest
+                  bees: []
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                .contentType("application/zip")
+                .content(zip))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.validation.scenarioProtocolVersion").value("1.3.0"))
+            .andExpect(jsonPath("$.validation.supportedScenarioProtocolVersion").value("2.0.0"))
+            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value("0.15.35"))
+            .andExpect(jsonPath("$.validation.artifactDigest", org.hamcrest.Matchers.startsWith("sha256:")))
+            .andExpect(jsonPath("$.findings[0].message", org.hamcrest.Matchers.containsString("incompatible")));
+    }
+
+    @Test
+    void bundleValidationRejectsLegacyV01528IdsThroughCanonicalValidator() throws Exception {
+        Path fixture = Path.of("..").resolve("tools/pockethive-mcp/fixtures/scenario-regression/"
+            + "v0.15.28-local-rest-topology/scenario.yaml").normalize();
+        byte[] zip = bundleZip("scenario.yaml", Files.readString(fixture));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                .contentType("application/zip")
+                .content(zip))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.findings[0].message",
+                org.hamcrest.Matchers.containsString("Unrecognized field \"id\"")));
+    }
+
+    @Test
+    void bundleValidationRejectsBrokenInlinePebbleAndEvalSyntax() throws Exception {
+        byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
+                id: broken-inline-template
+                name: Broken inline template
+                template:
+                  image: swarm-controller:latest
+                  bees:
+                    - role: generator
+                      image: generator:latest
+                      config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler: { ratePerSec: 1 }
+                        message:
+                          bodyType: SIMPLE
+                          body: |
+                            {{ payload
+                      work:
+                        out: { out: generated }
+                """);
+
+        mvc.perform(post("/validation/scenario-bundles")
+                .contentType("application/zip")
+                .content(zip))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.ok").value(false))
+            .andExpect(jsonPath("$.findings[*].code", org.hamcrest.Matchers.hasItem("TEMPLATE_INVALID")))
+            .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItem(
+                "scenario.yaml:template.bees[0].config.message.body")));
+    }
+
+    @Test
     void runtimePreparationRejectsDefunctScenarioBundle() throws Exception {
         Path quarantinedBundle = Files.createDirectories(scenariosDir.resolve("quarantine").resolve("defunct-runtime"));
         Files.writeString(quarantinedBundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: defunct-runtime
                 name: Defunct Runtime
                 template:
@@ -567,6 +687,7 @@ class ScenarioControllerTest {
     void runtimePreparationRejectsBundleBrokenAfterLoad() throws Exception {
         Path bundle = Files.createDirectories(scenariosDir.resolve("runtime-broken-after-load"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: runtime-broken-after-load
                 name: Runtime Broken After Load
                 template:
@@ -615,6 +736,7 @@ class ScenarioControllerTest {
     void bundleValidationDoesNotAcceptScenarioDescriptorFallbackNames() throws Exception {
         for (String descriptorName : List.of("scenario.yml", "scenario.json")) {
             byte[] zip = bundleZip(descriptorName, """
+                    protocolVersion: "2.0.0"
                     id: fallback-descriptor-demo
                     name: Fallback descriptor demo
                     template:
@@ -639,6 +761,7 @@ class ScenarioControllerTest {
     @Test
     void dryRunBundleValidationReturnsStructuredFindingsForMalformedDescriptor() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: [not-a-string]
                 name: Broken descriptor
                 template:
@@ -659,6 +782,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsLegacyBeeIdField() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: legacy-bee-id-demo
                 name: Legacy bee id demo
                 template:
@@ -684,6 +808,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsLegacyTopologyBeeIdField() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: legacy-topology-bee-id-demo
                 name: Legacy topology beeId demo
                 template:
@@ -717,6 +842,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsDuplicateBeeRole() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: duplicate-role-demo
                 name: Duplicate role demo
                 template:
@@ -745,6 +871,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsTopologyRoleNotDeclaredInTemplate() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: unknown-topology-role-demo
                 name: Unknown topology role demo
                 template:
@@ -780,6 +907,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsWorkerConfigWrapper() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: legacy-worker-wrapper-demo
                 name: Legacy worker wrapper demo
                 template:
@@ -811,6 +939,7 @@ class ScenarioControllerTest {
     @Test
     void bundleValidationRejectsLegacyPockethiveConfigWrapper() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: legacy-pockethive-wrapper-demo
                 name: Legacy pockethive wrapper demo
                 template:
@@ -871,6 +1000,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: missing-required-config-demo
                 name: Missing required config demo
                 template:
@@ -904,6 +1034,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: generator-missing-body-type-demo
                 name: Generator missing body type demo
                 template:
@@ -938,6 +1069,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-missing-mode-demo
                 name: Processor missing mode demo
                 template:
@@ -975,6 +1107,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-missing-io-selectors-demo
                 name: Processor missing IO selectors demo
                 template:
@@ -1011,6 +1144,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: generator-missing-selected-io-config-demo
                 name: Generator missing selected IO config demo
                 template:
@@ -1049,6 +1183,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: http-sequence-missing-runtime-config-demo
                 name: HTTP Sequence missing runtime config demo
                 template:
@@ -1082,6 +1217,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: db-query-missing-runtime-config-demo
                 name: DB Query missing runtime config demo
                 template:
@@ -1118,6 +1254,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: db-query-blank-credentials-demo
                 name: DB Query blank credentials demo
                 template:
@@ -1167,6 +1304,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: clearing-export-missing-runtime-config-demo
                 name: Clearing Export missing runtime config demo
                 template:
@@ -1200,6 +1338,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: request-builder-missing-template-settings-demo
                 name: Request Builder missing template settings demo
                 template:
@@ -1234,6 +1373,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: trigger-rest-missing-fields-demo
                 name: Trigger REST missing fields demo
                 template:
@@ -1268,6 +1408,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: trigger-shell-missing-command-demo
                 name: Trigger shell missing command demo
                 template:
@@ -1302,6 +1443,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-input-missing-selector-demo
                 name: Processor Redis input missing selector demo
                 template:
@@ -1342,6 +1484,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-input-mismatch-demo
                 name: Processor Redis input mismatch demo
                 template:
@@ -1383,6 +1526,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: generator-csv-input-mismatch-demo
                 name: Generator CSV input mismatch demo
                 template:
@@ -1422,6 +1566,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-output-missing-selector-demo
                 name: Processor Redis output missing selector demo
                 template:
@@ -1463,6 +1608,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-io-valid-demo
                 name: Processor Redis IO valid demo
                 template:
@@ -1516,6 +1662,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-empty-redis-io-demo
                 name: Processor empty Redis IO demo
                 template:
@@ -1575,6 +1722,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-dataset-two-source-modes-demo
                 name: Processor Redis dataset two source modes demo
                 template:
@@ -1634,6 +1782,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-malformed-redis-io-demo
                 name: Processor malformed Redis IO demo
                 template:
@@ -1702,6 +1851,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-io-non-list-json-demo
                 name: Processor Redis IO non-list JSON demo
                 template:
@@ -1765,6 +1915,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-redis-io-range-invalid-demo
                 name: Processor Redis IO range invalid demo
                 template:
@@ -1842,6 +1993,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: typed-worker-type-invalid-demo
                 name: Typed worker type invalid demo
                 template:
@@ -1898,6 +2050,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: bounded-worker-type-invalid-demo
                 name: Bounded worker type invalid demo
                 template:
@@ -1933,6 +2086,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: generator-selected-io-type-invalid-demo
                 name: Generator selected IO type invalid demo
                 template:
@@ -1979,6 +2133,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-unknown-input-selector-demo
                 name: Processor unknown input selector demo
                 template:
@@ -2019,6 +2174,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-unknown-output-selector-demo
                 name: Processor unknown output selector demo
                 template:
@@ -2060,6 +2216,7 @@ class ScenarioControllerTest {
         capabilityCatalogue.reload();
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: processor-unknown-mode-demo
                 name: Processor unknown mode demo
                 template:
@@ -2101,6 +2258,7 @@ class ScenarioControllerTest {
 
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: postprocessor-templated-option-demo
                     name: Postprocessor templated option demo
                     template:
@@ -2143,6 +2301,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateScenarioYamlKeys() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
                 id: duplicate-scenario-key-demo
+                protocolVersion: "2.0.0"
                 id: duplicate-scenario-key-demo
                 name: Duplicate scenario key demo
                 template:
@@ -2165,6 +2324,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateVariablesYamlKeys() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-variable-key-demo
                     name: Duplicate variable key demo
                     template:
@@ -2195,6 +2355,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateSutYamlKeys() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-sut-key-demo
                     name: Duplicate SUT key demo
                     template:
@@ -2222,6 +2383,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsMissingCanonicalSutYaml() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: missing-canonical-sut-demo
                     name: Missing canonical SUT demo
                     template:
@@ -2229,6 +2391,7 @@ class ScenarioControllerTest {
                       bees: []
                     """,
                 "sut/default/sut.yml", """
+                    protocolVersion: "2.0.0"
                     id: default
                     name: Default SUT
                     """));
@@ -2245,9 +2408,43 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsNestedSutEndpointId() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    protocolVersion: "2.0.0"
+                    id: nested-sut-endpoint-id-demo
+                    name: Nested SUT endpoint ID demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/wiremock-local/sut.yaml", """
+                    id: wiremock-local
+                    name: WireMock local
+                    endpoints:
+                      default:
+                        id: default
+                        kind: HTTP
+                        baseUrl: http://wiremock:8080
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("Unrecognized field \"id\"")));
+    }
+
+    @Test
     void bundleValidationReportsValuesSutWithoutCanonicalSutYaml() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: values-sut-missing-canonical-demo
                     name: Values SUT missing canonical demo
                     template:
@@ -2286,6 +2483,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsSutYamlIdMismatch() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: mismatched-sut-id-demo
                     name: Mismatched SUT ID demo
                     template:
@@ -2312,6 +2510,7 @@ class ScenarioControllerTest {
     void listBundleSutsRejectsMalformedCanonicalSut() throws Exception {
         Path bundle = Files.createDirectories(scenariosDir.resolve("malformed-sut-list-demo"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: malformed-sut-list-demo
                 name: Malformed SUT list demo
                 template:
@@ -2347,6 +2546,7 @@ class ScenarioControllerTest {
     @Test
     void bundleUploadReturnsValidationBodyWhenDescriptorIsMalformed() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: [not-a-string]
                 name: Broken descriptor
                 template:
@@ -2367,6 +2567,7 @@ class ScenarioControllerTest {
     void bundleReplaceReturnsCanonicalValidationBodyWhenScenarioIdMismatches() throws Exception {
         Path existing = Files.createDirectories(scenariosDir.resolve("replace-target"));
         Files.writeString(existing.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: replace-target
                 name: Replace target
                 template:
@@ -2377,6 +2578,7 @@ class ScenarioControllerTest {
                 .andExpect(status().isNoContent());
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: uploaded-other
                 name: Uploaded other
                 template:
@@ -2403,6 +2605,7 @@ class ScenarioControllerTest {
         Path bundleDir = scenariosDir.resolve("template-ref-demo");
         Files.createDirectories(bundleDir);
         Files.writeString(bundleDir.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: template-ref-demo
                 name: Template reference demo
                 template:
@@ -2445,6 +2648,7 @@ class ScenarioControllerTest {
     @Test
     void templateValidationClassifiesRequestTemplateConsumerByImage() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: custom-role-template-consumer-demo
                 name: Custom role template consumer demo
                 template:
@@ -2487,6 +2691,7 @@ class ScenarioControllerTest {
     @Test
     void templateValidationDoesNotClassifyRequestTemplateConsumerByRole() throws Exception {
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: role-name-is-not-worker-type-demo
                 name: Role name is not worker type demo
                 template:
@@ -2527,6 +2732,7 @@ class ScenarioControllerTest {
     void templateValidationUsesWorkerTemplateRootForTcpTemplates() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: tcp-template-ref-demo
                     name: TCP template reference demo
                     template:
@@ -2572,6 +2778,7 @@ class ScenarioControllerTest {
     void templateValidationIgnoresDuplicateCallIdOutsideWorkerTemplateRoot() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: template-root-scope-demo
                     name: Template root scope demo
                     template:
@@ -2625,6 +2832,7 @@ class ScenarioControllerTest {
     void templateValidationReportsDuplicateVisibleTemplateKey() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-visible-template-demo
                     name: Duplicate visible template demo
                     template:
@@ -2681,6 +2889,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsMissingVariablesYamlForVarsReferences() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: vars-ref-demo
                     name: Vars ref demo
                     template:
@@ -2709,6 +2918,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsUnknownAuthProfileType() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: auth-type-demo
                     name: Auth type demo
                     template:
@@ -2747,6 +2957,7 @@ class ScenarioControllerTest {
     void bundleValidationDoesNotAcceptAuthProfilesYmlFallback() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: auth-yml-demo
                     name: Auth YML demo
                     template:
@@ -2786,6 +2997,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsMissingRefreshableAuthTokenKey() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: auth-token-key-demo
                     name: Auth token key demo
                     template:
@@ -2825,6 +3037,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsInvalidRefreshableAuthTokenKey() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: invalid-auth-token-key-demo
                     name: Invalid auth token key demo
                     template:
@@ -2865,6 +3078,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateTemplateYamlKeys() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-template-key-demo
                     name: Duplicate template key demo
                     template:
@@ -2894,6 +3108,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateTemplateJsonKeys() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-template-json-key-demo
                     name: Duplicate template JSON key demo
                     template:
@@ -2925,6 +3140,7 @@ class ScenarioControllerTest {
     void bundleValidationReportsDuplicateAuthProfileKeys() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: duplicate-auth-profile-demo
                     name: Duplicate auth profile demo
                     template:
@@ -2969,6 +3185,7 @@ class ScenarioControllerTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                             {
+                              "protocolVersion": "2.0.0",
                               "id": "duplicate-upload",
                               "name": "Duplicate upload"
                             }
@@ -2976,6 +3193,7 @@ class ScenarioControllerTest {
                 .andExpect(status().isCreated());
 
         byte[] zip = bundleZip("scenario.yaml", """
+                protocolVersion: "2.0.0"
                 id: duplicate-upload
                 name: Duplicate upload
                 template:
@@ -2996,6 +3214,7 @@ class ScenarioControllerTest {
     void existingBundleValidationReportsDuplicateScenarioIdCode() throws Exception {
         Path first = Files.createDirectories(scenariosDir.resolve("duplicate-a"));
         Files.writeString(first.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: duplicate-existing
                 name: Duplicate A
                 template:
@@ -3004,6 +3223,7 @@ class ScenarioControllerTest {
                 """);
         Path second = Files.createDirectories(scenariosDir.resolve("duplicate-b"));
         Files.writeString(second.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: duplicate-existing
                 name: Duplicate B
                 template:
@@ -3029,6 +3249,7 @@ class ScenarioControllerTest {
     void existingBundleValidationReportsDefunctFindingOnce() throws Exception {
         Path bundle = Files.createDirectories(scenariosDir.resolve("missing-capability-demo"));
         Files.writeString(bundle.resolve("scenario.yaml"), """
+                protocolVersion: "2.0.0"
                 id: missing-capability-demo
                 name: Missing capability demo
                 template:
@@ -3060,6 +3281,7 @@ class ScenarioControllerTest {
     void bundleUploadReturnsValidationBodyWhenBundleIsInvalid() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
+                    protocolVersion: "2.0.0"
                     id: invalid-upload
                     name: Invalid upload
                     template:

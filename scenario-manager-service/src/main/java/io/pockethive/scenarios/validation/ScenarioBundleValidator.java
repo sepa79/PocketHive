@@ -23,10 +23,15 @@ import io.pockethive.worker.sdk.auth.AuthApplyAs;
 import io.pockethive.worker.sdk.auth.AuthStorageMode;
 import io.pockethive.worker.sdk.auth.AuthTokenKeys;
 import io.pockethive.worker.sdk.auth.AuthType;
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.TemplateRenderingException;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.HexFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -85,10 +90,14 @@ public final class ScenarioBundleValidator {
         .build());
     private final CapabilityCatalogueService capabilities;
     private final String defaultImageTag;
+    private final String scenarioManagerVersion;
+    private final PebbleTemplateRenderer templateSyntaxValidator = new PebbleTemplateRenderer();
 
-    public ScenarioBundleValidator(CapabilityCatalogueService capabilities, String defaultImageTag) {
+    public ScenarioBundleValidator(CapabilityCatalogueService capabilities, String defaultImageTag,
+                                   String scenarioManagerVersion) {
         this.capabilities = capabilities;
         this.defaultImageTag = normalizeTag(defaultImageTag);
+        this.scenarioManagerVersion = Objects.requireNonNull(scenarioManagerVersion, "scenarioManagerVersion");
     }
 
     public BundleValidationResult validate(BundleValidationInput input) throws IOException {
@@ -122,10 +131,15 @@ public final class ScenarioBundleValidator {
                     "Scenario descriptor could not be parsed."));
             }
         } else {
-            Optional<String> defunctReason = defunctReason(resolved);
-            defunctReason.ifPresent(reason -> findings.add(defunctFinding(reason)));
+            if (!validateScenarioProtocol(resolved, findings)) {
+                BundleValidationResult result = resultOf(input.source(), input.bundleKey(), input.bundlePath(),
+                    scenarioId, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
+                return new ValidationRun(result, descriptorScenario, bundleRoot);
+            }
+            defunctReason(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
         }
         expectedScenarioIdFinding(scenarioId, input.expectedScenarioId()).ifPresent(findings::add);
+        findings.addAll(validateScenarioTemplateSyntax(resolved));
         findings.addAll(validateScenarioConfigShape(resolved));
 
         if (bundleRoot != null && Files.isDirectory(bundleRoot) && scenarioId != null && !scenarioId.isBlank()) {
@@ -140,13 +154,149 @@ public final class ScenarioBundleValidator {
             findings.addAll(validateAuthContracts(bundleRoot));
         }
 
-        BundleValidationResult result = BundleValidationResult.of(
+        BundleValidationResult result = resultOf(
             input.source(),
             input.bundleKey(),
             input.bundlePath(),
-            scenarioId,
+            scenarioId, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
             List.copyOf(findings));
         return new ValidationRun(result, descriptorScenario, bundleRoot);
+    }
+
+    private List<ValidationFinding> validateScenarioTemplateSyntax(Scenario scenario) {
+        if (scenario == null || scenario.getTemplate() == null || scenario.getTemplate().bees() == null) {
+            return List.of();
+        }
+        List<ValidationFinding> findings = new ArrayList<>();
+        for (int index = 0; index < scenario.getTemplate().bees().size(); index++) {
+            Bee bee = scenario.getTemplate().bees().get(index);
+            if (bee != null) {
+                Map<String, Object> config = bee.config() == null ? Map.of() : bee.config();
+                Object syntaxScope = config;
+                String imageName = imageName(bee.image());
+                if (BeeRoles.TRIGGER.equals(imageName) && config.containsKey("body")) {
+                    Map<String, Object> withoutExternalBody = new LinkedHashMap<>(config);
+                    withoutExternalBody.remove("body");
+                    syntaxScope = withoutExternalBody;
+                }
+                validateTemplateSyntaxNode(
+                    syntaxScope,
+                    ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":template.bees[" + index + "].config",
+                    findings);
+            }
+        }
+        return List.copyOf(findings);
+    }
+
+    private String imageName(String image) {
+        if (image == null || image.isBlank()) return "";
+        String last = image.substring(image.lastIndexOf('/') + 1);
+        int tag = last.indexOf(':');
+        return tag >= 0 ? last.substring(0, tag) : last;
+    }
+
+    private void validateTemplateSyntaxNode(Object node, String path, List<ValidationFinding> findings) {
+        if (node instanceof Map<?, ?> map) {
+            map.forEach((key, value) -> validateTemplateSyntaxNode(value, path + "." + key, findings));
+            return;
+        }
+        if (node instanceof List<?> list) {
+            for (int index = 0; index < list.size(); index++) {
+                validateTemplateSyntaxNode(list.get(index), path + "[" + index + "]", findings);
+            }
+            return;
+        }
+        if (!(node instanceof String source) || (!source.contains("{{") && !source.contains("{%"))) {
+            return;
+        }
+        try {
+            templateSyntaxValidator.validateSyntax(source);
+        } catch (TemplateRenderingException ex) {
+            findings.add(ValidationIssue.TEMPLATE_INVALID.finding(
+                ValidationSeverity.ERROR,
+                path,
+                "Inline template syntax is invalid: " + cleanError(rootCauseMessage(ex)),
+                "Repair the Pebble quoting, delimiters, or expression syntax."));
+        }
+    }
+
+    private String rootCauseMessage(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current.getMessage();
+    }
+
+    public BundleValidationResult resultOf(BundleValidationSource source, String bundleKey, String bundlePath,
+                                           String scenarioId, String scenarioProtocolVersion, Path bundleRoot,
+                                           List<ValidationFinding> findings) {
+        return BundleValidationResult.of(source, bundleKey, bundlePath, scenarioId,
+            new BundleValidationEvidence(
+                scenarioProtocolVersion,
+                ScenarioProtocol.CURRENT_VERSION,
+                scenarioManagerVersion,
+                bundleDigest(bundleRoot)),
+            findings);
+    }
+
+    private String bundleDigest(Path bundleRoot) {
+        if (bundleRoot == null || !Files.isDirectory(bundleRoot)) {
+            return "sha256:" + HexFormat.of().formatHex(sha256(new byte[0]));
+        }
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            for (Path file : Files.walk(bundleRoot).filter(Files::isRegularFile).sorted().toList()) {
+                String relative = bundleRoot.relativize(file).toString().replace('\\', '/');
+                digest.update(relative.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                digest.update((byte) 0);
+                digest.update(Files.readAllBytes(file));
+                digest.update((byte) 0);
+            }
+            return "sha256:" + HexFormat.of().formatHex(digest.digest());
+        } catch (IOException e) {
+            throw new IllegalStateException("Could not fingerprint scenario bundle", e);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private byte[] sha256(byte[] value) {
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(value);
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 is unavailable", e);
+        }
+    }
+
+    private boolean validateScenarioProtocol(Scenario scenario, List<ValidationFinding> findings) {
+        String version = scenario.getProtocolVersion();
+        if (version == null || version.isBlank()) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":protocolVersion",
+                "Scenario protocolVersion is required; supported version is " + ScenarioProtocol.CURRENT_VERSION + ".",
+                "Set protocolVersion to an explicit compatible SemVer version."));
+            return false;
+        }
+        if (!ScenarioProtocol.isValid(version)) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":protocolVersion",
+                "Scenario protocolVersion '" + version + "' is not valid SemVer.",
+                "Set protocolVersion to MAJOR.MINOR.PATCH."));
+            return false;
+        }
+        if (!ScenarioProtocol.isCompatible(version)) {
+            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
+                ValidationSeverity.ERROR,
+                ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE + ":protocolVersion",
+                "Scenario protocolVersion '" + version + "' is incompatible with supported version "
+                    + ScenarioProtocol.CURRENT_VERSION + ".",
+                "Migrate the scenario to protocol major " + ScenarioProtocol.CURRENT_MAJOR + "."));
+            return false;
+        }
+        return true;
     }
 
     public Scenario applyDefaultImageTag(Scenario scenario) {
@@ -188,6 +338,7 @@ public final class ScenarioBundleValidator {
 
         SwarmTemplate updatedTemplate = new SwarmTemplate(controllerImage, updatedBees);
         return new Scenario(
+            scenario.getProtocolVersion(),
             scenario.getId(),
             scenario.getName(),
             scenario.getDescription(),
@@ -248,8 +399,10 @@ public final class ScenarioBundleValidator {
     }
 
     public BundleValidationResult uploadedBundleValidationResult(Exception e) {
-        return BundleValidationResult.of(
+        return resultOf(
             BundleValidationSource.UPLOADED_ZIP,
+            null,
+            null,
             null,
             null,
             null,
@@ -262,11 +415,13 @@ public final class ScenarioBundleValidator {
             ValidationIssue.DUPLICATE_SCENARIO_ID.path(),
             "Scenario '%s' already exists.".formatted(scenarioId),
             "Rename the scenario id or replace the existing bundle explicitly.");
-        return BundleValidationResult.of(
+        return resultOf(
             BundleValidationSource.UPLOADED_ZIP,
             null,
             null,
             scenarioId,
+            null,
+            null,
             List.of(finding));
     }
 
@@ -556,7 +711,7 @@ public final class ScenarioBundleValidator {
         } catch (IOException e) {
             throw validationFailure(
                 ValidationIssue.SUT_INVALID,
-                "Failed to parse %s".formatted(ScenarioBundleLayout.SUT_DESCRIPTOR_FILE),
+                "Failed to parse %s: %s".formatted(ScenarioBundleLayout.SUT_DESCRIPTOR_FILE, e.getMessage()),
                 e);
         }
     }
@@ -675,6 +830,7 @@ public final class ScenarioBundleValidator {
             }
             try {
                 sources.add(new TemplateSource(relativePath, readStructuredMap(bundleRoot.resolve(relativePath).normalize())));
+                validateTemplateSyntaxNode(sources.get(sources.size() - 1).document(), relativePath, findings);
             } catch (Exception e) {
                 findings.add(ValidationIssue.TEMPLATE_PARSE_ERROR.finding(
                     ValidationSeverity.ERROR,

@@ -3,7 +3,7 @@ package io.pockethive.worker.sdk.runtime;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;

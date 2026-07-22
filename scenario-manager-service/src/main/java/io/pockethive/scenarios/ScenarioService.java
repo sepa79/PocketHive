@@ -61,23 +61,25 @@ public class ScenarioService {
     public ScenarioService(@Value("${scenarios.dir:scenarios}") String dir,
                            @Value("${scenarios.show-test:true}") boolean showTestScenarios,
                            @Value("${pockethive.images.default-tag:}") String defaultImageTag,
+                           @Value("${pockethive.release.version}") String scenarioManagerVersion,
                            CapabilityCatalogueService capabilities) throws IOException {
         this(Paths.get(dir),
              Paths.get(SCENARIOS_RUNTIME_ROOT),
              showTestScenarios,
              normalizeTag(defaultImageTag),
+             scenarioManagerVersion,
              capabilities);
     }
 
     ScenarioService(String dir,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, null, capabilities);
+        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, null, "test", capabilities);
     }
 
     ScenarioService(String dir,
                     Path runtimeRoot,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), runtimeRoot, true, null, capabilities);
+        this(Paths.get(dir), runtimeRoot, true, null, "test", capabilities);
     }
 
     ScenarioService(String dir,
@@ -87,6 +89,7 @@ public class ScenarioService {
              Paths.get(SCENARIOS_RUNTIME_ROOT),
              true,
              normalizeTag(defaultImageTag),
+             "test",
              capabilities);
     }
 
@@ -94,6 +97,7 @@ public class ScenarioService {
                             Path runtimeRoot,
                             boolean showTestScenarios,
                             String defaultImageTag,
+                            String scenarioManagerVersion,
                             CapabilityCatalogueService capabilities) throws IOException {
         Path normalizedDir = dir.toAbsolutePath().normalize();
         this.storageDir = normalizedDir;
@@ -108,7 +112,7 @@ public class ScenarioService {
         Files.createDirectories(this.bundleRootDir);
         Files.createDirectories(this.bundleRootDir.resolve(QUARANTINE_FOLDER));
         Files.createDirectories(this.runtimeRootDir);
-        this.bundleValidator = new ScenarioBundleValidator(capabilities, defaultImageTag);
+        this.bundleValidator = new ScenarioBundleValidator(capabilities, defaultImageTag, scenarioManagerVersion);
     }
 
     @PostConstruct
@@ -1756,11 +1760,13 @@ public class ScenarioService {
         ScenarioRecord record = entry.scenarioRecord();
         if (record == null) {
             ValidationFinding finding = bundleValidator.defunctBundleFinding(entry.bundlePath(), entry.defunctReason());
-            return BundleValidationResult.of(
+            return bundleValidator.resultOf(
                 BundleValidationSource.SCENARIO_MANAGER,
                 entry.bundleKey(),
                 entry.bundlePath(),
                 null,
+                null,
+                entry.bundleDir(),
                 List.of(finding));
         }
 

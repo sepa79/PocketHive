@@ -115,6 +115,27 @@ class ControlPlaneEmitterTest {
     }
 
     @Test
+    void emitErrorHonoursExplicitRetryableValue() throws Exception {
+        ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+                "swarm-stop",
+                "corr-explicit",
+                "idem-explicit",
+                new CommandState(null, null, null),
+                "stop",
+                "stop.rejected",
+                "Stop cannot be retried")
+            .retryable(false)
+            .timestamp(Instant.parse("2024-01-02T00:00:00Z"))
+            .build();
+
+        emitter.emitError(context);
+
+        JsonNode outcome = MAPPER.readTree((String) publisher.events.getFirst().payload());
+        assertThat(outcome.path("data").path("status").asText()).isEqualTo("Failed");
+        assertThat(outcome.path("data").path("retryable").asBoolean()).isFalse();
+    }
+
+    @Test
     void emitStatusDeltaPublishesStatusEvent() throws Exception {
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
             .traffic("exchange.main")

@@ -25,7 +25,7 @@ import io.pockethive.worker.sdk.api.Iso8583ResultEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.net.URI;
 import java.time.Clock;
 import java.util.HashMap;

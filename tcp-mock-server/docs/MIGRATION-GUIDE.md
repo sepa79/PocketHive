@@ -329,6 +329,6 @@ The server will use defaults:
 ## Support
 
 For questions or issues:
-1. Check [WIREMOCK-PARITY-COMPLETE.md](WIREMOCK-PARITY-COMPLETE.md) for feature documentation
+1. Check [WIREMOCK-PARITY.md](WIREMOCK-PARITY.md) for feature documentation
 2. Review example mappings in `mappings/` directory
 3. Test with admin API: `http://localhost:8090/__admin/`

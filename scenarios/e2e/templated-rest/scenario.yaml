@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: templated-rest
 name: Local REST - Templated Generator
 description: Uses local images. Sample scenario that enables the templating

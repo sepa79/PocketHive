@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: history-policy-demo
 name: History Policy Demo - Local REST
 description: Local REST swarm that sets explicit WorkItem history policies per worker.

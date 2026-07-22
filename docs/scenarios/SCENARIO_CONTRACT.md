@@ -12,6 +12,7 @@ wraps a `SwarmTemplate` and optional `TrafficPolicy`.
 ## Top‑level structure
 
 ```yaml
+protocolVersion: "2.0.0"
 id: local-rest
 name: Local REST - Simple REST Swarm
 description: Uses local images with a 50 msg/s generator.
@@ -25,6 +26,10 @@ trafficPolicy:
   # optional, see traffic-shaping docs
 ```
 
+- `protocolVersion` (SemVer string, required) – scenario authoring protocol
+  version. Scenario Manager currently supports major version `2`. A missing,
+  malformed, or different-major version is rejected before deeper bundle
+  validation. There is no implicit version for legacy files.
 - `id` (string, required) – unique scenario id; used in URLs and UI.
 - `name` (string, required) – human‑friendly name.
 - `description` (string, optional) – short description.
@@ -388,12 +393,15 @@ Shape:
   - `endpoints` (object, required) – map from endpoint id to endpoint
     details.
 - Endpoint (`SutEndpoint`) inside `endpoints`:
-  - map key – endpoint id (e.g. `default`, `public-api`); this is also
-    used as the `SutEndpoint.id` value.
-  - `kind` (string, required) – short protocol label, currently
-    `HTTP`.
-  - `baseUrl` (string, required) – base URL for this endpoint, e.g.
-    `http://wiremock:8080` or `https://demo.example.com/public`.
+  - map key – the only endpoint id (e.g. `default`, `public-api`); nested
+    endpoint `id` fields are invalid.
+  - `kind` (non-blank string, required) – short protocol label such as
+    `HTTP`, `HTTPS`, `TCP`, or `TCPS`.
+  - `baseUrl` (non-blank string, required) – URI or protocol-specific
+    authority for this endpoint, e.g. `http://wiremock:8080`,
+    `https://demo.example.com/public`, or `tcp-mock-server:9090`.
+  - `upstreamBaseUrl` (non-blank string, optional) – upstream URI or
+    authority used by proxied network bindings.
 
 ### Using SUTs from scenarios
 
@@ -456,7 +464,6 @@ privateConfig:
       type: sandbox
       endpoints:
         default:
-          id: default
           kind: HTTP
           baseUrl: http://wiremock:8080
           upstreamBaseUrl: http://backend:8080
@@ -468,8 +475,9 @@ privateConfig:
 
 ## Backwards compatibility
 
-- Scenario Manager ignores unknown fields but workers and Swarm
-  Controller expect config to adhere to their property bindings.
+- Scenario Manager rejects non-canonical contract fields during bundle
+  validation. In particular, nested `endpoints.<key>.id` fields are invalid;
+  the map key is the only SUT endpoint identifier.
 - The **NFF** rule applies: avoid multiple keys for the same concept and
   do not rely on fallback chains. Use the config structure described
   here and in capability manifests.

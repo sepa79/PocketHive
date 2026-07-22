@@ -6,6 +6,7 @@ by the UI under `/docs/...` as part of the runtime image.
 
 ## Operator / Running PocketHive
 
+- `docs/UPGRADING.md` – required version-to-version migration actions.
 - `docs/USAGE.md` – how to run the stack, use the UI, create/start
   swarms, and interpret buffer guards.
 - `docs/observability.md` – metrics, logs, dashboards.
@@ -35,8 +36,9 @@ by the UI under `/docs/...` as part of the runtime image.
   basics, how to write a worker.
 - `docs/sdk/worker-interceptors.md` – interceptor pipeline (metrics,
   observability, templating hooks).
-- `docs/toBeReviewed/worker-configurable-io-plan.md` (Status: to be reviewed) –
-  config-driven IO types and future IO factory work.
+- `docs/archive/worker-configurable-io-plan.md` – historical delivery plan for
+  config-driven IO types.
+- `docs/todo/worker-configurable-io-followups.md` – remaining explicit IO work.
 - `docs/todo/config-key-normalisation-plan.md` (Status: future / design) –
   key naming conventions backlog.
 
@@ -46,44 +48,25 @@ by the UI under `/docs/...` as part of the runtime image.
   contracts.
 - `docs/ORCHESTRATOR-REST.md` – Orchestrator API and control-plane
   signals.
-- `docs/archive/manager-sdk-plan.md`
-  (Status: implemented / archived) – historical implementation plan for
-  Manager SDK and Swarm Controller extraction.
-- `docs/archive/worker-config-propagation-plan.md`
-  (Status: implemented / archived) – historical implementation plan for
-  worker config flow from scenario to control-plane.
-- `docs/archive/queue-guard-plan.md` (Status: implemented / archived) –
-  historical BufferGuard/queue guard implementation plan.
-- `docs/toBeReviewed/sut-environments-plan.md` (Status: to be reviewed) –
-  SUT environments and swarm binding plan pending final review.
-- `docs/toBeReviewed/ScenarioPlan.md` (Status: to be reviewed) –
-  scenario engine architecture plan pending review against SUT plan
-  changes from branch work.
-- `docs/archive/scenario-bundle-runtime-plan.md`
-  (Status: implemented / archived) – directory-based scenario bundles and
-  per-swarm runtimes (historical implementation plan).
-- `docs/architecture/tenancy-foundation-plan.md` (Status: planned / proposal) –
-  PocketHive-specific access-control model built on shared auth.
-- `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md` (Status: planned / proposal) –
-  standalone shared `auth-service` direction for PocketHive + HiveWatch,
-  with `DEV` first and room for `LDAP` later.
-- `docs/architecture/AUTH_SERVICE_API_SPEC.md` (Status: planned / spec draft) –
-  MVP HTTP contract for shared `auth-service`, bearer token resolution, and
-  product integration.
-- `docs/archive/auth-api-rollout-plan.md` (Status: completed / archived) –
-  service-by-service auth/authz rollout checklist for PocketHive HTTP APIs,
-  including e2e and verification tracking.
-- `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md` (Status: planned) –
-  UI v2 Scenarios workspace plan for bundle explorer, offline Monaco, permissions,
-  and guided editors.
-- `docs/toBeReviewed/ui-v2-control-plane-adoption.md` (Status: to be reviewed) –
-  UI-v2 control-plane adoption plan with review findings pending alignment.
-- `docs/inProgress/network-proxy-plan.md` (Status: in progress) –
-  shared-per-SUT network proxying, secure traffic routing, and runtime fault
-  profiles.
-- `docs/archive/e2e-api-framework-mini-plan.md` (Status: completed / archived) –
-  historical plan for extracting a reusable API/E2E support layer from the
-  ingress auth pack.
+- `docs/architecture/AUTH_SERVICE_API_SPEC.md` – implemented baseline HTTP
+  contract for shared auth, bearer token resolution, and product integration.
+- `docs/todo/auth-service-followups.md` – future LDAP, HiveWatch, admin, and
+  permission-model work.
+- `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md` – implemented Scenario workspace
+  UI baseline.
+- `docs/todo/sut-environments-followups.md` – remaining SUT environment work.
+- `docs/todo/scenario-plan-followups.md` – remaining Scenario Plan extensions.
+- `docs/todo/ui-v2-control-plane-followups.md` – remaining UI control-plane hardening.
+- `docs/todo/network-proxy-followups.md` – post-V1 proxy reliability, plan integration,
+  and isolation work.
+
+## Plans and history
+
+- `docs/inProgress/README.md` – actively delivered work only.
+- `docs/toBeReviewed/README.md` – bounded review queue.
+- `docs/todo/README.md` – future work and follow-ups.
+- `docs/archive/readme.md` – historical and completed plans; do not use archived
+  plans as current contracts.
 
 ## Specs & Tools
 
@@ -91,5 +74,5 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/docs.html` – simple HTML viewer for the AsyncAPI spec.
 - `tools/scenario-templating-check` – CLI for validating generator and
   request templates used in scenarios.
-- `tools/mcp-orchestrator-debug` – MCP client for driving Orchestrator
-  from tools/IDEs.
+- `tools/pockethive-mcp` – canonical PocketHive MCP server for agents and IDEs.
+- `tools/mcp-orchestrator-debug` – lower-level emergency/local diagnostic CLI.

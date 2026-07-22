@@ -1,7 +1,7 @@
 package io.pockethive.clearingexport;
 
-import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 

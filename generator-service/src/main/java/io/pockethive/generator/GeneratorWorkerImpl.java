@@ -10,7 +10,7 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;

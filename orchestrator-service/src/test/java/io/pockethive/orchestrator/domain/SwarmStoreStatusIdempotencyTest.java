@@ -22,4 +22,3 @@ class SwarmStoreStatusIdempotencyTest {
         assertDoesNotThrow(() -> store.updateStatus("sw1", SwarmLifecycleStatus.STOPPED));
     }
 }
-

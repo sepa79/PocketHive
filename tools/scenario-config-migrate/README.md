@@ -1,22 +1,24 @@
 # Scenario Config Migrator
 
-Standalone migrator for the Bee Config SSOT scenario authoring contract.
+Standalone migrator for the scenario bundle SSOT authoring contracts.
 
-It rewrites only scenario bundle files named `scenario.yaml` or
-`scenario.yml`. It does not read or rewrite application config files,
-Spring properties, runtime directories, or generated artifacts.
+It rewrites only scenario bundle files named `scenario.yaml`, `scenario.yml`,
+or `sut.yaml`. It does not read or rewrite application config files, Spring
+properties, runtime directories, or generated artifacts.
 
 The migrator covers:
 
 - legacy scenario authoring fields: `template.bees[].id` and topology endpoint
   `beeId`
+- legacy nested SUT endpoint `id` fields when they match their endpoint map key
 - legacy `config.worker` / `config.pockethive` wrapper removal
 - missing explicit IO selectors when exactly one known IO subblock is present
 - missing required fields for the selected IO manifest when the tool has a
   hardcoded safe explicit value for that field
 
-IO selector requirements are derived from Scenario Manager capability
-manifests. By default the tool reads
+IO selector requirements for `scenario.yaml` / `scenario.yml` are derived from
+Scenario Manager capability manifests. A run containing only `sut.yaml` files
+does not load capability manifests. For scenario files, the tool reads
 `scenario-manager-service/capabilities`; use `--capabilities-dir <dir>` when
 validating scenarios against a different manifest set.
 
@@ -36,7 +38,8 @@ node tools/scenario-config-migrate/cli.mjs check --json scenarios
 
 `check` exits non-zero when it finds previous-format bee config, missing IO
 selectors, mismatched IO selectors, ambiguous IO subblocks, or missing required
-selected-IO fields.
+selected-IO fields. Invalid YAML is reported as `INVALID_YAML` and also causes a
+non-zero exit.
 
 ## Migrate
 
@@ -47,6 +50,10 @@ node tools/scenario-config-migrate/cli.mjs migrate scenarios
 
 The migrator stops on conflicts. It never merges different source and target
 values. Resolve the reported scenario path and bee manually, then rerun it.
+
+For SUT descriptors, `migrate` removes `endpoints.<key>.id` only when its value
+matches `<key>` (or is null). If the values differ, migration fails explicitly
+so the author can choose the intended canonical map key.
 
 For scenario authoring, `migrate` rewrites old `.31` node ids into the new
 single key:

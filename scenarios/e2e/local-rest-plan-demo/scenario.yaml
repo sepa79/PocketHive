@@ -1,4 +1,5 @@
 ---
+protocolVersion: "2.0.0"
 id: "local-rest-plan-demo"
 name: "Local REST Plan Demo"
 description: "Local REST swarm that uses a scenario plan to drive the entire

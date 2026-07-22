@@ -21,11 +21,15 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Emits control-plane events using canonical routing keys and payload builders.
  */
 public final class ControlPlaneEmitter {
+
+    private static final Logger log = LoggerFactory.getLogger(ControlPlaneEmitter.class);
 
     private final ControlPlaneTopologyDescriptor topology;
     private final RoleContext role;
@@ -83,6 +87,11 @@ public final class ControlPlaneEmitter {
 
     public void emitError(ErrorContext context) {
         Objects.requireNonNull(context, "context");
+        Boolean retryable = errorRetryable(context);
+        log.warn("[CTRL] command failure operation={} phase={} code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable={} errorType={} errorDetail={}",
+            context.signal(), context.phase(), context.code(), context.message(), role.swarmId(), role.role(),
+            role.instanceId(), context.correlationId(), context.idempotencyKey(), retryable,
+            context.errorType(), context.errorDetail());
         publishOutcomeFromError(context);
         publishAlertFromError(context);
     }
@@ -370,7 +379,7 @@ public final class ControlPlaneEmitter {
         CommandOutcomePolicy.OutcomeRules rules = CommandOutcomePolicy.rulesFor(context.signal());
         CommandState baseState = context.state();
         CommandState state = new CommandState(rules.errorStatus(), baseState.enabled(), baseState.details());
-        Boolean retryable = rules.errorRetryableDefault() == CommandOutcomePolicy.RetryablePolicy.TRUE;
+        Boolean retryable = errorRetryable(context);
         publishOutcome(context.signal(),
             CommandOutcomes.fromState(
                 context.signal(),
@@ -384,6 +393,14 @@ public final class ControlPlaneEmitter {
                 context.details(),
                 context.timestamp()
             ));
+    }
+
+    private static Boolean errorRetryable(ErrorContext context) {
+        if (context.retryable() != null) {
+            return context.retryable();
+        }
+        return CommandOutcomePolicy.rulesFor(context.signal()).errorRetryableDefault()
+            == CommandOutcomePolicy.RetryablePolicy.TRUE;
     }
 
     private void publishOutcome(String signal, CommandOutcome outcome) {

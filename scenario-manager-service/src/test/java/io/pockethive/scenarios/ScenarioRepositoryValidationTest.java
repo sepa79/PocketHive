@@ -28,7 +28,7 @@ class ScenarioRepositoryValidationTest {
 
     CapabilityCatalogueService capabilities = new CapabilityCatalogueService(capabilitiesRoot);
     capabilities.reload();
-    ScenarioBundleValidator validator = new ScenarioBundleValidator(capabilities, "latest");
+    ScenarioBundleValidator validator = new ScenarioBundleValidator(capabilities, "latest", "test");
 
     List<Path> scenarioFiles;
     try (Stream<Path> stream = Files.walk(scenariosRoot)) {

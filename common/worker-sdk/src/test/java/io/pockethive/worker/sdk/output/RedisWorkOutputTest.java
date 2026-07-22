@@ -38,7 +38,7 @@ class RedisWorkOutputTest {
     @Test
     void publishesUsingDefaultListFromProperties() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -60,7 +60,7 @@ class RedisWorkOutputTest {
     @Test
     void updatesRoutingFromRawConfig() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -97,7 +97,7 @@ class RedisWorkOutputTest {
     @Test
     void failsWhenTargetListCannotBeResolved() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -178,7 +178,7 @@ class RedisWorkOutputTest {
 
     private static void assertMalformedRawUpdateKeepsDefaultList(Map<String, Object> invalidPatch) {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
         properties.setPort(6379);

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.scenarios.validation.BundleValidationResult;
+import io.pockethive.scenarios.validation.BundleValidationEvidence;
 import io.pockethive.scenarios.validation.BundleValidationSource;
 import io.pockethive.scenarios.validation.ValidationCategory;
 import io.pockethive.scenarios.validation.ValidationFinding;
@@ -26,6 +27,7 @@ class BundleValidationResultContractTest {
                 "bundles/demo",
                 "bundles/demo",
                 "demo",
+                new BundleValidationEvidence("2.0.0", "2.0.0", "0.15.35", "sha256:test"),
                 List.of(
                         new ValidationFinding(
                                 ValidationCategory.SCENARIO,
@@ -47,6 +49,10 @@ class BundleValidationResultContractTest {
         assertThat(json.get("ok").asBoolean()).isFalse();
         assertThat(json.get("source").asText()).isEqualTo("uploaded-zip");
         assertThat(json.get("scenarioId").asText()).isEqualTo("demo");
+        assertThat(json.at("/validation/scenarioProtocolVersion").asText()).isEqualTo("2.0.0");
+        assertThat(json.at("/validation/supportedScenarioProtocolVersion").asText()).isEqualTo("2.0.0");
+        assertThat(json.at("/validation/scenarioManagerVersion").asText()).isEqualTo("0.15.35");
+        assertThat(json.at("/validation/artifactDigest").asText()).isEqualTo("sha256:test");
         assertThat(fieldNames(json.get("summary"))).containsExactlyInAnyOrder("errors", "warnings");
         assertThat(json.at("/summary/errors").asInt()).isEqualTo(1);
         assertThat(json.at("/summary/warnings").asInt()).isEqualTo(1);
@@ -90,6 +96,7 @@ class BundleValidationResultContractTest {
                 .contains("bundleKey: string | null")
                 .contains("bundlePath: string | null")
                 .contains("scenarioId: string | null")
+                .contains("validation:")
                 .contains("errors: number")
                 .contains("warnings: number")
                 .contains("findings: BundleValidationFinding[]");

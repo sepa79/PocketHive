@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-ssl-enhanced-demo
 name: TCP SSL Enhanced Demo
 description: Demonstrates enhanced TCP features including SSL, metrics,

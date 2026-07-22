@@ -1,5 +1,8 @@
 package io.pockethive.worker.sdk.templating;
 
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.pockethive.worker.sdk.api.WorkItem;

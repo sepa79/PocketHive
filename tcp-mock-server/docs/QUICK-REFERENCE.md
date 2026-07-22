@@ -220,6 +220,6 @@ curl http://localhost:8090/__admin/requests
 
 ## 📚 Documentation
 
-- **[WIREMOCK-PARITY-COMPLETE.md](WIREMOCK-PARITY-COMPLETE.md)** - Full feature guide
+- **[WIREMOCK-PARITY.md](WIREMOCK-PARITY.md)** - Full feature guide
 - **[MIGRATION-GUIDE.md](MIGRATION-GUIDE.md)** - Migration from old mappings
-- **[TCP-MOCK-WIREMOCK-PARITY-SUMMARY.md](TCP-MOCK-WIREMOCK-PARITY-SUMMARY.md)** - Implementation summary
+- **[EXECUTIVE-SUMMARY.md](EXECUTIVE-SUMMARY.md)** - Implementation summary

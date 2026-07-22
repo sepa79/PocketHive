@@ -19,7 +19,7 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
 import java.util.Optional;
@@ -312,6 +312,65 @@ class WorkerControlPlaneRuntimeTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> redis = (Map<String, Object>) inputs.get("redis");
         assertThat(redis).containsEntry("port", 6379);
+    }
+
+    @Test
+    void configUpdateChangesRedisListNameWhenWorkerIsDisabled() throws Exception {
+        WorkerStateStore ioStateStore = new WorkerStateStore();
+        WorkerDefinition ioDefinition = redisIoDefinition();
+        ioStateStore.getOrCreate(ioDefinition);
+        WorkerControlPlaneRuntime ioRuntime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            ioStateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane()
+        );
+        applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
+        reset(emitter);
+
+        applyConfigUpdate(
+            ioRuntime,
+            Map.of("inputs", Map.of("redis", Map.of("listName", "ph:dataset:next")))
+        );
+
+        verify(emitter).emitReady(any());
+        assertThat(redisInputConfig(ioRuntime, ioDefinition)).containsEntry("listName", "ph:dataset:next");
+        assertThat(ioRuntime.workerEnabled(ioDefinition.beanName())).isFalse();
+    }
+
+    @Test
+    void configUpdateRejectsRedisListNameChangeWhenWorkerIsEnabled() throws Exception {
+        WorkerStateStore ioStateStore = new WorkerStateStore();
+        WorkerDefinition ioDefinition = redisIoDefinition();
+        ioStateStore.getOrCreate(ioDefinition);
+        WorkerControlPlaneRuntime ioRuntime = new WorkerControlPlaneRuntime(
+            controlPlane,
+            ioStateStore,
+            MAPPER,
+            emitter,
+            IDENTITY,
+            PROPERTIES.getControlPlane()
+        );
+        Map<String, Object> initialConfig = new java.util.LinkedHashMap<>(redisRuntimeIoConfig(1.0));
+        initialConfig.put("enabled", true);
+        applyConfigUpdate(ioRuntime, Map.copyOf(initialConfig));
+        reset(emitter);
+
+        applyConfigUpdate(
+            ioRuntime,
+            Map.of("inputs", Map.of("redis", Map.of("listName", "ph:dataset:next")))
+        );
+
+        verify(emitter, times(0)).emitReady(any());
+        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
+        verify(emitter).emitError(captor.capture());
+        assertThat(captor.getValue().message())
+            .contains("inputs.redis.listName")
+            .contains("stop the swarm first");
+        assertThat(redisInputConfig(ioRuntime, ioDefinition)).containsEntry("listName", "ph:dataset");
     }
 
     @Test
@@ -1092,6 +1151,31 @@ class WorkerControlPlaneRuntimeTest {
                 )
             )
         );
+    }
+
+    private static WorkerDefinition redisIoDefinition() {
+        return new WorkerDefinition(
+            "redisIoWorker",
+            TestWorker.class,
+            WorkerInputType.REDIS_DATASET,
+            "generator",
+            WorkIoBindings.none(),
+            Map.class,
+            WorkInputConfig.class,
+            WorkOutputConfig.class,
+            WorkerOutputType.REDIS,
+            "Redis IO worker",
+            Set.of(WorkerCapability.MESSAGE_DRIVEN)
+        );
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> redisInputConfig(
+        WorkerControlPlaneRuntime runtime,
+        WorkerDefinition definition
+    ) {
+        Map<String, Object> inputs = (Map<String, Object>) runtime.workerRawConfig(definition.beanName()).get("inputs");
+        return (Map<String, Object>) inputs.get("redis");
     }
 
 	        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {

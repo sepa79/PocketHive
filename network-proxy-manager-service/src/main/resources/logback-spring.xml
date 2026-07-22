@@ -1,10 +1,15 @@
-<?xml version="1.0" encoding="UTF-8"?>
 <configuration>
-  <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
-  </appender>
+  <include resource="org/springframework/boot/logging/logback/base.xml"/>
+
+  <logger name="org.springframework.amqp" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="com.rabbitmq" level="WARN" additivity="false">
+    <appender-ref ref="CONSOLE"/>
+  </logger>
+  <logger name="io.pockethive" level="INFO"/>
 
   <root level="INFO">
-    <appender-ref ref="STDOUT"/>
+    <appender-ref ref="CONSOLE"/>
   </root>
 </configuration>

@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-performance-demo
 name: TCP Performance Stress Test
 description: Demonstrates high-throughput TCP capabilities with ramping load,
@@ -43,8 +44,8 @@ template:
           body: |
             {
               "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-              "priority": "{{ eval('#randInt(1, 10) <= 6 ? \"FAST\" : (#randInt(1, 10) <= 9 ? \"NORMAL\" : \"SLOW\")') }}",
-              "payload": "ramp_{{ eval('#base64_encode(\"data\" + #randInt(1, 10000))') }}",
+              "priority": "{{ eval("#randInt(1, 10) <= 6 ? 'FAST' : (#randInt(1, 10) <= 9 ? 'NORMAL' : 'SLOW')") }}",
+              "payload": "ramp_{{ eval("#base64_encode('data' + #randInt(1, 10000))") }}",
               "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
             }
           headers:
@@ -68,8 +69,8 @@ template:
           body: |
             {
               "txnId": "TXN_{{ eval('#randInt(100000, 999999)') }}",
-              "priority": "{{ eval('#randInt(1, 10) <= 5 ? \"FAST\" : (#randInt(1, 10) <= 8 ? \"NORMAL\" : \"SLOW\")') }}",
-              "payload": "peak_{{ eval('#base64_encode(\"stress\" + #randInt(1, 10000))') }}",
+              "priority": "{{ eval("#randInt(1, 10) <= 5 ? 'FAST' : (#randInt(1, 10) <= 8 ? 'NORMAL' : 'SLOW')") }}",
+              "payload": "peak_{{ eval("#base64_encode('stress' + #randInt(1, 10000))") }}",
               "timestamp": "{{ eval("#date_format(now, 'yyyy-MM-dd''T''HH:mm:ss.SSS')") }}"
             }
           headers:

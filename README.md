@@ -1,10 +1,13 @@
-![PocketHive Logo](ui/assets/logo.svg)
+![PocketHive Logo](ui-v2/public/logo.svg)
 
 # PocketHive
 
 PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates swarms of modular workers (“bees”) to generate traffic, transform data, and emit results and telemetry. It is useful for repeatable performance testing, scenario‑driven demos, and production‑like simulations for APIs and message‑driven systems (ISO‑8583, REST, SOAP, custom protocols).
 
-> TL;DR: **UI → Orchestrator → Swarms**. The **Orchestrator** applies a **Scenario Plan** and manages swarms. **Swarms** are pipelines of small services (Generator → Moderator → Processor → Post‑Processor + optional Triggers).
+> TL;DR: **UI → Orchestrator → Swarms**. The **Orchestrator** applies a
+> **Scenario Plan** and manages swarms. Each swarm is a topology-defined graph
+> of workers; Generator → Moderator → Processor → Post‑Processor is one common
+> example, not a fixed pipeline.
 
 ---
 
@@ -38,7 +41,7 @@ PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates s
 ## Key Ideas
 
 - **Scenario Plan**: A declarative plan the Orchestrator applies to create/configure swarms.
-- **Swarm**: A unit of execution made of small services forming a pipeline (see below).
+- **Swarm**: A unit of execution made of workers connected by the topology declared in its scenario.
 - **Control vs Work/Data**:
   - **Control**: Commands/lifecycle/config (lightweight, low‑cardinality).
   - **Work/Data**: The main data stream through the pipeline.
@@ -79,6 +82,9 @@ flowchart LR
 
 ### 2) Swarm composition & internal queues
 
+The diagram below is an **example REST processing topology**. Worker roles and
+connections are scenario-defined; PocketHive does not impose this sequence.
+
 ```mermaid
 flowchart LR
   %% Swarm boundary
@@ -98,7 +104,7 @@ flowchart LR
     TRG["Trigger(s)"]
 
     %% Work/Data pipeline
-    subgraph DATA["Work/Data pipeline"]
+    subgraph DATA["Example Work/Data topology"]
       GEN --> MOD --> PRC --> PST
     end
 
@@ -126,7 +132,9 @@ flowchart LR
 
 Reading guide:
 - **Control**: dashed arrows from **Swarm Controller** to components.
-- **Work/Data**: left→right stream—`Generator → Moderator → Processor → Post‑Processor`. **Trigger** can inject/react to events.
+- **Work/Data example**: `Generator → Moderator → Processor → Post‑Processor`.
+  Other scenarios may use different roles and connections. **Trigger** can
+  inject/react to events when present.
 - **Telemetry**: components emit to a shared telemetry hub that feeds metrics and events.
 
 ---
@@ -185,7 +193,8 @@ flowchart LR
 - Versionable artifacts that the Orchestrator can fetch/apply.
 
 ### Swarm
-A single unit of execution composed of:
+A single unit of execution composed from the scenario topology. A common REST
+example contains:
 - **Swarm Controller (Marshal)** – the control brain for the swarm.
 - **Generator** – emits traffic/messages (shaped by the plan).
 - **Moderator** – gates, validates, and shapes throughput.
@@ -193,7 +202,7 @@ A single unit of execution composed of:
 - **Post‑Processor** – sinks results (files, HTTP, MQ, DB, etc.).
 - **Trigger(s)** – reacts to events or schedules, may inject control or data.
 
-> Swarms are **independent** and **composable**; scale them horizontally across scenarios or tenants.
+> Swarms are **independent**, **composable**, and not restricted to these example roles.
 
 ---
 
@@ -202,7 +211,9 @@ A single unit of execution composed of:
 All services read environment variables (see each service’s README/Dockerfile). Typical knobs:
 - `RABBITMQ_HOST`, `RABBITMQ_USER`, `RABBITMQ_PASSWORD`
 - `POCKETHIVE_CONTROL_PLANE_EXCHANGE` (control plane, direct)
-- `POCKETHIVE_CONTROL_PLANE_TRAFFIC_EXCHANGE` / queues for work/data paths
+- Work/data connections declared explicitly through scenario
+  `template.bees[].work` and worker `inputs`/`outputs` configuration; see
+  `docs/scenarios/SCENARIO_CONTRACT.md`
 - Logging: `LOG_LEVEL`, structured log toggles
 - Metrics adapter settings: `POCKETHIVE_METRICS_ADAPTER`, ClickHouse endpoint,
   table, batching, and label bounds.

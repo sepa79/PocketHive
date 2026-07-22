@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: http-proxy-demo
 name: HTTP Proxy Demo
 description: Routes processor HTTP traffic through the managed proxy authority.

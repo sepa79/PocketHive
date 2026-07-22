@@ -20,7 +20,7 @@ POCKETHIVE_BASE_URL=http://your-nft-server:8088
 
 | Tool | Works remotely | Notes |
 |---|---|---|
-| `health.check` | ✅ | Confirms all 4 services reachable |
+| `health.check` | ✅ | Confirms configured PocketHive services are reachable |
 | `scenario.list` / `scenario.get` | ✅ | |
 | `scenario.deploy` | ✅ | Uses HTTP zip upload — no Docker needed |
 | `swarm.create/start/stop/remove/get/list` | ✅ | |
@@ -28,7 +28,7 @@ POCKETHIVE_BASE_URL=http://your-nft-server:8088
 | `debug.queues` | ✅ | |
 | `debug.journal` | ✅ | |
 | `debug.tap` / `debug.tap.read` / `debug.tap.close` | ✅ | |
-| `debug.prometheus` | ✅ | |
+| `metrics_query` | ✅ | Reads whitelisted ClickHouse summaries through Grafana; requires explicit metrics configuration |
 | `debug.config-update` | ✅ | |
 | `mock.wiremock.*` | ✅ | If WireMock port is accessible |
 | `mock.tcp.*` | ✅ | If TCP mock admin port is accessible |
@@ -58,7 +58,8 @@ When `debug.docker-logs` is unavailable, use these alternatives:
 debug.journal { swarmId }          → control-plane events, errors, template-invalid
 debug.queues  { swarmId }          → message counts and consumer state
 debug.tap     { swarmId, role }    → sample actual WorkItem payloads
-debug.prometheus { query }         → metrics if postprocessor is running
+metrics_query { swarmId, kind: "processor-runtime-summary", from: "now-15m", to: "now" }
+                                  → aggregate ClickHouse metrics for the requested swarm and time range
 ```
 
 The journal `template-invalid` event type contains the deserialization error message
@@ -343,8 +344,7 @@ Processor (consumes from ph.work.my-test.proc):
 
 Postprocessor (consumes from ph.work.my-test.post):
   → Calculates hop durations from WorkItem step timestamps
-  → Records metrics: ph_transaction_total_latency_ms, ph_transaction_processor_duration_ms
-  → Pushes metrics to Prometheus Pushgateway
+  → Publishes aggregate runtime metrics to ph_metrics_samples in ClickHouse
   → Writes transaction outcomes to ClickHouse (when writeTxOutcomeToClickHouse: true)
   → WorkItem processing complete (no further output)
 ```
@@ -353,7 +353,8 @@ Postprocessor (consumes from ph.work.my-test.post):
 - `debug.queues` — message counts at each queue (should be low, not piling up)
 - `debug.tap` on any role — sample actual WorkItem payloads
 - `debug.docker-logs` for any role — errors, template failures, connection issues
-- `debug.prometheus` — `ph_transaction_total_latency_ms{ph_swarm="my-test"}` for metrics
+- `metrics_query` — use `processor-runtime-summary` with explicit `swarmId`, `from`, and `to`
+  for aggregate runtime metrics; use `tx-outcomes-summary` for transaction outcomes
 - `debug.journal` — control-plane events (config-update, status-full, alerts)
 
 ## Bundle structure (mandatory)
@@ -930,7 +931,7 @@ resultRules:                      # Optional — business outcome classification
     source: RESPONSE_BODY         # or REQUEST_BODY
     pattern: '(?is)<RsltCode>([^<]+)</RsltCode>'  # regex; capture group 1 is the code
   successRegex: '^TRS0001$'       # matched against extracted businessCode
-  dimensions:                     # optional — extra Prometheus label dimensions
+  dimensions:                     # optional — extra extracted outcome dimensions
     - name: transaction-type
       source: REQUEST_BODY
       pattern: '<TxTp>([^<]+)</TxTp>'
@@ -939,7 +940,8 @@ resultRules:                      # Optional — business outcome classification
 `resultRules` drives postprocessor classification:
 - `businessCode.pattern` extracts a code from the request or response body
 - `successRegex` determines if the transaction is a success (matched = success)
-- `dimensions` extract additional label values for Prometheus metrics
+- `dimensions` extract additional values into `x-ph-dim-*` processor step headers;
+  the postprocessor projects them into ClickHouse transaction outcomes
 - Without `resultRules`, success is determined solely by HTTP status code
 
 TCP template files add: `behavior`, `transport`, `endTag`, `maxBytes`.
@@ -1271,7 +1273,6 @@ config:
 | RabbitMQ AMQP | 5672 | 5672 | — |
 | RabbitMQ Management | 15672 | 15672 | `/rabbitmq/` |
 | RabbitMQ WebSocket | 15674 | — | `/ws` |
-| Prometheus | 9090 | — | `/prometheus/` |
 | Grafana | 3000 | — | `/grafana/` |
 | WireMock | 8080 | — | `/wiremock/` |
 | TCP Mock Server | 8083 (admin) / 9090 (TCP) | 8083 / 9090 | — |
@@ -1457,43 +1458,42 @@ This is now the default in the MCP tool.
 
 ## Observability chain
 
-The postprocessor is the end of the data pipeline and the primary source of transaction
-metrics. Understanding this chain is essential for verifying scenarios work correctly.
+PocketHive uses explicit ClickHouse-backed observability. Aggregate service metrics and
+per-transaction outcomes are separate data paths.
 
 ### Metric flow
 
 ```
-Postprocessor → Prometheus Pushgateway → Prometheus → Grafana dashboards
+Workers → ClickHouse ph_metrics_samples → Grafana dashboards / MCP metrics_query
+Postprocessor → ClickHouse ph_tx_outcome_v2 → transaction dashboards / MCP metrics_query
 ```
 
-Workers push metrics to the Pushgateway (scraped every 5s by Prometheus). Grafana
-queries Prometheus for visualization. ClickHouse stores detailed transaction outcomes
-for historical analysis.
+Active runtime targets declare the `CLICKHOUSE` metrics adapter and its settings.
+There is no Prometheus, Pushgateway, raw-SQL MCP path, or implicit backend fallback.
+Transaction outcomes are written only when `writeTxOutcomeToClickHouse: true`.
 
-### Key metrics (emitted by postprocessor)
+### MCP metrics summaries
 
-Metrics are always emitted to Prometheus. The postprocessor also writes transaction
-outcomes to ClickHouse when `writeTxOutcomeToClickHouse: true`.
+`metrics_query` requires `swarmId`, an explicit `from`/`to` time range, and one
+whitelisted summary kind:
 
-| Metric | Type | Labels | What it measures |
-|---|---|---|---|
-| `ph_transaction_hop_duration_ms` | Gauge | `ph_swarm`, `ph_role`, `hop_index`, `hop_service` | Duration of each pipeline hop |
-| `ph_transaction_total_latency_ms` | Gauge | `ph_swarm`, `ph_role` | End-to-end latency from generator to postprocessor |
-| `ph_transaction_processor_duration_ms` | Gauge | `ph_swarm`, `ph_role` | Time spent in the processor HTTP/TCP call |
-| `ph_transaction_processor_success` | Gauge | `ph_swarm`, `ph_role` | 1.0 = success, 0.0 = failure |
-| `ph_transaction_processor_status` | Gauge | `ph_swarm`, `ph_role` | HTTP status code (200, 500, etc.) |
+| Kind | Source | What it shows |
+|---|---|---|
+| `tx-outcomes-summary` | `ph_tx_outcome_v2` | Transaction count, success/failure totals, processor duration |
+| `processor-runtime-summary` | `ph_metrics_samples` | Processor calls, errors, latency, and success ratio |
+| `queue-runtime-summary` | `ph_metrics_samples` | Queue depth, consumers, and oldest-message age |
+| `buffer-guard-summary` | `ph_metrics_samples` | Buffer Guard depth, target, rate, and state |
 
 ### Grafana dashboards (pre-provisioned)
 
 | Dashboard | Data source | What it shows |
 |---|---|---|
-| Pipeline Observability | Prometheus | Worker throughput, queue depths, latencies |
-| Pipeline Observability (Detailed) | Prometheus | Per-hop durations, processor call stats |
+| Pipeline Observability | ClickHouse | Worker throughput, queue depths, latencies |
+| Pipeline Observability (Detailed) | ClickHouse | Processor call stats and Buffer Guard state |
 | TX Outcomes | ClickHouse | Transaction success/failure rates, status codes |
 | TX RTT Latency | ClickHouse | Round-trip time distributions |
 | TX RTT Overview | ClickHouse | Aggregate RTT by swarm/role |
 | TX RTT Quality | ClickHouse | Latency percentiles (p50, p95, p99) |
-| Logs | Loki | Structured log search across all workers |
 | Journal | Postgres | Control-plane event timeline |
 
 ### Verifying metrics in the TDD workflow
@@ -1501,8 +1501,9 @@ outcomes to ClickHouse when `writeTxOutcomeToClickHouse: true`.
 During Phase 4 (VERIFY), after confirming messages flow via `debug.queues` and
 `debug.tap`, also check:
 
-1. **Prometheus** — Query `ph_transaction_total_latency_ms{ph_swarm="<swarmId>"}` via
-   the Prometheus API at `<POCKETHIVE_BASE_URL>/prometheus/api/v1/query`.
+1. **MCP metrics** — Call `metrics_query` with
+   `{ swarmId: "<swarmId>", kind: "processor-runtime-summary", from: "now-15m", to: "now" }`.
+   If transaction outcomes are enabled, also call `tx-outcomes-summary` for the same range.
 2. **Grafana** — Open `<POCKETHIVE_BASE_URL>/grafana/` and check the Pipeline
    Observability dashboard filtered by swarm.
 3. **Status snapshot** — `swarm.get` returns worker status with throughput and latency

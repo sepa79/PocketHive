@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: auth-proving-no-auth
 name: Auth Proving - No Auth Clean Worker
 description: Proves a request-builder worker with no reachable authRef runs

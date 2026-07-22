@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-two-moderators
 name: Local REST - Double Moderator Chain
 description: Local images wired as generator → moderator A → processor →

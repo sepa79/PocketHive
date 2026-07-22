@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: webauth-balance-redis
 name: WebAuth Balance (Redis -> WebAuth -> Redis)
 description: Reads WebAuth balance payloads from Redis list webauth.BAL.custA

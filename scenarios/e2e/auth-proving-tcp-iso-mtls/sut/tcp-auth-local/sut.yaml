@@ -3,10 +3,8 @@ name: TCP Auth Mock Servers (local docker-compose)
 type: tcp
 endpoints:
   tcp-server:
-    id: tcp-server
     kind: tcp
     baseUrl: tcp://tcp-mock-server:9090
   tcps-server:
-    id: tcps-server
     kind: tcp
     baseUrl: tcps://tcp-mock-server-tls:9090

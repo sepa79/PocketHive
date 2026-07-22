@@ -8,6 +8,7 @@ public record BundleValidationResult(
     String bundleKey,
     String bundlePath,
     String scenarioId,
+    BundleValidationEvidence validation,
     ValidationSummary summary,
     List<ValidationFinding> findings
 ) {
@@ -21,10 +22,12 @@ public record BundleValidationResult(
         String bundleKey,
         String bundlePath,
         String scenarioId,
+        BundleValidationEvidence validation,
         List<ValidationFinding> findings
     ) {
         List<ValidationFinding> safeFindings = findings == null ? List.of() : List.copyOf(findings);
         ValidationSummary summary = ValidationSummary.from(safeFindings);
-        return new BundleValidationResult(summary.errors() == 0, source, bundleKey, bundlePath, scenarioId, summary, safeFindings);
+        return new BundleValidationResult(summary.errors() == 0, source, bundleKey, bundlePath, scenarioId,
+            validation, summary, safeFindings);
     }
 }

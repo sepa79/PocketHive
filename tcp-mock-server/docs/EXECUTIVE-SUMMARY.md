@@ -52,29 +52,11 @@ The TCP Mock Server is complete with 100% WireMock feature parity plus superior 
 ✅ Template library (9 templates)  
 ✅ Real-time validation  
 
-## 🧹 Cleanup Required (Manual)
+## Documentation packaging
 
-### Step 1: Remove Redundant Files
-Execute commands in `CLEANUP-NOTES.md`:
-- Remove 9 old UI files
-- Remove 14 interim documentation files
-
-### Step 2: Rename Production Files
-```bash
-mv src/main/resources/static/index-complete.html src/main/resources/static/index.html
-mv src/main/resources/static/app-ultimate.js src/main/resources/static/app.js
-```
-
-### Step 3: Update WebController
-Change line 26 in `WebController.java`:
-```java
-return "forward:/index.html";  // was index-complete.html
-```
-
-### Step 4: Rebuild
-```bash
-mvn clean package
-```
+Markdown under `tcp-mock-server/docs/` is the single source of truth. Maven
+packages it under the runtime `docs/` classpath and Docker copies it to
+`/app/docs`; no manual documentation-copy cleanup is required.
 
 ## 📚 Essential Reading
 
@@ -96,9 +78,8 @@ mvn clean package
 ## 🚀 Next Steps
 
 ### Immediate (Day 1)
-1. ✅ Execute cleanup (CLEANUP-NOTES.md)
-2. ✅ Rebuild and test locally
-3. ✅ Review documentation
+1. ✅ Rebuild and test locally
+2. ✅ Review documentation
 
 ### Short Term (Week 1)
 4. ✅ Deploy to test environment

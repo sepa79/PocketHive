@@ -8,7 +8,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 {
   "correlationId": "uuid-v4",
   "idempotencyKey": "uuid-v4",
-  "watch": { "successTopic": "...", "errorTopic": "..." },
+  "watch": { "successTopic": "...", "errorTopics": ["..."] },
   "timeoutMs": 180000
 }
 ```
@@ -631,7 +631,7 @@ Deletes the tap queue and returns the last known tap state.
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>",
-    "errorTopic":   "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
+    "errorTopics": ["event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"]
   },
   "timeoutMs": 120000
 }
@@ -656,6 +656,8 @@ Deletes the tap queue and returns the last known tap state.
 
 **Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
 
+Clients must correlate by `correlationId` and watch every entry in `errorTopics`; the orchestrator-scoped topic reports confirmation timeouts and finalization failures that cannot be emitted by the swarm controller.
+
 **Response (202)**
 ```json
 {
@@ -663,7 +665,10 @@ Deletes the tap queue and returns the last known tap state.
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopics": [
+      "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>",
+      "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
+    ]
   },
   "timeoutMs": 180000
 }
@@ -679,6 +684,8 @@ Deletes the tap queue and returns the last known tap state.
 
 **Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
 
+Clients must correlate by `correlationId` and watch every entry in `errorTopics`; the orchestrator-scoped topic reports confirmation timeouts and finalization failures that cannot be emitted by the swarm controller.
+
 **Response (202)**
 ```json
 {
@@ -686,7 +693,10 @@ Deletes the tap queue and returns the last known tap state.
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopics": [
+      "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>",
+      "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
+    ]
   },
   "timeoutMs": 90000
 }
@@ -710,7 +720,7 @@ Deletes the tap queue and returns the last known tap state.
   "idempotencyKey": "…",
   "watch": {
     "successTopic": "event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopic":   "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"
+    "errorTopics": ["event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"]
   },
   "timeoutMs": 180000
 }
@@ -789,7 +799,7 @@ identity; `role` alone is not a stable target.
         "idempotencyKey": "…",
         "watch": {
           "successTopic": "event.outcome.config-update.<swarmId>.swarm-controller.<instance>",
-          "errorTopic": "event.alert.{type}.<swarmId>.swarm-controller.<instance>"
+          "errorTopics": ["event.alert.{type}.<swarmId>.swarm-controller.<instance>"]
         },
         "timeoutMs": 60000
       }

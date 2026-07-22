@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-defaults
 name: Local REST - Simple REST Swarm using Defaults
 description: Uses local images. Sample scenario that is using defaults from workers.

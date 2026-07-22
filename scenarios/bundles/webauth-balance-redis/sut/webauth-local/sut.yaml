@@ -3,6 +3,5 @@ name: WebAuth (TCP mock local)
 type: http
 endpoints:
   webauth:
-    id: webauth
     kind: http
     baseUrl: http://tcp-mock-server:8080

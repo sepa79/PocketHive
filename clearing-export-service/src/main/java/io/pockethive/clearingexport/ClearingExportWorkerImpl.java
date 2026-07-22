@@ -14,7 +14,7 @@ import io.pockethive.worker.sdk.config.WorkerCapability;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import jakarta.annotation.PostConstruct;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Instant;

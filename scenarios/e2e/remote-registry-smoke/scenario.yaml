@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: remote-registry-smoke
 name: Remote Registry Smoke
 description: Remote smoke scenario using the deployment-selected image tag.

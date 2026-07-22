@@ -2,7 +2,64 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.15.35]
+Timestamp: 2026-07-10T13:36:56Z
+
+- Breaking SUT contract: make each `endpoints` map key the only endpoint
+  identifier, remove nested `SutEndpoint.id`, and reject legacy nested ids
+  during canonical bundle validation.
+- Scenario migration: update every repository `sut.yaml`, extend the standalone
+  scenario migrator to check and rewrite SUT descriptors, and publish the
+  version-to-version procedure in `docs/UPGRADING.md`.
+- Orchestrator/runtime: derive auth context and network/runtime endpoint
+  identity exclusively from the endpoint map key, fixing swarm creation for
+  canonical `wiremock-local` and `tcp-mock-local` descriptors.
+- Documentation SSOT: align the capability catalogue, controller heartbeat,
+  journal mode, topology example, routing-contract ownership, and Scenario
+  workspace references with the implemented product behavior.
+- Documentation lifecycle: archive the obsolete Scenario Editor concept, old
+  fixed-pipeline requirements, and completed Redis plan; move remaining
+  future SDK/build designs into the declared `docs/todo` area.
+- Scenario protocol: require `protocolVersion` in every `scenario.yaml` and
+  reject missing or incompatible major versions before deeper validation.
+- Validation evidence: report the scenario protocol version, supported
+  protocol version, Scenario Manager release, and bundle SHA-256 digest in the
+  canonical Scenario Manager validation response.
+- Validation SSOT: keep Scenario Manager as the sole authoritative bundle
+  validator used by MCP and runtime admission, with one shared set of
+  validators and no MCP-side acceptance fallback.
+- Template validation: extract the PocketHive Pebble/eval implementation into
+  the shared `common/templating` module and use the same compiler in workers and
+  Scenario Manager to catch malformed inline templates, including broken
+  nested and repeated quotes.
+- Scenario migration: add protocol version declarations to repository bundles,
+  repair invalid template quoting found by the stricter validator, and retain
+  the explicit TCP Mock Handlebars boundary pending template-language
+  unification.
+- Regression coverage: add a manual MCP agent based on the v0.15.28 legacy-ID
+  scenario that proves legacy fields, missing/incompatible protocol versions,
+  malformed Pebble, and invalid eval expressions are rejected through the
+  official Scenario Manager ingress path.
+- Tooling and tests: include validator evidence in UI/MCP contracts, update E2E
+  scenario creation payloads, and align the PocketHive MCP package with release
+  0.15.35.
+- Swarm lifecycle errors: surface correlated start/stop failures in the Hive UI
+  with human-readable messages, advertise every relevant alert topic in control
+  responses, and emit structured command-failure context for dispatch,
+  rejection, confirmation, and outcome-finalization paths.
+- Logging cleanup: remove the orphaned Logstash encoder dependency and JSON
+  appender from Network Proxy Manager after retirement of the central log
+  aggregation stack.
+- Release: bump PocketHive patch version to 0.15.35 for scenario validation
+  hardening and evidence.
+- Redis dataset runtime config: expose manual `inputs.redis.listName` editing
+  through the existing capability-driven form for stopped single-source
+  workers, while keeping `sources[]`, connection settings, and source-mode
+  conversion immutable at runtime.
+- Hive UI and MCP safety: block Redis `listName` submission unless swarm status
+  is explicitly `STOPPED`, require MCP agents to verify that state with
+  `swarm_get`, and retain the worker-side guard as the authoritative race-safe
+  enforcement boundary.
 
 ## [0.15.34]
 Timestamp: 2026-07-08T13:49:59Z

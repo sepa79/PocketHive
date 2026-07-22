@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-echo-demo
 name: TCP Echo Server Demo
 description: Demonstrates TCP echo behavior using socket transport with connection reuse

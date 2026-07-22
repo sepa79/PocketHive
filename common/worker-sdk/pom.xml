@@ -36,6 +36,11 @@
   <dependencies>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>templating</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>auth-contracts</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -67,11 +72,6 @@
     <dependency>
       <groupId>io.lettuce</groupId>
       <artifactId>lettuce-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>io.pebbletemplates</groupId>
-      <artifactId>pebble</artifactId>
-      <version>3.2.4</version>
     </dependency>
     <dependency>
       <groupId>org.springframework.amqp</groupId>

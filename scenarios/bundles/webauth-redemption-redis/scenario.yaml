@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: webauth-redemption-redis
 name: WebAuth Redemption (Redis -> WebAuth -> Redis)
 description: Reads WebAuth redemption payloads from Redis list webauth.RED.custA

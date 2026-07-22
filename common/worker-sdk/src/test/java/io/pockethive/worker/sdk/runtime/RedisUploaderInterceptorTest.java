@@ -14,7 +14,7 @@ import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
-import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.PebbleTemplateRenderer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;

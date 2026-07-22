@@ -99,6 +99,7 @@ Feature: Auth and scoped PocketHive access
     When I call "Scenario Manager" "POST" "/scenarios" for the active user with body
       """
       {
+        "protocolVersion": "2.0.0",
         "id": "{{value:scenarioId}}-blocked",
         "name": "Blocked Auth Scenario",
         "template": {
@@ -112,6 +113,7 @@ Feature: Auth and scoped PocketHive access
     And I call "Scenario Manager" "POST" "/scenarios" for the active user with body
       """
       {
+        "protocolVersion": "2.0.0",
         "id": "{{value:scenarioId}}",
         "name": "Created Auth Scenario",
         "template": {

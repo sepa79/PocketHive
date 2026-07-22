@@ -1,4 +1,5 @@
 ---
+protocolVersion: "2.0.0"
 id: "tcp-comprehensive-demo"
 name: "TCP Capabilities Demo"
 description: "Demonstrates TCP Mock Server capabilities including ISO-8583,

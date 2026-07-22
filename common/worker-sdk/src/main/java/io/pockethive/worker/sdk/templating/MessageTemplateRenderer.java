@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.templating;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;

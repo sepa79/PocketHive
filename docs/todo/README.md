@@ -1,23 +1,34 @@
 # Future / TODO Plans
 
-This directory groups **future design plans** that have not yet been
-implemented. They act as a backlog of larger architectural changes.
+This directory contains work that is not yet delivered. Completed baselines live in `docs/archive/`; the files below track only remaining behavior.
 
-Notable “todo” plans:
+## Architecture and runtime
 
-- `docs/todo/control-plane-contract-enforcement.md` – enforce AsyncAPI/JSON Schema contracts with dedicated contract tests + CI gates.
-- `docs/todo/auth-redesign-plan.md` – redesign worker auth around explicit opt-in activation, durable Redis token storage, TCP/ISO8583 support, and bounded failure reporting.
-- `docs/todo/auth-redesign-evidence.md` – current auth redesign build/test evidence and remaining deployed-proof gaps.
-- `docs/todo/ninja-bee.md` – Ninja Bee pipeline worker + Capabilities model (draft).
-- `docs/todo/swarm-runtime-core-refactor.md` – break up SwarmRuntimeCore (1000+ LOC) into smaller units and add focused tests.
-- `docs/todo/config-key-normalisation-plan.md` – unify config keys to camelCase; not started yet.
-- `docs/sdk/control-plane-io-plan.md` – IO v2 where the control plane owns IO config.
-- `docs/sdk/http-request-processor-plan.md` – richer HTTP processor worker and response routing.
-- `docs/sdk/worker-plugin-plan.md` – plugin-based workers.
-- `docs/sdk/workitem-refactor-plan.md` – WorkItem + interceptor pipeline follow-ups.
-- `docs/build-id-plan.md` – build id / runtime version propagation.
-- `docs/todo/debug-tap-ui-v2.md` – UI V2 debug tap flow via Orchestrator-managed queues.
-- `docs/todo/hive-graph-view.md` – stable single‑swarm graph view (anti‑flicker).
+- `auth-service-followups.md`
+- `config-key-normalisation-plan.md`
+- `control-plane-contract-enforcement-followups.md`
+- `network-proxy-followups.md`
+- `scenario-plan-followups.md`
+- `sut-environments-followups.md`
+- `swarm-lifecycle-health-model-plan.md`
+- `swarm-runtime-core-refactor.md`
+- `workitem-transport-agnostic.md`
 
-Each plan file has a `Status: future / design` header to distinguish it
-from implemented work.
+## UI and operator experience
+
+- `hive-graph-followups.md`
+- `journal-followups.md`
+- `ui-v2-control-plane-followups.md`
+
+## Worker and extension directions
+
+- `ninja-bee.md`
+- `pockethive-intellij-plugin.md`
+- `worker-configurable-io-followups.md`
+- `control-plane-io-plan.md`
+- `http-request-processor-plan.md`
+- `worker-plugin-plan.md`
+- `workitem-refactor-plan.md`
+- `build-id-plan.md`
+
+Every file must declare an explicit status. A delivered feature, verification report, or implementation history does not belong in this directory.

@@ -16,7 +16,7 @@ import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.worker.sdk.config.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 
 import java.time.Clock;
 import java.util.Locale;
@@ -90,7 +90,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
     this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(),
-        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(), new RedisSequenceProperties());
+        new io.pockethive.templating.PebbleTemplateRenderer(), new RedisSequenceProperties());
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
@@ -98,7 +98,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         clock,
-        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(),
         new RedisSequenceProperties());
   }
 
@@ -113,7 +113,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
         new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
         clock,
-        new io.pockethive.worker.sdk.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(),
         new RedisSequenceProperties());
   }
 

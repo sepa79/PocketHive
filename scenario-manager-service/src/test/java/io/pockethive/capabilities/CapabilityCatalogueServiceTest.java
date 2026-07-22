@@ -79,6 +79,22 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
+    void bundledRedisDatasetCapabilityExposesManualListNameRuntimeEdit() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        CapabilityManifest manifest = catalogue.findByImageName("io-redis-dataset").orElseThrow();
+        CapabilityManifest.ConfigEntry listName = manifest.config().stream()
+            .filter(entry -> "inputs.redis.listName".equals(entry.name()))
+            .findFirst()
+            .orElseThrow();
+
+        assertThat(manifest.capabilitiesVersion()).isEqualTo("1.3");
+        assertThat(listName.liveMutable()).isTrue();
+        assertThat(listName.allowBlank()).isTrue();
+    }
+
+    @Test
     void bundledCapabilitiesDeclareLiveMutabilityForEveryConfigEntry() throws Exception {
         CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
         catalogue.reload();

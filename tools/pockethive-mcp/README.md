@@ -100,6 +100,12 @@ names only. They are exposed only when `PH_MCP_TOOL_NAME_MODE=legacy` or
 `PH_MCP_TOOL_NAME_MODE=both` is set. Do not use those names in normal agent
 instructions or client integrations.
 
+Before using `component_config_update` to change `inputs.redis.listName`, call
+`swarm_get` and proceed only when it explicitly reports `STOPPED`. An accepted
+Stop request, worker inactivity, or stale observation is not sufficient. Do
+not infer or bypass this requirement; the worker rejects the field while it is
+enabled.
+
 ## Core Environment
 
 | Variable | Required | Purpose |
@@ -341,6 +347,19 @@ Run agentic evals:
 npm run mcp:agentic-evals
 ```
 
+Run the manual scenario-regression agent against a rebuilt PocketHive stack:
+
+```bash
+POCKETHIVE_BASE_URL=http://localhost:8088 \
+POCKETHIVE_AUTH_USERNAME=local-admin \
+npm --prefix tools/pockethive-mcp run acceptance:scenario-regression
+```
+
+This agent stages invalid bundles derived from the v0.15.28 legacy-ID scenario
+and submits them through MCP `bundle_validate`. It does not run a local or
+independent validator; every verdict and finding comes from Scenario Manager
+through the official PocketHive ingress.
+
 Run live workflow acceptance against a local PocketHive stack:
 
 ```bash
@@ -387,8 +406,8 @@ curl -X DELETE \
 
 ## More Docs
 
-- `docs/inProgress/pockethive-plugin/MCP-SERVER.md` - server architecture and tool surface
-- `docs/inProgress/pockethive-plugin/TOOL-CONTRACTS.md` - public tool contracts
-- `docs/inProgress/pockethive-plugin/DEVELOPER-SETUP.md` - team setup and doctor behavior
-- `docs/inProgress/pockethive-plugin/AI-ASSISTANT-SETUP.md` - assistant client configuration
-- `docs/inProgress/pockethive-plugin/EVIDENCE.md` - evidence taxonomy
+- `docs/plugins/pockethive/MCP-SERVER.md` - server architecture and tool surface
+- `docs/plugins/pockethive/TOOL-CONTRACTS.md` - public tool contracts
+- `docs/plugins/pockethive/DEVELOPER-SETUP.md` - team setup and doctor behavior
+- `docs/plugins/pockethive/AI-ASSISTANT-SETUP.md` - assistant client configuration
+- `docs/plugins/pockethive/EVIDENCE.md` - evidence taxonomy

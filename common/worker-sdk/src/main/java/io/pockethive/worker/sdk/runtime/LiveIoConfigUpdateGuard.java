@@ -16,7 +16,12 @@ final class LiveIoConfigUpdateGuard {
     private LiveIoConfigUpdateGuard() {
     }
 
-    static void validate(WorkerDefinition definition, Map<String, Object> previousRaw, Map<String, Object> update) {
+    static void validate(
+        WorkerDefinition definition,
+        Map<String, Object> previousRaw,
+        Map<String, Object> update,
+        boolean workerEnabled
+    ) {
         if (definition == null || update == null || update.isEmpty()) {
             return;
         }
@@ -28,7 +33,8 @@ final class LiveIoConfigUpdateGuard {
             inputSubblock(definition.input()),
             previous,
             update,
-            bootstrap
+            bootstrap,
+            workerEnabled
         );
         validateIoRoot(
             definition,
@@ -36,7 +42,8 @@ final class LiveIoConfigUpdateGuard {
             outputSubblock(definition.outputType()),
             previous,
             update,
-            bootstrap
+            bootstrap,
+            workerEnabled
         );
     }
 
@@ -58,7 +65,8 @@ final class LiveIoConfigUpdateGuard {
         String selectedSubblock,
         Map<String, Object> previousRaw,
         Map<String, Object> update,
-        boolean bootstrap
+        boolean bootstrap,
+        boolean workerEnabled
     ) {
         Object rawRootUpdate = update.get(root);
         if (rawRootUpdate == null) {
@@ -83,7 +91,7 @@ final class LiveIoConfigUpdateGuard {
             if (!(value instanceof Map<?, ?> nestedUpdate)) {
                 throw unsafeUpdate(definition, path);
             }
-            validateSubblock(definition, selectedSubblock, previousRaw, path, nestedUpdate, bootstrap);
+            validateSubblock(definition, selectedSubblock, previousRaw, path, nestedUpdate, bootstrap, workerEnabled);
         }
     }
 
@@ -93,7 +101,8 @@ final class LiveIoConfigUpdateGuard {
         Map<String, Object> previousRaw,
         String subblockPath,
         Map<?, ?> nestedUpdate,
-        boolean bootstrap
+        boolean bootstrap,
+        boolean workerEnabled
     ) {
         for (Map.Entry<?, ?> nestedEntry : nestedUpdate.entrySet()) {
             if (nestedEntry.getKey() == null) {
@@ -105,7 +114,13 @@ final class LiveIoConfigUpdateGuard {
                 && subblockPath.endsWith("." + selectedSubblock)
                 && LiveIoConfigMutability.isLiveMutableIoPath(fieldPath);
             if (safe) {
-                validateSafeOperationalField(definition, fieldPath, nestedEntry.getValue());
+                validateSafeOperationalField(
+                    definition,
+                    previousRaw,
+                    fieldPath,
+                    nestedEntry.getValue(),
+                    workerEnabled
+                );
                 continue;
             }
             if (bootstrap) {
@@ -115,7 +130,17 @@ final class LiveIoConfigUpdateGuard {
         }
     }
 
-    private static void validateSafeOperationalField(WorkerDefinition definition, String dottedPath, Object value) {
+    private static void validateSafeOperationalField(
+        WorkerDefinition definition,
+        Map<String, Object> previousRaw,
+        String dottedPath,
+        Object value,
+        boolean workerEnabled
+    ) {
+        if (LiveIoConfigMutability.isDisabledOnlyIoPath(dottedPath)) {
+            validateDisabledRedisListName(definition, previousRaw, dottedPath, value, workerEnabled);
+            return;
+        }
         switch (dottedPath) {
             case LiveIoConfigMutability.SCHEDULER_RATE_PER_SEC,
                  LiveIoConfigMutability.REDIS_DATASET_RATE_PER_SEC,
@@ -125,6 +150,54 @@ final class LiveIoConfigUpdateGuard {
             case LiveIoConfigMutability.SCHEDULER_RESET -> requireBoolean(definition, dottedPath, value);
             default -> throw unsafeUpdate(definition, dottedPath);
         }
+    }
+
+    private static void validateDisabledRedisListName(
+        WorkerDefinition definition,
+        Map<String, Object> previousRaw,
+        String dottedPath,
+        Object value,
+        boolean workerEnabled
+    ) {
+        if (previousRaw.isEmpty()) {
+            return;
+        }
+        Object previousValue = valueAt(previousRaw, dottedPath);
+        if (Objects.equals(previousValue, value)) {
+            return;
+        }
+        if (workerEnabled) {
+            throw new IllegalStateException(
+                "Runtime config-update cannot change disabled-only IO field '" + dottedPath
+                    + "' for enabled worker '" + definition.beanName() + "'; stop the swarm first."
+            );
+        }
+        if (!(value instanceof String listName) || listName.isBlank()) {
+            throw invalidOperationalValue(definition, dottedPath, "must be a non-blank string");
+        }
+        if (!listName.equals(listName.trim())) {
+            throw invalidOperationalValue(definition, dottedPath, "must not contain surrounding whitespace");
+        }
+        Object previousListName = valueAt(previousRaw, LiveIoConfigMutability.REDIS_DATASET_LIST_NAME);
+        Object previousSources = valueAt(previousRaw, LiveIoConfigMutability.REDIS_DATASET_SOURCES);
+        if (!(previousListName instanceof String currentListName) || currentListName.isBlank()
+            || hasConfiguredSources(previousSources)) {
+            throw new IllegalStateException(
+                "Runtime config-update cannot change disabled-only IO field '" + dottedPath
+                    + "' for worker '" + definition.beanName()
+                    + "'; the worker must already use Redis single-source listName mode."
+            );
+        }
+    }
+
+    private static boolean hasConfiguredSources(Object value) {
+        if (value == null) {
+            return false;
+        }
+        if (!(value instanceof Iterable<?> sources)) {
+            return true;
+        }
+        return sources.iterator().hasNext();
     }
 
     private static double requireRatePerSec(WorkerDefinition definition, String dottedPath, Object value) {

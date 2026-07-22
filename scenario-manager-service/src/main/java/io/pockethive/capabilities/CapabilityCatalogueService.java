@@ -225,7 +225,7 @@ public class CapabilityCatalogueService {
             && LiveIoConfigMutability.isIoPath(entryName)
             && !LiveIoConfigMutability.isLiveMutableIoPath(entryName)) {
             errors.add("config[].liveMutable for unsafe IO field '" + entryName
-                + "' must be false; live-mutable IO fields are: "
+                + "' must be false; runtime-editable IO fields are: "
                 + LiveIoConfigMutability.liveMutableIoPaths());
         }
     }

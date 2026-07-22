@@ -1,5 +1,7 @@
 # Processor ISO8583 - plan V1 + zarys V2
 
+Status: in progress
+
 ## Cel
 
 Rozszerzyc `processor-service`, aby obslugiwal ISO8583 bez trzymania definicji schematow (MC/VISA itp.) w repo PocketHive.

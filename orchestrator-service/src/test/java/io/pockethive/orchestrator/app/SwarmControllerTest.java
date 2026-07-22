@@ -137,6 +137,11 @@ class SwarmControllerTest {
         assertThat(resp.getBody().watch().successTopic()).isEqualTo(
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.SWARM_START,
                 new ConfirmationScope("sw1", "swarm-controller", "inst")));
+        assertThat(resp.getBody().watch().errorTopics()).containsExactly(
+            ControlPlaneRouting.event("alert", "alert",
+                new ConfirmationScope("sw1", "swarm-controller", "inst")),
+            ControlPlaneRouting.event("alert", "alert",
+                new ConfirmationScope("sw1", "orchestrator", "orch-instance")));
         assertThat(tracker.complete("sw1", Phase.START)).isPresent();
         assertThat(registry.find("sw1").get().getStatus()).isEqualTo(SwarmLifecycleStatus.STARTING);
     }
@@ -400,7 +405,6 @@ class SwarmControllerTest {
                 "WireMock Local",
                 "sandbox",
                 Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
-                    "default",
                     "HTTP",
                     "http://wiremock:8080",
                     "http://upstream:8080"))));
@@ -439,7 +443,6 @@ class SwarmControllerTest {
                     "name", "WireMock Local",
                     "type", "sandbox",
                     "endpoints", Map.of("default", Map.of(
-                        "id", "default",
                         "kind", "HTTP",
                         "baseUrl", "http://wiremock:8080",
                         "upstreamBaseUrl", "http://upstream:8080"))))));
@@ -468,7 +471,6 @@ class SwarmControllerTest {
                 "SUT A",
                 null,
                 Map.of("payments", new io.pockethive.swarm.model.SutEndpoint(
-                    "payments",
                     "HTTPS",
                     "https://proxy.testenv.company.com:9443",
                     "https://api.testenv.company.com"))));
@@ -539,7 +541,6 @@ class SwarmControllerTest {
                 "TCP SUT",
                 "tcp",
                 Map.of("tcp-server", new io.pockethive.swarm.model.SutEndpoint(
-                    "tcp-server",
                     "tcp",
                     "toxiproxy:19090",
                     "tcp-mock-server:9090"))));
@@ -630,7 +631,6 @@ class SwarmControllerTest {
                 "SUT A",
                 null,
                 Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
-                    "default",
                     "SMTP",
                     "smtp://mail.testenv.company.com",
                     "smtp://smtp-upstream.internal"))));
@@ -669,7 +669,6 @@ class SwarmControllerTest {
                 "SUT A",
                 null,
                 Map.of("default", new io.pockethive.swarm.model.SutEndpoint(
-                    "default",
                     "HTTPS",
                     "https://proxy.testenv.company.com:9443",
                     null))));
@@ -708,7 +707,6 @@ class SwarmControllerTest {
                 "SUT A",
                 null,
                 Map.of("payments", new io.pockethive.swarm.model.SutEndpoint(
-                    "payments",
                     "HTTPS",
                     "https://haproxy:18443",
                     "https://wiremock:8443"))));

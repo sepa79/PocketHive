@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -121,7 +122,7 @@ public class ComponentController {
         ConfirmationScope scope = new ConfirmationScope(swarmSegment, role, instance);
         ControlResponse.Watch watch = new ControlResponse.Watch(
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
-            ControlPlaneRouting.event("alert", "alert", scope)
+            List.of(ControlPlaneRouting.event("alert", "alert", scope))
         );
         ControlResponse response = new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
         return ResponseEntity.accepted().body(response);

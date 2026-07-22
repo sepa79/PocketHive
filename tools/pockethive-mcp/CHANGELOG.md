@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.15.35] - 2026-07-10
+
+### Changed
+- Version tracks the PocketHive 0.15.35 release.
+- Scenario bundle validation reports Scenario Manager and protocol-version
+  evidence, and the regression acceptance agent exercises invalid legacy and
+  template-syntax cases exclusively through Scenario Manager validation.
+
 ## [0.15.32] - 2026-07-02
 
 ### Changed

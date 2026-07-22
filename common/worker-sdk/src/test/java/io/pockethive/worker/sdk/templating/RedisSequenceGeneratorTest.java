@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.templating;
 
+import io.pockethive.templating.RedisSequenceGenerator;
+
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
@@ -84,12 +86,12 @@ class RedisSequenceGeneratorTest {
     }
 
     private static String formatSequence(long value, String modeName, String format) throws Exception {
-        Class<?> parsedClass = Class.forName("io.pockethive.worker.sdk.templating.RedisSequenceGenerator$ParsedFormat");
+        Class<?> parsedClass = Class.forName("io.pockethive.templating.RedisSequenceGenerator$ParsedFormat");
         java.lang.reflect.Method parse = parsedClass.getDeclaredMethod("parse", String.class);
         parse.setAccessible(true);
         Object parsed = parse.invoke(null, format);
 
-        Class<?> modeClass = Class.forName("io.pockethive.worker.sdk.templating.RedisSequenceGenerator$SequenceMode");
+        Class<?> modeClass = Class.forName("io.pockethive.templating.RedisSequenceGenerator$SequenceMode");
         @SuppressWarnings("unchecked")
         Object mode = Enum.valueOf((Class<Enum>) modeClass, modeName);
 

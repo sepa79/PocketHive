@@ -1,6 +1,5 @@
 package io.pockethive.swarm.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.constraints.NotBlank;
 
 /**
@@ -10,9 +9,30 @@ import jakarta.validation.constraints.NotBlank;
  * protocol kind and a base URL. Additional protocol‑specific fields
  * can be added in future iterations.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
-public record SutEndpoint(@NotBlank String id,
-                          @NotBlank String kind,
+public record SutEndpoint(@NotBlank String kind,
                           @NotBlank String baseUrl,
                           String upstreamBaseUrl) {
+
+    public SutEndpoint {
+        kind = requireText(kind, "kind");
+        baseUrl = requireText(baseUrl, "baseUrl");
+        upstreamBaseUrl = trimOptional(upstreamBaseUrl, "upstreamBaseUrl");
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("SUT endpoint " + field + " must not be blank");
+        }
+        return value.trim();
+    }
+
+    private static String trimOptional(String value, String field) {
+        if (value == null) {
+            return null;
+        }
+        if (value.isBlank()) {
+            throw new IllegalArgumentException("SUT endpoint " + field + " must not be blank when provided");
+        }
+        return value.trim();
+    }
 }

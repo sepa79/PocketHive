@@ -1,4 +1,4 @@
-Status: draft
+Status: future / design
 
 # Ninja Bee — Composable Pipeline Worker (Branching) + Capabilities Model
 
@@ -87,4 +87,3 @@ To avoid “two independent lists of fields” for the same behavior:
 - Contract for pipeline definition storage: where and how the pipeline config is stored (scenario template vs worker config vs dedicated object).
 - How step-level outcomes map to output routing keys/queues for multi-output fan-out.
 - How “best-effort pacing” (scheduler/gate step) should be expressed and surfaced in status.
-

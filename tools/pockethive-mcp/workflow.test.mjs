@@ -158,7 +158,7 @@ async function withFakeRedis(fn) {
 async function withScenarioManagerValidationClient(bundlesRoot, fn, options = {}) {
   const responses = Array.isArray(options.responses) && options.responses.length
     ? options.responses
-    : [{ ok: true, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
+    : [{ ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "test-bundle", summary: { errors: 0, warnings: 0 }, findings: [] }];
   let validationCalls = 0;
   const server = createServer(async (req, res) => {
     const url = new URL(req.url, "http://127.0.0.1");
@@ -310,7 +310,7 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     }
     if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
       for await (const _ of req) { /* drain zip upload */ }
-      return send(res, 200, { ok: true, source: "uploaded-zip", scenarioId: bundleId, summary: { errors: 0, warnings: 0 }, findings: [] });
+      return send(res, 200, { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: bundleId, summary: { errors: 0, warnings: 0 }, findings: [] });
     }
     if (req.method === "POST" && url.pathname === "/wiremock/__admin/mappings") {
       const mapping = await requestJson(req);
@@ -546,6 +546,7 @@ test("workflow_start rejects source paths outside allowed roots", async () => {
     responses: [
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
@@ -553,6 +554,7 @@ test("workflow_start rejects source paths outside allowed roots", async () => {
       },
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
@@ -560,12 +562,13 @@ test("workflow_start rejects source paths outside allowed roots", async () => {
       },
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
         findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
       },
-      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+      { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
     ],
   });
 });
@@ -756,6 +759,7 @@ test("workflow profile evidence gates and provenance policies are profile-driven
     responses: [
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
@@ -775,7 +779,7 @@ test("workflow profile evidence gates and provenance policies are profile-driven
         summary: { errors: 1, warnings: 0 },
         findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
       },
-      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+      { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
     ],
   });
 });
@@ -1244,7 +1248,14 @@ test("Scenario Manager auth refreshes username-derived bearer token once after 4
         return;
       }
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({
+        ok: true,
+        validation: validationEvidence,
+        source: "uploaded-zip",
+        scenarioId: "auth-refresh-validation",
+        summary: { errors: 0, warnings: 0 },
+        findings: [],
+      }));
       return;
     }
     res.writeHead(404, { "content-type": "application/json" });
@@ -1570,12 +1581,13 @@ test("workflow_patch is constrained and validation history preserves failed and 
     responses: [
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-patch",
         summary: { errors: 1, warnings: 0 },
         findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
       },
-      { ok: true, source: "uploaded-zip", scenarioId: "agent-patch", summary: { errors: 0, warnings: 0 }, findings: [] },
+      { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "agent-patch", summary: { errors: 0, warnings: 0 }, findings: [] },
     ],
   });
 });
@@ -1623,6 +1635,7 @@ test("workflow detects repeated unchanged failures without creating an unresolva
     responses: [
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
@@ -1630,6 +1643,7 @@ test("workflow detects repeated unchanged failures without creating an unresolva
       },
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
@@ -1637,12 +1651,13 @@ test("workflow detects repeated unchanged failures without creating an unresolva
       },
       {
         ok: false,
+        validation: validationEvidence,
         source: "uploaded-zip",
         scenarioId: "agent-stuck",
         summary: { errors: 1, warnings: 0 },
         findings: [{ category: "scenario", code: "SCENARIO_DESCRIPTOR_INVALID", severity: "error", path: "scenario.yaml", message: "Invalid scenario descriptor.", fix: "Repair scenario.yaml." }],
       },
-      { ok: true, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
+      { ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "agent-stuck", summary: { errors: 0, warnings: 0 }, findings: [] },
     ],
   });
 });
@@ -1958,7 +1973,7 @@ test("workflow deploy auth failure is classified as environment auth", async () 
     if (req.method === "POST" && url.pathname === "/scenario-manager/validation/scenario-bundles") {
       for await (const _ of req) { /* drain zip upload */ }
       res.writeHead(200, { "content-type": "application/json" });
-      res.end(JSON.stringify({ ok: true, source: "uploaded-zip", scenarioId: "deploy-auth-failure", summary: { errors: 0, warnings: 0 }, findings: [] }));
+      res.end(JSON.stringify({ ok: true, validation: validationEvidence, source: "uploaded-zip", scenarioId: "deploy-auth-failure", summary: { errors: 0, warnings: 0 }, findings: [] }));
       return;
     }
     if (req.method === "POST" && url.pathname === "/scenario-manager/scenarios/bundles") {
@@ -2311,3 +2326,9 @@ test("workflow evidence render returns an MCP App widget payload without mutatin
     assert.equal(after.history.length, before.history.length, "rendering evidence must not record a workflow attempt");
   });
 });
+const validationEvidence = {
+  scenarioProtocolVersion: "2.0.0",
+  supportedScenarioProtocolVersion: "2.0.0",
+  scenarioManagerVersion: "0.15.35",
+  artifactDigest: "sha256:test",
+};

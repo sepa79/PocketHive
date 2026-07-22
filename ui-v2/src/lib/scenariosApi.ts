@@ -126,6 +126,12 @@ export type BundleValidationResult = {
   bundleKey: string | null
   bundlePath: string | null
   scenarioId: string | null
+  validation: {
+    scenarioProtocolVersion: string | null
+    supportedScenarioProtocolVersion: string
+    scenarioManagerVersion: string
+    artifactDigest: string
+  }
   summary: {
     errors: number
     warnings: number
@@ -263,12 +269,26 @@ function normalizeValidationResult(input: unknown): BundleValidationResult {
   const warnings = typeof summary['warnings'] === 'number'
     ? summary['warnings']
     : findings.filter((finding) => finding.severity === 'warning').length
+  const validation = isRecord(input['validation']) ? input['validation'] : null
+  if (!validation) throw new Error('Bundle validation response is missing validation evidence')
+  const supportedScenarioProtocolVersion = asString(validation['supportedScenarioProtocolVersion'])
+  const scenarioManagerVersion = asString(validation['scenarioManagerVersion'])
+  const artifactDigest = asString(validation['artifactDigest'])
+  if (!supportedScenarioProtocolVersion || !scenarioManagerVersion || !artifactDigest) {
+    throw new Error('Bundle validation response contains incomplete validation evidence')
+  }
   return {
     ok: input['ok'] === true,
     source: asString(input['source']) ?? 'scenario-manager',
     bundleKey: asString(input['bundleKey']),
     bundlePath: asString(input['bundlePath']),
     scenarioId: asString(input['scenarioId']),
+    validation: {
+      scenarioProtocolVersion: asString(validation['scenarioProtocolVersion']),
+      supportedScenarioProtocolVersion,
+      scenarioManagerVersion,
+      artifactDigest,
+    },
     summary: { errors, warnings },
     findings,
   }

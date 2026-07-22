@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest
 name: Local REST - Test Scenario
 description: Test-only scenario for SwarmCreationMock1E2ETest.

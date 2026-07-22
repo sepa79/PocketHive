@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: webauth-topup-redis
 name: WebAuth Topup (Redis -> WebAuth -> Redis)
 description: Reads WebAuth topup payloads from Redis list webauth.TOP.custA and

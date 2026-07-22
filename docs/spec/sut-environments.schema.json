@@ -24,6 +24,9 @@
       "endpoints": {
         "type": "object",
         "description": "Map of named endpoints inside this environment.",
+        "propertyNames": {
+          "pattern": "^\\S(?:.*\\S)?$"
+        },
         "additionalProperties": {
           "$ref": "#/$defs/sutEndpoint"
         }
@@ -47,18 +50,20 @@
       "additionalProperties": false,
       "required": ["kind", "baseUrl"],
       "properties": {
-        "id": {
-          "type": "string",
-          "description": "Endpoint identifier. If omitted, the endpoints map key is used."
-        },
         "kind": {
           "type": "string",
-          "description": "Protocol/shape of the endpoint; currently HTTP is supported."
+          "pattern": "\\S",
+          "description": "Non-blank protocol/shape of the endpoint, for example HTTP, HTTPS, TCP, or TCPS."
         },
         "baseUrl": {
           "type": "string",
-          "format": "uri",
-          "description": "Base URL for this endpoint (e.g. http://wiremock:8080)."
+          "pattern": "\\S",
+          "description": "Non-blank URI or protocol-specific authority for this endpoint."
+        },
+        "upstreamBaseUrl": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Optional non-blank upstream URI or authority used by proxied network bindings."
         }
       }
     }

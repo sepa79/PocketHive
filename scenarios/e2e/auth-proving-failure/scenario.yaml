@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: auth-proving-failure
 name: Auth Proving - Failure Dedupe
 description: Proves auth failures fail explicitly and are bounded/redacted when

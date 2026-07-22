@@ -14,7 +14,7 @@ import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplatingRenderException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;

@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.templating.PebbleTemplateRenderer;
-import io.pockethive.worker.sdk.templating.TemplateRenderer;
+import io.pockethive.templating.PebbleTemplateRenderer;
+import io.pockethive.templating.TemplateRenderer;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: local-rest-schema-demo
 name: Local REST - Schema-driven body demo
 description: Local REST swarm using a JSON Schema to help author the generator

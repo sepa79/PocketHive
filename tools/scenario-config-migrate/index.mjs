@@ -4,6 +4,8 @@ import { fileURLToPath } from "node:url";
 import { isMap, isSeq, isScalar, parseDocument } from "yaml";
 
 const SCENARIO_FILE_NAMES = new Set(["scenario.yaml", "scenario.yml"]);
+const SUT_FILE_NAME = "sut.yaml";
+const BUNDLE_CONFIG_FILE_NAMES = new Set([...SCENARIO_FILE_NAMES, SUT_FILE_NAME]);
 const SKIP_DIRS = new Set([".git", "node_modules", "target", "build", "dist"]);
 const CAPABILITY_FILE_EXTENSIONS = new Set([".json", ".yaml", ".yml"]);
 const DEFAULT_CAPABILITIES_DIR = resolve(
@@ -50,11 +52,16 @@ export async function runScenarioConfigMigration({
     throw new Error(`${command} requires at least one path`);
   }
 
-  const ioRequirements = await loadIoSelectorRequirements(capabilitiesDir);
-  const scenarioFiles = await discoverScenarioFiles(paths);
+  const bundleFiles = await discoverScenarioBundleFiles(paths);
+  const hasScenarioFiles = bundleFiles.some((file) => SCENARIO_FILE_NAMES.has(basename(file)));
+  const ioRequirements = hasScenarioFiles
+    ? await loadIoSelectorRequirements(capabilitiesDir)
+    : new Map();
   const files = [];
-  for (const file of scenarioFiles) {
-    files.push(await processScenarioFile(file, { command, dryRun, ioRequirements }));
+  for (const file of bundleFiles) {
+    files.push(basename(file) === SUT_FILE_NAME
+      ? await processSutFile(file, { command, dryRun })
+      : await processScenarioFile(file, { command, dryRun, ioRequirements }));
   }
 
   const summary = summarize(files);
@@ -67,20 +74,20 @@ export async function runScenarioConfigMigration({
   };
 }
 
-export async function discoverScenarioFiles(paths) {
+export async function discoverScenarioBundleFiles(paths) {
   const discovered = new Map();
   for (const input of paths) {
     const root = resolve(input);
-    await collectScenarioFiles(root, discovered);
+    await collectScenarioBundleFiles(root, discovered);
   }
   return Array.from(discovered.values()).sort();
 }
 
-async function collectScenarioFiles(path, discovered) {
+async function collectScenarioBundleFiles(path, discovered) {
   const stat = await fs.stat(path);
   if (stat.isFile()) {
-    if (!SCENARIO_FILE_NAMES.has(basename(path))) {
-      throw new Error(`Not a scenario file: ${path}. Expected scenario.yaml or scenario.yml.`);
+    if (!BUNDLE_CONFIG_FILE_NAMES.has(basename(path))) {
+      throw new Error(`Not a scenario bundle config file: ${path}. Expected scenario.yaml, scenario.yml, or sut.yaml.`);
     }
     discovered.set(path, path);
     return;
@@ -93,14 +100,94 @@ async function collectScenarioFiles(path, discovered) {
     const child = join(path, entry.name);
     if (entry.isDirectory()) {
       if (!SKIP_DIRS.has(entry.name)) {
-        await collectScenarioFiles(child, discovered);
+        await collectScenarioBundleFiles(child, discovered);
       }
       continue;
     }
-    if (entry.isFile() && SCENARIO_FILE_NAMES.has(entry.name)) {
+    if (entry.isFile() && BUNDLE_CONFIG_FILE_NAMES.has(entry.name)) {
       discovered.set(child, child);
     }
   }
+}
+
+async function processSutFile(file, { command, dryRun }) {
+  const original = await fs.readFile(file, "utf8");
+  const doc = parseDocument(original, { keepSourceTokens: true });
+  const context = {
+    doc,
+    file,
+    command,
+    migrate: command === "migrate",
+    operations: [],
+    findings: [],
+  };
+
+  if (!reportYamlParseErrors(doc, context)) {
+    migrateSutEndpointIds(doc, context);
+  }
+
+  const changed = context.operations.some((operation) => operation.action !== "inspect");
+  let output = null;
+  if (context.migrate && changed) {
+    output = doc.toString();
+    if (!dryRun && !hasErrors(context.findings)) {
+      await fs.writeFile(file, output, "utf8");
+    }
+  }
+
+  return {
+    path: file,
+    changed,
+    operations: context.operations,
+    findings: context.findings,
+    ...(dryRun && output !== null ? { output } : {}),
+  };
+}
+
+function migrateSutEndpointIds(doc, context) {
+  const endpoints = doc.get("endpoints", true);
+  if (!isMap(endpoints)) {
+    return;
+  }
+  endpoints.items.forEach((endpointPair) => {
+    const endpointId = keyOf(endpointPair);
+    const endpoint = endpointPair.value;
+    if (!isMap(endpoint)) {
+      return;
+    }
+    const nestedIdPair = getPair(endpoint, "id");
+    if (!nestedIdPair) {
+      return;
+    }
+    const nestedIdNode = nestedIdPair.value;
+    const nestedIdIsNull = isScalar(nestedIdNode)
+      && (nestedIdNode.value === null || nestedIdNode.value === undefined);
+    const nestedIdMatchesKey = isScalar(nestedIdNode)
+      && typeof nestedIdNode.value === "string"
+      && nestedIdNode.value === endpointId;
+    const path = `endpoints.${endpointId}.id`;
+    if (!nestedIdIsNull && !nestedIdMatchesKey) {
+      addError(context, {
+        code: "SUT_ENDPOINT_ID_CONFLICT",
+        path,
+        message: `Nested SUT endpoint id must be null or exactly match canonical map key '${endpointId}'.`,
+        fix: "Choose the intended endpoint map key, remove the nested id manually, then rerun the migrator.",
+      });
+      return;
+    }
+    if (context.command === "check") {
+      context.findings.push({
+        severity: "error",
+        code: "LEGACY_SUT_ENDPOINT_ID",
+        path,
+        message: "Nested SUT endpoint id is legacy; the endpoints map key is the only endpoint identifier.",
+        fix: "Run tools/scenario-config-migrate migrate on this scenario bundle.",
+      });
+      return;
+    }
+    context.operations.push(removeOperation(context, path));
+    deleteKey(endpoint, "id");
+  });
 }
 
 async function processScenarioFile(file, { command, dryRun, ioRequirements }) {
@@ -116,7 +203,9 @@ async function processScenarioFile(file, { command, dryRun, ioRequirements }) {
     findings: [],
   };
 
-  migrateDocument(doc, context);
+  if (!reportYamlParseErrors(doc, context)) {
+    migrateDocument(doc, context);
+  }
 
   const changed = context.operations.some((operation) => operation.action !== "inspect");
   let output = null;
@@ -733,6 +822,19 @@ function addError(context, finding) {
   });
 }
 
+function reportYamlParseErrors(doc, context) {
+  for (const error of doc.errors) {
+    const position = error.linePos?.[0];
+    addError(context, {
+      code: "INVALID_YAML",
+      path: position ? `$:${position.line}:${position.col}` : "$",
+      message: `Invalid YAML: ${error.message}`,
+      fix: "Fix the YAML syntax, then rerun the migrator.",
+    });
+  }
+  return doc.errors.length > 0;
+}
+
 function summarize(files) {
   const summary = {
     files: files.length,
@@ -874,7 +976,7 @@ function keyOf(pair) {
 
 function scalarValue(node) {
   if (node === undefined || node === null) return null;
-  if (isScalar(node)) return String(node.value);
+  if (isScalar(node)) return node.value === undefined || node.value === null ? null : String(node.value);
   return null;
 }
 

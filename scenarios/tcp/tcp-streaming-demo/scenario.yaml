@@ -1,3 +1,4 @@
+protocolVersion: "2.0.0"
 id: tcp-streaming-demo
 name: TCP Streaming Large Payload Demo
 description: Demonstrates TCP streaming behavior with large responses

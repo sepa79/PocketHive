@@ -1,14 +1,13 @@
 # Scenario Bundle Workspace API Spec
 
-> Status: **planned / spec draft**  
+> Status: **implemented baseline / reference**
 > Scope: Scenario Manager API for UI v2 workspace  
 > Related:
-> - `docs/ui-v2/SCENARIO_WORKSPACE_PLAN.md`
-> - `docs/architecture/tenancy-foundation-plan.md`
-> - `docs/architecture/AUTH_SERVICE_FOUNDATION_PLAN.md`
-> - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
+> - `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md`
+> - `docs/archive/tenancy-foundation-plan.md`
+> - `docs/archive/auth-service-foundation-plan.md`
 
-This spec defines the **generic bundle explorer/file API** used by the new
+This spec defines the implemented **generic bundle explorer/file API** used by the
 Scenarios workspace in UI v2.
 
 The goal is to stop building the UI around separate per-file-type endpoints and
