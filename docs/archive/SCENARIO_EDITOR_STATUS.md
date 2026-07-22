@@ -1,8 +1,13 @@
-# Scenario Editor — Current State vs Intended Behaviour
+# Archived: Scenario Editor — Current State vs Intended Behaviour
 
-Status: living reference
+Status: historical concept; superseded by the generic bundle workspace
 
-This document is the **single place** to track what the Hive **Scenarios** editor
+This document is retained only as implementation history. It is not a current
+product contract. See `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md` and
+`docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md` for the implemented
+workspace baseline.
+
+This document was used to track what the Hive **Scenarios** editor
 currently does, what it *should* do (per the scenario contract), and what is
 missing or buggy.
 

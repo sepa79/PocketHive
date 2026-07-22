@@ -17,6 +17,9 @@ Scenario authoring has one node key: `template.bees[].role`. Do not keep
 `template.bees[].id`, and do not use `topology.edges[].from/to.beeId`.
 Topology endpoints must use `role`.
 
+SUT endpoint authoring also has one identity key: the key in the `endpoints`
+map. Do not keep a nested `endpoints.<key>.id` field.
+
 ## Mechanical Rewrites
 
 Before:
@@ -147,6 +150,32 @@ known IO subblock for that scope. It must fail and require manual editing when:
 Do not infer selectors from role names, topology edges, queues, runtime
 metadata, capability defaults, or worker defaults.
 
+## SUT Endpoint Identity Migration
+
+Before:
+
+```yaml
+endpoints:
+  default:
+    id: default
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+```
+
+After:
+
+```yaml
+endpoints:
+  default:
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+```
+
+The `endpoints` map key is the only endpoint identifier. The migrator removes
+a nested `id` only when it is null or exactly matches the map key. A different
+nested value is an identity conflict and requires a manual choice; the tool
+does not guess which value is authoritative.
+
 When an IO selector is already present, the tool also checks required fields from
 the selected IO manifest. It may fill a missing field only when the migrator has
 a hardcoded safe explicit value for that exact path, such as
@@ -171,8 +200,9 @@ node tools/scenario-config-migrate/cli.mjs check --json scenarios
 node tools/scenario-config-migrate/cli.mjs check --capabilities-dir scenario-manager-service/capabilities scenarios
 ```
 
-Accepted paths are individual `scenario.yaml` / `scenario.yml` files or
-directories. Directory traversal is limited to files with those names.
+Accepted paths are individual `scenario.yaml`, `scenario.yml`, or `sut.yaml`
+files and directories containing scenario bundles. Directory traversal is
+limited to files with those names.
 
 The migrator fails explicitly on conflicts. If a direct target key already
 exists with a different value, resolve the scenario manually and rerun the

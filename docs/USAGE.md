@@ -30,7 +30,7 @@ The journal backend is selected via `pockethive.journal.sink` (env: `POCKETHIVE_
 - `postgres` (recommended; default in `docker-compose.yml`)
   - Enables paginated APIs + runs + pin + Hive journal.
   - Requires Postgres connection (`SPRING_DATASOURCE_*`) to be configured.
-- `file` (fallback / lightweight mode)
+- `file` (explicit lightweight mode)
   - Disables Postgres-only APIs (they return `501 Not Implemented`).
   - Swarm journal is read from `journal.ndjson` under the runtime root (see below).
 
@@ -60,7 +60,9 @@ Then rebuild/redeploy the stack via `./build-hive.sh` (or `docker compose down &
 - The Hive UI’s mini-journal on a swarm card can switch between:
   - **Swarm**: per-swarm journal entries
   - **Hive**: Hive journal filtered by `swarmId`
-- When Postgres paging endpoints are unavailable (`501`), the UI falls back to the non-paginated swarm timeline endpoint.
+- Paginated Swarm and Hive journal views require the `postgres` backend.
+- In explicit `file` mode, Postgres-only requests return `501 Not Implemented`;
+  the UI reports that error and does not switch to another journal API.
 
 ## Grafana (metrics + journal annotations)
 

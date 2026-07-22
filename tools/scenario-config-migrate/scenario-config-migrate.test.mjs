@@ -3,7 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
-import { discoverScenarioFiles, runScenarioConfigMigration } from "./index.mjs";
+import { discoverScenarioBundleFiles, runScenarioConfigMigration } from "./index.mjs";
 
 test("migrate moves config.worker keys to direct bee config", async () => {
   const root = await fixtureDir();
@@ -174,7 +174,7 @@ topology:
   }
 });
 
-test("check reports legacy pockethive worker config and discovers only scenario files", async () => {
+test("check reports legacy pockethive worker config and ignores unrelated YAML files", async () => {
   const root = await fixtureDir();
   try {
     await writeFile(join(root, "other.yaml"), "worker: {}\n", "utf8");
@@ -189,13 +189,148 @@ template:
               baseUrl: http://example
 `, "utf8");
 
-    const files = await discoverScenarioFiles([root]);
+    const files = await discoverScenarioBundleFiles([root]);
     assert.deepEqual(files, [join(root, "scenario.yml")]);
 
     const result = await runScenarioConfigMigration({ command: "check", paths: [root] });
     assert.equal(result.ok, false);
     assert.equal(result.summary.legacyFindings, 2);
     assert.equal(result.summary.errors, 2);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate removes nested SUT endpoint ids that match their canonical map keys", async () => {
+  const root = await fixtureDir();
+  try {
+    const sutDir = join(root, "sut", "wiremock-local");
+    await mkdir(sutDir, { recursive: true });
+    const sut = join(sutDir, "sut.yaml");
+    await writeFile(sut, `id: wiremock-local
+name: WireMock local
+endpoints:
+  default:
+    id: default
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+  health:
+    id:
+    kind: HTTP
+    baseUrl: http://wiremock:8080/__admin/health
+`, "utf8");
+
+    const check = await runScenarioConfigMigration({ command: "check", paths: [root] });
+    assert.equal(check.ok, false);
+    assert.equal(check.files[0].findings[0].code, "LEGACY_SUT_ENDPOINT_ID");
+
+    const migrated = await runScenarioConfigMigration({ command: "migrate", paths: [root] });
+    assert.equal(migrated.ok, true);
+    assert.equal(migrated.summary.changed, 1);
+    const updated = await readFile(sut, "utf8");
+    assert.doesNotMatch(updated, /^\s+id: default$/m);
+    assert.doesNotMatch(updated, /^\s+id:\s*$/m);
+    assert.match(updated, /^  default:$/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate fails when nested SUT endpoint id conflicts with its map key", async () => {
+  const root = await fixtureDir();
+  try {
+    const sut = join(root, "sut.yaml");
+    await writeFile(sut, `id: wiremock-local
+name: WireMock local
+endpoints:
+  default:
+    id: payments
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "migrate", paths: [sut] });
+    assert.equal(result.ok, false);
+    assert.equal(result.files[0].findings[0].code, "SUT_ENDPOINT_ID_CONFLICT");
+    assert.match(await readFile(sut, "utf8"), /id: payments/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("migrate preserves and rejects non-exact or non-scalar nested SUT endpoint ids", async () => {
+  const root = await fixtureDir();
+  try {
+    const sut = join(root, "sut.yaml");
+    const original = `id: wiremock-local
+name: WireMock local
+endpoints:
+  default:
+    id: " default "
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+  health:
+    id: [health]
+    kind: HTTP
+    baseUrl: http://wiremock:8080/__admin/health
+`;
+    await writeFile(sut, original, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "migrate", paths: [sut] });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.summary.errors, 2);
+    assert.deepEqual(
+      result.files[0].findings.map((finding) => finding.code),
+      ["SUT_ENDPOINT_ID_CONFLICT", "SUT_ENDPOINT_ID_CONFLICT"]
+    );
+    assert.equal(await readFile(sut, "utf8"), original);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("SUT-only migration does not load scenario capability manifests", async () => {
+  const root = await fixtureDir();
+  try {
+    const sut = join(root, "sut.yaml");
+    await writeFile(sut, `id: wiremock-local
+name: WireMock local
+endpoints:
+  default:
+    id: default
+    kind: HTTP
+    baseUrl: http://wiremock:8080
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({
+      command: "migrate",
+      paths: [sut],
+      capabilitiesDir: join(root, "missing-capabilities"),
+    });
+
+    assert.equal(result.ok, true);
+    assert.doesNotMatch(await readFile(sut, "utf8"), /^\s+id: default$/m);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("check rejects malformed SUT YAML", async () => {
+  const root = await fixtureDir();
+  try {
+    const sut = join(root, "sut.yaml");
+    await writeFile(sut, `id: broken
+endpoints:
+  default: [
+`, "utf8");
+
+    const result = await runScenarioConfigMigration({ command: "check", paths: [sut] });
+
+    assert.equal(result.ok, false);
+    assert.equal(result.summary.errors, 1);
+    assert.equal(result.files[0].findings[0].code, "INVALID_YAML");
+    assert.match(result.files[0].findings[0].path, /^\$:\d+:\d+$/);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

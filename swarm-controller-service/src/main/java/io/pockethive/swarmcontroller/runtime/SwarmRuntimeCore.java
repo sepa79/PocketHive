@@ -1080,9 +1080,13 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
     });
     newSut.put("environmentId", sutEnvironment.id());
-    newSut.put("environmentType", sutEnvironment.type());
+    if (sutEnvironment.type() == null || sutEnvironment.type().isBlank()) {
+      newSut.remove("environmentType");
+    } else {
+      newSut.put("environmentType", sutEnvironment.type().trim());
+    }
     newSut.put("environment", sutEnvironment);
-    newSut.put("targetEndpointId", endpoint.id());
+    newSut.put("targetEndpointId", endpointId);
     newSut.put("targetEndpoint", endpoint);
 
     Map<String, Object> enriched = new LinkedHashMap<>(config);

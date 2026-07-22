@@ -41,6 +41,7 @@ pockethive:
         hive-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE}
       metrics:
         adapter: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER}
+        # Provisioned component metrics cadence; the controller's own AMQP status tick is fixed at 5s.
         publish-interval: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_PUBLISH_INTERVAL:10s}
         clickhouse:
           endpoint: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_CLICKHOUSE_ENDPOINT:}

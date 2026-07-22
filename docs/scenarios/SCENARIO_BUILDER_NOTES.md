@@ -13,5 +13,5 @@ It captures what still makes sense today and avoids repeating superseded plans.
 - Watch for schema drift between UI and backend; keep shared validation artifacts.
 
 ## Current references
-- Editor status and gaps: `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
+- Scenario workspace UI: `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md`
 - Scenario authoring overview: `docs/scenarios/README.md`

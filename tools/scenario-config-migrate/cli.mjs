@@ -2,8 +2,8 @@
 import { runScenarioConfigMigration } from "./index.mjs";
 
 const USAGE = `Usage:
-  scenario-config-migrate check [--json] [--capabilities-dir <dir>] <path...>
-  scenario-config-migrate migrate [--dry-run] [--json] [--capabilities-dir <dir>] <path...>
+  scenario-config-migrate check [--json] [--capabilities-dir <dir>] <scenario-or-bundle-path...>
+  scenario-config-migrate migrate [--dry-run] [--json] [--capabilities-dir <dir>] <scenario-or-bundle-path...>
 `;
 
 async function main(argv) {

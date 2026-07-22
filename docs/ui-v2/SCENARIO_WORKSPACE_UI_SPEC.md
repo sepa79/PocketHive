@@ -3,7 +3,6 @@
 > Status: **implemented baseline / reference**
 > Scope: UI v2 Scenarios page MVP  
 > Related:
-> - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
 > - `docs/ui-v2/MONACO_OFFLINE_SPEC.md`
 > - `docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md`
 

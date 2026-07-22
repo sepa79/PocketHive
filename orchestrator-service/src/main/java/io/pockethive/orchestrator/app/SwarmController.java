@@ -964,7 +964,6 @@ public class SwarmController {
 
     private static Map<String, Object> sutEndpointContext(SutEndpoint endpoint) {
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("id", endpoint.id());
         result.put("kind", endpoint.kind());
         result.put("baseUrl", endpoint.baseUrl());
         if (endpoint.upstreamBaseUrl() != null && !endpoint.upstreamBaseUrl().isBlank()) {

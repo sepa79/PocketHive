@@ -1,4 +1,4 @@
-![PocketHive Logo](../archive/legacy-ui/assets/logo.svg)
+![PocketHive Logo](../ui-v2/public/logo.svg)
 
 # PocketHive — ARCHITECTURE
 
@@ -669,7 +669,9 @@ sequenceDiagram
 - **Start timeout (per component):** 60s  
 - **Start timeout (swarm total):** 3m  
 - **Graceful stop timeout (per component):** 30s, then force‑stop (report degraded)  
-- **Controller heartbeats:** `event.metric.status-{delta|full}.{swarmId}.swarm-controller.{instance}` on **state change** + **every 10s** (aggregate watermark).
+- **Controller heartbeats:** `event.metric.status-{delta|full}.{swarmId}.swarm-controller.{instance}`
+  on **state change** plus a fixed **5s** controller status tick (aggregate
+  watermark), as scheduled by `SwarmSignalListener`.
 
 ---
 

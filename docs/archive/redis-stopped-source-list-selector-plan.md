@@ -1,6 +1,7 @@
-# Manual Redis source-list change — design and plan
+# Archived: Manual Redis source-list change — design and plan
 
 > Status: **implemented; targeted verification complete**.
+> Historical implementation record; not a current contract or TODO.
 
 ## 1. Goal
 

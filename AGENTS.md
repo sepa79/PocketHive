@@ -56,7 +56,9 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ### 1.3 Messaging & routing
 - **Do not hand‑craft routing keys.** Use the shared routing utility and the examples in `ARCHITECTURE.md` / `ORCHESTRATOR-REST.md`.
-- When adding a new signal or event, **update the contract + topics file** first; code follows the contract.
+- When adding a new signal or event, update `docs/spec/asyncapi.yaml` (channels
+  and routing) and `docs/spec/control-events.schema.json` (payload schema)
+  first; code follows those contracts.
 
 ### 1.4 Observability (baseline)
 - Propagate **correlationId** and **(if used) trace context** end‑to‑end as specified in `correlation-vs-idempotency.md`.

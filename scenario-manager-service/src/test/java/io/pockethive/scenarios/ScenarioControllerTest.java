@@ -2408,6 +2408,39 @@ class ScenarioControllerTest {
     }
 
     @Test
+    void bundleValidationRejectsNestedSutEndpointId() throws Exception {
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    protocolVersion: "2.0.0"
+                    id: nested-sut-endpoint-id-demo
+                    name: Nested SUT endpoint ID demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "sut/wiremock-local/sut.yaml", """
+                    id: wiremock-local
+                    name: WireMock local
+                    endpoints:
+                      default:
+                        id: default
+                        kind: HTTP
+                        baseUrl: http://wiremock:8080
+                    """));
+
+        mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(false))
+                .andExpect(jsonPath("$.findings[0].category").value("sut"))
+                .andExpect(jsonPath("$.findings[0].code").value("SUT_INVALID"))
+                .andExpect(jsonPath("$.findings[0].message")
+                        .value(org.hamcrest.Matchers.containsString("Unrecognized field \"id\"")));
+    }
+
+    @Test
     void bundleValidationReportsValuesSutWithoutCanonicalSutYaml() throws Exception {
         byte[] zip = bundleZip(Map.of(
                 "scenario.yaml", """
@@ -2458,7 +2491,6 @@ class ScenarioControllerTest {
                       bees: []
                     """,
                 "sut/default/sut.yaml", """
-                    protocolVersion: "2.0.0"
                     id: other
                     name: Other SUT
                     """));
@@ -2487,7 +2519,6 @@ class ScenarioControllerTest {
                 """);
         Path sutDir = Files.createDirectories(bundle.resolve("sut").resolve("default"));
         Files.writeString(sutDir.resolve("sut.yaml"), """
-                protocolVersion: "2.0.0"
                 id: other
                 name: Other SUT
                 """);

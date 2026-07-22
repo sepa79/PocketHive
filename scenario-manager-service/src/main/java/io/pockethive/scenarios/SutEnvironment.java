@@ -2,6 +2,7 @@ package io.pockethive.scenarios;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import io.pockethive.swarm.model.SutEndpoint;
 import java.util.Collections;
 import java.util.Map;
 

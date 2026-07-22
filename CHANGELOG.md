@@ -2,20 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
-
-- Redis dataset runtime config: expose manual `inputs.redis.listName` editing
-  through the existing capability-driven form for stopped single-source
-  workers, while keeping `sources[]`, connection settings, and source-mode
-  conversion immutable at runtime.
-- Hive UI and MCP safety: block Redis `listName` submission unless swarm status
-  is explicitly `STOPPED`, require MCP agents to verify that state with
-  `swarm_get`, and retain the worker-side guard as the authoritative race-safe
-  enforcement boundary.
-
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 
+- Breaking SUT contract: make each `endpoints` map key the only endpoint
+  identifier, remove nested `SutEndpoint.id`, and reject legacy nested ids
+  during canonical bundle validation.
+- Scenario migration: update every repository `sut.yaml`, extend the standalone
+  scenario migrator to check and rewrite SUT descriptors, and publish the
+  version-to-version procedure in `docs/UPGRADING.md`.
+- Orchestrator/runtime: derive auth context and network/runtime endpoint
+  identity exclusively from the endpoint map key, fixing swarm creation for
+  canonical `wiremock-local` and `tcp-mock-local` descriptors.
+- Documentation SSOT: align the capability catalogue, controller heartbeat,
+  journal mode, topology example, routing-contract ownership, and Scenario
+  workspace references with the implemented product behavior.
+- Documentation lifecycle: archive the obsolete Scenario Editor concept, old
+  fixed-pipeline requirements, and completed Redis plan; move remaining
+  future SDK/build designs into the declared `docs/todo` area.
 - Scenario protocol: require `protocolVersion` in every `scenario.yaml` and
   reject missing or incompatible major versions before deeper validation.
 - Validation evidence: report the scenario protocol version, supported
@@ -48,6 +52,14 @@ Timestamp: 2026-07-10T13:36:56Z
   aggregation stack.
 - Release: bump PocketHive patch version to 0.15.35 for scenario validation
   hardening and evidence.
+- Redis dataset runtime config: expose manual `inputs.redis.listName` editing
+  through the existing capability-driven form for stopped single-source
+  workers, while keeping `sources[]`, connection settings, and source-mode
+  conversion immutable at runtime.
+- Hive UI and MCP safety: block Redis `listName` submission unless swarm status
+  is explicitly `STOPPED`, require MCP agents to verify that state with
+  `swarm_get`, and retain the worker-side guard as the authoritative race-safe
+  enforcement boundary.
 
 ## [0.15.34]
 Timestamp: 2026-07-08T13:49:59Z

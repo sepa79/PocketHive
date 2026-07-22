@@ -4,7 +4,8 @@
 > Describes a richer HTTP processor worker and response routing; not implemented yet.
 
 > Scope: design a full HTTP Request Processor worker that can drive outbound HTTP calls with configurable threading and rate behaviour, and route responses intelligently, while keeping the worker API simple for users.  
-> Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`, `docs/sdk/worker-autoconfig-plan.md`, and the `WorkItem`/steps model in `docs/sdk/templated-generator-plan.md`.
+> Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`,
+> `common/worker-sdk/README.md`, and the current `WorkItem`/steps model.
 
 ## Motivation
 

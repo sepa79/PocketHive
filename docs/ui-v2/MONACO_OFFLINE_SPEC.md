@@ -3,7 +3,7 @@
 > Status: **implemented / reference**
 > Scope: `ui-v2` only  
 > Related:
-> - `docs/scenarios/SCENARIO_EDITOR_STATUS.md`
+> - `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md`
 > - `docs/archive/tenancy-foundation-plan.md`
 
 This spec defines how Monaco must be packaged and initialized in **UI v2** so

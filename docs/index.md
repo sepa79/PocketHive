@@ -6,6 +6,7 @@ by the UI under `/docs/...` as part of the runtime image.
 
 ## Operator / Running PocketHive
 
+- `docs/UPGRADING.md` – required version-to-version migration actions.
 - `docs/USAGE.md` – how to run the stack, use the UI, create/start
   swarms, and interpret buffer guards.
 - `docs/observability.md` – metrics, logs, dashboards.
@@ -51,8 +52,8 @@ by the UI under `/docs/...` as part of the runtime image.
   contract for shared auth, bearer token resolution, and product integration.
 - `docs/todo/auth-service-followups.md` – future LDAP, HiveWatch, admin, and
   permission-model work.
-- `docs/scenarios/SCENARIO_EDITOR_STATUS.md` – current Scenario workspace
-  behavior, known bugs, and remaining editor work.
+- `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md` – implemented Scenario workspace
+  UI baseline.
 - `docs/todo/sut-environments-followups.md` – remaining SUT environment work.
 - `docs/todo/scenario-plan-followups.md` – remaining Scenario Plan extensions.
 - `docs/todo/ui-v2-control-plane-followups.md` – remaining UI control-plane hardening.

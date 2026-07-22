@@ -11,6 +11,7 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
+- [Upgrading PocketHive](UPGRADING.md)
 
 ## Usage
 - [Usage Guide](USAGE.md)
@@ -48,7 +49,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## UI v2
 - [UI v2 shell and flow](ui-v2/UI_V2_FLOW.md)
-- [Scenario editor current status](scenarios/SCENARIO_EDITOR_STATUS.md)
 - [Scenario workspace UI spec](ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md)
 - [Monaco offline spec](ui-v2/MONACO_OFFLINE_SPEC.md)
 

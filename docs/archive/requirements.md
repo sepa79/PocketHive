@@ -1,4 +1,8 @@
-# PocketHive Requirements
+# Archived: PocketHive Requirements
+
+> Status: historical component/pipeline requirements. This document is not a
+> current contract. Use `docs/ARCHITECTURE.md`, `docs/scenarios/SCENARIO_CONTRACT.md`,
+> and the schemas under `docs/spec/`.
 
 ## Purpose
 PocketHive is a portable transaction swarm: a set of small, composable services and a UI that generate, moderate, process and observe message workflows over RabbitMQ.
@@ -6,7 +10,8 @@ PocketHive is a portable transaction swarm: a set of small, composable services 
 ## Overall System Requirements
 - Provide a Docker Compose environment orchestrating RabbitMQ, UI, and services.
 - Components communicate via swarm-scoped workload exchanges with queues named `ph.work.<swarmId>.<queueName>`.
-- Services read a `POCKETHIVE_CONTROL_PLANE_SWARM_ID` env (default `default`) to derive these names.
+- Services require an explicit `POCKETHIVE_CONTROL_PLANE_SWARM_ID` environment
+  value to derive these names; there is no implicit default swarm identity.
 - Control-plane messaging flows through the `ph.control` exchange using the routing families defined in `docs/ARCHITECTURE.md` and `docs/spec/asyncapi.yaml` (signals `signal.*`, outcomes `event.outcome.*`, metrics `event.metric.*`, alerts `event.alert.{type}.*`).
 - Each service exposes its presence and health through periodic `event.metric.status-delta` events and responds to `signal.status-request`.
 - The UI connects to RabbitMQ over same-origin Web-STOMP at `/ws`.

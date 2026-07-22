@@ -213,7 +213,7 @@ public class SwarmNetworkBindingService {
     }
 
     private static ResolvedSutEndpoint resolveSutEndpoint(String endpointKey, SutEndpoint endpoint, boolean proxied) {
-        String endpointId = endpoint.id() == null || endpoint.id().isBlank() ? endpointKey : endpoint.id().trim();
+        String endpointId = endpointKey;
         String kind = requireText(endpoint.kind(), "endpoint.kind");
         EndpointTarget clientTarget = parseEndpointTarget(endpointId, kind, endpoint.baseUrl(), "baseUrl");
         EndpointTarget upstreamTarget = proxied

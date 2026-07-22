@@ -4,7 +4,8 @@
 > Builds on the current WorkItem/steps model for richer pipelines and interceptor configuration; not fully implemented yet.
 
 > Scope: replace `WorkMessage`/`WorkResult` with a simpler `WorkItem` API and a single return type, then extend it with step support.  
-> Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`, and the pipeline/HTTP plans in `docs/sdk/`.
+> Sources: align with `docs/ARCHITECTURE.md`, `docs/ORCHESTRATOR-REST.md`,
+> and `docs/todo/http-request-processor-plan.md`.
 
 ## Motivation
 
@@ -116,4 +117,4 @@ After Stage 2 is stable, we can upgrade `WorkItem` to hold real step history and
 - [ ] (Deferred) Introduce explicit history bounds (max steps and/or size limits) for large payloads.
 - [x] Ensure the HTTP processor, templating pipeline, and routing output use steps in a consistent way (generator → moderator → processor chain recorded as successive steps, transport encodes steps in the Rabbit payload).
 
-> Stage 3 ties directly into `docs/sdk/templated-generator-plan.md` and `docs/sdk/http-request-processor-plan.md`.
+> Stage 3 ties directly into `docs/todo/http-request-processor-plan.md`.

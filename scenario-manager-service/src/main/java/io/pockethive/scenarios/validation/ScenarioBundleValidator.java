@@ -711,7 +711,7 @@ public final class ScenarioBundleValidator {
         } catch (IOException e) {
             throw validationFailure(
                 ValidationIssue.SUT_INVALID,
-                "Failed to parse %s".formatted(ScenarioBundleLayout.SUT_DESCRIPTOR_FILE),
+                "Failed to parse %s: %s".formatted(ScenarioBundleLayout.SUT_DESCRIPTOR_FILE, e.getMessage()),
                 e);
         }
     }

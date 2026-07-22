@@ -7,22 +7,25 @@ This spec defines how PocketHive exposes worker **capabilities** without embeddi
 
 ## 1) Goals
 
-- **Single source of truth:** Scenario Manager owns file-based capabilities per worker, and on runtime builds a catalogue of it in memory.
+- **Single source of truth:** Scenario Manager owns file-based capabilities and loads them
+  into an in-memory catalogue at startup.
 - **No worker code:** Bees do not emit capabilities; they stay dumb runtime artifacts.
 - **Easy authoring:** Hive UI and Scenario Editor fetch capabilities from SM alongside swarm templates.
-- **Deterministic execution:** Plans reference images; SM resolves images → capabilities.
+- **Deterministic authoring:** Scenario validation resolves template image references against
+  the loaded capability manifests.
 
 ---
 
 ## 2) Scope & Ownership
 
 - **Owner:** Scenario Manager (the service and its build pipeline).
-- **Consumers:** Hive UI + Scenario Editor (authoring), Orchestrator (validation), optional CLI.
+- **Consumers:** Hive UI, Scenario Editor, Scenario Manager validation, PocketHive MCP,
+  and optional CLI clients.
 - **Out of scope:** Workers/Bees do not publish, embed, or negotiate capabilities.
 
 ---
 
-## 3) Capability Catalogue (Files → Bundle)
+## 3) Capability Catalogue (Files → In-Memory Index)
 
 ### 3.1 File format (per image)
 One JSON (or YAML) **manifest per image**:
@@ -56,7 +59,9 @@ One JSON (or YAML) **manifest per image**:
 ```
 
 **Notes**
-- `image` is the **match key** at runtime (prefer `digest` > `name+tag`).
+- Manifests are indexed by canonical `image.name` and, when declared, by `image.digest`.
+  Scenario template validation matches canonical image names; the capabilities API also
+  supports direct digest lookup.
 - `config`/`actions` are **semantic contracts**, not URLs; UI builds forms and buttons from them.
 - `config[].type` has one canonical vocabulary only: `string`, `boolean`, `number`,
   `integer`, `json`. Do not use aliases such as `text` or `int`; capability
@@ -81,12 +86,16 @@ One JSON (or YAML) **manifest per image**:
   matches both values.
 - `panels` are optional hints for rich UI; fallback renderer uses `config`/`actions` only.
 
-### 3.2 Bundle
-- During SM build, all per-image manifests are **validated** and **packed** into:
-  - `contracts/capabilities/catalogue-v{N}.json` (signed; versioned)
-- CI fails if:
-  - a listed template image lacks a manifest, or
-  - schema validation fails.
+### 3.2 Loading and validation
+
+- Scenario Manager loads the individual JSON/YAML manifests from its configured
+  `capabilities` directory into an in-memory catalogue.
+- Loading rejects malformed manifests, unsupported config types, invalid live-mutability
+  declarations, and duplicate image-name or digest keys.
+- The new catalogue replaces the previous in-memory state only after every discovered
+  manifest has loaded and validated successfully.
+- Scenario bundle validation reports a missing manifest when a template references an
+  image that the catalogue cannot resolve.
 
 ---
 
@@ -99,14 +108,17 @@ UI already calls SM for swarm templates; it should fetch capabilities in the sam
   Returns authoring templates (as today), including each component’s image reference.
 
 - `GET /api/capabilities`  
-  - **Query:** `imageDigest` (preferred) or `imageName` + `tag`  
+  - **Query:** `imageDigest` or `imageName`.
   - **Bulk mode:** `?all=true` to return the entire catalogue for local caching.
   - **Response:** the manifest(s) matching the provided image(s).
 
-- `GET /api/capabilities/catalogue`  
-  Returns the signed `catalogue-v{N}.json` and metadata: `{ catalogueVersion, schemaVersion, publishedAt }`.
+- `GET /api/authoring-contract`
+  Returns the current authoring contract, capability summaries, templates, and a
+  deterministic fingerprint.
 
-*(Exact paths can be adapted to current SM routing; the contract is “templates + capabilities served by SM”.)*
+- `GET /api/authoring-contract/fingerprint`
+  Returns the lightweight contract fingerprint used to decide whether a cached
+  authoring contract must be refreshed.
 
 ---
 
@@ -115,14 +127,14 @@ UI already calls SM for swarm templates; it should fetch capabilities in the sam
 - On project load (or template change), UI:
   1) `GET /api/templates`
   2) Extracts the **images** referenced in the template
-  3) `GET /api/capabilities?images=...` (or `?all=true` if caching)
+  3) `GET /api/capabilities?all=true` and matches manifests to those images
 - UI renders:
   - **Generic forms** from `config`
   - **Action buttons** from `actions`
   - **Rich panels** only when `panels.id` matches a registered UI module; otherwise ignore panels
-- If an image in the template has **no matching manifest**, UI:
-  - warns the author,
-  - blocks publishing (soft or hard per environment setting).
+- If an image in the template has **no matching manifest**, Scenario Manager bundle
+  validation reports the missing capability and the authoring client must surface that
+  validation result.
 
 ---
 
@@ -136,25 +148,29 @@ UI already calls SM for swarm templates; it should fetch capabilities in the sam
 
 - **Schema:** `schemaVersion` changes only when the manifest structure changes.
 - **Capabilities:** `capabilitiesVersion` must bump on any user-visible change to `config`, `actions`, or `panels`.
-- **Catalogue:** `catalogueVersion` increments when SM publishes a new bundle.
-- **Provenance:** Prefer image **digests** in templates; if tags are used, SM resolves them to digests when possible.
+- **Provenance:** Manifests may declare an image digest. Scenario Manager can resolve
+  capabilities by that digest or by canonical image name.
 
 ---
 
-## 8) Drift & Integrity
+## 8) Integrity
 
-- **Build-time guardrails (preferred):**
-  - SM build checks that **every** image referenced by shipped templates has a manifest.
-  - Optional: SM resolves tags → digests and writes them back to the catalogue for immutability.
-- **Runtime observability (lightweight):**
-  - SM exposes `/api/capabilities/catalogue` with `publishedAt` and `catalogueVersion` so UIs can cache/compare.
-- **No component-side drift reporting** is required in this simplified model.
+- Manifest loading fails explicitly when any discovered file is invalid or when image-name
+  or digest keys collide.
+- Scenario validation checks template image references against the loaded catalogue.
+- `/api/authoring-contract` computes a deterministic fingerprint from the current
+  capability summaries and templates. Clients can compare it through
+  `/api/authoring-contract/fingerprint` before refreshing cached authoring data.
+- No component-side drift reporting is required in this Scenario-Manager-centric model.
 
 ---
 
 ## 9) Security & Trust
 
-- Sign the catalogue artifact; verify signature on SM start.
-- Optionally pin images by **digest** in templates to prevent “tag drift.”
+- Capability manifests are trusted deployment inputs owned by Scenario Manager and are
+  validated before becoming active.
+- Capability and authoring-contract API access is subject to Scenario Manager
+  authorization.
+- Image digests may be used where immutable image identity is required.
 
 ---

@@ -654,12 +654,10 @@ class ScenarioServiceTest {
         service.reload();
         String sutId = "sut-A";
         String raw = """
-                protocolVersion: "2.0.0"
                 id: sut-A
                 name: SUT A
                 endpoints:
                   api:
-                    id: api
                     kind: http
                     baseUrl: http://example.local
                 """;
@@ -707,7 +705,6 @@ class ScenarioServiceTest {
         sutRoot = service.bundleDir("scenario-2").resolve("sut");
         Path wrongIdSut = Files.createDirectories(sutRoot.resolve("sut-wrong-id"));
         Files.writeString(wrongIdSut.resolve("sut.yaml"), """
-                protocolVersion: "2.0.0"
                 id: different-id
                 name: Wrong ID SUT
                 """);
@@ -736,7 +733,6 @@ class ScenarioServiceTest {
 
         Path sutDir = Files.createDirectories(service.bundleDir("scenario-1").resolve("sut").resolve("wrong-id"));
         Files.writeString(sutDir.resolve("sut.yaml"), """
-                protocolVersion: "2.0.0"
                 id: different-id
                 name: Wrong ID
                 """);
@@ -857,7 +853,6 @@ class ScenarioServiceTest {
     private void writeBundleSut(String scenarioId, String sutId) throws IOException {
         Path sutDir = Files.createDirectories(service.bundleDir(scenarioId).resolve("sut").resolve(sutId));
         Files.writeString(sutDir.resolve("sut.yaml"), """
-                protocolVersion: "2.0.0"
                 id: %s
                 name: %s
                 """.formatted(sutId, sutId));
