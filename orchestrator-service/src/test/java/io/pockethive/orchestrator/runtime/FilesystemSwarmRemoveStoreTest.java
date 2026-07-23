@@ -15,8 +15,8 @@ class FilesystemSwarmRemoveStoreTest {
   @TempDir Path root;
 
   @Test
-  void writesOneImmutableRequestPerCorrelationId() {
-    FilesystemSwarmRemoveStore store = new FilesystemSwarmRemoveStore(new ObjectMapper(), root);
+  void writesOneImmutableRequestPerCorrelationIdUnderConfiguredContainerWriteRoot() {
+    FilesystemSwarmRemoveStore store = new FilesystemSwarmRemoveStore(new ObjectMapper(), root.toString());
     RemoveRequest request = RemoveRequest.create(
         "alpha", "run-1", "controller-1", "corr-1", "idem-1", Instant.parse("2026-07-22T12:00:00Z"));
 

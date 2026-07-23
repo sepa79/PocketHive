@@ -294,7 +294,7 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if (scenarioId == null) {
-      return NetworkMode.DIRECT;
+      return null;
     }
     return switch (scenarioId) {
       case "local-rest",
@@ -310,7 +310,7 @@ public class SwarmLifecycleSteps {
       case "tcp-ssl-demo" -> "tcp-mock-proxy-local-tls";
       case "variables-demo" -> "sut-A";
       case "webauth-loop-redis-5-customers" -> "webauth-local";
-      default -> NetworkMode.DIRECT;
+      default -> null;
     };
   }
 
@@ -318,11 +318,11 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if (scenarioId == null) {
-      return null;
+      return NetworkMode.DIRECT;
     }
     return switch (scenarioId) {
       case "http-proxy-demo", "https-proxy-demo", "tcp-ssl-demo" -> NetworkMode.PROXIED;
-      default -> null;
+      default -> NetworkMode.DIRECT;
     };
   }
 

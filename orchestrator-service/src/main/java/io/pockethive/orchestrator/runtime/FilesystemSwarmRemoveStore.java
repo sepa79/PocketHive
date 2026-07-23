@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.swarm.model.SwarmStartupArtifactContract;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
 import io.pockethive.swarm.model.lifecycle.RemoveResult;
 import java.io.IOException;
@@ -24,7 +25,7 @@ public final class FilesystemSwarmRemoveStore {
   @Autowired
   public FilesystemSwarmRemoveStore(
       ObjectMapper mapper,
-      @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}") String runtimeRoot) {
+      @Value("${" + SwarmStartupArtifactContract.WRITE_ROOT_ENV + ":}") String runtimeRoot) {
     this(mapper, path(runtimeRoot));
   }
 
@@ -101,7 +102,7 @@ public final class FilesystemSwarmRemoveStore {
 
   private static Path path(String value) {
     if (value == null || value.isBlank()) {
-      throw new IllegalStateException("POCKETHIVE_SCENARIOS_RUNTIME_ROOT must not be blank");
+      throw new IllegalStateException(SwarmStartupArtifactContract.WRITE_ROOT_ENV + " must not be blank");
     }
     return Path.of(value);
   }
