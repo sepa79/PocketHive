@@ -17,11 +17,6 @@ final class ControlPlaneSchemaValidator {
   private static final String SCHEMA_ROOT = "/io/pockethive/controlplane/schema/";
   private static final String CONTROL_SCHEMA = SCHEMA_ROOT + "control-events.schema.json";
   private static final String LIFECYCLE_SCHEMA = SCHEMA_ROOT + "swarm-lifecycle.schema.json";
-  private static final String CONTROL_SCHEMA_ID =
-      "https://pockethive.dev/docs/spec/control-events.schema.json";
-  private static final String LIFECYCLE_SCHEMA_ID =
-      "https://pockethive.dev/docs/spec/swarm-lifecycle.schema.json";
-
   private final JsonSchema schema;
 
   private ControlPlaneSchemaValidator(JsonSchema schema) {
@@ -33,12 +28,14 @@ final class ControlPlaneSchemaValidator {
     try {
       URL controlSchema = requireResource(CONTROL_SCHEMA);
       URL lifecycleSchema = requireResource(LIFECYCLE_SCHEMA);
+      String controlSchemaId = requireSchemaId(mapper, controlSchema);
+      String lifecycleSchemaId = requireSchemaId(mapper, lifecycleSchema);
       JsonSchemaFactory factory = JsonSchemaFactory.builder(
               JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012))
           .objectMapper(mapper)
           .addUriMappings(Map.of(
-              CONTROL_SCHEMA_ID, controlSchema.toExternalForm(),
-              LIFECYCLE_SCHEMA_ID, lifecycleSchema.toExternalForm()))
+              controlSchemaId, controlSchema.toExternalForm(),
+              lifecycleSchemaId, lifecycleSchema.toExternalForm()))
           .build();
       JsonSchema schema = factory.getSchema(controlSchema.toURI());
       return new ControlPlaneSchemaValidator(schema);
@@ -60,5 +57,13 @@ final class ControlPlaneSchemaValidator {
       throw new IllegalStateException("Missing packaged schema resource: " + path);
     }
     return resource;
+  }
+
+  private static String requireSchemaId(ObjectMapper mapper, URL resource) throws Exception {
+    JsonNode id = mapper.readTree(resource).get("$id");
+    if (id == null || !id.isTextual() || id.asText().isBlank()) {
+      throw new IllegalStateException("Packaged schema has no non-blank $id: " + resource);
+    }
+    return id.asText();
   }
 }

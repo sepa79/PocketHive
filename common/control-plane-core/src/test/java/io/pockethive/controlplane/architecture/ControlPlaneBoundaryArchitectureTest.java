@@ -27,6 +27,9 @@ class ControlPlaneBoundaryArchitectureTest {
       Pattern.DOTALL);
   private static final Pattern RAW_LISTENER_READ = Pattern.compile(
       "(readTree|readValue)\\s*\\(", Pattern.DOTALL);
+  private static final Pattern AMQP_PUBLISH = Pattern.compile(
+      "\\.(convertAndSend|send|sendAndReceive|convertSendAndReceive(?:AsType)?)\\s*\\(",
+      Pattern.DOTALL);
 
   @Test
   void transportMessagesCanOnlyCarryCanonicalEnvelopes() throws Exception {
@@ -80,9 +83,9 @@ class ControlPlaneBoundaryArchitectureTest {
           && !source.contains("controlPlaneRuntime.handle(")) {
         violations.add(relative + " does not delegate receive validation to ControlPlaneCodec");
       }
-      if (source.contains("convertAndSend(")
-          && !relative.endsWith("AmqpControlPlanePublisher.java")
-          && !relative.endsWith("RabbitMessageWorkerAdapter.java")) {
+      if (usesSpringAmqp(source)
+          && AMQP_PUBLISH.matcher(source).find()
+          && !isApprovedPublisher(relative)) {
         violations.add(relative + " publishes AMQP traffic outside an approved transport adapter");
       }
       if (!relative.endsWith("ControlPlaneCommonAutoConfiguration.java")
@@ -104,6 +107,18 @@ class ControlPlaneBoundaryArchitectureTest {
             || source.contains("swarmControllerControlQueueName")
             || source.contains("managerControlQueueName")
             || source.contains("controllerStatusQueue"));
+  }
+
+  private static boolean usesSpringAmqp(String source) {
+    return source.contains("org.springframework.amqp")
+        || source.contains("RabbitTemplate")
+        || source.contains("AmqpTemplate");
+  }
+
+  private static boolean isApprovedPublisher(String relative) {
+    return relative.endsWith("AmqpControlPlanePublisher.java")
+        || relative.endsWith("RabbitMessageWorkerAdapter.java")
+        || relative.endsWith("RabbitWorkOutput.java");
   }
 
   private static Path repositoryRoot() {

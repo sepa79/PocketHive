@@ -3,6 +3,7 @@ package io.pockethive.e2e.hooks;
 import io.pockethive.e2e.clients.RabbitSubscriptions;
 import io.pockethive.e2e.config.EnvironmentConfig;
 import io.pockethive.e2e.contracts.ControlEventsContractAudit;
+import io.pockethive.e2e.contracts.ControlPlaneCoverageExpectations;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture;
 import io.cucumber.java.AfterAll;
 import io.cucumber.java.BeforeAll;
@@ -24,6 +25,7 @@ public final class LifecycleHooks {
   @BeforeAll
   public static void beforeAll() {
     LOGGER.info("Starting PocketHive e2e harness (skeleton mode).");
+    ControlPlaneCoverageExpectations.reset();
     try {
       var endpoints = EnvironmentConfig.loadServiceEndpoints();
       RabbitSubscriptions rabbit = RabbitSubscriptions.from(endpoints.rabbitMq(), endpoints.controlPlane());
@@ -38,13 +40,11 @@ public final class LifecycleHooks {
     ControlPlaneMessageCapture current = capture;
     capture = null;
     if (current != null) {
-      try {
-        List<ControlPlaneMessageCapture.CapturedMessage> messages = current.messages();
-        LOGGER.info("Control-plane capture collected {} message(s)", messages.size());
-        ControlEventsContractAudit.assertAllValid(messages);
-      } finally {
-        current.close();
-      }
+      current.close();
+      List<ControlPlaneMessageCapture.CapturedMessage> messages = current.messages();
+      LOGGER.info("Control-plane capture collected {} message(s)", messages.size());
+      ControlEventsContractAudit.assertAllValid(
+          messages, ControlPlaneCoverageExpectations.snapshot());
     }
     LOGGER.info("Stopping PocketHive e2e harness (skeleton mode).");
   }

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.ValidationMessage;
 import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture.CapturedMessage;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -25,20 +24,14 @@ public final class ControlEventsContractAudit {
   }
 
   public static void assertAllValid(List<CapturedMessage> messages) {
-    assertAllValid(messages, Duration.ZERO);
+    assertAllValid(messages, List.of());
   }
 
-  public static void assertAllValid(List<CapturedMessage> messages, Duration settleTime) {
+  public static void assertAllValid(
+      List<CapturedMessage> messages, List<ExpectedOperation> expectedOperations) {
     List<CapturedMessage> payloads = messages == null ? List.of() : messages;
-    if (settleTime != null && !settleTime.isZero() && !settleTime.isNegative()) {
-      try {
-        Thread.sleep(settleTime.toMillis());
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-    }
-
     List<String> failures = new ArrayList<>();
+    List<JsonNode> validEnvelopes = new ArrayList<>();
     for (CapturedMessage message : payloads) {
       if (message == null) {
         continue;
@@ -54,13 +47,78 @@ public final class ControlEventsContractAudit {
         }
         routingIdentityCheck(node, routingKey, failures);
         semanticChecks(node, routingKey, failures);
+        validEnvelopes.add(node);
       } catch (Exception ex) {
         failures.add("parse failed rk=" + routingKey + " err=" + ex.getMessage() + " payload=" + snippet(json));
       }
     }
+    commandFlowCoverage(
+        validEnvelopes, expectedOperations == null ? List.of() : expectedOperations, failures);
 
     if (!failures.isEmpty()) {
       Assertions.fail("Control-plane contract audit failed:\n- " + String.join("\n- ", failures));
+    }
+  }
+
+  private static void commandFlowCoverage(
+      List<JsonNode> envelopes,
+      List<ExpectedOperation> expectedOperations,
+      List<String> failures) {
+    for (ExpectedOperation command : expectedOperations) {
+      if (command.signalRequired() && !hasMatchingSignal(envelopes, command)) {
+        failures.add("coverage missing family=signal type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+      if (command.resultRequired() && !hasMatchingOperation(envelopes, "result", command)) {
+        failures.add("coverage missing family=result type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+      if (!hasMatchingOperation(envelopes, "outcome", command)) {
+        failures.add("coverage missing family=outcome type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+    }
+  }
+
+  private static boolean hasMatchingSignal(
+      List<JsonNode> envelopes, ExpectedOperation command) {
+    return envelopes.stream().anyMatch(envelope -> matchesOperation(envelope, "signal", command));
+  }
+
+  private static boolean hasMatchingOperation(
+      List<JsonNode> envelopes, String kind, ExpectedOperation command) {
+    return envelopes.stream().anyMatch(envelope -> matchesOperation(envelope, kind, command));
+  }
+
+  private static boolean matchesOperation(
+      JsonNode envelope, String kind, ExpectedOperation command) {
+    return kind.equals(envelope.path("kind").asText(""))
+        && command.type().equals(envelope.path("type").asText(""))
+        && command.swarmId().equals(envelope.path("scope").path("swarmId").asText(""))
+        && command.correlationId().equals(envelope.path("correlationId").asText(""))
+        && command.idempotencyKey().equals(envelope.path("idempotencyKey").asText(""));
+  }
+
+  public record ExpectedOperation(
+      String type,
+      String swarmId,
+      String correlationId,
+      String idempotencyKey,
+      boolean signalRequired,
+      boolean resultRequired) {
+
+    public ExpectedOperation {
+      type = requireExpectationText(type, "type");
+      swarmId = requireExpectationText(swarmId, "swarmId");
+      correlationId = requireExpectationText(correlationId, "correlationId");
+      idempotencyKey = requireExpectationText(idempotencyKey, "idempotencyKey");
+    }
+
+    private static String requireExpectationText(String value, String field) {
+      if (value == null || value.isBlank()) {
+        throw new IllegalArgumentException(field + " must not be blank");
+      }
+      return value.trim();
     }
   }
 

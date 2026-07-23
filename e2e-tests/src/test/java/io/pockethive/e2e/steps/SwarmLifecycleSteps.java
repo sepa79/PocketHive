@@ -58,6 +58,8 @@ import io.pockethive.e2e.config.EnvironmentConfig;
 import io.pockethive.e2e.config.EnvironmentConfig.ControlPlaneSettings;
 import io.pockethive.e2e.config.EnvironmentConfig.ServiceEndpoints;
 import io.pockethive.e2e.support.ControlPlaneEvents;
+import io.pockethive.e2e.contracts.ControlEventsContractAudit.ExpectedOperation;
+import io.pockethive.e2e.contracts.ControlPlaneCoverageExpectations;
 import io.pockethive.e2e.support.QueueProbe;
 import io.pockethive.e2e.support.SwarmAssertions;
 import io.pockethive.e2e.support.StatusEvent;
@@ -2727,6 +2729,9 @@ public class SwarmLifecycleSteps {
       Optional<io.pockethive.control.CommandOutcome> outcome = controlPlaneEvents.outcome(signal, correlationId);
       assertTrue(outcome.isPresent(), () -> "Missing outcome for " + signal + " correlation=" + correlationId);
     });
+    registerControlPlaneExpectation(signal, response,
+        controlPlaneEvents.outcome(signal, correlationId)
+            .orElseThrow(() -> new AssertionError("Missing outcome for " + signal + " correlation=" + correlationId)));
   }
 
   private io.pockethive.control.CommandOutcome awaitOutcome(String signal, ControlResponse response) {
@@ -2735,8 +2740,28 @@ public class SwarmLifecycleSteps {
       Optional<io.pockethive.control.CommandOutcome> outcome = controlPlaneEvents.outcome(signal, correlationId);
       assertTrue(outcome.isPresent(), () -> "Missing outcome for " + signal + " correlation=" + correlationId);
     });
-    return controlPlaneEvents.outcome(signal, correlationId)
+    io.pockethive.control.CommandOutcome outcome = controlPlaneEvents.outcome(signal, correlationId)
         .orElseThrow(() -> new AssertionError("Missing outcome for " + signal + " correlation=" + correlationId));
+    registerControlPlaneExpectation(signal, response, outcome);
+    return outcome;
+  }
+
+  private void registerControlPlaneExpectation(
+      String signal,
+      ControlResponse response,
+      io.pockethive.control.CommandOutcome outcome) {
+    io.pockethive.swarm.model.lifecycle.TerminalStatus status = outcome.data().status();
+    boolean dispatchedCommand = Set.of("swarm-start", "swarm-stop", "config-update").contains(signal)
+        && status != io.pockethive.swarm.model.lifecycle.TerminalStatus.REJECTED;
+    boolean resultRequired = dispatchedCommand
+        && status != io.pockethive.swarm.model.lifecycle.TerminalStatus.TIMED_OUT;
+    ControlPlaneCoverageExpectations.expect(new ExpectedOperation(
+        signal,
+        swarmId,
+        response.correlationId(),
+        response.idempotencyKey(),
+        dispatchedCommand,
+        resultRequired));
   }
 
   private void assertNoErrors(String correlationId, String context) {
