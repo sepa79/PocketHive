@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -10,7 +12,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
@@ -20,7 +21,7 @@ import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
-import io.pockethive.orchestrator.runtime.FilesystemSwarmStartupArtifactStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
 import io.pockethive.swarm.model.lifecycle.OperationType;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.OperationState;
@@ -41,7 +42,7 @@ class SwarmControllerTest {
 
   @BeforeEach
   void setUp() {
-    Swarm swarm = new Swarm("alpha", "controller-1", "manager-1", "run-1");
+    Swarm swarm = new Swarm("alpha", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT);
     swarm.attachTemplate(new SwarmTemplateMetadata(
         "template-1", "controller:latest", List.of(), "demo/template-1", "demo"));
     store.register(swarm);
@@ -52,6 +53,7 @@ class SwarmControllerTest {
         operations,
         new OperationDispatchService(operations, outcomes, store),
         lifecycleCommands,
+        new ControlResponseFactory(controlPlaneProperties()),
         store,
         mock(SwarmStateStore.class),
         new ObjectMapper().findAndRegisterModules(),
@@ -79,7 +81,7 @@ class SwarmControllerTest {
   void startReturnsCanonicalOperationProjectionOwnedByOrchestrator() {
     var reservation = lifecycleReservation(OperationType.START, "corr-start", "idem-start");
     when(lifecycleCommands.dispatch(
-        eq(ControlPlaneSignals.SWARM_START), eq("alpha"), eq("idem-start"), eq(Duration.ofSeconds(180))))
+        eq(OperationType.START), eq("alpha"), eq("idem-start"), eq(Duration.ofSeconds(180))))
         .thenReturn(reservation);
 
     var response = controller.start("alpha", new ControlRequest("idem-start", null));
@@ -96,7 +98,7 @@ class SwarmControllerTest {
   @Test
   void stopAndRemoveUseTheSameConcreteLifecycleCommandPort() {
     when(lifecycleCommands.dispatch(
-        eq(ControlPlaneSignals.SWARM_STOP), eq("alpha"), eq("idem-stop"), eq(Duration.ofSeconds(90))))
+        eq(OperationType.STOP), eq("alpha"), eq("idem-stop"), eq(Duration.ofSeconds(90))))
         .thenReturn(lifecycleReservation(OperationType.STOP, "corr-stop", "idem-stop"));
 
     controller.stop("alpha", new ControlRequest("idem-stop", null));
@@ -106,15 +108,15 @@ class SwarmControllerTest {
         new TerminalResult(TerminalStatus.SUCCEEDED, false, java.util.Map.of()), Instant.now());
 
     when(lifecycleCommands.dispatch(
-        eq(ControlPlaneSignals.SWARM_REMOVE), eq("alpha"), eq("idem-remove"), eq(Duration.ofSeconds(180))))
+        eq(OperationType.REMOVE), eq("alpha"), eq("idem-remove"), eq(Duration.ofSeconds(180))))
         .thenReturn(lifecycleReservation(OperationType.REMOVE, "corr-remove", "idem-remove"));
 
     controller.remove("alpha", new ControlRequest("idem-remove", null));
 
     verify(lifecycleCommands).dispatch(
-        ControlPlaneSignals.SWARM_STOP, "alpha", "idem-stop", Duration.ofSeconds(90));
+        OperationType.STOP, "alpha", "idem-stop", Duration.ofSeconds(90));
     verify(lifecycleCommands).dispatch(
-        ControlPlaneSignals.SWARM_REMOVE, "alpha", "idem-remove", Duration.ofSeconds(180));
+        OperationType.REMOVE, "alpha", "idem-remove", Duration.ofSeconds(180));
   }
 
   @Test

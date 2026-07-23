@@ -7,6 +7,7 @@
     "sync:monaco": "node ./scripts/sync-monaco.mjs",
     "predev": "npm run sync:monaco",
     "prebuild": "npm run sync:monaco",
+    "pretest": "node ../scripts/generate-swarm-lifecycle-contract.mjs --check",
     "dev": "vite",
     "test": "vitest run",
     "lint": "eslint .",
@@ -15,6 +16,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pockethive/swarm-lifecycle-contract": "file:../packages/swarm-lifecycle-contract",
     "@monaco-editor/react": "^4.7.0",
     "@xyflow/react": "^12.3.3",
     "ajv": "^8.20.0",

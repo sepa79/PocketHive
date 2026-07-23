@@ -17,9 +17,20 @@ public interface HiveJournal {
 
   void append(HiveJournalEntry entry);
 
+  /** Persists required terminal evidence synchronously using the explicit run identity. */
+  void appendDurably(String runId, HiveJournalEntry entry);
+
   static HiveJournal noop() {
-    return entry -> {
-      // intentionally no-op
+    return new HiveJournal() {
+      @Override
+      public void append(HiveJournalEntry entry) {
+        // intentionally no-op for diagnostic evidence
+      }
+
+      @Override
+      public void appendDurably(String runId, HiveJournalEntry entry) {
+        throw new IllegalStateException("Durable hive journal is not configured");
+      }
     };
   }
 
@@ -116,4 +127,3 @@ public interface HiveJournal {
     LOCAL
   }
 }
-

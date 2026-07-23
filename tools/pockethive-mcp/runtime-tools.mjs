@@ -1,11 +1,4 @@
-import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import { z } from "zod";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-const REPO_ROOT = resolve(__dirname, "../..");
 
 const LABELS = {
   managed: "pockethive.managed",
@@ -34,11 +27,10 @@ const REQUIRED_CLEANUP_LABELS = [
   LABELS.instance
 ];
 
-const MANIFEST_FILE = "runtime-ownership-manifest.json";
 const DEFAULT_JOURNAL_LIMIT = 100;
 const RUNTIME_DEBUG_CAPABILITIES_PATH = "/api/runtime/debug/capabilities";
 const REQUIRED_RUNTIME_DEBUG_CAPABILITIES = Object.freeze({
-  runtimeDebugContractVersion: "3",
+  runtimeDebugContractVersion: "4",
   cleanupContractVersion: "3",
   runtimeDebugReadsBackedByOrchestrator: true,
   cleanupPlanHasExecutionRisk: true,
@@ -60,10 +52,7 @@ export function registerRuntimeTools(reg, options = {}) {
   const cleanupApi = options.httpJson ? runtimeCleanupApi(options.httpJson) : null;
   const runtimeApi = options.httpJson ? runtimeDebugApi(options.httpJson) : null;
   const sourceOptions = {
-    httpJson: options.httpJson ?? null,
-    manifestRoot: options.manifestRoot
-      ?? process.env.POCKETHIVE_SCENARIOS_RUNTIME_ROOT
-      ?? resolve(REPO_ROOT, "scenarios-runtime")
+    httpJson: options.httpJson ?? null
   };
   const runtimeContract = runtimeContractGuard(options.httpJson ?? null);
   const guarded = (handler) => async (input) => {
@@ -367,7 +356,7 @@ export async function runtimeDebugContext(input = {}, options = {}) {
   const includeRabbit = input.includeRabbit !== false;
   const resourcesSource = await readRuntimeInventory({ swarmId, runId }, options);
   const resources = resourcesSource.available ? runtimeResourcesFromListResponse(resourcesSource.data) : [];
-  const manifest = readRuntimeOwnershipManifest({ swarmId, runId }, options);
+  const manifest = await readRuntimeOwnershipManifest({ swarmId, runId }, options);
   const rabbit = includeRabbit
     ? await readRabbitTopology({ swarmId, runId }, manifest, options, resources)
     : { available: false, skipped: true, reason: "includeRabbit=false" };
@@ -767,30 +756,19 @@ export function buildWorkerLogTarget(resources, input = {}) {
 export function readRuntimeOwnershipManifest(input = {}, options = {}) {
   const swarmId = requireText(input.swarmId, "swarmId");
   const runId = optionalText(input.runId);
-  try {
-    const root = resolve(String(options.manifestRoot ?? resolve(REPO_ROOT, "scenarios-runtime")));
-    const file = runId
-      ? manifestPath(root, swarmId, runId)
-      : latestManifestPath(root, swarmId);
-    if (!file || !existsSync(file)) {
-      return {
-        available: false,
-        reason: "runtime ownership manifest was not found",
-        path: file ?? null
-      };
-    }
-    const manifest = JSON.parse(readFileSync(file, "utf8"));
-    return {
-      available: true,
-      path: file,
-      manifest: normalizeRuntimeManifest(manifest)
-    };
-  } catch (error) {
+  if (!options.httpJson) {
     return {
       available: false,
-      error: error instanceof Error ? error.message : String(error)
+      reason: "Orchestrator runtime debug API is not configured"
     };
   }
+  return safeSource("manifest", async () => ({
+    available: true,
+    manifest: await options.httpJson("/api/runtime/debug/manifest", {
+      method: "POST",
+      body: cleanApiBody({ swarmId, runId })
+    })
+  }));
 }
 
 async function readRabbitTopology(input, manifestSource, options = {}, resources = []) {
@@ -1024,54 +1002,6 @@ function sanitizeServiceMounts(mounts = []) {
   }));
 }
 
-function normalizeRuntimeManifest(manifest) {
-  return {
-    swarmId: manifest?.swarmId ?? null,
-    runId: manifest?.runId ?? null,
-    templateId: manifest?.templateId ?? null,
-    computeAdapter: manifest?.computeAdapter ?? null,
-    createdAt: manifest?.createdAt ?? null,
-    runtimeObjects: Array.isArray(manifest?.runtimeObjects) ? manifest.runtimeObjects : [],
-    rabbit: {
-      controlQueues: Array.isArray(manifest?.rabbit?.controlQueues) ? manifest.rabbit.controlQueues : [],
-      workQueues: Array.isArray(manifest?.rabbit?.workQueues) ? manifest.rabbit.workQueues : [],
-      exchanges: Array.isArray(manifest?.rabbit?.exchanges) ? manifest.rabbit.exchanges : []
-    }
-  };
-}
-
-function manifestPath(root, swarmId, runId) {
-  return resolve(root, safePathSegment(swarmId, "swarmId"), safePathSegment(runId, "runId"), MANIFEST_FILE);
-}
-
-function latestManifestPath(root, swarmId) {
-  const swarmDir = resolve(root, safePathSegment(swarmId, "swarmId"));
-  if (!existsSync(swarmDir)) {
-    return null;
-  }
-  const manifests = readdirSync(swarmDir, { withFileTypes: true })
-    .filter((entry) => entry.isDirectory())
-    .map((entry) => resolve(swarmDir, entry.name, MANIFEST_FILE))
-    .filter((file) => existsSync(file))
-    .map((file) => {
-      try {
-        const manifest = JSON.parse(readFileSync(file, "utf8"));
-        return { file, createdAt: Date.parse(manifest.createdAt ?? "") || 0 };
-      } catch {
-        return { file, createdAt: 0 };
-      }
-    })
-    .sort((left, right) => right.createdAt - left.createdAt);
-  return manifests[0]?.file ?? null;
-}
-
-function safePathSegment(value, name) {
-  const segment = requireText(value, name);
-  if (segment.includes("/") || segment.includes("\\") || segment === "." || segment === "..") {
-    throw new Error(`${name} is not a safe path segment`);
-  }
-  return segment;
-}
 
 function rabbitQueuesByName(rabbitSource = {}) {
   const queues = rabbitSource.queues ?? rabbitSource.data?.queues ?? [];

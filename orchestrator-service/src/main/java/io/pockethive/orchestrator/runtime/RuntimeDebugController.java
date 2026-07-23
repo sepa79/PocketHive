@@ -60,6 +60,11 @@ public class RuntimeDebugController {
         return ResponseEntity.ok(reconciliationService.rabbitTopology(request));
     }
 
+    @PostMapping("/manifest")
+    public ResponseEntity<RuntimeOwnershipManifest> ownershipManifest(@RequestBody RabbitTopologyRequest request) {
+        return ResponseEntity.ok(reconciliationService.ownershipManifest(request));
+    }
+
     @ExceptionHandler(RuntimeDebugException.class)
     public ResponseEntity<Map<String, String>> debugError(RuntimeDebugException ex) {
         return ResponseEntity.status(ex.status()).body(Map.of("error", ex.getMessage()));

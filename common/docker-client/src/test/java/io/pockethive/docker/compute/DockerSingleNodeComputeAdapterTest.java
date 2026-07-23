@@ -1,11 +1,13 @@
 package io.pockethive.docker.compute;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doThrow;
 
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.runtime.WorkerSpec;
@@ -54,6 +56,26 @@ class DockerSingleNodeComputeAdapterTest {
     assertThat(labelsCaptor.getValue()).containsEntry("pockethive.instance", "processor-worker");
     assertThat(labelsCaptor.getValue()).containsEntry("pockethive.computeAdapter", "DOCKER_SINGLE");
     assertThat(labelsCaptor.getValue()).containsEntry("pockethive.version", "test");
+  }
+
+  @Test
+  void workerRemovalFailureIsPropagatedAndRemainsRetryable() {
+    DockerContainerClient docker = mock(DockerContainerClient.class);
+    when(docker.createAndStartContainer(
+        eq("processor:test"), any(), eq("processor-worker"), any(), any()))
+        .thenReturn("container-id");
+    doThrow(new IllegalStateException("docker unavailable"))
+        .when(docker).stopAndRemoveContainer("container-id");
+    DockerSingleNodeComputeAdapter adapter = new DockerSingleNodeComputeAdapter(docker);
+    adapter.applyWorkers("swarm-1", List.of(new WorkerSpec(
+        "processor-worker", "processor", "processor:test", workerEnv(), null)));
+
+    assertThatThrownBy(() -> adapter.removeWorkers("swarm-1"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("docker unavailable");
+    assertThatThrownBy(() -> adapter.removeWorkers("swarm-1"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("docker unavailable");
   }
 
   private static Map<String, String> workerEnv() {

@@ -67,7 +67,7 @@ class SwarmNetworkBindingServiceTest {
     @Test
     void publishControllerNetworkContextPublishesConfigUpdateSignal() throws Exception {
         SwarmNetworkBindingService service = service();
-        Swarm swarm = new Swarm("sw1", "controller-1", "cid-1", "run-1");
+        Swarm swarm = new Swarm("sw1", "controller-1", "cid-1", "run-1", NetworkMode.DIRECT);
         swarm.setSutId("sut-a");
 
         service.publishControllerNetworkContext(

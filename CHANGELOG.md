@@ -15,6 +15,25 @@ Timestamp: 2026-07-22T22:53:54Z
 - Lifecycle convergence: complete create only after the controller verifies the
   filesystem startup artifact, and complete start, stop, and enabled config
   updates only after fresh worker observations match the requested intent.
+- Controller state authority: remove the parallel `ManagerRuntimeCore` workload
+  and readiness machine; scenarios now use a command-only lifecycle port and a
+  read-only projection derived from the single Controller lifecycle core.
+- Controller capability SSOT: replace silent lifecycle defaults with mandatory
+  core, scenario, and buffer-guard capability interfaces, and use the single
+  Manager SDK `QueueStats` value throughout Controller runtime and metrics.
+- Control-plane contract SSOT: construct public lifecycle responses in one
+  Orchestrator factory and dispatch lifecycle commands by canonical operation
+  type instead of transport strings.
+- TypeScript contract SSOT: generate one shared lifecycle package from the JSON
+  schema for the Hive UI and VS Code extension, reject compatibility status
+  aliases, and gate consumer builds against stale generated artifacts.
+- Explicit network selection: remove null-to-`DIRECT` coercion and compatibility
+  create constructors; create, binding, update, launch, and status boundaries
+  now require a declared canonical network mode.
+- SUT contract SSOT: delete the Scenario Manager `SutEnvironment` DTO and its
+  divergent validation, use the shared model directly for registry and bundle
+  APIs, reject missing/blank canonical fields, and remove unused runtime
+  `ui.panelId` metadata instead of retaining a compatibility projection.
 - Filesystem lifecycle handoff: start controllers from a versioned immutable
   swarm artifact with a verified SHA-256 digest, and coordinate swarm removal
   through correlation-specific filesystem request/result artifacts instead of
@@ -22,6 +41,25 @@ Timestamp: 2026-07-22T22:53:54Z
 - Lifecycle consumers and documentation: migrate the Hive UI, PocketHive MCP,
   VS Code extension, E2E tests, schemas, AsyncAPI, REST documentation, and
   runtime diagnostics to the canonical operation and state contracts.
+- Explicit failure semantics: reject invalid core registry identities, require
+  an explicitly composed Controller journal, and propagate cross-swarm,
+  serialization, and append failures instead of silently discarding them.
+- Bootstrap and template SSOT: provide one conditional Jackson
+  auto-configuration and shared worker logging defaults from `observability`,
+  and delete the unused divergent worker-sdk HTTP template record.
+- UI packaging: include the generated shared lifecycle contract in the Docker
+  build workspace so container builds consume the same package as local UI
+  and extension builds.
+- Agent lifecycle tooling: require callers to select `DIRECT` or `PROXIED`
+  explicitly when creating a swarm and require a profile only for the proxied
+  adapter; remove the MCP-side hard-coded network mode.
+- Idempotent Docker removal: treat an already stopped or already absent
+  container as satisfying the corresponding teardown postcondition, so a
+  failed partial create can still be removed completely.
+- Health journaling: establish the first observed health value as the baseline
+  instead of serializing a fake transition whose previous value is null.
+- Test boundaries: exclude archived legacy UI sources from the active root
+  Vitest suite; the current UI remains covered by its own package suite.
 
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z

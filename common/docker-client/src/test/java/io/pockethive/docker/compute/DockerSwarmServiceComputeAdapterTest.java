@@ -1,6 +1,7 @@
 package io.pockethive.docker.compute;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -137,6 +138,19 @@ class DockerSwarmServiceComputeAdapterTest {
     assertThat(spec.getLabels()).containsEntry("pockethive.computeAdapter", "SWARM_STACK");
     assertThat(spec.getLabels()).containsEntry("pockethive.image", "processor:test");
     assertThat(spec.getLabels()).containsEntry("pockethive.version", "test");
+  }
+
+  @Test
+  void managerRemovalFailureIsPropagated() {
+    DockerClient docker = mock(DockerClient.class);
+    when(docker.removeServiceCmd("service-id")).thenThrow(new IllegalStateException("docker unavailable"));
+
+    DockerSwarmServiceComputeAdapter adapter =
+        new DockerSwarmServiceComputeAdapter(docker, () -> "pockethive_default");
+
+    assertThatThrownBy(() -> adapter.stopManager("service-id"))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("docker unavailable");
   }
 
   private static void assertNetwork(NetworkAttachmentConfig attachment) {

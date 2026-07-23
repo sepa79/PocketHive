@@ -2900,10 +2900,19 @@ reg("swarm.get", "Get swarm status from the Orchestrator", {
 reg("swarm.create", "Create a new swarm from a scenario template", {
   swarmId: SWARM_ID_ARG.describe("Unique swarm identifier"),
   templateId: z.string().describe("Scenario template ID (must match scenario.yaml id)"),
+  networkMode: z.enum(["DIRECT", "PROXIED"]).describe("Required network adapter mode"),
+  networkProfileId: z.string().optional().describe("Required network profile ID when networkMode is PROXIED"),
   sutId: z.string().optional().describe("SUT environment ID"),
   variablesProfileId: z.string().optional().describe("Variables profile ID"),
-}, async ({ swarmId, templateId, sutId, variablesProfileId }) => {
-  const body = { templateId, idempotencyKey: idempotencyKey(), autoPullImages: false, networkMode: "DIRECT" };
+}, async ({ swarmId, templateId, networkMode, networkProfileId, sutId, variablesProfileId }) => {
+  if (networkMode === "PROXIED" && !networkProfileId?.trim()) {
+    throw new Error("networkProfileId is required when networkMode is PROXIED");
+  }
+  if (networkMode === "DIRECT" && networkProfileId !== undefined) {
+    throw new Error("networkProfileId is only valid when networkMode is PROXIED");
+  }
+  const body = { templateId, idempotencyKey: idempotencyKey(), autoPullImages: false, networkMode };
+  if (networkProfileId) body.networkProfileId = networkProfileId;
   if (sutId) body.sutId = sutId;
   if (variablesProfileId) body.variablesProfileId = variablesProfileId;
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/create`, { method: "POST", body });

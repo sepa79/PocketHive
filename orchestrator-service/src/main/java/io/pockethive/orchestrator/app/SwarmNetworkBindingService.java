@@ -148,7 +148,7 @@ public class SwarmNetworkBindingService {
         ControlScope target = ControlScope.forInstance(swarm.getId(), "swarm-controller", controllerInstance);
         Map<String, Object> data = new LinkedHashMap<>();
         data.put("sutId", normalize(sutId));
-        data.put("networkMode", NetworkMode.directIfNull(networkMode).name());
+        data.put("networkMode", Objects.requireNonNull(networkMode, "networkMode").name());
         data.put("networkProfileId", normalize(networkProfileId));
         ControlSignal payload = ControlSignals.configUpdate(
             originInstanceId,

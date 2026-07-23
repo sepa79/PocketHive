@@ -2,7 +2,6 @@ package io.pockethive.swarmcontroller.runtime;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
@@ -10,13 +9,12 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.docker.DockerContainerClient;
-import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
-import io.pockethive.manager.runtime.ManagerLifecycle;
-import io.pockethive.manager.runtime.ManagerRuntimeCore;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.ScenarioContext;
 import io.pockethive.manager.scenario.ScenarioEngine;
+import io.pockethive.manager.scenario.ScenarioLifecyclePort;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Topology;
@@ -27,14 +25,12 @@ import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.SutEndpoint;
-import io.pockethive.swarmcontroller.SwarmLifecycle;
+import io.pockethive.swarmcontroller.SwarmLifecycleCore;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmReadinessTracker;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
-import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
-import io.pockethive.swarmcontroller.QueueStats;
 import io.pockethive.swarmcontroller.SwarmLifecycleManager;
 import io.pockethive.swarmcontroller.scenario.TimelineScenarioObserver;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
@@ -70,21 +66,18 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
  * any Spring annotations so it can be reused by different Swarm Controller
  * runtimes or embedded tools.
  */
-public final class SwarmRuntimeCore implements SwarmLifecycle {
+public final class SwarmRuntimeCore implements SwarmLifecycleCore {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmLifecycleManager.class);
-  private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
 
   private final AmqpAdmin amqp;
   private final ObjectMapper mapper;
   private final DockerContainerClient docker;
   private final RabbitProperties rabbitProperties;
   private final SwarmControllerProperties properties;
-  private final MeterRegistry meterRegistry;
   private final WorkerSettings workerSettings;
   private final ControlPlanePublisher controlPublisher;
   private final SwarmWorkTopologyManager topology;
-  private final WorkloadProvisioner workloadProvisioner;
   private final ComputeAdapter computeAdapter;
   private final SwarmQueueMetrics queueMetrics;
   private final io.pockethive.manager.runtime.ConfigFanout configFanout;
@@ -93,9 +86,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private final String instanceId;
   private final String role;
   private final String swarmId;
-  private final String scenariosRuntimeRootSource;
+  private final io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount;
   private final ClickHouseSinkProperties clickHouseSink;
-  private final ManagerRuntimeCore managerCore;
   private final io.pockethive.swarmcontroller.scenario.TimelineScenario timelineScenario;
   private final ScenarioEngine scenarioEngine;
   private final java.time.Instant startedAt;
@@ -115,142 +107,53 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
                           DockerContainerClient docker,
                           RabbitProperties rabbitProperties,
                           SwarmControllerProperties properties,
-                          MeterRegistry meterRegistry,
                           ControlPlanePublisher controlPublisher,
                           SwarmWorkTopologyManager topology,
-                          WorkloadProvisioner workloadProvisioner,
                           ComputeAdapter computeAdapter,
                           SwarmQueueMetrics queueMetrics,
                           io.pockethive.manager.runtime.ConfigFanout configFanout,
                           SwarmJournal journal,
                           String instanceId,
-                          ClickHouseSinkProperties clickHouseSink) {
+                          ClickHouseSinkProperties clickHouseSink,
+                          io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.docker = Objects.requireNonNull(docker, "docker");
     this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
     this.properties = Objects.requireNonNull(properties, "properties");
-    this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
     this.topology = Objects.requireNonNull(topology, "topology");
-    this.workloadProvisioner = Objects.requireNonNull(workloadProvisioner, "workloadProvisioner");
     this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
     this.queueMetrics = Objects.requireNonNull(queueMetrics, "queueMetrics");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
-    this.journal = journal != null ? journal : SwarmJournal.noop();
+    this.journal = Objects.requireNonNull(journal, "journal");
     this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
     this.role = properties.getRole();
     this.swarmId = properties.getSwarmId();
-    this.scenariosRuntimeRootSource = System.getenv("POCKETHIVE_SCENARIOS_RUNTIME_ROOT");
+    this.runtimeFilesystemMount = Objects.requireNonNull(runtimeFilesystemMount, "runtimeFilesystemMount");
     this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
     this.workerSettings = deriveWorkerSettings(properties);
     this.readinessTracker = new SwarmReadinessTracker(this::requestStatus);
-    this.managerCore = new ManagerRuntimeCore(
-        new SwarmWorkTopologyPortAdapter(topology),
-        new DockerWorkloadPortAdapter(workloadProvisioner),
-        new SwarmControlPlanePortAdapter(controlPublisher),
-        new SwarmQueueStatsPortAdapter(amqp),
-        new SwarmMetricsPortAdapter(queueMetrics),
-        Clock.system(),
-        this.swarmId,
-        this.role,
-        this.instanceId);
-
-    // Scenario plans should drive swarm lifecycle through the same core that
-    // REST /api/swarms/{id}/start|stop uses so that status, config fan-out and
-    // diagnostics stay consistent. To keep the ScenarioEngine transport-agnostic
-    // we wrap ManagerRuntimeCore with a ManagerLifecycle that delegates
-    // everything except swarm-wide enable/disable to the core, and maps those
-    // to SwarmRuntimeCore.setSwarmEnabled(..).
-    ManagerLifecycle scenarioManager = new ManagerLifecycle() {
-      @Override
-      public void prepare(String planJson) {
-        managerCore.prepare(planJson);
-      }
-
-      @Override
-      public void start(String planJson) {
-        managerCore.start(planJson);
-      }
-
-      @Override
-      public void stop() {
-        managerCore.stop();
-      }
-
-      @Override
-      public void remove() {
-        managerCore.remove();
-      }
-
-      @Override
-      public io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
-        return managerCore.getWorkloadState();
-      }
-
-      @Override
-      public boolean markReady(String role, String instance) {
-        return managerCore.markReady(role, instance);
-      }
-
-      @Override
-      public void updateHeartbeat(String role, String instance) {
-        managerCore.updateHeartbeat(role, instance);
-      }
-
-      @Override
-      public void updateEnabled(String role, String instance, boolean enabled) {
-        managerCore.updateEnabled(role, instance, enabled);
-      }
-
-      @Override
-      public io.pockethive.manager.runtime.ManagerMetrics getMetrics() {
-        return managerCore.getMetrics();
-      }
-
-      @Override
-      public java.util.Map<String, io.pockethive.manager.runtime.QueueStats> snapshotQueueStats() {
-        return managerCore.snapshotQueueStats();
-      }
-
+    ScenarioLifecyclePort scenarioLifecycle = new ScenarioLifecyclePort() {
       @Override
       public void enableAll() {
-        // Scenario "start" swarm step – drive the same swarm-wide enablement
-        // path that REST start uses, including config-update fan-out and
-        // canonical workload-state updates.
-        setSwarmEnabled(true);
+        SwarmRuntimeCore.this.setSwarmEnabled(true);
       }
 
       @Override
       public void setWorkEnabled(boolean enabled) {
-        // Scenario "stop" swarm step – mirror swarm-wide disable semantics.
-        setSwarmEnabled(enabled);
-      }
-
-      @Override
-      public void setManagerEnabled(boolean enabled) {
-        managerCore.setManagerEnabled(enabled);
-      }
-
-      @Override
-      public boolean isReadyForWork() {
-        return managerCore.isReadyForWork();
+        SwarmRuntimeCore.this.setSwarmEnabled(enabled);
       }
     };
 
-    java.util.function.Supplier<ManagerRuntimeView> viewSupplier =
-        () -> new ManagerRuntimeView(
-            managerCore.getWorkloadState(),
-            managerCore.getMetrics(),
-            java.util.Collections.emptyMap());
-    ScenarioContext scenarioContext = new ScenarioContext(swarmId, scenarioManager, configFanout);
+    ScenarioContext scenarioContext = new ScenarioContext(swarmId, scenarioLifecycle, configFanout);
     this.timelineScenario = new io.pockethive.swarmcontroller.scenario.TimelineScenario(
         "default",
         mapper,
         new JournalTimelineScenarioObserver());
     this.scenarioEngine = new ScenarioEngine(
         java.util.List.of(timelineScenario),
-        viewSupplier,
+        this::scenarioRuntimeView,
         scenarioContext);
     this.startedAt = java.time.Instant.now();
   }
@@ -274,7 +177,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public void start(String planJson) {
     log.info("Starting swarm {}", swarmId);
-    managerCore.start(planJson);
     if (runtimeState == null || runtimeState.containersByRole().isEmpty()) {
       prepare(planJson);
     } else if (template == null) {
@@ -287,7 +189,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public void prepare(String templateJson) {
     log.info("Preparing swarm {}", swarmId);
-    managerCore.prepare(templateJson);
     try {
       this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
@@ -348,12 +249,10 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
         }
         Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnv);
         List<String> volumes = resolveVolumes(effectiveConfig);
-        if (hasText(scenariosRuntimeRootSource)) {
-          java.util.List<String> merged = new java.util.ArrayList<>(volumes.size() + 1);
-          merged.add(scenariosRuntimeRootSource + ":" + SCENARIOS_RUNTIME_DESTINATION);
-          merged.addAll(volumes);
-          volumes = java.util.List.copyOf(merged);
-        }
+        java.util.List<String> merged = new java.util.ArrayList<>(volumes.size() + 1);
+        merged.add(runtimeFilesystemMount.volume());
+        merged.addAll(volumes);
+        volumes = java.util.List.copyOf(merged);
         workerSpecs.add(new io.pockethive.manager.runtime.WorkerSpec(
             beeName,
             bee.role(),
@@ -416,7 +315,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public void stop() {
     log.info("Stopping swarm {}", swarmId);
-    managerCore.stop();
     setSwarmEnabled(false);
     setControllerEnabled(false);
     this.workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
@@ -444,7 +342,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   public List<io.pockethive.swarm.model.lifecycle.RemoveResource> remove() {
     log.info("Removing swarm {}", swarmId);
     List<io.pockethive.swarm.model.lifecycle.RemoveResource> removed = new ArrayList<>();
-    managerCore.remove();
     setSwarmEnabled(false);
     trafficPolicy = null;
     SwarmRuntimeContext ctx = runtimeContext;
@@ -500,7 +397,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   public void updateHeartbeat(String role, String instance, long timestamp) {
     readinessTracker.recordHeartbeat(role, instance, timestamp);
     configFanout.publishBootstrapConfigIfNecessary(instance, false);
-    managerCore.updateHeartbeat(role, instance);
     // Scenario plans, guards and other manager-side helpers must not run while
     // the controller is disabled. Only tick the scenario engine once the
     // controller has been started via the normal lifecycle (REST
@@ -528,7 +424,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public void updateEnabled(String role, String instance, boolean flag) {
     readinessTracker.recordEnabled(role, instance, flag);
-    managerCore.updateEnabled(role, instance, flag);
   }
 
   @Override
@@ -565,14 +460,27 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     for (String suffix : suffixes) {
       queueNames.add(properties.queueName(suffix));
     }
-    managerCore.setTrackedQueues(queueNames);
-    Map<String, io.pockethive.manager.runtime.QueueStats> raw = managerCore.snapshotQueueStats();
-    Map<String, QueueStats> converted = new LinkedHashMap<>(raw.size());
-    for (Map.Entry<String, io.pockethive.manager.runtime.QueueStats> entry : raw.entrySet()) {
-      io.pockethive.manager.runtime.QueueStats s = entry.getValue();
-      converted.put(entry.getKey(), new QueueStats(s.depth(), s.consumers(), s.oldestAgeSeconds()));
+    SwarmQueueStatsPortAdapter queueStats = new SwarmQueueStatsPortAdapter(amqp);
+    Map<String, QueueStats> snapshot = new LinkedHashMap<>(queueNames.size());
+    for (String queueName : queueNames) {
+      QueueStats stats = queueStats.getQueueStats(queueName);
+      snapshot.put(queueName, stats);
+      queueMetrics.update(queueName, stats);
     }
-    return converted;
+    return Map.copyOf(snapshot);
+  }
+
+  ManagerRuntimeView scenarioRuntimeView() {
+    SwarmMetrics metrics = getMetrics();
+    return new ManagerRuntimeView(
+        getWorkloadState(),
+        new io.pockethive.manager.runtime.ManagerMetrics(
+            metrics.desired(),
+            metrics.healthy(),
+            metrics.running(),
+            metrics.enabled(),
+            Objects.requireNonNull(metrics.watermark(), "metrics.watermark").toEpochMilli()),
+        java.util.Collections.emptyMap());
   }
 
   @Override
@@ -664,7 +572,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
   @Override
   public synchronized void enableAll() {
-    managerCore.enableAll();
     var data = mapper.createObjectNode();
     data.put("enabled", true);
     log.info("Issuing swarm-wide enable config-update for swarm {} (role={} instance={})",
@@ -689,7 +596,6 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       return;
     }
     this.controllerEnabled = enabled;
-    managerCore.setManagerEnabled(enabled);
     log.info("Swarm controller {} for swarm {} (role {})", enabled ? "enabled" : "disabled", swarmId, role);
   }
 

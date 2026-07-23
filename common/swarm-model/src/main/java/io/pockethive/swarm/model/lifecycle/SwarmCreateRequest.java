@@ -34,18 +34,4 @@ public record SwarmCreateRequest(
       throw new IllegalArgumentException("sutId must be provided when networkMode=PROXIED");
     }
   }
-
-  public SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {
-    this(templateId, idempotencyKey, notes, null, null, null, NetworkMode.DIRECT, null);
-  }
-
-  public SwarmCreateRequest(
-      String templateId,
-      String idempotencyKey,
-      String notes,
-      Boolean autoPullImages,
-      String sutId,
-      String variablesProfileId) {
-    this(templateId, idempotencyKey, notes, autoPullImages, sutId, variablesProfileId, NetworkMode.DIRECT, null);
-  }
 }

@@ -15,6 +15,7 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
@@ -417,7 +418,8 @@ class SwarmLifecycleManagerTest {
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
           amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
-          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
+          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
+          runtimeMount());
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
 
       assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
@@ -1047,7 +1049,13 @@ class SwarmLifecycleManagerTest {
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),
         meterRegistry,
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
+        runtimeMount());
+  }
+
+  private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {
+    return io.pockethive.controlplane.filesystem.RuntimeFilesystemMount.of(
+        "/opt/pockethive/scenarios-runtime");
   }
 
   private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {

@@ -355,8 +355,12 @@ validation rule. They must validate scenario authoring identity through unique
 Scenarios themselves do not embed full environment details, but swarms
 may be bound to a **System Under Test (SUT)** chosen at create time.
 The contract for SUT environments lives in
-`common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`
-and is represented on disk as YAML under
+`docs/spec/sut-environment.schema.json`; the Scenario Manager registry array
+references it from `docs/spec/sut-environments.schema.json`. Its sole Java representation lives in
+`common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`.
+Scenario Manager registry and bundle APIs use those shared types directly; a
+service-local SUT DTO or validator is not a supported projection. The contract
+is represented on disk as YAML under
 `scenario-manager-service/sut/sut-environments*.yaml`.
 
 ### SUT environment YAML
@@ -402,6 +406,12 @@ Shape:
     `https://demo.example.com/public`, or `tcp-mock-server:9090`.
   - `upstreamBaseUrl` (non-blank string, optional) – upstream URI or
     authority used by proxied network bindings.
+
+All text is trimmed at the canonical Java boundary. Blank `id`, `name`,
+`type`, endpoint keys and endpoint fields are rejected. `endpoints` must be
+present (it may be an empty object). Runtime SUT objects do not carry UI
+presentation hints; if such hints are introduced again, they must be a
+separate read-only projection keyed by the canonical environment id.
 
 ### Using SUTs from scenarios
 

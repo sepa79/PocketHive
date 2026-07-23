@@ -7,6 +7,8 @@ import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlRuntime;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.ControlPlaneRoles;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.payload.StatusPayloadFactory;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -77,7 +79,7 @@ public final class ControlPlaneEmitter {
       ControlPlanePublisher publisher,
       ControlPlaneTopologySettings settings,
       Map<String, Object> runtime) {
-    RoleContext role = requireIdentity(identity, "swarm-controller");
+    RoleContext role = requireIdentity(identity, ControlPlaneRoles.SWARM_CONTROLLER);
     return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher, runtime);
   }
 
@@ -134,11 +136,11 @@ public final class ControlPlaneEmitter {
   }
 
   public void emitStatusSnapshot(StatusContext context) {
-    publishStatus("status-full", context);
+    publishStatus(ControlPlaneEventTypes.STATUS_FULL, context);
   }
 
   public void emitStatusDelta(StatusContext context) {
-    publishStatus("status-delta", context);
+    publishStatus(ControlPlaneEventTypes.STATUS_DELTA, context);
   }
 
   private void publishStatus(String type, StatusContext context) {
@@ -150,8 +152,8 @@ public final class ControlPlaneEmitter {
       context.customiser().accept(builder);
     };
     String payload = switch (type) {
-      case "status-full" -> statusFactory.snapshot(customiser);
-      case "status-delta" -> statusFactory.delta(customiser);
+      case ControlPlaneEventTypes.STATUS_FULL -> statusFactory.snapshot(customiser);
+      case ControlPlaneEventTypes.STATUS_DELTA -> statusFactory.delta(customiser);
       default -> throw new IllegalArgumentException("Unsupported status type: " + type);
     };
     publisher.publishEvent(new EventMessage(routingKey, payload));

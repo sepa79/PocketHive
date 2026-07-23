@@ -322,7 +322,7 @@ services:
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: orchestrator-local-secret
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: {{ pockethive_bind_source_dir }}/state/scenarios-runtime
-      POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT: /app/scenarios-runtime
+      POCKETHIVE_RUNTIME_FILESYSTEM_ROOT: /app/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
@@ -377,6 +377,7 @@ services:
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
       POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
       POCKETHIVE_METRICS_ADAPTER: DISABLED
+      POCKETHIVE_RUNTIME_FILESYSTEM_ROOT: /app/scenarios-runtime
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     ports:
       - target: 8080

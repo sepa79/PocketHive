@@ -77,6 +77,14 @@ describe('swarm lifecycle action feedback', () => {
     })
   })
 
+  it('rejects non-canonical terminal status aliases', () => {
+    expect(() => resolveSwarmLifecycleFeedback(
+      pending('stop'),
+      [entry(envelope('outcome', 'swarm-stop', { status: 'TIMEDOUT' }, 'orchestrator'))],
+      ACCEPTED_AT + 1000,
+    )).toThrow('TerminalStatus')
+  })
+
   it('accepts only the orchestrator terminal outcome as success', () => {
     const resolved = resolveSwarmLifecycleFeedback(
       pending('stop'),

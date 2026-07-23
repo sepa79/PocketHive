@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.control.ControlSignal;
-import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
@@ -39,6 +38,7 @@ public class ComponentController {
 
 	    private final ControlPlanePublisher controlPublisher;
 	    private final OperationDispatchService operations;
+	    private final ControlResponseFactory controlResponses;
 	    private final String originInstanceId;
 	    private final SwarmStore store;
         private final OrchestratorEndpointAuthorization endpointAuthorization;
@@ -48,11 +48,13 @@ public class ComponentController {
 	        OperationDispatchService operations,
 	        SwarmStore store,
 	        ControlPlaneProperties controlPlaneProperties,
+            ControlResponseFactory controlResponses,
             OrchestratorEndpointAuthorization endpointAuthorization) {
 	        this.controlPublisher = controlPublisher;
 	        this.operations = operations;
 	        this.store = store;
 	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+            this.controlResponses = controlResponses;
             this.endpointAuthorization = endpointAuthorization;
 	    }
 
@@ -119,13 +121,8 @@ public class ComponentController {
     }
 
     private ResponseEntity<ControlResponse> accepted(SwarmOperation operation) {
-        ConfirmationScope scope = new ConfirmationScope(operation.swarmId(), "orchestrator", originInstanceId);
-        ControlResponse response = new ControlResponse(
-            operation.correlationId(),
-            operation.idempotencyKey(),
-            "/api/swarms/" + operation.swarmId() + "/operations/" + operation.correlationId(),
-            ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
-            CONFIG_UPDATE_TIMEOUT_MS);
+        ControlResponse response = controlResponses.create(
+            operation, Duration.ofMillis(CONFIG_UPDATE_TIMEOUT_MS));
         return ResponseEntity.accepted().body(response);
     }
 

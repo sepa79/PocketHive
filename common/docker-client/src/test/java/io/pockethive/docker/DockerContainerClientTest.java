@@ -4,6 +4,10 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.StartContainerCmd;
+import com.github.dockerjava.api.command.StopContainerCmd;
+import com.github.dockerjava.api.command.RemoveContainerCmd;
+import com.github.dockerjava.api.exception.NotFoundException;
+import com.github.dockerjava.api.exception.NotModifiedException;
 import com.github.dockerjava.api.model.Bind;
 import com.github.dockerjava.api.model.HostConfig;
 import org.junit.jupiter.api.Test;
@@ -17,6 +21,32 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.*;
 
 class DockerContainerClientTest {
+
+    @Test
+    void removesContainerWhenItIsAlreadyStopped() {
+        DockerClient docker = mock(DockerClient.class);
+        StopContainerCmd stop = mock(StopContainerCmd.class);
+        RemoveContainerCmd remove = mock(RemoveContainerCmd.class);
+        when(docker.stopContainerCmd("cid")).thenReturn(stop);
+        doThrow(mock(NotModifiedException.class)).when(stop).exec();
+        when(docker.removeContainerCmd("cid")).thenReturn(remove);
+
+        new DockerContainerClient(docker).stopAndRemoveContainer("cid");
+
+        verify(remove).exec();
+    }
+
+    @Test
+    void treatsAlreadyAbsentContainerAsRemoved() {
+        DockerClient docker = mock(DockerClient.class);
+        StopContainerCmd stop = mock(StopContainerCmd.class);
+        when(docker.stopContainerCmd("cid")).thenReturn(stop);
+        doThrow(mock(NotFoundException.class)).when(stop).exec();
+
+        new DockerContainerClient(docker).stopAndRemoveContainer("cid");
+
+        verify(docker, never()).removeContainerCmd(anyString());
+    }
 
     @Test
     void usesResolvedNetworkMode() {

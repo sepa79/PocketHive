@@ -13,13 +13,12 @@ public record RemoveResult(
     String idempotencyKey,
     TerminalStatus status,
     boolean retryable,
-    List<RemoveResource> removedResources,
-    List<RemoveResource> remainingResources,
+    List<RemoveResource> targetResources,
     List<RemoveError> errors,
     Instant completedAt
 ) {
 
-  public static final String SCHEMA = "pockethive/swarm-remove-result/v1";
+  public static final String SCHEMA = "pockethive/swarm-remove-result/v2";
 
   public RemoveResult {
     if (!SCHEMA.equals(schema)) {
@@ -34,13 +33,9 @@ public record RemoveResult(
     if (status != TerminalStatus.SUCCEEDED && status != TerminalStatus.FAILED) {
       throw new IllegalArgumentException("Remove result status must be SUCCEEDED or FAILED");
     }
-    removedResources = ContractValues.immutableList("removedResources", removedResources);
-    remainingResources = ContractValues.immutableList("remainingResources", remainingResources);
+    targetResources = ContractValues.immutableList("targetResources", targetResources);
     errors = ContractValues.immutableList("errors", errors);
     completedAt = Objects.requireNonNull(completedAt, "completedAt");
-    if (status == TerminalStatus.SUCCEEDED && !remainingResources.isEmpty()) {
-      throw new IllegalArgumentException("Successful remove cannot contain remainingResources");
-    }
     if (status == TerminalStatus.SUCCEEDED && !errors.isEmpty()) {
       throw new IllegalArgumentException("Successful remove cannot contain errors");
     }
@@ -55,7 +50,7 @@ public record RemoveResult(
       String controllerInstance,
       String correlationId,
       String idempotencyKey,
-      List<RemoveResource> removedResources,
+      List<RemoveResource> targetResources,
       Instant completedAt) {
     return new RemoveResult(
         SCHEMA,
@@ -66,8 +61,7 @@ public record RemoveResult(
         idempotencyKey,
         TerminalStatus.SUCCEEDED,
         false,
-        removedResources,
-        List.of(),
+        targetResources,
         List.of(),
         completedAt);
   }

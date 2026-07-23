@@ -14,7 +14,9 @@ public record NetworkBindingRequest(@NotBlank String sutId,
 
     public NetworkBindingRequest {
         sutId = requireText(sutId, "sutId");
-        networkMode = NetworkMode.directIfNull(networkMode);
+        if (networkMode == null) {
+            throw new IllegalArgumentException("networkMode must not be null");
+        }
         networkProfileId = trimToNull(networkProfileId);
         requestedBy = requireText(requestedBy, "requestedBy");
         reason = trimToNull(reason);

@@ -12,6 +12,7 @@ import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.SwarmStartupArtifactContract;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -63,7 +64,8 @@ import static org.junit.jupiter.api.Assertions.*;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", TEST_SWARM_ID);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
     setRequiredSystemProperty("POCKETHIVE_JOURNAL_RUN_ID", "run-it");
-    setRequiredSystemProperty(SwarmStartupArtifactContract.READ_ROOT_ENV, STARTUP.root().toString());
+    setRequiredSystemProperty(RuntimeFilesystemContract.LOCAL_ROOT_ENV, STARTUP.root().toString());
+    setRequiredSystemProperty(RuntimeFilesystemContract.HOST_ROOT_ENV, STARTUP.root().toString());
     setRequiredSystemProperty(SwarmStartupArtifactContract.PATH_ENV, STARTUP.path().toString());
     setRequiredSystemProperty(SwarmStartupArtifactContract.SHA256_ENV, STARTUP.sha256());
 

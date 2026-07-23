@@ -63,11 +63,9 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
 
   @Override
   public void stopManager(String managerId) {
-    if (managerId == null || managerId.isBlank()) {
-      return;
-    }
-    log.info("stopping manager container {}", managerId);
-    docker.stopAndRemoveContainer(managerId);
+    String resolvedManagerId = requireNonBlank(managerId, "managerId");
+    log.info("stopping manager container {}", resolvedManagerId);
+    docker.stopAndRemoveContainer(resolvedManagerId);
   }
 
   @Override
@@ -109,10 +107,8 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
 
   @Override
   public synchronized void removeWorkers(String topologyId) {
-    if (topologyId == null || topologyId.isBlank()) {
-      return;
-    }
-    List<String> ids = workerContainersByTopology.remove(topologyId);
+    String resolvedTopology = requireNonBlank(topologyId, "topologyId");
+    List<String> ids = workerContainersByTopology.get(resolvedTopology);
     if (ids == null || ids.isEmpty()) {
       return;
     }
@@ -123,6 +119,10 @@ public final class DockerSingleNodeComputeAdapter implements ComputeAdapter {
     for (String id : copy) {
       log.info("removeWorkers: stopping container {} for topology {}", id, topologyId);
       docker.stopAndRemoveContainer(id);
+      ids.remove(id);
+    }
+    if (ids.isEmpty()) {
+      workerContainersByTopology.remove(resolvedTopology);
     }
   }
 

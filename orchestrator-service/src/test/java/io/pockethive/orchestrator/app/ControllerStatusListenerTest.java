@@ -25,7 +25,7 @@ class ControllerStatusListenerTest {
   @Test
   void fullStatusUpdatesOnlyCanonicalObservationAxes() {
     SwarmStore store = new SwarmStore();
-    Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
+    Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT);
     store.register(swarm);
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
     SwarmSignalListener signals = mock(SwarmSignalListener.class);
@@ -56,7 +56,7 @@ class ControllerStatusListenerTest {
   @Test
   void deltaWithoutBaselineRequestsFullSnapshotAndDoesNotInventState() {
     SwarmStore store = new SwarmStore();
-    store.register(new Swarm("sw1", "inst1", "c1", "run-1"));
+    store.register(new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT));
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
     SwarmSignalListener signals = mock(SwarmSignalListener.class);
     ControllerStatusListener listener = listener(store, requests, signals);

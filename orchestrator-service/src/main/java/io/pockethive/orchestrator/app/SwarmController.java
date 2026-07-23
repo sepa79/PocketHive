@@ -9,6 +9,7 @@ import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.ControlPlaneOperations;
+import io.pockethive.controlplane.ControlPlaneRoles;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.EventMessage;
@@ -21,7 +22,7 @@ import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
-import io.pockethive.orchestrator.runtime.FilesystemSwarmStartupArtifactStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
@@ -97,6 +98,7 @@ public class SwarmController {
     private final SwarmOperationCoordinator operations;
     private final OperationDispatchService operationDispatch;
     private final SwarmLifecycleCommandService lifecycleCommands;
+    private final ControlResponseFactory controlResponses;
     private final SwarmStore store;
     private final SwarmStateStore stateStore;
     private final FilesystemSwarmStartupArtifactStore startupArtifacts;
@@ -106,7 +108,7 @@ public class SwarmController {
     private final OrchestratorAuthorization authorization;
     private final ObjectMapper json;
     private final String originInstanceId;
-    @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
+    @Value("${" + io.pockethive.swarm.model.RuntimeFilesystemContract.HOST_ROOT_ENV + ":}")
     private String scenariosRuntimeRootSource;
     private static final Set<String> AUTH_SUT_CONTEXT_IMAGE_NAMES =
         Set.of(BeeRoles.REQUEST_BUILDER, BeeRoles.HTTP_SEQUENCE, BeeRoles.PROCESSOR);
@@ -120,6 +122,7 @@ public class SwarmController {
                            SwarmOperationCoordinator operations,
                            OperationDispatchService operationDispatch,
                            SwarmLifecycleCommandService lifecycleCommands,
+                           ControlResponseFactory controlResponses,
                            SwarmStore store,
                            SwarmStateStore stateStore,
                            ObjectMapper json,
@@ -134,6 +137,7 @@ public class SwarmController {
         this.operations = Objects.requireNonNull(operations, "operations");
         this.operationDispatch = Objects.requireNonNull(operationDispatch, "operationDispatch");
         this.lifecycleCommands = Objects.requireNonNull(lifecycleCommands, "lifecycleCommands");
+        this.controlResponses = Objects.requireNonNull(controlResponses, "controlResponses");
         this.store = store;
         this.stateStore = stateStore;
         this.json = json;
@@ -167,7 +171,7 @@ public class SwarmController {
         logRestRequest("POST", path, req);
         String templateId = req.templateId();
         Duration timeout = Duration.ofMillis(120_000L);
-        Target operationTarget = new Target("orchestrator", originInstanceId);
+        Target operationTarget = new Target(ControlPlaneRoles.ORCHESTRATOR, originInstanceId);
         ResponseEntity<?> response;
         Optional<io.pockethive.swarm.model.lifecycle.SwarmOperation> existingOperation =
             operations.find(swarmId, OperationType.CREATE, operationTarget, req.idempotencyKey());
@@ -175,7 +179,7 @@ public class SwarmController {
             var operation = existingOperation.get();
             ControlResponse existing = controlResponse(operation, timeout.toMillis());
             log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
-                "swarm-create", swarmId, operation.correlationId(), req.idempotencyKey());
+                ControlPlaneSignals.SWARM_CREATE, swarmId, operation.correlationId(), req.idempotencyKey());
             response = ResponseEntity.accepted().body(existing);
             logRestResponse("POST", path, response);
             return response;
@@ -190,7 +194,7 @@ public class SwarmController {
 
         String correlation = UUID.randomUUID().toString();
         response = idempotentSend(
-            "swarm-create", swarmId, operationTarget, req.idempotencyKey(), timeout.toMillis(), correlation, corr -> {
+            OperationType.CREATE, swarmId, operationTarget, req.idempotencyKey(), timeout.toMillis(), correlation, corr -> {
                 ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = fetchScenarioTemplate(templateId);
                 requireRunTemplate(templateDescriptor);
                 log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} networkMode={} networkProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
@@ -211,11 +215,9 @@ public class SwarmController {
                 }
                 String image = requireImage(template, templateId);
                 SwarmPlan originalPlan = planDescriptor.toSwarmPlan(swarmId);
-                String runtimeRootSource = scenariosRuntimeRootSource;
-                if (runtimeRootSource == null || runtimeRootSource.isBlank()) {
-                    throw new IllegalStateException("POCKETHIVE_SCENARIOS_RUNTIME_ROOT must not be blank");
-                }
-                String scenarioVolume = runtimeRootSource + "/" + swarmId + ":/app/scenario:ro";
+                String scenarioVolume = io.pockethive.controlplane.filesystem.RuntimeFilesystemMount
+                    .of(scenariosRuntimeRootSource)
+                    .swarmVolume(swarmId, "/app/scenario", true);
                 String sutId = normalize(req.sutId());
                 String variablesProfileId = normalize(req.variablesProfileId());
                 NetworkMode networkMode = req.networkMode();
@@ -314,7 +316,7 @@ public class SwarmController {
                     originalPlan.trafficPolicy(),
                     sutId,
                     finalSutEnvironment);
-                String instanceId = BeeNameGenerator.generate("swarm-controller", swarmId);
+                String instanceId = BeeNameGenerator.generate(ControlPlaneRoles.SWARM_CONTROLLER, swarmId);
                 Map<String, Object> resolvedTimeline = json.convertValue(
                     timeline,
                     new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
@@ -335,9 +337,9 @@ public class SwarmController {
                         resolvedSutEnvironment,
                         corr,
                         req.idempotencyKey(),
-                        "orchestrator",
-                        "swarm-create",
-                        "orchestrator");
+                        ControlPlaneRoles.ORCHESTRATOR,
+                        ControlPlaneSignals.SWARM_CREATE,
+                        ControlPlaneRoles.ORCHESTRATOR);
                     networkBindingApplied = true;
                 }
                 Swarm swarm;
@@ -364,9 +366,9 @@ public class SwarmController {
                             sutId,
                             corr,
                             req.idempotencyKey(),
-                            "orchestrator",
+                            ControlPlaneRoles.ORCHESTRATOR,
                             "swarm-create-rollback",
-                            "orchestrator",
+                            ControlPlaneRoles.ORCHESTRATOR,
                             ex);
                     }
                     throw ex;
@@ -390,8 +392,8 @@ public class SwarmController {
                         swarmId,
                         HiveJournal.Direction.LOCAL,
                         "command",
-                        "swarm-create",
-                        "orchestrator",
+                        ControlPlaneSignals.SWARM_CREATE,
+                        ControlPlaneRoles.ORCHESTRATOR,
                         ControlScope.forSwarm(swarmId),
                         corr,
                         req.idempotencyKey(),
@@ -419,7 +421,7 @@ public class SwarmController {
      * POST {@code /api/swarms/{swarmId}/start} — enable work inside an existing swarm controller.
      * <p>
      * The body accepts {@link ControlRequest}, typically {@code {"idempotencyKey":"cli-42"}}. We invoke
-     * {@link #sendSignal(String, String, String, long)} with the {@code swarm-start} signal so the swarm
+     * {@link #sendSignal(OperationType, String, String, long)} with {@link OperationType#START} so the swarm
      * controller converges its workers to the requested workload intent. The response identifies the
      * authoritative operation resource and its optional outcome notification topic.
      */
@@ -428,7 +430,7 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId + "/start";
         logRestRequest("POST", path, req);
         requireRunSwarm(swarmId);
-        ResponseEntity<ControlResponse> response = sendSignal("swarm-start", swarmId, req.idempotencyKey(), 180_000L);
+        ResponseEntity<ControlResponse> response = sendSignal(OperationType.START, swarmId, req.idempotencyKey(), 180_000L);
         logRestResponse("POST", path, response);
         return response;
     }
@@ -445,7 +447,7 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId + "/stop";
         logRestRequest("POST", path, req);
         requireManageSwarm(swarmId);
-        ResponseEntity<ControlResponse> response = sendSignal("swarm-stop", swarmId, req.idempotencyKey(), 90_000L);
+        ResponseEntity<ControlResponse> response = sendSignal(OperationType.STOP, swarmId, req.idempotencyKey(), 90_000L);
         logRestResponse("POST", path, response);
         return response;
     }
@@ -462,7 +464,7 @@ public class SwarmController {
         String path = "/api/swarms/" + swarmId + "/remove";
         logRestRequest("POST", path, req);
         requireManageSwarm(swarmId);
-        ResponseEntity<ControlResponse> response = sendSignal("swarm-remove", swarmId, req.idempotencyKey(), 180_000L);
+        ResponseEntity<ControlResponse> response = sendSignal(OperationType.REMOVE, swarmId, req.idempotencyKey(), 180_000L);
         logRestResponse("POST", path, response);
         return response;
     }
@@ -559,9 +561,11 @@ public class SwarmController {
      * it only after the controller reports the required fresh convergence. The timeout is expressed in
      * milliseconds for alignment with the REST contract.
      */
-    private ResponseEntity<ControlResponse> sendSignal(String signal, String swarmId, String idempotencyKey, long timeoutMs) {
+    private ResponseEntity<ControlResponse> sendSignal(
+        OperationType operationType, String swarmId, String idempotencyKey, long timeoutMs) {
+        String signal = ControlPlaneOperations.signalForType(operationType);
         var reservation = lifecycleCommands.dispatch(
-            signal, swarmId, idempotencyKey, Duration.ofMillis(timeoutMs));
+            operationType, swarmId, idempotencyKey, Duration.ofMillis(timeoutMs));
         if (reservation.reused()) {
             log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
                 signal, swarmId, reservation.operation().correlationId(), idempotencyKey);
@@ -579,18 +583,18 @@ public class SwarmController {
      * return its existing {@link ControlResponse}. Otherwise the shared dispatch service reserves the
      * operation before {@code action.accept(corr)} publishes the control message.
      */
-    private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, Target target, String idempotencyKey,
+    private ResponseEntity<ControlResponse> idempotentSend(OperationType operationType, String swarmId, Target target, String idempotencyKey,
                                                            long timeoutMs, java.util.function.Consumer<String> action) {
-        return idempotentSend(signal, swarmId, target, idempotencyKey, timeoutMs, UUID.randomUUID().toString(), action);
+        return idempotentSend(operationType, swarmId, target, idempotencyKey, timeoutMs, UUID.randomUUID().toString(), action);
     }
 
-    private ResponseEntity<ControlResponse> idempotentSend(String signal, String swarmId, Target target, String idempotencyKey,
+    private ResponseEntity<ControlResponse> idempotentSend(OperationType operationType, String swarmId, Target target, String idempotencyKey,
                                                            long timeoutMs, String correlation,
                                                            java.util.function.Consumer<String> action) {
-        OperationType type = ControlPlaneOperations.typeForSignal(signal);
+        String signal = ControlPlaneOperations.signalForType(operationType);
         var reservation = operationDispatch.dispatch(
             swarmId,
-            type,
+            operationType,
             target,
             correlation,
             idempotencyKey,
@@ -616,14 +620,7 @@ public class SwarmController {
      * carrying the same terminal result and is documented in {@code docs/ORCHESTRATOR-REST.md#control-response}.
      */
     private ControlResponse controlResponse(io.pockethive.swarm.model.lifecycle.SwarmOperation operation, long timeoutMs) {
-        String signal = ControlPlaneOperations.signalForType(operation.type());
-        ConfirmationScope scope = new ConfirmationScope(operation.swarmId(), "orchestrator", originInstanceId);
-        return new ControlResponse(
-            operation.correlationId(),
-            operation.idempotencyKey(),
-            "/api/swarms/" + operation.swarmId() + "/operations/" + operation.correlationId(),
-            ControlPlaneRouting.event("outcome", signal, scope),
-            timeoutMs);
+        return controlResponses.create(operation, Duration.ofMillis(timeoutMs));
     }
 
     /**
@@ -925,7 +922,9 @@ public class SwarmController {
                                             String idempotencyKey,
                                             String notes) {
         public SwarmNetworkUpdateRequest {
-            networkMode = NetworkMode.directIfNull(networkMode);
+            if (networkMode == null) {
+                throw new IllegalArgumentException("networkMode must be provided");
+            }
             networkProfileId = normalize(networkProfileId);
             idempotencyKey = normalize(idempotencyKey);
             notes = normalize(notes);
@@ -1130,17 +1129,6 @@ public class SwarmController {
         }
         String text = value.asText(null);
         return text == null || text.isBlank() ? null : text;
-    }
-
-    private static NetworkMode parseNetworkMode(String value, NetworkMode fallback) {
-        if (value == null || value.isBlank()) {
-            return NetworkMode.directIfNull(fallback);
-        }
-        try {
-            return NetworkMode.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT));
-        } catch (IllegalArgumentException ex) {
-            return NetworkMode.directIfNull(fallback);
-        }
     }
 
     private List<WorkerSummary> workerSummaries(Map<String, Object> observation) {

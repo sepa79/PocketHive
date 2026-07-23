@@ -1,9 +1,12 @@
 package io.pockethive.orchestrator.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import io.pockethive.swarm.model.SwarmStartupArtifactContract;
-import java.nio.file.Path;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,12 +15,27 @@ import org.springframework.context.annotation.Configuration;
 public class FilesystemLifecycleConfiguration {
 
   @Bean
+  RuntimeFilesystemLayout runtimeFilesystemLayout(
+      @Value("${" + RuntimeFilesystemContract.LOCAL_ROOT_ENV + ":}") String runtimeRoot) {
+    return RuntimeFilesystemLayout.of(
+        runtimeRoot, RuntimeFilesystemContract.CONTAINER_ROOT);
+  }
+
+  @Bean
+  RuntimeFilesystemMount runtimeFilesystemMount(
+      @Value("${" + RuntimeFilesystemContract.HOST_ROOT_ENV + ":}") String hostRoot) {
+    return RuntimeFilesystemMount.of(hostRoot);
+  }
+
+  @Bean
   FilesystemSwarmRemoveStore filesystemSwarmRemoveStore(
-      ObjectMapper mapper,
-      @Value("${" + SwarmStartupArtifactContract.WRITE_ROOT_ENV + ":}") String runtimeRoot) {
-    if (runtimeRoot == null || runtimeRoot.isBlank()) {
-      throw new IllegalStateException(SwarmStartupArtifactContract.WRITE_ROOT_ENV + " must not be blank");
-    }
-    return new FilesystemSwarmRemoveStore(mapper, Path.of(runtimeRoot));
+      ObjectMapper mapper, RuntimeFilesystemLayout layout) {
+    return new FilesystemSwarmRemoveStore(mapper, layout);
+  }
+
+  @Bean
+  FilesystemSwarmStartupArtifactStore filesystemSwarmStartupArtifactStore(
+      ObjectMapper mapper, RuntimeFilesystemLayout layout) {
+    return new FilesystemSwarmStartupArtifactStore(mapper, layout);
   }
 }

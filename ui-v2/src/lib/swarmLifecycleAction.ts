@@ -1,16 +1,16 @@
 import type { WireLogEntry } from './controlPlane/wireLogStore'
 import { normalizeControlPlaneRoutingKey } from './controlPlane/decoder'
+import {
+  parseControlResponse,
+  parseOperationState,
+  parseTerminalStatus,
+  type ControlResponse,
+} from '@pockethive/swarm-lifecycle-contract'
 
 export type SwarmLifecycleAction = 'start' | 'stop'
 export type SwarmLifecycleFeedbackStatus = 'pending' | 'success' | 'error'
 
-export type SwarmLifecycleControlResponse = {
-  correlationId: string
-  idempotencyKey: string
-  operationUrl: string
-  outcomeTopic: string
-  timeoutMs: number
-}
+export type SwarmLifecycleControlResponse = Readonly<ControlResponse>
 
 export type SwarmLifecycleFeedback = {
   swarmId: string
@@ -26,18 +26,7 @@ export type SwarmLifecycleFeedback = {
 }
 
 export function parseSwarmLifecycleControlResponse(value: unknown): SwarmLifecycleControlResponse {
-  if (!isRecord(value)) {
-    throw new Error('Orchestrator returned an invalid lifecycle response.')
-  }
-  const correlationId = requiredString(value.correlationId, 'correlationId')
-  const idempotencyKey = requiredString(value.idempotencyKey, 'idempotencyKey')
-  const timeoutMs = value.timeoutMs
-  if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
-    throw new Error('Orchestrator lifecycle response is missing a valid timeoutMs.')
-  }
-  const operationUrl = requiredString(value.operationUrl, 'operationUrl')
-  const outcomeTopic = requiredString(value.outcomeTopic, 'outcomeTopic')
-  return { correlationId, idempotencyKey, operationUrl, outcomeTopic, timeoutMs }
+  return parseControlResponse(value)
 }
 
 export function pendingSwarmLifecycleFeedback(
@@ -79,10 +68,9 @@ export function resolveSwarmLifecycleFeedback(
         normalizeControlPlaneRoutingKey(entry.routingKey) === feedback.outcomeTopic &&
         entry.envelope?.kind === 'outcome',
     )?.envelope
-  const outcomeStatus = outcome ? optionalString(outcome.data.status) : null
-  if (outcomeStatus) {
-    const normalized = outcomeStatus.toUpperCase()
-    if (normalized === 'SUCCEEDED') {
+  if (outcome) {
+    const outcomeStatus = parseTerminalStatus(outcome.data.status)
+    if (outcomeStatus === 'Succeeded') {
       return terminalFeedback(
         feedback,
         'success',
@@ -90,10 +78,10 @@ export function resolveSwarmLifecycleFeedback(
         null,
       )
     }
-    if (normalized === 'REJECTED') {
+    if (outcomeStatus === 'Rejected') {
       return terminalFeedback(feedback, 'error', notReadyMessage(feedback, outcome?.data.context), 'Rejected')
     }
-    if (normalized === 'FAILED' || normalized === 'TIMEDOUT' || normalized === 'TIMED_OUT') {
+    if (outcomeStatus === 'Failed' || outcomeStatus === 'TimedOut') {
       return terminalFeedback(
         feedback,
         'error',
@@ -125,7 +113,7 @@ export function resolveSwarmLifecycleOperationFeedback(
   if (correlationId !== feedback.correlationId) {
     throw new Error('Orchestrator operation correlationId does not match the accepted request.')
   }
-  const state = requiredString(operationValue.state, 'operation.state').toUpperCase()
+  const state = parseOperationState(operationValue.state)
   if (state === 'SUCCEEDED') {
     return terminalFeedback(
       feedback,

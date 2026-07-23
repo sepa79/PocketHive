@@ -283,7 +283,7 @@
     },
     "RemoveResourceType": {
       "type": "string",
-      "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING"]
+      "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING", "RUNTIME_DIRECTORY", "REGISTRY_ENTRY", "TERMINAL_EVIDENCE"]
     },
     "RemoveResource": {
       "type": "object",
@@ -335,13 +335,12 @@
         "idempotencyKey",
         "status",
         "retryable",
-        "removedResources",
-        "remainingResources",
+        "targetResources",
         "errors",
         "completedAt"
       ],
       "properties": {
-        "schema": { "const": "pockethive/swarm-remove-result/v1" },
+        "schema": { "const": "pockethive/swarm-remove-result/v2" },
         "swarmId": { "$ref": "#/$defs/NonEmptyString" },
         "runId": { "$ref": "#/$defs/NonEmptyString" },
         "controllerInstance": { "$ref": "#/$defs/NonEmptyString" },
@@ -349,12 +348,7 @@
         "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
         "status": { "type": "string", "enum": ["Succeeded", "Failed"] },
         "retryable": { "type": "boolean" },
-        "removedResources": {
-          "type": "array",
-          "items": { "$ref": "#/$defs/RemoveResource" },
-          "uniqueItems": true
-        },
-        "remainingResources": {
+        "targetResources": {
           "type": "array",
           "items": { "$ref": "#/$defs/RemoveResource" },
           "uniqueItems": true
@@ -371,12 +365,7 @@
             "properties": { "status": { "const": "Succeeded" } },
             "required": ["status"]
           },
-          "then": {
-            "properties": {
-              "remainingResources": { "maxItems": 0 },
-              "errors": { "maxItems": 0 }
-            }
-          },
+          "then": { "properties": { "errors": { "maxItems": 0 } } },
           "else": {
             "properties": {
               "errors": { "minItems": 1 }

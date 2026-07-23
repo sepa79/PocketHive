@@ -25,7 +25,7 @@ public class Swarm {
     private SwarmTemplateMetadata templateMetadata;
     private SwarmStartupArtifactReference startupArtifact;
     private String sutId;
-    private NetworkMode networkMode = NetworkMode.DIRECT;
+    private NetworkMode networkMode;
     private String networkProfileId;
     private volatile JsonNode controllerStatusFull;
     private volatile Instant controllerStatusReceivedAt;
@@ -37,11 +37,12 @@ public class Swarm {
     private volatile RuntimeResourceState runtimeResourceState = RuntimeResourceState.PRESENT;
     private volatile Map<String, Object> observation = Map.of();
 
-    public Swarm(String id, String instanceId, String containerId, String runId) {
+    public Swarm(String id, String instanceId, String containerId, String runId, NetworkMode networkMode) {
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
         this.runId = runId;
+        this.networkMode = java.util.Objects.requireNonNull(networkMode, "networkMode");
         this.createdAt = Instant.now();
     }
 
@@ -114,7 +115,7 @@ public class Swarm {
     }
 
     public void setNetworkMode(NetworkMode networkMode) {
-        this.networkMode = NetworkMode.directIfNull(networkMode);
+        this.networkMode = java.util.Objects.requireNonNull(networkMode, "networkMode");
         if (this.networkMode == NetworkMode.DIRECT) {
             this.networkProfileId = null;
         }

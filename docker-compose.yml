@@ -262,7 +262,7 @@ services:
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME:-orchestrator-service}
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET:-orchestrator-local-secret}
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: /opt/pockethive/scenarios-runtime
-      POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT: /app/scenarios-runtime
+      POCKETHIVE_RUNTIME_FILESYSTEM_ROOT: /app/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive
@@ -320,6 +320,7 @@ services:
       POCKETHIVE_CONTROL_PLANE_INSTANCE_ID: scenario-manager
       POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE: scenario-manager
       POCKETHIVE_METRICS_ADAPTER: DISABLED
+      POCKETHIVE_RUNTIME_FILESYSTEM_ROOT: /app/scenarios-runtime
       MANAGEMENT_METRICS_TAGS_INSTANCE: scenario-manager
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]

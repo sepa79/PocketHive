@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,17 +34,16 @@ public class SwarmStore {
     }
 
     public Swarm register(Swarm swarm) {
-        if (swarm == null) {
-            return null;
-        }
-        swarms.put(swarm.getId(), swarm);
+        Objects.requireNonNull(swarm, "swarm");
+        String swarmId = requireSwarmId(swarm.getId());
+        swarms.put(swarmId, swarm);
         log.info("SwarmStore: registered swarm id={} instance={} container={}",
             swarm.getId(), swarm.getInstanceId(), swarm.getContainerId());
         return swarm;
     }
 
     public Optional<Swarm> find(String id) {
-        return Optional.ofNullable(swarms.get(id));
+        return Optional.ofNullable(swarms.get(requireSwarmId(id)));
     }
 
     public Collection<Swarm> all() {
@@ -51,12 +51,13 @@ public class SwarmStore {
     }
 
     public void remove(String id) {
-        Swarm removed = swarms.remove(id);
+        String swarmId = requireSwarmId(id);
+        Swarm removed = swarms.remove(swarmId);
         if (removed != null) {
             log.info("SwarmStore: removed swarm id={} instance={} container={}",
                 removed.getId(), removed.getInstanceId(), removed.getContainerId());
         } else {
-            log.info("SwarmStore: remove called for unknown swarm id={}", id);
+            log.info("SwarmStore: remove called for unknown swarm id={}", swarmId);
         }
     }
 
@@ -66,11 +67,10 @@ public class SwarmStore {
     }
 
     void pruneStaleControllers(Duration failedAfter, Instant now) {
-        if (failedAfter == null || failedAfter.isNegative() || failedAfter.isZero()) {
-            return;
-        }
-        if (now == null) {
-            return;
+        Objects.requireNonNull(failedAfter, "failedAfter");
+        Objects.requireNonNull(now, "now");
+        if (failedAfter.isNegative() || failedAfter.isZero()) {
+            throw new IllegalArgumentException("failedAfter must be positive");
         }
         swarms.values().forEach(s -> {
             Instant lastSeenAt = s.getControllerStatusReceivedAt();
@@ -91,10 +91,10 @@ public class SwarmStore {
     }
 
     public void cacheControllerStatusFull(String swarmId, JsonNode envelope, Instant receivedAt) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return;
-        }
-        Swarm swarm = swarms.get(swarmId);
+        String canonicalSwarmId = requireSwarmId(swarmId);
+        Objects.requireNonNull(envelope, "envelope");
+        Objects.requireNonNull(receivedAt, "receivedAt");
+        Swarm swarm = swarms.get(canonicalSwarmId);
         if (swarm == null) {
             return;
         }
@@ -102,10 +102,10 @@ public class SwarmStore {
     }
 
     public DeltaApplyResult applyControllerStatusDelta(String swarmId, JsonNode deltaEnvelope, Instant receivedAt) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return DeltaApplyResult.SWARM_NOT_FOUND;
-        }
-        Swarm swarm = swarms.get(swarmId);
+        String canonicalSwarmId = requireSwarmId(swarmId);
+        Objects.requireNonNull(deltaEnvelope, "deltaEnvelope");
+        Objects.requireNonNull(receivedAt, "receivedAt");
+        Swarm swarm = swarms.get(canonicalSwarmId);
         if (swarm == null) {
             return DeltaApplyResult.SWARM_NOT_FOUND;
         }
@@ -163,5 +163,13 @@ public class SwarmStore {
                 }
             }
         }
+    }
+
+    private static String requireSwarmId(String swarmId) {
+        Objects.requireNonNull(swarmId, "swarmId");
+        if (swarmId.isBlank() || !swarmId.equals(swarmId.trim())) {
+            throw new IllegalArgumentException("swarmId must be non-blank and normalized");
+        }
+        return swarmId;
     }
 }

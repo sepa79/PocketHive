@@ -1,11 +1,11 @@
 package io.pockethive.swarmcontroller.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.util.Objects;
 import java.util.concurrent.locks.Lock;
@@ -28,57 +28,42 @@ import org.springframework.stereotype.Component;
 public class FileSwarmJournal implements SwarmJournal {
 
   private static final Logger log = LoggerFactory.getLogger(FileSwarmJournal.class);
-  private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
-
   private final ObjectMapper mapper;
   private final String swarmId;
   private final String runId;
   private final Path journalFile;
   private final Lock lock = new ReentrantLock();
-  private final boolean enabled;
 
   public FileSwarmJournal(ObjectMapper mapper,
                           io.pockethive.swarmcontroller.config.SwarmControllerProperties properties,
-                          @Value("${pockethive.journal.run-id}") String runId) {
+                          @Value("${pockethive.journal.run-id}") String runId,
+                          RuntimeFilesystemLayout layout) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
-    this.runId = sanitizeSegment(requireNonBlank(runId, "runId"));
-    Path file = null;
-    boolean ok = false;
+    this.runId = requireNonBlank(runId, "runId");
     try {
-      Path root = resolveRuntimeRoot();
-      Path dir = root.resolve(sanitizeSegment(swarmId)).resolve(runId).normalize();
-      if (!dir.startsWith(root)) {
-        throw new IllegalArgumentException("Invalid swarmId for runtime directory");
-      }
+      Path dir = layout.swarmRunDirectory(swarmId, this.runId);
       Files.createDirectories(dir);
-      file = dir.resolve("journal.ndjson");
-      ok = true;
-      log.info("Swarm journal initialised at {}", file);
+      this.journalFile = dir.resolve("journal.ndjson");
+      log.info("Swarm journal initialised at {}", journalFile);
     } catch (Exception e) {
-      log.warn("Swarm journal disabled; unable to initialise runtime directory: {}", e.getMessage());
+      throw new IllegalStateException("Unable to initialise swarm journal", e);
     }
-    this.journalFile = file;
-    this.enabled = ok;
   }
 
   @Override
   public void append(SwarmJournalEntry entry) {
     Objects.requireNonNull(entry, "entry");
-    if (!enabled || journalFile == null) {
-      return;
-    }
     if (!swarmId.equals(entry.swarmId())) {
-      // Enforce per-swarm isolation; journal is scoped to a single swarm.
-      return;
+      throw new IllegalArgumentException(
+          "Journal for swarm " + swarmId + " cannot accept entry for swarm " + entry.swarmId());
     }
     String json;
     try {
       json = mapper.writeValueAsString(entry);
     } catch (Exception e) {
-      log.warn("Failed to serialise swarm journal entry: {}", e.getMessage());
-      return;
+      throw new SwarmJournalWriteException("Failed to serialise swarm journal entry", e);
     }
     lock.lock();
     try {
@@ -88,25 +73,10 @@ public class FileSwarmJournal implements SwarmJournal {
           StandardOpenOption.CREATE,
           StandardOpenOption.APPEND);
     } catch (IOException e) {
-      log.warn("Failed to append to swarm journal at {}: {}", journalFile, e.getMessage());
+      throw new SwarmJournalWriteException("Failed to append to swarm journal at " + journalFile, e);
     } finally {
       lock.unlock();
     }
-  }
-
-  private static Path resolveRuntimeRoot() {
-    return Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
-  }
-
-  private static String sanitizeSegment(String segment) {
-    if (segment == null || segment.isBlank()) {
-      throw new IllegalArgumentException("swarmId must not be null or blank");
-    }
-    String cleaned = Paths.get(segment).getFileName().toString();
-    if (!cleaned.equals(segment) || cleaned.contains("..") || cleaned.isBlank()) {
-      throw new IllegalArgumentException("Invalid swarmId");
-    }
-    return cleaned;
   }
 
   private static String requireNonBlank(String value, String name) {

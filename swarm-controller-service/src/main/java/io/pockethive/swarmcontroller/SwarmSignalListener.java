@@ -28,8 +28,8 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
 import io.pockethive.swarmcontroller.runtime.SwarmControlPlaneJournalErrors;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
-import io.pockethive.swarmcontroller.runtime.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.lifecycle.RemoveError;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
@@ -131,7 +131,7 @@ public class SwarmSignalListener {
     this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
     this.ioStates = new SwarmIoStateAggregator();
     this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
-    this.journal = journal != null ? journal : SwarmJournal.noop();
+    this.journal = Objects.requireNonNull(journal, "journal");
     this.journalErrors = new SwarmControlPlaneJournalErrors(this.journal, swarmId, role, instanceId, "swarm-signal-listener");
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
     this.baseRuntimeMeta = buildBaseRuntimeMeta();
@@ -698,7 +698,6 @@ public class SwarmSignalListener {
           TerminalStatus.FAILED,
           true,
           List.of(),
-          List.of(),
           List.of(new RemoveError(
               failure.getClass().getSimpleName(),
               Objects.toString(failure.getMessage(), failure.getClass().getName()),
@@ -958,10 +957,10 @@ public class SwarmSignalListener {
       return signal;
     }
     return switch (signal) {
-      case "swarm-start" -> "start";
-      case "swarm-stop" -> "stop";
-      case "swarm-remove" -> "remove";
-      case "config-update" -> "config-update";
+      case ControlPlaneSignals.SWARM_START -> "start";
+      case ControlPlaneSignals.SWARM_STOP -> "stop";
+      case ControlPlaneSignals.SWARM_REMOVE -> "remove";
+      case ControlPlaneSignals.CONFIG_UPDATE -> ControlPlaneSignals.CONFIG_UPDATE;
       default -> signal;
     };
   }
@@ -1381,7 +1380,7 @@ public class SwarmSignalListener {
 
   private static NetworkMode parseNetworkMode(String value) {
     if (value == null || value.isBlank()) {
-      return NetworkMode.DIRECT;
+      throw new IllegalArgumentException("POCKETHIVE_NETWORK_MODE/networkMode must be provided");
     }
     return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
   }
@@ -1453,7 +1452,10 @@ public class SwarmSignalListener {
     }
     String previous = this.lastHealthState;
     this.lastHealthState = state;
-    if (previous != null && previous.equals(state)) {
+    if (previous == null) {
+      return;
+    }
+    if (previous.equals(state)) {
       return;
     }
     boolean prevDegraded = "Degraded".equals(previous) || "Unknown".equals(previous);

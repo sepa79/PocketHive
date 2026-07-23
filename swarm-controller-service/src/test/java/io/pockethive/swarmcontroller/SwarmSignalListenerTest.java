@@ -13,12 +13,13 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.TrafficPolicy;
-import io.pockethive.swarmcontroller.runtime.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
 import io.pockethive.swarm.model.lifecycle.RemoveResult;
@@ -82,13 +83,24 @@ class SwarmSignalListenerTest {
       String instanceId,
       ObjectMapper mapper,
       FilesystemSwarmRemoveStore removeStore) {
+    return newListener(lifecycle, rabbit, instanceId, mapper, removeStore,
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
+  }
+
+  private SwarmSignalListener newListener(
+      SwarmLifecycle lifecycle,
+      RabbitTemplate rabbit,
+      String instanceId,
+      ObjectMapper mapper,
+      FilesystemSwarmRemoveStore removeStore,
+      io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
     SwarmSignalListener listener = new SwarmSignalListener(
         lifecycle,
         rabbit,
         instanceId,
         mapper,
         SwarmControllerTestProperties.defaults(),
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(),
+        journal,
         "run-1",
         startupArtifactLoader(),
         removeStore);
@@ -126,6 +138,17 @@ class SwarmSignalListenerTest {
   @BeforeEach
   void setup() {
     stubLifecycleDefaults();
+  }
+
+  @Test
+  void initialHealthObservationIsNotJournaledAsATransition() {
+    RecordingJournal journal = new RecordingJournal();
+
+    newListener(lifecycle, rabbit, "controller-1", mapper, removeStore(), journal);
+
+    assertThat(journal.entries).noneMatch(entry ->
+        "swarm-health-degraded".equals(entry.type())
+            || "swarm-health-recovered".equals(entry.type()));
   }
 
   private void markInitialized(SwarmSignalListener listener) {

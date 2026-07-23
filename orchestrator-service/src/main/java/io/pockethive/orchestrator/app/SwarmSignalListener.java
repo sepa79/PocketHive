@@ -7,7 +7,9 @@ import io.pockethive.control.CommandResult;
 import io.pockethive.control.JournalEvent;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.ControlPlaneOperations;
+import io.pockethive.controlplane.ControlPlaneRoles;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
@@ -21,7 +23,8 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.orchestrator.runtime.RuntimeRemovalPostconditionVerifier;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
@@ -56,7 +59,9 @@ import org.springframework.stereotype.Component;
 public class SwarmSignalListener {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
-  private static final String ROLE = "orchestrator";
+  private static final String ROLE = ControlPlaneRoles.ORCHESTRATOR;
+  private static final String CONTROLLER_ROLE = ControlPlaneRoles.SWARM_CONTROLLER;
+  private static final String OPERATION_TERMINAL_KIND = "operation-terminal";
   private static final long STATUS_INTERVAL_MS = 5_000L;
 
   private final SwarmStore store;
@@ -69,6 +74,7 @@ public class SwarmSignalListener {
   private final SwarmOperationCoordinator operations;
   private final OperationOutcomePublisher outcomes;
   private final FilesystemSwarmRemoveStore removeStore;
+  private final RuntimeRemovalPostconditionVerifier removalVerifier;
   private final String instanceId;
   private final String controlQueue;
   private final List<String> controlRoutes;
@@ -85,6 +91,7 @@ public class SwarmSignalListener {
       SwarmOperationCoordinator operations,
       OperationOutcomePublisher outcomes,
       FilesystemSwarmRemoveStore removeStore,
+      RuntimeRemovalPostconditionVerifier removalVerifier,
       @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
       @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
       @Qualifier("managerControlQueueName") String controlQueue) {
@@ -97,6 +104,7 @@ public class SwarmSignalListener {
     this.operations = Objects.requireNonNull(operations, "operations");
     this.outcomes = Objects.requireNonNull(outcomes, "outcomes");
     this.removeStore = Objects.requireNonNull(removeStore, "removeStore");
+    this.removalVerifier = Objects.requireNonNull(removalVerifier, "removalVerifier");
     this.instanceId = Objects.requireNonNull(identity, "identity").instanceId();
     this.controlQueue = requireText("controlQueue", controlQueue);
     this.controlRoutes = resolveControlRoutes(Objects.requireNonNull(descriptor, "descriptor").routes());
@@ -179,7 +187,8 @@ public class SwarmSignalListener {
 
   void handleControllerStatusFull(String routingKey, JsonNode statusEnvelope) {
     RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
-    if (key == null || !"metric.status-full".equals(key.type()) || !"swarm-controller".equals(key.role())) {
+    if (key == null || !ControlPlaneEventTypes.METRIC_STATUS_FULL.equals(key.type())
+        || !CONTROLLER_ROLE.equals(key.role())) {
       return;
     }
     completePendingConfigUpdates(key.swarmId());
@@ -205,7 +214,7 @@ public class SwarmSignalListener {
         && Objects.equals(expectedDigest, reportedDigest);
     TerminalStatus status = ready ? TerminalStatus.SUCCEEDED : TerminalStatus.FAILED;
     Map<String, Object> terminalContext = new LinkedHashMap<>();
-    terminalContext.put("target", new Target("swarm-controller", key.instance()));
+    terminalContext.put("target", new Target(CONTROLLER_ROLE, key.instance()));
     terminalContext.put("runtimeIntent", "PRESENT");
     terminalContext.put("controllerState", controllerState.name());
     terminalContext.put("workloadState", context.path("workloadState").asText("UNKNOWN"));
@@ -285,7 +294,7 @@ public class SwarmSignalListener {
       return true;
     }
     boolean requestedEnabled = enabledExpectation.requestedEnabled();
-    if ("swarm-controller".equals(operation.target().role())
+    if (CONTROLLER_ROLE.equals(operation.target().role())
         && operation.target().instance().equals(swarm.getInstanceId())) {
       Instant observedAt = swarm.getControllerStatusReceivedAt();
       return observedAt != null && !observedAt.isBefore(operation.dispatchedAt())
@@ -334,11 +343,6 @@ public class SwarmSignalListener {
         .filter(SwarmOperation::terminal)
         .filter(operation -> !outcomes.isPublished(operation.correlationId()))
         .forEach(operation -> outcomes.publish(operation, runtimeMeta(operation.swarmId())));
-    operations.operations().stream()
-        .filter(operation -> operation.type() == OperationType.REMOVE)
-        .filter(operation -> operation.state() == OperationState.SUCCEEDED)
-        .filter(operation -> outcomes.isPublished(operation.correlationId()))
-        .forEach(this::finalizeSuccessfulRemove);
   }
 
   private void checkRemoveResults() {
@@ -390,25 +394,68 @@ public class SwarmSignalListener {
       throw new IllegalArgumentException("Remove result does not match the active operation identity");
     }
     Map<String, Object> runtime = runtimeMeta(operation.swarmId());
-    List<RemoveResource> removed = new ArrayList<>(result.removedResources());
-    List<RemoveResource> remaining = new ArrayList<>(result.remainingResources());
+    List<RemoveResource> removed = new ArrayList<>();
+    List<RemoveResource> remaining = new ArrayList<>();
     List<RemoveError> errors = new ArrayList<>(result.errors());
     TerminalStatus status = result.status();
+    boolean retryable = result.retryable();
     if (status == TerminalStatus.SUCCEEDED) {
       var controllerRemoval = lifecycle.removeControllerRuntime(operation.swarmId());
-      removed.addAll(controllerRemoval.removedResources());
-      remaining.addAll(controllerRemoval.remainingResources());
+      remaining.addAll(controllerRemoval.failedResources());
       errors.addAll(controllerRemoval.errors());
       if (!controllerRemoval.succeeded()) {
         status = TerminalStatus.FAILED;
+        retryable = true;
+      } else {
+        List<RemoveResource> targets = new ArrayList<>(result.targetResources());
+        targets.addAll(controllerRemoval.targetResources());
+        var verification = removalVerifier.verifyAbsent(targets);
+        removed.addAll(verification.removedResources());
+        remaining.addAll(verification.remainingResources());
+        errors.addAll(verification.errors());
+        if (!verification.succeeded()) {
+          status = TerminalStatus.FAILED;
+          retryable = true;
+        } else {
+          CleanupResult cleanup = removeRuntimeDirectoryAndRegistry(operation.swarmId());
+          removed.addAll(cleanup.removedResources());
+          remaining.addAll(cleanup.remainingResources());
+          errors.addAll(cleanup.errors());
+          if (!cleanup.succeeded()) {
+            status = TerminalStatus.FAILED;
+            retryable = true;
+          }
+        }
+      }
+    } else {
+      remaining.addAll(result.targetResources());
+    }
+    Map<String, Object> context = removeContext(result.controllerInstance(), removed, remaining, errors);
+    TerminalResult terminal = new TerminalResult(status, retryable, context);
+    if (status == TerminalStatus.SUCCEEDED) {
+      RemoveResource terminalEvidence = new RemoveResource(
+          io.pockethive.swarm.model.lifecycle.RemoveResourceType.TERMINAL_EVIDENCE,
+          operation.correlationId());
+      removed.add(terminalEvidence);
+      context = removeContext(result.controllerInstance(), removed, remaining, errors);
+      terminal = new TerminalResult(status, retryable, context);
+      try {
+        hiveJournal.appendDurably(result.runId(), HiveJournalEntry.info(
+            operation.swarmId(), HiveJournal.Direction.LOCAL, OPERATION_TERMINAL_KIND,
+            ControlPlaneOperations.signalForType(operation.type()), ROLE,
+            new ControlScope(operation.swarmId(), ROLE, instanceId),
+            operation.correlationId(), operation.idempotencyKey(), null,
+            Map.of("status", status.wireValue(), "terminal", context), null, null));
+      } catch (RuntimeException failure) {
+        removed.remove(terminalEvidence);
+        remaining.add(terminalEvidence);
+        errors.add(removeError(failure, terminalEvidence));
+        status = TerminalStatus.FAILED;
+        retryable = true;
+        context = removeContext(result.controllerInstance(), removed, remaining, errors);
+        terminal = new TerminalResult(status, retryable, context);
       }
     }
-    Map<String, Object> context = new LinkedHashMap<>();
-    context.put("target", new Target("swarm-controller", result.controllerInstance()));
-    context.put("removedResources", List.copyOf(removed));
-    context.put("remainingResources", List.copyOf(remaining));
-    context.put("errors", List.copyOf(errors));
-    TerminalResult terminal = new TerminalResult(status, result.retryable(), context);
     OperationCompletion completion = operations.recordResult(
         operation.swarmId(), OperationType.REMOVE, operation.target(),
         operation.correlationId(), operation.idempotencyKey(),
@@ -416,20 +463,73 @@ public class SwarmSignalListener {
     if (completion == OperationCompletion.COMPLETED) {
       SwarmOperation completed = operations.findByCorrelation(operation.correlationId()).orElseThrow();
       outcomes.publish(completed, runtime);
-      finalizeSuccessfulRemove(completed);
     }
   }
 
-  private void finalizeSuccessfulRemove(SwarmOperation operation) {
-    if (store.find(operation.swarmId()).isEmpty()) {
-      return;
-    }
+  private static Map<String, Object> removeContext(
+      String controllerInstance,
+      List<RemoveResource> removed,
+      List<RemoveResource> remaining,
+      List<RemoveError> errors) {
+    Map<String, Object> context = new LinkedHashMap<>();
+    context.put("target", new Target(CONTROLLER_ROLE, controllerInstance));
+    context.put("removedResources", List.copyOf(removed));
+    context.put("remainingResources", List.copyOf(remaining));
+    context.put("errors", List.copyOf(errors));
+    return context;
+  }
+
+  private CleanupResult removeRuntimeDirectoryAndRegistry(String swarmId) {
+    RemoveResource runtimeDirectory = new RemoveResource(
+        io.pockethive.swarm.model.lifecycle.RemoveResourceType.RUNTIME_DIRECTORY,
+        swarmId);
+    RemoveResource registryEntry = new RemoveResource(
+        io.pockethive.swarm.model.lifecycle.RemoveResourceType.REGISTRY_ENTRY,
+        swarmId);
+    List<RemoveResource> removed = new ArrayList<>();
+    List<RemoveResource> remaining = new ArrayList<>();
+    List<RemoveError> errors = new ArrayList<>();
     try {
-      removeStore.deleteSwarmRuntime(operation.swarmId());
-      store.remove(operation.swarmId());
+      removeStore.deleteSwarmRuntime(swarmId);
+      if (removeStore.swarmRuntimeExists(swarmId)) {
+        throw new IllegalStateException("Runtime directory still exists after deletion");
+      }
+      removed.add(runtimeDirectory);
     } catch (RuntimeException failure) {
-      log.warn("Remove operation succeeded but runtime artifact cleanup is still pending swarm={} correlation={}",
-          operation.swarmId(), operation.correlationId(), failure);
+      remaining.add(runtimeDirectory);
+      errors.add(removeError(failure, runtimeDirectory));
+      return new CleanupResult(removed, remaining, errors);
+    }
+    store.remove(swarmId);
+    if (store.find(swarmId).isPresent()) {
+      IllegalStateException failure = new IllegalStateException("Swarm registry entry still exists after removal");
+      remaining.add(registryEntry);
+      errors.add(removeError(failure, registryEntry));
+    } else {
+      removed.add(registryEntry);
+    }
+    return new CleanupResult(removed, remaining, errors);
+  }
+
+  private static RemoveError removeError(RuntimeException failure, RemoveResource resource) {
+    return new RemoveError(
+        failure.getClass().getSimpleName(),
+        Objects.toString(failure.getMessage(), failure.getClass().getName()),
+        resource);
+  }
+
+  private record CleanupResult(
+      List<RemoveResource> removedResources,
+      List<RemoveResource> remainingResources,
+      List<RemoveError> errors) {
+    private CleanupResult {
+      removedResources = List.copyOf(removedResources);
+      remainingResources = List.copyOf(remainingResources);
+      errors = List.copyOf(errors);
+    }
+
+    private boolean succeeded() {
+      return remainingResources.isEmpty() && errors.isEmpty();
     }
   }
 
@@ -474,7 +574,7 @@ public class SwarmSignalListener {
     if (swarm == null) {
       return null;
     }
-    if ("swarm-controller".equals(target.role()) && target.instance().equals(swarm.getInstanceId())) {
+    if (CONTROLLER_ROLE.equals(target.role()) && target.instance().equals(swarm.getInstanceId())) {
       return switch (swarm.getWorkloadState()) {
         case RUNNING, STARTING -> true;
         case STOPPED, STOPPING -> false;
@@ -510,7 +610,7 @@ public class SwarmSignalListener {
       RoutingKey key, String routingKey, CommandResult result, OperationCompletion completion) {
     try {
       hiveJournal.append(HiveJournalEntry.info(
-          key.swarmId(), HiveJournal.Direction.IN, "result", result.type(), result.origin(), result.scope(),
+          key.swarmId(), HiveJournal.Direction.IN, CommandResult.KIND, result.type(), result.origin(), result.scope(),
           result.correlationId(), result.idempotencyKey(), routingKey,
           Map.of("status", result.data().status().wireValue(), "completion", completion.name()),
           null, null));

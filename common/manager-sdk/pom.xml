@@ -9,7 +9,7 @@
   </parent>
   <artifactId>manager-sdk</artifactId>
   <name>PocketHive Manager SDK</name>
-  <description>Runtime core, guards, scenarios, and ports for PocketHive managers (e.g. Swarm Controller).</description>
+  <description>Scenario, guard, and infrastructure ports used by PocketHive managers.</description>
   <properties>
     <java.version>21</java.version>
     <jackson.version>2.21.3</jackson.version>

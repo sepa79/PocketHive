@@ -68,7 +68,7 @@ const rejectedOutcome = lifecycle.findLifecycleOutcome({
       kind: "outcome",
       type: "swarm-start",
       correlationId: "old-attempt",
-      data: { status: "Running" },
+      data: { status: "Succeeded" },
     },
     {
       timestamp: "2026-05-27T10:00:00.000Z",
@@ -76,7 +76,7 @@ const rejectedOutcome = lifecycle.findLifecycleOutcome({
       type: "swarm-start",
       correlationId: "attempt-1",
       data: {
-        status: "NotReady",
+        status: "Rejected",
         context: {
           initialized: true,
           ready: false,
@@ -87,11 +87,14 @@ const rejectedOutcome = lifecycle.findLifecycleOutcome({
     },
   ],
 }, "start", "attempt-1");
-assert.equal(rejectedOutcome?.status, "NotReady");
+assert.equal(rejectedOutcome?.status, "Rejected");
 assert.equal(
   lifecycle.formatLifecycleOutcome(rejectedOutcome),
-  "NotReady (initialized=true, ready=false, pendingConfigUpdates=true)"
+  "Rejected (initialized=true, ready=false, pendingConfigUpdates=true)"
 );
+assert.throws(() => lifecycle.findLifecycleOutcome({
+  items: [{ kind: "outcome", type: "swarm-stop", data: { status: "TIMEDOUT" } }],
+}, "stop"), /TerminalStatus/);
 
 assert.equal(
   lifecycle.formatReadyResult(lifecycle.summarizeReadyResult({

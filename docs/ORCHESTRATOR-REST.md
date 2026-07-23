@@ -428,7 +428,7 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 **Response (200)**
 ```json
 {
-  "runtimeDebugContractVersion": "3",
+  "runtimeDebugContractVersion": "4",
   "cleanupContractVersion": "3",
   "runtimeDebugReadsBackedByOrchestrator": true,
   "cleanupPlanHasExecutionRisk": true,
@@ -518,7 +518,25 @@ worker or manager. Deployment-wide service versions are not used.
 Returns a bounded inspect summary for one worker or manager runtime. Raw bind
 host paths and environment variables are not returned.
 
-#### 2.9.6 Rabbit topology snapshot
+#### 2.9.6 Runtime ownership manifest
+`POST /api/runtime/debug/manifest`
+
+Returns the canonical runtime ownership manifest selected by exact `swarmId`
+and optional `runId`. Orchestrator owns manifest storage, selection and JSON
+shape; clients must not read, locate or parse manifest files themselves. A
+missing manifest returns `404 Not Found`.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional"
+}
+```
+
+**Response (200)** is the canonical `RuntimeOwnershipManifest` object.
+
+#### 2.9.7 Rabbit topology snapshot
 `POST /api/runtime/debug/rabbit/topology`
 
 Reads exact RabbitMQ topology for one PocketHive swarm through Orchestrator.
@@ -680,9 +698,13 @@ Deletes the tap queue and returns the last known tap state.
   "autoPullImages": true,
   "sutId": "optional; bundle-local SUT id",
   "variablesProfileId": "optional; required when variables.yaml defines profiles",
+  "networkMode": "DIRECT",
+  "networkProfileId": null,
   "notes": "optional"
 }
 ```
+
+`networkMode` is required and must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
 
 **Response (202)**
 ```json
@@ -758,7 +780,7 @@ Completion requires fresh post-dispatch status from every expected worker with `
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching immutable `result.json`; only then may the Orchestrator publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>` and tear down the Controller. Missing or partial cleanup evidence is failure/timeout, never success.
+The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator then removes the Controller runtime, verifies every compute and RabbitMQ target through the canonical observation ports, deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
 
 **Response (202)**
 ```json

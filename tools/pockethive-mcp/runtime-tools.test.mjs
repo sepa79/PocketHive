@@ -509,11 +509,18 @@ test("runtime context reads Rabbit topology from Orchestrator", async () => {
     runId: "run-1",
     includeRabbit: true
   }, {
-    manifestRoot: "__missing_manifest_root__",
     httpJson: async (path, options) => {
       calls.push({ path, options });
       if (path === "/api/runtime/debug/resources/list") {
         return { workers: [], managers: [], blocked: [] };
+      }
+      if (path === "/api/runtime/debug/manifest") {
+        return {
+          swarmId: "swarm-1",
+          runId: "run-1",
+          runtimeObjects: [],
+          rabbit: { controlQueues: [], workQueues: [], exchanges: [] }
+        };
       }
       if (path === "/api/runtime/debug/rabbit/topology") {
         return {
@@ -596,7 +603,7 @@ function runtimeManifest(overrides = {}) {
 
 function runtimeCapabilities(overrides = {}) {
   return {
-    runtimeDebugContractVersion: "3",
+    runtimeDebugContractVersion: "4",
     cleanupContractVersion: "3",
     runtimeDebugReadsBackedByOrchestrator: true,
     cleanupPlanHasExecutionRisk: true,

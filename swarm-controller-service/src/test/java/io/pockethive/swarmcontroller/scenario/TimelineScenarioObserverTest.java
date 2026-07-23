@@ -8,8 +8,8 @@ import static org.mockito.Mockito.verify;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.manager.runtime.ConfigFanout;
-import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerMetrics;
+import io.pockethive.manager.scenario.ScenarioLifecyclePort;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.ScenarioContext;
@@ -46,7 +46,7 @@ class TimelineScenarioObserverTest {
         """;
     scenario.applyPlan(planJson);
 
-    ManagerLifecycle lifecycle = mock(ManagerLifecycle.class);
+    ScenarioLifecyclePort lifecycle = mock(ScenarioLifecyclePort.class);
     ConfigFanout configFanout = mock(ConfigFanout.class);
     ScenarioContext ctx = new ScenarioContext("sw1", lifecycle, configFanout);
     ManagerRuntimeView view = new ManagerRuntimeView(
@@ -84,7 +84,7 @@ class TimelineScenarioObserverTest {
         """;
     scenario.applyPlan(planJson);
 
-    ManagerLifecycle lifecycle = mock(ManagerLifecycle.class);
+    ScenarioLifecyclePort lifecycle = mock(ScenarioLifecyclePort.class);
     ConfigFanout configFanout = mock(ConfigFanout.class);
     ScenarioContext ctx = new ScenarioContext("sw1", lifecycle, configFanout);
     ManagerRuntimeView view = new ManagerRuntimeView(
@@ -95,6 +95,30 @@ class TimelineScenarioObserverTest {
     scenario.onTick(view, ctx);
     scenario.onTick(view, ctx);
 
+    verify(lifecycle).enableAll();
     verify(observer, times(1)).onPlanCompleted(null, null);
+  }
+
+  @Test
+  void swarmStopUsesTheCommandOnlyLifecyclePort() {
+    ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    TimelineScenario scenario = new TimelineScenario("test", mapper);
+    scenario.applyPlan("""
+        {
+          "swarm": [
+            {"stepId": "s-1", "time": "PT0S", "type": "stop"}
+          ]
+        }
+        """);
+    ScenarioLifecyclePort lifecycle = mock(ScenarioLifecyclePort.class);
+    ScenarioContext context = new ScenarioContext("sw1", lifecycle, mock(ConfigFanout.class));
+    ManagerRuntimeView view = new ManagerRuntimeView(
+        WorkloadState.RUNNING,
+        new ManagerMetrics(0, 0, 0, 0, 0),
+        Map.of());
+
+    scenario.onTick(view, context);
+
+    verify(lifecycle).setWorkEnabled(false);
   }
 }

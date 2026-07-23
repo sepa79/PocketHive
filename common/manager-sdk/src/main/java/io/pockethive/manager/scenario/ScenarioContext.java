@@ -1,7 +1,6 @@
 package io.pockethive.manager.scenario;
 
 import io.pockethive.manager.runtime.ConfigFanout;
-import io.pockethive.manager.runtime.ManagerLifecycle;
 import java.util.Objects;
 
 /**
@@ -11,15 +10,15 @@ import java.util.Objects;
 public final class ScenarioContext {
 
   private final String swarmId;
-  private final ManagerLifecycle manager;
+  private final ScenarioLifecyclePort lifecycle;
   private final ConfigFanout configFanout;
 
-  public ScenarioContext(String swarmId, ManagerLifecycle manager, ConfigFanout configFanout) {
+  public ScenarioContext(String swarmId, ScenarioLifecyclePort lifecycle, ConfigFanout configFanout) {
     if (swarmId == null || swarmId.isBlank()) {
       throw new IllegalArgumentException("swarmId must not be null or blank");
     }
     this.swarmId = swarmId.trim();
-    this.manager = Objects.requireNonNull(manager, "manager");
+    this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
   }
 
@@ -30,8 +29,8 @@ public final class ScenarioContext {
   /**
    * Access to the manager lifecycle for failure signalling or status checks.
    */
-  public ManagerLifecycle manager() {
-    return manager;
+  public ScenarioLifecyclePort lifecycle() {
+    return lifecycle;
   }
 
   /**

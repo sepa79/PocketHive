@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -63,6 +65,7 @@ class ComponentControllerTest {
 	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
+                new ControlResponseFactory(controlPlaneProperties()),
                 endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
@@ -97,6 +100,7 @@ class ComponentControllerTest {
 	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
+                new ControlResponseFactory(controlPlaneProperties()),
                 endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
@@ -118,6 +122,7 @@ class ComponentControllerTest {
 	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
+                new ControlResponseFactory(controlPlaneProperties()),
                 endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
@@ -152,6 +157,7 @@ class ComponentControllerTest {
             operationDispatch(store),
             store,
             controlPlaneProperties(),
+            new ControlResponseFactory(controlPlaneProperties()),
             endpointAuthorization(store));
 
         try {
@@ -180,7 +186,7 @@ class ComponentControllerTest {
                                              String bundlePath,
                                              String folderPath) {
         SwarmStore store = new SwarmStore();
-        Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", runId);
+        Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", runId, NetworkMode.DIRECT);
         swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", java.util.List.of(), bundlePath, folderPath));
         store.register(swarm);
         var status = mapper.createObjectNode();

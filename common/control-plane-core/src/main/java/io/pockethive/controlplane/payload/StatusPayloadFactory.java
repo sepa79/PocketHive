@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.payload;
 
+import io.pockethive.controlplane.ControlPlaneEventTypes;
+
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import java.util.Objects;
 import java.util.function.Consumer;
@@ -23,11 +25,11 @@ public final class StatusPayloadFactory {
     }
 
     public String snapshot(Consumer<StatusEnvelopeBuilder> customiser) {
-        return build("status-full", customiser);
+        return build(ControlPlaneEventTypes.STATUS_FULL, customiser);
     }
 
     public String delta(Consumer<StatusEnvelopeBuilder> customiser) {
-        return build("status-delta", customiser);
+        return build(ControlPlaneEventTypes.STATUS_DELTA, customiser);
     }
 
     private String build(String kind, Consumer<StatusEnvelopeBuilder> customiser) {

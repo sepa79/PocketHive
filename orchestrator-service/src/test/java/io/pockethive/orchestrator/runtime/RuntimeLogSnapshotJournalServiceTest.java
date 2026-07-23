@@ -191,5 +191,10 @@ class RuntimeLogSnapshotJournalServiceTest {
         public void append(HiveJournalEntry entry) {
             entries.add(entry);
         }
+
+        @Override
+        public void appendDurably(String runId, HiveJournalEntry entry) {
+            entries.add(entry);
+        }
     }
 }

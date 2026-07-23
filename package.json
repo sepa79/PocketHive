@@ -5,6 +5,8 @@
   "description": "Development tooling for PocketHive",
   "scripts": {
     "build": "echo \"no build step\"",
+    "contracts:generate": "node scripts/generate-swarm-lifecycle-contract.mjs",
+    "contracts:check": "node scripts/generate-swarm-lifecycle-contract.mjs --check",
     "lint": "npm run lint --prefix ui-v2",
     "mcp:agentic-evals": "npm run acceptance:agentic --prefix tools/pockethive-mcp",
     "mcp:doctor": "npm --prefix tools/pockethive-mcp run doctor --",

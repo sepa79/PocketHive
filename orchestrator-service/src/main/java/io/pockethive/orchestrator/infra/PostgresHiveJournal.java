@@ -86,6 +86,12 @@ public class PostgresHiveJournal implements HiveJournal {
     writer.append(entry);
   }
 
+  @Override
+  public void appendDurably(String runId, HiveJournalEntry entry) {
+    Objects.requireNonNull(entry, "entry");
+    writer.insertDurably(toRecord(entry, requireNonBlank(runId, "runId"), true));
+  }
+
   @Scheduled(fixedDelay = 200L)
   public void flush() {
     writer.flush();
@@ -126,7 +132,10 @@ public class PostgresHiveJournal implements HiveJournal {
   }
 
   private PostgresJournalRecord toRecord(HiveJournalEntry entry) {
-    String runId = resolveRunId(entry);
+    return toRecord(entry, resolveRunId(entry), false);
+  }
+
+  private PostgresJournalRecord toRecord(HiveJournalEntry entry, String runId, boolean required) {
     ControlScope scope = entry.scope();
     return new PostgresJournalRecord(
         entry.timestamp() != null ? entry.timestamp() : Instant.now(),
@@ -143,18 +152,28 @@ public class PostgresHiveJournal implements HiveJournal {
         entry.correlationId(),
         entry.idempotencyKey(),
         entry.routingKey(),
-        toJson(entry.data()),
-        toJson(entry.raw()),
-        toJson(entry.extra()));
+        toJson(entry.data(), required),
+        toJson(entry.raw(), required),
+        toJson(entry.extra(), required));
   }
 
-  private String toJson(Map<String, Object> value) {
+  private static String requireNonBlank(String value, String name) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(name + " must not be blank");
+    }
+    return value.trim();
+  }
+
+  private String toJson(Map<String, Object> value, boolean required) {
     if (value == null) {
       return null;
     }
     try {
       return mapper.writeValueAsString(value);
     } catch (Exception e) {
+      if (required) {
+        throw new IllegalStateException("Unable to serialize required hive journal evidence", e);
+      }
       return null;
     }
   }

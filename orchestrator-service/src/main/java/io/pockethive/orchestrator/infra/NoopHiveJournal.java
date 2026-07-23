@@ -11,5 +11,9 @@ public class NoopHiveJournal implements HiveJournal {
   public void append(HiveJournalEntry entry) {
     // intentionally no-op
   }
-}
 
+  @Override
+  public void appendDurably(String runId, HiveJournalEntry entry) {
+    throw new IllegalStateException("Durable hive journal is not configured");
+  }
+}

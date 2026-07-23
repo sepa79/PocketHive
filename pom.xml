@@ -26,6 +26,7 @@
     <module>common/templating</module>
     <module>common/auth-client</module>
     <module>common/control-plane-core</module>
+    <module>common/control-plane-filesystem</module>
     <module>common/control-plane-spring</module>
     <module>common/manager-sdk</module>
     <module>common/worker-sdk</module>
@@ -187,6 +188,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>
@@ -197,6 +199,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>

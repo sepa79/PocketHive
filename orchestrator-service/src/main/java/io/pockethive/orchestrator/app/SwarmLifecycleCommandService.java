@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneOperations;
+import io.pockethive.controlplane.ControlPlaneRoles;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlSignals;
@@ -15,8 +16,9 @@ import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
+import io.pockethive.swarm.model.lifecycle.OperationType;
 import io.pockethive.swarm.model.lifecycle.RuntimeIntent;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.WorkloadIntent;
@@ -53,40 +55,40 @@ public final class SwarmLifecycleCommandService {
   }
 
   public SwarmOperationCoordinator.Reservation dispatch(
-      String signal,
+      OperationType operationType,
       String swarmId,
       String idempotencyKey,
       Duration timeout) {
-    if (!ControlPlaneSignals.SWARM_START.equals(signal)
-        && !ControlPlaneSignals.SWARM_STOP.equals(signal)
-        && !ControlPlaneSignals.SWARM_REMOVE.equals(signal)) {
-      throw new IllegalArgumentException("Unsupported controller lifecycle signal: " + signal);
+    if (operationType != OperationType.START
+        && operationType != OperationType.STOP
+        && operationType != OperationType.REMOVE) {
+      throw new IllegalArgumentException("Unsupported controller lifecycle operation: " + operationType);
     }
     Swarm swarm = swarms.find(swarmId)
         .orElseThrow(() -> new IllegalStateException("Swarm " + swarmId + " is not registered"));
     String controllerInstance = requireText("controller instance", swarm.getInstanceId());
-    Target operationTarget = new Target("swarm-controller", controllerInstance);
+    Target operationTarget = new Target(ControlPlaneRoles.SWARM_CONTROLLER, controllerInstance);
     return operations.dispatch(
         swarmId,
-        ControlPlaneOperations.typeForSignal(signal),
+        operationType,
         operationTarget,
         idempotencyKey,
         timeout,
         correlationId -> execute(
-            signal, swarm, operationTarget, correlationId, idempotencyKey, timeout));
+            operationType, swarm, operationTarget, correlationId, idempotencyKey, timeout));
   }
 
   private void execute(
-      String signal,
+      OperationType operationType,
       Swarm swarm,
       Target operationTarget,
       String correlationId,
       String idempotencyKey,
       Duration timeout) {
-    switch (signal) {
-      case ControlPlaneSignals.SWARM_START -> swarm.requestWorkload(WorkloadIntent.RUNNING);
-      case ControlPlaneSignals.SWARM_STOP -> swarm.requestWorkload(WorkloadIntent.STOPPED);
-      case ControlPlaneSignals.SWARM_REMOVE -> {
+    switch (operationType) {
+      case START -> swarm.requestWorkload(WorkloadIntent.RUNNING);
+      case STOP -> swarm.requestWorkload(WorkloadIntent.STOPPED);
+      case REMOVE -> {
         swarm.requestRuntime(RuntimeIntent.ABSENT);
         removeStore.saveRequest(RemoveRequest.create(
             swarm.getId(),
@@ -96,18 +98,19 @@ public final class SwarmLifecycleCommandService {
             idempotencyKey,
             Instant.now()));
       }
-      default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
+      default -> throw new IllegalArgumentException("Unsupported lifecycle operation: " + operationType);
     }
+    String signal = ControlPlaneOperations.signalForType(operationType);
     ControlScope scope = ControlScope.forInstance(
         swarm.getId(), operationTarget.role(), operationTarget.instance());
-    ControlSignal payload = switch (signal) {
-      case ControlPlaneSignals.SWARM_START ->
+    ControlSignal payload = switch (operationType) {
+      case START ->
           ControlSignals.swarmStart(originInstanceId, scope, correlationId, idempotencyKey);
-      case ControlPlaneSignals.SWARM_STOP ->
+      case STOP ->
           ControlSignals.swarmStop(originInstanceId, scope, correlationId, idempotencyKey);
-      case ControlPlaneSignals.SWARM_REMOVE ->
+      case REMOVE ->
           ControlSignals.swarmRemove(originInstanceId, scope, correlationId, idempotencyKey);
-      default -> throw new IllegalArgumentException("Unsupported lifecycle signal: " + signal);
+      default -> throw new IllegalArgumentException("Unsupported lifecycle operation: " + operationType);
     };
     String routingKey = ControlPlaneRouting.signal(
         signal, swarm.getId(), operationTarget.role(), operationTarget.instance());
@@ -132,9 +135,9 @@ public final class SwarmLifecycleCommandService {
       journal.append(HiveJournalEntry.info(
           swarmId,
           HiveJournal.Direction.OUT,
-          "signal",
+          ControlSignal.KIND,
           signal,
-          "orchestrator",
+          ControlPlaneRoles.ORCHESTRATOR,
           target,
           correlationId,
           idempotencyKey,

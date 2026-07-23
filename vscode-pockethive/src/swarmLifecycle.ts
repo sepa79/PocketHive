@@ -1,3 +1,14 @@
+import {
+  parseControllerState,
+  parseLifecycleAxes,
+  parseTerminalStatus,
+  parseWorkloadState,
+  type ControllerState,
+  type LifecycleAxes,
+  type TerminalStatus,
+  type WorkloadState,
+} from '@pockethive/swarm-lifecycle-contract';
+
 export type SwarmLifecycleAction = 'start' | 'stop';
 
 const OUTCOME_TYPE_BY_ACTION: Record<SwarmLifecycleAction, string> = {
@@ -5,16 +16,11 @@ const OUTCOME_TYPE_BY_ACTION: Record<SwarmLifecycleAction, string> = {
   stop: 'swarm-stop',
 };
 
-export type SwarmLifecycleState = {
-  controllerState: string;
-  workloadState: string;
-  health: string;
-  observationStale: boolean;
-};
+export type SwarmLifecycleState = LifecycleAxes;
 
 export type SwarmLifecycleOutcome = {
   type: string;
-  status: string;
+  status: TerminalStatus;
   timestamp?: string;
   correlationId?: string;
   retryable?: boolean;
@@ -23,21 +29,12 @@ export type SwarmLifecycleOutcome = {
 
 export type SwarmReadyResult = {
   ready: boolean;
-  controllerState: string;
-  workloadState: string;
+  controllerState: ControllerState;
+  workloadState: WorkloadState;
 };
 
 export function summarizeSwarmLifecycle(detail: unknown): SwarmLifecycleState {
-  if (!detail || typeof detail !== 'object') {
-    throw new Error('Swarm state must be an object');
-  }
-  const record = detail as Record<string, unknown>;
-  return {
-    controllerState: requiredString(record.controllerState, 'controllerState'),
-    workloadState: requiredString(record.workloadState, 'workloadState'),
-    health: requiredString(record.health, 'health'),
-    observationStale: requiredBoolean(record.observationStale, 'observationStale'),
-  };
+  return parseLifecycleAxes(detail);
 }
 
 export function isExpectedLifecycleState(action: SwarmLifecycleAction, state: SwarmLifecycleState): boolean {
@@ -87,7 +84,7 @@ export function findLifecycleOutcome(
 }
 
 export function formatLifecycleOutcome(outcome: SwarmLifecycleOutcome): string {
-  const parts = [outcome.status];
+  const parts: string[] = [outcome.status];
   const context = formatLifecycleContext(outcome.context);
   if (context) parts.push(`(${context})`);
   if (typeof outcome.retryable === 'boolean') parts.push(outcome.retryable ? 'retryable' : 'not retryable');
@@ -99,8 +96,8 @@ export function summarizeReadyResult(result: unknown): SwarmReadyResult {
   if (!record) throw new Error('Swarm readiness result must be an object');
   return {
     ready: requiredBoolean(record.ready, 'ready'),
-    controllerState: requiredString(record.controllerState, 'controllerState'),
-    workloadState: requiredString(record.workloadState, 'workloadState'),
+    controllerState: parseControllerState(record.controllerState),
+    workloadState: parseWorkloadState(record.workloadState),
   };
 }
 
@@ -127,8 +124,8 @@ function outcomeFromEntry(entry: Record<string, unknown>): SwarmLifecycleOutcome
   const data = objectValue(entry.data) ?? objectValue(envelope?.data);
   const kind = stringValue(entry.kind) ?? stringValue(envelope?.kind);
   const type = stringValue(entry.type) ?? stringValue(envelope?.type);
-  const status = stringValue(data?.status);
-  if (kind !== 'outcome' || !type || !status) return undefined;
+  if (kind !== 'outcome' || !type || data?.status === undefined) return undefined;
+  const status = parseTerminalStatus(data.status);
   return {
     type,
     status,
@@ -169,12 +166,6 @@ function stringValue(value: unknown): string | undefined {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
-}
-
-function requiredString(value: unknown, field: string): string {
-  const parsed = stringValue(value);
-  if (!parsed) throw new Error(`Swarm contract field '${field}' is required`);
-  return parsed;
 }
 
 function requiredBoolean(value: unknown, field: string): boolean {

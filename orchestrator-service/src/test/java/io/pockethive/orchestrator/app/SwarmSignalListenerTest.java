@@ -1,11 +1,16 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandResult;
@@ -21,10 +26,15 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
-import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
+import io.pockethive.orchestrator.runtime.RuntimeRemovalPostconditionVerifier;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RemoveResult;
+import io.pockethive.swarm.model.lifecycle.RemoveError;
+import io.pockethive.swarm.model.lifecycle.RemoveResource;
+import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -36,6 +46,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -54,7 +65,7 @@ class SwarmSignalListenerTest {
 
   @BeforeEach
   void setUp() {
-    Swarm swarm = new Swarm(SWARM_ID, CONTROLLER, "container-1", "run-1");
+    Swarm swarm = new Swarm(SWARM_ID, CONTROLLER, "container-1", "run-1", NetworkMode.DIRECT);
     swarm.attachTemplate(new SwarmTemplateMetadata(
         "template-1", "controller:latest", List.of(), "demo/template-1", "demo"));
     store.register(swarm);
@@ -70,6 +81,7 @@ class SwarmSignalListenerTest {
         operations,
         outcomes,
         mock(FilesystemSwarmRemoveStore.class),
+        mock(RuntimeRemovalPostconditionVerifier.class),
         new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
         descriptor,
         "ph.control.orchestrator.orchestrator-1");
@@ -189,11 +201,159 @@ class SwarmSignalListenerTest {
             .isEqualTo("event.outcome.config-update.swarm-test.orchestrator.orchestrator-1"));
   }
 
+  @Test
+  void removeCannotSucceedWhenRuntimeDirectoryCleanupFails() {
+    ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+    FilesystemSwarmRemoveStore removeStore = mock(FilesystemSwarmRemoveStore.class);
+    RuntimeRemovalPostconditionVerifier verifier = mock(RuntimeRemovalPostconditionVerifier.class);
+    listener = listener(lifecycle, removeStore, verifier);
+    Instant now = reserveRemove();
+    when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
+        RemoveResult.succeeded(
+            SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(), now)));
+    when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
+        new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(), List.of(), List.of()));
+    when(verifier.verifyAbsent(List.of())).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(List.of(), List.of(), List.of()));
+    doThrow(new IllegalStateException("runtime directory is busy"))
+        .when(removeStore).deleteSwarmRuntime(SWARM_ID);
+
+    listener.checkTimeouts();
+
+    assertThat(operations.findByCorrelation("remove-corr"))
+        .map(operation -> operation.state())
+        .contains(OperationState.FAILED);
+    assertThat(store.find(SWARM_ID)).isPresent();
+    assertThat(transport.events).singleElement().satisfies(event ->
+        assertThat(event.routingKey())
+            .isEqualTo("event.outcome.swarm-remove.swarm-test.orchestrator.orchestrator-1"));
+  }
+
+  @Test
+  void removeCannotCleanupArtifactsOrRegistryWhileRuntimeResourceRemains() {
+    ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+    FilesystemSwarmRemoveStore removeStore = mock(FilesystemSwarmRemoveStore.class);
+    RuntimeRemovalPostconditionVerifier verifier = mock(RuntimeRemovalPostconditionVerifier.class);
+    listener = listener(lifecycle, removeStore, verifier);
+    Instant now = reserveRemove();
+    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1");
+    RemoveResource controller = new RemoveResource(RemoveResourceType.CONTROLLER_RUNTIME, "container-1");
+    when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
+        RemoveResult.succeeded(
+            SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(worker), now)));
+    when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
+        new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(controller), List.of(), List.of()));
+    when(verifier.verifyAbsent(List.of(worker, controller))).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(
+            List.of(controller),
+            List.of(worker),
+            List.of(new RemoveError("RESOURCE_STILL_PRESENT", "worker is still running", worker))));
+
+    listener.checkTimeouts();
+
+    assertThat(operations.findByCorrelation("remove-corr"))
+        .map(operation -> operation.state())
+        .contains(OperationState.FAILED);
+    assertThat(store.find(SWARM_ID)).isPresent();
+    verify(removeStore, never()).deleteSwarmRuntime(SWARM_ID);
+  }
+
+  @Test
+  void removeSucceedsOnlyAfterRuntimeDirectoryAndRegistryAreAbsent() {
+    ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+    FilesystemSwarmRemoveStore removeStore = mock(FilesystemSwarmRemoveStore.class);
+    RuntimeRemovalPostconditionVerifier verifier = mock(RuntimeRemovalPostconditionVerifier.class);
+    listener = listener(lifecycle, removeStore, verifier);
+    Instant now = reserveRemove();
+    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1");
+    RemoveResource controller = new RemoveResource(RemoveResourceType.CONTROLLER_RUNTIME, "container-1");
+    when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
+        RemoveResult.succeeded(
+            SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(worker), now)));
+    when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
+        new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(controller), List.of(), List.of()));
+    when(verifier.verifyAbsent(List.of(worker, controller))).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(
+            List.of(worker, controller), List.of(), List.of()));
+    when(removeStore.swarmRuntimeExists(SWARM_ID)).thenReturn(false);
+
+    listener.checkTimeouts();
+
+    assertThat(operations.findByCorrelation("remove-corr"))
+        .map(operation -> operation.state())
+        .contains(OperationState.SUCCEEDED);
+    assertThat(store.find(SWARM_ID)).isEmpty();
+    verify(removeStore).deleteSwarmRuntime(SWARM_ID);
+    verify(journal).appendDurably(eq("run-1"), any(HiveJournal.HiveJournalEntry.class));
+    assertThat(transport.events).singleElement().satisfies(event ->
+        assertThat(event.routingKey())
+            .isEqualTo("event.outcome.swarm-remove.swarm-test.orchestrator.orchestrator-1"));
+  }
+
+  @Test
+  void removeCannotSucceedWhenDurableTerminalEvidenceCannotBeWritten() {
+    ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+    FilesystemSwarmRemoveStore removeStore = mock(FilesystemSwarmRemoveStore.class);
+    RuntimeRemovalPostconditionVerifier verifier = mock(RuntimeRemovalPostconditionVerifier.class);
+    listener = listener(lifecycle, removeStore, verifier);
+    Instant now = reserveRemove();
+    when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
+        RemoveResult.succeeded(
+            SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(), now)));
+    when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
+        new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(), List.of(), List.of()));
+    when(verifier.verifyAbsent(List.of())).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(List.of(), List.of(), List.of()));
+    when(removeStore.swarmRuntimeExists(SWARM_ID)).thenReturn(false);
+    doThrow(new IllegalStateException("journal unavailable"))
+        .when(journal).appendDurably(eq("run-1"), any(HiveJournal.HiveJournalEntry.class));
+
+    listener.checkTimeouts();
+
+    assertThat(operations.findByCorrelation("remove-corr"))
+        .map(operation -> operation.state())
+        .contains(OperationState.FAILED);
+    assertThat(store.find(SWARM_ID)).isEmpty();
+    assertThat(operations.findByCorrelation("remove-corr").orElseThrow().terminalResult().context())
+        .extracting("remainingResources")
+        .asList()
+        .contains(new RemoveResource(RemoveResourceType.TERMINAL_EVIDENCE, "remove-corr"));
+  }
+
   private void reserveStart() {
     Instant now = Instant.now();
     operations.reserve(
         SWARM_ID, OperationType.START, TARGET, "corr-1", "idem-1", now, now.plusSeconds(30));
     operations.markDispatched("corr-1", now.plusMillis(1));
+  }
+
+  private Instant reserveRemove() {
+    Instant now = Instant.now();
+    operations.reserve(
+        SWARM_ID, OperationType.REMOVE, TARGET,
+        "remove-corr", "remove-idem", now, now.plusSeconds(30));
+    operations.markDispatched("remove-corr", now.plusMillis(1));
+    return now;
+  }
+
+  private SwarmSignalListener listener(
+      ContainerLifecycleManager lifecycle,
+      FilesystemSwarmRemoveStore removeStore,
+      RuntimeRemovalPostconditionVerifier verifier) {
+    return new SwarmSignalListener(
+        store,
+        lifecycle,
+        mapper,
+        journal,
+        mock(ControlPlaneEmitter.class),
+        mock(RuntimeLogSnapshotJournalService.class),
+        operations,
+        new OperationOutcomePublisher(transport, mapper, "orchestrator-1"),
+        removeStore,
+        verifier,
+        new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
+        new OrchestratorControlPlaneTopologyDescriptor("ph.control"),
+        "ph.control.orchestrator.orchestrator-1");
   }
 
   private String result(String controller) throws Exception {

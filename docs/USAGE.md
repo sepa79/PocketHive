@@ -34,24 +34,25 @@ The journal backend is selected via `pockethive.journal.sink` (env: `POCKETHIVE_
   - Disables Postgres-only APIs (they return `501 Not Implemented`).
   - Swarm journal is read from `journal.ndjson` under the runtime root (see below).
 
-### Runtime root (`POCKETHIVE_SCENARIOS_RUNTIME_ROOT`)
+### Runtime filesystem roots
 
 File-backed swarm journals live under:
 
-`$POCKETHIVE_SCENARIOS_RUNTIME_ROOT/<swarmId>/<runId>/journal.ndjson`
+`$POCKETHIVE_RUNTIME_FILESYSTEM_ROOT/<swarmId>/<runId>/journal.ndjson`
 
 In the default stack this is a bind mount:
 
 - Host: `/opt/pockethive/scenarios-runtime`
 - Containers: `/app/scenarios-runtime`
 
-Filesystem controller startup uses the same bind mount with two explicit Orchestrator settings:
+Filesystem controller startup uses the same bind mount with two explicit settings whose meanings do not overlap:
 
-- `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` is the host source passed to the runtime adapter;
-- `POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT` is the path through which the Orchestrator process writes the mounted directory (`/app/scenarios-runtime` in the default stack).
+- `POCKETHIVE_RUNTIME_FILESYSTEM_ROOT` is the absolute local path used by every process performing file IO (`/app/scenarios-runtime` in the default stack);
+- `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` is only the absolute host source passed to the runtime adapter when it creates a bind mount.
 
-The Orchestrator requires and creates the write root on startup. A controller receives the exact artifact path and SHA-256; it does not fall back to RabbitMQ or another file.
-The controller accepts that path only below `/app/scenarios-runtime`; isolated test harnesses can set `POCKETHIVE_STARTUP_ARTIFACT_READ_ROOT` explicitly to their temporary mount root.
+PocketHive MCP does not read this filesystem. Runtime manifest diagnostics go through the Orchestrator runtime-debug API, so storage and parsing remain under one owner.
+
+There are no separate startup read/write root settings. The Orchestrator, Scenario Manager and Controller all use the shared runtime-filesystem contract and resolver. A controller receives the exact artifact path and SHA-256; it does not fall back to RabbitMQ or another file. Isolated test harnesses set `POCKETHIVE_RUNTIME_FILESYSTEM_ROOT` to their absolute temporary root.
 
 ### How to enable file mode locally
 

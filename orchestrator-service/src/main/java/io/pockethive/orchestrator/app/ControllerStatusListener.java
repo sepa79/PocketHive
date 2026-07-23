@@ -94,8 +94,8 @@ public class ControllerStatusListener {
                 return;
             }
             if (controllerScope) {
-                hydrateNetworkMetadata(swarm, context);
                 if (statusFull) {
+                    hydrateNetworkMetadata(swarm, context);
                     Instant observedAt = Instant.now();
                     store.cacheControllerStatusFull(swarmId, node, observedAt);
                     updateObservation(swarm, context, observedAt);
@@ -260,7 +260,7 @@ public class ControllerStatusListener {
 
     private static NetworkMode parseNetworkMode(String value) {
         if (value == null || value.isBlank()) {
-            return NetworkMode.DIRECT;
+            throw new IllegalArgumentException("networkMode must be present in controller status");
         }
         return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
     }

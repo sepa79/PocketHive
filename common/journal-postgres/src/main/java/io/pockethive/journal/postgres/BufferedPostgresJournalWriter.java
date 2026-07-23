@@ -141,6 +141,16 @@ public final class BufferedPostgresJournalWriter<T> {
     lastDropNanos.set(System.nanoTime());
   }
 
+  /** Inserts one required record synchronously and propagates any persistence failure. */
+  public void insertDurably(PostgresJournalRecord record) {
+    Objects.requireNonNull(record, "record");
+    try {
+      insertRecords(java.util.List.of(record));
+    } catch (Exception failure) {
+      throw new IllegalStateException(name + " durable insert failed", failure);
+    }
+  }
+
   public void flush() {
     long nowMillis = System.currentTimeMillis();
     long disabledUntil = dbDisabledUntilMillis.get();
@@ -197,10 +207,17 @@ public final class BufferedPostgresJournalWriter<T> {
   }
 
   private void insertBatch(java.util.List<T> batch) throws Exception {
+    var records = new ArrayList<PostgresJournalRecord>(batch.size());
+    for (T entry : batch) {
+      records.add(recordMapper.apply(entry));
+    }
+    insertRecords(records);
+  }
+
+  private void insertRecords(java.util.List<PostgresJournalRecord> records) throws Exception {
     try (Connection connection = dataSource.getConnection();
          PreparedStatement ps = connection.prepareStatement(INSERT_SQL)) {
-      for (T entry : batch) {
-        PostgresJournalRecord record = recordMapper.apply(entry);
+      for (PostgresJournalRecord record : records) {
         bind(ps, record);
         ps.addBatch();
       }
@@ -286,4 +303,3 @@ public final class BufferedPostgresJournalWriter<T> {
     return value.trim();
   }
 }
-

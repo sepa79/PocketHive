@@ -1,9 +1,13 @@
 package io.pockethive.orchestrator.infra;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.app.JournalController;
 import io.pockethive.orchestrator.app.JournalPageResponse;
 import io.pockethive.orchestrator.app.ScenarioClient;
@@ -14,7 +18,9 @@ import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Instant;
+import java.nio.file.Path;
 import java.util.Map;
+import java.util.LinkedHashMap;
 import javax.sql.DataSource;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
@@ -291,7 +297,8 @@ class PostgresJournalStorageTest {
         "run-1",
         "t-2");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
+    SwarmJournalController ctrl = new SwarmJournalController(
+        mapper, jdbc, store, endpointAuthorization(store), runtimeLayout());
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null, null).getBody();
@@ -308,7 +315,8 @@ class PostgresJournalStorageTest {
     insertSwarmJournalEvent(base, "sw-filter", "run-filter", "INFO", "info-event");
     insertSwarmJournalEvent(base.plusSeconds(1), "sw-filter", "run-filter", "ERROR", "error-event");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
+    SwarmJournalController ctrl = new SwarmJournalController(
+        mapper, jdbc, store, endpointAuthorization(store), runtimeLayout());
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw-filter", null, null, 10, "run-filter", null, "ERROR").getBody();
@@ -321,7 +329,7 @@ class PostgresJournalStorageTest {
   @Test
   void hiveJournalOverloadEvictsInfoToKeepError() throws Exception {
     jdbc.update("DELETE FROM journal_event");
-    store.register(new Swarm("s1", "inst", "container", "run-1"));
+    store.register(new Swarm("s1", "inst", "container", "run-1", NetworkMode.DIRECT));
     PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 3, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
@@ -368,9 +376,54 @@ class PostgresJournalStorageTest {
   }
 
   @Test
+  void durableHiveJournalAppendUsesExplicitRunIdAfterRegistryRemoval() {
+    jdbc.update("DELETE FROM journal_event");
+    store.register(new Swarm("durable-swarm", "inst", "container", "run-durable", NetworkMode.DIRECT));
+    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 3, 50, 30_000L, 1_000L);
+    store.remove("durable-swarm");
+
+    journal.appendDurably("run-durable", new HiveJournal.HiveJournalEntry(
+        Instant.now(),
+        "durable-swarm",
+        "INFO",
+        HiveJournal.Direction.LOCAL,
+        "operation-terminal",
+        "swarm-remove",
+        "orchestrator",
+        new ControlScope("durable-swarm", "orchestrator", "inst"),
+        "corr-durable",
+        "idem-durable",
+        null,
+        Map.of("status", "succeeded"),
+        null,
+        null));
+
+    String runId = jdbc.queryForObject(
+        "SELECT run_id FROM journal_event WHERE correlation_id='corr-durable'", String.class);
+    assertThat(runId).isEqualTo("run-durable");
+  }
+
+  @Test
+  void durableHiveJournalAppendRejectsUnserializableEvidence() {
+    PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 3, 50, 30_000L, 1_000L);
+    Map<String, Object> cyclic = new LinkedHashMap<>();
+    cyclic.put("self", cyclic);
+
+    HiveJournal.HiveJournalEntry entry = new HiveJournal.HiveJournalEntry(
+        Instant.now(), "durable-swarm", "INFO", HiveJournal.Direction.LOCAL,
+        "operation-terminal", "swarm-remove", "orchestrator",
+        new ControlScope("durable-swarm", "orchestrator", "inst"),
+        "corr-cyclic", "idem-cyclic", null, cyclic, null, null);
+
+    assertThatThrownBy(() -> journal.appendDurably("run-durable", entry))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("serialize required hive journal evidence");
+  }
+
+  @Test
   void hiveJournalDropEmitsSingleStartStopEvents() throws Exception {
     jdbc.update("DELETE FROM journal_event");
-    store.register(new Swarm("s1", "inst", "container", "run-1"));
+    store.register(new Swarm("s1", "inst", "container", "run-1", NetworkMode.DIRECT));
     PostgresHiveJournal journal = new PostgresHiveJournal(mapper, jdbc, store, 2, 50, 30_000L, 1_000L);
     ControlScope scope = new ControlScope("s1", "orchestrator", "inst");
 
@@ -481,7 +534,8 @@ class PostgresJournalStorageTest {
           "{\"x\":" + i + "}");
     }
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
+    SwarmJournalController ctrl = new SwarmJournalController(
+        mapper, jdbc, store, endpointAuthorization(store), runtimeLayout());
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ResponseEntity<SwarmJournalController.PinRunResponse> pinned =
@@ -541,7 +595,8 @@ class PostgresJournalStorageTest {
         "sw1",
         "run-1");
 
-    SwarmJournalController ctrl = new SwarmJournalController(mapper, jdbc, store, endpointAuthorization(store));
+    SwarmJournalController ctrl = new SwarmJournalController(
+        mapper, jdbc, store, endpointAuthorization(store), runtimeLayout());
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "FULL", null));
@@ -550,5 +605,10 @@ class PostgresJournalStorageTest {
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, null, null, null).getBody();
     assertThat(page).isNotNull();
     assertThat(page.items()).hasSize(1);
+  }
+
+  private static RuntimeFilesystemLayout runtimeLayout() {
+    String root = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize().toString();
+    return RuntimeFilesystemLayout.of(root, root);
   }
 }

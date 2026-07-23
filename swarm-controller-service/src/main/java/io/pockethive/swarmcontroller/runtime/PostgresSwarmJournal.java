@@ -8,6 +8,7 @@ import io.pockethive.journal.postgres.PostgresJournalRecord;
 import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
+import java.util.function.Function;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -32,7 +33,7 @@ public class PostgresSwarmJournal implements SwarmJournal {
   private final ObjectMapper mapper;
   private final String swarmId;
   private final String runId;
-  private final BufferedPostgresJournalWriter<SwarmJournalEntry> writer;
+  private final BufferedPostgresJournalWriter<PostgresJournalRecord> writer;
 
   public PostgresSwarmJournal(ObjectMapper mapper,
                               JdbcTemplate jdbc,
@@ -57,14 +58,19 @@ public class PostgresSwarmJournal implements SwarmJournal {
         batchSize,
         dbFailureBackoffMillis,
         dropQuietPeriodMillis,
-        SwarmJournalEntry::severity,
-        this::toRecord,
+        PostgresJournalRecord::severity,
+        Function.identity(),
         new SwarmBackpressureEvents());
   }
 
   @Override
   public void append(SwarmJournalEntry entry) {
-    writer.append(entry);
+    Objects.requireNonNull(entry, "entry");
+    if (!swarmId.equals(entry.swarmId())) {
+      throw new IllegalArgumentException(
+          "Journal for swarm " + swarmId + " cannot accept entry for swarm " + entry.swarmId());
+    }
+    writer.append(toRecord(entry));
   }
 
   @Scheduled(fixedDelay = 200L)
@@ -127,20 +133,20 @@ public class PostgresSwarmJournal implements SwarmJournal {
     try {
       return mapper.writeValueAsString(value);
     } catch (Exception e) {
-      return null;
+      throw new SwarmJournalWriteException("Failed to serialise swarm journal entry data", e);
     }
   }
 
-  private final class SwarmBackpressureEvents implements PostgresJournalBackpressureEvents<SwarmJournalEntry> {
+  private final class SwarmBackpressureEvents implements PostgresJournalBackpressureEvents<PostgresJournalRecord> {
 
     @Override
-    public SwarmJournalEntry backpressureStart() {
-      return newDropEvent("WARN", "journal-backpressure-start", Map.of("policy", "dropping INFO"));
+    public PostgresJournalRecord backpressureStart() {
+      return toRecord(newDropEvent("WARN", "journal-backpressure-start", Map.of("policy", "dropping INFO")));
     }
 
     @Override
-    public SwarmJournalEntry backpressureStop(long droppedInfo) {
-      return newDropEvent("WARN", "journal-backpressure-stop", Map.of("droppedInfo", droppedInfo));
+    public PostgresJournalRecord backpressureStop(long droppedInfo) {
+      return toRecord(newDropEvent("WARN", "journal-backpressure-stop", Map.of("droppedInfo", droppedInfo)));
     }
   }
 }

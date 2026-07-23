@@ -24,11 +24,13 @@ public record ControlSignal(
     Map<String, Object> data
 ) {
 
+    public static final String KIND = "signal";
+
     public ControlSignal {
         Objects.requireNonNull(timestamp, "timestamp");
         version = CommandEnvelopeSupport.requireCurrentVersion(version);
         kind = requireNonBlank("kind", kind);
-        if (!"signal".equals(kind)) {
+        if (!KIND.equals(kind)) {
             throw new IllegalArgumentException("kind must be 'signal' for ControlSignal");
         }
         type = requireNonBlank("type", type);
@@ -55,7 +57,7 @@ public record ControlSignal(
         return new ControlSignal(
             Instant.now(),
             ControlPlaneEnvelopeVersion.CURRENT,
-            "signal",
+            KIND,
             type,
             origin,
             Objects.requireNonNull(scope, "scope"),

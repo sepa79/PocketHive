@@ -1,7 +1,8 @@
 # Build the React app
 FROM node:20-alpine AS build
 
-WORKDIR /app
+WORKDIR /workspace/ui-v2
+COPY packages/swarm-lifecycle-contract/ /workspace/packages/swarm-lifecycle-contract/
 COPY ui-v2/package.json ui-v2/package-lock.json ./
 RUN npm ci
 COPY ui-v2/ .
@@ -23,7 +24,7 @@ RUN npm run build
 # Serve with Nginx
 FROM nginx:1.27-alpine
 COPY ui-v2/nginx.conf /etc/nginx/conf.d/default.conf
-COPY --from=build /app/dist/ /usr/share/nginx/html/
+COPY --from=build /workspace/ui-v2/dist/ /usr/share/nginx/html/
 COPY CHANGELOG.md README.md pom.xml /usr/share/nginx/html/
 COPY --from=docs-build /workspace/docs-site/build/ /usr/share/nginx/html/docs/
 

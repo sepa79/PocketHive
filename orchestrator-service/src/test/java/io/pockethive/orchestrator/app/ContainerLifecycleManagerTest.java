@@ -8,6 +8,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
@@ -24,6 +25,7 @@ import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import java.time.Duration;
@@ -67,7 +69,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         Swarm swarm = manager.startSwarm(
             "sw1",
@@ -131,8 +133,11 @@ class ContainerLifecycleManagerTest {
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
         List<String> volumes = spec.volumes();
         assertNotNull(volumes);
-        assertEquals(1, volumes.size());
-        assertEquals("/var/run/docker.sock:/var/run/docker.sock", volumes.get(0));
+        assertIterableEquals(
+            List.of(
+                "/var/run/docker.sock:/var/run/docker.sock",
+                "/opt/pockethive/scenarios-runtime:" + RuntimeFilesystemContract.CONTAINER_ROOT),
+            volumes);
     }
 
     @Test
@@ -152,7 +157,8 @@ class ContainerLifecycleManagerTest {
             rabbitProperties(),
             runMetadataWriter,
             new ClickHouseSinkProperties(),
-            manifests);
+            manifests,
+            runtimeMount());
 
         manager.startSwarm(
             "sw1",
@@ -189,7 +195,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         manager.startSwarm(
             "sw1",
@@ -217,7 +223,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         Swarm swarm = manager.startSwarm(
             "sw1",
@@ -245,7 +251,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         manager.startSwarm(
             "sw1",
@@ -266,14 +272,17 @@ class ContainerLifecycleManagerTest {
         assertEquals("unix:///custom/docker.sock", env.get("DOCKER_HOST"));
         List<String> volumes = spec.volumes();
         assertNotNull(volumes);
-        assertEquals(1, volumes.size());
-        assertEquals("/custom/docker.sock:/custom/docker.sock", volumes.get(0));
+        assertIterableEquals(
+            List.of(
+                "/custom/docker.sock:/custom/docker.sock",
+                "/opt/pockethive/scenarios-runtime:" + RuntimeFilesystemContract.CONTAINER_ROOT),
+            volumes);
     }
 
     @Test
     void removeControllerRuntimeReportsResourcesWithoutDeletingRegistryAuthority() {
         SwarmStore registry = new SwarmStore();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1", NetworkMode.DIRECT);
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "ctrl-image",
@@ -282,28 +291,28 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         var result = manager.removeControllerRuntime(swarm.getId());
 
         verify(computeAdapter).stopManager("cid");
         verify(amqp).deleteQueue("ph.control.manager.sw1.swarm-controller.inst1");
         assertTrue(result.succeeded());
-        assertEquals(2, result.removedResources().size());
+        assertEquals(2, result.targetResources().size());
         assertTrue(registry.find(swarm.getId()).isPresent());
     }
 
     @Test
     void controllerRuntimeRemovalIsScopedToOneSwarm() {
         SwarmStore registry = new SwarmStore();
-        Swarm sw1 = new Swarm("sw1", "inst1", "c1", "run-1");
-        Swarm sw2 = new Swarm("sw2", "inst2", "c2", "run-2");
+        Swarm sw1 = new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT);
+        Swarm sw2 = new Swarm("sw2", "inst2", "c2", "run-2", NetworkMode.DIRECT);
         registry.register(sw1);
         registry.register(sw2);
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         manager.removeControllerRuntime(sw1.getId());
 
@@ -316,7 +325,7 @@ class ContainerLifecycleManagerTest {
     @Test
     void preloadSwarmImagesPullsControllerAndBeeImages() {
         SwarmStore registry = new SwarmStore();
-        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1");
+        Swarm swarm = new Swarm("sw1", "inst1", "cid", "run-1", NetworkMode.DIRECT);
         swarm.attachTemplate(new SwarmTemplateMetadata(
             "tpl-1",
             "swarm-controller:latest",
@@ -327,7 +336,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitProperties(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount());
 
         manager.preloadSwarmImages("sw1");
 
@@ -429,8 +438,12 @@ class ContainerLifecycleManagerTest {
 
     private static io.pockethive.swarm.model.SwarmStartupArtifactReference startupArtifact() {
         return new io.pockethive.swarm.model.SwarmStartupArtifactReference(
-            "/app/scenarios-runtime/sw1/runtime-artifacts/startup.json",
+            RuntimeFilesystemContract.CONTAINER_ROOT + "/sw1/runtime-artifacts/startup.json",
             "a".repeat(64));
+    }
+
+    private static RuntimeFilesystemMount runtimeMount() {
+        return RuntimeFilesystemMount.of("/opt/pockethive/scenarios-runtime");
     }
 
     private static final class RecordingManifestStore implements RuntimeOwnershipManifestStore {

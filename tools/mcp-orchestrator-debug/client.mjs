@@ -175,6 +175,8 @@ const COMMANDS = [
       "[notes]",
       "[--sutId <sutId>]",
       "[--variablesProfileId <profileId>]",
+      "--networkMode <DIRECT|PROXIED>",
+      "[--networkProfileId <profileId>]",
       "[--record]",
     ],
   },
@@ -415,14 +417,28 @@ async function main() {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
         }
+        const networkMode = String(flags.networkMode || "").trim();
+        if (!new Set(["DIRECT", "PROXIED"]).has(networkMode)) {
+          throw new Error("create-swarm requires --networkMode DIRECT or --networkMode PROXIED");
+        }
+        if (networkMode === "PROXIED" && !flags.networkProfileId) {
+          throw new Error("create-swarm requires --networkProfileId when --networkMode PROXIED");
+        }
+        if (networkMode === "DIRECT" && flags.networkProfileId) {
+          throw new Error("--networkProfileId is only valid with --networkMode PROXIED");
+        }
         await verifyTemplateIsRunnable(templateId);
         const body = {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
+          networkMode,
           ...(notes ? { notes } : {}),
           ...(flags.sutId ? { sutId: String(flags.sutId) } : {}),
           ...(flags.variablesProfileId
             ? { variablesProfileId: String(flags.variablesProfileId) }
+            : {}),
+          ...(flags.networkProfileId
+            ? { networkProfileId: String(flags.networkProfileId) }
             : {}),
         };
         const resp = await httpJson(

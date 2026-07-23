@@ -230,6 +230,18 @@ public class RuntimeReconciliationService {
             List.of());
     }
 
+    public RuntimeOwnershipManifest ownershipManifest(RabbitTopologyRequest request) {
+        CleanupScope scope = CleanupScope.from(new PlanRequest(
+            request == null ? null : request.swarmId(),
+            request == null ? null : request.runId(),
+            false,
+            false),
+            currentComputeAdapterType());
+        return manifest(scope).orElseThrow(() -> cleanupError(
+            HttpStatus.NOT_FOUND,
+            "runtime ownership manifest was not found"));
+    }
+
     private void appendComputeCandidates(CleanupScope scope,
                                          Optional<Swarm> activeSwarm,
                                          List<ComputeRuntimeResource> resources,
@@ -539,7 +551,7 @@ public class RuntimeReconciliationService {
         try {
             if (candidate.action() == RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM) {
                 var reservation = lifecycleCommands.dispatch(
-                    ControlPlaneSignals.SWARM_REMOVE,
+                    io.pockethive.swarm.model.lifecycle.OperationType.REMOVE,
                     candidate.resourceId(),
                     idempotencyKey,
                     Duration.ofSeconds(180));

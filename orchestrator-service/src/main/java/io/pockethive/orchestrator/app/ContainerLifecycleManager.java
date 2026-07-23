@@ -41,7 +41,7 @@ import org.springframework.stereotype.Service;
 public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
-    private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
+    private final io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount;
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmStore store;
@@ -52,8 +52,6 @@ public class ContainerLifecycleManager {
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
-    @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
-    private String scenariosRuntimeRootSource;
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
     @Value("${spring.datasource.url:}")
@@ -77,7 +75,8 @@ public class ContainerLifecycleManager {
         RabbitProperties rabbitProperties,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
-        RuntimeOwnershipManifestStore manifestStore) {
+        RuntimeOwnershipManifestStore manifestStore,
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.store = Objects.requireNonNull(store, "store");
@@ -88,6 +87,7 @@ public class ContainerLifecycleManager {
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
+        this.runtimeFilesystemMount = Objects.requireNonNull(runtimeFilesystemMount, "runtimeFilesystemMount");
         this.resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
     }
 
@@ -100,7 +100,8 @@ public class ContainerLifecycleManager {
         ControlPlaneProperties controlPlaneProperties,
         RabbitProperties rabbitProperties,
         JournalRunMetadataWriter runMetadataWriter,
-        ClickHouseSinkProperties clickHouseSink) {
+        ClickHouseSinkProperties clickHouseSink,
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
         this(
             docker,
             computeAdapter,
@@ -125,7 +126,8 @@ public class ContainerLifecycleManager {
                 public java.util.Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
                     return java.util.Optional.empty();
                 }
-            });
+            },
+            runtimeFilesystemMount);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -142,6 +144,7 @@ public class ContainerLifecycleManager {
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
+        NetworkMode resolvedNetworkMode = Objects.requireNonNull(networkMode, "networkMode");
         String runId = java.util.UUID.randomUUID().toString();
         MetricsSettings metrics = metricsSettings(properties.getMetrics());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
@@ -160,10 +163,12 @@ public class ContainerLifecycleManager {
                 controllerSettings,
                 rabbitProperties));
         applyClickHouseSinkEnv(env);
-        String runtimeRootSource = scenariosRuntimeRootSource;
-        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
-            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRootSource);
-        }
+        env.put(
+            io.pockethive.swarm.model.RuntimeFilesystemContract.HOST_ROOT_ENV,
+            runtimeFilesystemMount.hostRoot().toString());
+        env.put(
+            io.pockethive.swarm.model.RuntimeFilesystemContract.LOCAL_ROOT_ENV,
+            io.pockethive.swarm.model.RuntimeFilesystemContract.CONTAINER_ROOT);
         String resolvedSink = normalizeRuntimeRoot(journalSink);
         if (resolvedSink != null) {
             env.put("POCKETHIVE_JOURNAL_SINK", resolvedSink);
@@ -200,7 +205,7 @@ public class ContainerLifecycleManager {
             startupArtifact.sha256());
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
-        env.put("POCKETHIVE_NETWORK_MODE", NetworkMode.directIfNull(networkMode).name());
+        env.put("POCKETHIVE_NETWORK_MODE", resolvedNetworkMode.name());
         putEnvIfMissing(env, "POCKETHIVE_NETWORK_PROFILE_ID", normalizeRuntimeRoot(networkProfileId));
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
@@ -213,9 +218,7 @@ public class ContainerLifecycleManager {
         log.info("docker env: {}", redactEnv(env));
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
-        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
-            volumes.add(runtimeRootSource + ":" + SCENARIOS_RUNTIME_DESTINATION);
-        }
+        volumes.add(runtimeFilesystemMount.volume());
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,
             resolvedImage,
@@ -223,7 +226,7 @@ public class ContainerLifecycleManager {
             java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
-        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId);
+        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId, resolvedNetworkMode);
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
@@ -419,8 +422,8 @@ public class ContainerLifecycleManager {
     public ControllerRuntimeRemoval removeControllerRuntime(String swarmId) {
         Swarm swarm = store.find(swarmId)
             .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
-        var removed = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
-        var remaining = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
+        var targets = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
+        var failed = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
         var errors = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveError>();
 
         var controller = new io.pockethive.swarm.model.lifecycle.RemoveResource(
@@ -429,9 +432,9 @@ public class ContainerLifecycleManager {
         try {
             log.info("tearing down controller runtime {} for swarm {}", swarm.getContainerId(), swarmId);
             computeAdapter.stopManager(swarm.getContainerId());
-            removed.add(controller);
+            targets.add(controller);
         } catch (RuntimeException failure) {
-            remaining.add(controller);
+            failed.add(controller);
             errors.add(removeError(failure, controller));
         }
 
@@ -446,12 +449,12 @@ public class ContainerLifecycleManager {
         try {
             log.info("deleting swarm-controller control queue {}", controllerQueue);
             amqp.deleteQueue(controllerQueue);
-            removed.add(queue);
+            targets.add(queue);
         } catch (RuntimeException failure) {
-            remaining.add(queue);
+            failed.add(queue);
             errors.add(removeError(failure, queue));
         }
-        return new ControllerRuntimeRemoval(removed, remaining, errors);
+        return new ControllerRuntimeRemoval(targets, failed, errors);
     }
 
     private static io.pockethive.swarm.model.lifecycle.RemoveError removeError(
@@ -464,17 +467,17 @@ public class ContainerLifecycleManager {
     }
 
     public record ControllerRuntimeRemoval(
-        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> removedResources,
-        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> remainingResources,
+        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> targetResources,
+        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> failedResources,
         java.util.List<io.pockethive.swarm.model.lifecycle.RemoveError> errors) {
         public ControllerRuntimeRemoval {
-            removedResources = java.util.List.copyOf(removedResources);
-            remainingResources = java.util.List.copyOf(remainingResources);
+            targetResources = java.util.List.copyOf(targetResources);
+            failedResources = java.util.List.copyOf(failedResources);
             errors = java.util.List.copyOf(errors);
         }
 
         public boolean succeeded() {
-            return remainingResources.isEmpty() && errors.isEmpty();
+            return failedResources.isEmpty() && errors.isEmpty();
         }
     }
 

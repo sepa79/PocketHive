@@ -26,13 +26,6 @@ public final class ControlSignals {
         return signal(ControlPlaneSignals.SWARM_CREATE, origin, target, correlationId, idempotencyKey, data);
     }
 
-    public static ControlSignal swarmControllerReady(String origin,
-                                                     ControlScope target,
-                                                     String correlationId,
-                                                     String idempotencyKey) {
-        return signal("swarm-controller", origin, target, correlationId, idempotencyKey, null);
-    }
-
     public static ControlSignal swarmStart(String origin,
                                            ControlScope target,
                                            String correlationId,

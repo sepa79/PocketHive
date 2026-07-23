@@ -1,0 +1,60 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "io.pockethive.sut-environment",
+  "title": "PocketHive SUT Environment",
+  "description": "Canonical System Under Test environment shared by registry, bundle, control-plane, and runtime boundaries.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "name", "endpoints"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Stable environment identifier (e.g. wiremock-local, paytech-reltest)."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Human-readable name for the environment."
+    },
+    "type": {
+      "type": "string",
+      "pattern": "\\S",
+      "description": "Optional classification (sandbox, dev, uat, prodlike, team-dev, ...)."
+    },
+    "endpoints": {
+      "type": "object",
+      "description": "Map of named endpoints inside this environment.",
+      "propertyNames": {
+        "pattern": "^\\S(?:.*\\S)?$"
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/sutEndpoint"
+      }
+    }
+  },
+  "$defs": {
+    "sutEndpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "baseUrl"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Non-blank protocol/shape of the endpoint, for example HTTP, HTTPS, TCP, or TCPS."
+        },
+        "baseUrl": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Non-blank URI or protocol-specific authority for this endpoint."
+        },
+        "upstreamBaseUrl": {
+          "type": "string",
+          "pattern": "\\S",
+          "description": "Optional non-blank upstream URI or authority used by proxied network bindings."
+        }
+      }
+    }
+  }
+}

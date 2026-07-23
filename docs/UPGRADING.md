@@ -7,7 +7,18 @@ and commands live in `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`.
 PocketHive does not implicitly accept legacy contract shapes. Complete the
 documented migration before deploying a release that removes an old shape.
 
-## Unreleased (from 0.15.35 and earlier)
+## 0.15.36 (from 0.15.35 and earlier)
+
+### SUT registry contract SSOT
+
+Scenario Manager now reads and returns the shared `SutEnvironment` contract
+directly. Remove `ui` blocks from `scenario-manager-service/sut/sut-environments.yaml`;
+presentation hints are not part of the runtime SUT contract. Environment
+`id`, `name`, optional `type`, endpoint map keys and endpoint values must be
+non-blank. The `endpoints` object is required.
+
+This is an intentional strict contract change. There is no parser fallback for
+the former Scenario Manager DTO.
 
 ### SUT endpoint identity
 

@@ -15,12 +15,10 @@ import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.TrafficPolicy;
-import io.pockethive.swarmcontroller.QueueStats;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
-import io.pockethive.swarmcontroller.infra.docker.DockerWorkloadProvisioner;
-import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import java.util.Map;
 import java.util.Objects;
@@ -61,11 +59,13 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
-                               ClickHouseSinkProperties clickHouseSink) {
+                               ClickHouseSinkProperties clickHouseSink,
+                               io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
     this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
-        clickHouseSink);
+        clickHouseSink,
+        runtimeFilesystemMount);
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -79,14 +79,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         MeterRegistry meterRegistry,
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                         WorkerSettings workerSettings,
-                        ClickHouseSinkProperties clickHouseSink) {
+                        ClickHouseSinkProperties clickHouseSink,
+                        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
-    this.journal = journal != null ? journal : io.pockethive.swarmcontroller.runtime.SwarmJournal.noop();
+    this.journal = Objects.requireNonNull(journal, "journal");
     ControlPlanePublisher controlPublisher =
         new AmqpControlPlanePublisher(rabbit, properties.getControlExchange());
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
-    WorkloadProvisioner workloadProvisioner = new DockerWorkloadProvisioner(docker);
     ComputeAdapter computeAdapter;
     ComputeAdapterType adapterType = properties.getDocker() == null
         ? ComputeAdapterType.DOCKER_SINGLE
@@ -113,16 +113,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         docker,
         rabbitProperties,
         properties,
-        meterRegistry,
         controlPublisher,
         topology,
-        workloadProvisioner,
         computeAdapter,
         queueMetrics,
         configFanout,
         this.journal,
         instanceId,
-        clickHouseSink);
+        clickHouseSink,
+        runtimeFilesystemMount);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,
@@ -276,6 +275,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return core.trafficPolicy();
+  }
+
+  @Override
+  public String sutId() {
+    return core.sutId();
   }
 
   public boolean bufferGuardActive() {

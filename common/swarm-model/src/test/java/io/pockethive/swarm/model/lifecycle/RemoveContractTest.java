@@ -24,9 +24,7 @@ class RemoveContractTest {
   }
 
   @Test
-  void successfulResultCannotHideRemainingResourcesOrErrors() {
-    RemoveResource queue = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "ph.alpha.work");
-
+  void successfulActionResultCannotContainErrors() {
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> new RemoveResult(
         RemoveResult.SCHEMA,
         "alpha",
@@ -37,10 +35,9 @@ class RemoveContractTest {
         TerminalStatus.SUCCEEDED,
         false,
         List.of(),
-        List.of(queue),
-        List.of(),
+        List.of(new RemoveError("unexpected", "must fail", null)),
         NOW));
-    assertTrue(error.getMessage().contains("remainingResources"));
+    assertTrue(error.getMessage().contains("errors"));
   }
 
   @Test
@@ -56,21 +53,20 @@ class RemoveContractTest {
         true,
         List.of(),
         List.of(),
-        List.of(),
         NOW));
     assertTrue(error.getMessage().contains("errors"));
   }
 
   @Test
   void resultCopiesEvidenceCollections() {
-    List<RemoveResource> removed = new ArrayList<>();
-    removed.add(new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1"));
+    List<RemoveResource> targets = new ArrayList<>();
+    targets.add(new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1"));
 
     RemoveResult result = RemoveResult.succeeded(
-        "alpha", "run-1", "alpha-controller-1", "correlation-1", "idempotency-1", removed, NOW);
-    removed.clear();
+        "alpha", "run-1", "alpha-controller-1", "correlation-1", "idempotency-1", targets, NOW);
+    targets.clear();
 
-    assertEquals(1, result.removedResources().size());
-    assertThrows(UnsupportedOperationException.class, () -> result.removedResources().clear());
+    assertEquals(1, result.targetResources().size());
+    assertThrows(UnsupportedOperationException.class, () -> result.targetResources().clear());
   }
 }

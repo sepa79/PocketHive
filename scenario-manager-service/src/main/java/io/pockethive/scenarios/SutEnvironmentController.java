@@ -3,6 +3,7 @@ package io.pockethive.scenarios;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
+import io.pockethive.swarm.model.SutEnvironment;
 import java.io.IOException;
 import java.util.List;
 import java.util.Optional;

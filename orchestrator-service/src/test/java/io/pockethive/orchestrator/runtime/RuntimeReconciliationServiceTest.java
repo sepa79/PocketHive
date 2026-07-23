@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -9,7 +11,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.manager.runtime.ComputeAdapterType;
@@ -63,7 +64,7 @@ class RuntimeReconciliationServiceTest {
 
   @Test
   void registeredSwarmHasOnlyCanonicalLifecycleCandidateAndDirectResourcesStayBlocked() {
-    swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1"));
+    swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT));
     when(inventory.list()).thenReturn(List.of(runtime("manager-1", "manager", "swarm-controller", "controller-1")));
     when(manifests.find("sw1", "run-1")).thenReturn(Optional.of(manifest()));
     when(rabbit.queue("ph.sw1.work")).thenReturn(Optional.of(new RabbitQueueResource("ph.sw1.work", 0, 0)));
@@ -77,8 +78,35 @@ class RuntimeReconciliationServiceTest {
   }
 
   @Test
+  void ownershipManifestUsesExactRunWhenDeclared() {
+    RuntimeOwnershipManifest expected = manifest();
+    when(manifests.find("sw1", "run-1")).thenReturn(Optional.of(expected));
+
+    assertThat(service.ownershipManifest(
+        new RuntimeDebugContracts.RabbitTopologyRequest("sw1", "run-1")))
+        .isSameAs(expected);
+    verify(manifests).find("sw1", "run-1");
+    verify(manifests, never()).findLatest(any());
+  }
+
+  @Test
+  void ownershipManifestUsesLatestOnlyWhenRunIsOmittedAndFailsWhenAbsent() {
+    RuntimeOwnershipManifest expected = manifest();
+    when(manifests.findLatest("sw1")).thenReturn(Optional.of(expected));
+
+    assertThat(service.ownershipManifest(
+        new RuntimeDebugContracts.RabbitTopologyRequest("sw1", null)))
+        .isSameAs(expected);
+
+    assertThatThrownBy(() -> service.ownershipManifest(
+        new RuntimeDebugContracts.RabbitTopologyRequest("missing", null)))
+        .isInstanceOf(RuntimeCleanupException.class)
+        .hasMessage("runtime ownership manifest was not found");
+  }
+
+  @Test
   void registeredSwarmWithAbsentIntentExposesNoSecondRemove() {
-    Swarm swarm = new Swarm("sw1", "controller-1", "manager-1", "run-1");
+    Swarm swarm = new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT);
     swarm.requestRuntime(RuntimeIntent.ABSENT);
     swarms.register(swarm);
 
@@ -91,7 +119,7 @@ class RuntimeReconciliationServiceTest {
 
   @Test
   void lifecycleCleanupDispatchesCanonicalRemoveAndReturnsOperationIdentity() {
-    swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1"));
+    swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT));
     Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     Instant now = Instant.now();
@@ -100,7 +128,7 @@ class RuntimeReconciliationServiceTest {
         "corr-remove", "cleanup-idem", now, now.plusSeconds(180));
     coordinator.markDispatched("corr-remove", now.plusMillis(1));
     when(lifecycleCommands.dispatch(
-        eq(ControlPlaneSignals.SWARM_REMOVE), eq("sw1"), eq("cleanup-idem"), any(Duration.class)))
+        eq(OperationType.REMOVE), eq("sw1"), eq("cleanup-idem"), any(Duration.class)))
         .thenReturn(new SwarmOperationCoordinator.Reservation(
             coordinator.findByCorrelation("corr-remove").orElseThrow(), reservation.reused()));
 

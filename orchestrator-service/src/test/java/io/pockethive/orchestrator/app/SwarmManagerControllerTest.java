@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.verify;
@@ -45,11 +47,11 @@ class SwarmManagerControllerTest {
     @Test
     void fanOutToggleToAllControllers() throws Exception {
         SwarmStore registry = new SwarmStore();
-        Swarm swarm1 = new Swarm("sw1", "ctrl-a", "c1", "run-1");
+        Swarm swarm1 = new Swarm("sw1", "ctrl-a", "c1", "run-1", NetworkMode.DIRECT);
         swarm1.attachTemplate(new SwarmTemplateMetadata("tpl-1", "swarm-controller:latest", List.of(), "demo/tpl-1", "demo"));
         registry.register(swarm1);
         cacheStatusFull(mapper, registry, "sw1", "tpl-1", "run-1");
-        Swarm swarm2 = new Swarm("sw2", "ctrl-b", "c2", "run-2");
+        Swarm swarm2 = new Swarm("sw2", "ctrl-b", "c2", "run-2", NetworkMode.DIRECT);
         swarm2.attachTemplate(new SwarmTemplateMetadata("tpl-2", "swarm-controller:latest", List.of(), "demo/tpl-2", "demo"));
         registry.register(swarm2);
         cacheStatusFull(mapper, registry, "sw2", "tpl-2", "run-2");
@@ -58,6 +60,7 @@ class SwarmManagerControllerTest {
 	            publisher,
 	            operationDispatch(registry),
 	            controlPlaneProperties(),
+                new ControlResponseFactory(controlPlaneProperties()),
                 endpointAuthorization(registry));
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-1", true, null);
@@ -86,7 +89,7 @@ class SwarmManagerControllerTest {
     @Test
     void toggleSingleControllerScope() throws Exception {
         SwarmStore registry = new SwarmStore();
-        Swarm swarm = new Swarm("sw9", "ctrl-z", "c9", "run-9");
+        Swarm swarm = new Swarm("sw9", "ctrl-z", "c9", "run-9", NetworkMode.DIRECT);
         swarm.attachTemplate(new SwarmTemplateMetadata("tpl-9", "swarm-controller:latest", List.of(), "demo/tpl-9", "demo"));
         registry.register(swarm);
 	        cacheStatusFull(mapper, registry, "sw9", "tpl-9", "run-9");
@@ -95,6 +98,7 @@ class SwarmManagerControllerTest {
 	            publisher,
 	            operationDispatch(registry),
 	            controlPlaneProperties(),
+                new ControlResponseFactory(controlPlaneProperties()),
                 endpointAuthorization(registry));
         SwarmManagerController.ToggleRequest request =
             new SwarmManagerController.ToggleRequest("idem-2", false, null);
@@ -127,6 +131,7 @@ class SwarmManagerControllerTest {
             publisher,
             operationDispatch(registry),
             controlPlaneProperties(),
+            new ControlResponseFactory(controlPlaneProperties()),
             endpointAuthorization(registry));
 
         try {
