@@ -40,7 +40,8 @@ class HaproxyConfigClientTest {
     @Test
     void applyWaitsUntilHaproxyConfirmsTheExactConfigDigest() throws Exception {
         Path configFile = tempDir.resolve("haproxy.cfg");
-        HaproxyConfigClient client = new HaproxyConfigClient(properties(configFile,
+        Path appliedDigestFile = tempDir.resolve("confirmed-digest");
+        HaproxyConfigClient client = new HaproxyConfigClient(properties(configFile, appliedDigestFile,
             Duration.ofSeconds(2), Duration.ofMillis(10)));
 
         try (var executor = Executors.newSingleThreadExecutor()) {
@@ -55,7 +56,7 @@ class HaproxyConfigClientTest {
             }
             assertThat(apply.isDone()).isFalse();
             Files.writeString(
-                configFile.resolveSibling("haproxy.cfg.applied.sha256"),
+                appliedDigestFile,
                 sha256(Files.readAllBytes(configFile)),
                 StandardCharsets.UTF_8);
 
@@ -66,11 +67,12 @@ class HaproxyConfigClientTest {
     @Test
     void applyFailsExplicitlyWhenHaproxyDoesNotConfirmTheDesiredDigest() throws Exception {
         Path configFile = tempDir.resolve("haproxy.cfg");
+        Path appliedDigestFile = tempDir.resolve("confirmed-digest");
         Files.writeString(
-            configFile.resolveSibling("haproxy.cfg.applied.sha256"),
+            appliedDigestFile,
             "stale-digest",
             StandardCharsets.UTF_8);
-        HaproxyConfigClient client = new HaproxyConfigClient(properties(configFile,
+        HaproxyConfigClient client = new HaproxyConfigClient(properties(configFile, appliedDigestFile,
             Duration.ofMillis(100), Duration.ofMillis(10)));
 
         assertThatThrownBy(() -> client.applyRoutes(List.of()))
@@ -81,10 +83,12 @@ class HaproxyConfigClientTest {
 
     private static NetworkProxyManagerProperties properties(
         Path configFile,
+        Path appliedDigestFile,
         Duration applyTimeout,
         Duration applyPollInterval) {
         NetworkProxyManagerProperties properties = new NetworkProxyManagerProperties();
         properties.getHaproxy().setConfigFile(configFile.toString());
+        properties.getHaproxy().setAppliedDigestFile(appliedDigestFile.toString());
         properties.getHaproxy().setApplyTimeout(applyTimeout);
         properties.getHaproxy().setApplyPollInterval(applyPollInterval);
         return properties;

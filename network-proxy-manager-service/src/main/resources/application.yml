@@ -21,7 +21,8 @@ pockethive:
       listen-host: 0.0.0.0
       listen-port-offset: 10000
     haproxy:
-      config-file: /opt/haproxy-runtime/haproxy.cfg
+      config-file: ${HAPROXY_CONFIG_FILE:/opt/haproxy-runtime/haproxy.cfg}
+      applied-digest-file: ${HAPROXY_APPLIED_DIGEST_FILE:}
       backend-host: toxiproxy
       apply-timeout: ${POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_TIMEOUT:PT10S}
       apply-poll-interval: ${POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_POLL_INTERVAL:PT0.1S}

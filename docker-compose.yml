@@ -1,3 +1,7 @@
+x-haproxy-runtime-environment: &haproxy-runtime-environment
+  HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+  HAPROXY_APPLIED_DIGEST_FILE: /opt/haproxy-runtime/haproxy.applied.sha256
+
 services:
 #--------------------------------------
 # Off the Shelf Services
@@ -207,7 +211,7 @@ services:
   haproxy:
     image: ${DOCKER_REGISTRY:-}network-proxy-haproxy:${POCKETHIVE_VERSION:-latest}
     environment:
-      HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+      <<: *haproxy-runtime-environment
       HAPROXY_CONFIG_POLL_INTERVAL_SECONDS: ${HAPROXY_CONFIG_POLL_INTERVAL_SECONDS:-1}
     volumes:
       - haproxy-runtime:/opt/haproxy-runtime
@@ -340,12 +344,12 @@ services:
   network-proxy-manager:
     image: ${DOCKER_REGISTRY:-}network-proxy-manager:${POCKETHIVE_VERSION:-latest}
     environment:
+      <<: *haproxy-runtime-environment
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME:-network-proxy-manager}
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: ${POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET:-network-proxy-manager-local-secret}
       POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
       POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://toxiproxy:8474
-      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_TIMEOUT: ${POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_TIMEOUT:-PT10S}
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_POLL_INTERVAL: ${POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_POLL_INTERVAL:-PT0.1S}

@@ -3,6 +3,10 @@ networks:
     name: pockethive
     attachable: true
 
+x-haproxy-runtime-environment: &haproxy-runtime-environment
+  HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+  HAPROXY_APPLIED_DIGEST_FILE: /opt/haproxy-runtime/haproxy.applied.sha256
+
 services:
   rabbitmq:
     image: rabbitmq:3.13-management-alpine
@@ -264,7 +268,7 @@ services:
   haproxy:
     image: {{ pockethive_docker_registry }}network-proxy-haproxy:{{ pockethive_version }}
     environment:
-      HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
+      <<: *haproxy-runtime-environment
       HAPROXY_CONFIG_POLL_INTERVAL_SECONDS: "1"
     volumes:
       - {{ pockethive_bind_source_dir }}/state/haproxy/runtime:/opt/haproxy-runtime
@@ -400,12 +404,12 @@ services:
   network-proxy-manager:
     image: {{ pockethive_docker_registry }}network-proxy-manager:{{ pockethive_version }}
     environment:
+      <<: *haproxy-runtime-environment
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: network-proxy-manager
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: network-proxy-manager-local-secret
       POCKETHIVE_NETWORK_PROXY_MANAGER_SCENARIO_MANAGER_URL: http://scenario-manager:8080
       POCKETHIVE_NETWORK_PROXY_MANAGER_TOXIPROXY_URL: http://toxiproxy:8474
-      POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_CONFIG_FILE: /opt/haproxy-runtime/haproxy.cfg
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_BACKEND_HOST: toxiproxy
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_TIMEOUT: PT10S
       POCKETHIVE_NETWORK_PROXY_MANAGER_HAPROXY_APPLY_POLL_INTERVAL: PT0.1S

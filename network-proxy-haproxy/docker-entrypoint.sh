@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CONFIG_FILE="${HAPROXY_CONFIG_FILE:-/opt/haproxy-runtime/haproxy.cfg}"
+CONFIG_FILE="${HAPROXY_CONFIG_FILE:?HAPROXY_CONFIG_FILE must be set}"
 CONFIG_DIR="$(dirname "${CONFIG_FILE}")"
-APPLIED_HASH_FILE="${CONFIG_FILE}.applied.sha256"
+APPLIED_HASH_FILE="${HAPROXY_APPLIED_DIGEST_FILE:?HAPROXY_APPLIED_DIGEST_FILE must be set}"
 ACTIVE_CONFIG_FILE="/var/run/pockethive-haproxy.cfg"
 POLL_INTERVAL_SECONDS="${HAPROXY_CONFIG_POLL_INTERVAL_SECONDS:-1}"
 PID_FILE="/var/run/haproxy.pid"

@@ -132,7 +132,8 @@ polling the file's SHA-256 at the explicitly configured interval; cross-node fil
 file timestamps and `inotify` are not part of the contract.
 
 For each new digest, HAProxy copies a stable candidate, validates it with `haproxy -c`, reloads from
-that candidate, and atomically writes the applied digest to `<config-file>.applied.sha256`. A Network
+that candidate, and atomically writes the applied digest to the shared path declared once as
+`HAPROXY_APPLIED_DIGEST_FILE` in the deployment manifest and passed unchanged to both containers. A Network
 Proxy Manager mutation succeeds only after that file contains the exact desired digest. An invalid
 configuration or apply timeout is an explicit binding failure; the previously applied HAProxy process
 may continue serving its last valid configuration, but it must not be reported as the new binding.

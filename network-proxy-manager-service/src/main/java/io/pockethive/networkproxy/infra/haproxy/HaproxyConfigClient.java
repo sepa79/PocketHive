@@ -26,7 +26,9 @@ public class HaproxyConfigClient implements HaproxyAdminClient {
         this.configFile = Path.of(requireText(
             properties.getHaproxy().getConfigFile(),
             "pockethive.network-proxy-manager.haproxy.config-file"));
-        this.appliedHashFile = configFile.resolveSibling(configFile.getFileName() + ".applied.sha256");
+        this.appliedHashFile = Path.of(requireText(
+            properties.getHaproxy().getAppliedDigestFile(),
+            "pockethive.network-proxy-manager.haproxy.applied-digest-file"));
         this.applyTimeout = requirePositive(
             properties.getHaproxy().getApplyTimeout(),
             "pockethive.network-proxy-manager.haproxy.apply-timeout");
