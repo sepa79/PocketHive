@@ -29,6 +29,7 @@ import io.pockethive.e2e.clients.OrchestratorClient;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.TemplateSummary;
@@ -47,6 +48,7 @@ public class AuthSteps {
 
   private static final Duration SWARM_REMOVE_TIMEOUT = Duration.ofSeconds(45);
   private static final Duration SWARM_REGISTRATION_TIMEOUT = Duration.ofSeconds(20);
+  private static final Duration LIFECYCLE_OPERATION_TIMEOUT = Duration.ofSeconds(120);
 
   private ServiceEndpoints endpoints;
   private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
@@ -65,6 +67,7 @@ public class AuthSteps {
   private JsonNode latestResponseJson;
   private List<TemplateSummary> latestTemplates = List.of();
   private AuthServiceClient.AuthenticatedUser latestAuthUser;
+  private ControlResponse latestControlResponse;
   private final List<String> swarmsToCleanup = new ArrayList<>();
 
   @Given("the auth harness is initialised")
@@ -147,6 +150,7 @@ public class AuthSteps {
   public void iTryToCreateSwarmFromTemplate(String swarmId, String templateId) {
     ensureHarness();
     latestErrorBody = null;
+    latestControlResponse = null;
     String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
       ControlResponse response = activeOrchestratorClient.createSwarm(
@@ -161,6 +165,7 @@ public class AuthSteps {
               NetworkMode.DIRECT,
               null));
       latestStatus = 202;
+      latestControlResponse = response;
       if (response != null) {
         swarmsToCleanup.add(resolvedSwarmId);
       }
@@ -168,6 +173,21 @@ public class AuthSteps {
       latestStatus = ex.getStatusCode().value();
       latestErrorBody = ex.getResponseBodyAsString();
     }
+  }
+
+  @When("I wait for the accepted lifecycle operation to succeed")
+  public void iWaitForTheAcceptedLifecycleOperationToSucceed() {
+    ensureHarness();
+    assertNotNull(latestControlResponse, "Expected an accepted lifecycle operation");
+    Awaitility.await("accepted lifecycle operation " + latestControlResponse.correlationId())
+        .atMost(LIFECYCLE_OPERATION_TIMEOUT)
+        .pollInterval(Duration.ofSeconds(1))
+        .untilAsserted(() -> {
+          var operation = activeOrchestratorClient.findOperation(latestControlResponse.operationUrl())
+              .orElseThrow(() -> new AssertionError("Accepted operation is not available"));
+          assertEquals(OperationState.SUCCEEDED, operation.state(),
+              () -> "Accepted operation did not succeed: " + operation);
+        });
   }
 
   @When("I wait until swarm {string} becomes visible")
@@ -184,9 +204,10 @@ public class AuthSteps {
   public void iTryToStopSwarm(String swarmId) {
     ensureHarness();
     latestErrorBody = null;
+    latestControlResponse = null;
     String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
-      activeOrchestratorClient.stopSwarm(
+      latestControlResponse = activeOrchestratorClient.stopSwarm(
           resolvedSwarmId,
           new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "stop"), "auth e2e stop"));
       latestStatus = 202;
@@ -200,9 +221,10 @@ public class AuthSteps {
   public void iTryToStartSwarm(String swarmId) {
     ensureHarness();
     latestErrorBody = null;
+    latestControlResponse = null;
     String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
-      activeOrchestratorClient.startSwarm(
+      latestControlResponse = activeOrchestratorClient.startSwarm(
           resolvedSwarmId,
           new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "start"), "auth e2e start"));
       latestStatus = 202;
@@ -216,9 +238,10 @@ public class AuthSteps {
   public void iTryToRemoveSwarm(String swarmId) {
     ensureHarness();
     latestErrorBody = null;
+    latestControlResponse = null;
     String resolvedSwarmId = placeholderResolver.resolveSwarmId(swarmId);
     try {
-      activeOrchestratorClient.removeSwarm(
+      latestControlResponse = activeOrchestratorClient.removeSwarm(
           resolvedSwarmId,
           new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "remove"), "auth e2e remove"));
       latestStatus = 202;

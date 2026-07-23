@@ -15,11 +15,15 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Consumer;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 /** Single application service for reserving and dispatching Orchestrator-owned operations. */
 @Component
 public final class OperationDispatchService {
+
+  private static final Logger log = LoggerFactory.getLogger(OperationDispatchService.class);
 
   private final SwarmOperationCoordinator operations;
   private final OperationOutcomePublisher outcomes;
@@ -90,8 +94,21 @@ public final class OperationDispatchService {
           terminal,
           Instant.now());
       if (completion == io.pockethive.orchestrator.domain.OperationCompletion.COMPLETED) {
-        operations.findByCorrelation(correlationId)
-            .ifPresent(operation -> outcomes.publish(operation, runtimeMeta(swarmId)));
+        try {
+          operations.findByCorrelation(correlationId)
+              .ifPresent(operation -> outcomes.publish(operation, runtimeMeta(swarmId)));
+        } catch (RuntimeException publicationFailure) {
+          if (publicationFailure != failure) {
+            failure.addSuppressed(publicationFailure);
+          }
+          log.error(
+              "Failed to publish terminal outcome type={} swarm={} correlation={}; "
+                  + "the execution failure remains authoritative",
+              type,
+              swarmId,
+              correlationId,
+              publicationFailure);
+        }
       }
       throw failure;
     }
@@ -120,9 +137,11 @@ public final class OperationDispatchService {
       case REMOVE -> {
         context.put("removedResources", java.util.List.of());
         context.put("remainingResources", java.util.List.of());
-        context.put("errors", java.util.List.of(Map.of(
-            "code", failure.getClass().getSimpleName(),
-            "message", Objects.toString(failure.getMessage(), failure.getClass().getName()))));
+        Map<String, Object> error = new LinkedHashMap<>();
+        error.put("code", failure.getClass().getSimpleName());
+        error.put("message", Objects.toString(failure.getMessage(), failure.getClass().getName()));
+        error.put("resource", null);
+        context.put("errors", java.util.List.of(java.util.Collections.unmodifiableMap(error)));
       }
       case CONFIG_UPDATE -> {
         context.put("requestedEnabled", null);

@@ -80,6 +80,16 @@ Timestamp: 2026-07-22T22:53:54Z
 - Workflow cleanup acceptance: wait for the correlation-specific remove
   operation to succeed and verify the swarm registry postcondition before
   reporting teardown, while still attempting bundle cleanup after a failure.
+- Network proxy NFS reliability: replace cross-node `inotify` reloads with
+  SHA-256 polling, validated HAProxy reloads, and an applied-digest handshake;
+  binding mutations now fail explicitly unless HAProxy confirms the exact
+  desired configuration.
+- Lifecycle API failure semantics: return the active canonical operation as
+  `409 Conflict` for concurrent lifecycle requests, include the schema-required
+  nullable resource in remove errors, reject unauthorized create requests before
+  reserving an operation, preserve the originating execution failure when outcome
+  publication also fails, and make auth E2E wait for accepted lifecycle operations
+  before issuing dependent commands.
 
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z

@@ -123,6 +123,19 @@ Operators can inspect data-plane traffic via **debug taps**. A tap is a temporar
 bound to the swarm's hive exchange (e.g. `ph.<swarmId>.hive`) using the same routing key as the
 target work queue (e.g. `ph.work.<swarmId>.<queueName>`). The Orchestrator owns tap lifecycle
 and exposes REST endpoints for UI V2; workers remain AMQP-only and untouched.
+
+### 2.6 Network proxy configuration apply
+
+The Network Proxy Manager owns desired proxy bindings and renders the complete HAProxy configuration
+to the shared runtime directory using an atomic replacement. HAProxy detects desired configuration by
+polling the file's SHA-256 at the explicitly configured interval; cross-node filesystem notifications,
+file timestamps and `inotify` are not part of the contract.
+
+For each new digest, HAProxy copies a stable candidate, validates it with `haproxy -c`, reloads from
+that candidate, and atomically writes the applied digest to `<config-file>.applied.sha256`. A Network
+Proxy Manager mutation succeeds only after that file contains the exact desired digest. An invalid
+configuration or apply timeout is an explicit binding failure; the previously applied HAProxy process
+may continue serving its last valid configuration, but it must not be reported as the new binding.
 ---
 
 ## 3. Control-plane envelope & routing (SSOT)
@@ -256,6 +269,8 @@ Results and outcomes share the canonical terminal-operation payload so the Orche
 - `data.retryable` is set only for commands with defined retry semantics.
 - `data.context` contains command-specific terminal evidence such as desired/observed values, non-converged workers or remaining resources. Domain observations such as `RUNNING` and `STOPPED` are never encoded as operation status.
 - Human-readable `message` and stable diagnostic `code` belong in the correlated `event.alert.{type}` payload.
+- Synchronous request preconditions are evaluated before operation reservation. In particular, a rejected create authorization must not create an operation record.
+- Failure to publish a terminal outcome never replaces the originating execution failure. The operation remains terminal with its outcome unpublished so the existing publication retry can deliver it later; the publication failure is retained as secondary diagnostic evidence.
 
 **Canonical terminal outcome mapping**
 

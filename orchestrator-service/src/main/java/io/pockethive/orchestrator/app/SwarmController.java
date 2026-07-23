@@ -22,6 +22,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
+import io.pockethive.orchestrator.domain.OperationConflictException;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
@@ -45,6 +46,7 @@ import io.pockethive.swarm.model.lifecycle.ControlRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import io.pockethive.swarm.model.lifecycle.Target;
@@ -171,6 +173,8 @@ public class SwarmController {
         String templateId = req.templateId();
         Duration timeout = Duration.ofMillis(120_000L);
         Target operationTarget = new Target(ControlPlaneRoles.ORCHESTRATOR, originInstanceId);
+        ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = fetchScenarioTemplate(templateId);
+        requireRunTemplate(templateDescriptor);
         ResponseEntity<?> response;
         Optional<io.pockethive.swarm.model.lifecycle.SwarmOperation> existingOperation =
             operations.find(swarmId, OperationType.CREATE, operationTarget, req.idempotencyKey());
@@ -194,8 +198,6 @@ public class SwarmController {
         String correlation = UUID.randomUUID().toString();
         response = idempotentSend(
             OperationType.CREATE, swarmId, operationTarget, req.idempotencyKey(), timeout.toMillis(), correlation, corr -> {
-                ScenarioClient.ScenarioTemplateDescriptor templateDescriptor = fetchScenarioTemplate(templateId);
-                requireRunTemplate(templateDescriptor);
                 log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} networkMode={} networkProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
                     swarmId,
                     templateId,
@@ -684,6 +686,11 @@ public class SwarmController {
         return ResponseEntity.status(e.statusCode())
             .contentType(contentType)
             .body(body);
+    }
+
+    @ExceptionHandler(OperationConflictException.class)
+    ResponseEntity<SwarmOperation> operationConflict(OperationConflictException exception) {
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(exception.activeOperation());
     }
 
     private static MediaType responseContentType(String contentType, String body) {

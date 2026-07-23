@@ -681,6 +681,16 @@ production access is governed by HiveGate policy outside Orchestrator.
 
 Deletes the tap queue and returns the last known tap state.
 
+### Lifecycle operation conflicts
+
+Only one non-terminal lifecycle operation may exist for a swarm. A `create`, `start`, `stop`, or
+`remove` request that conflicts with a different active lifecycle operation returns `409 Conflict`.
+The response body is the canonical active `SwarmOperation`, allowing the caller to follow its
+`correlationId` instead of retrying or replacing it implicitly.
+
+Create authorization is evaluated before lifecycle-operation lookup or reservation. A rejected
+`create` request returns its authorization error and does not create or expose an operation record.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 

@@ -17,6 +17,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 
 /**
  * Thin wrapper around {@link WebClient} to access the Orchestrator REST API.
@@ -94,6 +95,22 @@ public final class OrchestratorClient {
         return Optional.empty();
       }
       return Optional.ofNullable(toSwarmView(entity.getBody()));
+    } catch (WebClientResponseException.NotFound notFound) {
+      return Optional.empty();
+    }
+  }
+
+  public Optional<SwarmOperation> findOperation(String operationUrl) {
+    Objects.requireNonNull(operationUrl, "operationUrl");
+    try {
+      ResponseEntity<SwarmOperation> entity = webClient.get()
+          .uri(operationUrl)
+          .accept(MediaType.APPLICATION_JSON)
+          .retrieve()
+          .toEntity(SwarmOperation.class)
+          .timeout(HTTP_TIMEOUT)
+          .block(HTTP_TIMEOUT);
+      return entity == null ? Optional.empty() : Optional.ofNullable(entity.getBody());
     } catch (WebClientResponseException.NotFound notFound) {
       return Optional.empty();
     }

@@ -6,7 +6,11 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Duration;
 import java.util.Comparator;
+import java.util.HexFormat;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
@@ -14,11 +18,25 @@ import org.springframework.stereotype.Component;
 public class HaproxyConfigClient implements HaproxyAdminClient {
 
     private final Path configFile;
+    private final Path appliedHashFile;
+    private final Duration applyTimeout;
+    private final Duration applyPollInterval;
 
     public HaproxyConfigClient(NetworkProxyManagerProperties properties) {
         this.configFile = Path.of(requireText(
             properties.getHaproxy().getConfigFile(),
             "pockethive.network-proxy-manager.haproxy.config-file"));
+        this.appliedHashFile = configFile.resolveSibling(configFile.getFileName() + ".applied.sha256");
+        this.applyTimeout = requirePositive(
+            properties.getHaproxy().getApplyTimeout(),
+            "pockethive.network-proxy-manager.haproxy.apply-timeout");
+        this.applyPollInterval = requirePositive(
+            properties.getHaproxy().getApplyPollInterval(),
+            "pockethive.network-proxy-manager.haproxy.apply-poll-interval");
+        if (applyPollInterval.toMillis() < 1) {
+            throw new IllegalStateException(
+                "pockethive.network-proxy-manager.haproxy.apply-poll-interval must be at least 1 ms");
+        }
     }
 
     @Override
@@ -31,10 +49,48 @@ public class HaproxyConfigClient implements HaproxyAdminClient {
             Files.createDirectories(parent);
         }
         Path tempFile = configFile.resolveSibling(configFile.getFileName() + ".tmp");
-        Files.writeString(tempFile, renderConfig(sortedRoutes), StandardCharsets.UTF_8);
+        byte[] desiredConfig = renderConfig(sortedRoutes).getBytes(StandardCharsets.UTF_8);
+        Files.write(tempFile, desiredConfig);
         Files.move(tempFile, configFile,
             StandardCopyOption.REPLACE_EXISTING,
             StandardCopyOption.ATOMIC_MOVE);
+        waitUntilApplied(sha256(desiredConfig));
+    }
+
+    private void waitUntilApplied(String desiredHash) throws Exception {
+        long deadline = System.nanoTime() + applyTimeout.toNanos();
+        String lastAppliedHash = "missing";
+        do {
+            if (Files.exists(appliedHashFile)) {
+                lastAppliedHash = Files.readString(appliedHashFile, StandardCharsets.UTF_8).trim();
+                if (desiredHash.equals(lastAppliedHash)) {
+                    return;
+                }
+            }
+            if (System.nanoTime() >= deadline) {
+                break;
+            }
+            try {
+                Thread.sleep(applyPollInterval.toMillis());
+            } catch (InterruptedException interrupted) {
+                Thread.currentThread().interrupt();
+                throw new IllegalStateException(
+                    "Interrupted while waiting for HAProxy to apply config SHA-256 " + desiredHash,
+                    interrupted);
+            }
+        } while (true);
+        throw new IllegalStateException(
+            "HAProxy did not apply config SHA-256 " + desiredHash
+                + " within " + applyTimeout
+                + "; last applied SHA-256=" + lastAppliedHash);
+    }
+
+    private static String sha256(byte[] content) {
+        try {
+            return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 is unavailable", exception);
+        }
     }
 
     static String renderConfig(List<RouteRecord> routes) {
@@ -80,6 +136,13 @@ public class HaproxyConfigClient implements HaproxyAdminClient {
             throw new IllegalStateException(field + " must not be blank");
         }
         return value.trim();
+    }
+
+    private static Duration requirePositive(Duration value, String field) {
+        if (value == null || value.isZero() || value.isNegative()) {
+            throw new IllegalStateException(field + " must be positive");
+        }
+        return value;
     }
 
     private static String sanitize(String value) {

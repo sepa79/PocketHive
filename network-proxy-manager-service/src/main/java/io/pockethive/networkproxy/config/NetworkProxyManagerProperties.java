@@ -93,6 +93,8 @@ public class NetworkProxyManagerProperties {
     public static class Haproxy {
         private String configFile = "/opt/haproxy-runtime/haproxy.cfg";
         private String backendHost = "toxiproxy";
+        private Duration applyTimeout = Duration.ofSeconds(10);
+        private Duration applyPollInterval = Duration.ofMillis(100);
 
         public String getConfigFile() {
             return configFile;
@@ -108,6 +110,22 @@ public class NetworkProxyManagerProperties {
 
         public void setBackendHost(String backendHost) {
             this.backendHost = backendHost;
+        }
+
+        public Duration getApplyTimeout() {
+            return applyTimeout;
+        }
+
+        public void setApplyTimeout(Duration applyTimeout) {
+            this.applyTimeout = applyTimeout;
+        }
+
+        public Duration getApplyPollInterval() {
+            return applyPollInterval;
+        }
+
+        public void setApplyPollInterval(Duration applyPollInterval) {
+            this.applyPollInterval = applyPollInterval;
         }
     }
 }

@@ -5,24 +5,33 @@ import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.AuthProvider;
+import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
+import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.OperationConflictException;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactStore;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
@@ -30,14 +39,19 @@ import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class SwarmControllerTest {
 
   private final SwarmStore store = new SwarmStore();
   private final SwarmOperationCoordinator operations = new SwarmOperationCoordinator();
   private final SwarmLifecycleCommandService lifecycleCommands = mock(SwarmLifecycleCommandService.class);
+  private final ScenarioClient scenarios = mock(ScenarioClient.class);
+  private final OrchestratorAuthorization authorization = mock(OrchestratorAuthorization.class);
   private SwarmController controller;
 
   @BeforeEach
@@ -57,10 +71,10 @@ class SwarmControllerTest {
         store,
         mock(SwarmStateStore.class),
         new ObjectMapper().findAndRegisterModules(),
-        mock(ScenarioClient.class),
+        scenarios,
         mock(SwarmNetworkBindingService.class),
         HiveJournal.noop(),
-        mock(OrchestratorAuthorization.class),
+        authorization,
         mock(FilesystemSwarmStartupArtifactStore.class),
         controlPlaneProperties());
   }
@@ -125,6 +139,51 @@ class SwarmControllerTest {
 
     assertThat(controller.operation("alpha", "corr-start").getStatusCode().value()).isEqualTo(200);
     assertThat(controller.operation("other", "corr-start").getStatusCode().value()).isEqualTo(404);
+  }
+
+  @Test
+  void lifecycleConflictIsExposedAsHttp409WithTheActiveOperation() throws Exception {
+    var reservation = lifecycleReservation(OperationType.CREATE, "corr-create", "idem-create");
+    when(lifecycleCommands.dispatch(
+        eq(OperationType.STOP), eq("alpha"), eq("idem-stop"), eq(Duration.ofSeconds(90))))
+        .thenThrow(new OperationConflictException(reservation.operation()));
+
+    MockMvcBuilders.standaloneSetup(controller).build()
+        .perform(post("/api/swarms/alpha/stop")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"idempotencyKey\":\"idem-stop\"}"))
+        .andExpect(status().isConflict())
+        .andExpect(jsonPath("$.correlationId").value("corr-create"))
+        .andExpect(jsonPath("$.type").value("CREATE"))
+        .andExpect(jsonPath("$.state").value("DISPATCHED"));
+  }
+
+  @Test
+  void deniedCreateDoesNotReserveALifecycleOperation() throws Exception {
+    var descriptor = new ScenarioClient.ScenarioTemplateDescriptor(
+        "template-denied", "restricted/template-denied", "restricted/template-denied", "restricted", false);
+    when(scenarios.fetchScenarioTemplate("template-denied")).thenReturn(descriptor);
+    when(authorization.canRun(any(), eq(descriptor))).thenReturn(false);
+    when(authorization.runDeniedMessage()).thenReturn("Template run denied");
+    var user = new AuthenticatedUserDto(
+        UUID.fromString("11111111-1111-1111-1111-111111111111"),
+        "denied-user",
+        "Denied User",
+        true,
+        AuthProvider.DEV,
+        List.of());
+
+    try {
+      OrchestratorCurrentUserHolder.set(user);
+      assertThatThrownBy(() -> controller.create("denied-swarm", new SwarmCreateRequest(
+          "template-denied", "idem-denied", null, false, null, null, NetworkMode.DIRECT, null)))
+          .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
+          .hasMessageContaining("403 FORBIDDEN");
+    } finally {
+      OrchestratorCurrentUserHolder.clear();
+    }
+
+    assertThat(operations.operations()).isEmpty();
   }
 
   private SwarmOperationCoordinator.Reservation lifecycleReservation(

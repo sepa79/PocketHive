@@ -41,6 +41,7 @@ Feature: Auth and scoped PocketHive access
     Then all runnable templates are under folder "e2e"
     When I try to create swarm "auth-runner-e2e" from template "local-rest"
     Then the create request is accepted
+    And I wait for the accepted lifecycle operation to succeed
     When I try to create swarm "auth-runner-bundles" from template "local-rest-topology"
     Then the create request is rejected with status 403
 
@@ -153,6 +154,7 @@ Feature: Auth and scoped PocketHive access
       | local-rest |
     When I try to create swarm "auth-bundle-runner-allowed" from template "local-rest"
     Then the create request is accepted
+    And I wait for the accepted lifecycle operation to succeed
     When I try to create swarm "auth-bundle-runner-blocked" from template "local-rest-defaults"
     Then the create request is rejected with status 403
 
@@ -161,6 +163,7 @@ Feature: Auth and scoped PocketHive access
     And I authenticate as "local-bundle-runner"
     When I try to create swarm "auth-bundle-managed" from template "local-rest"
     Then the create request is accepted
+    And I wait for the accepted lifecycle operation to succeed
     And I try to stop swarm "auth-bundle-managed"
     Then the create request is rejected with status 403
     When I authenticate as "local-e2e-folder-admin"
@@ -168,6 +171,7 @@ Feature: Auth and scoped PocketHive access
     Then the current auth profile contains grant "ALL" on "PH_FOLDER"="e2e"
     When I try to stop swarm "auth-bundle-managed"
     Then the create request is accepted
+    And I wait for the accepted lifecycle operation to succeed
     When I try to remove swarm "auth-bundle-managed"
     Then the create request is accepted
 

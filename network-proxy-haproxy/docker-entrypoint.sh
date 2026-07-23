@@ -3,6 +3,9 @@ set -euo pipefail
 
 CONFIG_FILE="${HAPROXY_CONFIG_FILE:-/opt/haproxy-runtime/haproxy.cfg}"
 CONFIG_DIR="$(dirname "${CONFIG_FILE}")"
+APPLIED_HASH_FILE="${CONFIG_FILE}.applied.sha256"
+ACTIVE_CONFIG_FILE="/var/run/pockethive-haproxy.cfg"
+POLL_INTERVAL_SECONDS="${HAPROXY_CONFIG_POLL_INTERVAL_SECONDS:-1}"
 PID_FILE="/var/run/haproxy.pid"
 DEFAULT_CONFIG='global
   log stdout format raw local0
@@ -30,16 +33,51 @@ if [[ ! -f "${CONFIG_FILE}" ]]; then
   printf '%s\n' "${DEFAULT_CONFIG}" > "${CONFIG_FILE}"
 fi
 
+config_hash() {
+  sha256sum "$1" | awk '{print $1}'
+}
+
+publish_applied_hash() {
+  local hash="$1"
+  local temp_file="${APPLIED_HASH_FILE}.tmp.$$"
+  printf '%s\n' "${hash}" > "${temp_file}"
+  mv -f "${temp_file}" "${APPLIED_HASH_FILE}"
+}
+
 reload_haproxy() {
-  if ! haproxy -c -f "${CONFIG_FILE}"; then
-    echo "HAProxy config validation failed; keeping current config" >&2
+  local desired_hash candidate_hash current_hash
+  local candidate_file="${ACTIVE_CONFIG_FILE}.candidate.$$"
+  desired_hash="$(config_hash "${CONFIG_FILE}")" || return 1
+  cp "${CONFIG_FILE}" "${candidate_file}" || return 1
+  candidate_hash="$(config_hash "${candidate_file}")" || return 1
+  current_hash="$(config_hash "${CONFIG_FILE}")" || return 1
+  if [[ "${desired_hash}" != "${candidate_hash}" || "${candidate_hash}" != "${current_hash}" ]]; then
+    rm -f "${candidate_file}"
+    echo "HAProxy config changed while reading; it will be checked on the next poll" >&2
     return 1
   fi
-  if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
-    haproxy -W -D -p "${PID_FILE}" -f "${CONFIG_FILE}" -sf "$(cat "${PID_FILE}")"
-  else
-    haproxy -W -D -p "${PID_FILE}" -f "${CONFIG_FILE}"
+  if ! haproxy -c -f "${candidate_file}"; then
+    rm -f "${candidate_file}"
+    echo "HAProxy config validation failed; keeping current config" >&2
+    return 2
   fi
+  mv -f "${candidate_file}" "${ACTIVE_CONFIG_FILE}" || return 1
+  if [[ -f "${PID_FILE}" ]] && kill -0 "$(cat "${PID_FILE}")" 2>/dev/null; then
+    if ! haproxy -W -D -p "${PID_FILE}" -f "${ACTIVE_CONFIG_FILE}" -sf "$(cat "${PID_FILE}")"; then
+      echo "HAProxy reload failed; applied digest was not updated" >&2
+      return 1
+    fi
+  else
+    if ! haproxy -W -D -p "${PID_FILE}" -f "${ACTIVE_CONFIG_FILE}"; then
+      echo "HAProxy start failed; applied digest was not updated" >&2
+      return 1
+    fi
+  fi
+  if ! publish_applied_hash "${candidate_hash}"; then
+    echo "HAProxy applied digest could not be published" >&2
+    return 1
+  fi
+  LAST_APPLIED_HASH="${candidate_hash}"
 }
 
 shutdown_haproxy() {
@@ -51,9 +89,24 @@ shutdown_haproxy() {
 
 trap shutdown_haproxy EXIT INT TERM
 
+LAST_APPLIED_HASH=""
+REJECTED_HASH=""
 reload_haproxy
 
 while true; do
-  inotifywait -q -e close_write,create,delete,move "${CONFIG_DIR}" >/dev/null 2>&1 || true
-  reload_haproxy || true
+  sleep "${POLL_INTERVAL_SECONDS}"
+  if ! desired_hash="$(config_hash "${CONFIG_FILE}")"; then
+    echo "HAProxy config could not be read; it will be checked on the next poll" >&2
+    continue
+  fi
+  if [[ "${desired_hash}" != "${LAST_APPLIED_HASH}" && "${desired_hash}" != "${REJECTED_HASH}" ]]; then
+    if reload_haproxy; then
+      REJECTED_HASH=""
+    else
+      reload_status=$?
+      if [[ "${reload_status}" -eq 2 ]]; then
+        REJECTED_HASH="${desired_hash}"
+      fi
+    fi
+  fi
 done
