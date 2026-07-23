@@ -2,10 +2,7 @@ package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.contract.AuthGrantDto;
@@ -24,12 +21,11 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
-import io.pockethive.orchestrator.domain.IdempotencyStore;
+import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -44,9 +40,6 @@ class SwarmManagerControllerTest {
     @Mock
     ControlPlanePublisher publisher;
 
-    @Mock
-    IdempotencyStore idempotency;
-
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
     @Test
@@ -60,14 +53,10 @@ class SwarmManagerControllerTest {
         swarm2.attachTemplate(new SwarmTemplateMetadata("tpl-2", "swarm-controller:latest", List.of(), "demo/tpl-2", "demo"));
         registry.register(swarm2);
         cacheStatusFull(mapper, registry, "sw2", "tpl-2", "run-2");
-	        when(idempotency.reserve(eq("sw1"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-	            .thenReturn(Optional.empty());
-	        when(idempotency.reserve(eq("sw2"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-1"), anyString()))
-	            .thenReturn(Optional.empty());
 	        SwarmManagerController controller = new SwarmManagerController(
 	            registry,
 	            publisher,
-	            idempotency,
+	            operationDispatch(registry),
 	            controlPlaneProperties(),
                 endpointAuthorization(registry));
         SwarmManagerController.ToggleRequest request =
@@ -101,12 +90,10 @@ class SwarmManagerControllerTest {
         swarm.attachTemplate(new SwarmTemplateMetadata("tpl-9", "swarm-controller:latest", List.of(), "demo/tpl-9", "demo"));
         registry.register(swarm);
 	        cacheStatusFull(mapper, registry, "sw9", "tpl-9", "run-9");
-	        when(idempotency.reserve(eq("sw9"), eq(ControlPlaneSignals.CONFIG_UPDATE), eq("idem-2"), anyString()))
-	            .thenReturn(Optional.empty());
 	        SwarmManagerController controller = new SwarmManagerController(
 	            registry,
 	            publisher,
-	            idempotency,
+	            operationDispatch(registry),
 	            controlPlaneProperties(),
                 endpointAuthorization(registry));
         SwarmManagerController.ToggleRequest request =
@@ -127,8 +114,8 @@ class SwarmManagerControllerTest {
         assertThat(response.getBody()).isNotNull();
         assertThat(response.getBody().dispatches()).hasSize(1);
         SwarmManagerController.Dispatch dispatch = response.getBody().dispatches().getFirst();
-        ConfirmationScope scope = new ConfirmationScope("sw9", "swarm-controller", "ctrl-z");
-        assertThat(dispatch.response().watch().successTopic())
+        ConfirmationScope scope = new ConfirmationScope("sw9", "orchestrator", "orch-instance");
+        assertThat(dispatch.response().outcomeTopic())
             .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope));
     }
 
@@ -138,7 +125,7 @@ class SwarmManagerControllerTest {
         SwarmManagerController controller = new SwarmManagerController(
             registry,
             publisher,
-            idempotency,
+            operationDispatch(registry),
             controlPlaneProperties(),
             endpointAuthorization(registry));
 
@@ -181,6 +168,13 @@ class SwarmManagerControllerTest {
 
     private static OrchestratorEndpointAuthorization endpointAuthorization(SwarmStore store) {
         return new OrchestratorEndpointAuthorization(new OrchestratorAuthorization(), scenarioClient(), store);
+    }
+
+    private static OperationDispatchService operationDispatch(SwarmStore store) {
+        return new OperationDispatchService(
+            new SwarmOperationCoordinator(),
+            org.mockito.Mockito.mock(OperationOutcomePublisher.class),
+            store);
     }
 
     private static ScenarioClient scenarioClient() {

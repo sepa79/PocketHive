@@ -37,8 +37,6 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         // Lifecycle commands must target a concrete controller instance.
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, ROLE, "ALL"));
@@ -73,8 +71,6 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         );
         Set<String> lifecycleRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN)
         );

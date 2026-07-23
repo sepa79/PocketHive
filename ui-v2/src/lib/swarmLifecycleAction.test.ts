@@ -5,18 +5,36 @@ import {
   parseSwarmLifecycleControlResponse,
   pendingSwarmLifecycleFeedback,
   resolveSwarmLifecycleFeedback,
+  resolveSwarmLifecycleOperationFeedback,
 } from './swarmLifecycleAction'
 
 const ACCEPTED_AT = Date.parse('2026-07-13T12:00:00Z')
 
 describe('swarm lifecycle action feedback', () => {
-  it('requires the explicit correlation and watch contract', () => {
+  it('completes from the authoritative operation resource', () => {
+    const feedback = pending('start')
+    const resolved = resolveSwarmLifecycleOperationFeedback(feedback, {
+      correlationId: feedback.correlationId,
+      state: 'SUCCEEDED',
+    })
+    expect(resolved.status).toBe('success')
+  })
+
+  it('rejects an operation resource for another correlation', () => {
+    expect(() => resolveSwarmLifecycleOperationFeedback(pending('stop'), {
+      correlationId: 'another-operation',
+      state: 'SUCCEEDED',
+    })).toThrow('correlationId')
+  })
+
+  it('requires the canonical operation and outcome contract', () => {
     expect(
       parseSwarmLifecycleControlResponse({
         correlationId: 'corr-1',
         idempotencyKey: 'idem-1',
+        operationUrl: '/api/swarms/demo/operations/corr-1',
+        outcomeTopic: 'event.outcome.swarm-stop.demo.orchestrator.orch-1',
         timeoutMs: 90_000,
-        watch: { successTopic: 'event.outcome.swarm-stop.demo.swarm-controller.sc-1', errorTopics: ['event.alert.alert.demo.swarm-controller.sc-1'] },
       }),
     ).toMatchObject({ correlationId: 'corr-1', timeoutMs: 90_000 })
 
@@ -25,31 +43,16 @@ describe('swarm lifecycle action feedback', () => {
         correlationId: 'corr-1',
         idempotencyKey: 'idem-1',
         timeoutMs: 90_000,
-        watch: { successTopic: 'event.outcome.swarm-stop.demo.swarm-controller.sc-1' },
+        outcomeTopic: 'event.outcome.swarm-stop.demo.orchestrator.orch-1',
       }),
-    ).toThrow('watch.errorTopics')
-  })
-
-  it('surfaces a human-readable alert message', () => {
-    const feedback = pending('start')
-    const resolved = resolveSwarmLifecycleFeedback(
-      feedback,
-      [entry(envelope('event', 'alert', { level: 'error', code: 'runtime.exception', message: 'Worker configuration was rejected.' }))],
-      ACCEPTED_AT + 1000,
-    )
-
-    expect(resolved).toMatchObject({
-      status: 'error',
-      code: 'runtime.exception',
-      message: "Could not start swarm 'demo': Worker configuration was rejected.",
-    })
+    ).toThrow('operationUrl')
   })
 
   it('explains a NotReady outcome using its structured context', () => {
     const feedback = pending('start')
     const resolved = resolveSwarmLifecycleFeedback(
       feedback,
-      [entry(envelope('outcome', 'swarm-start', { status: 'NotReady', context: { initialized: false, ready: false, pendingConfigUpdates: true } }))],
+      [entry(envelope('outcome', 'swarm-start', { status: 'Rejected', context: { initialized: false, ready: false, pendingConfigUpdates: true } }))],
       ACCEPTED_AT + 1000,
     )
 
@@ -59,39 +62,28 @@ describe('swarm lifecycle action feedback', () => {
     expect(resolved.message).toContain('configuration updates are still pending')
   })
 
-  it('surfaces timeout alerts emitted by the orchestrator', () => {
+  it('surfaces terminal timeout outcomes emitted by the orchestrator', () => {
     const feedback = pending('stop')
     const resolved = resolveSwarmLifecycleFeedback(
       feedback,
-      [entry(envelope('event', 'alert', { level: 'error', code: 'timeout', message: 'stop confirmation timed out' }, 'orchestrator'))],
+      [entry(envelope('outcome', 'swarm-stop', { status: 'TimedOut' }, 'orchestrator'))],
       ACCEPTED_AT + 1000,
     )
 
     expect(resolved).toMatchObject({
       status: 'error',
-      code: 'timeout',
-      message: "Could not stop swarm 'demo': stop confirmation timed out",
+      code: 'TimedOut',
+      message: "Could not stop swarm 'demo': the control plane reported a failed outcome.",
     })
   })
 
-  it('replaces an early success with a later correlated finalization error', () => {
-    const accepted = pending('stop')
-    const successful = resolveSwarmLifecycleFeedback(
-      accepted,
-      [entry(envelope('outcome', 'swarm-stop', { status: 'Stopped' }))],
+  it('accepts only the orchestrator terminal outcome as success', () => {
+    const resolved = resolveSwarmLifecycleFeedback(
+      pending('stop'),
+      [entry(envelope('outcome', 'swarm-stop', { status: 'Succeeded' }, 'orchestrator'))],
       ACCEPTED_AT + 1000,
     )
-    const resolved = resolveSwarmLifecycleFeedback(
-      successful,
-      [entry(envelope('event', 'alert', { level: 'error', code: 'runtime.exception', message: 'Container shutdown failed.' }, 'orchestrator'))],
-      ACCEPTED_AT + 2000,
-    )
-
-    expect(resolved).toMatchObject({
-      status: 'error',
-      code: 'runtime.exception',
-      message: "Could not stop swarm 'demo': Container shutdown failed.",
-    })
+    expect(resolved.status).toBe('success')
   })
 
   it('reports local expiry when no terminal event arrives', () => {
@@ -110,14 +102,9 @@ function pending(action: 'start' | 'stop') {
     {
       correlationId: 'corr-1',
       idempotencyKey: 'idem-1',
+      operationUrl: '/api/swarms/demo/operations/corr-1',
+      outcomeTopic: `event.outcome.swarm-${action}.demo.orchestrator.orch-1`,
       timeoutMs: 90_000,
-      watch: {
-        successTopic: `event.outcome.swarm-${action}.demo.swarm-controller.sc-1`,
-        errorTopics: [
-          'event.alert.alert.demo.swarm-controller.sc-1',
-          'event.alert.alert.demo.orchestrator.orch-1',
-        ],
-      },
     },
     ACCEPTED_AT,
   )
@@ -127,7 +114,7 @@ function envelope(
   kind: string,
   type: string,
   data: Record<string, unknown>,
-  role = 'swarm-controller',
+  role = 'orchestrator',
 ): ControlPlaneEnvelope {
   return {
     timestamp: '2026-07-13T12:00:01Z',
@@ -143,10 +130,7 @@ function envelope(
 }
 
 function entry(controlEnvelope: ControlPlaneEnvelope): WireLogEntry {
-  const routingKey =
-    controlEnvelope.type === 'alert'
-      ? `event.alert.alert.demo.${controlEnvelope.scope.role}.${controlEnvelope.scope.instance}`
-      : `event.outcome.${controlEnvelope.type}.demo.${controlEnvelope.scope.role}.${controlEnvelope.scope.instance}`
+  const routingKey = `event.outcome.${controlEnvelope.type}.demo.${controlEnvelope.scope.role}.${controlEnvelope.scope.instance}`
   return {
     id: `${controlEnvelope.kind}-${controlEnvelope.type}`,
     receivedAt: controlEnvelope.timestamp,

@@ -242,12 +242,11 @@ state, RabbitMQ topology, idempotency, and evidence stay in one authority path.
 If Orchestrator HTTP is unavailable, cleanup tools fail closed instead of running
 a local cleanup fallback. Register `runtime_cleanup_execute` behind HiveGate for
 real policy, approval when required, and governed execution evidence.
-Registered pre-run, stopped, and failed swarms are cleanup candidates only
-through Orchestrator lifecycle removal. Running/removing registered swarms are
-blocked by default, and the plan or execute error includes the required lifecycle
-action. Rare break-glass cleanup can set `overrideRegisteredSwarmState=true` on
-both plan and execute; the override is hash-bound, high-risk, and still uses only
-`LIFECYCLE_REMOVE_SWARM`.
+Every registered swarm is a cleanup candidate only through Orchestrator's
+canonical `LIFECYCLE_REMOVE_SWARM` operation. Execute returns `DISPATCHED` with
+the operation correlation and URL; verified filesystem result evidence owns the
+eventual terminal outcome. Direct Docker/RabbitMQ candidates for a registered
+swarm remain blocked, and there is no lifecycle ownership override.
 
 Runtime debug and cleanup tools first read `/api/runtime/debug/capabilities`.
 Docker/Swarm list, logs, version, inspect, and exact Rabbit topology tools

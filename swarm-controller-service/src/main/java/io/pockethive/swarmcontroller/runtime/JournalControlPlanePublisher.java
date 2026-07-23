@@ -2,7 +2,7 @@ package io.pockethive.swarmcontroller.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.CommandResult;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
@@ -13,7 +13,7 @@ import java.util.Objects;
  * Control-plane publisher wrapper that appends outgoing envelopes to a {@link SwarmJournal}.
  *
  * <p>This is the canonical hook for swarm-scoped journaling of control-plane outputs
- * (signals/outcomes/alerts), excluding status metrics.</p>
+ * (signals/results/alerts), excluding status metrics.</p>
  */
 public final class JournalControlPlanePublisher implements ControlPlanePublisher {
 
@@ -56,10 +56,10 @@ public final class JournalControlPlanePublisher implements ControlPlanePublisher
     if (routingKey.startsWith("event.metric.status-")) {
       return;
     }
-    if (routingKey.startsWith("event.outcome.")) {
-      CommandOutcome outcome = tryParse(message.payload(), CommandOutcome.class);
-      if (outcome != null) {
-        journal.append(SwarmJournalEntries.outOutcome(mapper, routingKey, outcome));
+    if (routingKey.startsWith("event.result.")) {
+      CommandResult result = tryParse(message.payload(), CommandResult.class);
+      if (result != null) {
+        journal.append(SwarmJournalEntries.outResult(mapper, routingKey, result));
       }
       return;
     }

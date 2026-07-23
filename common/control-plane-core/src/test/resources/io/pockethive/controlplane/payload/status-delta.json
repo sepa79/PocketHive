@@ -1,6 +1,6 @@
 {
   "timestamp": "<<ANY>>",
-  "version": "1",
+  "version": "2",
   "kind": "metric",
   "type": "status-delta",
   "origin": "instance-7",

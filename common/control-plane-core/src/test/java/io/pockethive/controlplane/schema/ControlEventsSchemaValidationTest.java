@@ -15,7 +15,7 @@ final class ControlEventsSchemaValidationTest {
     ControlEventsSchemaValidator.assertValid(normalizeEnvelope(resourceNode("/io/pockethive/controlplane/payload/status-snapshot.json")));
     ControlEventsSchemaValidator.assertValid(normalizeEnvelope(resourceNode("/io/pockethive/controlplane/payload/status-delta.json")));
     ControlEventsSchemaValidator.assertValid(normalizeEnvelope(payloadFromWrapper("/io/pockethive/controlplane/messaging/status-delta-event.json")));
-    ControlEventsSchemaValidator.assertValid(normalizeEnvelope(payloadFromWrapper("/io/pockethive/controlplane/messaging/ready-event.json")));
+    ControlEventsSchemaValidator.assertValid(normalizeEnvelope(payloadFromWrapper("/io/pockethive/controlplane/messaging/result-event.json")));
     ControlEventsSchemaValidator.assertValid(normalizeEnvelope(payloadFromWrapper("/io/pockethive/controlplane/messaging/error-event.json")));
   }
 

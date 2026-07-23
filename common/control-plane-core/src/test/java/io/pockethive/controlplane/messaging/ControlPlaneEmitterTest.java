@@ -7,12 +7,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.time.Instant;
 import java.io.IOException;
@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Consumer;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -44,61 +46,66 @@ class ControlPlaneEmitterTest {
     }
 
     @Test
-    void emitReadyPublishesLifecycleEvent() throws Exception {
-        CommandState state = new CommandState(null, true, Map.of("tasks", 5));
-        ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext.builder(
+    void emitResultPublishesExecutorEvidence() throws Exception {
+        TerminalResult result = new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of(
+            "target", Map.of("role", "generator", "instance", "gen-1"),
+            "requestedWorkloadState", "RUNNING",
+            "observedWorkloadState", "RUNNING",
+            "nonConvergedWorkers", List.of()));
+        ControlPlaneEmitter.ResultContext context = new ControlPlaneEmitter.ResultContext(
                 "swarm-start",
                 "corr-1",
                 "idem-1",
-                state)
-            .result("success")
-            .details(Map.of("durationMs", 120))
-            .timestamp(Instant.parse("2024-01-01T00:00:00Z"))
-            .build();
+                result,
+                Instant.parse("2024-01-01T00:00:00Z"));
 
-        emitter.emitReady(context);
+        emitter.emitResult(context);
 
         EventMessage message = publisher.lastEvent;
         assertThat(message).isNotNull();
-        String expectedRoute = ControlPlaneRouting.event("outcome", "swarm-start",
+        String expectedRoute = ControlPlaneRouting.event("result", "swarm-start",
             RoleContext.fromIdentity(identity).toScope());
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
         String json = describeEvent(message, payload -> { });
         JsonFixtureAssertions.assertMatchesFixture(
-            "/io/pockethive/controlplane/messaging/ready-event.json",
+            "/io/pockethive/controlplane/messaging/result-event.json",
             json);
     }
 
     @Test
-    void emitErrorPublishesLifecycleEvent() throws Exception {
-        CommandState state = new CommandState(null, null, null);
-        ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+    void emitFailurePublishesResultAndAlert() throws Exception {
+        TerminalResult result = new TerminalResult(TerminalStatus.FAILED, true, Map.of(
+            "target", Map.of("role", "generator", "instance", "gen-1"),
+            "requestedWorkloadState", "STOPPED",
+            "observedWorkloadState", "RUNNING",
+            "nonConvergedWorkers", List.of()));
+        ControlPlaneEmitter.FailureContext context = new ControlPlaneEmitter.FailureContext(
                 "swarm-stop",
                 "corr-2",
                 "idem-2",
-                state,
+                result,
                 "shutdown",
                 "ERR-42",
-                "Failure")
-            .result("error")
-            .details(Map.of("stack", "trace"))
-            .timestamp(Instant.parse("2024-01-02T00:00:00Z"))
-            .build();
+                "Failure",
+                "java.lang.IllegalStateException",
+                "trace",
+                null,
+                Instant.parse("2024-01-02T00:00:00Z"));
 
-        emitter.emitError(context);
+        emitter.emitFailure(context);
 
         assertThat(publisher.events).hasSize(2);
-        EventMessage outcomeMessage = publisher.events.getFirst();
+        EventMessage resultMessage = publisher.events.getFirst();
         EventMessage alertMessage = publisher.events.get(1);
-        String expectedRoute = ControlPlaneRouting.event("outcome", "swarm-stop",
+        String expectedRoute = ControlPlaneRouting.event("result", "swarm-stop",
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
-        assertThat(outcomeMessage.routingKey()).isEqualTo(expectedRoute);
+        assertThat(resultMessage.routingKey()).isEqualTo(expectedRoute);
         assertThat(alertMessage.routingKey()).isEqualTo(
             ControlPlaneRouting.event("alert", "alert",
                 new ConfirmationScope("swarm-A", "generator", "gen-1")));
 
-        String json = describeEvent(outcomeMessage, payload -> { });
+        String json = describeEvent(resultMessage, payload -> { });
         JsonFixtureAssertions.assertMatchesFixture(
             "/io/pockethive/controlplane/messaging/error-event.json",
             json);
@@ -111,28 +118,47 @@ class ControlPlaneEmitterTest {
         assertThat(alert.data().code()).isEqualTo("ERR-42");
         assertThat(alert.data().message()).isEqualTo("Failure");
         assertThat(alert.data().context()).containsEntry("phase", "shutdown");
-        assertThat(alert.data().context()).containsEntry("stack", "trace");
+        assertThat(alert.data().errorDetail()).isEqualTo("trace");
     }
 
     @Test
-    void emitErrorHonoursExplicitRetryableValue() throws Exception {
-        ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
+    void emitJournalPublishesNonTerminalEvidenceOnItsOwnRoutingFamily() throws Exception {
+        emitter.emitJournal(new ControlPlaneEmitter.JournalContext(
+            "work-journal",
+            "corr-journal",
+            "idem-journal",
+            Map.of("status", "recorded", "callId", "flush-summary"),
+            Instant.parse("2024-01-03T00:00:00Z")));
+
+        EventMessage message = publisher.lastEvent;
+        assertThat(message.routingKey()).isEqualTo(
+            "event.journal.work-journal.swarm-A.generator.gen-1");
+        JsonNode payload = MAPPER.readTree((String) message.payload());
+        assertThat(payload.path("kind").asText()).isEqualTo("journal");
+        assertThat(payload.path("data").path("status").asText()).isEqualTo("recorded");
+        ControlEventsSchemaValidator.assertValid(payload);
+    }
+
+    @Test
+    void emitFailureHonoursExplicitRetryableValue() throws Exception {
+        ControlPlaneEmitter.FailureContext context = new ControlPlaneEmitter.FailureContext(
                 "swarm-stop",
                 "corr-explicit",
                 "idem-explicit",
-                new CommandState(null, null, null),
+                new TerminalResult(TerminalStatus.FAILED, false, Map.of()),
                 "stop",
                 "stop.rejected",
-                "Stop cannot be retried")
-            .retryable(false)
-            .timestamp(Instant.parse("2024-01-02T00:00:00Z"))
-            .build();
+                "Stop cannot be retried",
+                null,
+                null,
+                null,
+                Instant.parse("2024-01-02T00:00:00Z"));
 
-        emitter.emitError(context);
+        emitter.emitFailure(context);
 
-        JsonNode outcome = MAPPER.readTree((String) publisher.events.getFirst().payload());
-        assertThat(outcome.path("data").path("status").asText()).isEqualTo("Failed");
-        assertThat(outcome.path("data").path("retryable").asBoolean()).isFalse();
+        JsonNode resultNode = MAPPER.readTree((String) publisher.events.getFirst().payload());
+        assertThat(resultNode.path("data").path("status").asText()).isEqualTo("Failed");
+        assertThat(resultNode.path("data").path("retryable").asBoolean()).isFalse();
     }
 
     @Test

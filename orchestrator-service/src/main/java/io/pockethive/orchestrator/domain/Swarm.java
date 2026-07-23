@@ -2,30 +2,46 @@ package io.pockethive.orchestrator.domain;
 
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.SwarmStartupArtifactReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.Health;
+import io.pockethive.swarm.model.lifecycle.RuntimeIntent;
+import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
+import io.pockethive.swarm.model.lifecycle.WorkloadIntent;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 
 public class Swarm {
     private final String id;
     private final String instanceId;
     private final String containerId;
     private final String runId;
-    private SwarmLifecycleStatus status;
     private final Instant createdAt;
     private SwarmTemplateMetadata templateMetadata;
+    private SwarmStartupArtifactReference startupArtifact;
     private String sutId;
     private NetworkMode networkMode = NetworkMode.DIRECT;
     private String networkProfileId;
     private volatile JsonNode controllerStatusFull;
     private volatile Instant controllerStatusReceivedAt;
+    private volatile RuntimeIntent runtimeIntent = RuntimeIntent.PRESENT;
+    private volatile WorkloadIntent workloadIntent = WorkloadIntent.STOPPED;
+    private volatile ControllerState controllerState = ControllerState.PROVISIONING;
+    private volatile WorkloadState workloadState = WorkloadState.UNAVAILABLE;
+    private volatile Health health = Health.UNKNOWN;
+    private volatile RuntimeResourceState runtimeResourceState = RuntimeResourceState.PRESENT;
+    private volatile Map<String, Object> observation = Map.of();
 
     public Swarm(String id, String instanceId, String containerId, String runId) {
         this.id = id;
         this.instanceId = instanceId;
         this.containerId = containerId;
         this.runId = runId;
-        this.status = SwarmLifecycleStatus.NEW;
         this.createdAt = Instant.now();
     }
 
@@ -45,17 +61,6 @@ public class Swarm {
         return runId;
     }
 
-    public SwarmLifecycleStatus getStatus() {
-        return status;
-    }
-
-    public void transitionTo(SwarmLifecycleStatus next) {
-        if (!status.canTransitionTo(next)) {
-            throw new IllegalStateException("Cannot transition from " + status + " to " + next);
-        }
-        this.status = next;
-    }
-
     public void attachTemplate(SwarmTemplateMetadata metadata) {
         this.templateMetadata = metadata;
     }
@@ -66,6 +71,14 @@ public class Swarm {
 
     public SwarmTemplateMetadata templateMetadata() {
         return templateMetadata;
+    }
+
+    public void attachStartupArtifact(SwarmStartupArtifactReference reference) {
+        this.startupArtifact = java.util.Objects.requireNonNull(reference, "reference");
+    }
+
+    public SwarmStartupArtifactReference startupArtifact() {
+        return startupArtifact;
     }
 
     public String templateId() {
@@ -133,4 +146,54 @@ public class Swarm {
     public Instant getCreatedAt() {
         return createdAt;
     }
+
+    public RuntimeIntent getRuntimeIntent() {
+        return runtimeIntent;
+    }
+
+    public WorkloadIntent getWorkloadIntent() {
+        return workloadIntent;
+    }
+
+    public synchronized void requestRuntime(RuntimeIntent runtimeIntent) {
+        this.runtimeIntent = java.util.Objects.requireNonNull(runtimeIntent, "runtimeIntent");
+        if (runtimeIntent == RuntimeIntent.ABSENT) {
+            this.workloadIntent = WorkloadIntent.STOPPED;
+            this.runtimeResourceState = RuntimeResourceState.REMOVING;
+        }
+    }
+
+    public void requestWorkload(WorkloadIntent workloadIntent) {
+        this.workloadIntent = java.util.Objects.requireNonNull(workloadIntent, "workloadIntent");
+    }
+
+    public synchronized void updateObservation(
+        ControllerState controllerState,
+        WorkloadState workloadState,
+        Health health,
+        RuntimeResourceState runtimeResourceState,
+        Map<String, Object> observation,
+        Instant observedAt) {
+        this.controllerState = java.util.Objects.requireNonNull(controllerState, "controllerState");
+        this.workloadState = java.util.Objects.requireNonNull(workloadState, "workloadState");
+        this.health = java.util.Objects.requireNonNull(health, "health");
+        this.runtimeResourceState = java.util.Objects.requireNonNull(runtimeResourceState, "runtimeResourceState");
+        this.observation = observation == null
+            ? Map.of()
+            : Collections.unmodifiableMap(new LinkedHashMap<>(observation));
+        this.controllerStatusReceivedAt = java.util.Objects.requireNonNull(observedAt, "observedAt");
+    }
+
+    public synchronized void markObservationStale() {
+        this.controllerState = ControllerState.UNKNOWN;
+        this.workloadState = WorkloadState.UNKNOWN;
+        this.health = Health.UNKNOWN;
+        this.runtimeResourceState = RuntimeResourceState.UNKNOWN;
+    }
+
+    public ControllerState getControllerState() { return controllerState; }
+    public WorkloadState getWorkloadState() { return workloadState; }
+    public Health getHealth() { return health; }
+    public RuntimeResourceState getRuntimeResourceState() { return runtimeResourceState; }
+    public Map<String, Object> getObservation() { return observation; }
 }

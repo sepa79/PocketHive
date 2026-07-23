@@ -104,7 +104,7 @@ Require concrete evidence before making any change:
     connection for slow stacks). Use this pattern instead:
     - Call `swarm.wait-ready` with default timeout. If it returns `{ ready: true }`, proceed.
     - If it returns `{ ready: false }` or times out, poll `swarm.get` every 5s manually
-      until `context.totals.healthy == context.totals.desired` and `swarmStatus == READY`.
+      until `controllerState == READY`, `workloadState == STOPPED`, and `observationStale == false`.
     - Also check `debug.journal` for `swarm-health-degraded` events if workers are slow.
 17. `swarm.start`.
 17. Wait 5-10 seconds, then `swarm.get`.

@@ -1,0 +1,389 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/docs/spec/swarm-lifecycle.schema.json",
+  "title": "PocketHive Swarm Lifecycle Contracts",
+  "oneOf": [
+    { "$ref": "#/$defs/ControlRequest" },
+    { "$ref": "#/$defs/SwarmCreateRequest" },
+    { "$ref": "#/$defs/ControlResponse" },
+    { "$ref": "#/$defs/SwarmStateView" },
+    { "$ref": "#/$defs/SwarmOperation" },
+    { "$ref": "#/$defs/RemoveRequest" },
+    { "$ref": "#/$defs/RemoveResult" }
+  ],
+  "$defs": {
+    "NonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": ".*\\S.*"
+    },
+    "NullableNonEmptyString": {
+      "oneOf": [
+        { "$ref": "#/$defs/NonEmptyString" },
+        { "type": "null" }
+      ]
+    },
+    "RuntimeIntent": {
+      "type": "string",
+      "enum": ["PRESENT", "ABSENT"]
+    },
+    "WorkloadIntent": {
+      "type": "string",
+      "enum": ["RUNNING", "STOPPED"]
+    },
+    "ControllerState": {
+      "type": "string",
+      "enum": ["PROVISIONING", "READY", "FAILED", "UNKNOWN"]
+    },
+    "WorkloadState": {
+      "type": "string",
+      "enum": ["UNAVAILABLE", "STARTING", "RUNNING", "STOPPING", "STOPPED", "UNKNOWN"]
+    },
+    "Health": {
+      "type": "string",
+      "enum": ["HEALTHY", "DEGRADED", "FAILED", "UNKNOWN"]
+    },
+    "RuntimeResourceState": {
+      "type": "string",
+      "enum": ["PRESENT", "REMOVING", "ABSENT", "UNKNOWN"]
+    },
+    "OperationType": {
+      "type": "string",
+      "enum": ["CREATE", "START", "STOP", "REMOVE", "CONFIG_UPDATE"]
+    },
+    "OperationState": {
+      "type": "string",
+      "enum": ["ACCEPTED", "DISPATCHED", "SUCCEEDED", "REJECTED", "FAILED", "TIMED_OUT"]
+    },
+    "TerminalStatus": {
+      "type": "string",
+      "enum": ["Succeeded", "Rejected", "Failed", "TimedOut"]
+    },
+    "Target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "instance"],
+      "properties": {
+        "role": { "$ref": "#/$defs/NonEmptyString" },
+        "instance": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "TerminalResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "retryable", "context"],
+      "properties": {
+        "status": { "$ref": "#/$defs/TerminalStatus" },
+        "retryable": { "type": "boolean" },
+        "context": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "ControlResponse": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["correlationId", "idempotencyKey", "operationUrl", "outcomeTopic", "timeoutMs"],
+      "properties": {
+        "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "operationUrl": { "$ref": "#/$defs/NonEmptyString" },
+        "outcomeTopic": { "$ref": "#/$defs/NonEmptyString" },
+        "timeoutMs": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "ControlRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["idempotencyKey", "notes"],
+      "properties": {
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "notes": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
+    "SwarmCreateRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["templateId", "idempotencyKey", "notes", "autoPullImages", "sutId", "variablesProfileId", "networkMode", "networkProfileId"],
+      "properties": {
+        "templateId": { "$ref": "#/$defs/NonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "notes": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "autoPullImages": { "type": ["boolean", "null"] },
+        "sutId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "variablesProfileId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "networkMode": { "type": "string", "enum": ["DIRECT", "PROXIED"] },
+        "networkProfileId": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
+    "SwarmOperation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "swarmId",
+        "type",
+        "target",
+        "correlationId",
+        "idempotencyKey",
+        "state",
+        "createdAt",
+        "dispatchedAt",
+        "deadlineAt",
+        "completedAt",
+        "terminalResult"
+      ],
+      "properties": {
+        "swarmId": { "$ref": "#/$defs/NonEmptyString" },
+        "type": { "$ref": "#/$defs/OperationType" },
+        "target": { "$ref": "#/$defs/Target" },
+        "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "state": { "$ref": "#/$defs/OperationState" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "dispatchedAt": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "deadlineAt": { "type": "string", "format": "date-time" },
+        "completedAt": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "terminalResult": {
+          "oneOf": [
+            { "$ref": "#/$defs/TerminalResult" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": { "enum": ["SUCCEEDED", "REJECTED", "FAILED", "TIMED_OUT"] }
+            },
+            "required": ["state"]
+          },
+          "then": {
+            "properties": {
+              "completedAt": { "type": "string", "format": "date-time" },
+              "terminalResult": { "$ref": "#/$defs/TerminalResult" }
+            }
+          },
+          "else": {
+            "properties": {
+              "completedAt": { "type": "null" },
+              "terminalResult": { "type": "null" }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "state": { "const": "SUCCEEDED" } }, "required": ["state"] },
+          "then": { "properties": { "terminalResult": { "properties": { "status": { "const": "Succeeded" } } } } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "REJECTED" } }, "required": ["state"] },
+          "then": { "properties": { "terminalResult": { "properties": { "status": { "const": "Rejected" } } } } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "FAILED" } }, "required": ["state"] },
+          "then": { "properties": { "terminalResult": { "properties": { "status": { "const": "Failed" } } } } }
+        },
+        {
+          "if": { "properties": { "state": { "const": "TIMED_OUT" } }, "required": ["state"] },
+          "then": { "properties": { "terminalResult": { "properties": { "status": { "const": "TimedOut" } } } } }
+        }
+      ]
+    },
+    "WorkerSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "instance", "image"],
+      "properties": {
+        "role": { "$ref": "#/$defs/NonEmptyString" },
+        "instance": { "$ref": "#/$defs/NonEmptyString" },
+        "image": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
+    "SwarmStateView": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "runId",
+        "runtimeIntent",
+        "workloadIntent",
+        "controllerState",
+        "workloadState",
+        "health",
+        "runtimeResourceState",
+        "observedAt",
+        "observationStale",
+        "activeOperation",
+        "templateId",
+        "controllerImage",
+        "bees",
+        "observation"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
+        "runtimeIntent": { "$ref": "#/$defs/RuntimeIntent" },
+        "workloadIntent": { "$ref": "#/$defs/WorkloadIntent" },
+        "controllerState": { "$ref": "#/$defs/ControllerState" },
+        "workloadState": { "$ref": "#/$defs/WorkloadState" },
+        "health": { "$ref": "#/$defs/Health" },
+        "runtimeResourceState": { "$ref": "#/$defs/RuntimeResourceState" },
+        "observedAt": {
+          "oneOf": [
+            { "type": "string", "format": "date-time" },
+            { "type": "null" }
+          ]
+        },
+        "observationStale": { "type": "boolean" },
+        "activeOperation": {
+          "oneOf": [
+            {
+              "allOf": [
+                { "$ref": "#/$defs/SwarmOperation" },
+                {
+                  "properties": {
+                    "state": { "enum": ["ACCEPTED", "DISPATCHED"] }
+                  }
+                }
+              ]
+            },
+            { "type": "null" }
+          ]
+        },
+        "templateId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "controllerImage": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "bees": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/WorkerSummary" }
+        },
+        "observation": {
+          "oneOf": [
+            { "type": "object" },
+            { "type": "null" }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "runtimeIntent": { "const": "ABSENT" } }, "required": ["runtimeIntent"] },
+          "then": { "properties": { "workloadIntent": { "const": "STOPPED" } } }
+        }
+      ]
+    },
+    "RemoveResourceType": {
+      "type": "string",
+      "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING"]
+    },
+    "RemoveResource": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": { "$ref": "#/$defs/RemoveResourceType" },
+        "id": { "$ref": "#/$defs/NonEmptyString" }
+      }
+    },
+    "RemoveError": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "message", "resource"],
+      "properties": {
+        "code": { "$ref": "#/$defs/NonEmptyString" },
+        "message": { "$ref": "#/$defs/NonEmptyString" },
+        "resource": {
+          "oneOf": [
+            { "$ref": "#/$defs/RemoveResource" },
+            { "type": "null" }
+          ]
+        }
+      }
+    },
+    "RemoveRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["schema", "swarmId", "runId", "controllerInstance", "correlationId", "idempotencyKey", "requestedAt"],
+      "properties": {
+        "schema": { "const": "pockethive/swarm-remove-request/v1" },
+        "swarmId": { "$ref": "#/$defs/NonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
+        "controllerInstance": { "$ref": "#/$defs/NonEmptyString" },
+        "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "requestedAt": { "type": "string", "format": "date-time" }
+      }
+    },
+    "RemoveResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "swarmId",
+        "runId",
+        "controllerInstance",
+        "correlationId",
+        "idempotencyKey",
+        "status",
+        "retryable",
+        "removedResources",
+        "remainingResources",
+        "errors",
+        "completedAt"
+      ],
+      "properties": {
+        "schema": { "const": "pockethive/swarm-remove-result/v1" },
+        "swarmId": { "$ref": "#/$defs/NonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
+        "controllerInstance": { "$ref": "#/$defs/NonEmptyString" },
+        "correlationId": { "$ref": "#/$defs/NonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
+        "status": { "type": "string", "enum": ["Succeeded", "Failed"] },
+        "retryable": { "type": "boolean" },
+        "removedResources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RemoveResource" },
+          "uniqueItems": true
+        },
+        "remainingResources": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RemoveResource" },
+          "uniqueItems": true
+        },
+        "errors": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/RemoveError" }
+        },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "status": { "const": "Succeeded" } },
+            "required": ["status"]
+          },
+          "then": {
+            "properties": {
+              "remainingResources": { "maxItems": 0 },
+              "errors": { "maxItems": 0 }
+            }
+          },
+          "else": {
+            "properties": {
+              "errors": { "minItems": 1 }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

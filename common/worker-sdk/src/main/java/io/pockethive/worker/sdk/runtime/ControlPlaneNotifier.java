@@ -3,8 +3,11 @@ package io.pockethive.worker.sdk.runtime;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
-import io.pockethive.control.CommandState;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
+import io.pockethive.controlplane.CanonicalPayloadDigest;
+import io.pockethive.swarm.model.lifecycle.Target;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -71,59 +74,58 @@ final class ControlPlaneNotifier {
         WorkerState state,
         Map<String, Object> rawConfig
     ) {
-        Map<String, Object> commandDetails = new LinkedHashMap<>();
-        if (!rawConfig.isEmpty()) {
-            commandDetails.put("config", rawConfig);
-        }
         Boolean enabled = state.enabled();
-        CommandState commandState = new CommandState(
-            null,
-            enabled,
-            commandDetails.isEmpty() ? null : commandDetails
-        );
         Map<String, Object> confirmationDetails = new LinkedHashMap<>();
-        confirmationDetails.put("worker", state.definition().beanName());
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            confirmationDetails.put("data", statusData);
-        }
-        if (!rawConfig.isEmpty()) {
-            confirmationDetails.put("config", rawConfig);
-        }
-        ControlPlaneEmitter.ReadyContext.Builder ready = ControlPlaneEmitter.ReadyContext.builder(
+        confirmationDetails.put("target", target(signal));
+        confirmationDetails.put("requestedEnabled", requestedEnabled(signal));
+        confirmationDetails.put("observedEnabled", enabled);
+        confirmationDetails.put("appliedConfigSha256", CanonicalPayloadDigest.sha256(objectMapper, rawConfig));
+        emitter.emitResult(new ControlPlaneEmitter.ResultContext(
             signal.type(),
             signal.correlationId(),
             signal.idempotencyKey(),
-            commandState
-        );
-        if (!confirmationDetails.isEmpty()) {
-            ready.details(confirmationDetails);
-        }
-        emitter.emitReady(ready.build());
+            new TerminalResult(TerminalStatus.SUCCEEDED, false, confirmationDetails),
+            null));
     }
 
     void emitConfigError(ControlSignal signal, WorkerState state, Exception error) {
         String code = error.getClass().getSimpleName();
         String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
-        CommandState commandState = new CommandState(null, state.enabled(), null);
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("worker", state.definition().beanName());
-        details.put("exception", code);
-        Map<String, Object> statusData = state.statusData();
-        if (!statusData.isEmpty()) {
-            details.put("data", statusData);
-        }
-        ControlPlaneEmitter.ErrorContext.Builder builder = ControlPlaneEmitter.ErrorContext.builder(
+        details.put("target", target(signal));
+        details.put("requestedEnabled", requestedEnabled(signal));
+        details.put("observedEnabled", state.enabled());
+        details.put("appliedConfigSha256", null);
+        emitter.emitFailure(new ControlPlaneEmitter.FailureContext(
             signal.type(),
             signal.correlationId(),
             signal.idempotencyKey(),
-            commandState,
+            new TerminalResult(TerminalStatus.FAILED, false, details),
             "apply",
             code,
-            message
-        );
-        builder.details(details);
-        emitter.emitError(builder.build());
+            message,
+            error.getClass().getName(),
+            error.getMessage(),
+            null,
+            null));
+    }
+
+    private Target target(ControlSignal signal) {
+        if (signal.scope() == null) {
+            throw new IllegalArgumentException("config-update scope is required");
+        }
+        return new Target(signal.scope().role(), signal.scope().instance());
+    }
+
+    private static Boolean requestedEnabled(ControlSignal signal) {
+        Object value = signal.data().get("enabled");
+        if (value == null) {
+            return null;
+        }
+        if (value instanceof Boolean enabled) {
+            return enabled;
+        }
+        throw new IllegalArgumentException("config-update enabled must be boolean");
     }
 
     private String prettyPrint(Object value) {

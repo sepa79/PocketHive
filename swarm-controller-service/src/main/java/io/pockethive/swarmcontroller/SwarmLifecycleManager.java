@@ -181,14 +181,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void remove() {
-    core.remove();
+  public java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> remove() {
+    java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> removed = core.remove();
     bufferGuard.onRemove();
+    return removed;
   }
 
   @Override
-  public SwarmStatus getStatus() {
-    return core.getStatus();
+  public io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
+    return core.getWorkloadState();
   }
 
   @Override
@@ -216,6 +217,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
+      long cutoffMillis, boolean expectedEnabled) {
+    return core.nonConvergedWorkersSince(cutoffMillis, expectedEnabled);
+  }
+
+  @Override
   public void updateEnabled(String role, String instance, boolean enabled) {
     core.updateEnabled(role, instance, enabled);
   }
@@ -223,6 +230,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public SwarmMetrics getMetrics() {
     return core.getMetrics();
+  }
+
+  @Override
+  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> expectedWorkers() {
+    return core.expectedWorkers();
   }
 
   @Override

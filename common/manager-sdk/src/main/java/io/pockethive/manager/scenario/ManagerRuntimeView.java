@@ -1,7 +1,7 @@
 package io.pockethive.manager.scenario;
 
 import io.pockethive.manager.runtime.ManagerMetrics;
-import io.pockethive.manager.runtime.ManagerStatus;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.manager.runtime.QueueStats;
 import java.util.Collections;
 import java.util.Map;
@@ -12,22 +12,22 @@ import java.util.Objects;
  */
 public final class ManagerRuntimeView {
 
-  private final ManagerStatus status;
+  private final WorkloadState workloadState;
   private final ManagerMetrics metrics;
   private final Map<String, QueueStats> queueStats;
 
-  public ManagerRuntimeView(ManagerStatus status,
+  public ManagerRuntimeView(WorkloadState workloadState,
                             ManagerMetrics metrics,
                             Map<String, QueueStats> queueStats) {
-    this.status = Objects.requireNonNull(status, "status");
+    this.workloadState = Objects.requireNonNull(workloadState, "workloadState");
     this.metrics = Objects.requireNonNull(metrics, "metrics");
     this.queueStats = queueStats == null
         ? Collections.emptyMap()
         : Collections.unmodifiableMap(queueStats);
   }
 
-  public ManagerStatus status() {
-    return status;
+  public WorkloadState workloadState() {
+    return workloadState;
   }
 
   public ManagerMetrics metrics() {
@@ -38,4 +38,3 @@ public final class ManagerRuntimeView {
     return queueStats;
   }
 }
-

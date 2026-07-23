@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.networknt.schema.JsonSchema;
 import com.networknt.schema.JsonSchemaFactory;
 import com.networknt.schema.SpecVersion;
@@ -12,6 +13,8 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Set;
+import java.util.Iterator;
+import java.util.Map;
 
 public final class ControlEventsSchemaValidator {
 
@@ -47,10 +50,56 @@ public final class ControlEventsSchemaValidator {
     Path schemaPath = locateRepoSchema();
     try {
       JsonNode schemaNode = MAPPER.readTree(schemaPath.toFile());
+      inlineLifecycleDefinitions((ObjectNode) schemaNode, schemaPath.resolveSibling("swarm-lifecycle.schema.json"));
       JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
       return factory.getSchema(schemaNode);
     } catch (Exception e) {
       throw new IllegalStateException("Failed to load schema from " + schemaPath, e);
+    }
+  }
+
+  private static void inlineLifecycleDefinitions(ObjectNode controlSchema, Path lifecyclePath) throws IOException {
+    JsonNode lifecycleSchema = MAPPER.readTree(lifecyclePath.toFile());
+    ObjectNode controlDefinitions = (ObjectNode) controlSchema.required("$defs");
+    lifecycleSchema.required("$defs").fields().forEachRemaining(entry -> {
+      JsonNode definition = entry.getValue().deepCopy();
+      prefixLocalLifecycleReferences(definition);
+      controlDefinitions.set("Lifecycle" + entry.getKey(), definition);
+    });
+    rewriteLifecycleReferences(controlSchema);
+  }
+
+  private static void prefixLocalLifecycleReferences(JsonNode node) {
+    if (node instanceof ObjectNode object) {
+      JsonNode reference = object.get("$ref");
+      if (reference != null && reference.isTextual()
+          && reference.asText().startsWith("#/$defs/")) {
+        object.put("$ref", reference.asText().replace("#/$defs/", "#/$defs/Lifecycle"));
+      }
+      object.fields().forEachRemaining(entry -> prefixLocalLifecycleReferences(entry.getValue()));
+      return;
+    }
+    if (node.isArray()) {
+      node.forEach(ControlEventsSchemaValidator::prefixLocalLifecycleReferences);
+    }
+  }
+
+  private static void rewriteLifecycleReferences(JsonNode node) {
+    if (node instanceof ObjectNode object) {
+      JsonNode reference = object.get("$ref");
+      if (reference != null && reference.isTextual()
+          && reference.asText().startsWith("swarm-lifecycle.schema.json#/$defs/")) {
+        object.put("$ref", reference.asText().replace(
+            "swarm-lifecycle.schema.json#/$defs/", "#/$defs/Lifecycle"));
+      }
+      Iterator<Map.Entry<String, JsonNode>> fields = object.fields();
+      while (fields.hasNext()) {
+        rewriteLifecycleReferences(fields.next().getValue());
+      }
+      return;
+    }
+    if (node.isArray()) {
+      node.forEach(ControlEventsSchemaValidator::rewriteLifecycleReferences);
     }
   }
 

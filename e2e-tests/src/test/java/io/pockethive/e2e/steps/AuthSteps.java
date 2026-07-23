@@ -26,9 +26,10 @@ import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import io.pockethive.e2e.clients.AuthServiceClient;
 import io.pockethive.e2e.clients.OrchestratorClient;
-import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
-import io.pockethive.e2e.clients.OrchestratorClient.ControlResponse;
-import io.pockethive.e2e.clients.OrchestratorClient.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.ControlRequest;
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.e2e.clients.ScenarioManagerClient;
 import io.pockethive.e2e.clients.ScenarioManagerClient.TemplateSummary;
 import io.pockethive.e2e.config.EnvironmentConfig;
@@ -157,7 +158,7 @@ public class AuthSteps {
               null,
               null,
               null,
-              "DIRECT",
+              NetworkMode.DIRECT,
               null));
       latestStatus = 202;
       if (response != null) {

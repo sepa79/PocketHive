@@ -272,7 +272,7 @@ async function runOfflinePoc() {
         patch: ratePatch,
         notes: "PocketHive MCP live POC rate update proof",
       });
-      if (!configUpdate.accepted || !configUpdate.watch) {
+      if (!configUpdate.accepted || !configUpdate.operationUrl || !configUpdate.outcomeTopic) {
         throw new Error(`component_config_update was not accepted: ${JSON.stringify(configUpdate)}`);
       }
       log("component_config_update", generator.instance);

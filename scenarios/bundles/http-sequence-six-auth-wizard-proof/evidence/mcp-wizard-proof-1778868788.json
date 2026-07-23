@@ -106,7 +106,7 @@
   },
   "swarmCleanup": {
     "stopRequested": true,
-    "finalSwarmStatus": "STOPPED",
+    "finalWorkloadState": "STOPPED",
     "finalTotals": {
       "desired": 3,
       "healthy": 3,

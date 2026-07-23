@@ -13,7 +13,6 @@ import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
@@ -21,6 +20,8 @@ import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.SwarmStartupArtifactContract;
+import io.pockethive.swarm.model.SwarmStartupArtifactReference;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -130,43 +131,14 @@ public class ContainerLifecycleManager {
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
-                            SwarmTemplateMetadata templateMetadata) {
-        return startSwarm(
-            swarmId,
-            image,
-            instanceId,
-            Objects.requireNonNull(templateMetadata, "templateMetadata"),
-            false,
-            null,
-            NetworkMode.DIRECT,
-            null);
-    }
-
-    public Swarm startSwarm(String swarmId,
-                            String image,
-                            String instanceId,
-                            SwarmTemplateMetadata templateMetadata,
-                            boolean autoPullImages) {
-        return startSwarm(
-            swarmId,
-            image,
-            instanceId,
-            Objects.requireNonNull(templateMetadata, "templateMetadata"),
-            autoPullImages,
-            null,
-            NetworkMode.DIRECT,
-            null);
-    }
-
-    public Swarm startSwarm(String swarmId,
-                            String image,
-                            String instanceId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages,
                             String sutId,
                             NetworkMode networkMode,
-                            String networkProfileId) {
+                            String networkProfileId,
+                            SwarmStartupArtifactReference startupArtifact) {
         Objects.requireNonNull(templateMetadata, "templateMetadata");
+        Objects.requireNonNull(startupArtifact, "startupArtifact");
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
@@ -220,6 +192,12 @@ public class ContainerLifecycleManager {
         putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
+        env.put(
+            SwarmStartupArtifactContract.PATH_ENV,
+            startupArtifact.path());
+        env.put(
+            SwarmStartupArtifactContract.SHA256_ENV,
+            startupArtifact.sha256());
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
         env.put("POCKETHIVE_NETWORK_MODE", NetworkMode.directIfNull(networkMode).name());
@@ -249,6 +227,7 @@ public class ContainerLifecycleManager {
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
+        swarm.attachStartupArtifact(startupArtifact);
         store.register(swarm);
         writeRuntimeOwnershipManifest(
             resolvedSwarmId,
@@ -258,7 +237,6 @@ public class ContainerLifecycleManager {
             containerId,
             templateMetadata,
             controllerSettings);
-        store.updateStatus(resolvedSwarmId, SwarmLifecycleStatus.CREATING);
         return swarm;
     }
 
@@ -438,80 +416,65 @@ public class ContainerLifecycleManager {
         return resolveImage(image);
     }
 
-    public void stopSwarm(String swarmId) {
-        store.find(swarmId).ifPresent(swarm -> {
-            SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == SwarmLifecycleStatus.STOPPING || current == SwarmLifecycleStatus.STOPPED) {
-                log.info("swarm {} already {}", swarmId, current);
-                return;
-            }
-            log.info("marking swarm {} as stopped", swarmId);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
-        });
-    }
+    public ControllerRuntimeRemoval removeControllerRuntime(String swarmId) {
+        Swarm swarm = store.find(swarmId)
+            .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
+        var removed = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
+        var remaining = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
+        var errors = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveError>();
 
-    public void removeSwarm(String swarmId) {
-        store.find(swarmId).ifPresent(swarm -> {
-            log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVING);
+        var controller = new io.pockethive.swarm.model.lifecycle.RemoveResource(
+            io.pockethive.swarm.model.lifecycle.RemoveResourceType.CONTROLLER_RUNTIME,
+            swarm.getContainerId());
+        try {
+            log.info("tearing down controller runtime {} for swarm {}", swarm.getContainerId(), swarmId);
             computeAdapter.stopManager(swarm.getContainerId());
-            // The swarm-controller's own control queue is declared via the manager
-            // control-plane topology. Delete it from the orchestrator once the
-            // manager has been stopped so we do not race against its AMQP context.
-            try {
-                String basePrefix = controlPlaneProperties.getControlQueuePrefix();
-                SwarmControllerControlPlaneTopologyDescriptor descriptor =
-                    new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix);
-                String controllerQueue = descriptor.controlQueue(swarm.getInstanceId())
-                    .map(ControlQueueDescriptor::name)
-                    .orElse(null);
-                if (controllerQueue != null && !controllerQueue.isBlank()) {
-                    log.info("deleting swarm-controller control queue {}", controllerQueue);
-                    amqp.deleteQueue(controllerQueue);
-                }
-            } catch (Exception ex) {
-                log.warn("Failed to delete swarm-controller control queue for swarm {}: {}", swarmId, ex.getMessage());
-            }
-            boolean manifestQueuesDeleted = deleteManifestRabbitResources(swarmId, swarm.getRunId());
-            if (!manifestQueuesDeleted) {
-                String legacyTrafficPrefix = "ph." + swarmId;
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "gen"));
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "mod"));
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "final"));
-            }
-            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
-            swarm.clearTemplate();
-            store.remove(swarmId);
-        });
+            removed.add(controller);
+        } catch (RuntimeException failure) {
+            remaining.add(controller);
+            errors.add(removeError(failure, controller));
+        }
+
+        String basePrefix = controlPlaneProperties.getControlQueuePrefix();
+        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix)
+            .controlQueue(swarm.getInstanceId())
+            .map(ControlQueueDescriptor::name)
+            .orElseThrow(() -> new IllegalStateException("Controller control queue is not defined"));
+        var queue = new io.pockethive.swarm.model.lifecycle.RemoveResource(
+            io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_QUEUE,
+            controllerQueue);
+        try {
+            log.info("deleting swarm-controller control queue {}", controllerQueue);
+            amqp.deleteQueue(controllerQueue);
+            removed.add(queue);
+        } catch (RuntimeException failure) {
+            remaining.add(queue);
+            errors.add(removeError(failure, queue));
+        }
+        return new ControllerRuntimeRemoval(removed, remaining, errors);
     }
 
-    private boolean deleteManifestRabbitResources(String swarmId, String runId) {
-        return manifestStore.find(swarmId, runId)
-            .map(manifest -> {
-                RuntimeOwnershipManifest.RabbitResources rabbit = manifest.rabbit();
-                for (String queue : rabbit.controlQueues()) {
-                    deleteQueueIfPresent(queue);
-                }
-                for (String queue : rabbit.workQueues()) {
-                    deleteQueueIfPresent(queue);
-                }
-                for (String exchange : rabbit.exchanges()) {
-                    if (exchange != null && !exchange.isBlank()) {
-                        amqp.deleteExchange(exchange);
-                    }
-                }
-                return true;
-            })
-            .orElse(false);
+    private static io.pockethive.swarm.model.lifecycle.RemoveError removeError(
+        RuntimeException failure,
+        io.pockethive.swarm.model.lifecycle.RemoveResource resource) {
+        return new io.pockethive.swarm.model.lifecycle.RemoveError(
+            failure.getClass().getSimpleName(),
+            java.util.Objects.toString(failure.getMessage(), failure.getClass().getName()),
+            resource);
     }
 
-    private void deleteQueueIfPresent(String queue) {
-        if (queue != null && !queue.isBlank()) {
-            amqp.deleteQueue(queue);
+    public record ControllerRuntimeRemoval(
+        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> removedResources,
+        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> remainingResources,
+        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveError> errors) {
+        public ControllerRuntimeRemoval {
+            removedResources = java.util.List.copyOf(removedResources);
+            remainingResources = java.util.List.copyOf(remainingResources);
+            errors = java.util.List.copyOf(errors);
+        }
+
+        public boolean succeeded() {
+            return remainingResources.isEmpty() && errors.isEmpty();
         }
     }
 

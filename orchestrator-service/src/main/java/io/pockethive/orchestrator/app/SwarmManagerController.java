@@ -11,9 +11,12 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
-import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.SwarmOperation;
+import io.pockethive.swarm.model.lifecycle.Target;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -24,10 +27,9 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.ArrayList;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * REST surface for toggling swarm controller workloads on or off via {@code /api/swarm-managers}.
@@ -45,18 +47,18 @@ public class SwarmManagerController {
 
 	    private final SwarmStore store;
 	    private final ControlPlanePublisher controlPublisher;
-	    private final IdempotencyStore idempotency;
+	    private final OperationDispatchService operations;
 	    private final String originInstanceId;
         private final OrchestratorEndpointAuthorization endpointAuthorization;
 
 	    public SwarmManagerController(SwarmStore store,
 	                                  ControlPlanePublisher controlPublisher,
-	                                  IdempotencyStore idempotency,
+	                                  OperationDispatchService operations,
 	                                  ControlPlaneProperties controlPlaneProperties,
                                       OrchestratorEndpointAuthorization endpointAuthorization) {
 	        this.store = store;
 	        this.controlPublisher = controlPublisher;
-	        this.idempotency = idempotency;
+	        this.operations = operations;
 	        this.originInstanceId = requireOrigin(controlPlaneProperties);
             this.endpointAuthorization = endpointAuthorization;
 	    }
@@ -109,8 +111,8 @@ public class SwarmManagerController {
     /**
      * Iterate through the provided swarms, publishing idempotent {@code config-update} signals.
      * <p>
-     * For each swarm we check {@link IdempotencyStore}; if a correlation exists we return it immediately.
-     * Otherwise we construct {@link ControlSignals#configUpdate(String, ControlScope, String, String, Map)} with routing
+     * For each swarm the operation coordinator reserves a target-specific operation before dispatch.
+     * We construct {@link ControlSignals#configUpdate(String, ControlScope, String, String, Map)} with routing
      * keys derived from {@link #routingKey(String, String)} and record the new correlation so
      * retries remain deterministic. The resulting {@link FanoutControlResponse} lists each dispatch with a
      * {@code reused} flag for observability.
@@ -118,34 +120,41 @@ public class SwarmManagerController {
     private FanoutControlResponse dispatch(Iterable<Swarm> swarms, ToggleRequest request) {
         List<Dispatch> dispatches = new ArrayList<>();
         for (Swarm swarm : swarms) {
-            if (swarm == null || swarm.getInstanceId() == null || swarm.getInstanceId().isBlank()) {
-                continue;
+            if (swarm == null) {
+                throw new IllegalArgumentException("swarms must not contain null");
+            }
+            if (swarm.getInstanceId() == null || swarm.getInstanceId().isBlank()) {
+                throw new IllegalStateException("Swarm " + swarm.getId() + " has no concrete controller instance");
             }
             String swarmId = swarm.getId();
-            String swarmSegment = segmentOrAll(swarmId);
-            String scope = swarmId;
-            String newCorrelation = UUID.randomUUID().toString();
-            Optional<String> existing = idempotency.reserve(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
-            if (existing.isPresent()) {
-                dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
-                    accepted(existing.get(), request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), true));
-                continue;
-	            }
-	            ControlScope target = ControlScope.forInstance(swarmId, "swarm-controller", swarm.getInstanceId());
-	            ControlSignal payload = ControlSignals.configUpdate(
-	                originInstanceId,
-	                target,
-	                newCorrelation,
-	                request.idempotencyKey(),
-	                Map.of("enabled", request.enabled()));
-            try {
-                sendControl(routingKey(swarmSegment, swarm.getInstanceId()), toJson(payload));
-            } catch (RuntimeException e) {
-                idempotency.rollback(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
-                throw e;
-            }
-            dispatches.add(new Dispatch(swarmSegment, swarm.getInstanceId(),
-                accepted(newCorrelation, request.idempotencyKey(), swarmSegment, swarm.getInstanceId()), false));
+            String controllerInstance = swarm.getInstanceId().trim();
+            Target operationTarget = new Target("swarm-controller", controllerInstance);
+            var reservation = operations.dispatch(
+                swarmId,
+                OperationType.CONFIG_UPDATE,
+                operationTarget,
+                request.idempotencyKey(),
+                Duration.ofMillis(CONFIG_UPDATE_TIMEOUT_MS),
+                correlation -> {
+	                operations.registerConfigExpectation(
+	                    correlation,
+	                    io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation
+	                        .fromRequested(request.enabled()));
+	                ControlScope target = ControlScope.forInstance(
+	                    swarmId, operationTarget.role(), operationTarget.instance());
+	                ControlSignal payload = ControlSignals.configUpdate(
+	                    originInstanceId,
+	                    target,
+	                    correlation,
+	                    request.idempotencyKey(),
+	                    Map.of("enabled", request.enabled()));
+                  sendControl(routingKey(swarmId, controllerInstance), toJson(payload));
+                });
+            dispatches.add(new Dispatch(
+                swarmId,
+                controllerInstance,
+                accepted(reservation.operation()),
+                reservation.reused()));
         }
         return new FanoutControlResponse(dispatches);
     }
@@ -164,19 +173,17 @@ public class SwarmManagerController {
      * Build the {@link ControlResponse} returned to clients for a successful dispatch.
      * <p>
      * The watch section uses {@link ControlPlaneRouting#event(String, ConfirmationScope)} to point to the
-     * ready/error queues the UI should monitor. {@code CONFIG_UPDATE_TIMEOUT_MS} matches the contract in
+     * canonical outcome topic and operation URL the UI should monitor. {@code CONFIG_UPDATE_TIMEOUT_MS} matches the contract in
      * {@code docs/ORCHESTRATOR-REST.md} so front-ends align their polling windows.
      */
-    private ControlResponse accepted(String correlationId,
-                                     String idempotencyKey,
-                                     String swarmSegment,
-                                     String instanceId) {
-        ConfirmationScope scope = new ConfirmationScope(swarmSegment, "swarm-controller", instanceId);
-        ControlResponse.Watch watch = new ControlResponse.Watch(
+    private ControlResponse accepted(SwarmOperation operation) {
+        ConfirmationScope scope = new ConfirmationScope(operation.swarmId(), "orchestrator", originInstanceId);
+        return new ControlResponse(
+            operation.correlationId(),
+            operation.idempotencyKey(),
+            "/api/swarms/" + operation.swarmId() + "/operations/" + operation.correlationId(),
             ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
-            List.of(ControlPlaneRouting.event("alert", "alert", scope))
-        );
-        return new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
+            CONFIG_UPDATE_TIMEOUT_MS);
     }
 
     /**
@@ -277,7 +284,4 @@ public class SwarmManagerController {
 
     public record Dispatch(String swarm, String instanceId, ControlResponse response, boolean reused) {}
 
-    private static String segmentOrAll(String value) {
-        return (value == null || value.isBlank()) ? "ALL" : value;
-    }
 }

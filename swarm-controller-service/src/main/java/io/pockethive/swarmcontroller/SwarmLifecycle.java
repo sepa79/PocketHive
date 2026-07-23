@@ -23,7 +23,7 @@ public interface SwarmLifecycle {
    * <p>
    * <strong>When it runs:</strong> invoked before {@link #start(String)} whenever a new template is
    * chosen. The orchestrator provides a JSON swarm template payload (see
-   * {@code docs/ARCHITECTURE.md#swarm-plans}) so queues, exchanges, and containers can be
+   * {@code docs/ARCHITECTURE.md}) so queues, exchanges, and containers can be
    * pre-created.
    * <p>
    * <strong>Caller responsibilities:</strong> supply valid JSON matching {@link SwarmPlan}. Example:
@@ -60,8 +60,7 @@ public interface SwarmLifecycle {
    * <p>
    * <strong>Caller responsibilities:</strong> the caller should expect idempotent behaviour; calling
    * {@code start} repeatedly with the same plan should simply ensure workloads are enabled.
-   * Implementations should ensure correlation information and control acknowledgements are emitted so
-   * the orchestrator can mark the swarm {@code RUNNING}.
+   * The caller correlates fresh worker status after dispatch before emitting a terminal result.
    */
   void start(String planJson);
 
@@ -69,8 +68,8 @@ public interface SwarmLifecycle {
    * Pause the swarm by disabling workloads but leaving infrastructure running.
    * <p>
    * <strong>When it runs:</strong> triggered by the control plane when operators issue
-   * {@code POST /api/swarms/{id}/stop}. Implementations should emit a {@code ready.swarm-stop}
-   * confirmation (see {@code docs/ORCHESTRATOR-REST.md}).
+   * {@code POST /api/swarms/{id}/stop}. The caller waits for fresh disabled worker status before
+   * emitting the terminal result (see {@code docs/ORCHESTRATOR-REST.md}).
    * <p>
    * <strong>Caller responsibilities:</strong> ensure subsequent calls to {@link #start(String)} or
    * {@link #enableAll()} re-enable work as desired; stopping does not tear down queues/containers.
@@ -81,39 +80,40 @@ public interface SwarmLifecycle {
    * Tear down all swarm resources, deleting queues and removing any controller-managed containers.
    * <p>
    * <strong>When it runs:</strong> called when an operator issues {@code POST /api/swarms/{id}/remove}
-   * after a stop. Implementations should emit a {@code ready.swarm-remove} confirmation and clean up
-   * any cached plan data.
+   * after a stop. Implementations clean up resources and return the removed-resource evidence that
+   * is persisted in the filesystem remove result.
    * <p>
    * <strong>Caller responsibilities:</strong> ensure no further {@link #start(String)} calls occur
    * until {@link #prepare(String)} is invoked with a fresh plan.
    */
-  void remove();
+  java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> remove();
 
   /**
    * Report the current high-level lifecycle status for health dashboards.
    * <p>
-   * Typical statuses include {@code STOPPED}, {@code RUNNING}, or {@code REMOVED}. Callers should use
+   * Values describe workload observation only, such as {@code STOPPED}, {@code RUNNING}, or
+   * {@code UNKNOWN}. Callers should use
    * this alongside {@link #getMetrics()} to populate /api/swarms/{id} responses.
    */
-  SwarmStatus getStatus();
+  io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState();
 
   /**
    * Record that a worker instance has completed its readiness handshake.
    * <p>
-   * <strong>When it runs:</strong> invoked when the controller receives a {@code ready.swarm-start}
-	   * event from a worker (for example, routing key {@code event.ready.generator.generator-1}).
+   * <strong>When it runs:</strong> invoked when the controller receives the worker's initial disabled
+	   * status snapshot.
    * <p>
    * <strong>Return value:</strong> {@code true} when all expected workers are ready and healthy,
-   * signalling the orchestrator can emit a ready confirmation.
+   * signalling that controller bootstrap readiness has converged.
    */
   boolean markReady(String role, String instance);
 
   /**
    * Update the latest heartbeat timestamp for a worker instance.
    * <p>
-   * <strong>When it runs:</strong> on every {@code heartbeat.*} control message. Implementations use
-   * this to expire stale workers after the controller's configured time-to-live window (15 seconds by
-   * default in {@link SwarmLifecycleManager}).
+   * <strong>When it runs:</strong> on every worker {@code status-full} or {@code status-delta} event.
+   * Implementations use the receipt time to expire stale worker observations after the configured
+   * time-to-live window (15 seconds by default in {@link SwarmLifecycleManager}).
    * <p>
    * <strong>Caller responsibilities:</strong> provide the role (e.g. {@code "processor"}) and the
    * instance identifier (e.g. {@code "processor-1"}).
@@ -141,6 +141,11 @@ public interface SwarmLifecycle {
     return true;
   }
 
+  default java.util.List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
+      long cutoffMillis, boolean expectedEnabled) {
+    return java.util.List.of();
+  }
+
   /**
    * Track whether a worker instance has acknowledged its enabled/disabled state.
    * <p>
@@ -156,6 +161,8 @@ public interface SwarmLifecycle {
    * and the oldest heartbeat watermark so callers can render UI health badges.
    */
   SwarmMetrics getMetrics();
+
+  java.util.List<io.pockethive.swarm.model.lifecycle.Target> expectedWorkers();
 
   /**
    * Capture a snapshot of RabbitMQ queue statistics for the active swarm.
@@ -190,7 +197,7 @@ public interface SwarmLifecycle {
    * <p>
    * <strong>When it runs:</strong> triggered by {@code POST /api/swarm-managers/{id}/enabled} calls.
    * Implementations should emit {@code config-update} signals and update
-   * {@link #getStatus()} accordingly.
+   * {@link #getWorkloadState()} accordingly.
    *
    * @param enabled whether workloads should actively process messages ({@code true}) or pause ({@code false}).
    */
@@ -200,8 +207,8 @@ public interface SwarmLifecycle {
    * Determine whether the swarm has received all readiness signals required to safely enable work.
    * <p>
    * Implementations should return {@code true} when the controller has already observed every
-   * expected worker heartbeat (or when no workers are expected) so callers can emit the
-   * {@code ready.swarm-template} confirmation without racing the control-plane queue declarations.
+   * expected worker heartbeat (or when no workers are expected) so callers can report
+   * filesystem startup readiness without racing the control-plane queue declarations.
    */
   boolean isReadyForWork();
 

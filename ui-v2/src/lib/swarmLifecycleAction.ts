@@ -1,4 +1,3 @@
-import type { ControlPlaneEnvelope } from './controlPlane/types'
 import type { WireLogEntry } from './controlPlane/wireLogStore'
 import { normalizeControlPlaneRoutingKey } from './controlPlane/decoder'
 
@@ -8,11 +7,9 @@ export type SwarmLifecycleFeedbackStatus = 'pending' | 'success' | 'error'
 export type SwarmLifecycleControlResponse = {
   correlationId: string
   idempotencyKey: string
+  operationUrl: string
+  outcomeTopic: string
   timeoutMs: number
-  watch: {
-    successTopic: string
-    errorTopics: string[]
-  }
 }
 
 export type SwarmLifecycleFeedback = {
@@ -21,8 +18,8 @@ export type SwarmLifecycleFeedback = {
   correlationId: string
   deadlineAt: number
   timeoutMs: number
-  successTopic: string
-  errorTopics: string[]
+  operationUrl: string
+  outcomeTopic: string
   status: SwarmLifecycleFeedbackStatus
   message: string
   code: string | null
@@ -38,20 +35,9 @@ export function parseSwarmLifecycleControlResponse(value: unknown): SwarmLifecyc
   if (typeof timeoutMs !== 'number' || !Number.isFinite(timeoutMs) || timeoutMs <= 0) {
     throw new Error('Orchestrator lifecycle response is missing a valid timeoutMs.')
   }
-  if (!isRecord(value.watch)) {
-    throw new Error('Orchestrator lifecycle response is missing watch topics.')
-  }
-  const successTopic = requiredString(value.watch.successTopic, 'watch.successTopic')
-  if (!Array.isArray(value.watch.errorTopics)) {
-    throw new Error('Orchestrator lifecycle response is missing watch.errorTopics.')
-  }
-  const errorTopics = value.watch.errorTopics.map((topic, index) =>
-    requiredString(topic, `watch.errorTopics[${index}]`),
-  )
-  if (errorTopics.length === 0) {
-    throw new Error('Orchestrator lifecycle response has no error topics.')
-  }
-  return { correlationId, idempotencyKey, timeoutMs, watch: { successTopic, errorTopics } }
+  const operationUrl = requiredString(value.operationUrl, 'operationUrl')
+  const outcomeTopic = requiredString(value.outcomeTopic, 'outcomeTopic')
+  return { correlationId, idempotencyKey, operationUrl, outcomeTopic, timeoutMs }
 }
 
 export function pendingSwarmLifecycleFeedback(
@@ -66,8 +52,8 @@ export function pendingSwarmLifecycleFeedback(
     correlationId: response.correlationId,
     deadlineAt: acceptedAt + response.timeoutMs,
     timeoutMs: response.timeoutMs,
-    successTopic: response.watch.successTopic,
-    errorTopics: response.watch.errorTopics,
+    operationUrl: response.operationUrl,
+    outcomeTopic: response.outcomeTopic,
     status: 'pending',
     message: `${action === 'start' ? 'Starting' : 'Stopping'} swarm '${swarmId}'…`,
     code: null,
@@ -83,20 +69,6 @@ export function resolveSwarmLifecycleFeedback(
   if (feedback.status === 'success' && now >= feedback.deadlineAt) return feedback
 
   const correlated = entries.filter((entry) => entry.envelope?.correlationId === feedback.correlationId)
-  const alert = [...correlated]
-    .reverse()
-    .find(
-      (entry) =>
-        entry.routingKey !== undefined &&
-        feedback.errorTopics.includes(normalizeControlPlaneRoutingKey(entry.routingKey)) &&
-        isErrorAlert(entry.envelope),
-    )
-    ?.envelope
-  if (alert) {
-    const detail = optionalString(alert.data.message) ?? 'The control plane reported an error.'
-    return terminalFeedback(feedback, 'error', `Could not ${feedback.action} swarm '${feedback.swarmId}': ${detail}`, optionalString(alert.data.code))
-  }
-
   if (feedback.status === 'success') return feedback
 
   const outcome = [...correlated]
@@ -104,14 +76,13 @@ export function resolveSwarmLifecycleFeedback(
     .find(
       (entry) =>
         entry.routingKey !== undefined &&
-        normalizeControlPlaneRoutingKey(entry.routingKey) === feedback.successTopic &&
+        normalizeControlPlaneRoutingKey(entry.routingKey) === feedback.outcomeTopic &&
         entry.envelope?.kind === 'outcome',
     )?.envelope
   const outcomeStatus = outcome ? optionalString(outcome.data.status) : null
   if (outcomeStatus) {
     const normalized = outcomeStatus.toUpperCase()
-    const expected = feedback.action === 'start' ? 'RUNNING' : 'STOPPED'
-    if (normalized === expected) {
+    if (normalized === 'SUCCEEDED') {
       return terminalFeedback(
         feedback,
         'success',
@@ -119,15 +90,15 @@ export function resolveSwarmLifecycleFeedback(
         null,
       )
     }
-    if (normalized === 'NOTREADY') {
-      return terminalFeedback(feedback, 'error', notReadyMessage(feedback, outcome?.data.context), 'NotReady')
+    if (normalized === 'REJECTED') {
+      return terminalFeedback(feedback, 'error', notReadyMessage(feedback, outcome?.data.context), 'Rejected')
     }
-    if (normalized === 'FAILED') {
+    if (normalized === 'FAILED' || normalized === 'TIMEDOUT' || normalized === 'TIMED_OUT') {
       return terminalFeedback(
         feedback,
         'error',
         `Could not ${feedback.action} swarm '${feedback.swarmId}': the control plane reported a failed outcome.`,
-        'Failed',
+        outcomeStatus,
       )
     }
   }
@@ -140,6 +111,39 @@ export function resolveSwarmLifecycleFeedback(
       `Could not ${feedback.action} swarm '${feedback.swarmId}': no final result was received within ${seconds} seconds.`,
       'timeout',
     )
+  }
+  return feedback
+}
+
+export function resolveSwarmLifecycleOperationFeedback(
+  feedback: SwarmLifecycleFeedback,
+  operationValue: unknown,
+): SwarmLifecycleFeedback {
+  if (feedback.status !== 'pending') return feedback
+  if (!isRecord(operationValue)) throw new Error('Orchestrator returned an invalid operation resource.')
+  const correlationId = requiredString(operationValue.correlationId, 'operation.correlationId')
+  if (correlationId !== feedback.correlationId) {
+    throw new Error('Orchestrator operation correlationId does not match the accepted request.')
+  }
+  const state = requiredString(operationValue.state, 'operation.state').toUpperCase()
+  if (state === 'SUCCEEDED') {
+    return terminalFeedback(
+      feedback,
+      'success',
+      `Swarm '${feedback.swarmId}' ${feedback.action === 'start' ? 'started' : 'stopped'}.`,
+      null,
+    )
+  }
+  if (state === 'REJECTED' || state === 'FAILED' || state === 'TIMED_OUT') {
+    return terminalFeedback(
+      feedback,
+      'error',
+      `Could not ${feedback.action} swarm '${feedback.swarmId}': operation ended in ${state}.`,
+      state,
+    )
+  }
+  if (state !== 'ACCEPTED' && state !== 'DISPATCHED') {
+    throw new Error(`Orchestrator returned unsupported operation state '${state}'.`)
   }
   return feedback
 }
@@ -163,11 +167,6 @@ function terminalFeedback(
   code: string | null,
 ): SwarmLifecycleFeedback {
   return { ...feedback, status, message, code }
-}
-
-function isErrorAlert(envelope: ControlPlaneEnvelope | undefined): boolean {
-  if (!envelope || envelope.kind !== 'event' || envelope.type !== 'alert') return false
-  return optionalString(envelope.data.level)?.toLowerCase() === 'error'
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

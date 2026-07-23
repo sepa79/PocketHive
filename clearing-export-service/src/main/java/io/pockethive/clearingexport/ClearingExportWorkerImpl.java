@@ -291,7 +291,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
       controlPlaneRuntime.publishWorkJournalEvent(
           WORKER_BEAN_NAME,
           lifecycleCorrelationId,
-          null,
+          lifecycleCorrelationId + ":" + callId,
           ControlPlaneSignals.WORK_JOURNAL,
           "recorded",
           callId,

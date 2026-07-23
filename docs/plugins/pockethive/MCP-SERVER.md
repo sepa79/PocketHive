@@ -287,9 +287,10 @@ changed fingerprint.
   Orchestrator `POST /api/components/{role}/{instance}/config`.
 
 For `inputs.redis.listName`, agents must first call `swarm_get` and verify that
-the returned swarm status is explicitly `STOPPED`. An accepted `swarm_stop`
-request is not completion evidence. Running, transitional, unknown, or stale
-state must block the call; agents must not infer or bypass this rule.
+both `workloadIntent` and fresh `workloadState` are explicitly `STOPPED`. An
+accepted `swarm_stop` request is not completion evidence. Running, transitional,
+unknown, or stale observation must block the call; agents must not infer or
+bypass this rule.
 
 This is the same write path used by the web UI. Before sending the update, the
 MCP tool reads the latest exact `status-full` config for the target component.
@@ -322,13 +323,13 @@ tool fails with `CURRENT_CONFIG_UNAVAILABLE` instead of sending a partial patch.
 Use `component_config_preview` when an agent or human wants to inspect the
 planned merge first; it uses the same read and merge logic but does not publish
 a config update.
-The returned Orchestrator `202 Accepted` response and watch topics are dispatch
-evidence only; agents should follow with `debug_journal`, status-full snapshots,
-queue depth, or metrics to prove the component applied the update.
+The returned Orchestrator `202 Accepted` response is dispatch evidence only.
+Agents must poll its `operationUrl` for the terminal operation and may use
+`debug_journal`, status snapshots, queue depth, or metrics as corroborating evidence.
 
 ### Debugging
 - `debug_queues`, `debug_tap`, `debug_tap_read`, `debug_tap_close`
-- `debug_journal`, `debug_config_update` compatibility alias
+- `debug_journal`
 - `metrics_query`
 - `runtime_tail_worker_logs`
 - `evidence_summary` — read-only aggregate evidence model for one swarm

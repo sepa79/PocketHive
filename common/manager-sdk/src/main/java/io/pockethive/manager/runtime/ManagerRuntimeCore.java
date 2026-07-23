@@ -46,7 +46,8 @@ public final class ManagerRuntimeCore implements ManagerLifecycle {
 
   private final ReadinessTracker readinessTracker;
 
-  private volatile ManagerStatus status = ManagerStatus.NEW;
+  private volatile io.pockethive.swarm.model.lifecycle.WorkloadState workloadState =
+      io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
   private volatile boolean managerEnabled = false;
   private volatile boolean workEnabled = false;
   private volatile String lastPlanJson;
@@ -82,9 +83,7 @@ public final class ManagerRuntimeCore implements ManagerLifecycle {
   public synchronized void prepare(String planJson) {
     readinessTracker.reset();
     this.lastPlanJson = planJson;
-    if (status == ManagerStatus.NEW || status == ManagerStatus.FAILED || status == ManagerStatus.REMOVED) {
-      status = ManagerStatus.PREPARING;
-    }
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
   }
 
   @Override
@@ -96,24 +95,24 @@ public final class ManagerRuntimeCore implements ManagerLifecycle {
     }
     workEnabled = true;
     managerEnabled = true;
-    status = ManagerStatus.RUNNING;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING;
   }
 
   @Override
   public synchronized void stop() {
     workEnabled = false;
-    status = ManagerStatus.STOPPED;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
   }
 
   @Override
   public synchronized void remove() {
     workEnabled = false;
-    status = ManagerStatus.REMOVED;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.UNAVAILABLE;
   }
 
   @Override
-  public synchronized ManagerStatus getStatus() {
-    return status;
+  public synchronized io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
+    return workloadState;
   }
 
   @Override
@@ -161,16 +160,16 @@ public final class ManagerRuntimeCore implements ManagerLifecycle {
   @Override
   public synchronized void enableAll() {
     workEnabled = true;
-    status = ManagerStatus.RUNNING;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING;
   }
 
   @Override
   public synchronized void setWorkEnabled(boolean enabled) {
     this.workEnabled = enabled;
-    if (!enabled && status == ManagerStatus.RUNNING) {
-      status = ManagerStatus.STOPPED;
-    } else if (enabled && status == ManagerStatus.STOPPED) {
-      status = ManagerStatus.RUNNING;
+    if (!enabled && workloadState == io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING) {
+      workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
+    } else if (enabled && workloadState == io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED) {
+      workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING;
     }
   }
 
@@ -184,7 +183,7 @@ public final class ManagerRuntimeCore implements ManagerLifecycle {
     if (!managerEnabled || !workEnabled) {
       return false;
     }
-    if (status != ManagerStatus.RUNNING) {
+    if (workloadState != io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING) {
       return false;
     }
     return readinessTracker.isReadyForWork();

@@ -313,13 +313,16 @@ renders that model.
 | 🐝 PocketHive Swarms                    [↺]      |
 | Environment: local  http://localhost:8088         |
 |--------------------------------------------------|
-| ● <swarm-a>    RUNNING   N bees   tps: 10        |
+| ● <swarm-a>    RUNNING · HEALTHY   N bees        |
+|   controller READY · tps: 10                     |
 |   [■ Stop]  [📊 Queues]  [📓 Journal]            |
 |                                                  |
-| ◐ <swarm-b>    READY     N bees                  |
+| ◐ <swarm-b>    UNAVAILABLE · UNKNOWN   N bees    |
+|   controller PROVISIONING                        |
 |   [▶ Start]  [📊 Queues]  [📓 Journal]           |
 |                                                  |
-| ○ <swarm-c>    STOPPED   N bees                  |
+| ● <swarm-c>    STOPPED · HEALTHY   N bees        |
+|   controller READY                               |
 |   [▶ Start]  [✕ Remove → Confirm? [Yes] [No]]   |
 |                                                  |
 | [+ Create swarm]                                 |
@@ -328,6 +331,8 @@ renders that model.
 
 Remove uses a two-click inline confirm pattern — `confirm()` is blocked
 in sandboxed iframes. First click shows `[Confirm? [Yes] [No]]` inline.
+The App renders workload observation, Controller observation and health as
+separate fields. It does not define a combined lifecycle value.
 Auto-cancels after 5s if not confirmed.
 
 **Server registration:**
@@ -587,7 +592,7 @@ async function createAndStart() {
 |                                                  |
 | ✓ 14:32:05  swarm-start                          |
 | ✓ 14:32:04  config-update       generator        |
-| ✓ 14:32:03  swarm-template                       |
+| ✓ 14:32:03  filesystem-startup                   |
 | ✓ 14:32:00  swarm-create                         |
 |                                                  |
 | [Load more]                                      |

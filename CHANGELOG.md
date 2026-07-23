@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.36]
+Timestamp: 2026-07-22T22:53:54Z
+
+- Breaking lifecycle contract: replace the mixed swarm/container status and
+  implicit `enabled` state with independent runtime intent, workload intent,
+  controller state, workload state, health, and resource state axes; legacy
+  lifecycle fields and envelopes are not accepted.
+- Lifecycle operations: make the correlation-specific REST operation resource
+  authoritative, publish one orchestrator-owned terminal outcome notification,
+  and scope idempotency to operation type, swarm, exact target, and key.
+- Lifecycle convergence: complete create only after the controller verifies the
+  filesystem startup artifact, and complete start, stop, and enabled config
+  updates only after fresh worker observations match the requested intent.
+- Filesystem lifecycle handoff: start controllers from a versioned immutable
+  swarm artifact with a verified SHA-256 digest, and coordinate swarm removal
+  through correlation-specific filesystem request/result artifacts instead of
+  a fragile RabbitMQ teardown acknowledgement.
+- Lifecycle consumers and documentation: migrate the Hive UI, PocketHive MCP,
+  VS Code extension, E2E tests, schemas, AsyncAPI, REST documentation, and
+  runtime diagnostics to the canonical operation and state contracts.
+
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 
@@ -231,17 +252,12 @@ Timestamp: 2026-06-18T15:27:35Z
   control-plane topology descriptors for label-gated Docker/RabbitMQ cleanup,
   removing the duplicate `TrafficTopology` naming helper.
 - RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
-  descriptor-derived worker control queues only when worker labels and registry
-  state prove the instance is stale; registered swarms that are not explicitly
-  stopped keep shared queues, and derived worker control queues obey the same
-  `includeRunning` gate as their worker runtime object.
-- Runtime cleanup safety: allow pre-run registered swarms to be aborted through
-  `LIFECYCLE_REMOVE_SWARM`, keep running swarms and swarms in `REMOVING` state
-  blocked, and return the required lifecycle action when execute targets a
-  blocked lifecycle candidate.
-- Runtime cleanup emergency path: add hash-bound
-  `overrideRegisteredSwarmState` for rare break-glass lifecycle removal of
-  `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` registered swarms.
+  descriptor-derived worker control queues only for unregistered orphan
+  resources proven by labels and ownership evidence.
+- Runtime cleanup safety: every registered swarm is removable only through the
+  canonical FS-backed `LIFECYCLE_REMOVE_SWARM` operation. Cleanup execution
+  reports `DISPATCHED` with its correlation and operation URL; direct
+  Docker/RabbitMQ candidates and lifecycle ownership overrides are forbidden.
 - Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
   reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
   a local Docker socket fallback for worker or swarm-controller manager debug.

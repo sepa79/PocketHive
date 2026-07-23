@@ -76,21 +76,18 @@ export function registerRuntimeTools(reg, options = {}) {
     swarmId: z.string(),
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
-    includeRabbit: z.boolean().optional(),
-    overrideRegisteredSwarmState: z.boolean().optional()
+    includeRabbit: z.boolean().optional()
   }, guarded(async ({
     swarmId,
     runId,
     includeRunning = false,
-    includeRabbit,
-    overrideRegisteredSwarmState
+    includeRabbit
   }) => {
     return await requireCleanupApi(cleanupApi).plan({
       swarmId,
       runId,
       includeRunning,
-      includeRabbit,
-      overrideRegisteredSwarmState
+      includeRabbit
     });
   }), runtimeReadOnly);
 
@@ -191,7 +188,6 @@ export function registerRuntimeTools(reg, options = {}) {
     runId: z.string().optional(),
     includeRunning: z.boolean().optional(),
     includeRabbit: z.boolean().optional(),
-    overrideRegisteredSwarmState: z.boolean().optional(),
     candidateSetHash: z.string(),
     candidateIds: z.array(z.string()),
     idempotencyKey: z.string(),
@@ -1252,7 +1248,12 @@ function summarizeSwarmSnapshot(snapshot) {
   return {
     receivedAt: snapshot.receivedAt ?? null,
     staleAfterSeconds: snapshot.staleAfterSeconds ?? null,
-    status: payload.status ?? payload.lifecycleStatus ?? payload.state ?? null,
+    runtimeIntent: payload.runtimeIntent ?? null,
+    workloadIntent: payload.workloadIntent ?? null,
+    controllerState: payload.controllerState ?? null,
+    workloadState: payload.workloadState ?? null,
+    health: payload.health ?? null,
+    runtimeResourceState: payload.runtimeResourceState ?? null,
     templateId: payload.templateId ?? payload.runtime?.templateId ?? null,
     runId: payload.runId ?? payload.runtime?.runId ?? null,
     workerCount: Array.isArray(payload.bees)

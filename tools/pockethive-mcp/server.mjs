@@ -2903,7 +2903,7 @@ reg("swarm.create", "Create a new swarm from a scenario template", {
   sutId: z.string().optional().describe("SUT environment ID"),
   variablesProfileId: z.string().optional().describe("Variables profile ID"),
 }, async ({ swarmId, templateId, sutId, variablesProfileId }) => {
-  const body = { templateId, idempotencyKey: idempotencyKey() };
+  const body = { templateId, idempotencyKey: idempotencyKey(), autoPullImages: false, networkMode: "DIRECT" };
   if (sutId) body.sutId = sutId;
   if (variablesProfileId) body.variablesProfileId = variablesProfileId;
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/create`, { method: "POST", body });
@@ -2917,7 +2917,7 @@ reg("swarm.start", "Start a created swarm", {
   });
 });
 
-reg("swarm.wait-ready", "Poll swarm status until all workers are healthy (totals.healthy == totals.desired). Call this after swarm.create before swarm.start to avoid NotReady rejections.", {
+reg("swarm.wait-ready", "Poll canonical swarm state until the Controller is ready with a stopped workload and a fresh observation. Call this after swarm.create before swarm.start.", {
   swarmId: SWARM_ID_ARG,
   timeoutSec: z.number().optional().default(90),
 }, async ({ swarmId, timeoutSec }) => {
@@ -2930,12 +2930,18 @@ reg("swarm.wait-ready", "Poll swarm status until all workers are healthy (totals
   while (Date.now() < deadline) {
     try {
       const status = await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}`);
-      const ctx = status?.envelope?.data?.context;
-      if (ctx) {
-        lastCtx = ctx;
-        const { desired, healthy } = ctx.totals || {};
-        if (desired > 0 && healthy >= desired && ctx.swarmStatus === "READY") {
-          return { ready: true, swarmId, totals: ctx.totals, swarmStatus: ctx.swarmStatus, polls };
+      if (status) {
+        lastCtx = status;
+        if (status.controllerState === "READY"
+            && status.workloadState === "STOPPED"
+            && status.observationStale === false) {
+          return {
+            ready: true,
+            swarmId,
+            controllerState: status.controllerState,
+            workloadState: status.workloadState,
+            polls,
+          };
         }
       }
     } catch { /* transient — keep polling */ }
@@ -2946,10 +2952,10 @@ reg("swarm.wait-ready", "Poll swarm status until all workers are healthy (totals
   return {
     ready: false,
     swarmId,
-    totals: lastCtx?.totals ?? null,
-    swarmStatus: lastCtx?.swarmStatus ?? "unknown",
+    controllerState: lastCtx?.controllerState ?? "UNKNOWN",
+    workloadState: lastCtx?.workloadState ?? "UNKNOWN",
     polls,
-    message: `Did not reach READY within ${effectiveTimeout}s. Call swarm.get to check current state, then retry swarm.start when healthy==desired.`,
+    message: `Did not observe controllerState=READY and workloadState=STOPPED within ${effectiveTimeout}s. Call swarm.get to inspect canonical state.`,
   };
 });
 
@@ -3226,6 +3232,12 @@ async function sendComponentConfigUpdate({
     method: "POST",
     body,
   });
+  if (!response || typeof response.operationUrl !== "string" || !response.operationUrl.trim()) {
+    throw new Error("Orchestrator config-update response is missing operationUrl");
+  }
+  if (typeof response.outcomeTopic !== "string" || !response.outcomeTopic.trim()) {
+    throw new Error("Orchestrator config-update response is missing outcomeTopic");
+  }
   return {
     accepted: true,
     source: "orchestrator-api",
@@ -3234,7 +3246,8 @@ async function sendComponentConfigUpdate({
     idempotencyKey: key,
     ...configUpdatePlanResponse(plan),
     response,
-    watch: response?.watch || null,
+    operationUrl: response.operationUrl,
+    outcomeTopic: response.outcomeTopic,
     evidenceNext: [
       {
         tool: "debug.journal",
@@ -3472,8 +3485,7 @@ function sourceData(sources, name) {
 }
 
 function inferScenarioId(swarmSource, fallbackSwarmId) {
-  const fromRuntime = swarmSource?.envelope?.runtime?.templateId
-    || swarmSource?.envelope?.data?.context?.workers?.find(worker => worker?.runtime?.templateId)?.runtime?.templateId;
+  const fromRuntime = swarmSource?.templateId;
   if (fromRuntime) return fromRuntime;
   const match = String(fallbackSwarmId || "").match(/^(.+)-\d{10,}$/);
   return match ? match[1] : null;
@@ -3795,7 +3807,7 @@ function buildReport({ swarmId, scenarioId, sources, queueRows, tapSample, inclu
   const refreshAt = Number(tokenRecord?.fields?.refreshAt);
   const expiresAt = Number(tokenRecord?.fields?.expiresAt);
   const refreshDue = Number.isFinite(refreshAt) && refreshAt <= nowMs;
-  const lifecycleState = swarm?.envelope?.data?.context?.state || swarm?.envelope?.data?.context?.swarmStatus || swarm?.status || "unknown";
+  const lifecycleState = swarm?.workloadState || swarm?.controllerState || "unknown";
   const dataSource = scenario?.plan?.dataSource;
   const usesRedisDataset = dataSource === "REDIS_DATASET";
   const debugCaptureCount = Number(redisDebug?.count || 0);

@@ -322,6 +322,7 @@ services:
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service
       POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: orchestrator-local-secret
       POCKETHIVE_SCENARIOS_RUNTIME_ROOT: {{ pockethive_bind_source_dir }}/state/scenarios-runtime
+      POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT: /app/scenarios-runtime
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/pockethive
       SPRING_DATASOURCE_USERNAME: pockethive
       SPRING_DATASOURCE_PASSWORD: pockethive

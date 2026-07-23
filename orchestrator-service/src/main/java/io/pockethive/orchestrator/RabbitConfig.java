@@ -18,17 +18,24 @@ public class RabbitConfig {
     }
 
     @Bean
-    Binding bindOutcomes(
+    Binding bindResults(
         @Qualifier("controlQueue") Queue controlQueue,
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.outcome.#");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.result.#");
     }
 
     @Bean
     Binding bindAlerts(
         @Qualifier("controlQueue") Queue controlQueue,
         @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
-        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.alert.#");
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.alert.alert.#");
+    }
+
+    @Bean
+    Binding bindJournalEvents(
+        @Qualifier("controlQueue") Queue controlQueue,
+        @Qualifier("controlPlaneExchange") TopicExchange controlExchange) {
+        return BindingBuilder.bind(controlQueue).to(controlExchange).with("event.journal.work-journal.#");
     }
 
     @Bean

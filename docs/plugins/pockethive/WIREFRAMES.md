@@ -136,19 +136,22 @@ Tab strip detail:
 | SWARMS on local           [+ New]  |
 |                                    |
 | +--------------------------------+ |
-| | [●green] <swarm-a>  RUNNING    | |
+| | [●green] <swarm-a> RUNNING · HEALTHY | |
+| |  controller READY              | |
 | |  N bees · <template-id>        | |
 | |  [▶ Start][■ Stop]             | |  <- Remove moved to context menu
 | |  [View][Journal][Queues]       | |
 | +--------------------------------+ |
 | +--------------------------------+ |
-| | [◐cyan]  <swarm-b>  READY      | |
+| | [◐cyan] <swarm-b> UNAVAILABLE · UNKNOWN | |
+| |  controller PROVISIONING       | |
 | |  N bees · <template-id>        | |
 | |  [▶ Start][■ Stop]             | |
 | |  [View][Journal][Queues]       | |
 | +--------------------------------+ |
 | +--------------------------------+ |
-| | [○grey]  <swarm-c>  STOPPED    | |
+| | [●green] <swarm-c> STOPPED · HEALTHY | |
+| |  controller READY              | |
 | |  N bees · <template-id>        | |
 | |  [▶ Start][■ Stop]             | |
 | |  [View][Journal][Queues]       | |
@@ -158,11 +161,13 @@ Tab strip detail:
 |                                    |
 +------------------------------------+
 
-Swarm card states:
-  RUNNING:  hal-eye ok (green glow)
-  READY:    hal-eye warn (cyan modem blink)
-  STOPPED:  hal-eye missing (grey, no animation)
-  FAILED:   hal-eye alert (red fast pulse)
+Swarm card fields:
+  workloadState: RUNNING | STOPPED | STARTING | STOPPING | UNAVAILABLE | UNKNOWN
+  controllerState: PROVISIONING | READY | FAILED | UNKNOWN
+  health/eye: HEALTHY=green | DEGRADED=cyan | FAILED=red | UNKNOWN=grey
+
+These are separate contract axes. A compact presentation must not persist or
+send a synthetic combined lifecycle value back to the product APIs.
 
 Remove swarm: context menu only (right-click) — never an inline button.
 Confirm modal required before remove executes.
@@ -274,7 +279,7 @@ Empty state (no bundles folder configured):
 |                                    |
 | 14:32:05  swarm-start      [✓]    |
 | 14:32:04  config-update    [✓]    |
-| 14:32:03  swarm-template   [✓]    |
+| 14:32:03  filesystem-startup [✓]  |
 | 14:32:01  template-invalid [⚠]    |  <- amber
 | 14:32:00  swarm-create     [✓]    |
 |                                    |
@@ -646,9 +651,11 @@ Same content, rendered as `StatusBarWidget`.
 | | [○grey]  remote-env  http://<host>:8088                       |   |
 | |                                                               |   |
 | | SWARMS                                           [+ New]      |   |
-| | [●green] <swarm-id-a>    RUNNING   N bees                     |   |
+| | [●green] <swarm-id-a> RUNNING · HEALTHY   N bees             |   |
+| |   controller READY                                           |   |
 | |   [▶][■][✕]  [View topology]  [Journal]  [Queues]            |   |
-| | [◐cyan]  <swarm-id-b>    READY     N bees                     |   |
+| | [◐cyan] <swarm-id-b> UNAVAILABLE · UNKNOWN   N bees          |   |
+| |   controller PROVISIONING                                    |   |
 | |   [▶][■][✕]  [View topology]  [Journal]  [Queues]            |   |
 | |                                                               |   |
 | +---------------------------------------------------------------+   |

@@ -152,4 +152,24 @@ class StatusEnvelopeBuilderTest {
         assertTrue(ioState.path("filesystem").isMissingNode());
         assertEquals(0, ioState.size());
     }
+
+    @Test
+    void controlPlaneStatusCanExplicitlyOmitEnabled() throws Exception {
+        String json = new StatusEnvelopeBuilder()
+            .workPlaneEnabled(false)
+            .enabledRequired(false)
+            .tpsEnabled(false)
+            .type("status-delta")
+            .role("swarm-controller")
+            .instance("controller-1")
+            .origin("controller-1")
+            .swarmId("sw1")
+            .runtime(Map.of("templateId", "tpl-1", "runId", "run-1"))
+            .data("controllerState", "READY")
+            .toJson();
+
+        JsonNode data = new ObjectMapper().readTree(json).path("data");
+        assertTrue(data.path("enabled").isMissingNode());
+        assertEquals("READY", data.path("context").path("controllerState").asText());
+    }
 }

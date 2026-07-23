@@ -40,23 +40,23 @@ assert.equal(
 );
 
 const running = lifecycle.summarizeSwarmLifecycle({
-  envelope: { data: { enabled: true, context: { swarmStatus: "RUNNING", swarmHealth: "RUNNING" } } },
+  controllerState: "READY", workloadState: "RUNNING", health: "HEALTHY", observationStale: false,
 });
 assert.equal(lifecycle.isExpectedLifecycleState("start", running), true);
-assert.equal(lifecycle.formatLifecycleState(running), "RUNNING / enabled / health RUNNING");
+assert.equal(lifecycle.formatLifecycleState(running), "controller READY / workload RUNNING / health HEALTHY");
 
 const stopped = lifecycle.summarizeSwarmLifecycle({
-  envelope: { data: { enabled: false, context: { swarmStatus: "STOPPED", swarmHealth: "RUNNING" } } },
+  controllerState: "READY", workloadState: "STOPPED", health: "HEALTHY", observationStale: false,
 });
 assert.equal(lifecycle.isExpectedLifecycleState("stop", stopped), true);
 assert.equal(lifecycle.isExpectedLifecycleState("start", stopped), false);
 assert.equal(lifecycle.formatLifecycleState(stopped).includes("[object Object]"), false);
 assert.equal(lifecycle.shouldWaitForStartReadiness(stopped), false);
-assert.equal(lifecycle.shouldWaitForStartReadiness({ status: "READY", enabled: false }), true);
+assert.equal(lifecycle.shouldWaitForStartReadiness(stopped), false);
 
 assert.equal(
   lifecycle.extractLifecycleCorrelationId({
-    watch: { correlationId: "attempt-1" },
+    correlationId: "attempt-1",
   }),
   "attempt-1"
 );
@@ -96,10 +96,10 @@ assert.equal(
 assert.equal(
   lifecycle.formatReadyResult(lifecycle.summarizeReadyResult({
     ready: true,
-    swarmStatus: "READY",
-    totals: { desired: 4, healthy: 4, running: 0, enabled: 0 },
+    controllerState: "READY",
+    workloadState: "STOPPED",
   })),
-  "ready / status READY / desired 4, healthy 4, running 0, enabled 0"
+  "ready / controller READY / workload STOPPED"
 );
 
 console.log("PocketHive VS Code command target checks passed.");

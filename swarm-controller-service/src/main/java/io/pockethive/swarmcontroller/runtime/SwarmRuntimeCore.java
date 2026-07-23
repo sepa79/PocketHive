@@ -14,11 +14,9 @@ import io.pockethive.manager.ports.Clock;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerRuntimeCore;
-import io.pockethive.manager.runtime.ManagerStatus;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.ScenarioContext;
 import io.pockethive.manager.scenario.ScenarioEngine;
-import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.Topology;
@@ -32,7 +30,6 @@ import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarmcontroller.SwarmLifecycle;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import io.pockethive.swarmcontroller.SwarmReadinessTracker;
-import io.pockethive.swarmcontroller.SwarmStatus;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
@@ -108,7 +105,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   private volatile SwarmRuntimeContext runtimeContext;
   private volatile SwarmRuntimeState runtimeState;
   private TrafficPolicy trafficPolicy;
-  private SwarmStatus status = SwarmStatus.STOPPED;
+  private io.pockethive.swarm.model.lifecycle.WorkloadState workloadState =
+      io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
   private boolean controllerEnabled = false;
   private String template;
 
@@ -186,8 +184,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       }
 
       @Override
-      public ManagerStatus getStatus() {
-        return managerCore.getStatus();
+      public io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
+        return managerCore.getWorkloadState();
       }
 
       @Override
@@ -219,7 +217,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       public void enableAll() {
         // Scenario "start" swarm step – drive the same swarm-wide enablement
         // path that REST start uses, including config-update fan-out and
-        // SwarmStatus updates.
+        // canonical workload-state updates.
         setSwarmEnabled(true);
       }
 
@@ -242,7 +240,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
 
     java.util.function.Supplier<ManagerRuntimeView> viewSupplier =
         () -> new ManagerRuntimeView(
-            managerCore.getStatus(),
+            managerCore.getWorkloadState(),
             managerCore.getMetrics(),
             java.util.Collections.emptyMap());
     ScenarioContext scenarioContext = new ScenarioContext(swarmId, scenarioManager, configFanout);
@@ -382,7 +380,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
           Map.of("workers", workerSpecs.size()),
           mdcCorrelationId(),
           mdcIdempotencyKey()));
-      status = SwarmStatus.READY;
+      workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
     } catch (JsonProcessingException e) {
       log.warn("Invalid template payload", e);
       journal.append(localEntry(
@@ -421,30 +419,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     managerCore.stop();
     setSwarmEnabled(false);
     setControllerEnabled(false);
-    this.status = SwarmStatus.STOPPED;
+    this.workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
 
-    String controlQueue = properties.controlQueueName(role, instanceId);
-    String rk = ControlPlaneRouting.event(
-        "metric",
-        "status-delta",
-        ConfirmationScope.forInstance(swarmId, role, instanceId));
-	    String payload = new StatusEnvelopeBuilder()
-	        .type("status-delta")
-	        .role(role)
-	        .instance(instanceId)
-	        .origin(instanceId)
-	        .swarmId(swarmId)
-	        .runtime(runtimeMeta())
-	        .workPlaneEnabled(false)
-	        .tpsEnabled(false)
-	        .controlIn(controlQueue)
-	        .controlRoutes(io.pockethive.swarmcontroller.SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
-        .controlOut(rk)
-        .enabled(false)
-        .data("swarmStatus", status.name())
-        .toJson();
-    log.debug("[CTRL] SEND rk={} inst={} payload={}", rk, instanceId, snippet(payload));
-    controlPublisher.publishEvent(new EventMessage(rk, payload));
   }
 
   @Override
@@ -465,8 +441,9 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   }
 
   @Override
-  public void remove() {
+  public List<io.pockethive.swarm.model.lifecycle.RemoveResource> remove() {
     log.info("Removing swarm {}", swarmId);
+    List<io.pockethive.swarm.model.lifecycle.RemoveResource> removed = new ArrayList<>();
     managerCore.remove();
     setSwarmEnabled(false);
     trafficPolicy = null;
@@ -479,33 +456,40 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       computeAdapter.removeWorkers(swarmId);
 
       Map<String, List<String>> instancesByRole = state.instancesByRole();
+      instancesByRole.values().stream().flatMap(List::stream).forEach(workerId -> removed.add(
+          new io.pockethive.swarm.model.lifecycle.RemoveResource(
+              io.pockethive.swarm.model.lifecycle.RemoveResourceType.WORKER_RUNTIME, workerId)));
       for (Map.Entry<String, List<String>> entry : instancesByRole.entrySet()) {
         String role = entry.getKey();
         for (String instanceId : entry.getValue()) {
           String controlQueue = properties.controlQueueName(role, instanceId);
-          try {
-            log.info("deleting control queue {}", controlQueue);
-            amqp.deleteQueue(controlQueue);
-          } catch (Exception ex) {
-            log.warn("Failed to delete control queue {}: {}", controlQueue, ex.getMessage());
-          }
+          log.info("deleting control queue {}", controlQueue);
+          amqp.deleteQueue(controlQueue);
+          removed.add(new io.pockethive.swarm.model.lifecycle.RemoveResource(
+              io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_QUEUE, controlQueue));
         }
       }
     }
 
     Set<String> suffixes = ctx != null ? ctx.queueSuffixes() : new LinkedHashSet<>(declaredQueues);
     topology.deleteWorkQueues(suffixes, queueMetrics::unregister);
+    suffixes.stream().map(properties::queueName).forEach(queue -> removed.add(
+        new io.pockethive.swarm.model.lifecycle.RemoveResource(
+            io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_QUEUE, queue)));
     topology.deleteWorkExchange();
+    removed.add(new io.pockethive.swarm.model.lifecycle.RemoveResource(
+        io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_EXCHANGE, properties.hiveExchange()));
     declaredQueues.clear();
     runtimeContext = null;
     runtimeState = null;
 
-    status = SwarmStatus.REMOVED;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.UNAVAILABLE;
+    return List.copyOf(removed);
   }
 
   @Override
-  public SwarmStatus getStatus() {
-    return status;
+  public io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
+    return workloadState;
   }
 
   @Override
@@ -536,6 +520,11 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     return readinessTracker.hasFreshSnapshotsSince(cutoffMillis);
   }
 
+  public List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
+      long cutoffMillis, boolean expectedEnabled) {
+    return readinessTracker.nonConvergedWorkersSince(cutoffMillis, expectedEnabled);
+  }
+
   @Override
   public void updateEnabled(String role, String instance, boolean flag) {
     readinessTracker.recordEnabled(role, instance, flag);
@@ -545,6 +534,20 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public SwarmMetrics getMetrics() {
     return readinessTracker.metrics();
+  }
+
+  @Override
+  public List<io.pockethive.swarm.model.lifecycle.Target> expectedWorkers() {
+    SwarmRuntimeState state = runtimeState;
+    if (state == null) {
+      return List.of();
+    }
+    return state.instancesByRole().entrySet().stream()
+        .flatMap(entry -> entry.getValue().stream()
+            .map(instance -> new io.pockethive.swarm.model.lifecycle.Target(entry.getKey(), instance)))
+        .sorted(java.util.Comparator.comparing(io.pockethive.swarm.model.lifecycle.Target::role)
+            .thenComparing(io.pockethive.swarm.model.lifecycle.Target::instance))
+        .toList();
   }
 
   /**
@@ -643,7 +646,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     Optional<String> message = configFanout.handleConfigUpdateError(instance, error);
     message.ifPresent(msg -> {
       log.warn(msg);
-      status = SwarmStatus.FAILED;
+      workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.UNKNOWN;
     });
     return message;
   }
@@ -651,7 +654,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
   @Override
   public synchronized void fail(String reason) {
     log.warn("Marking swarm {} failed: {}", swarmId, reason);
-    status = SwarmStatus.FAILED;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.UNKNOWN;
   }
 
   @Override
@@ -667,7 +670,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
     log.info("Issuing swarm-wide enable config-update for swarm {} (role={} instance={})",
         swarmId, role, instanceId);
     configFanout.publishConfigUpdate(data, "enable");
-    status = SwarmStatus.RUNNING;
+    workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.RUNNING;
   }
 
   @Override
@@ -676,7 +679,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycle {
       enableAll();
     } else {
       disableAll();
-      status = SwarmStatus.STOPPED;
+      workloadState = io.pockethive.swarm.model.lifecycle.WorkloadState.STOPPED;
     }
   }
 

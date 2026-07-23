@@ -46,23 +46,6 @@ public class SwarmStore {
         return Optional.ofNullable(swarms.get(id));
     }
 
-    public boolean ensureDiscoveredSwarm(String swarmId, String controllerInstance, String runId) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return false;
-        }
-        if (find(swarmId).isPresent()) {
-            return false;
-        }
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            return false;
-        }
-        Swarm swarm = new Swarm(swarmId, controllerInstance, controllerInstance, runId);
-        register(swarm);
-        updateStatus(swarmId, SwarmLifecycleStatus.CREATING);
-        updateStatus(swarmId, SwarmLifecycleStatus.READY);
-        return true;
-    }
-
     public Collection<Swarm> all() {
         return Collections.unmodifiableCollection(swarms.values());
     }
@@ -77,70 +60,7 @@ public class SwarmStore {
         }
     }
 
-    public void updateStatus(String id, SwarmLifecycleStatus status) {
-        Swarm swarm = swarms.get(id);
-        if (swarm != null) {
-            SwarmLifecycleStatus previous = swarm.getStatus();
-            // Idempotency guard: control-plane outcome events can be duplicated/redelivered.
-            // Re-applying the same status would throw and trigger AMQP requeue loops (redelivery storms).
-            if (previous == status) {
-                log.info("SwarmStore: duplicate status update id={} status={} (ignoring)", id, status);
-                return;
-            }
-            swarm.transitionTo(status);
-            if (previous != status) {
-                log.info("SwarmStore: status change id={} {} -> {}", id, previous, status);
-            }
-        }
-    }
-
-    public void markTemplateApplied(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        if (swarm.getStatus() == SwarmLifecycleStatus.CREATING) {
-            swarm.transitionTo(SwarmLifecycleStatus.READY);
-        }
-    }
-
-    public void markStartIssued(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        SwarmLifecycleStatus status = swarm.getStatus();
-        if (status == SwarmLifecycleStatus.STARTING || status == SwarmLifecycleStatus.RUNNING) {
-            return;
-        }
-        if (status == SwarmLifecycleStatus.READY || status == SwarmLifecycleStatus.STOPPED) {
-            swarm.transitionTo(SwarmLifecycleStatus.STARTING);
-        }
-    }
-
-    public void markStartConfirmed(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        SwarmLifecycleStatus status = swarm.getStatus();
-        if (status == SwarmLifecycleStatus.RUNNING) {
-            return;
-        }
-        if (status == SwarmLifecycleStatus.READY || status == SwarmLifecycleStatus.STOPPED) {
-            swarm.transitionTo(SwarmLifecycleStatus.STARTING);
-        }
-        if (swarm.getStatus() == SwarmLifecycleStatus.STARTING) {
-            swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
-        }
-    }
-
-    /**
-     * Remove swarms whose swarm-controller stopped reporting status metrics.
-     * <p>
-     * This is intentionally strict: only swarms that have a recorded controller status timestamp and
-     * have not been seen for at least {@code failedAfter} are pruned.
-     */
+    /** Marks stale observation unknown; status traffic never creates or deletes registry entries. */
     public void pruneStaleControllers(Duration failedAfter) {
         pruneStaleControllers(failedAfter, Instant.now());
     }
@@ -152,17 +72,17 @@ public class SwarmStore {
         if (now == null) {
             return;
         }
-        swarms.values().removeIf(s -> {
+        swarms.values().forEach(s -> {
             Instant lastSeenAt = s.getControllerStatusReceivedAt();
             if (lastSeenAt == null) {
-                return false;
+                return;
             }
             if (!now.isAfter(lastSeenAt.plus(failedAfter))) {
-                return false;
+                return;
             }
-            log.info("SwarmStore: pruning stale swarm id={} instance={} container={} lastSeenAt={}",
+            log.info("SwarmStore: marking stale observation id={} instance={} container={} lastSeenAt={}",
                 s.getId(), s.getInstanceId(), s.getContainerId(), lastSeenAt);
-            return true;
+            s.markObservationStale();
         });
     }
 

@@ -16,8 +16,11 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.ControlPlaneEnvelopeVersion;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.messaging.Alerts;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 
 class ControlPlaneEventParserTest {
 
@@ -27,24 +30,27 @@ class ControlPlaneEventParserTest {
 	  void parsesCommandOutcomes() throws Exception {
 	    CommandOutcome outcome = new CommandOutcome(
 	        Instant.parse("2024-07-01T12:00:00Z"),
-	        "1",
+	        ControlPlaneEnvelopeVersion.CURRENT,
 	        "outcome",
 	        "swarm-start",
-	        "swarm-controller:alpha",
-	        ControlScope.forInstance("swarm-test", "swarm-controller", "alpha"),
+	        "orchestrator:local",
+	        ControlScope.forInstance("swarm-test", "orchestrator", "local"),
 	        "corr-1",
 	        "idem-1",
 	        Map.of(
 	            "templateId", "tpl-1",
 	            "runId", "run-1"
 	        ),
-	        Map.of("status", "Running")
+	        new TerminalResult(
+	            TerminalStatus.SUCCEEDED,
+	            false,
+	            Map.of("requestedWorkloadState", "RUNNING", "observedWorkloadState", "RUNNING"))
 	    );
 	    byte[] body = mapper.writeValueAsBytes(outcome);
 
     ControlPlaneEventParser parser = new ControlPlaneEventParser(mapper);
     ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
-        "event.outcome.swarm-start.swarm-test.swarm-controller.alpha",
+        "event.outcome.swarm-start.swarm-test.orchestrator.local",
         body
     );
 
@@ -54,7 +60,8 @@ class ControlPlaneEventParserTest {
     assertNotNull(parsedOutcome);
     assertEquals("corr-1", parsedOutcome.correlationId());
     assertEquals("swarm-start", parsedOutcome.type());
-    assertEquals("Running", parsedOutcome.data().get("status"));
+    assertEquals(TerminalStatus.SUCCEEDED, parsedOutcome.data().status());
+    assertEquals("RUNNING", parsedOutcome.data().context().get("observedWorkloadState"));
   }
 
   @Test

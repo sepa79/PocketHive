@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { changesRedisDatasetListName, isStoppedSwarmStatus } from './runtimeConfigGuard'
+import { changesRedisDatasetListName, isStoppedWorkloadState } from './runtimeConfigGuard'
 
 describe('runtime config guard', () => {
   it('recognizes only an explicit Redis dataset listName patch', () => {
@@ -9,9 +9,9 @@ describe('runtime config guard', () => {
   })
 
   it('accepts STOPPED case-insensitively and fails closed for missing or other states', () => {
-    expect(isStoppedSwarmStatus('STOPPED')).toBe(true)
-    expect(isStoppedSwarmStatus('Stopped')).toBe(true)
-    expect(isStoppedSwarmStatus(' RUNNING ')).toBe(false)
-    expect(isStoppedSwarmStatus(null)).toBe(false)
+    expect(isStoppedWorkloadState('STOPPED')).toBe(true)
+    expect(isStoppedWorkloadState('Stopped')).toBe(true)
+    expect(isStoppedWorkloadState(' RUNNING ')).toBe(false)
+    expect(isStoppedWorkloadState(null)).toBe(false)
   })
 })

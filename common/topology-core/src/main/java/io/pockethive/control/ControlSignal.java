@@ -26,7 +26,7 @@ public record ControlSignal(
 
     public ControlSignal {
         Objects.requireNonNull(timestamp, "timestamp");
-        version = requireNonBlank("version", version);
+        version = CommandEnvelopeSupport.requireCurrentVersion(version);
         kind = requireNonBlank("kind", kind);
         if (!"signal".equals(kind)) {
             throw new IllegalArgumentException("kind must be 'signal' for ControlSignal");
@@ -35,7 +35,7 @@ public record ControlSignal(
         origin = requireNonBlank("origin", origin);
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = requireNonBlank("correlationId", correlationId);
-        idempotencyKey = trimToNull(idempotencyKey);
+        idempotencyKey = requireNonBlank("idempotencyKey", idempotencyKey);
         if (data != null && !data.isEmpty()) {
             data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
         } else {

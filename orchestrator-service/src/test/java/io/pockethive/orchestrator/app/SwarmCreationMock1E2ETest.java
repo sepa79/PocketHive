@@ -20,7 +20,6 @@ import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
 import io.pockethive.auth.contract.SessionResponseDto;
-import io.pockethive.control.ControlSignal;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -28,12 +27,14 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.orchestrator.OrchestratorApplication;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import io.pockethive.scenarios.test.ScenarioManagerTestApplication;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.Work;
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -134,9 +135,6 @@ class SwarmCreationMock1E2ETest {
     SwarmStore swarmStore;
 
     @Autowired
-    SwarmPlanRegistry swarmPlanRegistry;
-
-    @Autowired
     RabbitTemplate rabbitTemplate;
 
     @Autowired
@@ -228,6 +226,9 @@ class SwarmCreationMock1E2ETest {
         registry.add(
             "POCKETHIVE_SCENARIOS_RUNTIME_ROOT",
             () -> scenarioRuntimeRoot != null ? scenarioRuntimeRoot.toString() : "");
+        registry.add(
+            "POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT",
+            () -> scenarioRuntimeRoot != null ? scenarioRuntimeRoot.toString() : "");
     }
 
     @AfterAll
@@ -251,7 +252,7 @@ class SwarmCreationMock1E2ETest {
     }
 
     @Test
-    void orchestratorPublishesSwarmTemplateFromScenarioManager() throws Exception {
+    void orchestratorPersistsStartupArtifactFromScenarioManager() throws Exception {
         Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
         when(docker.resolveControlNetwork()).thenReturn("ph-test-net");
@@ -284,20 +285,16 @@ class SwarmCreationMock1E2ETest {
 
         Swarm swarm = swarmStore.find(swarmId).orElseThrow();
         assertThat(swarm.getContainerId()).isEqualTo("container-123");
-        assertThat(swarm.getStatus()).isEqualTo(SwarmLifecycleStatus.CREATING);
+        assertThat(swarm.getControllerState()).isEqualTo(ControllerState.PROVISIONING);
         String instanceId = swarm.getInstanceId();
         assertThat(instanceId).isNotBlank();
 
-        assertThat(swarmPlanRegistry.find(instanceId)).isPresent();
+        assertThat(swarm.startupArtifact().sha256()).matches("[0-9a-f]{64}");
 
         verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any(), anyMap());
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);
-        Binding templateBinding = BindingBuilder.bind(captureQueue)
-            .to(controlExchange)
-            .with(ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId));
-        admin.declareBinding(templateBinding);
         Binding createBinding = BindingBuilder.bind(captureQueue)
             .to(controlExchange)
             .with(ControlPlaneRouting.event("outcome", "swarm-create",
@@ -307,7 +304,7 @@ class SwarmCreationMock1E2ETest {
         String statusPayload = """
             {
               "timestamp": "2024-01-01T00:00:00Z",
-              "version": "1",
+              "version": "2",
               "kind": "metric",
               "type": "status-full",
               "origin": "%s",
@@ -327,10 +324,17 @@ class SwarmCreationMock1E2ETest {
 	                "startedAt": "2024-01-01T00:00:00Z",
 	                "io": {},
 	                "ioState": {},
-	                "context": {"swarmStatus": "READY"}
+	                "context": {
+	                  "controllerState": "READY",
+	                  "workloadState": "STOPPED",
+	                  "health": "HEALTHY",
+	                  "startupReady": true,
+	                  "startupArtifactSha256": "%s"
+	                }
 	              }
             }
-            """.formatted(instanceId, swarmId, instanceId, instanceId, swarmId);
+            """.formatted(instanceId, swarmId, instanceId, instanceId, swarmId,
+                swarm.startupArtifact().sha256());
 
         rabbitTemplate.convertAndSend(
             controlPlaneProperties.getExchange(),
@@ -338,21 +342,12 @@ class SwarmCreationMock1E2ETest {
                 new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
             statusPayload);
 
-        String templateRoutingKey = ControlPlaneRouting.signal("swarm-template", swarmId, "swarm-controller", instanceId);
-        Message templateMessage = awaitMessage(captureName, Duration.ofSeconds(15), templateRoutingKey);
-        assertThat(templateMessage).isNotNull();
-        assertThat(templateMessage.getMessageProperties().getReceivedRoutingKey())
-            .isEqualTo(templateRoutingKey);
-        ControlSignal controlSignal = objectMapper.readValue(templateMessage.getBody(), ControlSignal.class);
-        assertThat(controlSignal.type()).isEqualTo("swarm-template");
-        assertThat(controlSignal.scope().swarmId()).isEqualTo(swarmId);
-        assertThat(controlSignal.scope().role()).isEqualTo("swarm-controller");
-        assertThat(controlSignal.scope().instance()).isEqualTo(instanceId);
-        assertThat(controlSignal.correlationId()).isEqualTo(correlationId);
-        assertThat(controlSignal.idempotencyKey()).isEqualTo(idempotencyKey);
-        assertThat(controlSignal.data()).isNotNull();
-
-        SwarmPlan publishedPlan = objectMapper.convertValue(controlSignal.data(), SwarmPlan.class);
+        String containerPrefix = "/app/scenarios-runtime/";
+        String artifactPath = swarm.startupArtifact().path();
+        assertThat(artifactPath).startsWith(containerPrefix);
+        Path hostArtifactPath = scenarioRuntimeRoot.resolve(artifactPath.substring(containerPrefix.length()));
+        SwarmStartupArtifact startupArtifact = objectMapper.readValue(hostArtifactPath.toFile(), SwarmStartupArtifact.class);
+        SwarmPlan artifactPlan = startupArtifact.swarmPlan();
         String runtimeVolume = scenarioRuntimeRoot
             .resolve(swarmId)
             .toAbsolutePath()
@@ -360,8 +355,8 @@ class SwarmCreationMock1E2ETest {
             .toString() + ":/app/scenario:ro";
         Map<String, Object> dockerConfig = Map.of("volumes", java.util.List.of(runtimeVolume));
 
-        assertThat(publishedPlan.id()).isEqualTo(swarmId);
-        assertThat(publishedPlan.bees()).containsExactly(
+        assertThat(artifactPlan.id()).isEqualTo(swarmId);
+        assertThat(artifactPlan.bees()).containsExactly(
             new Bee(
                 "generator",
                 "generator:latest",
@@ -431,16 +426,9 @@ class SwarmCreationMock1E2ETest {
         assertThat(outcome.type()).isEqualTo("swarm-create");
         assertThat(outcome.scope().swarmId()).isEqualTo(swarmId);
         assertThat(outcome.data()).isNotNull();
-        assertThat(outcome.data().get("status")).isEqualTo("Ready");
+        assertThat(outcome.data().status()).isEqualTo(TerminalStatus.SUCCEEDED);
 
-        assertThat(swarmPlanRegistry.find(instanceId)).isEmpty();
-
-        rabbitTemplate.convertAndSend(
-            controlPlaneProperties.getExchange(),
-            ControlPlaneRouting.event("outcome", "swarm-template",
-                new ConfirmationScope(swarmId, "swarm-controller", instanceId)),
-            "{\"data\":{\"status\":\"Ready\"}}");
-        awaitStatus(swarmId, SwarmLifecycleStatus.READY, Duration.ofSeconds(15));
+        awaitControllerState(swarmId, ControllerState.READY, Duration.ofSeconds(15));
 
         admin.deleteQueue(captureName);
     }
@@ -660,12 +648,12 @@ class SwarmCreationMock1E2ETest {
         return null;
     }
 
-    private void awaitStatus(String swarmId, SwarmLifecycleStatus expected, Duration timeout)
+    private void awaitControllerState(String swarmId, ControllerState expected, Duration timeout)
         throws InterruptedException {
         Instant deadline = Instant.now().plus(timeout);
         while (Instant.now().isBefore(deadline)) {
-            SwarmLifecycleStatus current = swarmStore.find(swarmId)
-                .map(Swarm::getStatus)
+            ControllerState current = swarmStore.find(swarmId)
+                .map(Swarm::getControllerState)
                 .orElse(null);
             if (expected.equals(current)) {
                 return;
@@ -673,7 +661,7 @@ class SwarmCreationMock1E2ETest {
             Thread.sleep(50L);
         }
         assertThat(swarmStore.find(swarmId)
-            .map(Swarm::getStatus)).contains(expected);
+            .map(Swarm::getControllerState)).contains(expected);
     }
 
     private static void ensureScenarioManagerRunning() {

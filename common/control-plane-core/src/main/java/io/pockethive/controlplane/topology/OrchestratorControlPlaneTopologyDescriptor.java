@@ -30,8 +30,11 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
         String queueName = controlQueuePrefix + "." + ROLE + "." + id;
-        Set<String> outcomeEvents = Set.of(lifecycleEventPattern("outcome"));
-        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), outcomeEvents));
+        Set<String> executorEvents = Set.of(
+            lifecycleEventPattern("result"),
+            lifecycleEventPattern("journal.work-journal"),
+            lifecycleEventPattern("alert.alert"));
+        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), executorEvents));
     }
 
     @Override
@@ -47,12 +50,16 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
 
     @Override
     public ControlPlaneRouteCatalog routes() {
-        Set<String> lifecycleEvents = Set.of(lifecycleEventPattern("outcome"));
+        Set<String> lifecycleEvents = Set.of(lifecycleEventPattern("result"));
         Set<String> statusEvents = Set.of(
             controllerStatusPattern("status-full"),
             controllerStatusPattern("status-delta")
         );
-        return new ControlPlaneRouteCatalog(Set.of(), Set.of(), Set.of(), statusEvents, lifecycleEvents, Set.of());
+        return new ControlPlaneRouteCatalog(
+            Set.of(), Set.of(), Set.of(), statusEvents, lifecycleEvents,
+            Set.of(
+                lifecycleEventPattern("alert.alert"),
+                lifecycleEventPattern("journal.work-journal")));
     }
 
     private static String lifecycleEventPattern(String type) {

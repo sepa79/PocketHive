@@ -94,7 +94,7 @@ class ControlPlaneEventsTest {
   }
 
   @Test
-  void matchesErrorTopicsByCorrelationId() {
+  void matchesAlertsByCorrelationId() {
     String routingKey = "event.alert.alert.swarm-alpha.orchestrator.orchestrator-1";
     events.recordAlert(
         routingKey,

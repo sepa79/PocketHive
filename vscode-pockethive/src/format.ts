@@ -4,12 +4,9 @@ type SwarmAction = 'start' | 'stop' | 'remove';
 
 export function formatSwarmDescription(swarm: SwarmSummary): string {
   const parts: string[] = [];
-  if (swarm.status) {
-    parts.push(swarm.status);
-  }
-  if (swarm.health) {
-    parts.push(swarm.health);
-  }
+  parts.push(`controller ${swarm.controllerState}`);
+  parts.push(`workload ${swarm.workloadState}`);
+  parts.push(`health ${swarm.health}`);
   return parts.join(' / ');
 }
 

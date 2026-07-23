@@ -1,8 +1,8 @@
 package io.pockethive.controlplane.messaging;
 
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.CommandOutcome;
-import io.pockethive.control.CommandState;
+import io.pockethive.control.CommandResult;
+import io.pockethive.control.JournalEvent;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlRuntime;
 import io.pockethive.control.ControlScope;
@@ -14,8 +14,9 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
-import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.observability.ControlPlaneJson;
+import io.pockethive.observability.StatusEnvelopeBuilder;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -24,493 +25,292 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/**
- * Emits control-plane events using canonical routing keys and payload builders.
- */
+/** Emits executor results, alerts and status metrics using canonical routing. */
 public final class ControlPlaneEmitter {
 
-    private static final Logger log = LoggerFactory.getLogger(ControlPlaneEmitter.class);
+  private static final Logger log = LoggerFactory.getLogger(ControlPlaneEmitter.class);
 
-    private final ControlPlaneTopologyDescriptor topology;
-    private final RoleContext role;
-    private final ControlPlanePublisher publisher;
-    private final StatusPayloadFactory statusFactory;
-    private final Map<String, Object> runtime;
-    private ControlPlaneEmitter(ControlPlaneTopologyDescriptor topology,
-                                RoleContext role,
-                                ControlPlanePublisher publisher,
-                                StatusPayloadFactory statusFactory,
-                                Map<String, Object> runtime) {
-        this.topology = Objects.requireNonNull(topology, "topology");
-        this.role = Objects.requireNonNull(role, "role");
-        this.publisher = Objects.requireNonNull(publisher, "publisher");
-        this.statusFactory = Objects.requireNonNull(statusFactory, "statusFactory");
-        this.runtime = normaliseRuntime(runtime);
-        requireRoleMatch();
+  private final ControlPlaneTopologyDescriptor topology;
+  private final RoleContext role;
+  private final ControlPlanePublisher publisher;
+  private final StatusPayloadFactory statusFactory;
+  private final Map<String, Object> runtime;
+
+  private ControlPlaneEmitter(
+      ControlPlaneTopologyDescriptor topology,
+      RoleContext role,
+      ControlPlanePublisher publisher,
+      StatusPayloadFactory statusFactory,
+      Map<String, Object> runtime) {
+    this.topology = Objects.requireNonNull(topology, "topology");
+    this.role = Objects.requireNonNull(role, "role");
+    this.publisher = Objects.requireNonNull(publisher, "publisher");
+    this.statusFactory = Objects.requireNonNull(statusFactory, "statusFactory");
+    this.runtime = ControlRuntime.normalise(runtime);
+    requireRoleMatch();
+  }
+
+  public static ControlPlaneEmitter using(
+      ControlPlaneTopologyDescriptor topology,
+      RoleContext role,
+      ControlPlanePublisher publisher,
+      Map<String, Object> runtime) {
+    return new ControlPlaneEmitter(
+        topology,
+        role,
+        publisher,
+        new StatusPayloadFactory(role),
+        runtime);
+  }
+
+  public static ControlPlaneEmitter worker(
+      ControlPlaneIdentity identity,
+      ControlPlanePublisher publisher,
+      ControlPlaneTopologySettings settings,
+      Map<String, Object> runtime) {
+    RoleContext role = RoleContext.fromIdentity(identity);
+    return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher, runtime);
+  }
+
+  public static ControlPlaneEmitter swarmController(
+      ControlPlaneIdentity identity,
+      ControlPlanePublisher publisher,
+      ControlPlaneTopologySettings settings,
+      Map<String, Object> runtime) {
+    RoleContext role = requireIdentity(identity, "swarm-controller");
+    return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher, runtime);
+  }
+
+  public void emitResult(ResultContext context) {
+    Objects.requireNonNull(context, "context");
+    CommandResult result = new CommandResult(
+        context.timestamp() == null ? Instant.now() : context.timestamp(),
+        io.pockethive.control.ControlPlaneEnvelopeVersion.CURRENT,
+        CommandResult.KIND,
+        context.signal(),
+        role.instanceId(),
+        toControlScope(role.toScope()),
+        context.correlationId(),
+        context.idempotencyKey(),
+        runtime,
+        context.result());
+    ConfirmationScope routingScope = toConfirmationScope(result.scope());
+    String routingKey = ControlPlaneRouting.event(CommandResult.KIND, context.signal(), routingScope);
+    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(result, CommandResult.KIND)));
+  }
+
+  public void emitJournal(JournalContext context) {
+    Objects.requireNonNull(context, "context");
+    JournalEvent event = new JournalEvent(
+        context.timestamp() == null ? Instant.now() : context.timestamp(),
+        io.pockethive.control.ControlPlaneEnvelopeVersion.CURRENT,
+        JournalEvent.KIND,
+        context.type(),
+        role.instanceId(),
+        toControlScope(role.toScope()),
+        context.correlationId(),
+        context.idempotencyKey(),
+        runtime,
+        context.data());
+    String routingKey = ControlPlaneRouting.event(
+        JournalEvent.KIND, event.type(), toConfirmationScope(event.scope()));
+    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(event, JournalEvent.KIND)));
+  }
+
+  public void emitFailure(FailureContext context) {
+    Objects.requireNonNull(context, "context");
+    log.warn(
+        "[CTRL] command failure operation={} phase={} code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable={} errorType={} errorDetail={}",
+        context.signal(), context.phase(), context.code(), context.message(), role.swarmId(), role.role(),
+        role.instanceId(), context.correlationId(), context.idempotencyKey(), context.result().retryable(),
+        context.errorType(), context.errorDetail());
+    emitResult(new ResultContext(
+        context.signal(),
+        context.correlationId(),
+        context.idempotencyKey(),
+        context.result(),
+        context.timestamp()));
+    publishAlertFromFailure(context);
+  }
+
+  public void emitStatusSnapshot(StatusContext context) {
+    publishStatus("status-full", context);
+  }
+
+  public void emitStatusDelta(StatusContext context) {
+    publishStatus("status-delta", context);
+  }
+
+  private void publishStatus(String type, StatusContext context) {
+    Objects.requireNonNull(context, "context");
+    String routingKey = ControlPlaneRouting.event("metric", type, role.toScope());
+    Consumer<StatusEnvelopeBuilder> customiser = builder -> {
+      builder.controlOut(routingKey);
+      builder.runtime(runtime);
+      context.customiser().accept(builder);
+    };
+    String payload = switch (type) {
+      case "status-full" -> statusFactory.snapshot(customiser);
+      case "status-delta" -> statusFactory.delta(customiser);
+      default -> throw new IllegalArgumentException("Unsupported status type: " + type);
+    };
+    publisher.publishEvent(new EventMessage(routingKey, payload));
+  }
+
+  private void publishAlertFromFailure(FailureContext context) {
+    Map<String, Object> alertContext = new LinkedHashMap<>();
+    alertContext.put("phase", context.phase());
+    alertContext.putAll(context.result().context());
+    AlertMessage alert = Alerts.error(
+        role.instanceId(),
+        toControlScope(role.toScope()),
+        context.correlationId(),
+        context.idempotencyKey(),
+        runtime,
+        context.code(),
+        context.message(),
+        context.errorType(),
+        context.errorDetail(),
+        context.logRef(),
+        Map.copyOf(alertContext),
+        context.timestamp());
+    publishAlert(alert);
+  }
+
+  public void publishAlert(AlertMessage alert) {
+    Objects.requireNonNull(alert, "alert");
+    ConfirmationScope routingScope = toConfirmationScope(alert.scope());
+    String routingKey = ControlPlaneRouting.event("alert", "alert", routingScope);
+    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(alert, "alert")));
+  }
+
+  private void requireRoleMatch() {
+    if (!topology.role().equals(role.role())) {
+      throw new IllegalArgumentException(
+          "Role context does not match topology role: expected " + topology.role() + " but was " + role.role());
+    }
+  }
+
+  private static RoleContext requireIdentity(ControlPlaneIdentity identity, String expectedRole) {
+    RoleContext role = RoleContext.fromIdentity(Objects.requireNonNull(identity, "identity"));
+    if (!expectedRole.equals(role.role())) {
+      throw new IllegalArgumentException(
+          "Identity role mismatch: expected " + expectedRole + " but was " + role.role());
+    }
+    return role;
+  }
+
+  private static String serializeEnvelope(Object value, String label) {
+    return ControlPlaneJson.write(value, label + " envelope");
+  }
+
+  private static ConfirmationScope toConfirmationScope(ControlScope scope) {
+    return new ConfirmationScope(scope.swarmId(), scope.role(), scope.instance());
+  }
+
+  private static ControlScope toControlScope(ConfirmationScope scope) {
+    return new ControlScope(scope.swarmId(), scope.role(), scope.instance());
+  }
+
+  private static String requireText(String field, String value) {
+    if (value == null || value.isBlank()) {
+      throw new IllegalArgumentException(field + " must not be blank");
+    }
+    return value.trim();
+  }
+
+  public record ResultContext(
+      String signal,
+      String correlationId,
+      String idempotencyKey,
+      TerminalResult result,
+      Instant timestamp
+  ) {
+    public ResultContext {
+      signal = requireText("signal", signal);
+      correlationId = requireText("correlationId", correlationId);
+      idempotencyKey = requireText("idempotencyKey", idempotencyKey);
+      result = Objects.requireNonNull(result, "result");
+    }
+  }
+
+  public record JournalContext(
+      String type,
+      String correlationId,
+      String idempotencyKey,
+      Map<String, Object> data,
+      Instant timestamp) {
+    public JournalContext {
+      type = requireText("type", type);
+      correlationId = requireText("correlationId", correlationId);
+      idempotencyKey = requireText("idempotencyKey", idempotencyKey);
+      data = data == null ? Map.of() : Map.copyOf(data);
+    }
+  }
+
+  public record FailureContext(
+      String signal,
+      String correlationId,
+      String idempotencyKey,
+      TerminalResult result,
+      String phase,
+      String code,
+      String message,
+      String errorType,
+      String errorDetail,
+      String logRef,
+      Instant timestamp
+  ) {
+    public FailureContext {
+      signal = requireText("signal", signal);
+      correlationId = requireText("correlationId", correlationId);
+      idempotencyKey = requireText("idempotencyKey", idempotencyKey);
+      result = Objects.requireNonNull(result, "result");
+      phase = requireText("phase", phase);
+      code = requireText("code", code);
+      message = requireText("message", message);
+      errorType = optionalText(errorType);
+      errorDetail = optionalText(errorDetail);
+      logRef = optionalText(logRef);
     }
 
-    private static Map<String, Object> normaliseRuntime(Map<String, Object> runtime) {
-        return ControlRuntime.normalise(runtime);
+    public static FailureContext fromException(
+        String signal,
+        String correlationId,
+        String idempotencyKey,
+        TerminalResult result,
+        String phase,
+        Throwable exception,
+        String logRef,
+        Instant timestamp) {
+      Objects.requireNonNull(exception, "exception");
+      String detail = optionalText(exception.getMessage());
+      return new FailureContext(
+          signal,
+          correlationId,
+          idempotencyKey,
+          result,
+          phase,
+          Alerts.Codes.RUNTIME_EXCEPTION,
+          detail == null ? exception.getClass().getName() : detail,
+          exception.getClass().getName(),
+          detail,
+          logRef,
+          timestamp);
+    }
+  }
+
+  public record StatusContext(Consumer<StatusEnvelopeBuilder> customiser) {
+    public StatusContext {
+      customiser = Objects.requireNonNull(customiser, "customiser");
     }
 
-    public static ControlPlaneEmitter using(ControlPlaneTopologyDescriptor topology,
-                                            RoleContext role,
-                                            ControlPlanePublisher publisher,
-                                            Map<String, Object> runtime) {
-        Objects.requireNonNull(topology, "topology");
-        Objects.requireNonNull(role, "role");
-        Objects.requireNonNull(publisher, "publisher");
-        StatusPayloadFactory statusFactory = new StatusPayloadFactory(role);
-        return new ControlPlaneEmitter(topology, role, publisher, statusFactory, runtime);
+    public static StatusContext of(Consumer<StatusEnvelopeBuilder> customiser) {
+      return new StatusContext(customiser);
     }
+  }
 
-    public static ControlPlaneEmitter worker(ControlPlaneIdentity identity,
-                                             ControlPlanePublisher publisher,
-                                             ControlPlaneTopologySettings settings,
-                                             Map<String, Object> runtime) {
-        RoleContext role = RoleContext.fromIdentity(identity);
-        return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher, runtime);
-    }
-
-    public static ControlPlaneEmitter swarmController(ControlPlaneIdentity identity,
-                                                      ControlPlanePublisher publisher,
-                                                      ControlPlaneTopologySettings settings,
-                                                      Map<String, Object> runtime) {
-        RoleContext role = requireIdentity(identity, "swarm-controller");
-        return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher, runtime);
-    }
-
-    public void emitReady(ReadyContext context) {
-        Objects.requireNonNull(context, "context");
-        publishOutcomeFromReady(context);
-    }
-
-    public void emitError(ErrorContext context) {
-        Objects.requireNonNull(context, "context");
-        Boolean retryable = errorRetryable(context);
-        log.warn("[CTRL] command failure operation={} phase={} code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable={} errorType={} errorDetail={}",
-            context.signal(), context.phase(), context.code(), context.message(), role.swarmId(), role.role(),
-            role.instanceId(), context.correlationId(), context.idempotencyKey(), retryable,
-            context.errorType(), context.errorDetail());
-        publishOutcomeFromError(context);
-        publishAlertFromError(context);
-    }
-
-    public void emitStatusSnapshot(StatusContext context) {
-        publishStatus("status-full", context);
-    }
-
-    public void emitStatusDelta(StatusContext context) {
-        publishStatus("status-delta", context);
-    }
-
-    private void publishStatus(String type, StatusContext context) {
-        Objects.requireNonNull(context, "context");
-        String routingKey = ControlPlaneRouting.event("metric", type, role.toScope());
-        Consumer<StatusEnvelopeBuilder> customiser = builder -> {
-            builder.controlOut(routingKey);
-            builder.runtime(runtime);
-            context.customiser().accept(builder);
-        };
-        String payload = switch (type) {
-            case "status-full" -> statusFactory.snapshot(customiser);
-            case "status-delta" -> statusFactory.delta(customiser);
-            default -> throw new IllegalArgumentException("Unsupported status type: " + type);
-        };
-        publisher.publishEvent(new EventMessage(routingKey, payload));
-    }
-
-    private void requireRoleMatch() {
-        String expectedRole = topology.role();
-        if (!expectedRole.equals(role.role())) {
-            throw new IllegalArgumentException("Role context does not match topology role: expected " + expectedRole
-                + " but was " + role.role());
-        }
-    }
-
-    private static RoleContext requireIdentity(ControlPlaneIdentity identity, String expectedRole) {
-        Objects.requireNonNull(identity, "identity");
-        RoleContext role = RoleContext.fromIdentity(identity);
-        if (!expectedRole.equals(role.role())) {
-            throw new IllegalArgumentException("Identity role mismatch: expected " + expectedRole + " but was "
-                + role.role());
-        }
-        return role;
-    }
-
-    public record ReadyContext(String signal,
-                               String correlationId,
-                               String idempotencyKey,
-                               CommandState state,
-                               String result,
-                               Instant timestamp,
-                               Map<String, Object> details) {
-
-        public ReadyContext {
-            signal = requireNonBlank("signal", signal);
-            correlationId = requireNonBlank("correlationId", correlationId);
-            idempotencyKey = trimToNull(idempotencyKey);
-            state = Objects.requireNonNull(state, "state");
-            details = immutable(details);
-        }
-
-        public static Builder builder(String signal, String correlationId, String idempotencyKey, CommandState state) {
-            return new Builder(signal, correlationId, idempotencyKey, state);
-        }
-
-        public static final class Builder {
-
-            private final String signal;
-            private final String correlationId;
-            private final String idempotencyKey;
-            private final CommandState state;
-            private String result;
-            private Instant timestamp;
-            private Map<String, Object> details = Map.of();
-
-            private Builder(String signal, String correlationId, String idempotencyKey, CommandState state) {
-                this.signal = requireNonBlank("signal", signal);
-                this.correlationId = requireNonBlank("correlationId", correlationId);
-                this.idempotencyKey = trimToNull(idempotencyKey);
-                this.state = Objects.requireNonNull(state, "state");
-            }
-
-            public Builder result(String result) {
-                this.result = result;
-                return this;
-            }
-
-            public Builder timestamp(Instant timestamp) {
-                this.timestamp = Objects.requireNonNull(timestamp, "timestamp");
-                return this;
-            }
-
-            public Builder details(Map<String, Object> details) {
-                this.details = immutable(details);
-                return this;
-            }
-
-            public ReadyContext build() {
-                return new ReadyContext(signal, correlationId, idempotencyKey, state, result, timestamp, details);
-            }
-        }
-    }
-
-    public record ErrorContext(String signal,
-                               String correlationId,
-                               String idempotencyKey,
-                               CommandState state,
-                               String phase,
-                               String code,
-                               String message,
-                               String errorType,
-                               String errorDetail,
-                               String logRef,
-                               Boolean retryable,
-                               String result,
-                               Instant timestamp,
-                               Map<String, Object> details) {
-
-        public ErrorContext {
-            signal = requireNonBlank("signal", signal);
-            correlationId = requireNonBlank("correlationId", correlationId);
-            idempotencyKey = trimToNull(idempotencyKey);
-            state = Objects.requireNonNull(state, "state");
-            phase = requireNonBlank("phase", phase);
-            code = requireNonBlank("code", code);
-            message = requireNonBlank("message", message);
-            errorType = trimToNull(errorType);
-            errorDetail = trimToNull(errorDetail);
-            logRef = trimToNull(logRef);
-            details = immutable(details);
-        }
-
-        public static Builder builder(String signal,
-                                      String correlationId,
-                                      String idempotencyKey,
-                                      CommandState state,
-                                      String phase,
-                                      String code,
-                                      String message) {
-            return new Builder(signal, correlationId, idempotencyKey, state, phase, code, message);
-        }
-
-        public static ErrorContext fromException(String signal,
-                                                 String correlationId,
-                                                 String idempotencyKey,
-                                                 CommandState state,
-                                                 String phase,
-                                                 Throwable exception,
-                                                 Boolean retryable,
-                                                 String logRef,
-                                                 Map<String, Object> details,
-                                                 Instant timestamp) {
-            Objects.requireNonNull(exception, "exception");
-            String errorType = exception.getClass().getName();
-            String errorDetail = trimToNull(exception.getMessage());
-            String message = errorDetail != null ? errorDetail : errorType;
-            return new ErrorContext(
-                signal,
-                correlationId,
-                idempotencyKey,
-                state,
-                phase,
-                Alerts.Codes.RUNTIME_EXCEPTION,
-                message,
-                errorType,
-                errorDetail,
-                logRef,
-                retryable,
-                null,
-                timestamp,
-                details
-            );
-        }
-
-        public static final class Builder {
-
-            private final String signal;
-            private final String correlationId;
-            private final String idempotencyKey;
-            private final CommandState state;
-            private final String phase;
-            private final String code;
-            private final String message;
-            private String errorType;
-            private String errorDetail;
-            private String logRef;
-            private Boolean retryable;
-            private String result;
-            private Instant timestamp;
-            private Map<String, Object> details = Map.of();
-
-            private Builder(String signal,
-                            String correlationId,
-                            String idempotencyKey,
-                            CommandState state,
-                            String phase,
-                            String code,
-                            String message) {
-                this.signal = requireNonBlank("signal", signal);
-                this.correlationId = requireNonBlank("correlationId", correlationId);
-                this.idempotencyKey = trimToNull(idempotencyKey);
-                this.state = Objects.requireNonNull(state, "state");
-                this.phase = requireNonBlank("phase", phase);
-                this.code = requireNonBlank("code", code);
-                this.message = requireNonBlank("message", message);
-            }
-
-            public Builder errorType(String errorType) {
-                this.errorType = trimToNull(errorType);
-                return this;
-            }
-
-            public Builder errorDetail(String errorDetail) {
-                this.errorDetail = trimToNull(errorDetail);
-                return this;
-            }
-
-            public Builder logRef(String logRef) {
-                this.logRef = trimToNull(logRef);
-                return this;
-            }
-
-            public Builder retryable(Boolean retryable) {
-                this.retryable = Objects.requireNonNull(retryable, "retryable");
-                return this;
-            }
-
-            public Builder result(String result) {
-                this.result = result;
-                return this;
-            }
-
-            public Builder timestamp(Instant timestamp) {
-                this.timestamp = Objects.requireNonNull(timestamp, "timestamp");
-                return this;
-            }
-
-            public Builder details(Map<String, Object> details) {
-                this.details = immutable(details);
-                return this;
-            }
-
-            public ErrorContext build() {
-                return new ErrorContext(signal, correlationId, idempotencyKey, state, phase, code, message,
-                    errorType, errorDetail, logRef, retryable, result, timestamp, details);
-            }
-        }
-    }
-
-    public record StatusContext(Consumer<StatusEnvelopeBuilder> customiser) {
-
-        public StatusContext {
-            customiser = Objects.requireNonNull(customiser, "customiser");
-        }
-
-        public static StatusContext of(Consumer<StatusEnvelopeBuilder> customiser) {
-            return new StatusContext(customiser);
-        }
-    }
-
-	    private void publishOutcomeFromReady(ReadyContext context) {
-	        CommandState baseState = context.state();
-	        String overrideStatus = CommandOutcomePolicy.isNotReadyStatus(baseState.status())
-	            ? CommandOutcomePolicy.STATUS_NOT_READY
-	            : null;
-        String status = CommandOutcomePolicy.resolveSuccessStatus(context.signal(), overrideStatus);
-        CommandState state = new CommandState(status, baseState.enabled(), baseState.details());
-        publishOutcome(context.signal(),
-            CommandOutcomes.fromState(
-                context.signal(),
-                role.instanceId(),
-                toControlScope(role.toScope()),
-                context.correlationId(),
-                context.idempotencyKey(),
-                runtime,
-                state,
-                null,
-                context.details(),
-                context.timestamp()
-            ));
-    }
-
-    private void publishOutcomeFromError(ErrorContext context) {
-        CommandOutcomePolicy.OutcomeRules rules = CommandOutcomePolicy.rulesFor(context.signal());
-        CommandState baseState = context.state();
-        CommandState state = new CommandState(rules.errorStatus(), baseState.enabled(), baseState.details());
-        Boolean retryable = errorRetryable(context);
-        publishOutcome(context.signal(),
-            CommandOutcomes.fromState(
-                context.signal(),
-                role.instanceId(),
-                toControlScope(role.toScope()),
-                context.correlationId(),
-                context.idempotencyKey(),
-                runtime,
-                state,
-                retryable,
-                context.details(),
-                context.timestamp()
-            ));
-    }
-
-    private static Boolean errorRetryable(ErrorContext context) {
-        if (context.retryable() != null) {
-            return context.retryable();
-        }
-        return CommandOutcomePolicy.rulesFor(context.signal()).errorRetryableDefault()
-            == CommandOutcomePolicy.RetryablePolicy.TRUE;
-    }
-
-    private void publishOutcome(String signal, CommandOutcome outcome) {
-        Objects.requireNonNull(outcome, "outcome");
-        ConfirmationScope routingScope = toConfirmationScope(outcome.scope());
-        String routingKey = ControlPlaneRouting.event("outcome", signal, routingScope);
-        publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(outcome, "outcome")));
-    }
-
-    private void publishAlertFromError(ErrorContext context) {
-        Map<String, Object> mergedContext = mergeContext(context.state(), context.details());
-        Map<String, Object> alertContext = new LinkedHashMap<>();
-        alertContext.put("phase", context.phase());
-        if (!mergedContext.isEmpty()) {
-            alertContext.putAll(mergedContext);
-        }
-        AlertMessage alert = Alerts.error(
-            role.instanceId(),
-            toControlScope(role.toScope()),
-            context.correlationId(),
-            context.idempotencyKey(),
-            runtime,
-            context.code(),
-            context.message(),
-            context.errorType(),
-            context.errorDetail(),
-            context.logRef(),
-            alertContext.isEmpty() ? null : alertContext,
-            context.timestamp()
-        );
-        publishAlert(alert);
-    }
-
-    private static Map<String, Object> mergeContext(CommandState state, Map<String, Object> extras) {
-        Map<String, Object> merged = new LinkedHashMap<>();
-        if (state.details() != null && !state.details().isEmpty()) {
-            merged.putAll(state.details());
-        }
-        if (extras != null && !extras.isEmpty()) {
-            merged.putAll(extras);
-        }
-        return merged;
-    }
-
-    public void publishAlert(AlertMessage alert) {
-        Objects.requireNonNull(alert, "alert");
-        ConfirmationScope routingScope = toConfirmationScope(alert.scope());
-        String routingKey = ControlPlaneRouting.event("alert", "alert", routingScope);
-        publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(alert, "alert")));
-    }
-
-    public void emitException(String signal,
-                              String correlationId,
-                              String idempotencyKey,
-                              CommandState state,
-                              String phase,
-                              Throwable exception,
-                              Boolean retryable,
-                              String logRef,
-                              Map<String, Object> details) {
-        Objects.requireNonNull(state, "state");
-        ErrorContext context = ErrorContext.fromException(
-            signal,
-            correlationId,
-            idempotencyKey,
-            state,
-            phase,
-            exception,
-            retryable,
-            logRef,
-            details,
-            Instant.now()
-        );
-        emitError(context);
-    }
-
-    private static String serializeEnvelope(Object value, String label) {
-        return ControlPlaneJson.write(value, label + " envelope");
-    }
-
-    private static String requireNonBlank(String field, String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return value;
-    }
-
-    private static String trimToNull(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private static Map<String, Object> immutable(Map<String, Object> source) {
-        if (source == null || source.isEmpty()) {
-            return Map.of();
-        }
-        return Map.copyOf(source);
-    }
-
-    private static ConfirmationScope toConfirmationScope(ControlScope scope) {
-        Objects.requireNonNull(scope, "scope");
-        return new ConfirmationScope(scope.swarmId(), scope.role(), scope.instance());
-    }
-
-    private static ControlScope toControlScope(ConfirmationScope scope) {
-        Objects.requireNonNull(scope, "scope");
-        return new ControlScope(scope.swarmId(), scope.role(), scope.instance());
-    }
-
+  private static String optionalText(String value) {
+    return value == null || value.isBlank() ? null : value.trim();
+  }
 }

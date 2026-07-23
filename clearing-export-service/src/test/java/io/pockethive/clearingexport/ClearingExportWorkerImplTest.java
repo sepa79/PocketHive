@@ -725,7 +725,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime, times(4)).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         anyString(),
@@ -735,7 +735,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-created"),
@@ -745,7 +745,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-write-failed"),
@@ -755,7 +755,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-finalize-failed"),
@@ -765,7 +765,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-flush-summary"),

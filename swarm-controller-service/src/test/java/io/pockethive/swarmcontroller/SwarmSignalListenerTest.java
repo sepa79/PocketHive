@@ -13,10 +13,16 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.docker.DockerDaemonUnavailableException;
 import io.pockethive.swarm.model.BufferGuardPolicy;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.TrafficPolicy;
-import io.pockethive.swarmcontroller.SwarmStatus;
+import io.pockethive.swarmcontroller.runtime.FilesystemSwarmStartupArtifactLoader;
+import io.pockethive.swarmcontroller.runtime.FilesystemSwarmRemoveStore;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
+import io.pockethive.swarm.model.lifecycle.RemoveRequest;
+import io.pockethive.swarm.model.lifecycle.RemoveResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -67,14 +73,38 @@ class SwarmSignalListenerTest {
   }
 
   private SwarmSignalListener newListener(SwarmLifecycle lifecycle, RabbitTemplate rabbit, String instanceId, ObjectMapper mapper) {
-    return new SwarmSignalListener(
+    return newListener(lifecycle, rabbit, instanceId, mapper, removeStore());
+  }
+
+  private SwarmSignalListener newListener(
+      SwarmLifecycle lifecycle,
+      RabbitTemplate rabbit,
+      String instanceId,
+      ObjectMapper mapper,
+      FilesystemSwarmRemoveStore removeStore) {
+    SwarmSignalListener listener = new SwarmSignalListener(
         lifecycle,
         rabbit,
         instanceId,
         mapper,
         SwarmControllerTestProperties.defaults(),
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(),
-        "run-1");
+        "run-1",
+        startupArtifactLoader(),
+        removeStore);
+    return listener;
+  }
+
+  private FilesystemSwarmStartupArtifactLoader startupArtifactLoader() {
+    FilesystemSwarmStartupArtifactLoader loader = mock(FilesystemSwarmStartupArtifactLoader.class);
+    when(loader.expectedSha256()).thenReturn("a".repeat(64));
+    when(loader.load(TEST_SWARM_ID)).thenReturn(
+        SwarmStartupArtifact.v1(new SwarmPlan(TEST_SWARM_ID, List.of()), Map.of()));
+    return loader;
+  }
+
+  private FilesystemSwarmRemoveStore removeStore() {
+    return mock(FilesystemSwarmRemoveStore.class);
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
@@ -82,7 +112,7 @@ class SwarmSignalListenerTest {
   private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 
   private void stubLifecycleDefaults() {
-    lenient().when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    lenient().when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
     lenient().when(lifecycle.snapshotQueueStats()).thenReturn(DEFAULT_QUEUE_STATS);
     lenient().when(lifecycle.workBindingsSnapshot()).thenReturn(Map.of(
@@ -99,10 +129,9 @@ class SwarmSignalListenerTest {
   }
 
   private void markInitialized(SwarmSignalListener listener) {
-    AtomicBoolean templateApplied = (AtomicBoolean) ReflectionTestUtils.getField(listener, "templateApplied");
-    AtomicBoolean planApplied = (AtomicBoolean) ReflectionTestUtils.getField(listener, "planApplied");
-    templateApplied.set(true);
-    planApplied.set(true);
+    AtomicBoolean startupArtifactApplied =
+        (AtomicBoolean) ReflectionTestUtils.getField(listener, "startupArtifactApplied");
+    startupArtifactApplied.set(true);
   }
 
   private String signal(String sig, String instance, String id, String corr) {
@@ -177,7 +206,7 @@ class SwarmSignalListenerTest {
   }
 
   private String controllerReadyEvent(String command, String instance) {
-    return ControlPlaneRouting.event("outcome", command,
+    return ControlPlaneRouting.event("result", command,
         new ConfirmationScope(TEST_SWARM_ID, "swarm-controller", instance));
   }
 
@@ -300,106 +329,15 @@ class SwarmSignalListenerTest {
     verifyNoInteractions(lifecycle, rabbit);
   }
 
-  @Test
-  void templateEmitsConfirmation() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "i0", "c0"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-    verify(lifecycle).prepare("{}");
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")),
-        payload.capture());
-    JsonNode node = mapper.readTree(payload.getValue());
-    assertThat(node.path("correlationId").asText()).isEqualTo("c0");
-    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
-    assertThat(node.path("kind").asText()).isEqualTo("outcome");
-    assertThat(node.path("type").asText()).isEqualTo("swarm-template");
-    assertThat(node.path("data").path("status").asText()).isEqualTo("Ready");
-    assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(TEST_SWARM_ID);
-    assertThat(node.path("scope").path("role").asText()).isEqualTo("swarm-controller");
-    assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
-  }
-
-  @Test
-  void templateFailureIncludesDockerAvailabilityMessage() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    doThrow(new DockerDaemonUnavailableException("Unable to create container because the Docker daemon is unavailable. hint",
-        new RuntimeException("boom")))
-        .when(lifecycle).prepare("{}");
-
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "i9", "c9"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerErrorEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")),
-        payload.capture());
-
-    JsonNode node = mapper.readTree(payload.getValue());
-    assertThat(node.path("kind").asText()).isEqualTo("event");
-    assertThat(node.path("type").asText()).isEqualTo("alert");
-    assertThat(node.path("data").path("message").asText()).contains("Docker daemon is unavailable");
-    assertThat(node.path("correlationId").asText()).isEqualTo("c9");
-    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i9");
-  }
-
-  @Test
-  void templateReadyWaitsForWorkerStatuses() throws Exception {
-    when(lifecycle.isReadyForWork()).thenReturn(false, false, true);
-
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    reset(rabbit);
-
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "i0", "c0"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-
-    verify(rabbit, never()).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")), anyString());
-
-    when(lifecycle.markReady("gen", "g1")).thenReturn(true);
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-delta", "gen", "g1"));
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")), payload.capture());
-    JsonNode node = mapper.readTree(payload.getValue());
-    assertThat(node.path("correlationId").asText()).isEqualTo("c0");
-    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i0");
-  }
-
-  @Test
-  void configErrorFailsPendingTemplate() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    when(lifecycle.isReadyForWork()).thenReturn(false);
-    when(lifecycle.handleConfigUpdateError("generator", "gen-1", "boom")).thenReturn(java.util.Optional.of("boom"));
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "it", "ct"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-
-    reset(rabbit);
-    listener.handle(configErrorPayload("generator", "gen-1", "boom"), workerConfigErrorEvent("generator", "gen-1"));
-
-    verify(lifecycle).handleConfigUpdateError("generator", "gen-1", "boom");
-    verify(lifecycle, atLeastOnce()).fail("boom");
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerErrorEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")),
-        anyString());
-  }
 
   @Test
   void configErrorFailsPendingStart() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     when(lifecycle.hasPendingConfigUpdates()).thenReturn(false, true);
     when(lifecycle.handleConfigUpdateError("generator", "gen-2", "bad config")).thenReturn(java.util.Optional.of("bad config"));
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     markInitialized(listener);
 
     listener.handle(
@@ -416,37 +354,10 @@ class SwarmSignalListenerTest {
         anyString());
   }
 
-  @Test
-  void newTemplateReplacesPendingConfirmation() throws Exception {
-    when(lifecycle.isReadyForWork()).thenReturn(false, false, false, false, true);
-
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    reset(rabbit);
-
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "i0", "c0"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_TEMPLATE, "inst", "i1", "c1"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_TEMPLATE, "inst"));
-
-    verify(rabbit, never()).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")), anyString());
-
-    when(lifecycle.markReady("gen", "g1")).thenReturn(true);
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-delta", "gen", "g1"));
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_TEMPLATE, "inst")), payload.capture());
-    JsonNode node = mapper.readTree(payload.getValue());
-    assertThat(node.path("correlationId").asText()).isEqualTo("c1");
-    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i1");
-  }
 
   @Test
   void startEmitsConfirmation() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -460,14 +371,40 @@ class SwarmSignalListenerTest {
         eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")),
         startPayload.capture());
     JsonNode startNode = mapper.readTree(startPayload.getValue());
-    assertThat(startNode.path("kind").asText()).isEqualTo("outcome");
+    assertThat(startNode.path("kind").asText()).isEqualTo("result");
     assertThat(startNode.path("type").asText()).isEqualTo("swarm-start");
     assertThat(startNode.path("correlationId").asText()).isEqualTo("c1");
     assertThat(startNode.path("idempotencyKey").asText()).isEqualTo("i1");
-    assertThat(startNode.path("data").path("status").asText()).isEqualTo("Running");
+    assertThat(startNode.path("data").path("status").asText()).isEqualTo("Succeeded");
     assertThat(startNode.path("scope").path("swarmId").asText()).isEqualTo(TEST_SWARM_ID);
     assertThat(startNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(startNode.path("scope").path("instance").asText()).isEqualTo("inst");
+  }
+
+  @Test
+  void startWaitsForFreshMatchingWorkerStatusBeforeSuccess() throws Exception {
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+    markInitialized(listener);
+    when(lifecycle.nonConvergedWorkersSince(anyLong(), eq(true)))
+        .thenReturn(List.of(new io.pockethive.swarm.model.lifecycle.Target("gen", "g1")))
+        .thenReturn(List.of());
+
+    listener.handle(
+        signal(ControlPlaneSignals.SWARM_START, "inst", "i1", "c1"),
+        controllerInstanceSignal(ControlPlaneSignals.SWARM_START, "inst"));
+
+    verify(rabbit, never()).convertAndSend(
+        eq(CONTROL_EXCHANGE), eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")), anyString());
+
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", true), statusEvent("status-full", "gen", "g1"));
+
+    ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(
+        eq(CONTROL_EXCHANGE), eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")), result.capture());
+    assertThat(mapper.readTree(result.getValue()).path("data").path("status").asText())
+        .isEqualTo("Succeeded");
   }
 
   @Test
@@ -489,41 +426,18 @@ class SwarmSignalListenerTest {
         eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")),
         startPayload.capture());
     JsonNode startNode = mapper.readTree(startPayload.getValue());
-    assertThat(startNode.path("kind").asText()).isEqualTo("outcome");
+    assertThat(startNode.path("kind").asText()).isEqualTo("result");
     assertThat(startNode.path("type").asText()).isEqualTo("swarm-start");
     assertThat(startNode.path("correlationId").asText()).isEqualTo("c1");
     assertThat(startNode.path("idempotencyKey").asText()).isEqualTo("i1");
-    assertThat(startNode.path("data").path("status").asText()).isEqualTo("NotReady");
-    assertThat(startNode.path("data").path("context").path("initialized").asBoolean()).isTrue();
-    assertThat(startNode.path("data").path("context").path("ready").asBoolean()).isFalse();
-    assertThat(startNode.path("data").path("context").path("pendingConfigUpdates").asBoolean()).isFalse();
-  }
-
-  @Test
-  void startRejectsWhenNotInitialized() throws Exception {
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    reset(lifecycle, rabbit);
-    stubLifecycleDefaults();
-    when(lifecycle.isReadyForWork()).thenReturn(true);
-    when(lifecycle.hasPendingConfigUpdates()).thenReturn(false);
-
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_START, "inst", "i1", "c1"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_START, "inst"));
-
-    verify(lifecycle, never()).start(anyString());
-    ArgumentCaptor<String> startPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")),
-        startPayload.capture());
-    JsonNode startNode = mapper.readTree(startPayload.getValue());
-    assertThat(startNode.path("data").path("status").asText()).isEqualTo("NotReady");
-    assertThat(startNode.path("data").path("context").path("initialized").asBoolean()).isFalse();
+    assertThat(startNode.path("data").path("status").asText()).isEqualTo("Rejected");
+    assertThat(startNode.path("data").path("context").path("requestedWorkloadState").asText()).isEqualTo("RUNNING");
+    assertThat(startNode.path("data").path("context").path("observedWorkloadState").asText()).isEqualTo("RUNNING");
   }
 
   @Test
   void stopEmitsConfirmation() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     markInitialized(listener);
     listener.handle(
@@ -535,11 +449,11 @@ class SwarmSignalListenerTest {
         eq(controllerReadyEvent(ControlPlaneSignals.SWARM_STOP, "inst")),
         stopPayload.capture());
     JsonNode stopNode = mapper.readTree(stopPayload.getValue());
-    assertThat(stopNode.path("kind").asText()).isEqualTo("outcome");
+    assertThat(stopNode.path("kind").asText()).isEqualTo("result");
     assertThat(stopNode.path("type").asText()).isEqualTo("swarm-stop");
     assertThat(stopNode.path("correlationId").asText()).isEqualTo("c2");
     assertThat(stopNode.path("idempotencyKey").asText()).isEqualTo("i2");
-    assertThat(stopNode.path("data").path("status").asText()).isEqualTo("Stopped");
+    assertThat(stopNode.path("data").path("status").asText()).isEqualTo("Succeeded");
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(TEST_SWARM_ID);
     assertThat(stopNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(stopNode.path("scope").path("instance").asText()).isEqualTo("inst");
@@ -547,45 +461,38 @@ class SwarmSignalListenerTest {
 
   @Test
   void removeEmitsErrorOnFailure() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    FilesystemSwarmRemoveStore removeStore = removeStore();
+    RemoveRequest request = RemoveRequest.create(TEST_SWARM_ID, "run-1", "inst", "c3", "i3", Instant.now());
+    when(removeStore.findResult(TEST_SWARM_ID, "c3")).thenReturn(java.util.Optional.empty());
+    when(removeStore.loadRequest(TEST_SWARM_ID, "c3")).thenReturn(request);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper, removeStore);
+    reset(rabbit);
     doThrow(new RuntimeException("boom")).when(lifecycle).remove();
     listener.handle(
         signal(ControlPlaneSignals.SWARM_REMOVE, "inst", "i3", "c3"),
         controllerInstanceSignal(ControlPlaneSignals.SWARM_REMOVE, "inst"));
 
-    ArgumentCaptor<String> errorPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerErrorEvent(ControlPlaneSignals.SWARM_REMOVE, "inst")),
-        errorPayload.capture());
-    JsonNode errNode = mapper.readTree(errorPayload.getValue());
-    assertThat(errNode.path("kind").asText()).isEqualTo("event");
-    assertThat(errNode.path("type").asText()).isEqualTo("alert");
-    assertThat(errNode.path("data").path("code").asText()).isEqualTo("RuntimeException");
-    assertThat(errNode.path("data").path("message").asText()).isEqualTo("boom");
-    assertThat(errNode.path("correlationId").asText()).isEqualTo("c3");
-    assertThat(errNode.path("idempotencyKey").asText()).isEqualTo("i3");
-    assertThat(errNode.path("data").path("context").path("phase").asText()).isEqualTo("remove");
-    assertThat(errNode.path("data").path("level").asText()).isEqualTo("error");
-    assertThat(errNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
-    assertThat(errNode.path("scope").path("instance").asText()).isEqualTo("inst");
-
-    ArgumentCaptor<String> outcomePayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_REMOVE, "inst")),
-        outcomePayload.capture());
-    JsonNode outcomeNode = mapper.readTree(outcomePayload.getValue());
-    assertThat(outcomeNode.path("kind").asText()).isEqualTo("outcome");
-    assertThat(outcomeNode.path("type").asText()).isEqualTo("swarm-remove");
-    assertThat(outcomeNode.path("data").path("status").asText()).isEqualTo("Failed");
-    assertThat(outcomeNode.path("data").path("retryable").asBoolean()).isTrue();
+    ArgumentCaptor<RemoveResult> result = ArgumentCaptor.forClass(RemoveResult.class);
+    verify(removeStore).saveResult(result.capture());
+    assertThat(result.getValue().status()).isEqualTo(TerminalStatus.FAILED);
+    assertThat(result.getValue().errors()).singleElement().satisfies(error -> {
+      assertThat(error.code()).isEqualTo("RuntimeException");
+      assertThat(error.message()).isEqualTo("boom");
+    });
+    verifyNoInteractions(rabbit);
   }
 
   @Test
   void removeEmitsSuccessConfirmation() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    FilesystemSwarmRemoveStore removeStore = removeStore();
+    RemoveRequest request = RemoveRequest.create(TEST_SWARM_ID, "run-1", "inst", "c3", "i3", Instant.now());
+    when(removeStore.findResult(TEST_SWARM_ID, "c3")).thenReturn(java.util.Optional.empty());
+    when(removeStore.loadRequest(TEST_SWARM_ID, "c3")).thenReturn(request);
+    when(lifecycle.remove()).thenReturn(List.of());
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper, removeStore);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
 
@@ -594,25 +501,17 @@ class SwarmSignalListenerTest {
         controllerInstanceSignal(ControlPlaneSignals.SWARM_REMOVE, "inst"));
 
     verify(lifecycle).remove();
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_REMOVE, "inst")),
-        payload.capture());
-
-    JsonNode node = mapper.readTree(payload.getValue());
-    assertThat(node.path("kind").asText()).isEqualTo("outcome");
-    assertThat(node.path("type").asText()).isEqualTo("swarm-remove");
-    assertThat(node.path("data").path("status").asText()).isEqualTo("Removed");
-    assertThat(node.path("correlationId").asText()).isEqualTo("c3");
-    assertThat(node.path("idempotencyKey").asText()).isEqualTo("i3");
-    assertThat(node.path("scope").path("swarmId").asText()).isEqualTo(TEST_SWARM_ID);
-    assertThat(node.path("scope").path("role").asText()).isEqualTo("swarm-controller");
-    assertThat(node.path("scope").path("instance").asText()).isEqualTo("inst");
+    ArgumentCaptor<RemoveResult> result = ArgumentCaptor.forClass(RemoveResult.class);
+    verify(removeStore).saveResult(result.capture());
+    assertThat(result.getValue().status()).isEqualTo(TerminalStatus.SUCCEEDED);
+    assertThat(result.getValue().correlationId()).isEqualTo("c3");
+    assertThat(result.getValue().idempotencyKey()).isEqualTo("i3");
+    verifyNoInteractions(rabbit);
   }
 
   @Test
   void configUpdateEmitsConfirmation() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     markInitialized(listener);
     String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
@@ -623,19 +522,19 @@ class SwarmSignalListenerTest {
         eq(controllerReadyEvent(ControlPlaneSignals.CONFIG_UPDATE, "inst")),
         configPayload.capture());
     JsonNode configNode = mapper.readTree(configPayload.getValue());
-    assertThat(configNode.path("kind").asText()).isEqualTo("outcome");
+    assertThat(configNode.path("kind").asText()).isEqualTo("result");
     assertThat(configNode.path("type").asText()).isEqualTo("config-update");
     assertThat(configNode.path("correlationId").asText()).isEqualTo("c4");
     assertThat(configNode.path("idempotencyKey").asText()).isEqualTo("i4");
     assertThat(configNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(configNode.path("scope").path("instance").asText()).isEqualTo("inst");
-    assertThat(configNode.path("data").path("status").asText()).isEqualTo("Applied");
-    assertThat(configNode.path("data").path("enabled").asBoolean()).isTrue();
+    assertThat(configNode.path("data").path("status").asText()).isEqualTo("Succeeded");
+    assertThat(configNode.path("data").path("context").path("observedEnabled").asBoolean()).isTrue();
   }
 
   @Test
   void configUpdateRejectsWhenNotRunning() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.STOPPED);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     markInitialized(listener);
     when(lifecycle.isReadyForWork()).thenReturn(true);
@@ -650,13 +549,14 @@ class SwarmSignalListenerTest {
         eq(controllerReadyEvent(ControlPlaneSignals.CONFIG_UPDATE, "inst")),
         configPayload.capture());
     JsonNode configNode = mapper.readTree(configPayload.getValue());
-    assertThat(configNode.path("data").path("status").asText()).isEqualTo("NotReady");
-    assertThat(configNode.path("data").path("context").path("status").asText()).isEqualTo("STOPPED");
+    assertThat(configNode.path("data").path("status").asText()).isEqualTo("Rejected");
+    assertThat(configNode.path("data").path("context").path("requestedEnabled").asBoolean()).isTrue();
+    assertThat(configNode.path("data").path("context").path("observedEnabled").asBoolean()).isFalse();
   }
 
   @Test
   void configUpdateProducesJournalRequestAndAppliedEvents() throws Exception {
-		    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+		    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
 		    RecordingJournal journal = new RecordingJournal();
 		    SwarmSignalListener listener = new SwarmSignalListener(
 		        lifecycle,
@@ -665,7 +565,9 @@ class SwarmSignalListenerTest {
 	        mapper,
 	        SwarmControllerTestProperties.defaults(),
 	        journal,
-          "run-1");
+          "run-1",
+          startupArtifactLoader(),
+          removeStore());
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
 	
@@ -674,7 +576,7 @@ class SwarmSignalListenerTest {
 	    java.util.List<String> entries = journal.entries.stream()
 	        .map(e -> e.kind() + "." + e.type())
 	        .toList();
-    assertThat(entries).contains("signal.config-update", "outcome.config-update");
+    assertThat(entries).contains("signal.config-update", "result.config-update");
   }
 
   @Test
@@ -687,7 +589,9 @@ class SwarmSignalListenerTest {
         mapper,
         SwarmControllerTestProperties.defaults(),
         journal,
-        "run-1");
+        "run-1",
+        startupArtifactLoader(),
+        removeStore());
 
     assertThatCode(() -> listener.handle("{}", " "))
         .doesNotThrowAnyException();
@@ -698,7 +602,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void configUpdateAllProcessedOnce() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     markInitialized(listener);
 
@@ -717,7 +621,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING, SwarmStatus.STOPPED);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING, WorkloadState.STOPPED);
     markInitialized(listener);
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,0,0, java.time.Instant.now()));
 
@@ -730,16 +634,16 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         eq(controllerReadyEvent(ControlPlaneSignals.CONFIG_UPDATE, "inst")), readyPayload.capture());
     JsonNode readyNode = mapper.readTree(readyPayload.getValue());
-    assertThat(readyNode.path("data").path("status").asText()).isEqualTo("Applied");
-    assertThat(readyNode.path("data").path("enabled").asBoolean()).isFalse();
+    assertThat(readyNode.path("data").path("status").asText()).isEqualTo("Succeeded");
+    assertThat(readyNode.path("data").path("context").path("observedEnabled").asBoolean()).isFalse();
 
     ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         eq(statusEvent("status-delta", "swarm-controller", "inst")), statusPayload.capture());
     JsonNode node = mapper.readTree(statusPayload.getValue());
-    assertThat(node.path("data").path("enabled").asBoolean()).isFalse();
+    assertThat(node.path("data").path("enabled").isMissingNode()).isTrue();
     assertThat(node.path("data").path("tps").isMissingNode()).isTrue();
-    assertThat(node.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
+    assertThat(node.path("data").path("context").path("workloadState").asText()).isEqualTo("STOPPED");
   }
 
   @Test
@@ -772,7 +676,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void statusOmitsNullNetworkProfileIdForDirectMode() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
 
     newListener(lifecycle, rabbit, "inst", mapper);
 
@@ -786,7 +690,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void repliesToStatusRequest() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -796,37 +700,37 @@ class SwarmSignalListenerTest {
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
         argThat((ArgumentMatcher<String>) this::payloadContainsDefaultQueueStatsFull));
-    verify(lifecycle, atLeastOnce()).getStatus();
+    verify(lifecycle, atLeastOnce()).getWorkloadState();
   }
 
   @Test
   void emitsStatusOnStartup() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     newListener(lifecycle, rabbit, "inst", mapper);
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-full", "swarm-controller", "inst"))),
         argThat((ArgumentMatcher<String>) this::payloadContainsDefaultQueueStatsFull));
-    verify(lifecycle, atLeastOnce()).getStatus();
+    verify(lifecycle, atLeastOnce()).getWorkloadState();
   }
 
   @Test
   void emitsPeriodicStatusDelta() {
-      when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+      when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
       SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
       reset(lifecycle, rabbit);
     stubLifecycleDefaults();
-      when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+      when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
       when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
       listener.status();
       verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
           argThat((ArgumentMatcher<String>) routingKey -> routingKey.startsWith(statusEvent("status-delta", "swarm-controller", "inst"))),
           argThat((ArgumentMatcher<String>) this::payloadContainsStatusDeltaBasics));
-      verify(lifecycle, atLeastOnce()).getStatus();
+      verify(lifecycle, atLeastOnce()).getWorkloadState();
   }
 
   @Test
   void statusEventMarksReady() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -838,7 +742,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void statusFullWorkerListUsesRuntimeInstanceWithoutSecondRuntimeId() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(rabbit);
 
@@ -862,7 +766,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void statusEnabledDoesNotMarkReady() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -874,7 +778,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void ignoresStatusEventsFromOtherSwarms() throws Exception {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -887,7 +791,7 @@ class SwarmSignalListenerTest {
 
   @Test
   void ignoresScenarioSignals() {
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
@@ -910,12 +814,10 @@ class SwarmSignalListenerTest {
         payload.capture());
     JsonNode node = mapper.readTree(payload.getValue());
     JsonNode context = node.path("data").path("context");
-    assertThat(context.path("totals").path("desired").asInt()).isEqualTo(2);
-    assertThat(context.path("totals").path("healthy").asInt()).isEqualTo(2);
-	    assertThat(context.path("totals").path("running").asInt()).isEqualTo(2);
-	    assertThat(context.path("totals").path("enabled").asInt()).isEqualTo(2);
-	    assertThat(context.path("watermark").asText()).isEqualTo("2025-09-12T12:34:55Z");
-	    assertThat(context.has("maxStalenessSec")).isFalse();
+    assertThat(context.path("health").asText()).isEqualTo("HEALTHY");
+    assertThat(context.path("controllerState").asText()).isEqualTo("READY");
+    assertThat(context.path("workloadState").asText()).isEqualTo("RUNNING");
+    assertThatCode(() -> Instant.parse(context.path("watermarkAt").asText())).doesNotThrowAnyException();
 	  }
 
   @Test
@@ -930,25 +832,26 @@ class SwarmSignalListenerTest {
         startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
         degradedPayload.capture());
     JsonNode degradedNode = mapper.readTree(degradedPayload.getValue());
-    assertThat(degradedNode.path("data").path("context").path("state").asText()).isEqualTo("Degraded");
+    assertThat(degradedNode.path("data").path("context").path("health").asText()).isEqualTo("DEGRADED");
 
     reset(rabbit);
     SwarmMetrics unknown = new SwarmMetrics(3,0,0,0, java.time.Instant.now());
     when(lifecycle.getMetrics()).thenReturn(unknown);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.UNKNOWN);
     listener.status();
     ArgumentCaptor<String> unknownPayload = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
         startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
         unknownPayload.capture());
     JsonNode unknownNode = mapper.readTree(unknownPayload.getValue());
-    assertThat(unknownNode.path("data").path("context").path("state").asText()).isEqualTo("Unknown");
+    assertThat(unknownNode.path("data").path("context").path("health").asText()).isEqualTo("FAILED");
   }
 
   @Test
   void statusMessagesAdvertiseConcreteSwarmControlRoutes() throws Exception {
     SwarmMetrics metrics = new SwarmMetrics(1,1,1,1, java.time.Instant.now());
     when(lifecycle.getMetrics()).thenReturn(metrics);
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
 
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
 
@@ -968,7 +871,7 @@ class SwarmSignalListenerTest {
   @Test
   void statusFullRefreshesQueueMetricsForGrafana() {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
 
     newListener(lifecycle, rabbit, "inst", mapper);
 
@@ -978,7 +881,7 @@ class SwarmSignalListenerTest {
   @Test
   void statusFullStillPublishesWhenQueueMetricsRefreshFails() {
     when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
-    when(lifecycle.getStatus()).thenReturn(SwarmStatus.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     doThrow(new IllegalStateException("queue stats unavailable")).when(lifecycle).snapshotQueueStats();
 
     newListener(lifecycle, rabbit, "inst", mapper);
@@ -997,10 +900,9 @@ class SwarmSignalListenerTest {
     routesNode.forEach(route -> routes.add(route.asText()));
 
     assertThat(routes).contains(
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, TEST_SWARM_ID, "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "ALL"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "inst"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "inst"),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "inst"),
         ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "swarm-controller", "ALL"),
@@ -1019,9 +921,9 @@ class SwarmSignalListenerTest {
       JsonNode data = node.path("data");
       return "metric".equals(node.path("kind").asText())
           && "status-full".equals(node.path("type").asText())
-          && data.path("enabled").asBoolean()
+          && data.path("enabled").isMissingNode()
           && data.path("tps").isMissingNode()
-          && "RUNNING".equals(data.path("context").path("swarmStatus").asText())
+          && "RUNNING".equals(data.path("context").path("workloadState").asText())
           && data.path("context").path("bindings").path("work").path("exchange").isTextual()
           && data.path("io").path("work").isMissingNode();
     } catch (Exception ex) {
@@ -1038,7 +940,7 @@ class SwarmSignalListenerTest {
       JsonNode data = node.path("data");
       return "metric".equals(node.path("kind").asText())
           && "status-delta".equals(node.path("type").asText())
-          && data.has("enabled")
+          && !data.has("enabled")
           && data.path("tps").isMissingNode()
           && !data.has("startedAt")
           && data.path("io").isMissingNode();

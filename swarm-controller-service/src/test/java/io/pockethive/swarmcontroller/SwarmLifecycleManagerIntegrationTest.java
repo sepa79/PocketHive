@@ -9,8 +9,16 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_S
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.swarm.model.SwarmPlan;
+import io.pockethive.swarm.model.SwarmStartupArtifact;
+import io.pockethive.swarm.model.SwarmStartupArtifactContract;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +52,7 @@ import static org.junit.jupiter.api.Assertions.*;
 	  private static final Map<String, String> ORIGINAL_PROPERTIES = new LinkedHashMap<>();
 	  private static final ObjectMapper mapper = new ObjectMapper();
 	  private static final String TEST_INSTANCE_ID = "test-swarm-controller-bee";
+	  private static final StartupFixture STARTUP = createStartupFixture();
 	  private static final PostgreSQLContainer<?> POSTGRES =
 	      new PostgreSQLContainer<>("postgres:16-alpine")
 	          .withDatabaseName("pockethive")
@@ -54,6 +63,9 @@ import static org.junit.jupiter.api.Assertions.*;
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_SWARM_ID", TEST_SWARM_ID);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", TEST_INSTANCE_ID);
     setRequiredSystemProperty("POCKETHIVE_JOURNAL_RUN_ID", "run-it");
+    setRequiredSystemProperty(SwarmStartupArtifactContract.READ_ROOT_ENV, STARTUP.root().toString());
+    setRequiredSystemProperty(SwarmStartupArtifactContract.PATH_ENV, STARTUP.path().toString());
+    setRequiredSystemProperty(SwarmStartupArtifactContract.SHA256_ENV, STARTUP.sha256());
 
     var broker = RabbitAvailableCondition.getBrokerRunning();
     setRequiredSystemProperty("SPRING_RABBITMQ_HOST", broker.getHostName());
@@ -211,7 +223,8 @@ import static org.junit.jupiter.api.Assertions.*;
     } catch (com.fasterxml.jackson.core.JsonProcessingException e) {
       throw new RuntimeException(e);
     }
-    assertEquals("STOPPED", json.path("data").path("context").path("swarmStatus").asText());
+    assertEquals("READY", json.path("data").path("context").path("controllerState").asText());
+    assertEquals("STOPPED", json.path("data").path("context").path("workloadState").asText());
 
     manager.remove();
 
@@ -239,6 +252,30 @@ import static org.junit.jupiter.api.Assertions.*;
         System.setProperty(key, value);
       }
     });
+    try {
+      Files.deleteIfExists(STARTUP.path());
+      Files.deleteIfExists(STARTUP.root());
+    } catch (IOException exception) {
+      throw new IllegalStateException("Failed to delete startup fixture", exception);
+    }
+  }
+
+  private static StartupFixture createStartupFixture() {
+    try {
+      Path root = Files.createTempDirectory("pockethive-controller-startup-").toAbsolutePath().normalize();
+      Path path = root.resolve("startup.json");
+      SwarmStartupArtifact artifact = SwarmStartupArtifact.v1(
+          new SwarmPlan(TEST_SWARM_ID, List.of()), Map.of("bee", List.of()));
+      byte[] content = new ObjectMapper().findAndRegisterModules().writeValueAsBytes(artifact);
+      Files.write(path, content);
+      String sha256 = HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(content));
+      return new StartupFixture(root, path, sha256);
+    } catch (Exception exception) {
+      throw new ExceptionInInitializerError(exception);
+    }
+  }
+
+  private record StartupFixture(Path root, Path path, String sha256) {
   }
 
   private static void setRequiredSystemProperty(String key, String value) {

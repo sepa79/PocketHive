@@ -333,12 +333,10 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
     swarmId: "sw1",
     runId: "run-1",
     includeRunning: false,
-    includeRabbit: true,
-    overrideRegisteredSwarmState: true
+    includeRabbit: true
   });
   const execution = await handlers.get("runtime.cleanup.execute")({
     swarmId: "sw1",
-    overrideRegisteredSwarmState: true,
     candidateSetHash: "sha256:abc",
     candidateIds: ["lifecycle:swarm:sw1"],
     idempotencyKey: "idem-1",
@@ -355,8 +353,6 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
   ]);
   assert.deepEqual(calls.map((call) => call.options.method), ["GET", "POST", "POST"]);
   assert.equal(calls[1].options.body.includeRabbit, true);
-  assert.equal(calls[1].options.body.overrideRegisteredSwarmState, true);
-  assert.equal(calls[2].options.body.overrideRegisteredSwarmState, true);
   assert.equal(calls[2].options.body.actor, "alice");
   assert.equal(calls[2].options.body.idempotencyKey, "idem-1");
 });

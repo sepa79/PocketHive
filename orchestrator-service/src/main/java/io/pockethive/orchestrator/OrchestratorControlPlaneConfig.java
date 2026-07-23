@@ -7,6 +7,7 @@ import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
+import io.pockethive.orchestrator.app.OperationOutcomePublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -36,6 +37,14 @@ class OrchestratorControlPlaneConfig {
         Objects.requireNonNull(publisher, "publisher");
         RoleContext role = RoleContext.fromIdentity(identity);
         return ControlPlaneEmitter.using(descriptor, role, publisher, runtimeMeta());
+    }
+
+    @Bean
+    OperationOutcomePublisher operationOutcomePublisher(
+        ControlPlanePublisher publisher,
+        com.fasterxml.jackson.databind.ObjectMapper objectMapper,
+        @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
+        return new OperationOutcomePublisher(publisher, objectMapper, identity.instanceId());
     }
 
     @Bean(name = "managerControlQueueName")

@@ -10,7 +10,7 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.manager.runtime.ManagerLifecycle;
 import io.pockethive.manager.runtime.ManagerMetrics;
-import io.pockethive.manager.runtime.ManagerStatus;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.manager.scenario.ScenarioContext;
 import java.util.Map;
@@ -50,7 +50,7 @@ class TimelineScenarioObserverTest {
     ConfigFanout configFanout = mock(ConfigFanout.class);
     ScenarioContext ctx = new ScenarioContext("sw1", lifecycle, configFanout);
     ManagerRuntimeView view = new ManagerRuntimeView(
-        ManagerStatus.RUNNING,
+        WorkloadState.RUNNING,
         new ManagerMetrics(0, 0, 0, 0, 0),
         Map.of());
 
@@ -88,7 +88,7 @@ class TimelineScenarioObserverTest {
     ConfigFanout configFanout = mock(ConfigFanout.class);
     ScenarioContext ctx = new ScenarioContext("sw1", lifecycle, configFanout);
     ManagerRuntimeView view = new ManagerRuntimeView(
-        ManagerStatus.RUNNING,
+        WorkloadState.RUNNING,
         new ManagerMetrics(0, 0, 0, 0, 0),
         Map.of());
 

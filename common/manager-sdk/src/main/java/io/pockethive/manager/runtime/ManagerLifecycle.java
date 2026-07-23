@@ -15,7 +15,7 @@ public interface ManagerLifecycle {
 
   void remove();
 
-  ManagerStatus getStatus();
+  io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState();
 
   boolean markReady(String role, String instance);
 
@@ -35,4 +35,3 @@ public interface ManagerLifecycle {
 
   boolean isReadyForWork();
 }
-

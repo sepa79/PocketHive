@@ -33,22 +33,6 @@ public final class ControlSignals {
         return signal("swarm-controller", origin, target, correlationId, idempotencyKey, null);
     }
 
-    public static ControlSignal swarmTemplate(String origin,
-                                              ControlScope target,
-                                              String correlationId,
-                                              String idempotencyKey,
-                                              Map<String, Object> data) {
-        return signal(ControlPlaneSignals.SWARM_TEMPLATE, origin, target, correlationId, idempotencyKey, data);
-    }
-
-    public static ControlSignal swarmPlan(String origin,
-                                          ControlScope target,
-                                          String correlationId,
-                                          String idempotencyKey,
-                                          Map<String, Object> data) {
-        return signal(ControlPlaneSignals.SWARM_PLAN, origin, target, correlationId, idempotencyKey, data);
-    }
-
     public static ControlSignal swarmStart(String origin,
                                            ControlScope target,
                                            String correlationId,

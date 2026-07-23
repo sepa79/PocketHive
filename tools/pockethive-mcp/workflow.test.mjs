@@ -232,24 +232,24 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     return body ? JSON.parse(body) : null;
   }
 
-  function swarmStatus() {
+  function swarmStateView() {
     if (!state.started && !state.stopped) state.readyPolls += 1;
     const ready = state.stopped || state.started || state.readyPolls >= readyAfterPolls;
     const running = state.started && !state.stopped;
     const stopped = state.stopped;
     return {
-      envelope: {
-        runtime: { templateId: bundleId },
-        data: {
-          context: {
-            state: stopped ? "STOPPED" : running ? "RUNNING" : ready ? "READY" : "CREATING",
-            swarmStatus: stopped ? "STOPPED" : running ? "RUNNING" : ready ? "READY" : "CREATING",
-            swarmHealth: "RUNNING",
-            totals: { desired: 4, healthy: ready ? 4 : 0, running: running ? 4 : 0, enabled: running ? 4 : 0 },
-            workers: [],
-          },
-        },
-      },
+      id: "agent-live-stack",
+      runId: "run-1",
+      runtimeIntent: "PRESENT",
+      workloadIntent: running ? "RUNNING" : "STOPPED",
+      controllerState: ready ? "READY" : "PROVISIONING",
+      workloadState: running ? "RUNNING" : ready ? "STOPPED" : "UNAVAILABLE",
+      health: ready ? "HEALTHY" : "UNKNOWN",
+      runtimeResourceState: "PRESENT",
+      observationStale: !ready,
+      templateId: bundleId,
+      bees: [],
+      observation: { workers: [] },
     };
   }
 
@@ -368,23 +368,41 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/create") {
       await requestJson(req);
       state.createCalls += 1;
-      return send(res, 200, { accepted: true });
+      return send(res, 202, { accepted: true });
+    }
+    if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/operations/start-corr") {
+      return send(res, 200, { state: "SUCCEEDED" });
+    }
+    if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/operations/stop-corr") {
+      return send(res, 200, { state: "SUCCEEDED" });
     }
     if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack") {
-      return send(res, 200, swarmStatus());
+      return send(res, 200, swarmStateView());
     }
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/start") {
       await requestJson(req);
       state.startCalls += 1;
       state.started = true;
       if (requestOnStart) addExpectedRequest();
-      return send(res, 200, { accepted: true });
+      return send(res, 202, {
+        correlationId: "start-corr",
+        idempotencyKey: "start-idem",
+        operationUrl: "/api/swarms/agent-live-stack/operations/start-corr",
+        outcomeTopic: "event.outcome.swarm-start.agent-live-stack.orchestrator.orch-1",
+        timeoutMs: 180000,
+      });
     }
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/stop") {
       await requestJson(req);
       state.stopCalls += 1;
       state.stopped = true;
-      return send(res, 200, { accepted: true });
+      return send(res, 202, {
+        correlationId: "stop-corr",
+        idempotencyKey: "stop-idem",
+        operationUrl: "/api/swarms/agent-live-stack/operations/stop-corr",
+        outcomeTopic: "event.outcome.swarm-stop.agent-live-stack.orchestrator.orch-1",
+        timeoutMs: 90000,
+      });
     }
     if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/journal/page") {
       return send(res, 200, { items: [], nextCursor: null, hasMore: false });
@@ -1914,9 +1932,13 @@ test("workflow async deploy job survives slow readiness without blocking one too
         assert.equal(state.startCalls, 0);
 
         step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
-        assert.equal(step.status, "succeeded");
-        assert.equal(step.phase, "complete");
+        assert.equal(step.status, "running");
+        assert.equal(step.phase, "wait-start");
         assert.equal(state.startCalls, 1);
+
+        step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
+        assert.equal(step.status, "succeeded", JSON.stringify(step));
+        assert.equal(step.phase, "complete");
 
         const status = await call(client, "workflow_deploy_status", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(status.status, "succeeded");
@@ -2069,8 +2091,12 @@ test("workflow async verify job observes, stops, and settles in resumable steps"
 
         step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "running");
-        assert.equal(step.phase, "settle");
+        assert.equal(step.phase, "wait-stop");
         assert.equal(state.stopCalls, 1);
+
+        step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
+        assert.equal(step.status, "running");
+        assert.equal(step.phase, "settle");
 
         step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "succeeded");

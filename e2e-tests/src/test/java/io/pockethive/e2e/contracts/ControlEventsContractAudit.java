@@ -16,8 +16,6 @@ public final class ControlEventsContractAudit {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final Set<String> LIFECYCLE_SIGNALS = Set.of(
-      "swarm-template",
-      "swarm-plan",
       "swarm-start",
       "swarm-stop",
       "swarm-remove"

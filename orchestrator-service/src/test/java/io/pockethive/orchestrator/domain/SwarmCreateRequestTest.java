@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.domain;
 
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -9,13 +11,21 @@ import org.junit.jupiter.api.Test;
 class SwarmCreateRequestTest {
 
     @Test
-    void defaultsMissingNetworkModeToDirect() {
+    void threeArgumentConstructorDeclaresDirectNetworkMode() {
         SwarmCreateRequest request = new SwarmCreateRequest(" tpl-1 ", " idem ", null);
 
         assertThat(request.templateId()).isEqualTo("tpl-1");
         assertThat(request.idempotencyKey()).isEqualTo("idem");
         assertThat(request.networkMode()).isEqualTo(NetworkMode.DIRECT);
         assertThat(request.networkProfileId()).isNull();
+    }
+
+    @Test
+    void rejectsMissingNetworkModeInTheWireConstructor() {
+        assertThatThrownBy(() -> new SwarmCreateRequest(
+            "tpl-1", "idem", null, false, null, null, null, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("networkMode must be provided");
     }
 
     @Test

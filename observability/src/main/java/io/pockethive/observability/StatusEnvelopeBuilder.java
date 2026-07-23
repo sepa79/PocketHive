@@ -20,7 +20,7 @@ import java.util.Set;
  */
 public class StatusEnvelopeBuilder {
 
-    private static final String ENVELOPE_VERSION = "1";
+    private static final String ENVELOPE_VERSION = io.pockethive.control.ControlPlaneEnvelopeVersion.CURRENT;
     private static final Set<String> RESERVED_DATA_FIELDS = Set.of(
         "enabled",
         "tps",
@@ -45,6 +45,7 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> filesystemIoState = new LinkedHashMap<>();
 
     private boolean workPlaneEnabled = true;
+    private boolean enabledRequired = true;
     private boolean tpsEnabled = true;
     private boolean filesystemEnabled = false;
 
@@ -138,6 +139,15 @@ public class StatusEnvelopeBuilder {
      */
     public StatusEnvelopeBuilder enabled(boolean enabled) {
         data.put("enabled", enabled);
+        return this;
+    }
+
+    /** Declares whether this component contract carries {@code data.enabled}. */
+    public StatusEnvelopeBuilder enabledRequired(boolean required) {
+        this.enabledRequired = required;
+        if (!required) {
+            data.remove("enabled");
+        }
         return this;
     }
 
@@ -444,7 +454,7 @@ public class StatusEnvelopeBuilder {
             data.putIfAbsent("context", Map.copyOf(context));
         }
 
-        if (!data.containsKey("enabled")) {
+        if (enabledRequired && !data.containsKey("enabled")) {
             throw new IllegalStateException("status metrics must include data.enabled");
         }
         if (tpsEnabled && !data.containsKey("tps")) {
@@ -478,7 +488,9 @@ public class StatusEnvelopeBuilder {
         }
 
         Map<String, Object> canonicalData = new LinkedHashMap<>();
-        canonicalData.put("enabled", data.get("enabled"));
+        if (enabledRequired) {
+            canonicalData.put("enabled", data.get("enabled"));
+        }
         if (tpsEnabled && data.containsKey("tps")) {
             canonicalData.put("tps", data.get("tps"));
         }

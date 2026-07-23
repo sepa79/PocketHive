@@ -6,8 +6,9 @@ import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
+import io.pockethive.orchestrator.app.SwarmLifecycleCommandService;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Blocked;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Candidate;
@@ -33,6 +34,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
@@ -64,6 +66,7 @@ public class RuntimeReconciliationService {
     private final RabbitTopologyPort rabbitTopology;
     private final RuntimeCleanupEvidenceStore evidenceStore;
     private final ContainerLifecycleManager lifecycleManager;
+    private final SwarmLifecycleCommandService lifecycleCommands;
     private final ControlPlaneProperties controlPlaneProperties;
 
     public RuntimeReconciliationService(
@@ -74,6 +77,7 @@ public class RuntimeReconciliationService {
         RabbitTopologyPort rabbitTopology,
         RuntimeCleanupEvidenceStore evidenceStore,
         ContainerLifecycleManager lifecycleManager,
+        SwarmLifecycleCommandService lifecycleCommands,
         ControlPlaneProperties controlPlaneProperties) {
         this.swarmStore = Objects.requireNonNull(swarmStore, "swarmStore");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
@@ -82,6 +86,7 @@ public class RuntimeReconciliationService {
         this.rabbitTopology = Objects.requireNonNull(rabbitTopology, "rabbitTopology");
         this.evidenceStore = Objects.requireNonNull(evidenceStore, "evidenceStore");
         this.lifecycleManager = Objects.requireNonNull(lifecycleManager, "lifecycleManager");
+        this.lifecycleCommands = Objects.requireNonNull(lifecycleCommands, "lifecycleCommands");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
     }
 
@@ -108,7 +113,6 @@ public class RuntimeReconciliationService {
             scope.runId().orElse(null),
             scope.includeRunning(),
             scope.includeRabbit(),
-            scope.overrideRegisteredSwarmState(),
             "pending",
             executionRisk(scope, candidates),
             List.copyOf(candidates),
@@ -119,7 +123,6 @@ public class RuntimeReconciliationService {
             base.runId(),
             base.includeRunning(),
             base.includeRabbit(),
-            base.overrideRegisteredSwarmState(),
             planHash(base),
             base.executionRisk(),
             base.candidates(),
@@ -144,8 +147,7 @@ public class RuntimeReconciliationService {
             request.swarmId(),
             request.runId(),
             request.includeRunning(),
-            request.includeRabbit(),
-            request.overrideRegisteredSwarmState()));
+            request.includeRabbit()));
         if (!plan.candidateSetHash().equals(candidateSetHash)) {
             throw cleanupError(HttpStatus.CONFLICT, "candidateSetHash does not match the current cleanup plan");
         }
@@ -167,7 +169,7 @@ public class RuntimeReconciliationService {
         List<String> errors = new ArrayList<>();
         for (String id : candidateIds) {
             Candidate candidate = byId.get(id);
-            CandidateResult result = executeCandidate(candidate);
+            CandidateResult result = executeCandidate(candidate, idempotencyKey);
             results.add(result);
             if (result.status() == RuntimeCleanupStatus.FAILED && result.error() != null) {
                 errors.add(result.error());
@@ -256,9 +258,8 @@ public class RuntimeReconciliationService {
             if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(PocketHiveDockerLabels.RUN_ID))) {
                 continue;
             }
-            if (activeSwarm.isPresent()
-                && PocketHiveDockerLabels.RESOURCE_KIND_MANAGER.equals(labels.get(PocketHiveDockerLabels.RESOURCE_KIND))) {
-                blocked.add(blocked(resource, "registered swarm controller must be removed through lifecycle cleanup"));
+            if (activeSwarm.isPresent()) {
+                blocked.add(blocked(resource, "registered swarm resources must be removed through lifecycle cleanup"));
                 continue;
             }
             boolean running = isRunningState(resource.state());
@@ -297,14 +298,13 @@ public class RuntimeReconciliationService {
             if (live.isEmpty()) {
                 continue;
             }
-            boolean sharedWorkQueue = rabbit.workQueues().contains(queue);
-            if (activeSwarm.isPresent() && sharedWorkQueue) {
+            if (activeSwarm.isPresent()) {
                 blocked.add(new Blocked(
                     rabbitCandidateId(RuntimeCleanupAction.DELETE_RABBIT_QUEUE, queue),
                     RuntimeCleanupAction.DELETE_RABBIT_QUEUE,
                     queue,
                     "queue",
-                    "active swarm shared RabbitMQ resource is protected",
+                    "registered swarm RabbitMQ resources must be removed through lifecycle cleanup",
                     Map.of()));
                 continue;
             }
@@ -448,50 +448,24 @@ public class RuntimeReconciliationService {
                                           Swarm swarm,
                                           List<Candidate> candidates,
                                           List<Blocked> blocked) {
-        if (!canCleanupRegisteredSwarm(swarm.getStatus())) {
-            if (scope.overrideRegisteredSwarmState() && canEmergencyOverrideRegisteredSwarm(swarm.getStatus())) {
-                candidates.add(lifecycleCandidate(scope, swarm, true));
-                return;
-            }
+        if (swarm.getRuntimeIntent() == io.pockethive.swarm.model.lifecycle.RuntimeIntent.ABSENT) {
             blocked.add(new Blocked(
                 "lifecycle:swarm:" + scope.swarmId(),
                 RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
                 scope.swarmId(),
                 "swarm",
-                blockedRegisteredSwarmReason(swarm.getStatus()),
+                "registered swarm already has runtime intent ABSENT; inspect its active REMOVE operation",
                 Map.of()));
             return;
         }
-        candidates.add(lifecycleCandidate(scope, swarm, false));
+        candidates.add(lifecycleCandidate(scope, swarm));
     }
 
-    private static boolean canCleanupRegisteredSwarm(SwarmLifecycleStatus status) {
-        return switch (status) {
-            case NEW, CREATING, READY, STOPPED, FAILED -> true;
-            case STARTING, RUNNING, STOPPING, REMOVING, REMOVED -> false;
+    private Candidate lifecycleCandidate(CleanupScope scope, Swarm swarm) {
+        boolean workloadActive = switch (swarm.getWorkloadState()) {
+            case STARTING, RUNNING, STOPPING -> true;
+            case UNAVAILABLE, STOPPED, UNKNOWN -> false;
         };
-    }
-
-    private static boolean canEmergencyOverrideRegisteredSwarm(SwarmLifecycleStatus status) {
-        return switch (status) {
-            case STARTING, RUNNING, STOPPING, REMOVING -> true;
-            case NEW, CREATING, READY, STOPPED, FAILED, REMOVED -> false;
-        };
-    }
-
-    private static String blockedRegisteredSwarmReason(SwarmLifecycleStatus status) {
-        return switch (status) {
-            case STARTING, RUNNING, STOPPING -> "registered swarm status " + status
-                + " must be explicitly stopped before runtime cleanup";
-            case REMOVING -> "registered swarm status REMOVING requires lifecycle recovery; "
-                + "runtime cleanup cannot bypass lifecycle removal";
-            case REMOVED -> "registered swarm status REMOVED should not remain registered; "
-                + "reconcile swarm registry before runtime cleanup";
-            case NEW, CREATING, READY, STOPPED, FAILED -> "registered swarm status " + status + " is cleanup eligible";
-        };
-    }
-
-    private Candidate lifecycleCandidate(CleanupScope scope, Swarm swarm, boolean emergencyOverride) {
         return new Candidate(
             "lifecycle:swarm:" + scope.swarmId(),
             RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
@@ -500,16 +474,14 @@ public class RuntimeReconciliationService {
             PocketHiveDockerLabels.RESOURCE_KIND_MANAGER,
             "swarm-controller",
             swarm.getInstanceId(),
-            swarm.getStatus().name(),
+            swarm.getRuntimeIntent().name() + "/" + swarm.getWorkloadIntent().name()
+                + "/" + swarm.getWorkloadState().name(),
             swarm.controllerImage(),
             null,
             null,
-            emergencyOverride,
-            emergencyOverride,
-            emergencyOverride
-                ? "emergency override: registered swarm state "
-                    + swarm.getStatus() + " will be removed through Orchestrator lifecycle"
-                : "registered swarm must be removed through Orchestrator lifecycle",
+            workloadActive,
+            false,
+            "registered swarm must be removed through the canonical REMOVE operation",
             Map.of());
     }
 
@@ -563,20 +535,38 @@ public class RuntimeReconciliationService {
         return Map.copyOf(safe);
     }
 
-    private CandidateResult executeCandidate(Candidate candidate) {
+    private CandidateResult executeCandidate(Candidate candidate, String idempotencyKey) {
         try {
+            if (candidate.action() == RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM) {
+                var reservation = lifecycleCommands.dispatch(
+                    ControlPlaneSignals.SWARM_REMOVE,
+                    candidate.resourceId(),
+                    idempotencyKey,
+                    Duration.ofSeconds(180));
+                return new CandidateResult(
+                    candidate.candidateId(),
+                    candidate.action(),
+                    candidate.resourceId(),
+                    RuntimeCleanupStatus.DISPATCHED,
+                    reservation.operation().correlationId(),
+                    "/api/swarms/" + candidate.resourceId() + "/operations/"
+                        + reservation.operation().correlationId(),
+                    null);
+            }
             switch (candidate.action()) {
-                case LIFECYCLE_REMOVE_SWARM -> lifecycleManager.removeSwarm(candidate.resourceId());
                 case DELETE_DOCKER_CONTAINER -> computeRemoval.removeContainer(candidate.resourceId());
                 case DELETE_DOCKER_SERVICE -> computeRemoval.removeService(candidate.resourceId());
                 case DELETE_RABBIT_QUEUE -> rabbitTopology.deleteQueue(candidate.resourceId());
                 case DELETE_RABBIT_EXCHANGE -> rabbitTopology.deleteExchange(candidate.resourceId());
+                case LIFECYCLE_REMOVE_SWARM -> throw new IllegalStateException("handled above");
             }
             return new CandidateResult(
                 candidate.candidateId(),
                 candidate.action(),
                 candidate.resourceId(),
                 RuntimeCleanupStatus.REMOVED,
+                null,
+                null,
                 null);
         } catch (RuntimeException ex) {
             return new CandidateResult(
@@ -584,6 +574,8 @@ public class RuntimeReconciliationService {
                 candidate.action(),
                 candidate.resourceId(),
                 RuntimeCleanupStatus.FAILED,
+                null,
+                null,
                 ex.getMessage());
         }
     }
@@ -618,7 +610,6 @@ public class RuntimeReconciliationService {
             + Objects.toString(plan.runId(), "") + "\n"
             + plan.includeRunning() + "\n"
             + plan.includeRabbit() + "\n"
-            + plan.overrideRegisteredSwarmState() + "\n"
             + plan.candidates().stream()
                 .map(c -> c.candidateId() + "|" + c.action() + "|" + c.resourceId() + "|" + c.highRisk())
                 .sorted()
@@ -704,8 +695,7 @@ public class RuntimeReconciliationService {
         String swarmId,
         Optional<String> runId,
         boolean includeRunning,
-        boolean includeRabbit,
-        boolean overrideRegisteredSwarmState) {
+        boolean includeRabbit) {
         static CleanupScope from(PlanRequest request, String computeAdapter) {
             if (request == null) {
                 throw cleanupError(HttpStatus.BAD_REQUEST, "request body is required");
@@ -715,8 +705,7 @@ public class RuntimeReconciliationService {
                 requireText(request.swarmId(), "swarmId"),
                 hasText(request.runId()) ? Optional.of(request.runId().trim()) : Optional.empty(),
                 Boolean.TRUE.equals(request.includeRunning()),
-                !Boolean.FALSE.equals(request.includeRabbit()),
-                Boolean.TRUE.equals(request.overrideRegisteredSwarmState()));
+                !Boolean.FALSE.equals(request.includeRabbit()));
         }
     }
 

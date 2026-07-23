@@ -43,9 +43,10 @@ import io.cucumber.java.en.When;
 import io.pockethive.e2e.clients.AuthServiceClient;
 import io.pockethive.e2e.clients.OrchestratorClient;
 import io.pockethive.e2e.clients.OrchestratorClient.ComponentConfigRequest;
-import io.pockethive.e2e.clients.OrchestratorClient.ControlRequest;
-import io.pockethive.e2e.clients.OrchestratorClient.ControlResponse;
-import io.pockethive.e2e.clients.OrchestratorClient.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.ControlRequest;
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.e2e.clients.OrchestratorClient.SwarmView;
 import io.pockethive.e2e.clients.NetworkProxyManagerClient;
 import io.pockethive.e2e.clients.RabbitManagementClient;
@@ -233,7 +234,8 @@ public class SwarmLifecycleSteps {
         resolveNetworkModeForScenario(),
         resolveNetworkProfileIdForScenario());
     createResponse = orchestratorClient.createSwarm(swarmId, request);
-    LOGGER.info("Create request accepted correlation={} watch={}", createResponse.correlationId(), createResponse.watch());
+    LOGGER.info("Create request accepted correlation={} operationUrl={} outcomeTopic={}",
+        createResponse.correlationId(), createResponse.operationUrl(), createResponse.outcomeTopic());
   }
 
   @Then("the swarm is registered and queues are declared")
@@ -241,15 +243,14 @@ public class SwarmLifecycleSteps {
     ensureCreateResponse();
 
     awaitReady("swarm-create", createResponse);
-    awaitReady("swarm-template", createResponse);
     assertNoErrors(createResponse.correlationId(), "swarm-create");
-    assertWatchMatched(createResponse);
-    awaitSwarmPlanReady();
+    assertOutcomeTopicMatched(createResponse);
 
     SwarmAssertions.await("swarm registered", () -> {
       Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
       assertTrue(view.isPresent(), "Swarm should be registered after create");
-      assertEquals("READY", view.get().status(), "Swarm status should be READY after template applied");
+      assertEquals("READY", view.get().controllerState(), "Controller should be READY after create");
+      assertEquals("STOPPED", view.get().workloadState(), "Workload should be STOPPED after create");
     });
 
     QueueProbe probe = new QueueProbe(rabbitSubscriptions.connectionFactory());
@@ -293,7 +294,7 @@ public class SwarmLifecycleSteps {
     ensureTemplate();
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if (scenarioId == null) {
-      return null;
+      return NetworkMode.DIRECT;
     }
     return switch (scenarioId) {
       case "local-rest",
@@ -309,18 +310,18 @@ public class SwarmLifecycleSteps {
       case "tcp-ssl-demo" -> "tcp-mock-proxy-local-tls";
       case "variables-demo" -> "sut-A";
       case "webauth-loop-redis-5-customers" -> "webauth-local";
-      default -> null;
+      default -> NetworkMode.DIRECT;
     };
   }
 
-  private String resolveNetworkModeForScenario() {
+  private NetworkMode resolveNetworkModeForScenario() {
     ensureTemplate();
     String scenarioId = scenarioDetails != null ? scenarioDetails.id() : null;
     if (scenarioId == null) {
       return null;
     }
     return switch (scenarioId) {
-      case "http-proxy-demo", "https-proxy-demo", "tcp-ssl-demo" -> "PROXIED";
+      case "http-proxy-demo", "https-proxy-demo", "tcp-ssl-demo" -> NetworkMode.PROXIED;
       default -> null;
     };
   }
@@ -360,22 +361,22 @@ public class SwarmLifecycleSteps {
     startResponse = orchestratorClient.startSwarm(
         swarmId,
         new ControlRequest(idempotencyKey, "e2e lifecycle start"));
-    LOGGER.info("Start request correlation={} watch={}", startResponse.correlationId(), startResponse.watch());
+    LOGGER.info("Start request correlation={} operationUrl={} outcomeTopic={}",
+        startResponse.correlationId(), startResponse.operationUrl(), startResponse.outcomeTopic());
   }
 
   @Then("the swarm reports running")
   public void theSwarmReportsRunning() {
     ensureStartResponse();
     io.pockethive.control.CommandOutcome outcome = awaitOutcome("swarm-start", startResponse);
-    assertOutcomeStatus("swarm-start", outcome, "Running");
+    assertOutcomeStatus("swarm-start", outcome, "Succeeded");
     assertNoErrors(startResponse.correlationId(), "swarm-start");
-    assertWatchMatched(startResponse);
+    assertOutcomeTopicMatched(startResponse);
 
     SwarmAssertions.await("swarm running", () -> {
       Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
       assertTrue(view.isPresent(), "Swarm should be available when running");
-      assertEquals("RUNNING", view.get().status(), "Swarm status should be RUNNING after start");
-      assertTrue(view.get().workEnabled(), "Workloads should be enabled after start");
+      assertEquals("RUNNING", view.get().workloadState(), "Workload should be RUNNING after start");
     });
 
     SwarmAssertions.await("all workers running", () -> {
@@ -422,7 +423,7 @@ public class SwarmLifecycleSteps {
 
       awaitReady("config-update", generatorConfigResponse);
       assertNoErrors(generatorConfigResponse.correlationId(), "generator config-update");
-      assertWatchMatched(generatorConfigResponse);
+      assertOutcomeTopicMatched(generatorConfigResponse);
     }
 
     SwarmAssertions.await("generator status delta", () -> {
@@ -475,7 +476,7 @@ public class SwarmLifecycleSteps {
         postprocessorInstance, response.correlationId());
     awaitReady("config-update", response);
     assertNoErrors(response.correlationId(), "postprocessor config-update");
-    assertWatchMatched(response);
+    assertOutcomeTopicMatched(response);
   }
 
   @Then("ClickHouse stores tx outcomes for the swarm")
@@ -994,8 +995,7 @@ public class SwarmLifecycleSteps {
       Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
       assertTrue(viewOpt.isPresent(), "Swarm should be available while plan is running");
       SwarmView view = viewOpt.get();
-      assertEquals("RUNNING", view.status(), "Swarm status should be RUNNING while plan is active");
-      assertTrue(view.workEnabled(), "Workloads should be enabled while plan is active");
+      assertEquals("RUNNING", view.workloadState(), "Workload should be RUNNING while plan is active");
     });
 
     // 2) Eventually the plan should stop the swarm entirely via its final
@@ -1004,8 +1004,7 @@ public class SwarmLifecycleSteps {
       Optional<SwarmView> viewOpt = orchestratorClient.findSwarm(swarmId);
       assertTrue(viewOpt.isPresent(), "Swarm should still be registered when stopped");
       SwarmView view = viewOpt.get();
-      assertEquals("STOPPED", view.status(), "Swarm status should be STOPPED after plan completes");
-      assertFalse(view.workEnabled(), "Workloads should be disabled after plan completes");
+      assertEquals("STOPPED", view.workloadState(), "Workload should be STOPPED after plan completes");
     });
 
     // 3) Inspect control-plane status events emitted during the run to ensure
@@ -1502,7 +1501,8 @@ public class SwarmLifecycleSteps {
     stopResponse = orchestratorClient.stopSwarm(
         swarmId,
         new ControlRequest(idempotencyKey, "e2e lifecycle stop"));
-    LOGGER.info("Stop request correlation={} watch={}", stopResponse.correlationId(), stopResponse.watch());
+    LOGGER.info("Stop request correlation={} operationUrl={} outcomeTopic={}",
+        stopResponse.correlationId(), stopResponse.operationUrl(), stopResponse.outcomeTopic());
   }
 
   @When("I request swarm stop without start")
@@ -1512,8 +1512,8 @@ public class SwarmLifecycleSteps {
     stopResponse = orchestratorClient.stopSwarm(
         swarmId,
         new ControlRequest(idempotencyKey, "e2e lifecycle stop without start"));
-    LOGGER.info("Stop without start request correlation={} watch={}",
-        stopResponse.correlationId(), stopResponse.watch());
+    LOGGER.info("Stop without start request correlation={} operationUrl={} outcomeTopic={}",
+        stopResponse.correlationId(), stopResponse.operationUrl(), stopResponse.outcomeTopic());
   }
 
   @Then("the swarm reports stopped")
@@ -1521,21 +1521,20 @@ public class SwarmLifecycleSteps {
     ensureStopResponse();
     awaitReady("swarm-stop", stopResponse);
     assertNoErrors(stopResponse.correlationId(), "swarm-stop");
-    assertWatchMatched(stopResponse);
+    assertOutcomeTopicMatched(stopResponse);
 
     SwarmAssertions.await("swarm stopped", () -> {
       Optional<SwarmView> view = orchestratorClient.findSwarm(swarmId);
       assertTrue(view.isPresent(), "Swarm should still be registered when stopped");
-      assertEquals("STOPPED", view.get().status(), "Swarm status should be STOPPED after stop");
+      assertEquals("STOPPED", view.get().workloadState(), "Workload should be STOPPED after stop");
     });
 
     var outcomeOpt = controlPlaneEvents.outcome("swarm-stop", stopResponse.correlationId());
     assertTrue(outcomeOpt.isPresent(),
         () -> "Missing outcome for swarm-stop correlation=" + stopResponse.correlationId());
-    Object status = outcomeOpt.get().data() == null ? null : outcomeOpt.get().data().get("status");
-    assertNotNull(status, "Stop outcome should include data.status");
-    assertEquals("stopped", status.toString().trim().toLowerCase(Locale.ROOT),
-        "Stop outcome should report status Stopped");
+    assertOutcomeStatus("swarm-stop", outcomeOpt.get(), "Succeeded");
+    assertEquals("STOPPED", outcomeContext(outcomeOpt.get()).get("observedWorkloadState"),
+        "Stop outcome should report the converged workload state");
   }
 
   @When("I remove the swarm")
@@ -1545,7 +1544,8 @@ public class SwarmLifecycleSteps {
     removeResponse = orchestratorClient.removeSwarm(
         swarmId,
         new ControlRequest(idempotencyKey, "e2e lifecycle remove"));
-    LOGGER.info("Remove request correlation={} watch={}", removeResponse.correlationId(), removeResponse.watch());
+    LOGGER.info("Remove request correlation={} operationUrl={} outcomeTopic={}",
+        removeResponse.correlationId(), removeResponse.operationUrl(), removeResponse.outcomeTopic());
   }
 
   @Then("the swarm is removed and lifecycle confirmations are recorded")
@@ -1553,7 +1553,7 @@ public class SwarmLifecycleSteps {
     ensureRemoveResponse();
     awaitReady("swarm-remove", removeResponse);
     assertNoErrors(removeResponse.correlationId(), "swarm-remove");
-    assertWatchMatched(removeResponse);
+    assertOutcomeTopicMatched(removeResponse);
     swarmRemoved = true;
 
     SwarmAssertions.await("swarm removed", () -> {
@@ -1563,8 +1563,6 @@ public class SwarmLifecycleSteps {
 
     assertTrue(controlPlaneEvents.outcomeCount("swarm-create") >= 1,
         "Expected at least one swarm-create outcome");
-    assertTrue(controlPlaneEvents.outcomeCount("swarm-template") >= 1,
-        "Expected at least one swarm-template outcome");
     assertTrue(controlPlaneEvents.outcomeCount("swarm-start") >= 1,
         "Expected at least one swarm-start outcome");
     assertTrue(controlPlaneEvents.outcomeCount("swarm-stop") >= 1,
@@ -1611,7 +1609,7 @@ public class SwarmLifecycleSteps {
     ensureRemoveResponse();
     awaitReady("swarm-remove", removeResponse);
     assertNoErrors(removeResponse.correlationId(), "swarm-remove");
-    assertWatchMatched(removeResponse);
+    assertOutcomeTopicMatched(removeResponse);
     swarmRemoved = true;
 
     SwarmAssertions.await("swarm removed", () -> {
@@ -1621,8 +1619,6 @@ public class SwarmLifecycleSteps {
 
     assertTrue(controlPlaneEvents.outcomeCount("swarm-create") >= 1,
         "Expected at least one swarm-create outcome");
-    assertTrue(controlPlaneEvents.outcomeCount("swarm-template") >= 1,
-        "Expected at least one swarm-template outcome");
     assertTrue(controlPlaneEvents.outcomeCount("swarm-start") >= 1,
         "Expected at least one swarm-start outcome");
     long stopOutcomeCount = controlPlaneEvents.outcomeCount("swarm-stop");
@@ -2743,15 +2739,6 @@ public class SwarmLifecycleSteps {
         .orElseThrow(() -> new AssertionError("Missing outcome for " + signal + " correlation=" + correlationId));
   }
 
-  private void awaitSwarmPlanReady() {
-    SwarmAssertions.await("swarm-plan outcome", () -> {
-      Optional<ControlPlaneEvents.OutcomeEnvelope> envelope =
-          latestOutcomeForSwarm("swarm-plan", swarmId);
-      assertTrue(envelope.isPresent(), () -> "Missing outcome for swarm-plan swarm=" + swarmId);
-      assertOutcomeStatus("swarm-plan", envelope.get().outcome(), "Ready");
-    });
-  }
-
   private void assertNoErrors(String correlationId, String context) {
     List<io.pockethive.control.AlertMessage> alerts = controlPlaneEvents.alertsForCorrelation(correlationId);
     assertTrue(alerts.isEmpty(), () -> "Unexpected alerts for " + context + " correlation=" + correlationId + ": " + alerts);
@@ -2768,28 +2755,22 @@ public class SwarmLifecycleSteps {
         .toList();
   }
 
-  private void assertWatchMatched(ControlResponse response) {
-    String signal = signalFromWatch(response);
+  private void assertOutcomeTopicMatched(ControlResponse response) {
+    String signal = signalFromOutcomeTopic(response);
     if (signal.isEmpty()) {
       return;
     }
     controlPlaneEvents.findOutcome(signal, response.correlationId()).ifPresent(env -> {
-      String expected = response.watch().successTopic();
+      String expected = response.outcomeTopic();
       if (expected != null && !expected.isBlank()) {
-        assertEquals(expected, env.routingKey(), "Watch success topic should match emitted event");
+        assertEquals(expected, env.routingKey(), "Outcome topic should match emitted event");
       }
     });
-    for (String errorTopic : response.watch().errorTopics()) {
-      if (errorTopic != null && !errorTopic.isBlank()) {
-        assertFalse(controlPlaneEvents.hasAlertOnRoutingKey(errorTopic, response.correlationId()),
-            () -> "Unexpected error event detected on " + errorTopic);
-      }
-    }
   }
 
-  private String signalFromWatch(ControlResponse response) {
-    // success topic format: event.outcome.<signal>.<swarm>... -> extract <signal>
-    String topic = response.watch().successTopic();
+  private String signalFromOutcomeTopic(ControlResponse response) {
+    // outcome topic format: event.outcome.<signal>.<swarm>... -> extract <signal>
+    String topic = response.outcomeTopic();
     if (topic == null || topic.isBlank()) {
       return "";
     }
@@ -2838,7 +2819,7 @@ public class SwarmLifecycleSteps {
 
   private void assertNotReadyOutcome(String signal, ControlResponse response) {
     io.pockethive.control.CommandOutcome outcome = awaitOutcome(signal, response);
-    assertOutcomeStatus(signal, outcome, "NotReady");
+    assertOutcomeStatus(signal, outcome, "Rejected");
     Map<String, Object> context = outcomeContext(outcome);
     assertFalse(context.isEmpty(), () -> "Expected NotReady outcome to include data.context: " + describeOutcome(outcome));
   }
@@ -2847,19 +2828,14 @@ public class SwarmLifecycleSteps {
     if (outcome == null || outcome.data() == null) {
       return null;
     }
-    Object status = outcome.data().get("status");
-    return status == null ? null : status.toString();
+    return outcome.data().status().wireValue();
   }
 
   private Map<String, Object> outcomeContext(io.pockethive.control.CommandOutcome outcome) {
     if (outcome == null || outcome.data() == null) {
       return Map.of();
     }
-    Object context = outcome.data().get("context");
-    if (context instanceof Map<?, ?> map) {
-      return copyMap(map);
-    }
-    return Map.of();
+    return outcome.data().context();
   }
 
   private String describeOutcome(io.pockethive.control.CommandOutcome outcome) {

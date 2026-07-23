@@ -14,6 +14,9 @@ import org.springframework.web.reactive.function.client.WebClient;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.ControlRequest;
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
 
 /**
  * Thin wrapper around {@link WebClient} to access the Orchestrator REST API.
@@ -100,19 +103,16 @@ public final class OrchestratorClient {
     if (snapshot == null || snapshot.isMissingNode()) {
       return null;
     }
-    JsonNode envelope = snapshot.path("envelope");
-    if (envelope.isMissingNode() || envelope.isNull()) {
-      return null;
-    }
-    JsonNode scope = envelope.path("scope");
-    JsonNode data = envelope.path("data");
-    JsonNode context = data.path("context");
-    String id = textOrNull(scope, "swarmId");
-    String status = textOrNull(context, "swarmStatus");
-    String health = textOrNull(context, "swarmHealth");
-    String heartbeat = textOrNull(envelope, "timestamp");
-    boolean enabled = data.has("enabled") ? data.path("enabled").asBoolean(false) : false;
-    return new SwarmView(id, status, health, heartbeat, enabled, enabled);
+    return new SwarmView(
+        textOrNull(snapshot, "id"),
+        textOrNull(snapshot, "runtimeIntent"),
+        textOrNull(snapshot, "workloadIntent"),
+        textOrNull(snapshot, "controllerState"),
+        textOrNull(snapshot, "workloadState"),
+        textOrNull(snapshot, "health"),
+        textOrNull(snapshot, "runtimeResourceState"),
+        textOrNull(snapshot, "observedAt"),
+        snapshot.path("observationStale").asBoolean(true));
   }
 
   private static String textOrNull(JsonNode node, String field) {
@@ -151,45 +151,16 @@ public final class OrchestratorClient {
     return resolved.replace("{instance}", instance);
   }
 
-  public record ControlResponse(String correlationId, String idempotencyKey, Watch watch, long timeoutMs) {
-    public ControlResponse {
-      watch = Objects.requireNonNull(watch, "watch");
-    }
-  }
-
-  public record Watch(String successTopic, List<String> errorTopics) {
-    public Watch {
-      successTopic = Objects.requireNonNull(successTopic, "successTopic");
-      errorTopics = List.copyOf(Objects.requireNonNull(errorTopics, "errorTopics"));
-      if (successTopic.isBlank() || errorTopics.isEmpty()) {
-        throw new IllegalArgumentException("Watch requires a success topic and at least one error topic");
-      }
-    }
-  }
-
-  public record ControlRequest(String idempotencyKey, String notes) {
-  }
-
-  public record SwarmCreateRequest(String templateId,
-                                   String idempotencyKey,
-                                   String notes,
-                                   Boolean autoPullImages,
-                                   String sutId,
-                                   String variablesProfileId,
-                                   String networkMode,
-                                   String networkProfileId) {
-
-    public SwarmCreateRequest(String templateId, String idempotencyKey, String notes) {
-      this(templateId, idempotencyKey, notes, null, null, null, null, null);
-    }
-  }
-
-  public record SwarmView(String id,
-                          String status,
-                          String health,
-                          String heartbeat,
-                          boolean workEnabled,
-                          boolean controllerEnabled) {
+  public record SwarmView(
+      String id,
+      String runtimeIntent,
+      String workloadIntent,
+      String controllerState,
+      String workloadState,
+      String health,
+      String runtimeResourceState,
+      String observedAt,
+      boolean observationStale) {
   }
 
   public record ComponentConfigRequest(String idempotencyKey,

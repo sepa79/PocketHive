@@ -23,10 +23,11 @@ import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
-import io.pockethive.orchestrator.infra.InMemoryIdempotencyStore;
+import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -59,7 +60,7 @@ class ComponentControllerTest {
 	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
 	        ComponentController controller = new ComponentController(
 	            publisher,
-	            new InMemoryIdempotencyStore(),
+	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
                 endpointAuthorization(store));
@@ -83,22 +84,22 @@ class ComponentControllerTest {
 	        assertThat(signal.data()).isNotNull();
 	        assertThat(signal.data()).containsEntry("enabled", true);
 	        assertThat(response.getBody()).isNotNull();
-	        assertThat(response.getBody().watch().successTopic())
+	        assertThat(response.getBody().outcomeTopic())
 	            .isEqualTo(ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE,
-	                new ConfirmationScope(SWARM_ID, "generator", "c1")));
+	                new ConfirmationScope(SWARM_ID, "orchestrator", "orch-instance")));
     }
 
     @Test
 	    void configUpdateIsIdempotent() {
-	        SwarmStore store = new SwarmStore();
+	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
 	        ComponentController controller = new ComponentController(
 	            publisher,
-	            new InMemoryIdempotencyStore(),
+	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
                 endpointAuthorization(store));
         ComponentController.ConfigUpdateRequest request =
-            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, null);
+            new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 
         ResponseEntity<ControlResponse> first = controller.updateConfig("processor", "p1", request);
         ResponseEntity<ControlResponse> second = controller.updateConfig("processor", "p1", request);
@@ -114,7 +115,7 @@ class ComponentControllerTest {
 	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
 	        ComponentController controller = new ComponentController(
 	            publisher,
-	            new InMemoryIdempotencyStore(),
+	            operationDispatch(store),
 	            store,
 	            controlPlaneProperties(),
                 endpointAuthorization(store));
@@ -148,7 +149,7 @@ class ComponentControllerTest {
         SwarmStore store = storeWithSwarm(mapper, "prod-swarm", "tpl-prod", RUN_ID, "prod/tpl-prod", "prod");
         ComponentController controller = new ComponentController(
             publisher,
-            new InMemoryIdempotencyStore(),
+            operationDispatch(store),
             store,
             controlPlaneProperties(),
             endpointAuthorization(store));
@@ -204,6 +205,13 @@ class ComponentControllerTest {
 
     private static OrchestratorEndpointAuthorization endpointAuthorization(SwarmStore store) {
         return new OrchestratorEndpointAuthorization(new OrchestratorAuthorization(), scenarioClient(), store);
+    }
+
+    private static OperationDispatchService operationDispatch(SwarmStore store) {
+        return new OperationDispatchService(
+            new SwarmOperationCoordinator(),
+            org.mockito.Mockito.mock(OperationOutcomePublisher.class),
+            store);
     }
 
     private static ScenarioClient scenarioClient() {

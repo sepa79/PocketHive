@@ -45,7 +45,13 @@ In the default stack this is a bind mount:
 - Host: `/opt/pockethive/scenarios-runtime`
 - Containers: `/app/scenarios-runtime`
 
-The Orchestrator creates the runtime root directory on startup when configured.
+Filesystem controller startup uses the same bind mount with two explicit Orchestrator settings:
+
+- `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` is the host source passed to the runtime adapter;
+- `POCKETHIVE_STARTUP_ARTIFACT_WRITE_ROOT` is the path through which the Orchestrator process writes the mounted directory (`/app/scenarios-runtime` in the default stack).
+
+The Orchestrator requires and creates the write root on startup. A controller receives the exact artifact path and SHA-256; it does not fall back to RabbitMQ or another file.
+The controller accepts that path only below `/app/scenarios-runtime`; isolated test harnesses can set `POCKETHIVE_STARTUP_ARTIFACT_READ_ROOT` explicitly to their temporary mount root.
 
 ### How to enable file mode locally
 
@@ -229,13 +235,13 @@ Manual checks:
   }
   ```
 
-  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `signal.swarm-create` message is published by clients.
+  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, persists a checksummed startup artifact, boots a Swarm Controller runtime with the artifact reference, and tracks progress internally—no plan payload is sent through RabbitMQ.
 - Subscribe to control-plane outcomes and alerts to follow the lifecycle:
   - `event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>` — emitted by the Orchestrator after the controller handshake completes.
-  - `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted once the plan is applied and bees are provisioned (idle by default).
-  - `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; `data.status` indicates success/failure.
+  - `event.outcome.swarm-start.<swarmId>.orchestrator.<orchestratorInstance>` — the sole public terminal start outcome, emitted only after the Controller's correlated convergence result is accepted; `data.status` is `Succeeded`, `Rejected`, `Failed`, or `TimedOut`.
+  - `event.outcome.swarm-stop.<swarmId>.orchestrator.<orchestratorInstance>` and `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>` follow the same ownership rule.
   - `event.alert.{type}.<swarmId>.*.*` — emitted for runtime/IO failures.
-- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` on your behalf and you can reuse the outcome/alert subscriptions above to track readiness.
+- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The response includes both the Orchestrator outcome topic and an `operationUrl`; polling the operation URL is the broker-independent way to observe terminal state.
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides directly inside each bee's `config` map. The Scenario Manager passes those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap. No environment variables are used for logical scenario settings.
