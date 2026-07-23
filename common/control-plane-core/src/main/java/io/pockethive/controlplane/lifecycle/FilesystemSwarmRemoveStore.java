@@ -1,7 +1,6 @@
-package io.pockethive.orchestrator.runtime;
+package io.pockethive.controlplane.lifecycle;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.swarm.model.SwarmStartupArtifactContract;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
 import io.pockethive.swarm.model.lifecycle.RemoveResult;
 import java.io.IOException;
@@ -11,25 +10,14 @@ import java.nio.file.StandardOpenOption;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.Optional;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
-/** Orchestrator side of the immutable filesystem remove handshake. */
-@Component
+/** Canonical immutable filesystem transport for the swarm-remove request/result handshake. */
 public final class FilesystemSwarmRemoveStore {
 
   private final ObjectMapper mapper;
   private final Path runtimeRoot;
 
-  @Autowired
-  public FilesystemSwarmRemoveStore(
-      ObjectMapper mapper,
-      @Value("${" + SwarmStartupArtifactContract.WRITE_ROOT_ENV + ":}") String runtimeRoot) {
-    this(mapper, path(runtimeRoot));
-  }
-
-  FilesystemSwarmRemoveStore(ObjectMapper mapper, Path runtimeRoot) {
+  public FilesystemSwarmRemoveStore(ObjectMapper mapper, Path runtimeRoot) {
     this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
     this.runtimeRoot = Objects.requireNonNull(runtimeRoot, "runtimeRoot").toAbsolutePath().normalize();
   }
@@ -39,6 +27,21 @@ public final class FilesystemSwarmRemoveStore {
     Path path = operationDirectory(request.swarmId(), request.correlationId()).resolve("request.json");
     writeImmutable(path, request, RemoveRequest.class);
     return path;
+  }
+
+  public RemoveRequest loadRequest(String swarmId, String correlationId) {
+    Path path = operationDirectory(swarmId, correlationId).resolve("request.json");
+    try {
+      return mapper.readValue(path.toFile(), RemoveRequest.class);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Failed to load remove request: " + path, exception);
+    }
+  }
+
+  public void saveResult(RemoveResult result) {
+    Objects.requireNonNull(result, "result");
+    Path path = operationDirectory(result.swarmId(), result.correlationId()).resolve("result.json");
+    writeImmutable(path, result, RemoveResult.class);
   }
 
   public Optional<RemoveResult> findResult(String swarmId, String correlationId) {
@@ -88,23 +91,14 @@ public final class FilesystemSwarmRemoveStore {
   }
 
   private Path operationDirectory(String swarmId, String correlationId) {
-    Path directory = runtimeRoot
-        .resolve(segment(swarmId, "swarmId"))
-        .resolve("operations")
-        .resolve("remove")
+    Path directory = runtimeRoot.resolve(segment(swarmId, "swarmId"))
+        .resolve("operations/remove")
         .resolve(segment(correlationId, "correlationId"))
         .normalize();
     if (!directory.startsWith(runtimeRoot)) {
       throw new IllegalArgumentException("Remove path escapes runtime root");
     }
     return directory;
-  }
-
-  private static Path path(String value) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalStateException(SwarmStartupArtifactContract.WRITE_ROOT_ENV + " must not be blank");
-    }
-    return Path.of(value);
   }
 
   private static String segment(String value, String field) {

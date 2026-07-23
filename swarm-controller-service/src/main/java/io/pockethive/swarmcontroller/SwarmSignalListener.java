@@ -29,7 +29,7 @@ import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
 import io.pockethive.swarmcontroller.runtime.SwarmControlPlaneJournalErrors;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
 import io.pockethive.swarmcontroller.runtime.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.swarmcontroller.runtime.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.lifecycle.RemoveError;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;

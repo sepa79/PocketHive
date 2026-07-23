@@ -15,7 +15,7 @@ import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.runtime.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
 import io.pockethive.swarm.model.lifecycle.RuntimeIntent;
 import io.pockethive.swarm.model.lifecycle.Target;

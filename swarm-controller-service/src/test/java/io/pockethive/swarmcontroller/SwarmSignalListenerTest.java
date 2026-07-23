@@ -18,7 +18,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.runtime.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.swarmcontroller.runtime.FilesystemSwarmRemoveStore;
+import io.pockethive.controlplane.lifecycle.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarm.model.lifecycle.RemoveRequest;
 import io.pockethive.swarm.model.lifecycle.RemoveResult;
