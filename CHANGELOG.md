@@ -77,6 +77,9 @@ Timestamp: 2026-07-22T22:53:54Z
 - Control-plane result ownership: terminal worker results identify the concrete
   executor even for broadcast signals, and Orchestrator ignores valid results
   whose correlation belongs to controller-internal operations.
+- Workflow cleanup acceptance: wait for the correlation-specific remove
+  operation to succeed and verify the swarm registry postcondition before
+  reporting teardown, while still attempting bundle cleanup after a failure.
 
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
