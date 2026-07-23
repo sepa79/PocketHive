@@ -27,7 +27,7 @@ class OperationOutcomePublisherTest {
   void publishesTheOrchestratorOwnedTerminalOutcomeOnlyOnce() throws Exception {
     ControlPlanePublisher transport = Mockito.mock(ControlPlanePublisher.class);
     OperationOutcomePublisher publisher = new OperationOutcomePublisher(
-        transport, new ObjectMapper().findAndRegisterModules(), "orchestrator-1");
+        transport, "orchestrator-1");
     Instant now = Instant.parse("2026-07-22T12:00:00Z");
     TerminalResult result = new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of("target", "controller-1"));
     SwarmOperation operation = new SwarmOperation(
@@ -42,8 +42,7 @@ class OperationOutcomePublisherTest {
     verify(transport, times(1)).publishEvent(message.capture());
     assertThat(message.getValue().routingKey())
         .isEqualTo("event.outcome.swarm-start.alpha.orchestrator.orchestrator-1");
-    CommandOutcome envelope = new ObjectMapper().findAndRegisterModules()
-        .readValue(String.valueOf(message.getValue().payload()), CommandOutcome.class);
+    CommandOutcome envelope = (CommandOutcome) message.getValue().payload();
     assertThat(envelope.scope().role()).isEqualTo("orchestrator");
     assertThat(envelope.correlationId()).isEqualTo("corr-1");
     assertThat(envelope.data()).isEqualTo(result);

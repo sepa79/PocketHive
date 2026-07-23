@@ -57,6 +57,8 @@ class SwarmSignalListenerTest {
   private static final Target TARGET = new Target("swarm-controller", CONTROLLER);
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+  private final io.pockethive.controlplane.codec.ControlPlaneCodec codec =
+      io.pockethive.controlplane.codec.ControlPlaneCodec.create();
   private final SwarmStore store = new SwarmStore();
   private final SwarmOperationCoordinator operations = new SwarmOperationCoordinator();
   private final CapturingPublisher transport = new CapturingPublisher();
@@ -69,12 +71,13 @@ class SwarmSignalListenerTest {
     swarm.attachTemplate(new SwarmTemplateMetadata(
         "template-1", "controller:latest", List.of(), "demo/template-1", "demo"));
     store.register(swarm);
-    OperationOutcomePublisher outcomes = new OperationOutcomePublisher(transport, mapper, "orchestrator-1");
+    OperationOutcomePublisher outcomes = new OperationOutcomePublisher(transport, "orchestrator-1");
     var descriptor = new OrchestratorControlPlaneTopologyDescriptor("ph.control");
     listener = new SwarmSignalListener(
         store,
         mock(ContainerLifecycleManager.class),
         mapper,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         journal,
         mock(ControlPlaneEmitter.class),
         mock(RuntimeLogSnapshotJournalService.class),
@@ -159,7 +162,7 @@ class SwarmSignalListenerTest {
         Map.of("status", "recorded"));
 
     listener.handle(
-        mapper.writeValueAsString(event),
+        codec.encode(event, "event.journal.work-journal.swarm-test.generator.generator-1"),
         "event.journal.work-journal.swarm-test.generator.generator-1");
 
     verify(journal).append(any(HiveJournal.HiveJournalEntry.class));
@@ -356,11 +359,12 @@ class SwarmSignalListenerTest {
         store,
         lifecycle,
         mapper,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         journal,
         mock(ControlPlaneEmitter.class),
         mock(RuntimeLogSnapshotJournalService.class),
         operations,
-        new OperationOutcomePublisher(transport, mapper, "orchestrator-1"),
+        new OperationOutcomePublisher(transport, "orchestrator-1"),
         removeStore,
         verifier,
         new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
@@ -379,11 +383,11 @@ class SwarmSignalListenerTest {
             "requestedWorkloadState", "RUNNING",
             "observedWorkloadState", "RUNNING",
             "nonConvergedWorkers", List.of())));
-    return mapper.writeValueAsString(result);
+    return codec.encode(result, route(controller));
   }
 
   private String configResult(Target target, boolean enabled) throws Exception {
-    return mapper.writeValueAsString(new CommandResult(
+    CommandResult result = new CommandResult(
         Instant.now(), "2", "result", "config-update", target.instance(),
         new ControlScope(SWARM_ID, target.role(), target.instance()),
         "config-corr", "config-idem",
@@ -392,7 +396,9 @@ class SwarmSignalListenerTest {
             "target", target,
             "requestedEnabled", enabled,
             "observedEnabled", enabled,
-            "appliedConfigSha256", "a".repeat(64)))));
+            "appliedConfigSha256", "a".repeat(64))));
+    return codec.encode(result,
+        "event.result.config-update." + SWARM_ID + "." + target.role() + "." + target.instance());
   }
 
   private static String route(String controller) {

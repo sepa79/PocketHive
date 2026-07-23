@@ -2,6 +2,7 @@ package io.pockethive.observability;
 
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlRuntime;
+import io.pockethive.control.StatusMetric;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -68,7 +69,7 @@ public class StatusEnvelopeBuilder {
     public StatusEnvelopeBuilder() {
         root.put("timestamp", Instant.now().toString());
         root.put("version", ENVELOPE_VERSION);
-        root.put("kind", "metric");
+        root.put("kind", StatusMetric.KIND);
         root.put("type", null);
         root.put("origin", null);
         scope.put("swarmId", null);
@@ -404,14 +405,14 @@ public class StatusEnvelopeBuilder {
     }
 
     /**
-     * Serialise the collected fields into a JSON document.
+     * Build the canonical typed status envelope.
      */
-    public String toJson() {
+    public StatusMetric toEnvelope() {
         String type = (String) root.get("type");
         if (type == null || type.isBlank()) {
             throw new IllegalStateException("type must be set before serialising status envelope");
         }
-        boolean isFull = "status-full".equals(type);
+        boolean isFull = StatusMetric.STATUS_FULL.equals(type);
 
         if (!publishes.isEmpty()) {
             context.put("publishes", List.copyOf(publishes));
@@ -505,7 +506,24 @@ public class StatusEnvelopeBuilder {
             canonicalData.put("io", Objects.requireNonNullElse(data.get("io"), Collections.emptyMap()));
         }
 
-        root.put("data", canonicalData);
-        return ControlPlaneJson.write(root, "status envelope");
+        return new StatusMetric(
+            Instant.parse((String) root.get("timestamp")),
+            (String) root.get("version"),
+            (String) root.get("kind"),
+            type,
+            (String) root.get("origin"),
+            new ControlScope(
+                (String) scope.get("swarmId"),
+                (String) scope.get("role"),
+                (String) scope.get("instance")),
+            null,
+            null,
+            castMap(root.get("runtime")),
+            canonicalData);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object value) {
+        return value == null ? null : (Map<String, Object>) value;
     }
 }

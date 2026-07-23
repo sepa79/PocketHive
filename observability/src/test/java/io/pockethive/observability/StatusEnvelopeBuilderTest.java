@@ -10,9 +10,11 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.*;
 
 class StatusEnvelopeBuilderTest {
+    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+
     @Test
     void includesSwarmIdWhenProvided() throws Exception {
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
                 .type("status-full")
                 .role("orchestrator")
                 .instance("inst")
@@ -27,14 +29,14 @@ class StatusEnvelopeBuilderTest {
                     "containerId", "container-1",
                     "image", "worker:latest",
                     "stackName", "ph-sw1"))
-                .toJson();
+                .toEnvelope());
         JsonNode node = new ObjectMapper().readTree(json);
         assertEquals("sw1", node.path("scope").path("swarmId").asText());
     }
 
     @Test
     void storesOrigin() throws Exception {
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
                 .type("status-delta")
                 .role("processor")
                 .instance("proc-1")
@@ -43,7 +45,7 @@ class StatusEnvelopeBuilderTest {
                 .enabled(true)
                 .tps(0)
                 .runtime(Map.of("templateId", "tpl-1", "runId", "run-1"))
-                .toJson();
+                .toEnvelope());
         JsonNode node = new ObjectMapper().readTree(json);
         assertEquals("proc-1", node.get("origin").asText());
     }
@@ -60,7 +62,7 @@ class StatusEnvelopeBuilderTest {
                 "ph.work.alpha.generator", Map.of("depth", 3, "consumers", 2, "oldestAgeSec", 12.5)
         );
 
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
                 .type("status-full")
                 .role("generator")
                 .instance("gen-1")
@@ -76,7 +78,7 @@ class StatusEnvelopeBuilderTest {
                     "image", "worker:latest",
                     "stackName", "ph-sw1"))
                 .queueStats(stats)
-                .toJson();
+                .toEnvelope());
 
         JsonNode node = new ObjectMapper().readTree(json);
         JsonNode queueStats = node.path("data").path("io").path("work").path("queueStats");
@@ -88,7 +90,7 @@ class StatusEnvelopeBuilderTest {
 
     @Test
     void serialisesIoStateWhenProvided() throws Exception {
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
                 .type("status-full")
                 .role("generator")
                 .instance("gen-1")
@@ -106,7 +108,7 @@ class StatusEnvelopeBuilderTest {
                 .ioWorkState("out-of-data", "ok", Map.of("dataset", "redis:users"))
                 .filesystemEnabled(true)
                 .ioFilesystemState("ok", "ok", null)
-                .toJson();
+                .toEnvelope());
 
         JsonNode node = new ObjectMapper().readTree(json);
         JsonNode ioState = node.path("data").path("ioState");
@@ -135,7 +137,7 @@ class StatusEnvelopeBuilderTest {
 
     @Test
     void canDisableWorkPlaneIo() throws Exception {
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
             .workPlaneEnabled(false)
             .type("status-delta")
             .role("orchestrator")
@@ -144,7 +146,7 @@ class StatusEnvelopeBuilderTest {
             .swarmId("ALL")
             .enabled(true)
             .tps(0)
-            .toJson();
+            .toEnvelope());
 
         JsonNode node = new ObjectMapper().readTree(json);
         JsonNode ioState = node.path("data").path("ioState");
@@ -155,7 +157,7 @@ class StatusEnvelopeBuilderTest {
 
     @Test
     void controlPlaneStatusCanExplicitlyOmitEnabled() throws Exception {
-        String json = new StatusEnvelopeBuilder()
+        String json = json(new StatusEnvelopeBuilder()
             .workPlaneEnabled(false)
             .enabledRequired(false)
             .tpsEnabled(false)
@@ -166,10 +168,14 @@ class StatusEnvelopeBuilderTest {
             .swarmId("sw1")
             .runtime(Map.of("templateId", "tpl-1", "runId", "run-1"))
             .data("controllerState", "READY")
-            .toJson();
+            .toEnvelope());
 
         JsonNode data = new ObjectMapper().readTree(json).path("data");
         assertTrue(data.path("enabled").isMissingNode());
         assertEquals("READY", data.path("context").path("controllerState").asText());
+    }
+
+    private static String json(io.pockethive.control.StatusMetric status) throws Exception {
+        return MAPPER.writeValueAsString(status);
     }
 }

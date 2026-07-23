@@ -7,13 +7,16 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.StatusMetric;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.CanonicalPayloadDigest;
 import io.pockethive.controlplane.consumer.ControlSignalEnvelope;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -108,6 +111,7 @@ public class SwarmSignalListener {
   private volatile boolean healthWorkloadsEnabled;
   private final ConcurrentMap<String, Long> lastWorkerErrorCounts = new ConcurrentHashMap<>();
   private final FilesystemSwarmRemoveStore removeStore;
+  private final io.pockethive.controlplane.codec.ControlPlaneCodec controlPlaneCodec;
 
   @Autowired
   public SwarmSignalListener(SwarmLifecycle lifecycle,
@@ -118,7 +122,8 @@ public class SwarmSignalListener {
                              SwarmJournal journal,
                              @Value("${pockethive.journal.run-id:}") String journalRunId,
                              FilesystemSwarmStartupArtifactLoader startupArtifactLoader,
-                             FilesystemSwarmRemoveStore removeStore) {
+                             FilesystemSwarmRemoveStore removeStore,
+                             ControlPlaneCodec controlPlaneCodec) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
@@ -137,9 +142,11 @@ public class SwarmSignalListener {
     this.baseRuntimeMeta = buildBaseRuntimeMeta();
     this.templateId = requireEnvValue("POCKETHIVE_TEMPLATE_ID");
     ObjectMapper controlPlaneMapper = ControlPlaneJson.mapper();
-    ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(rabbit, controlExchange);
+    this.controlPlaneCodec = Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec");
+    ControlPlanePublisher basePublisher = new AmqpControlPlanePublisher(
+        rabbit, controlExchange, controlPlaneCodec);
     ControlPlanePublisher publisher = new JournalControlPlanePublisher(controlPlaneMapper, this.journal, basePublisher);
-    this.controlPlane = ManagerControlPlane.builder(publisher, controlPlaneMapper)
+    this.controlPlane = ManagerControlPlane.builder(publisher, controlPlaneCodec)
         .identity(new ControlPlaneIdentity(swarmId, role, instanceId))
         .duplicateCache(java.time.Duration.ofMinutes(1), 256)
         .build();
@@ -196,27 +203,35 @@ public class SwarmSignalListener {
         return;
       }
       String snippet = snippet(body);
-      if (routingKey.startsWith("event.metric.status-")
-          || routingKey.startsWith("event.status-")
-          || routingKey.startsWith("signal." + ControlPlaneSignals.STATUS_REQUEST)) {
+      RoutingKey signalKey = ControlPlaneRouting.parseSignal(routingKey);
+      RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+      boolean statusEvent = eventKey != null
+          && (ControlPlaneEventTypes.METRIC_STATUS_FULL.equals(eventKey.type())
+              || ControlPlaneEventTypes.METRIC_STATUS_DELTA.equals(eventKey.type()));
+      boolean alertEvent = eventKey != null
+          && ControlPlaneEventTypes.ALERT_ALERT.equals(eventKey.type());
+      if (statusEvent
+          || (signalKey != null && ControlPlaneSignals.STATUS_REQUEST.equals(signalKey.type()))) {
         log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
       } else {
         log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
       }
-      if (routingKey.startsWith("signal.")) {
-        RoutingKey key = ControlPlaneRouting.parseSignal(routingKey);
-        if (!shouldAcceptSignal(key)) {
-          log.debug("Ignoring control signal on routing key {}", routingKey);
-          return;
-        }
-        boolean processed = controlPlane.consume(body, routingKey, envelope -> handleSignal(envelope, body));
+      if (signalKey != null) {
+        boolean processed = controlPlane.consume(body, routingKey, envelope -> {
+          RoutingKey key = ControlPlaneRouting.parseSignal(envelope.routingKey());
+          if (!shouldAcceptSignal(key)) {
+            log.debug("Ignoring control signal on routing key {}", envelope.routingKey());
+            return;
+          }
+          handleSignal(envelope);
+        });
         if (!processed) {
           log.debug("Ignoring control signal on routing key {}", routingKey);
         }
         return;
-      } else if (routingKey.startsWith("event.metric.status-")) {
+      } else if (statusEvent) {
         handleStatusEvent(routingKey, body);
-      } else if (routingKey.startsWith("event.alert.")) {
+      } else if (alertEvent) {
         handleAlertEvent(routingKey, body);
       } else {
         log.warn("Ignoring unsupported control-plane routing key {}; payload snippet={}", routingKey, snippet(body));
@@ -248,10 +263,6 @@ public class SwarmSignalListener {
       journalErrors.errorDrop("status-parse-error", routingKey, "unparseable routing key", body, null);
       return;
     }
-    if (!isLocalSwarm(eventKey.swarmId())) {
-      log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
-      return;
-    }
     String role = eventKey.role();
     if (role == null || role.isBlank()) {
       log.warn("Received status event with missing role on routing key {}; payload snippet={}", routingKey, snippet(body));
@@ -264,22 +275,18 @@ public class SwarmSignalListener {
       journalErrors.errorDrop("status-parse-error", routingKey, "missing instance segment", body, null);
       return;
     }
-    if (this.role.equalsIgnoreCase(role) && this.instanceId.equalsIgnoreCase(instance)) {
-      // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.
-      return;
-    }
     try {
-      JsonNode node = mapper.readTree(body);
-      JsonNode scopeNode = node.path("scope");
-      String payloadSwarm = scopeNode.path("swarmId").asText(null);
-      String payloadRole = scopeNode.path("role").asText(null);
-      String payloadInstance = scopeNode.path("instance").asText(null);
-      warnMissingScopeFields("status", routingKey, body, payloadSwarm, payloadRole, payloadInstance);
-	      if (payloadSwarm != null && !payloadSwarm.isBlank() && !ControlScope.isAll(payloadSwarm)
-	          && !swarmId.equals(payloadSwarm)) {
-	        log.debug("Ignoring status payload for swarm {} on routing key {}", payloadSwarm, routingKey);
-	        return;
-	      }
+      io.pockethive.control.StatusMetric status =
+          controlPlaneCodec.decode(body, routingKey, io.pockethive.control.StatusMetric.class);
+      if (!isLocalSwarm(eventKey.swarmId())) {
+        log.debug("Ignoring status for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
+        return;
+      }
+      if (this.role.equalsIgnoreCase(role) && this.instanceId.equalsIgnoreCase(instance)) {
+        // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.
+        return;
+      }
+      JsonNode node = mapper.valueToTree(status);
       boolean isStatusFull = isStatusFullEvent(eventKey);
       lifecycle.updateHeartbeat(role, instance);
       if (isStatusFull) {
@@ -301,6 +308,9 @@ public class SwarmSignalListener {
         if (ready) {
           maybeEmitStartupReadyStatusFull();
         }
+      }
+      if (isStatusFull) {
+        sendStatusFull();
       }
       tryCompletePendingLifecycle();
       maybeEmitPendingStatusFull();
@@ -376,12 +386,12 @@ public class SwarmSignalListener {
       journalErrors.errorDrop("alert-parse-error", routingKey, "unparseable routing key", body, null);
       return;
     }
-    if (!isLocalSwarm(eventKey.swarmId())) {
-      log.debug("Ignoring alert for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
-      return;
-    }
     try {
-      AlertMessage alert = mapper.readValue(body, AlertMessage.class);
+      AlertMessage alert = controlPlaneCodec.decode(body, routingKey, AlertMessage.class);
+      if (!isLocalSwarm(eventKey.swarmId())) {
+        log.debug("Ignoring alert for swarm {} on routing key {}", eventKey.swarmId(), routingKey);
+        return;
+      }
       String payloadSwarm = alert != null && alert.scope() != null ? alert.scope().swarmId() : null;
       String payloadRole = alert != null && alert.scope() != null ? alert.scope().role() : null;
       String payloadInstance = alert != null && alert.scope() != null ? alert.scope().instance() : null;
@@ -505,7 +515,7 @@ public class SwarmSignalListener {
     }
   }
 
-  private void processConfigUpdate(ControlSignalEnvelope envelope, String rawPayload, String resolvedSignal) {
+  private void processConfigUpdate(ControlSignalEnvelope envelope, String resolvedSignal) {
     ControlSignal cs = envelope.signal();
     MDC.put("correlation_id", cs.correlationId());
     MDC.put("idempotency_key", cs.idempotencyKey());
@@ -623,7 +633,7 @@ public class SwarmSignalListener {
     return startupArtifactApplied.get();
   }
 
-  private void handleSignal(ControlSignalEnvelope envelope, String rawPayload) {
+  private void handleSignal(ControlSignalEnvelope envelope) {
     ControlSignal cs = envelope.signal();
     if (cs == null) {
       return;
@@ -662,7 +672,7 @@ public class SwarmSignalListener {
         log.debug("Status request received: {}", envelope.routingKey());
         sendStatusFull();
       }
-      case ControlPlaneSignals.CONFIG_UPDATE -> processConfigUpdate(envelope, rawPayload, signal);
+      case ControlPlaneSignals.CONFIG_UPDATE -> processConfigUpdate(envelope, signal);
       default -> {
         // ignore other signals
       }
@@ -888,12 +898,7 @@ public class SwarmSignalListener {
   }
 
   private String resolveSignal(ControlSignalEnvelope envelope) {
-    ControlSignal signal = envelope.signal();
-    if (signal != null && signal.type() != null && !signal.type().isBlank()) {
-      return signal.type();
-    }
-    RoutingKey key = ControlPlaneRouting.parseSignal(envelope.routingKey());
-    return key != null ? defaultSegment(key.type(), null) : null;
+    return envelope.signal().type();
   }
 
   private record PendingLifecycle(
@@ -949,7 +954,7 @@ public class SwarmSignalListener {
     if (key == null || key.type() == null) {
       return false;
     }
-    return key.type().endsWith("status-full");
+    return ControlPlaneEventTypes.METRIC_STATUS_FULL.equals(key.type());
   }
 
   private String phaseForSignal(String signal) {
@@ -984,9 +989,9 @@ public class SwarmSignalListener {
     WorkloadState status = lifecycle.getWorkloadState();
     String health = determineHealth(status, m);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
-    String rk = ControlPlaneRouting.event("metric", "status-full", scope);
+    String rk = ControlPlaneRouting.event(StatusMetric.KIND, StatusMetric.STATUS_FULL, scope);
     StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-        .type("status-full")
+        .type(StatusMetric.STATUS_FULL)
         .role(role)
         .instance(instanceId)
         .origin(instanceId)
@@ -1015,7 +1020,7 @@ public class SwarmSignalListener {
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(rk);
     appendTrafficDiagnostics(builder);
-    String payload = builder.toJson();
+    io.pockethive.control.StatusMetric payload = builder.toEnvelope();
     sendControl(rk, payload, "status");
   }
 
@@ -1044,9 +1049,9 @@ public class SwarmSignalListener {
     WorkloadState status = lifecycle.getWorkloadState();
     String health = determineHealth(status, m);
     ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
-    String rk = ControlPlaneRouting.event("metric", "status-delta", scope);
+    String rk = ControlPlaneRouting.event(StatusMetric.KIND, StatusMetric.STATUS_DELTA, scope);
     StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-        .type("status-delta")
+        .type(StatusMetric.STATUS_DELTA)
         .role(role)
         .instance(instanceId)
         .origin(instanceId)
@@ -1058,15 +1063,11 @@ public class SwarmSignalListener {
         .data("workloadState", status.name())
         .data("health", health)
         .data("startupReady", startupReady())
-        .data("startupArtifactSha256", startupArtifactSha256)
         .data("watermarkAt", Instant.now())
-        .data("expectedWorkers", lifecycle.expectedWorkers())
-        .data("workers", workers.snapshot())
         .data("scenario", scenarioProgress());
-    appendNetworkContext(builder);
     builder.runtime(runtimeMetaSnapshot());
     appendTrafficDiagnostics(builder);
-    String payload = builder.toJson();
+    io.pockethive.control.StatusMetric payload = builder.toEnvelope();
     sendControl(rk, payload, "status");
   }
 
@@ -1507,16 +1508,16 @@ public class SwarmSignalListener {
     this.lastHealthState = null;
   }
 
-  private void sendControl(String routingKey, String payload, String context) {
+  private void sendControl(String routingKey, io.pockethive.control.ControlPlaneEnvelope payload, String context) {
     String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-    boolean statusLog = "status".equals(context) || (routingKey != null && routingKey.contains(".status-"));
-    String snippet = snippet(payload);
+    boolean statusLog = "status".equals(context);
     if (statusLog) {
-      log.debug("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+      log.debug("[CTRL] {} rk={} inst={} type={}", label, routingKey, instanceId, payload.type());
     } else {
-      log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
+      log.info("[CTRL] {} rk={} inst={} type={} correlationId={}",
+          label, routingKey, instanceId, payload.type(), payload.correlationId());
     }
-    if (routingKey != null && routingKey.startsWith("signal.")) {
+    if (payload instanceof io.pockethive.control.ControlSignal) {
       controlPlane.publishSignal(new SignalMessage(routingKey, payload));
     } else {
       controlPlane.publishEvent(new EventMessage(routingKey, payload));

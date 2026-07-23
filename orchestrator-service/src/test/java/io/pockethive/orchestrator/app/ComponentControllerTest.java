@@ -77,8 +77,7 @@ class ComponentControllerTest {
         SignalMessage message = captor.getValue();
         assertThat(message.routingKey())
             .isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw1", "generator", "c1"));
-        assertThat(message.payload()).isInstanceOf(String.class);
-        ControlSignal signal = mapper.readValue(message.payload().toString(), ControlSignal.class);
+        ControlSignal signal = (ControlSignal) message.payload();
         assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
         assertThat(signal.scope().role()).isEqualTo("generator");
         assertThat(signal.scope().instance()).isEqualTo("c1");

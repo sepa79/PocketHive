@@ -1,54 +1,45 @@
 package io.pockethive.e2e.support;
 
-import java.io.IOException;
-import java.util.Objects;
+import static java.nio.charset.StandardCharsets.UTF_8;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
+import java.util.Objects;
 
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.ControlPlaneEnvelope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 
 /**
- * Utility responsible for decoding control-plane event payloads based on their routing keys.
+ * E2E projection over envelopes decoded by the canonical production codec.
  */
 public final class ControlPlaneEventParser {
 
-  private final ObjectMapper objectMapper;
+  private final ControlPlaneCodec codec;
 
   public ControlPlaneEventParser() {
-    this(createDefaultMapper());
+    this(ControlPlaneCodec.create());
   }
 
-  public ControlPlaneEventParser(ObjectMapper objectMapper) {
-    this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+  public ControlPlaneEventParser(ControlPlaneCodec codec) {
+    this.codec = Objects.requireNonNull(codec, "codec");
   }
 
-  public ParsedEvent parse(String routingKey, byte[] body) throws IOException {
+  public ParsedEvent parse(String routingKey, byte[] body) {
     if (routingKey == null || body == null) {
       return ParsedEvent.ignored();
     }
-    if (routingKey.startsWith("event.outcome.")) {
-      CommandOutcome outcome = objectMapper.readValue(body, CommandOutcome.class);
+    ControlPlaneEnvelope envelope = codec.decode(new String(body, UTF_8), routingKey);
+    if (envelope instanceof CommandOutcome outcome) {
       return ParsedEvent.outcome(outcome);
     }
-    if (routingKey.startsWith("event.alert.")) {
-      AlertMessage alert = objectMapper.readValue(body, AlertMessage.class);
+    if (envelope instanceof AlertMessage alert) {
       return ParsedEvent.alert(alert);
     }
-    if (routingKey.startsWith("event.metric.status-")) {
-      StatusEvent status = objectMapper.readValue(body, StatusEvent.class);
-      return ParsedEvent.status(status);
+    if (envelope instanceof StatusMetric status) {
+      return ParsedEvent.status(new StatusEvent(status));
     }
     return ParsedEvent.ignored();
-  }
-
-  private static ObjectMapper createDefaultMapper() {
-    ObjectMapper mapper = new ObjectMapper();
-    mapper.registerModule(new JavaTimeModule());
-    mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-    return mapper;
   }
 
   public record ParsedEvent(CommandOutcome outcome, AlertMessage alert, StatusEvent status) {

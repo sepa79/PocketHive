@@ -42,9 +42,8 @@ class OrchestratorControlPlaneConfig {
     @Bean
     OperationOutcomePublisher operationOutcomePublisher(
         ControlPlanePublisher publisher,
-        com.fasterxml.jackson.databind.ObjectMapper objectMapper,
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
-        return new OperationOutcomePublisher(publisher, objectMapper, identity.instanceId());
+        return new OperationOutcomePublisher(publisher, identity.instanceId());
     }
 
     @Bean(name = "managerControlQueueName")

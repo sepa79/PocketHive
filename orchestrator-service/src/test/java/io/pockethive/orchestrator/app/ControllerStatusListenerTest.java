@@ -16,11 +16,18 @@ import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
 import io.pockethive.swarm.model.lifecycle.Health;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
+import io.pockethive.control.ControlScope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ControllerStatusListenerTest {
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+  private final ControlPlaneCodec codec = ControlPlaneCodec.create();
 
   @Test
   void fullStatusUpdatesOnlyCanonicalObservationAxes() {
@@ -102,23 +109,44 @@ class ControllerStatusListenerTest {
       SwarmStore store,
       ControlPlaneStatusRequestPublisher requests,
       SwarmSignalListener signals) {
-    return new ControllerStatusListener(store, mapper, requests, signals, HiveJournal.noop());
+    return new ControllerStatusListener(
+        store,
+        mapper,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
+        requests,
+        signals,
+        HiveJournal.noop());
   }
 
-  private String status(String type, String context) {
-    return """
-        {
-          "timestamp":"2026-07-22T12:00:00Z",
-          "version":"2",
-          "kind":"metric",
-          "type":"%s",
-          "origin":"inst1",
-          "scope":{"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
-          "correlationId":null,
-          "idempotencyKey":null,
-          "runtime":{"templateId":"tpl-1","runId":"run-1"},
-          "data":{"config":{},"io":{},"ioState":{},"context":%s}
-        }
-        """.formatted(type, context);
+  private String status(String type, String contextJson) {
+    try {
+      var contextNode = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(contextJson);
+      contextNode.putIfAbsent("startupReady", mapper.getNodeFactory().booleanNode(true));
+      contextNode.putIfAbsent("watermarkAt", mapper.getNodeFactory().textNode("2026-07-22T12:00:00Z"));
+      contextNode.putIfAbsent("controllerState", mapper.getNodeFactory().textNode("READY"));
+      contextNode.putIfAbsent("workloadState", mapper.getNodeFactory().textNode("STOPPED"));
+      contextNode.putIfAbsent("health", mapper.getNodeFactory().textNode("HEALTHY"));
+      Map<String, Object> context = mapper.convertValue(contextNode, Map.class);
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("context", context);
+      if ("status-full".equals(type)) {
+        context.put("startupArtifactSha256", "a".repeat(64));
+        context.put("expectedWorkers", java.util.List.of());
+        context.put("workers", java.util.List.of());
+        data.put("config", Map.of());
+        data.put("startedAt", "2026-07-22T12:00:00Z");
+        data.put("io", Map.of());
+        data.put("ioState", Map.of());
+      } else {
+        data.put("ioState", Map.of());
+      }
+      StatusMetric status = new StatusMetric(
+          Instant.parse("2026-07-22T12:00:00Z"), "2", "metric", type, "inst1",
+          new ControlScope("sw1", "swarm-controller", "inst1"), null, null,
+          Map.of("templateId", "tpl-1", "runId", "run-1"), data);
+      return codec.encode(status, "event.metric." + type + ".sw1.swarm-controller.inst1");
+    } catch (Exception exception) {
+      throw new IllegalStateException(exception);
+    }
   }
 }

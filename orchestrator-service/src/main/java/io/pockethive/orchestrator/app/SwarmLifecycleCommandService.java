@@ -10,7 +10,6 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -116,7 +115,7 @@ public final class SwarmLifecycleCommandService {
         signal, swarm.getId(), operationTarget.role(), operationTarget.instance());
     publisher.publishSignal(new SignalMessage(
         routingKey,
-        ControlPlaneJson.write(payload, "control signal " + signal)));
+        payload));
     appendJournal(swarm.getId(), signal, scope, correlationId, idempotencyKey, routingKey, timeout);
   }
 

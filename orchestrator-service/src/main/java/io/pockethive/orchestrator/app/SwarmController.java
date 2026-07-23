@@ -16,7 +16,6 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.orchestrator.domain.ScenarioPlan;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -1148,35 +1147,6 @@ public class SwarmController {
             workers.add(new WorkerSummary(role, instance, image));
         }
         return List.copyOf(workers);
-    }
-
-    /**
-     * Serialize control signals for RabbitMQ publishing.
-     * <p>
-     * Wraps {@link ObjectMapper#writeValueAsString(Object)} and rethrows as {@link IllegalStateException}
-     * so REST handlers surface a 500 if serialization fails.
-     */
-    private String toJson(ControlSignal signal) {
-        return ControlPlaneJson.write(
-            signal,
-            "control signal %s for swarm %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"));
-    }
-
-    /**
-     * Emit a control-plane message and log the human-readable context.
-     * <p>
-     * Example log line: {@code [CTRL] SEND swarm-start rk=signal.swarm-start.demo payload={...}}. Having the
-     * snippet in logs helps engineers correlate REST calls to RabbitMQ traffic when debugging.
-     */
-    private void sendControl(String routingKey, String payload, String context) {
-        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-        log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
-        if (routingKey != null && routingKey.startsWith("signal.")) {
-            controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
-        } else {
-            controlPublisher.publishEvent(new EventMessage(routingKey, payload));
-        }
     }
 
     private static String requireOrigin(ControlPlaneProperties properties) {

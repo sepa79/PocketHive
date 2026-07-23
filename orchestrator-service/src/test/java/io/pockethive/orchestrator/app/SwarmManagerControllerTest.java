@@ -73,8 +73,7 @@ class SwarmManagerControllerTest {
         assertThat(sentPayloads).hasSize(2);
         List<String> swarmIds = new java.util.ArrayList<>();
         for (SignalMessage message : sentPayloads) {
-            assertThat(message.payload()).isInstanceOf(String.class);
-            ControlSignal signal = mapper.readValue(message.payload().toString(), ControlSignal.class);
+            ControlSignal signal = (ControlSignal) message.payload();
             swarmIds.add(signal.scope().swarmId());
             assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
             assertThat(signal.data()).containsEntry("enabled", true);
@@ -110,8 +109,7 @@ class SwarmManagerControllerTest {
         SignalMessage message = payload.getValue();
         assertThat(message.routingKey())
             .isEqualTo(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "sw9", "swarm-controller", "ctrl-z"));
-        assertThat(message.payload()).isInstanceOf(String.class);
-        ControlSignal signal = mapper.readValue(message.payload().toString(), ControlSignal.class);
+        ControlSignal signal = (ControlSignal) message.payload();
         assertThat(signal.data()).containsEntry("enabled", false);
         assertThat(signal.data()).doesNotContainKey("target");
         assertThat(response.getStatusCode().value()).isEqualTo(202);

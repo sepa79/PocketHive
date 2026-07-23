@@ -417,7 +417,9 @@ class SwarmLifecycleManagerTest {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
+          amqp, mapper, dockerClient, docker, rabbit,
+          io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
+          rabbitProperties, "inst", properties, registry,
           io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
           runtimeMount());
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
@@ -1045,6 +1047,7 @@ class SwarmLifecycleManagerTest {
         dockerClient,
         docker,
         rabbit,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         rabbitProperties,
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),

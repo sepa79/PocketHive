@@ -326,7 +326,6 @@ class SwarmCreationMock1E2ETest {
 	                "stackName": "ph-%s"
 	              },
 	              "data": {
-	                "enabled": false,
 	                "config": {},
 	                "startedAt": "2024-01-01T00:00:00Z",
 	                "io": {},
@@ -337,7 +336,10 @@ class SwarmCreationMock1E2ETest {
 	                  "health": "HEALTHY",
 	                  "networkMode": "DIRECT",
 	                  "startupReady": true,
-	                  "startupArtifactSha256": "%s"
+	                  "startupArtifactSha256": "%s",
+	                  "watermarkAt": "2024-01-01T00:00:00Z",
+	                  "expectedWorkers": [],
+	                  "workers": []
 	                }
 	              }
             }

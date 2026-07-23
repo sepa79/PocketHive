@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.DockerClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
@@ -54,6 +55,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                DockerClient dockerClient,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
+                               ControlPlaneCodec controlPlaneCodec,
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
@@ -61,7 +63,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                                ClickHouseSinkProperties clickHouseSink,
                                io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
-    this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
+    this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitProperties, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
         clickHouseSink,
@@ -73,6 +75,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         DockerClient dockerClient,
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
+                        ControlPlaneCodec controlPlaneCodec,
                         RabbitProperties rabbitProperties,
                         String instanceId,
                         SwarmControllerProperties properties,
@@ -84,8 +87,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
     this.journal = Objects.requireNonNull(journal, "journal");
-    ControlPlanePublisher controlPublisher =
-        new AmqpControlPlanePublisher(rabbit, properties.getControlExchange());
+    ControlPlanePublisher controlPublisher = new AmqpControlPlanePublisher(
+        rabbit, properties.getControlExchange(), Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec"));
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
     ComputeAdapter computeAdapter;
     ComputeAdapterType adapterType = properties.getDocker() == null

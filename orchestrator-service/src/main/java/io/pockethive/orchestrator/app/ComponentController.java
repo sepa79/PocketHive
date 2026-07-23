@@ -8,7 +8,6 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
@@ -92,8 +91,7 @@ public class ComponentController {
 	                  correlation,
 	                  request.idempotencyKey(),
 	                  configPatch);
-            String jsonPayload = toJson(payload);
-              sendControl(routingKey(swarmId, targetRole, targetInstance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
+              sendControl(routingKey(swarmId, targetRole, targetInstance), payload, ControlPlaneSignals.CONFIG_UPDATE);
             });
         SwarmOperation operation = reservation.operation();
         log.info("[CTRL] {} config-update role={} instance={} correlation={} idempotencyKey={} swarm={}",
@@ -143,16 +141,9 @@ public class ComponentController {
         return value.trim();
     }
 
-    private String toJson(ControlSignal signal) {
-        return ControlPlaneJson.write(
-            signal,
-            "control signal %s for role %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().role() : "n/a"));
-    }
-
-    private void sendControl(String routingKey, String payload, String context) {
+    private void sendControl(String routingKey, ControlSignal payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-        log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
+        log.info("[CTRL] {} rk={} type={} correlationId={}", label, routingKey, payload.type(), payload.correlationId());
         controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 

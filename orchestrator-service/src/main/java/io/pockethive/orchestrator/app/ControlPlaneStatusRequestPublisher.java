@@ -7,7 +7,6 @@ import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.observability.ControlPlaneJson;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -52,8 +51,7 @@ public class ControlPlaneStatusRequestPublisher {
                          String correlationId,
                          String idempotencyKey) {
         var signal = ControlSignals.statusRequest(identity.instanceId(), target, correlationId, idempotencyKey);
-        String payload = ControlPlaneJson.write(signal, "status-request signal");
-        controlPlane.publishSignal(new SignalMessage(routingKey, payload));
+        controlPlane.publishSignal(new SignalMessage(routingKey, signal));
         log.info("[CTRL] SEND status-request rk={} correlationId={}", routingKey, correlationId);
     }
 

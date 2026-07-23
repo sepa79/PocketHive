@@ -1,7 +1,5 @@
 package io.pockethive.controlplane.worker;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.consumer.ControlSignalEnvelope;
 
@@ -16,44 +14,32 @@ import java.util.Objects;
  */
 public final class WorkerConfigCommand {
 
-    private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() { };
-
     private final ControlSignalEnvelope envelope;
-    private final String payload;
     private final Map<String, Object> arguments;
     private final Object dataValue;
     private final Object enabledValue;
-    private final ObjectMapper mapper;
     private Map<String, Object> cachedData;
 
     private WorkerConfigCommand(ControlSignalEnvelope envelope,
-                                 String payload,
                                  Map<String, Object> arguments,
                                  Object dataValue,
-                                 Object enabledValue,
-                                 ObjectMapper mapper) {
+                                 Object enabledValue) {
         this.envelope = envelope;
-        this.payload = payload;
         this.arguments = arguments;
         this.dataValue = dataValue;
         this.enabledValue = enabledValue;
-        this.mapper = mapper;
     }
 
-    public static WorkerConfigCommand from(ControlSignalEnvelope envelope, String payload, ObjectMapper mapper) {
-        Objects.requireNonNull(mapper, "mapper");
-        Map<String, Object> args = normalise(mapper, envelope.signal().data());
+    public static WorkerConfigCommand from(ControlSignalEnvelope envelope) {
+        Objects.requireNonNull(envelope, "envelope");
+        Map<String, Object> args = immutableCopy(envelope.signal().data());
         Object dataValue = args.get("data");
         Object enabled = extractEnabled(args, dataValue);
-        return new WorkerConfigCommand(envelope, payload, args, dataValue, enabled, mapper);
+        return new WorkerConfigCommand(envelope, args, dataValue, enabled);
     }
 
     public ControlSignalEnvelope envelope() {
         return envelope;
-    }
-
-    public String payload() {
-        return payload;
     }
 
     public ControlSignal signal() {
@@ -78,7 +64,7 @@ public final class WorkerConfigCommand {
         if (dataValue == null) {
             computed = arguments;
         } else {
-            computed = convert(dataValue);
+            computed = nestedData(dataValue);
         }
         cachedData = computed;
         return cachedData;
@@ -106,17 +92,20 @@ public final class WorkerConfigCommand {
         throw new IllegalArgumentException("Invalid enabled value type: " + enabledValue.getClass().getSimpleName());
     }
 
-    private Map<String, Object> convert(Object value) {
-        Map<String, Object> converted = mapper.convertValue(value, MAP_TYPE);
-        return Collections.unmodifiableMap(new LinkedHashMap<>(converted));
+    private static Map<String, Object> nestedData(Object value) {
+        if (!(value instanceof Map<?, ?> map)) {
+            throw new IllegalArgumentException("config-update data must be an object");
+        }
+        Map<String, Object> converted = new LinkedHashMap<>();
+        map.forEach((key, entry) -> converted.put(Objects.toString(key), entry));
+        return Collections.unmodifiableMap(converted);
     }
 
-    private static Map<String, Object> normalise(ObjectMapper mapper, Object source) {
+    private static Map<String, Object> immutableCopy(Map<String, Object> source) {
         if (source == null) {
             return Collections.emptyMap();
         }
-        Map<String, Object> converted = mapper.convertValue(source, MAP_TYPE);
-        return Collections.unmodifiableMap(new LinkedHashMap<>(converted));
+        return Collections.unmodifiableMap(new LinkedHashMap<>(source));
     }
 
     private static Object extractEnabled(Map<String, Object> args, Object dataValue) {

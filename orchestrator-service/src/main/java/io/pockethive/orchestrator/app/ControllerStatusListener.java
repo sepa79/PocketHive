@@ -7,6 +7,11 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.control.ControlScope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -38,6 +43,7 @@ public class ControllerStatusListener {
 
     private final SwarmStore store;
     private final ObjectMapper mapper;
+    private final ControlPlaneCodec codec;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
     private final HiveJournal hiveJournal;
@@ -45,11 +51,13 @@ public class ControllerStatusListener {
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
+                                    ControlPlaneCodec codec,
                                     ControlPlaneStatusRequestPublisher statusRequests,
                                     SwarmSignalListener swarmSignals,
                                     HiveJournal hiveJournal) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
+        this.codec = Objects.requireNonNull(codec, "codec");
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -71,19 +79,21 @@ public class ControllerStatusListener {
                 return;
             }
             String payloadSnippet = snippet(body);
-            if (routingKey.startsWith("event.metric.status-")) {
+            RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+            boolean statusFull = eventKey != null
+                && ControlPlaneEventTypes.METRIC_STATUS_FULL.equals(eventKey.type());
+            boolean statusDelta = eventKey != null
+                && ControlPlaneEventTypes.METRIC_STATUS_DELTA.equals(eventKey.type());
+            if (statusFull || statusDelta) {
                 log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
             } else {
                 log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
             }
-            boolean statusFull = routingKey.startsWith("event.metric.status-full.");
-            boolean statusDelta = routingKey.startsWith("event.metric.status-delta.");
-            JsonNode node = mapper.readTree(body);
-            JsonNode scope = node.path("scope");
-            String swarmId = scope.path("swarmId").asText(null);
-            String role = scope.path("role").asText(null);
-            String controllerInstance = scope.path("instance").asText(null);
-            warnMissingScopeFields(routingKey, body, swarmId, role, controllerInstance);
+            StatusMetric status = codec.decode(body, routingKey, StatusMetric.class);
+            JsonNode node = mapper.valueToTree(status);
+            String swarmId = status.scope().swarmId();
+            String role = status.scope().role();
+            String controllerInstance = status.scope().instance();
             JsonNode data = node.path("data");
             JsonNode context = data.path("context");
             Swarm swarm = swarmId == null ? null : store.find(swarmId).orElse(null);
@@ -116,7 +126,7 @@ public class ControllerStatusListener {
             }
         } catch (Exception e) {
             log.error("Ignoring controller status message due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
-            journalParseError(bestEffortSwarmIdFromBody(body), routingKey, "handler exception", body, e);
+            journalParseError(bestEffortSwarmIdFromRouting(routingKey), routingKey, "handler exception", body, e);
         }
     }
 
@@ -189,33 +199,6 @@ public class ControllerStatusListener {
         return trimmed;
     }
 
-    private void warnMissingScopeFields(String routingKey,
-                                        String body,
-                                        String swarmId,
-                                        String role,
-                                        String instance) {
-        java.util.List<String> missing = new java.util.ArrayList<>();
-        if (swarmId == null || swarmId.isBlank()) {
-            missing.add("swarmId");
-        }
-        if (role == null || role.isBlank()) {
-            missing.add("role");
-        }
-        if (instance == null || instance.isBlank()) {
-            missing.add("instance");
-        }
-        if (!missing.isEmpty()) {
-            log.error("Received controller status payload with missing scope fields {}; rk={} payload snippet={}",
-                missing, routingKey, snippet(body));
-            journalParseError(
-                swarmId != null && !swarmId.isBlank() ? swarmId : "hive",
-                routingKey,
-                "missing scope fields: " + String.join(",", missing),
-                body,
-                null);
-        }
-    }
-
     private void journalParseError(String swarmId,
                                   String routingKey,
                                   String reason,
@@ -233,17 +216,11 @@ public class ControllerStatusListener {
             exception);
     }
 
-    private String bestEffortSwarmIdFromBody(String body) {
-        if (body == null || body.isBlank()) {
-            return "hive";
-        }
-        try {
-            JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("scope").path("swarmId").asText(null);
-            return swarmId != null && !swarmId.isBlank() ? swarmId : "hive";
-        } catch (Exception ignored) {
-            return "hive";
-        }
+    private static String bestEffortSwarmIdFromRouting(String routingKey) {
+        var parsed = io.pockethive.controlplane.routing.ControlPlaneRouting.parseEvent(routingKey);
+        return parsed != null && parsed.swarmId() != null && !parsed.swarmId().isBlank()
+            ? parsed.swarmId()
+            : "hive";
     }
 
     private static String textOrNull(JsonNode node) {

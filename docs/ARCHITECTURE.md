@@ -299,7 +299,7 @@ Results and outcomes share the canonical terminal-operation payload so the Orche
 |  | `context` | No | Same semantics as in `status-full`, but only for fields that change frequently (for example Controller/workload observation, health and rolling diagnostics). `data.config`, `data.io`, and `data.startedAt` must be omitted from deltas. |
 
 Additional rules:
-- `runtime` is an envelope field, not a `data` field. It is required for all swarm-scoped messages (that is, `scope.swarmId != ALL`) and must be omitted for global broadcasts (`scope.swarmId = ALL`).
+- `runtime` is an event-envelope field, not a `data` field. It is required for swarm-scoped results, outcomes, journal events, status metrics and alerts (that is, `scope.swarmId != ALL`) and must be omitted for their global broadcasts (`scope.swarmId = ALL`). Command signals intentionally omit `runtime`; their target and operation identity are carried by `scope`, `correlationId` and `idempotencyKey`.
 - `data.ioState` represents workload/local IO only (for example `ioState.work`, `ioState.filesystem`). It does not represent control-plane health.
 - `data.context` carries role-specific context. For swarm-controller:
   - `status-delta` carries a small aggregate only (no worker list).
@@ -318,6 +318,11 @@ Additional rules:
     reported an empty effective config. Later worker `status-delta` events
     omit `data.config` and must not erase the last reported config from the
     swarm-controller aggregate.
+  - Every accepted worker `status-full` refreshes the swarm-controller
+    `status-full` projection. This supplies a fresh aggregate observation for
+    config-update postconditions even when the requested value was already in
+    effect. Worker `status-delta` updates the internal aggregate but does not
+    force publication of the heavy projection.
   - Runtime worker status must not emit or require a second runtime worker id.
     `data.context.beeId` is not part of the runtime contract.
   - Live mutation requests must address the worker by `role` plus
@@ -376,6 +381,24 @@ Recommended `data.code` values include: `worker.runtime-error`, `controller.runt
   (avoid `NON_NULL` serialization for control-plane envelopes).
 - Commands without args still include `data: {}`.
 - `correlationId` and `idempotencyKey` semantics follow the envelope rules in §3.1.
+- `ControlPlaneCodec` in `common/control-plane-core` is the sole production boundary for
+  control-plane JSON. Publishers pass a canonical envelope DTO to the codec; the codec serializes
+  the DTO, validates the resulting JSON against `docs/spec/control-events.schema.json`, validates
+  routing-key identity, and only then allows the transport adapter to publish it.
+- Consumer transport adapters pass the raw message and received routing key to the same codec. The
+  codec validates schema and routing identity before deserializing to the canonical DTO. Handlers
+  receive that DTO and never parse the envelope from `JsonNode`, `Map`, raw JSON, or a service-local
+  wire type.
+- `ControlPlaneEnvelope` is a sealed Java hierarchy. Only the canonical `ControlSignal`,
+  `CommandResult`, `CommandOutcome`, `JournalEvent`, `StatusMetric`, and `AlertMessage` DTOs may cross
+  the production boundary; services must not define local envelope implementations.
+- `docs/spec/control-events.schema.json` remains the single schema source. The build packages that
+  exact file and its referenced lifecycle schema into the runtime artifact; runtime code must not
+  search a checkout or documentation filesystem for schemas.
+- Direct control-plane serialization through `ObjectMapper`/`ControlPlaneJson` and direct AMQP
+  publishing outside the shared publisher/codec adapter are forbidden. `JsonNode` may be used
+  internally by the codec to run JSON Schema validation, but it is not a control-plane contract
+  exposed to producers, consumers, or domain handlers.
 
 ### 3.9 UI consumption constraints
 

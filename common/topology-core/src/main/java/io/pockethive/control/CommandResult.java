@@ -19,7 +19,7 @@ public record CommandResult(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     Map<String, Object> runtime,
     TerminalResult data
-) {
+) implements ControlPlaneEnvelope {
 
   public static final String KIND = "result";
 
@@ -32,7 +32,7 @@ public record CommandResult(
     scope = Objects.requireNonNull(scope, "scope");
     correlationId = CommandEnvelopeSupport.requireText("correlationId", correlationId);
     idempotencyKey = CommandEnvelopeSupport.requireText("idempotencyKey", idempotencyKey);
-    runtime = ControlRuntime.normalise(runtime);
+    runtime = ControlRuntime.normalise(scope, runtime);
     data = Objects.requireNonNull(data, "data");
   }
 

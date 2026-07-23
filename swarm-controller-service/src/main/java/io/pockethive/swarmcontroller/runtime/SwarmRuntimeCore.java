@@ -624,9 +624,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
 		        target,
 		        correlationId,
 		        idempotencyKey);
-		    String payload = io.pockethive.observability.ControlPlaneJson.write(signal, "status-request signal");
-		    log.info("[CTRL] SEND rk={} inst={} payload={} (reason={})", rk, instanceId, snippet(payload), reason);
-		    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, payload));
+		    log.info("[CTRL] SEND rk={} inst={} correlationId={} (reason={})", rk, instanceId, correlationId, reason);
+		    controlPublisher.publishSignal(new io.pockethive.controlplane.messaging.SignalMessage(rk, signal));
 		  }
 
 	  private Map<String, Object> runtimeMeta() {

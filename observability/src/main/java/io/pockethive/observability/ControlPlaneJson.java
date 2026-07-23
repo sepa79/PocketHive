@@ -1,14 +1,13 @@
 package io.pockethive.observability;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
-import java.util.Objects;
 
 /**
- * Canonical JSON serializer for control-plane envelopes.
+ * Shared Jackson configuration for non-wire runtime JSON projections.
+ * Control-plane wire serialization belongs exclusively to {@code ControlPlaneCodec}.
  */
 public final class ControlPlaneJson {
 
@@ -25,17 +24,4 @@ public final class ControlPlaneJson {
         return MAPPER;
     }
 
-    public static String write(Object value) {
-        return write(value, "control-plane envelope");
-    }
-
-    public static String write(Object value, String label) {
-        Objects.requireNonNull(value, "value");
-        Objects.requireNonNull(label, "label");
-        try {
-            return MAPPER.writeValueAsString(value);
-        } catch (JsonProcessingException e) {
-            throw new IllegalStateException("Failed to serialize " + label, e);
-        }
-    }
 }

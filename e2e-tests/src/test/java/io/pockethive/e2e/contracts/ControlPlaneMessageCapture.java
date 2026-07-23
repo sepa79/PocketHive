@@ -30,7 +30,9 @@ public final class ControlPlaneMessageCapture implements AutoCloseable {
       this.channel = connection.createChannel(false);
       this.queueName = channel.queueDeclare("", false, true, true, Collections.emptyMap()).getQueue();
       channel.queueBind(queueName, exchange, "signal.#");
+      channel.queueBind(queueName, exchange, "event.result.#");
       channel.queueBind(queueName, exchange, "event.outcome.#");
+      channel.queueBind(queueName, exchange, "event.journal.#");
       channel.queueBind(queueName, exchange, "event.alert.#");
       channel.queueBind(queueName, exchange, "event.metric.status-full.#");
       channel.queueBind(queueName, exchange, "event.metric.status-delta.#");

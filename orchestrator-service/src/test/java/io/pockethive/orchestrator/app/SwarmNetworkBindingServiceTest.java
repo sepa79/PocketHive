@@ -87,7 +87,7 @@ class SwarmNetworkBindingServiceTest {
                 "sw1",
                 "swarm-controller",
                 "controller-1"));
-        ControlSignal signal = mapper.readValue(message.payload().toString(), ControlSignal.class);
+        ControlSignal signal = (ControlSignal) message.payload();
         assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
         assertThat(signal.scope().swarmId()).isEqualTo("sw1");
         assertThat(signal.scope().role()).isEqualTo("swarm-controller");

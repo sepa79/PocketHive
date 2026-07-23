@@ -78,7 +78,7 @@ class WorkerControlPlaneRuntimeTest {
             Set.of(WorkerCapability.SCHEDULER)
         );
         stateStore.getOrCreate(definition);
-        controlPlane = WorkerControlPlane.builder(MAPPER)
+        controlPlane = WorkerControlPlane.builder(io.pockethive.controlplane.codec.ControlPlaneCodec.create())
             .identity(IDENTITY)
             .build();
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
@@ -1207,15 +1207,21 @@ class WorkerControlPlaneRuntimeTest {
         return (Map<String, Object>) inputs.get("redis");
     }
 
-	        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {
-	            StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-	                .type(type)
-	                .origin(IDENTITY.instanceId())
-	                .swarmId(IDENTITY.swarmId())
-	                .runtime(RUNTIME_META);
-	            context.customiser().accept(builder);
-	            return builder.toJson();
-	        }
+		        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {
+		            StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
+		                .type(type)
+		                .origin(IDENTITY.instanceId())
+		                .swarmId(IDENTITY.swarmId())
+		                .role(IDENTITY.role())
+		                .instance(IDENTITY.instanceId())
+		                .runtime(RUNTIME_META);
+		            context.customiser().accept(builder);
+		            try {
+		                return MAPPER.writeValueAsString(builder.toEnvelope());
+		            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+		                throw new IllegalStateException("Cannot serialize status test fixture", exception);
+		            }
+		        }
 
         private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
             @SuppressWarnings("unchecked")

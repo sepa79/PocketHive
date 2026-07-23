@@ -1,7 +1,7 @@
 package io.pockethive.controlplane.manager;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.consumer.ControlPlaneConsumer;
 import io.pockethive.controlplane.consumer.ControlSignalHandler;
 import io.pockethive.controlplane.consumer.DuplicateSignalGuard;
@@ -54,8 +54,8 @@ public final class ManagerControlPlane {
         return publisher;
     }
 
-    public static Builder builder(ControlPlanePublisher publisher, ObjectMapper objectMapper) {
-        return new Builder(publisher, objectMapper);
+    public static Builder builder(ControlPlanePublisher publisher, ControlPlaneCodec codec) {
+        return new Builder(publisher, codec);
     }
 
     public static final class Builder {
@@ -66,9 +66,9 @@ public final class ManagerControlPlane {
         private Duration duplicateTtl;
         private Integer duplicateCapacity;
 
-        private Builder(ControlPlanePublisher publisher, ObjectMapper objectMapper) {
+        private Builder(ControlPlanePublisher publisher, ControlPlaneCodec codec) {
             this.publisher = Objects.requireNonNull(publisher, "publisher");
-            this.consumerBuilder = ControlPlaneConsumer.builder(Objects.requireNonNull(objectMapper, "objectMapper"));
+            this.consumerBuilder = ControlPlaneConsumer.builder(Objects.requireNonNull(codec, "codec"));
         }
 
         public Builder identity(ControlPlaneIdentity identity) {
@@ -96,11 +96,6 @@ public final class ManagerControlPlane {
 
         public Builder clock(java.time.Clock clock) {
             consumerBuilder.clock(clock);
-            return this;
-        }
-
-        public Builder errorMapper(java.util.function.Function<java.io.IOException, RuntimeException> mapper) {
-            consumerBuilder.errorMapper(mapper);
             return this;
         }
 

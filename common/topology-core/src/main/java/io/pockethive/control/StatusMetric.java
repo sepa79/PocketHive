@@ -1,12 +1,14 @@
 package io.pockethive.control;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import java.time.Instant;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 
-/** Correlated non-terminal operational evidence that must never complete an operation. */
-public record JournalEvent(
+/** Canonical Java envelope for status-full and status-delta metrics. */
+public record StatusMetric(
     Instant timestamp,
     String version,
     String kind,
@@ -15,26 +17,31 @@ public record JournalEvent(
     ControlScope scope,
     String correlationId,
     String idempotencyKey,
-    Map<String, Object> runtime,
+    @JsonInclude(JsonInclude.Include.NON_NULL) Map<String, Object> runtime,
     Map<String, Object> data
 ) implements ControlPlaneEnvelope {
 
-  public static final String KIND = "journal";
-  public static final String TYPE = "work-journal";
+  public static final String KIND = "metric";
+  public static final String STATUS_FULL = "status-full";
+  public static final String STATUS_DELTA = "status-delta";
 
-  public JournalEvent {
+  public StatusMetric {
     timestamp = Objects.requireNonNull(timestamp, "timestamp");
     version = CommandEnvelopeSupport.requireCurrentVersion(version);
     kind = CommandEnvelopeSupport.requireKind(KIND, kind);
     type = CommandEnvelopeSupport.requireText("type", type);
+    if (!STATUS_FULL.equals(type) && !STATUS_DELTA.equals(type)) {
+      throw new IllegalArgumentException("Unsupported status metric type: " + type);
+    }
     origin = CommandEnvelopeSupport.requireText("origin", origin);
     scope = Objects.requireNonNull(scope, "scope");
-    correlationId = CommandEnvelopeSupport.requireText("correlationId", correlationId);
-    idempotencyKey = CommandEnvelopeSupport.requireText("idempotencyKey", idempotencyKey);
+    if (correlationId != null || idempotencyKey != null) {
+      throw new IllegalArgumentException("Status metrics must not carry operation identity");
+    }
     runtime = ControlRuntime.normalise(scope, runtime);
     if (data == null || data.isEmpty()) {
       throw new IllegalArgumentException("data must not be empty");
     }
-    data = java.util.Collections.unmodifiableMap(new LinkedHashMap<>(data));
+    data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
   }
 }

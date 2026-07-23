@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.pockethive.control.AlertMessage;
+import io.pockethive.control.ControlPlaneEnvelopeVersion;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.orchestrator.config.RuntimeLogSnapshotMode;
@@ -150,14 +151,14 @@ class RuntimeLogSnapshotJournalServiceTest {
     private static AlertMessage warningAlert() {
         return new AlertMessage(
             ALERT_TIME,
-            "1",
+            ControlPlaneEnvelopeVersion.CURRENT,
             "event",
             Alerts.TYPE,
             "processor-1",
             ControlScope.forInstance(SWARM_ID, "processor", "processor-1"),
             "corr-1",
             "idem-1",
-            Map.of("runId", "run-1"),
+            Map.of("templateId", "template-1", "runId", "run-1"),
             new AlertMessage.AlertData(
                 "warn",
                 "runtime.warning",

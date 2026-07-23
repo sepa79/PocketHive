@@ -1,6 +1,5 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ConfirmationScope;
@@ -18,16 +17,13 @@ import java.util.Set;
 public final class OperationOutcomePublisher {
 
   private final ControlPlanePublisher publisher;
-  private final ObjectMapper json;
   private final String instanceId;
   private final Set<String> publishedCorrelations = new HashSet<>();
 
   public OperationOutcomePublisher(
       ControlPlanePublisher publisher,
-      ObjectMapper json,
       String instanceId) {
     this.publisher = Objects.requireNonNull(publisher, "publisher");
-    this.json = Objects.requireNonNull(json, "json").findAndRegisterModules();
     this.instanceId = requireText("instanceId", instanceId);
   }
 
@@ -56,14 +52,11 @@ public final class OperationOutcomePublisher {
           CommandOutcome.KIND,
           outcome.type(),
           new ConfirmationScope(scope.swarmId(), scope.role(), scope.instance()));
-      publisher.publishEvent(new EventMessage(routingKey, json.writeValueAsString(outcome)));
+      publisher.publishEvent(new EventMessage(routingKey, outcome));
       return true;
     } catch (RuntimeException exception) {
       publishedCorrelations.remove(operation.correlationId());
       throw exception;
-    } catch (Exception exception) {
-      publishedCorrelations.remove(operation.correlationId());
-      throw new IllegalStateException("Failed to serialize command outcome", exception);
     }
   }
 

@@ -110,7 +110,7 @@ class ControlPlaneEmitterTest {
             "/io/pockethive/controlplane/messaging/error-event.json",
             json);
 
-        AlertMessage alert = MAPPER.readValue((String) alertMessage.payload(), AlertMessage.class);
+        AlertMessage alert = (AlertMessage) alertMessage.payload();
         assertThat(alert.kind()).isEqualTo("event");
         assertThat(alert.type()).isEqualTo("alert");
         assertThat(alert.correlationId()).isEqualTo("corr-2");
@@ -133,7 +133,7 @@ class ControlPlaneEmitterTest {
         EventMessage message = publisher.lastEvent;
         assertThat(message.routingKey()).isEqualTo(
             "event.journal.work-journal.swarm-A.generator.gen-1");
-        JsonNode payload = MAPPER.readTree((String) message.payload());
+        JsonNode payload = MAPPER.valueToTree(message.payload());
         assertThat(payload.path("kind").asText()).isEqualTo("journal");
         assertThat(payload.path("data").path("status").asText()).isEqualTo("recorded");
         ControlEventsSchemaValidator.assertValid(payload);
@@ -156,7 +156,7 @@ class ControlPlaneEmitterTest {
 
         emitter.emitFailure(context);
 
-        JsonNode resultNode = MAPPER.readTree((String) publisher.events.getFirst().payload());
+        JsonNode resultNode = MAPPER.valueToTree(publisher.events.getFirst().payload());
         assertThat(resultNode.path("data").path("status").asText()).isEqualTo("Failed");
         assertThat(resultNode.path("data").path("retryable").asBoolean()).isFalse();
     }
@@ -178,7 +178,7 @@ class ControlPlaneEmitterTest {
             new ConfirmationScope("swarm-A", "generator", "gen-1"));
         assertThat(message.routingKey()).isEqualTo(expectedRoute);
 
-        ObjectNode payloadNode = (ObjectNode) MAPPER.readTree((String) message.payload());
+        ObjectNode payloadNode = MAPPER.valueToTree(message.payload());
         assertThat(payloadNode.get("origin").asText()).isEqualTo("gen-1");
 
         String json = describeEvent(message, payload -> { });

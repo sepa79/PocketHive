@@ -2,6 +2,7 @@ package io.pockethive.controlplane.spring;
 
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
@@ -38,6 +39,12 @@ public class ControlPlaneCommonAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean
+    ControlPlaneCodec controlPlaneCodec() {
+        return ControlPlaneCodec.create();
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
     ControlPlaneTopologyDeclarableFactory controlPlaneTopologyDeclarableFactory() {
         return new ControlPlaneTopologyDeclarableFactory();
     }
@@ -47,10 +54,11 @@ public class ControlPlaneCommonAutoConfiguration {
     @ConditionalOnMissingBean(ControlPlanePublisher.class)
     @ConditionalOnProperty(prefix = "pockethive.control-plane.publisher", name = "enabled", havingValue = "true", matchIfMissing = true)
     ControlPlanePublisher controlPlanePublisher(RabbitTemplate template,
+                                                ControlPlaneCodec codec,
                                                 ObjectProvider<ControlPlaneProperties> managerProperties,
                                                 ObjectProvider<WorkerControlPlaneProperties> workerProperties) {
         String exchange = resolveExchange(managerProperties, workerProperties);
-        return new AmqpControlPlanePublisher(template, exchange);
+        return new AmqpControlPlanePublisher(template, exchange, codec);
     }
 
     private static String resolveExchange(ObjectProvider<ControlPlaneProperties> managerProperties,

@@ -1,6 +1,6 @@
 {
   "timestamp": "2024-07-01T12:34:56Z",
-  "version": "1",
+  "version": "2",
   "kind": "metric",
   "type": "status-full",
   "origin": "worker-control",
@@ -12,6 +12,7 @@
   "correlationId": null,
   "idempotencyKey": null,
   "runtime": {
+    "templateId": "template-1",
     "runId": "run-1",
     "containerId": "container-1",
     "image": "worker:latest",
@@ -31,7 +32,8 @@
         },
         "queueStats": {
           "processor.input": {
-            "depth": 0
+            "depth": 0,
+            "consumers": 1
           }
         }
       },

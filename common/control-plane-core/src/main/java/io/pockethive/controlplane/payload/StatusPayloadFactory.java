@@ -1,6 +1,7 @@
 package io.pockethive.controlplane.payload;
 
 import io.pockethive.controlplane.ControlPlaneEventTypes;
+import io.pockethive.control.StatusMetric;
 
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import java.util.Objects;
@@ -24,15 +25,15 @@ public final class StatusPayloadFactory {
         this.builderSupplier = Objects.requireNonNull(builderSupplier, "builderSupplier");
     }
 
-    public String snapshot(Consumer<StatusEnvelopeBuilder> customiser) {
+    public StatusMetric snapshot(Consumer<StatusEnvelopeBuilder> customiser) {
         return build(ControlPlaneEventTypes.STATUS_FULL, customiser);
     }
 
-    public String delta(Consumer<StatusEnvelopeBuilder> customiser) {
+    public StatusMetric delta(Consumer<StatusEnvelopeBuilder> customiser) {
         return build(ControlPlaneEventTypes.STATUS_DELTA, customiser);
     }
 
-    private String build(String kind, Consumer<StatusEnvelopeBuilder> customiser) {
+    private StatusMetric build(String kind, Consumer<StatusEnvelopeBuilder> customiser) {
         Objects.requireNonNull(customiser, "customiser");
         StatusEnvelopeBuilder builder = Objects.requireNonNull(builderSupplier.get(), "builder");
         builder.type(kind)
@@ -41,6 +42,6 @@ public final class StatusPayloadFactory {
             .origin(context.instanceId())
             .swarmId(context.swarmId());
         customiser.accept(builder);
-        return builder.toJson();
+        return builder.toEnvelope();
     }
 }

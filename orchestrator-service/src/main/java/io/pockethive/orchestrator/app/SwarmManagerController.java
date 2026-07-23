@@ -8,7 +8,6 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
@@ -150,7 +149,7 @@ public class SwarmManagerController {
 	                    correlation,
 	                    request.idempotencyKey(),
 	                    Map.of("enabled", request.enabled()));
-                  sendControl(routingKey(swarmId, controllerInstance), toJson(payload));
+                  sendControl(routingKey(swarmId, controllerInstance), payload);
                 });
             dispatches.add(new Dispatch(
                 swarmId,
@@ -185,8 +184,8 @@ public class SwarmManagerController {
     /**
      * Publish a control message.
      */
-    private void sendControl(String routingKey, String payload) {
-        log.info("[CTRL] SEND rk={} payload={}", routingKey, snippet(payload));
+    private void sendControl(String routingKey, ControlSignal payload) {
+        log.info("[CTRL] SEND rk={} type={} correlationId={}", routingKey, payload.type(), payload.correlationId());
         controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 
@@ -194,13 +193,6 @@ public class SwarmManagerController {
      * Serialize {@link ControlSignal} payloads, failing fast with {@link IllegalStateException} if
      * serialization fails so REST callers receive an actionable 500 response.
      */
-    private String toJson(ControlSignal signal) {
-        return ControlPlaneJson.write(
-            signal,
-            "control signal %s for swarm %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"));
-    }
-
     private static String requireOrigin(ControlPlaneProperties properties) {
         String instanceId = properties.getInstanceId();
         if (instanceId == null || instanceId.isBlank()) {

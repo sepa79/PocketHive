@@ -2,7 +2,7 @@ package io.pockethive.clearingexport;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.control.JournalEvent;
 import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
 import io.pockethive.worker.sdk.api.StatusPublisher;
 import io.pockethive.worker.sdk.api.WorkItem;
@@ -292,7 +292,7 @@ class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
           WORKER_BEAN_NAME,
           lifecycleCorrelationId,
           lifecycleCorrelationId + ":" + callId,
-          ControlPlaneSignals.WORK_JOURNAL,
+          JournalEvent.TYPE,
           "recorded",
           callId,
           null,

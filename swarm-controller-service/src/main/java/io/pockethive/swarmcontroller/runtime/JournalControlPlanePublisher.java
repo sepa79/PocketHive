@@ -4,6 +4,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandResult;
 import io.pockethive.control.ControlSignal;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -35,11 +37,10 @@ public final class JournalControlPlanePublisher implements ControlPlanePublisher
     if (routingKey == null || routingKey.isBlank()) {
       return;
     }
-    if (routingKey.startsWith("signal.status-request.")) {
-      return;
+    if (!(message.payload() instanceof ControlSignal signal)) {
+      throw new IllegalArgumentException("SignalMessage must carry ControlSignal");
     }
-    ControlSignal signal = tryParse(message.payload(), ControlSignal.class);
-    if (signal == null) {
+    if (ControlPlaneSignals.STATUS_REQUEST.equals(signal.type())) {
       return;
     }
     journal.append(SwarmJournalEntries.outSignal(mapper, routingKey, signal));
@@ -53,38 +54,15 @@ public final class JournalControlPlanePublisher implements ControlPlanePublisher
     if (routingKey == null || routingKey.isBlank()) {
       return;
     }
-    if (routingKey.startsWith("event.metric.status-")) {
+    if (message.payload() instanceof StatusMetric) {
       return;
     }
-    if (routingKey.startsWith("event.result.")) {
-      CommandResult result = tryParse(message.payload(), CommandResult.class);
-      if (result != null) {
-        journal.append(SwarmJournalEntries.outResult(mapper, routingKey, result));
-      }
+    if (message.payload() instanceof CommandResult result) {
+      journal.append(SwarmJournalEntries.outResult(mapper, routingKey, result));
       return;
     }
-    if (routingKey.startsWith("event.alert.")) {
-      AlertMessage alert = tryParse(message.payload(), AlertMessage.class);
-      if (alert != null) {
-        journal.append(SwarmJournalEntries.outAlert(mapper, routingKey, alert));
-      }
-    }
-  }
-
-  private <T> T tryParse(Object payload, Class<T> type) {
-    if (payload == null) {
-      return null;
-    }
-    if (type.isInstance(payload)) {
-      return type.cast(payload);
-    }
-    try {
-      if (payload instanceof String s) {
-        return mapper.readValue(s, type);
-      }
-      return mapper.convertValue(payload, type);
-    } catch (Exception ignored) {
-      return null;
+    if (message.payload() instanceof AlertMessage alert) {
+      journal.append(SwarmJournalEntries.outAlert(mapper, routingKey, alert));
     }
   }
 }

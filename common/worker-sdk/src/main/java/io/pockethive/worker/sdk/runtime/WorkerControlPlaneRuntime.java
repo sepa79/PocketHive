@@ -6,7 +6,6 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
@@ -555,15 +554,7 @@ public final class WorkerControlPlaneRuntime {
     private record FilteredConfigUpdate(Map<String, Object> values, boolean reseedRequested) { }
 
     private String resolveSignalName(WorkerStatusRequest request) {
-        ControlSignal signal = request.signal();
-        if (signal != null && signal.type() != null && !signal.type().isBlank()) {
-            return signal.type();
-        }
-        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
-        if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
-            return routingKey.type();
-        }
-        return "n/a";
+        return request.signal().type();
     }
     private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();

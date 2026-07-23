@@ -61,6 +61,8 @@ class SwarmSignalListenerTest {
   RabbitTemplate rabbit;
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+  private final io.pockethive.controlplane.codec.ControlPlaneCodec codec =
+      io.pockethive.controlplane.codec.ControlPlaneCodec.create();
   private static final String ORIGIN = "orchestrator-1";
 
   private static final class RecordingJournal implements io.pockethive.swarmcontroller.runtime.SwarmJournal {
@@ -103,7 +105,8 @@ class SwarmSignalListenerTest {
         journal,
         "run-1",
         startupArtifactLoader(),
-        removeStore);
+        removeStore,
+        codec);
     return listener;
   }
 
@@ -168,7 +171,7 @@ class SwarmSignalListenerTest {
 	          corr,
 	          id,
 	          null);
-      return mapper.writeValueAsString(cs);
+      return codec.encode(cs, controllerInstanceSignal(sig, instance));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -186,7 +189,7 @@ class SwarmSignalListenerTest {
 	          "c-all",
 	          "i-all",
 	          args);
-      return mapper.writeValueAsString(cs);
+      return codec.encode(cs, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, "ALL"));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
@@ -204,16 +207,30 @@ class SwarmSignalListenerTest {
 	          correlationId,
 	          idempotencyKey,
 	          args);
-      return mapper.writeValueAsString(cs);
+      return codec.encode(cs, controllerInstanceSignal(ControlPlaneSignals.CONFIG_UPDATE, instance));
     } catch (Exception e) {
       throw new IllegalStateException(e);
     }
   }
 
-  private String status(String swarmId, String role, String instance, boolean enabled) {
+  private String status(String swarmId, String role, String instance, boolean enabled, String type) {
+    String data;
+    if ("swarm-controller".equals(role)) {
+      data = """
+          {"ioState":{},"context":{"controllerState":"READY","workloadState":"RUNNING","health":"HEALTHY","startupReady":true,"watermarkAt":"2024-01-01T00:00:00Z","location":"local"}}
+          """.trim();
+    } else if ("status-full".equals(type)) {
+      data = """
+          {"enabled":%s,"tps":0,"config":{},"startedAt":"2024-01-01T00:00:00Z","io":{},"ioState":{"work":{"input":"ok","output":"ok"}}}
+          """.formatted(enabled).trim();
+    } else {
+      data = """
+          {"enabled":%s,"tps":0,"ioState":{"work":{"input":"ok","output":"ok"}}}
+          """.formatted(enabled).trim();
+    }
     return """
-        {"timestamp":"2024-01-01T00:00:00Z","version":"1","kind":"metric","type":"status-delta","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"runtime":{"templateId":"tpl-1","runId":"run-1"},"data":{"enabled":%s,"tps":0}}
-        """.formatted(swarmId, role, instance, enabled);
+        {"timestamp":"2024-01-01T00:00:00Z","version":"2","kind":"metric","type":"%s","origin":"worker-1","scope":{"swarmId":"%s","role":"%s","instance":"%s"},"correlationId":null,"idempotencyKey":null,"runtime":{"templateId":"tpl-1","runId":"run-1"},"data":%s}
+        """.formatted(type, swarmId, role, instance, data);
   }
 
   private String controllerSignal(String command) {
@@ -249,7 +266,7 @@ class SwarmSignalListenerTest {
   private String configErrorPayload(String role, String instance, String message) throws Exception {
     AlertMessage alert = new AlertMessage(
         Instant.now(),
-        "1",
+        "2",
         "event",
         "alert",
         "worker-1",
@@ -265,7 +282,7 @@ class SwarmSignalListenerTest {
             null,
             null,
             Map.of("phase", "config-update")));
-    return mapper.writeValueAsString(alert);
+    return codec.encode(alert, workerConfigErrorEvent(role, instance));
   }
 
   @Test
@@ -274,7 +291,7 @@ class SwarmSignalListenerTest {
 
     reset(rabbit);
 
-    listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst-log", true), statusEvent("status-delta", "swarm-controller", "inst-log"));
+    listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst-log", true, "status-delta"), statusEvent("status-delta", "swarm-controller", "inst-log"));
     listener.handle(
         signal(ControlPlaneSignals.STATUS_REQUEST, "inst-log", "idem-log", "corr-log"),
         statusRequestSignal("swarm-controller", "inst-log"));
@@ -291,7 +308,7 @@ class SwarmSignalListenerTest {
     reset(lifecycle);
     stubLifecycleDefaults();
 
-    listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), statusEvent("status-delta", "swarm-controller", "inst"));
+    listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true, "status-delta"), statusEvent("status-delta", "swarm-controller", "inst"));
 
     verify(lifecycle, never()).updateHeartbeat(eq("swarm-controller"), eq("inst"));
     verify(lifecycle, never()).updateEnabled(eq("swarm-controller"), eq("inst"), anyBoolean());
@@ -323,7 +340,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     clearInvocations(lifecycle, rabbit);
 
-    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), "event.metric.status-"))
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true, "status-delta"), "event.metric.status-"))
         .doesNotThrowAnyException();
     verifyNoInteractions(lifecycle, rabbit);
   }
@@ -335,7 +352,7 @@ class SwarmSignalListenerTest {
 
     String routingKey = "event.metric.status-delta.%s..inst".formatted(TEST_SWARM_ID);
 
-    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true, "status-delta"), routingKey))
         .doesNotThrowAnyException();
     verifyNoInteractions(lifecycle, rabbit);
   }
@@ -347,7 +364,7 @@ class SwarmSignalListenerTest {
 
     String routingKey = "event.metric.status-delta.%s.swarm-controller.".formatted(TEST_SWARM_ID);
 
-    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true), routingKey))
+    assertThatCode(() -> listener.handle(status(TEST_SWARM_ID, "swarm-controller", "inst", true, "status-delta"), routingKey))
         .doesNotThrowAnyException();
     verifyNoInteractions(lifecycle, rabbit);
   }
@@ -421,7 +438,7 @@ class SwarmSignalListenerTest {
     verify(rabbit, never()).convertAndSend(
         eq(CONTROL_EXCHANGE), eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")), anyString());
 
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", true), statusEvent("status-full", "gen", "g1"));
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", true, "status-full"), statusEvent("status-full", "gen", "g1"));
 
     ArgumentCaptor<String> result = ArgumentCaptor.forClass(String.class);
     verify(rabbit).convertAndSend(
@@ -590,7 +607,8 @@ class SwarmSignalListenerTest {
 	        journal,
           "run-1",
           startupArtifactLoader(),
-          removeStore());
+          removeStore(),
+          codec);
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
 	
@@ -614,7 +632,8 @@ class SwarmSignalListenerTest {
         journal,
         "run-1",
         startupArtifactLoader(),
-        removeStore());
+        removeStore(),
+        codec);
 
     assertThatCode(() -> listener.handle("{}", " "))
         .doesNotThrowAnyException();
@@ -758,9 +777,34 @@ class SwarmSignalListenerTest {
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-full", "gen", "g1"));
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false, "status-full"), statusEvent("status-full", "gen", "g1"));
     verify(lifecycle).updateHeartbeat("gen", "g1");
     verify(lifecycle).markReady("gen", "g1");
+  }
+
+  @Test
+  void workerStatusFullPublishesFreshControllerProjection() throws Exception {
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    reset(lifecycle, rabbit);
+    stubLifecycleDefaults();
+    lenient().when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    lenient().when(lifecycle.getMetrics())
+        .thenReturn(new SwarmMetrics(0, 0, 0, 0, java.time.Instant.now()));
+
+    listener.handle(
+        status(TEST_SWARM_ID, "gen", "g1", false, "status-full"),
+        statusEvent("status-full", "gen", "g1"));
+    reset(rabbit);
+
+    listener.handle(
+        status(TEST_SWARM_ID, "gen", "g1", true, "status-full"),
+        statusEvent("status-full", "gen", "g1"));
+
+    verify(rabbit).convertAndSend(
+        eq(CONTROL_EXCHANGE),
+        eq(statusEvent("status-full", "swarm-controller", "inst")),
+        anyString());
   }
 
   @Test
@@ -769,7 +813,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(rabbit);
 
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false), statusEvent("status-full", "gen", "g1"));
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", false, "status-full"), statusEvent("status-full", "gen", "g1"));
     reset(rabbit);
 
     listener.handle(
@@ -794,7 +838,7 @@ class SwarmSignalListenerTest {
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    listener.handle(status(TEST_SWARM_ID, "gen", "g1", true), statusEvent("status-delta", "gen", "g1"));
+    listener.handle(status(TEST_SWARM_ID, "gen", "g1", true, "status-delta"), statusEvent("status-delta", "gen", "g1"));
     verify(lifecycle).updateHeartbeat("gen", "g1");
     verify(lifecycle, never()).markReady(anyString(), anyString());
   }
@@ -806,7 +850,7 @@ class SwarmSignalListenerTest {
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
     lenient().when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    listener.handle(status("swarm-other", "gen", "g1", true), statusEvent("status-full", "gen", "g1"));
+    listener.handle(status("swarm-other", "gen", "g1", true, "status-full"), statusEvent("status-full", "gen", "g1"));
     verify(lifecycle, never()).updateHeartbeat(anyString(), anyString());
     verify(lifecycle, never()).updateEnabled(anyString(), anyString(), anyBoolean());
     verify(lifecycle, never()).markReady(anyString(), anyString());

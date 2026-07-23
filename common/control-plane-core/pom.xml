@@ -15,6 +15,19 @@
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>${maven.multiModuleProjectDirectory}/docs/spec</directory>
+        <includes>
+          <include>control-events.schema.json</include>
+          <include>swarm-lifecycle.schema.json</include>
+        </includes>
+        <targetPath>io/pockethive/controlplane/schema</targetPath>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
@@ -91,7 +104,6 @@
       <groupId>com.networknt</groupId>
       <artifactId>json-schema-validator</artifactId>
       <version>1.0.87</version>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

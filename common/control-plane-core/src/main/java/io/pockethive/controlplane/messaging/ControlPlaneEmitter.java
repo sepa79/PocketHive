@@ -3,6 +3,7 @@ package io.pockethive.controlplane.messaging;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandResult;
 import io.pockethive.control.JournalEvent;
+import io.pockethive.control.StatusMetric;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlRuntime;
 import io.pockethive.control.ControlScope;
@@ -16,7 +17,6 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import java.time.Instant;
@@ -98,7 +98,7 @@ public final class ControlPlaneEmitter {
         context.result());
     ConfirmationScope routingScope = toConfirmationScope(result.scope());
     String routingKey = ControlPlaneRouting.event(CommandResult.KIND, context.signal(), routingScope);
-    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(result, CommandResult.KIND)));
+    publisher.publishEvent(new EventMessage(routingKey, result));
   }
 
   public void emitJournal(JournalContext context) {
@@ -116,7 +116,7 @@ public final class ControlPlaneEmitter {
         context.data());
     String routingKey = ControlPlaneRouting.event(
         JournalEvent.KIND, event.type(), toConfirmationScope(event.scope()));
-    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(event, JournalEvent.KIND)));
+    publisher.publishEvent(new EventMessage(routingKey, event));
   }
 
   public void emitFailure(FailureContext context) {
@@ -145,13 +145,13 @@ public final class ControlPlaneEmitter {
 
   private void publishStatus(String type, StatusContext context) {
     Objects.requireNonNull(context, "context");
-    String routingKey = ControlPlaneRouting.event("metric", type, role.toScope());
+    String routingKey = ControlPlaneRouting.event(StatusMetric.KIND, type, role.toScope());
     Consumer<StatusEnvelopeBuilder> customiser = builder -> {
       builder.controlOut(routingKey);
       builder.runtime(runtime);
       context.customiser().accept(builder);
     };
-    String payload = switch (type) {
+    io.pockethive.control.StatusMetric payload = switch (type) {
       case ControlPlaneEventTypes.STATUS_FULL -> statusFactory.snapshot(customiser);
       case ControlPlaneEventTypes.STATUS_DELTA -> statusFactory.delta(customiser);
       default -> throw new IllegalArgumentException("Unsupported status type: " + type);
@@ -182,8 +182,8 @@ public final class ControlPlaneEmitter {
   public void publishAlert(AlertMessage alert) {
     Objects.requireNonNull(alert, "alert");
     ConfirmationScope routingScope = toConfirmationScope(alert.scope());
-    String routingKey = ControlPlaneRouting.event("alert", "alert", routingScope);
-    publisher.publishEvent(new EventMessage(routingKey, serializeEnvelope(alert, "alert")));
+    String routingKey = ControlPlaneRouting.event(AlertMessage.TYPE, AlertMessage.TYPE, routingScope);
+    publisher.publishEvent(new EventMessage(routingKey, alert));
   }
 
   private void requireRoleMatch() {
@@ -200,10 +200,6 @@ public final class ControlPlaneEmitter {
           "Identity role mismatch: expected " + expectedRole + " but was " + role.role());
     }
     return role;
-  }
-
-  private static String serializeEnvelope(Object value, String label) {
-    return ControlPlaneJson.write(value, label + " envelope");
   }
 
   private static ConfirmationScope toConfirmationScope(ControlScope scope) {

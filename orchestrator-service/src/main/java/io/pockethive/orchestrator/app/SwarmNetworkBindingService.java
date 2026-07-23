@@ -8,7 +8,6 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.domain.Swarm;
@@ -161,7 +160,7 @@ public class SwarmNetworkBindingService {
             swarm.getId(),
             "swarm-controller",
             controllerInstance);
-        controlPublisher.publishSignal(new SignalMessage(routingKey, toJson(payload)));
+        controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 
     public ResolvedSutEnvironment resolveSutEnvironment(SutEnvironment sutEnvironment, boolean proxied) {
@@ -320,13 +319,6 @@ public class SwarmNetworkBindingService {
             throw new IllegalStateException("pockethive.control-plane.identity.instance-id must not be null or blank");
         }
         return instanceId.trim();
-    }
-
-    private static String toJson(ControlSignal signal) {
-        return ControlPlaneJson.write(
-            signal,
-            "control signal %s for swarm %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().swarmId() : "n/a"));
     }
 
     private record EndpointTarget(String clientBaseUrl, String scheme, URI uri) {

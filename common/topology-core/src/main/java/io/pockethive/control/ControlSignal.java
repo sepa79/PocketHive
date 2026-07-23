@@ -22,7 +22,7 @@ public record ControlSignal(
     String correlationId,
     String idempotencyKey,
     Map<String, Object> data
-) {
+) implements ControlPlaneEnvelope {
 
     public static final String KIND = "signal";
 

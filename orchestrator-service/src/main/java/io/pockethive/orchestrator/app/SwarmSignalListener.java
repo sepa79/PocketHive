@@ -6,6 +6,9 @@ import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandResult;
 import io.pockethive.control.JournalEvent;
 import io.pockethive.control.ControlScope;
+import io.pockethive.control.ControlPlaneEnvelope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.ControlPlaneOperations;
@@ -67,6 +70,7 @@ public class SwarmSignalListener {
   private final SwarmStore store;
   private final ContainerLifecycleManager lifecycle;
   private final ObjectMapper json;
+  private final ControlPlaneCodec codec;
   private final HiveJournal hiveJournal;
   private final ControlPlaneJournalErrors journalErrors;
   private final ControlPlaneEmitter statusEmitter;
@@ -85,6 +89,7 @@ public class SwarmSignalListener {
       SwarmStore store,
       ContainerLifecycleManager lifecycle,
       ObjectMapper json,
+      ControlPlaneCodec codec,
       HiveJournal hiveJournal,
       ControlPlaneEmitter statusEmitter,
       RuntimeLogSnapshotJournalService runtimeLogSnapshots,
@@ -98,6 +103,7 @@ public class SwarmSignalListener {
     this.store = Objects.requireNonNull(store, "store");
     this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
     this.json = Objects.requireNonNull(json, "json").findAndRegisterModules();
+    this.codec = Objects.requireNonNull(codec, "codec");
     this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
     this.statusEmitter = Objects.requireNonNull(statusEmitter, "statusEmitter");
     this.runtimeLogSnapshots = Objects.requireNonNull(runtimeLogSnapshots, "runtimeLogSnapshots");
@@ -115,47 +121,39 @@ public class SwarmSignalListener {
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     try {
       RoutingKey key = requireEventKey(routingKey);
-      if (key.type().startsWith("metric.status-")) {
+      ControlPlaneEnvelope envelope = codec.decode(body, routingKey);
+      if (envelope instanceof StatusMetric) {
         return;
       }
-      if ("alert.alert".equals(key.type())) {
-        runtimeLogSnapshots.captureForAlert(routingKey, json.readValue(body, AlertMessage.class));
+      if (envelope instanceof AlertMessage alert) {
+        runtimeLogSnapshots.captureForAlert(routingKey, alert);
         return;
       }
-      if ("journal.work-journal".equals(key.type())) {
-        acceptJournal(key, routingKey, body);
+      if (envelope instanceof JournalEvent journal) {
+        acceptJournal(key, routingKey, journal);
         return;
       }
-      if (!key.type().startsWith("result.")) {
+      if (!(envelope instanceof CommandResult result)) {
         log.warn("Dropping non-result terminal event rk={}", routingKey);
         journalDrop(key.swarmId(), routingKey, "expected event.result", body, null);
         return;
       }
-      acceptResult(key, routingKey, body);
+      acceptResult(key, routingKey, result);
     } catch (Exception exception) {
       log.warn("Dropping invalid control-plane event rk={} payload={}", routingKey, snippet(body), exception);
       journalDrop(bestEffortSwarmId(routingKey), routingKey, "invalid control-plane event", body, exception);
     }
   }
 
-  private void acceptJournal(RoutingKey key, String routingKey, String body) throws Exception {
-    JournalEvent event = json.readValue(body, JournalEvent.class);
-    if (!"work-journal".equals(event.type())
-        || !key.swarmId().equals(event.scope().swarmId())
-        || !key.role().equals(event.scope().role())
-        || !key.instance().equals(event.scope().instance())) {
-      throw new IllegalArgumentException("Journal envelope identity does not match its routing key");
-    }
+  private void acceptJournal(RoutingKey key, String routingKey, JournalEvent event) {
     hiveJournal.append(HiveJournalEntry.info(
         key.swarmId(), HiveJournal.Direction.IN, JournalEvent.KIND, event.type(), event.origin(), event.scope(),
         event.correlationId(), event.idempotencyKey(), routingKey, event.data(), null, null));
   }
 
-  private void acceptResult(RoutingKey key, String routingKey, String body) throws Exception {
-    CommandResult result = json.readValue(body, CommandResult.class);
+  private void acceptResult(RoutingKey key, String routingKey, CommandResult result) {
     String signal = key.type().substring("result.".length());
     OperationType operationType = ControlPlaneOperations.typeForSignal(signal);
-    requireRoutingMatchesEnvelope(key, result, signal);
     if (operations.findByCorrelation(result.correlationId()).isEmpty()) {
       log.debug(
           "Ignoring executor result with no Orchestrator-owned operation signal={} swarm={} role={} instance={} correlation={}",
@@ -656,15 +654,6 @@ public class SwarmSignalListener {
             .controlIn(controlQueue)
             .controlRoutes(controlRoutes.toArray(String[]::new))
             .data("swarmCount", store.count())));
-  }
-
-  private static void requireRoutingMatchesEnvelope(RoutingKey key, CommandResult result, String signal) {
-    if (!signal.equals(result.type())
-        || !key.swarmId().equals(result.scope().swarmId())
-        || !key.role().equals(result.scope().role())
-        || !key.instance().equals(result.scope().instance())) {
-      throw new IllegalArgumentException("Result envelope identity does not match its routing key");
-    }
   }
 
   private void requireTerminalTargetMatchesEnvelope(RoutingKey key, CommandResult result) {

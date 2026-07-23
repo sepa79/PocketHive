@@ -20,7 +20,8 @@ class ControlPlaneWireShapeTest {
   @Test
   void publisherUsesCanonicalWireShape() throws Exception {
     AmqpTemplate template = mock(AmqpTemplate.class);
-    AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(template, "ph.control");
+    AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(
+        template, "ph.control", io.pockethive.controlplane.codec.ControlPlaneCodec.create());
 
 	    var signal = ControlSignals.statusRequest(
 	        "origin",

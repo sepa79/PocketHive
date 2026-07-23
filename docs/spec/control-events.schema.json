@@ -73,6 +73,19 @@
         "data": { "type": "object" }
       }
     },
+    "EventRuntimeScopeRule": {
+      "if": {
+        "properties": {
+          "scope": {
+            "properties": { "swarmId": { "const": "ALL" } },
+            "required": ["swarmId"]
+          }
+        },
+        "required": ["scope"]
+      },
+      "then": { "not": { "required": ["runtime"] } },
+      "else": { "required": ["runtime"] }
+    },
     "SignalEnvelopeBase": {
       "type": "object",
       "additionalProperties": false,
@@ -201,6 +214,7 @@
     "CommandResult": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -239,6 +253,7 @@
     "JournalEvent": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -258,6 +273,7 @@
     "CommandOutcome": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -393,7 +409,7 @@
     "WorkerObservation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["role", "instance", "enabled", "lastSeenAt", "stale"],
+      "required": ["role", "instance", "enabled", "tps", "lastSeenAt", "stale", "ioState"],
       "properties": {
         "role": { "$ref": "#/$defs/NonEmptyString" },
         "instance": { "$ref": "#/$defs/NonEmptyString" },
@@ -406,7 +422,7 @@
         "ioState": { "$ref": "#/$defs/MetricIoState" }
       }
     },
-    "ControllerStatusContext": {
+    "ControllerStatusFullContext": {
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -428,7 +444,7 @@
         "watermarkAt": { "type": "string", "format": "date-time" },
         "expectedWorkers": {
           "type": "array",
-          "items": { "$ref": "#/$defs/Scope" },
+          "items": { "$ref": "swarm-lifecycle.schema.json#/$defs/Target" },
           "uniqueItems": true
         },
         "workers": {
@@ -438,9 +454,27 @@
         "bindings": { "type": "object", "additionalProperties": true },
         "swarmDiagnostics": { "type": "object", "additionalProperties": true },
         "scenario": { "type": "object", "additionalProperties": true },
+        "bufferGuard": { "type": "object", "additionalProperties": true },
+        "location": { "$ref": "#/$defs/NonEmptyString" },
         "sutId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "networkMode": { "type": "string", "enum": ["DIRECT", "PROXIED"] },
         "networkProfileId": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
+    "ControllerStatusDeltaContext": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["controllerState", "workloadState", "health", "startupReady", "watermarkAt"],
+      "properties": {
+        "controllerState": { "$ref": "swarm-lifecycle.schema.json#/$defs/ControllerState" },
+        "workloadState": { "$ref": "swarm-lifecycle.schema.json#/$defs/WorkloadState" },
+        "health": { "$ref": "swarm-lifecycle.schema.json#/$defs/Health" },
+        "startupReady": { "type": "boolean" },
+        "watermarkAt": { "type": "string", "format": "date-time" },
+        "swarmDiagnostics": { "type": "object", "additionalProperties": true },
+        "scenario": { "type": "object", "additionalProperties": true },
+        "bufferGuard": { "type": "object", "additionalProperties": true },
+        "location": { "$ref": "#/$defs/NonEmptyString" }
       }
     },
     "WorkerStatusFullData": {
@@ -466,7 +500,7 @@
         "startedAt": { "type": "string", "format": "date-time" },
         "io": { "$ref": "#/$defs/MetricIo" },
         "ioState": { "$ref": "#/$defs/MetricIoState" },
-        "context": { "$ref": "#/$defs/ControllerStatusContext" }
+        "context": { "$ref": "#/$defs/ControllerStatusFullContext" }
       }
     },
     "WorkerStatusDeltaData": {
@@ -483,15 +517,16 @@
     "ControllerStatusDeltaData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["context"],
+      "required": ["ioState", "context"],
       "properties": {
-        "context": { "$ref": "#/$defs/ControllerStatusContext" }
+        "ioState": { "$ref": "#/$defs/MetricIoState" },
+        "context": { "$ref": "#/$defs/ControllerStatusDeltaContext" }
       }
     },
     "ManagerStatusFullData": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["startedAt", "io", "ioState", "context"],
+      "required": ["config", "startedAt", "io", "ioState", "context"],
       "properties": {
         "config": { "type": "object", "additionalProperties": true },
         "startedAt": { "type": "string", "format": "date-time" },
@@ -505,7 +540,6 @@
       "additionalProperties": false,
       "required": ["context"],
       "properties": {
-        "io": { "$ref": "#/$defs/MetricIo" },
         "ioState": { "$ref": "#/$defs/MetricIoState" },
         "context": { "type": "object", "additionalProperties": true }
       }
@@ -513,6 +547,7 @@
     "StatusFullMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -552,6 +587,7 @@
     "StatusDeltaMetric": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
@@ -591,6 +627,7 @@
     "AlertEvent": {
       "allOf": [
         { "$ref": "#/$defs/EnvelopeBase" },
+        { "$ref": "#/$defs/EventRuntimeScopeRule" },
         {
           "type": "object",
           "properties": {
