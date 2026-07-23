@@ -141,7 +141,7 @@ async function generateValidateReport(client, workflowId, bundleId) {
   const generated = await call(client, "workflow_generate", { workflowId });
   assert.equal(generated.ok, true, `${bundleId} generation failed`);
   const validated = await call(client, "workflow_validate", { workflowId });
-  assert.equal(validated.ok, true, `${bundleId} validation failed`);
+  assert.equal(validated.ok, true, `${bundleId} validation failed: ${JSON.stringify(validated.evidence ?? validated)}`);
   const report = await call(client, "workflow_report", { workflowId });
   assert.equal(report.ok, true, `${bundleId} report failed`);
   assert.ok(report.claimMatrix.some(claim => claim.id === "bundle.exists" && claim.status === "satisfied"));
@@ -269,7 +269,7 @@ async function modifyWorkflowCase(client) {
     changes: [{ file: "README.md", content: "# accept-workflow-modify\n\nModified by workflow acceptance.\n" }],
   });
   const validated = await call(client, "workflow_validate", { workflowId: start.workflowId });
-  assert.equal(validated.ok, true);
+  assert.equal(validated.ok, true, `modify workflow validation failed: ${JSON.stringify(validated.evidence ?? validated)}`);
   log("modify workflow", start.workflowId);
 }
 
@@ -307,10 +307,22 @@ async function liveCase(client) {
     await call(client, "workflow_update", { workflowId: start.workflowId, plan: basePlan(liveBundleId), provenance: requiredProvenance() });
     await completeThreeAmigos(client, start.workflowId);
     await generateValidateReport(client, start.workflowId, liveBundleId);
-    const deploy = await call(client, "workflow_deploy", { workflowId: start.workflowId, swarmId: liveSwarmId });
-    assert.equal(deploy.ok, true, "live workflow deploy failed");
+    const deploy = await call(client, "workflow_deploy", {
+      workflowId: start.workflowId,
+      swarmId: liveSwarmId,
+      captureTapSample: true,
+    });
+    assert.equal(
+      deploy.ok,
+      true,
+      `live workflow deploy failed: ${JSON.stringify(deploy.evidence ?? deploy, null, 2)}`,
+    );
     const verify = await call(client, "workflow_verify", { workflowId: start.workflowId, includeTapSample: true, proofMode: "strict" });
-    assert.equal(verify.ok, true, "live workflow verify failed");
+    assert.equal(
+      verify.ok,
+      true,
+      `live workflow verify failed: ${JSON.stringify(verify.evidence ?? verify, null, 2)}`,
+    );
     log("live workflow proof", start.workflowId);
   } finally {
     await cleanupLiveSwarm(client, liveSwarmId);

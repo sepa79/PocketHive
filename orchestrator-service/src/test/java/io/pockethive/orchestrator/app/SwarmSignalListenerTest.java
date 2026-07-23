@@ -116,6 +116,18 @@ class SwarmSignalListenerTest {
   }
 
   @Test
+  void executorResultWithoutOrchestratorOwnedOperationIsNotAnInvalidEvent() throws Exception {
+    Target worker = new Target("generator", "generator-1");
+
+    listener.handle(
+        configResult(worker, true),
+        "event.result.config-update.swarm-test.generator.generator-1");
+
+    verify(journal, never()).append(any(HiveJournal.HiveJournalEntry.class));
+    assertThat(transport.events).isEmpty();
+  }
+
+  @Test
   void lateResultAfterTimeoutDoesNotOverwriteOrRepublish() throws Exception {
     reserveStart();
     operations.recordResult(

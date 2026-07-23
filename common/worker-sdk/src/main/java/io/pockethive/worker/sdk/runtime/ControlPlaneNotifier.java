@@ -76,7 +76,7 @@ final class ControlPlaneNotifier {
     ) {
         Boolean enabled = state.enabled();
         Map<String, Object> confirmationDetails = new LinkedHashMap<>();
-        confirmationDetails.put("target", target(signal));
+        confirmationDetails.put("target", target());
         confirmationDetails.put("requestedEnabled", requestedEnabled(signal));
         confirmationDetails.put("observedEnabled", enabled);
         confirmationDetails.put("appliedConfigSha256", CanonicalPayloadDigest.sha256(objectMapper, rawConfig));
@@ -92,7 +92,7 @@ final class ControlPlaneNotifier {
         String code = error.getClass().getSimpleName();
         String message = error.getMessage() == null || error.getMessage().isBlank() ? code : error.getMessage();
         Map<String, Object> details = new LinkedHashMap<>();
-        details.put("target", target(signal));
+        details.put("target", target());
         details.put("requestedEnabled", requestedEnabled(signal));
         details.put("observedEnabled", state.enabled());
         details.put("appliedConfigSha256", null);
@@ -110,11 +110,8 @@ final class ControlPlaneNotifier {
             null));
     }
 
-    private Target target(ControlSignal signal) {
-        if (signal.scope() == null) {
-            throw new IllegalArgumentException("config-update scope is required");
-        }
-        return new Target(signal.scope().role(), signal.scope().instance());
+    private Target target() {
+        return new Target(role, instanceId);
     }
 
     private static Boolean requestedEnabled(ControlSignal signal) {

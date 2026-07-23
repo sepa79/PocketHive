@@ -60,6 +60,23 @@ Timestamp: 2026-07-22T22:53:54Z
   instead of serializing a fake transition whose previous value is null.
 - Test boundaries: exclude archived legacy UI sources from the active root
   Vitest suite; the current UI remains covered by its own package suite.
+- Scenario authoring defaults SSOT: declare safe required config defaults in
+  capability manifests, generate the MCP defaults projection from those
+  manifests, and make the scenario migrator consume the same manifest contract
+  instead of maintaining a second defaults table.
+- Workflow lifecycle ordering: wait for the correlation-specific create
+  operation to succeed before readiness polling and start dispatch, including
+  the resumable deploy path, so controller readiness cannot race an active
+  create operation.
+- Strict workflow evidence: allow deploy to explicitly pre-arm a debug tap
+  before start traffic, then reuse that tap during verification without
+  weakening strict proof requirements or crossing swarm identities.
+- Startup artifact JSON correctness: preserve legal null values inside the
+  immutable scenario plan rather than passing arbitrary JSON through
+  `Map.copyOf`.
+- Control-plane result ownership: terminal worker results identify the concrete
+  executor even for broadcast signals, and Orchestrator ignores valid results
+  whose correlation belongs to controller-internal operations.
 
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z

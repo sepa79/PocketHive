@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -20,12 +21,12 @@ public record SwarmStartupArtifact(@NotBlank String schema,
         if (swarmPlan == null) {
             throw new IllegalArgumentException("swarmPlan must not be null");
         }
-        scenarioPlan = scenarioPlan == null
-            ? null
-            : Map.copyOf(new LinkedHashMap<>(scenarioPlan));
         if (scenarioPlan == null) {
             throw new IllegalArgumentException("scenarioPlan must not be null");
         }
+        // scenarioPlan is arbitrary JSON. JSON null values are valid, while Map.copyOf rejects
+        // them. Keep the boundary value immutable without narrowing the JSON contract.
+        scenarioPlan = Collections.unmodifiableMap(new LinkedHashMap<>(scenarioPlan));
     }
 
     public static SwarmStartupArtifact v1(SwarmPlan swarmPlan, Map<String, Object> scenarioPlan) {

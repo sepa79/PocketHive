@@ -32,6 +32,7 @@ import {
 } from "./config-update.mjs";
 import { registerRuntimeTools } from "./runtime-tools.mjs";
 import { registerWorkflowTools } from "./workflow-tools.mjs";
+import { applyScenarioConfigDefaults } from "./generated/scenario-config-defaults.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -696,12 +697,16 @@ reg("bundle.scaffold", "Scaffold a new bundle directory with a canonical scenari
 
   // Build scenario.yaml as plain text to preserve YAML formatting
   const { stringify } = await import("yaml").catch(() => ({ stringify: JSON.stringify }));
+  const bees = beesByPattern[pattern].map((bee) => ({
+    ...bee,
+    config: applyScenarioConfigDefaults(bee.image, bee.config ?? {}),
+  }));
   const scenario = {
     protocolVersion: SCENARIO_PROTOCOL_VERSION,
     id: bundleId,
     name: bundleId,
     description: `Scaffolded by bundle.scaffold (pattern: ${pattern})`,
-    template: { image: "swarm-controller:latest", bees: beesByPattern[pattern] },
+    template: { image: "swarm-controller:latest", bees },
   };
   writeFileSync(resolve(targetBundleDir, "scenario.yaml"), stringify(scenario), "utf8");
 
@@ -1783,6 +1788,10 @@ async function writeWizardBundle(session) {
       },
       postprocessor,
     );
+  }
+
+  for (const bee of bees) {
+    bee.config = applyScenarioConfigDefaults(bee.image, bee.config ?? {});
   }
 
   const scenario = {

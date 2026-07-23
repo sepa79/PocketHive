@@ -1116,6 +1116,7 @@ input:
     swarmId: string
     sutId: string
     variablesProfileId: string
+    captureTapSample: boolean
     readyTimeoutSec: number
 sideEffects:
   files: none
@@ -1175,6 +1176,7 @@ input:
     swarmId: string
     sutId: string
     variablesProfileId: string
+    captureTapSample: boolean
 output:
   required:
     operationId: string
@@ -1203,7 +1205,7 @@ output:
   required:
     operationId: string
     status: running | succeeded | failed | cancelled
-    phase: upload | mock-config | create | wait-ready | start | complete | failed | cancelled
+    phase: upload | mock-config | create | wait-create | wait-ready | start | wait-start | complete | failed | cancelled
     nextPollAfterMs: number
     evidence: object
     lastStep: object | null
@@ -1248,6 +1250,11 @@ Polling semantics are explicit: `status` never advances a lifecycle operation,
 and `resume` advances one bounded phase. When the returned operation or
 `workflow_result.nextAction` contains `nextPollAfterMs`, agents should wait that
 interval before the next `resume` call rather than holding a tool call open.
+Deploy never treats the controller projection as completion of create: it waits
+for the create operation resource to reach `SUCCEEDED` before polling readiness
+or dispatching start. Set `captureTapSample=true` on deploy when the following
+strict verification must observe short-lived startup traffic; deploy then opens
+the tap immediately before start and verification reuses it.
 
 ```yaml
 name: workflow_verify

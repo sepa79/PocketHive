@@ -199,6 +199,11 @@ Production/live verification should use:
 }
 ```
 
+For short-lived startup traffic, pass `captureTapSample: true` to
+`workflow_deploy` or `workflow_deploy_start`. Deploy opens the tap immediately
+before start, and strict verification reuses that evidence instead of racing to
+open a tap after traffic has already completed.
+
 ## Metrics Evidence
 
 `metrics_query` reads product metrics from ClickHouse through Grafana's

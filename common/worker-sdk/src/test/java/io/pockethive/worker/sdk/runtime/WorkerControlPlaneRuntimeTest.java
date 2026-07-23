@@ -142,7 +142,7 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-	    void workerConfigAccessibleAfterUpdate() throws Exception {
+    void workerConfigAccessibleAfterUpdate() throws Exception {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
 	        Map<String, Object> args = Map.of(
@@ -174,6 +174,34 @@ class WorkerControlPlaneRuntimeTest {
 	        verify(emitter).emitResult(captor.capture());
 	        assertThat(captor.getValue().signal()).isEqualTo("config-update");
 	    }
+
+    @Test
+    void broadcastConfigUpdateResultIdentifiesTheConcreteWorkerExecutor() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        ControlSignal signal = ControlSignal.forSwarm(
+            "config-update",
+            IDENTITY.swarmId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            Map.of("enabled", true));
+
+        boolean handled = runtime.handle(
+            MAPPER.writeValueAsString(signal),
+            ControlPlaneRouting.signal(
+                "config-update",
+                IDENTITY.swarmId(),
+                signal.scope().role(),
+                signal.scope().instance()));
+
+        assertThat(handled).isTrue();
+        ArgumentCaptor<ControlPlaneEmitter.ResultContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ResultContext.class);
+        verify(emitter).emitResult(captor.capture());
+        assertThat(captor.getValue().result().context().get("target"))
+            .isEqualTo(new io.pockethive.swarm.model.lifecycle.Target(IDENTITY.role(), IDENTITY.instanceId()));
+    }
 
 	    @Test
 	    void configUpdateReseedClearsSeededSelectionsWithoutPersistingDirective() throws Exception {

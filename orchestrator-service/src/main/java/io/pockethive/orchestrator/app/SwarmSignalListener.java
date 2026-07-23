@@ -156,6 +156,12 @@ public class SwarmSignalListener {
     String signal = key.type().substring("result.".length());
     OperationType operationType = ControlPlaneOperations.typeForSignal(signal);
     requireRoutingMatchesEnvelope(key, result, signal);
+    if (operations.findByCorrelation(result.correlationId()).isEmpty()) {
+      log.debug(
+          "Ignoring executor result with no Orchestrator-owned operation signal={} swarm={} role={} instance={} correlation={}",
+          signal, key.swarmId(), key.role(), key.instance(), result.correlationId());
+      return;
+    }
     requireTerminalTargetMatchesEnvelope(key, result);
     if (operationType == OperationType.REMOVE) {
       throw new IllegalArgumentException("swarm-remove terminal evidence must come from the filesystem");

@@ -13,6 +13,7 @@
     "fixtures",
     "config-update.mjs",
     "doctor.mjs",
+    "generated",
     "runtime-tools.mjs",
     "server.mjs",
     "workflow-tools.mjs",

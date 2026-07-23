@@ -17,6 +17,7 @@ config:
       group: Redis
   - name: inputs.redis.port
     type: integer
+    default: 6379
     liveMutable: false
     required: true
     min: 1
@@ -38,6 +39,7 @@ config:
       group: Redis
   - name: inputs.redis.ssl
     type: boolean
+    default: false
     liveMutable: false
     required: true
     ui:
@@ -45,6 +47,7 @@ config:
       group: Redis
   - name: inputs.redis.listName
     type: string
+    default: ""
     liveMutable: true
     required: true
     allowBlank: true
@@ -54,6 +57,7 @@ config:
       help: "Single-source mode. Stop the swarm before changing this list manually. Use listName OR sources, never both."
   - name: inputs.redis.sources
     type: json
+    default: []
     liveMutable: false
     required: true
     multiline: true
@@ -63,6 +67,7 @@ config:
       help: "Multi-source mode. Array of {\"listName\":\"...\",\"weight\":1}. Clear listName when using sources."
   - name: inputs.redis.pickStrategy
     type: string
+    default: "ROUND_ROBIN"
     liveMutable: false
     required: true
     options:
@@ -73,6 +78,7 @@ config:
       group: Redis
   - name: inputs.redis.ratePerSec
     type: number
+    default: 1
     liveMutable: true
     required: true
     min: 0
