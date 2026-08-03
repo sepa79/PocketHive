@@ -302,6 +302,7 @@ public class SwarmLifecycleSteps {
       case "local-rest",
           "local-rest-defaults",
           "templated-rest",
+          "history-policy-demo",
           "redis-dataset-demo",
           "clearing-export-demo",
           "clearing-export-streaming-demo",
@@ -497,12 +498,6 @@ public class SwarmLifecycleSteps {
   public void theSwarmStartIsRejectedAsNotReady() {
     ensureStartResponse();
     assertNotReadyOutcome("swarm-start", startResponse);
-  }
-
-  @Then("the swarm-stop is rejected as NotReady")
-  public void theSwarmStopIsRejectedAsNotReady() {
-    ensureStopResponseWithoutStart();
-    assertNotReadyOutcome("swarm-stop", stopResponse);
   }
 
   @And("the worker status snapshots include config only in status-full")
@@ -2703,11 +2698,6 @@ public class SwarmLifecycleSteps {
   }
 
   private void ensureStopResponse() {
-    ensureStartResponse();
-    Assumptions.assumeTrue(stopResponse != null, "Stop request was not issued");
-  }
-
-  private void ensureStopResponseWithoutStart() {
     ensureCreateResponse();
     Assumptions.assumeTrue(stopResponse != null, "Stop request was not issued");
   }
