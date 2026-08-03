@@ -19,12 +19,14 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
 
   @gating @group-lifecycle
-  Scenario: Swarm stop is rejected before running
+  Scenario: Lifecycle commands are idempotent after their target state is reached
     And the "local-rest-defaults" scenario template is requested
     When I create the swarm from that template
     Then the swarm is registered and queues are declared
     When I request swarm stop without start
-    Then the swarm-stop is rejected as NotReady
+    Then the swarm reports stopped
+    When I start the swarm
+    Then the swarm reports running
     When I start the swarm
     Then the swarm reports running
     When I stop the swarm

@@ -375,7 +375,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
     when(lifecycle.hasPendingConfigUpdates()).thenReturn(false, true);
     when(lifecycle.handleConfigUpdateError("generator", "gen-2", "bad config")).thenReturn(java.util.Optional.of("bad config"));
     markInitialized(listener);
@@ -397,10 +397,10 @@ class SwarmSignalListenerTest {
 
   @Test
   void startEmitsConfirmation() throws Exception {
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
     markInitialized(listener);
     listener.handle(
         signal(ControlPlaneSignals.SWARM_START, "inst", "i1", "c1"),
@@ -426,6 +426,7 @@ class SwarmSignalListenerTest {
     SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
     reset(lifecycle, rabbit);
     stubLifecycleDefaults();
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
     markInitialized(listener);
     when(lifecycle.nonConvergedWorkersSince(anyLong(), eq(true)))
         .thenReturn(List.of(new io.pockethive.swarm.model.lifecycle.Target("gen", "g1")))
@@ -497,6 +498,46 @@ class SwarmSignalListenerTest {
     assertThat(stopNode.path("scope").path("swarmId").asText()).isEqualTo(TEST_SWARM_ID);
     assertThat(stopNode.path("scope").path("role").asText()).isEqualTo("swarm-controller");
     assertThat(stopNode.path("scope").path("instance").asText()).isEqualTo("inst");
+  }
+
+  @Test
+  void startCompletesWithoutRebroadcastWhenAlreadyRunning() throws Exception {
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    markInitialized(listener);
+
+    listener.handle(
+        signal(ControlPlaneSignals.SWARM_START, "inst", "i-already-running", "c-already-running"),
+        controllerInstanceSignal(ControlPlaneSignals.SWARM_START, "inst"));
+
+    verify(lifecycle, never()).start(anyString());
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_START, "inst")), payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("data").path("status").asText()).isEqualTo("Succeeded");
+    assertThat(node.path("data").path("context").path("requestedWorkloadState").asText()).isEqualTo("RUNNING");
+    assertThat(node.path("data").path("context").path("observedWorkloadState").asText()).isEqualTo("RUNNING");
+  }
+
+  @Test
+  void stopCompletesWithoutRebroadcastWhenAlreadyStopped() throws Exception {
+    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.STOPPED);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
+    markInitialized(listener);
+
+    listener.handle(
+        signal(ControlPlaneSignals.SWARM_STOP, "inst", "i-already-stopped", "c-already-stopped"),
+        controllerInstanceSignal(ControlPlaneSignals.SWARM_STOP, "inst"));
+
+    verify(lifecycle, never()).stop();
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+        eq(controllerReadyEvent(ControlPlaneSignals.SWARM_STOP, "inst")), payload.capture());
+    JsonNode node = mapper.readTree(payload.getValue());
+    assertThat(node.path("data").path("status").asText()).isEqualTo("Succeeded");
+    assertThat(node.path("data").path("context").path("requestedWorkloadState").asText()).isEqualTo("STOPPED");
+    assertThat(node.path("data").path("context").path("observedWorkloadState").asText()).isEqualTo("STOPPED");
   }
 
   @Test

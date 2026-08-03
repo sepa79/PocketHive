@@ -645,7 +645,7 @@ Only the Orchestrator operation coordinator changes an operation to `SUCCEEDED` 
 | `START` | Matching executor result and a fresh observation for every expected worker with `enabled=true` after dispatch |
 | `STOP` | Matching executor result and a fresh observation for every expected worker with `enabled=false` after dispatch |
 | `CONFIG_UPDATE` | Matching target result; when enablement changes, a fresh matching target observation |
-| `REMOVE` | Matching filesystem result; verified absence of every targeted worker runtime and RabbitMQ resource; verified Controller runtime absence; runtime directory cleanup complete; active registry removal; synchronous terminal audit persistence complete |
+| `REMOVE` | Matching filesystem result; verified absence of every targeted worker runtime and RabbitMQ resource; Network Proxy Manager binding cleared and then authoritatively observed absent; verified Controller runtime absence; runtime directory cleanup complete; active registry removal; synchronous terminal audit persistence complete |
 
 Attempted actions, accepted adapter calls, dispatched messages, intended resource lists and stale cached state never satisfy a postcondition. If required evidence cannot be obtained, the operation is `FAILED` or `TIMED_OUT` with explicit missing/remaining evidence.
 
@@ -653,10 +653,12 @@ For `REMOVE`, cleanup order is part of the contract:
 
 1. Controller disables workload and asks adapters to remove worker runtime and RabbitMQ resources.
 2. Controller writes `result.json` with the exact `targetResources` for which removal actions completed; this is action evidence, never an absence claim.
-3. Orchestrator validates the result identity, removes the Controller runtime, and uses the canonical compute/topology observation ports to verify absence of every target.
-4. Orchestrator deletes the runtime directory and removes the active registry entry while retaining the operation's already captured `swarmId` and `runId`.
-5. Orchestrator synchronously persists terminal audit evidence through the configured durable adapter, passing that captured identity explicitly; the adapter must not recover `runId` from the now-removed active registry.
-6. Only after all required postconditions succeed does it change the in-process operation to `SUCCEEDED` and publish `Succeeded`. Any failure records `FAILED` with remaining evidence; there is no `Succeeded, cleanup pending` state.
+3. Orchestrator validates the result identity and uses the canonical compute/topology observation ports to verify absence of every Controller-reported worker and RabbitMQ target.
+4. Orchestrator asks Network Proxy Manager to clear the swarm binding with the active operation identity, then reads the binding through Network Proxy Manager's canonical API and requires it to be absent.
+5. Orchestrator removes the Controller runtime and verifies absence of its Controller-specific targets.
+6. Orchestrator deletes the runtime directory and removes the active registry entry while retaining the operation's already captured `swarmId` and `runId`.
+7. Orchestrator synchronously persists terminal audit evidence through the configured durable adapter, passing that captured identity explicitly; the adapter must not recover `runId` from the now-removed active registry.
+8. Only after all required postconditions succeed does it change the in-process operation to `SUCCEEDED` and publish `Succeeded`. Any failure records `FAILED` with remaining evidence; there is no `Succeeded, cleanup pending` state.
 
 Terminal audit durability is not crash recovery. This scope does not reconstruct or resume in-flight operations after an Orchestrator crash; that remains outside the current lifecycle rewrite. It does require that a success published during a live execution already has durable terminal evidence independent of the removable swarm directory and active registry.
 
@@ -700,8 +702,10 @@ Controller readiness is satisfied when:
 
 Start and stop use broadcast enablement. PocketHive does not promise dependency-ordered activation because workers are independently connected to durable queues and the current contract does not define a safe per-edge activation handshake.
 
-- `START` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=true`.
-- `STOP` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=false`.
+- A `START` request received while the Controller is `READY` and the current workload observation is already `RUNNING` succeeds as an idempotent no-op. It does not broadcast enablement again or require a newer worker status.
+- A `STOP` request received while the Controller is `READY` and the current workload observation is already `STOPPED` succeeds as an idempotent no-op. It does not broadcast disablement again or require a newer worker status.
+- Otherwise, `START` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=true`.
+- Otherwise, `STOP` succeeds only when every expected worker has published a status newer than the operation dispatch timestamp with `enabled=false`.
 - An empty expected-worker set converges immediately once the Controller is `READY`.
 - Worker health is independent of enablement. A workload can be observed `RUNNING` and health `DEGRADED`; this must not be collapsed into a failed start unless the command-specific contract explicitly requires health.
 - While observations are mixed, the Controller projects `STARTING` or `STOPPING` according to its active correlated command. If command context or evidence is unavailable, it projects `UNKNOWN`.

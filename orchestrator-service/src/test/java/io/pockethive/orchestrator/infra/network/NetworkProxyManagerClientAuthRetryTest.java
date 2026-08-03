@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.infra.network;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sun.net.httpserver.HttpExchange;
@@ -20,6 +21,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -123,6 +125,81 @@ class NetworkProxyManagerClientAuthRetryTest {
         assertThat(bindCalls).hasValue(2);
     }
 
+    @Test
+    void findBindingRefreshesServiceTokenAfterUnauthorized() throws Exception {
+        AtomicInteger serviceLoginCalls = new AtomicInteger();
+        AtomicInteger bindingReads = new AtomicInteger();
+
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/auth/service/login", exchange -> {
+            int call = serviceLoginCalls.incrementAndGet();
+            respondJson(exchange, serviceToken(call == 1 ? "stale-token" : "fresh-token"));
+        });
+        server.createContext("/api/network/bindings/swarm-1", exchange -> {
+            int call = bindingReads.incrementAndGet();
+            assertThat(exchange.getRequestMethod()).isEqualTo("GET");
+            String authorization = exchange.getRequestHeaders().getFirst("Authorization");
+            if (call == 1) {
+                assertThat(authorization).isEqualTo("Bearer stale-token");
+                respondStatus(exchange, 401);
+                return;
+            }
+            assertThat(authorization).isEqualTo("Bearer fresh-token");
+            respondJson(exchange, bindingJson());
+        });
+        server.start();
+
+        URI baseUri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        AuthServiceServiceTokenProvider provider = new AuthServiceServiceTokenProvider(
+            new AuthServiceClient(baseUri, Duration.ofSeconds(2), Duration.ofSeconds(5)),
+            "orchestrator-service",
+            "orchestrator-secret");
+        NetworkProxyManagerClient client = new NetworkProxyManagerClient(
+            new ObjectMapper().findAndRegisterModules(),
+            properties(baseUri.toString()),
+            new StaticListableBeanFactory(
+                Map.of("orchestratorServiceTokenProvider", provider)
+            ).getBeanProvider(AuthServiceServiceTokenProvider.class));
+
+        Optional<NetworkBinding> binding = client.findBinding("swarm-1");
+
+        assertThat(binding).isPresent();
+        assertThat(serviceLoginCalls).hasValue(2);
+        assertThat(bindingReads).hasValue(2);
+    }
+
+    @Test
+    void findBindingReturnsEmptyOnNotFound() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/network/bindings/swarm-1", exchange -> respondStatus(exchange, 404));
+        server.start();
+
+        URI baseUri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        NetworkProxyManagerClient client = new NetworkProxyManagerClient(
+            new ObjectMapper().findAndRegisterModules(),
+            properties(baseUri.toString()),
+            new StaticListableBeanFactory(Map.of()).getBeanProvider(AuthServiceServiceTokenProvider.class));
+
+        assertThat(client.findBinding("swarm-1")).isEmpty();
+    }
+
+    @Test
+    void findBindingFailsExplicitlyOnUnexpectedStatus() throws Exception {
+        server = HttpServer.create(new InetSocketAddress(0), 0);
+        server.createContext("/api/network/bindings/swarm-1", exchange -> respondStatus(exchange, 503));
+        server.start();
+
+        URI baseUri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+        NetworkProxyManagerClient client = new NetworkProxyManagerClient(
+            new ObjectMapper().findAndRegisterModules(),
+            properties(baseUri.toString()),
+            new StaticListableBeanFactory(Map.of()).getBeanProvider(AuthServiceServiceTokenProvider.class));
+
+        assertThatThrownBy(() -> client.findBinding("swarm-1"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("GET status 503");
+    }
+
     private static OrchestratorProperties properties(String networkProxyManagerUrl) {
         OrchestratorProperties.Http http = new OrchestratorProperties.Http(Duration.ofSeconds(2), Duration.ofSeconds(5));
         return new OrchestratorProperties(new OrchestratorProperties.Orchestrator(
@@ -151,5 +228,43 @@ class NetworkProxyManagerClientAuthRetryTest {
         try (OutputStream output = exchange.getResponseBody()) {
             output.write(bytes);
         }
+    }
+
+    private static void respondStatus(HttpExchange exchange, int status) throws IOException {
+        exchange.sendResponseHeaders(status, -1);
+        exchange.close();
+    }
+
+    private static String serviceToken(String accessToken) {
+        return """
+            {
+              "accessToken": "%s",
+              "tokenType": "Bearer",
+              "expiresAt": "2099-01-01T00:00:00Z",
+              "user": {
+                "id": "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa",
+                "username": "orchestrator-service",
+                "displayName": "Orchestrator Service",
+                "active": true,
+                "authProvider": "DEV",
+                "grants": []
+              }
+            }
+            """.formatted(accessToken);
+    }
+
+    private static String bindingJson() {
+        return """
+            {
+              "swarmId": "swarm-1",
+              "sutId": "sut-1",
+              "networkMode": "PROXIED",
+              "networkProfileId": "passthrough",
+              "effectiveMode": "PROXIED",
+              "requestedBy": "orchestrator-service",
+              "appliedAt": "2099-01-01T00:00:00Z",
+              "affectedEndpoints": []
+            }
+            """;
     }
 }

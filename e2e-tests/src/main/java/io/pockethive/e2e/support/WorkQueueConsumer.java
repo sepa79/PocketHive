@@ -25,7 +25,7 @@ import com.rabbitmq.client.GetResponse;
 import com.rabbitmq.client.LongString;
 
 /**
- * Lightweight consumer used by the end-to-end tests to inspect workload queues without interfering
+ * Exchange-tap consumer used by end-to-end tests to inspect workload messages without competing
  * with application consumers. Instances operate with manual acknowledgements so callers can inspect
  * payloads before releasing them back to the broker.
  */
@@ -41,27 +41,6 @@ public final class WorkQueueConsumer implements AutoCloseable {
     this.connection = Objects.requireNonNull(connection, "connection");
     this.channel = Objects.requireNonNull(channel, "channel");
     this.queueName = Objects.requireNonNull(queueName, "queueName");
-  }
-
-  public WorkQueueConsumer(ConnectionFactory connectionFactory, String queueName) {
-    Objects.requireNonNull(connectionFactory, "connectionFactory");
-    Objects.requireNonNull(queueName, "queueName");
-    if (queueName.isBlank()) {
-      throw new IllegalArgumentException("queueName must not be blank");
-    }
-    org.springframework.amqp.rabbit.connection.Connection newConnection = null;
-    Channel newChannel = null;
-    try {
-      newConnection = connectionFactory.createConnection();
-      newChannel = newConnection.createChannel(false);
-      this.connection = newConnection;
-      this.channel = newChannel;
-      this.queueName = queueName;
-    } catch (Exception ex) {
-      closeQuietly(newChannel);
-      closeQuietly(newConnection);
-      throw new IllegalStateException("Failed to initialise work queue consumer for " + queueName, ex);
-    }
   }
 
   public static WorkQueueConsumer forExchangeTap(ConnectionFactory connectionFactory,

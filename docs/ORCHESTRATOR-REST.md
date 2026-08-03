@@ -748,6 +748,8 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
 
 Clients watch the Orchestrator outcome and correlate it by the returned `correlationId`. `data.status` is terminal and may be `Succeeded`, `Rejected`, `Failed` or `TimedOut`; the topic is therefore not a success-only channel. Alerts are diagnostic and never replace the terminal outcome.
 
+When the Controller is ready and the workload is already `RUNNING`, a new `START` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast enablement again. An exact retry reuses the original operation as described in [Idempotency & correlation](#idempotency--correlation).
+
 **Response (202)**
 ```json
 {
@@ -771,6 +773,8 @@ Clients watch the Orchestrator outcome and correlate it by the returned `correla
 
 Completion requires fresh post-dispatch status from every expected worker with `enabled=false`. Dispatch acceptance is not completion.
 
+When the Controller is ready and the workload is already `STOPPED`, a new `STOP` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast disablement again. The lifecycle-operation conflict rule still applies while another lifecycle operation is non-terminal.
+
 **Response (202)**
 ```json
 {
@@ -790,7 +794,7 @@ Completion requires fresh post-dispatch status from every expected worker with `
 { "idempotencyKey": "uuid-v4", "notes": "optional" }
 ```
 
-The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator then removes the Controller runtime, verifies every compute and RabbitMQ target through the canonical observation ports, deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
+The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and RabbitMQ target through the canonical observation ports, clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
 
 **Response (202)**
 ```json

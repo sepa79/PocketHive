@@ -85,6 +85,7 @@ class SwarmSignalListenerTest {
         outcomes,
         mock(FilesystemSwarmRemoveStore.class),
         mock(RuntimeRemovalPostconditionVerifier.class),
+        mock(SwarmNetworkBindingService.class),
         new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
         descriptor,
         "ph.control.orchestrator.orchestrator-1");
@@ -252,15 +253,12 @@ class SwarmSignalListenerTest {
     listener = listener(lifecycle, removeStore, verifier);
     Instant now = reserveRemove();
     RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1");
-    RemoveResource controller = new RemoveResource(RemoveResourceType.CONTROLLER_RUNTIME, "container-1");
     when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
         RemoveResult.succeeded(
             SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(worker), now)));
-    when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
-        new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(controller), List.of(), List.of()));
-    when(verifier.verifyAbsent(List.of(worker, controller))).thenReturn(
+    when(verifier.verifyAbsent(List.of(worker))).thenReturn(
         new RuntimeRemovalPostconditionVerifier.Verification(
-            List.of(controller),
+            List.of(),
             List.of(worker),
             List.of(new RemoveError("RESOURCE_STILL_PRESENT", "worker is still running", worker))));
 
@@ -270,6 +268,7 @@ class SwarmSignalListenerTest {
         .map(operation -> operation.state())
         .contains(OperationState.FAILED);
     assertThat(store.find(SWARM_ID)).isPresent();
+    verify(lifecycle, never()).removeControllerRuntime(SWARM_ID);
     verify(removeStore, never()).deleteSwarmRuntime(SWARM_ID);
   }
 
@@ -287,9 +286,12 @@ class SwarmSignalListenerTest {
             SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(worker), now)));
     when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
         new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(controller), List.of(), List.of()));
-    when(verifier.verifyAbsent(List.of(worker, controller))).thenReturn(
+    when(verifier.verifyAbsent(List.of(worker))).thenReturn(
         new RuntimeRemovalPostconditionVerifier.Verification(
-            List.of(worker, controller), List.of(), List.of()));
+            List.of(worker), List.of(), List.of()));
+    when(verifier.verifyAbsent(List.of(controller))).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(
+            List.of(controller), List.of(), List.of()));
     when(removeStore.swarmRuntimeExists(SWARM_ID)).thenReturn(false);
 
     listener.checkTimeouts();
@@ -335,6 +337,40 @@ class SwarmSignalListenerTest {
         .contains(new RemoveResource(RemoveResourceType.TERMINAL_EVIDENCE, "remove-corr"));
   }
 
+  @Test
+  void removeCannotSucceedOrTearDownWhenNetworkBindingCleanupFails() {
+    ContainerLifecycleManager lifecycle = mock(ContainerLifecycleManager.class);
+    FilesystemSwarmRemoveStore removeStore = mock(FilesystemSwarmRemoveStore.class);
+    RuntimeRemovalPostconditionVerifier verifier = mock(RuntimeRemovalPostconditionVerifier.class);
+    SwarmNetworkBindingService networkBindings = mock(SwarmNetworkBindingService.class);
+    listener = listener(lifecycle, removeStore, verifier, networkBindings);
+    Instant now = reserveRemove();
+    when(removeStore.findResult(SWARM_ID, "remove-corr")).thenReturn(Optional.of(
+        RemoveResult.succeeded(
+            SWARM_ID, "run-1", CONTROLLER, "remove-corr", "remove-idem", List.of(), now)));
+    when(verifier.verifyAbsent(List.of())).thenReturn(
+        new RuntimeRemovalPostconditionVerifier.Verification(List.of(), List.of(), List.of()));
+    doThrow(new IllegalStateException("binding still active"))
+        .when(networkBindings)
+        .clearBindingAndVerifyAbsent(
+            SWARM_ID, "remove-corr", "remove-idem", "orchestrator", "swarm-remove", "orchestrator");
+
+    listener.checkTimeouts();
+
+    assertThat(operations.findByCorrelation("remove-corr"))
+        .map(operation -> operation.state())
+        .contains(OperationState.FAILED);
+    assertThat(operations.findByCorrelation("remove-corr").orElseThrow().terminalResult().retryable())
+        .isTrue();
+    assertThat(operations.findByCorrelation("remove-corr").orElseThrow().terminalResult().context())
+        .extracting("remainingResources")
+        .asList()
+        .contains(new RemoveResource(RemoveResourceType.NETWORK_BINDING, SWARM_ID));
+    assertThat(store.find(SWARM_ID)).isPresent();
+    verify(lifecycle, never()).removeControllerRuntime(SWARM_ID);
+    verify(removeStore, never()).deleteSwarmRuntime(SWARM_ID);
+  }
+
   private void reserveStart() {
     Instant now = Instant.now();
     operations.reserve(
@@ -355,6 +391,14 @@ class SwarmSignalListenerTest {
       ContainerLifecycleManager lifecycle,
       FilesystemSwarmRemoveStore removeStore,
       RuntimeRemovalPostconditionVerifier verifier) {
+    return listener(lifecycle, removeStore, verifier, mock(SwarmNetworkBindingService.class));
+  }
+
+  private SwarmSignalListener listener(
+      ContainerLifecycleManager lifecycle,
+      FilesystemSwarmRemoveStore removeStore,
+      RuntimeRemovalPostconditionVerifier verifier,
+      SwarmNetworkBindingService networkBindings) {
     return new SwarmSignalListener(
         store,
         lifecycle,
@@ -367,6 +411,7 @@ class SwarmSignalListenerTest {
         new OperationOutcomePublisher(transport, "orchestrator-1"),
         removeStore,
         verifier,
+        networkBindings,
         new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
         new OrchestratorControlPlaneTopologyDescriptor("ph.control"),
         "ph.control.orchestrator.orchestrator-1");

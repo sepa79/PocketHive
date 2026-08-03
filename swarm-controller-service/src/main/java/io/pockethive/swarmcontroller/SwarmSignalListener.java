@@ -629,6 +629,21 @@ public class SwarmSignalListener {
     return true;
   }
 
+  private boolean completeLifecycleIfAlreadyAchieved(
+      ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
+    WorkloadState requested = ControlPlaneSignals.SWARM_START.equals(resolvedSignal)
+        ? WorkloadState.RUNNING
+        : WorkloadState.STOPPED;
+    if (lifecycle.getWorkloadState() != requested) {
+      return false;
+    }
+    log.info("Lifecycle command already achieved operation={} swarmId={} workloadState={} correlationId={} idempotencyKey={}",
+        resolvedSignal, swarmIdFallback, requested, cs.correlationId(), cs.idempotencyKey());
+    emitSuccess(cs, resolvedSignal, swarmIdFallback,
+        terminalResult(cs, resolvedSignal, TerminalStatus.SUCCEEDED, Map.of()));
+    return true;
+  }
+
   private boolean isInitialized() {
     return startupArtifactApplied.get();
   }
@@ -648,6 +663,9 @@ public class SwarmSignalListener {
           if (rejectIfNotReady(cs, signal, swarmIdOrDefault(cs), false)) {
             return;
           }
+          if (completeLifecycleIfAlreadyAchieved(cs, signal, swarmIdOrDefault(cs))) {
+            return;
+          }
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {
             lifecycle.start(args);
           }, "start");
@@ -655,7 +673,10 @@ public class SwarmSignalListener {
       }
       case ControlPlaneSignals.SWARM_STOP -> {
         if (isForLocalSwarm(cs)) {
-          if (rejectIfNotReady(cs, signal, swarmIdOrDefault(cs), true)) {
+          if (rejectIfNotReady(cs, signal, swarmIdOrDefault(cs), false)) {
+            return;
+          }
+          if (completeLifecycleIfAlreadyAchieved(cs, signal, swarmIdOrDefault(cs))) {
             return;
           }
           processSwarmSignal(cs, signal, swarmIdOrDefault(cs), args -> {

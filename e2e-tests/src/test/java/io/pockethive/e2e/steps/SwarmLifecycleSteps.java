@@ -956,35 +956,14 @@ public class SwarmLifecycleSteps {
 
   @And("the worker statuses advertise history policies")
   public void theWorkerStatusesAdvertiseHistoryPolicies() {
-    captureWorkerStatuses();
+    captureWorkerStatuses(true);
 
     for (String role : workerRoles()) {
       StatusEvent status = workerStatusByRole.get(role);
       String displayRole = actualRoleName(role);
       assertNotNull(status, () -> "No status recorded for role " + displayRole);
-
-      Map<String, Object> snapshot = workerSnapshot(status, displayRole);
-      assertFalse(snapshot.isEmpty(), () -> "No worker snapshot found for role " + displayRole);
-
-      Map<String, Object> config = snapshotConfig(snapshot);
-      LOGGER.info("History policy snapshot for role {}: config={}", displayRole, config);
+      assertHistoryPolicyMatchesTemplate(role, status);
     }
-  }
-
-  @And("the postprocessor status reflects applied history policy")
-  public void thePostprocessorStatusReflectsAppliedHistoryPolicy() {
-    ensureStartResponse();
-    // History semantics are currently validated via unit tests; at runtime we
-    // log the postprocessor status snapshot for manual inspection without
-    // asserting on workItemSteps, as that field may be omitted depending on
-    // metrics configuration and timing.
-    captureWorkerStatuses(true);
-    String roleKey = POSTPROCESSOR_ROLE;
-    String displayRole = actualRoleName(roleKey);
-    StatusEvent status = workerStatusByRole.get(roleKey);
-    assertNotNull(status, () -> "No status recorded for role " + displayRole);
-    LOGGER.info("Postprocessor status data for history-policy-demo: enabled={} tps={} context={} extra={}",
-        status.data().enabled(), status.data().tps(), status.data().context(), status.data().extra());
   }
 
   @And("the plan demo scenario plan drives the swarm lifecycle")
@@ -1178,10 +1157,7 @@ public class SwarmLifecycleSteps {
       List<String> stepPayloads = workItemStepPayloads(message);
       LOGGER.info("Final WorkItem step payloads for scenario {}: {}", scenarioId, stepPayloads);
 
-      if ("history-policy-demo".equals(scenarioId)) {
-        // History policy semantics are covered by unit tests; when we re-enable this scenario,
-        // adjust expectations to the current WorkItem history model.
-      } else if (scenarioId != null) {
+      if (scenarioId != null && !"history-policy-demo".equals(scenarioId)) {
         // For default, named-queues, and templated scenarios we expect at least
         // generator + processor steps to be present in history.
         assertTrue(stepPayloads.size() >= 2,
@@ -1869,6 +1845,32 @@ public class SwarmLifecycleSteps {
     return Map.of();
   }
 
+  private void assertHistoryPolicyMatchesTemplate(String role, StatusEvent status) {
+    String displayRole = actualRoleName(role);
+    Bee bee = findBee(role);
+    Map<String, Object> expectedConfig = bee.config();
+    assertNotNull(expectedConfig, () -> "Template config is missing for role " + displayRole);
+    Map<String, Object> expectedWorkerConfig = toMap(expectedConfig.get("worker"));
+    assertFalse(expectedWorkerConfig.isEmpty(),
+        () -> "Template config must include a worker block for role " + displayRole);
+    Object expectedPolicy = expectedWorkerConfig.get("historyPolicy");
+    assertNotNull(expectedPolicy,
+        () -> "Template worker config must include historyPolicy for role " + displayRole);
+
+    Map<String, Object> snapshot = workerSnapshot(status, role);
+    assertFalse(snapshot.isEmpty(), () -> "No worker snapshot found for role " + displayRole);
+    Map<String, Object> appliedConfig = snapshotConfig(snapshot);
+    Map<String, Object> appliedWorkerConfig = toMap(appliedConfig.get("worker"));
+    assertFalse(appliedWorkerConfig.isEmpty(),
+        () -> "status-full config must include a worker block for role " + displayRole + ": " + appliedConfig);
+    Object appliedPolicy = appliedWorkerConfig.get("historyPolicy");
+    assertNotNull(appliedPolicy,
+        () -> "status-full worker config must include historyPolicy for role " + displayRole + ": " + appliedWorkerConfig);
+    assertEquals(expectedPolicy.toString(), appliedPolicy.toString(),
+        () -> "Applied historyPolicy differs from the canonical template for role " + displayRole);
+    LOGGER.info("History policy role={} expected={} applied={}", displayRole, expectedPolicy, appliedPolicy);
+  }
+
   private void assertRuntimeMeta(Map<String, Object> runtime, String label) {
     assertNotNull(runtime, () -> "Missing runtime metadata for " + label);
     assertFalse(runtime.isEmpty(), () -> "Runtime metadata should not be empty for " + label);
@@ -2100,17 +2102,9 @@ public class SwarmLifecycleSteps {
     }
     String suffix = finalQueueSuffix();
     String queueName = queueNameForSuffix(suffix);
-    if ("final".equals(suffix)) {
-      // For the final sink queue we can safely consume from the queue directly (there should be no
-      // application consumer draining it).
-      workQueueConsumer = new WorkQueueConsumer(rabbitSubscriptions.connectionFactory(), queueName);
-      tapQueueName = queueName;
-      LOGGER.info("Subscribed to final queue={} (direct consumer)", queueName);
-      return;
-    }
-
-    // Intermediate queues such as `post` are consumed by downstream workers, so use an exchange tap
-    // and bind it before traffic starts to avoid racing the application consumer.
+    // Work queues may have a downstream application consumer, including the queue named `final`.
+    // Use a dedicated exchange tap and bind it before traffic starts to observe every publication
+    // without competing for a workload message.
     workQueueConsumer = WorkQueueConsumer.forExchangeTap(
         rabbitSubscriptions.connectionFactory(),
         hiveExchangeName(),

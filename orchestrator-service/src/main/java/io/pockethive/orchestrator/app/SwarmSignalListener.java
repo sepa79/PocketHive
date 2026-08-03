@@ -79,6 +79,7 @@ public class SwarmSignalListener {
   private final OperationOutcomePublisher outcomes;
   private final FilesystemSwarmRemoveStore removeStore;
   private final RuntimeRemovalPostconditionVerifier removalVerifier;
+  private final SwarmNetworkBindingService networkBindings;
   private final String instanceId;
   private final String controlQueue;
   private final List<String> controlRoutes;
@@ -97,6 +98,7 @@ public class SwarmSignalListener {
       OperationOutcomePublisher outcomes,
       FilesystemSwarmRemoveStore removeStore,
       RuntimeRemovalPostconditionVerifier removalVerifier,
+      SwarmNetworkBindingService networkBindings,
       @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
       @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
       @Qualifier("managerControlQueueName") String controlQueue) {
@@ -111,6 +113,7 @@ public class SwarmSignalListener {
     this.outcomes = Objects.requireNonNull(outcomes, "outcomes");
     this.removeStore = Objects.requireNonNull(removeStore, "removeStore");
     this.removalVerifier = Objects.requireNonNull(removalVerifier, "removalVerifier");
+    this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
     this.instanceId = Objects.requireNonNull(identity, "identity").instanceId();
     this.controlQueue = requireText("controlQueue", controlQueue);
     this.controlRoutes = resolveControlRoutes(Objects.requireNonNull(descriptor, "descriptor").routes());
@@ -404,23 +407,51 @@ public class SwarmSignalListener {
     TerminalStatus status = result.status();
     boolean retryable = result.retryable();
     if (status == TerminalStatus.SUCCEEDED) {
-      var controllerRemoval = lifecycle.removeControllerRuntime(operation.swarmId());
-      remaining.addAll(controllerRemoval.failedResources());
-      errors.addAll(controllerRemoval.errors());
-      if (!controllerRemoval.succeeded()) {
+      var workerAndRabbitVerification = removalVerifier.verifyAbsent(result.targetResources());
+      removed.addAll(workerAndRabbitVerification.removedResources());
+      remaining.addAll(workerAndRabbitVerification.remainingResources());
+      errors.addAll(workerAndRabbitVerification.errors());
+      if (!workerAndRabbitVerification.succeeded()) {
         status = TerminalStatus.FAILED;
         retryable = true;
       } else {
-        List<RemoveResource> targets = new ArrayList<>(result.targetResources());
-        targets.addAll(controllerRemoval.targetResources());
-        var verification = removalVerifier.verifyAbsent(targets);
-        removed.addAll(verification.removedResources());
-        remaining.addAll(verification.remainingResources());
-        errors.addAll(verification.errors());
-        if (!verification.succeeded()) {
+        RemoveResource networkBinding = new RemoveResource(
+            io.pockethive.swarm.model.lifecycle.RemoveResourceType.NETWORK_BINDING,
+            operation.swarmId());
+        try {
+          networkBindings.clearBindingAndVerifyAbsent(
+              operation.swarmId(),
+              operation.correlationId(),
+              operation.idempotencyKey(),
+              ROLE,
+              "swarm-remove",
+              ROLE);
+          removed.add(networkBinding);
+        } catch (RuntimeException failure) {
+          remaining.add(networkBinding);
+          errors.add(removeError(failure, networkBinding));
           status = TerminalStatus.FAILED;
           retryable = true;
-        } else {
+        }
+        if (status == TerminalStatus.SUCCEEDED) {
+          var controllerRemoval = lifecycle.removeControllerRuntime(operation.swarmId());
+          remaining.addAll(controllerRemoval.failedResources());
+          errors.addAll(controllerRemoval.errors());
+          if (!controllerRemoval.succeeded()) {
+            status = TerminalStatus.FAILED;
+            retryable = true;
+          } else {
+            var controllerVerification = removalVerifier.verifyAbsent(controllerRemoval.targetResources());
+            removed.addAll(controllerVerification.removedResources());
+            remaining.addAll(controllerVerification.remainingResources());
+            errors.addAll(controllerVerification.errors());
+            if (!controllerVerification.succeeded()) {
+              status = TerminalStatus.FAILED;
+              retryable = true;
+            }
+          }
+        }
+        if (status == TerminalStatus.SUCCEEDED) {
           CleanupResult cleanup = removeRuntimeDirectoryAndRegistry(operation.swarmId());
           removed.addAll(cleanup.removedResources());
           remaining.addAll(cleanup.remainingResources());

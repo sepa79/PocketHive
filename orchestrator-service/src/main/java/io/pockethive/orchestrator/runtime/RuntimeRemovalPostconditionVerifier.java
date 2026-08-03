@@ -48,7 +48,7 @@ public final class RuntimeRemovalPostconditionVerifier {
           case RABBIT_EXCHANGE -> rabbitTopology.exchange(target.id()).isPresent();
           case RABBIT_BINDING -> throw new IllegalArgumentException(
               "Rabbit binding absence is not observable by the configured topology port");
-          case RUNTIME_DIRECTORY, REGISTRY_ENTRY, TERMINAL_EVIDENCE -> throw new IllegalArgumentException(
+          case NETWORK_BINDING, RUNTIME_DIRECTORY, REGISTRY_ENTRY, TERMINAL_EVIDENCE -> throw new IllegalArgumentException(
               target.type() + " belongs to a later remove postcondition stage");
         };
         if (present) {

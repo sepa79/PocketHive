@@ -75,6 +75,18 @@ class RuntimeRemovalPostconditionVerifierTest {
     });
   }
 
+  @Test
+  void rejectsNetworkBindingBecauseNetworkProxyManagerOwnsThatPostcondition() {
+    RemoveResource binding = resource(RemoveResourceType.NETWORK_BINDING, "swarm-1");
+
+    var result = verifier.verifyAbsent(List.of(binding));
+
+    assertThat(result.succeeded()).isFalse();
+    assertThat(result.remainingResources()).containsExactly(binding);
+    assertThat(result.errors()).singleElement().satisfies(error ->
+        assertThat(error.message()).contains("later remove postcondition stage"));
+  }
+
   private static RemoveResource resource(RemoveResourceType type, String id) {
     return new RemoveResource(type, id);
   }

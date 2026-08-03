@@ -23,6 +23,7 @@ import java.net.URI;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -128,6 +129,34 @@ public class SwarmNetworkBindingService {
         } catch (Exception ex) {
             throw new IllegalStateException(
                 "Failed to clear network proxy binding for swarm '%s'".formatted(swarmId), ex);
+        }
+    }
+
+    public void clearBindingAndVerifyAbsent(String swarmId,
+                                            String correlationId,
+                                            String idempotencyKey,
+                                            String requestedBy,
+                                            String reason,
+                                            String journalOrigin) {
+        try {
+            Optional<NetworkBinding> existing = networkProxy.findBinding(swarmId);
+            if (existing.isPresent()) {
+                clearBinding(
+                    swarmId,
+                    existing.orElseThrow().sutId(),
+                    correlationId,
+                    idempotencyKey,
+                    requestedBy,
+                    reason,
+                    journalOrigin);
+            }
+            if (networkProxy.findBinding(swarmId).isPresent()) {
+                throw new IllegalStateException(
+                    "Network proxy binding remains after clear for swarm '%s'".formatted(swarmId));
+            }
+        } catch (Exception ex) {
+            throw new IllegalStateException(
+                "Failed to clear and verify network proxy binding for swarm '%s'".formatted(swarmId), ex);
         }
     }
 
