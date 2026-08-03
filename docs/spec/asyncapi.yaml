@@ -6,7 +6,7 @@ info:
     - ph.control \u2014 swarm-aware control plane covering signals (commands) and event streams (outcomes, metrics, alerts).\n\
     - Signals publish with routing keys `signal.<type>.<swarmId>.<role>.<instance>`.\n\
     - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.outcome.swarm-start.*`, `event.metric.status-full.*`, `event.alert.{type}.*`).\n\
-    - ph.{swarmId}.hive \u2014 traffic exchange for workload messages (generator \u2192 moderator \u2192 processor).\n"
+    - ph.{swarmId}.hive \u2014 work exchange for the scenario-defined worker graph; generator \u2192 moderator \u2192 processor is one example route.\n"
 servers:
   control-ws:
     url: ws://{host}/ws
@@ -67,7 +67,7 @@ channels:
   exchange/ph.control/event.outcome.{type}.{swarm}.{role}.{instance}:
     parameters:
       type:
-        description: Command name that this outcome corresponds to
+        description: Command name this outcome corresponds to, or work-journal for a non-command informational worker record
         schema:
           type: string
           enum:
@@ -78,6 +78,7 @@ channels:
           - swarm-stop
           - swarm-remove
           - config-update
+          - work-journal
       swarm:
         description: Swarm context for the outcome (or ALL for wildcard fan-out)
         schema:
@@ -91,7 +92,7 @@ channels:
         schema:
           type: string
     subscribe:
-      summary: Outcomes emitted for control-plane commands (success and error)
+      summary: Command outcomes and informational worker journal outcomes
       message:
         $ref: '#/components/messages/CommandOutcome'
     bindings:

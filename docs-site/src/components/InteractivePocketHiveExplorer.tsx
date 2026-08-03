@@ -1,552 +1,738 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useId, useState } from "react";
 
-type Detail = {
+type PlaneFocus = "all" | "control" | "work";
+
+type ArchitectureDetailKey =
+  | "orchestrator"
+  | "controller"
+  | "control-queues"
+  | "source-worker"
+  | "work-queue"
+  | "action-worker"
+  | "sink-worker"
+  | "evidence"
+  | "multi-swarm"
+  | "redis";
+
+type ArchitectureDetail = {
   title: string;
-  summary: string;
-  bullets: string[];
+  description: string;
 };
 
-const DETAILS: Record<string, Detail> = {
+type RedisStep = {
+  title: string;
+  kind: "dataset" | "worker";
+  actor: string;
+  description: string;
+};
+
+type LabelledSectionProps = {
+  labelledBy?: string;
+};
+
+const ARCHITECTURE_DETAILS: Record<ArchitectureDetailKey, ArchitectureDetail> = {
   orchestrator: {
     title: "Orchestrator",
-    summary: "Global control owner for PocketHive.",
-    bullets: [
-      "Creates and manages swarms.",
-      "Sends lifecycle and config commands.",
-      "Collects swarm-level outcomes.",
-    ],
+    description:
+      "Creates swarms, sends lifecycle commands to controllers, and routes targeted live configuration directly to workers.",
   },
-  "swarm-a": {
-    title: "Swarm A",
-    summary: "One runtime group for a scenario flow.",
-    bullets: [
-      "Runs a dedicated worker chain.",
-      "Uses control and work queues.",
-      "Can run independently from other swarms.",
-    ],
+  controller: {
+    title: "Swarm Controller",
+    description:
+      "Applies startup configuration, fans out swarm-wide lifecycle, and reports swarm-level outcomes.",
   },
-  "swarm-b": {
-    title: "Swarm B",
-    summary: "Second runtime group that can cooperate with Swarm A.",
-    bullets: [
-      "Can process another stage of the same dataset.",
-      "Can run different rates and profiles.",
-      "Keeps the same control-plane model.",
-    ],
+  "control-queues": {
+    title: "RabbitMQ control queues",
+    description:
+      "Carry commands, status, and outcomes. Business WorkItems do not pass through the control plane.",
   },
-  "controller-a": {
-    title: "Swarm Controller (A)",
-    summary: "Applies plan and tracks worker status in Swarm A.",
-    bullets: [
-      "Manages local worker lifecycle.",
-      "Keeps status snapshots up to date.",
-      "Bridges control and work planes.",
-    ],
+  "source-worker": {
+    title: "Source worker",
+    description:
+      "Creates or reads a WorkItem and publishes it to the route declared by the scenario.",
   },
-  "controller-b": {
-    title: "Swarm Controller (B)",
-    summary: "Applies plan and tracks worker status in Swarm B.",
-    bullets: [
-      "Same responsibilities as Controller A.",
-      "Operates independently for this swarm.",
-      "Reports outcomes and metrics upstream.",
-    ],
+  "work-queue": {
+    title: "RabbitMQ work queue",
+    description:
+      "Decouples worker stages while carrying WorkItems, including their payload and routing context.",
   },
-  "control-queues-a": {
-    title: "Control Queues (A)",
-    summary: "Control-plane transport for commands and status in Swarm A.",
-    bullets: [
-      "Carries start/stop/config/status-request commands.",
-      "Carries outcomes and status events.",
-      "Keeps control plane responsive even when workload is paused.",
-    ],
+  "action-worker": {
+    title: "Action worker",
+    description:
+      "Runs the scenario behavior, such as a protocol call, transformation, or business operation.",
   },
-  "control-queues-b": {
-    title: "Control Queues (B)",
-    summary: "Control-plane transport for commands and status in Swarm B.",
-    bullets: [
-      "Same semantics as in Swarm A.",
-      "Independent command/status channel per swarm.",
-      "Supports isolated swarm operation.",
-    ],
+  "sink-worker": {
+    title: "Sink worker",
+    description:
+      "Consumes the final WorkItem, publishes the result, and emits completion evidence.",
   },
-  "work-queues-a": {
-    title: "Work Queues (A)",
-    summary: "Asynchronous handoff in Swarm A work plane.",
-    bullets: [
-      "Decouples producer and consumer speed.",
-      "Carries WorkItems across stages.",
-      "Buffers bursts safely.",
-    ],
+  evidence: {
+    title: "Runtime evidence",
+    description:
+      "Use Journal, logs, metrics, and Grafana to confirm what ran and whether the swarm converged.",
   },
-  "work-queues-b": {
-    title: "Work Queues (B)",
-    summary: "Asynchronous handoff in Swarm B work plane.",
-    bullets: [
-      "Supports independent throughput.",
-      "Improves stage isolation.",
-      "Feeds downstream workers in order.",
-    ],
+  "multi-swarm": {
+    title: "Independent swarms",
+    description:
+      "Each swarm owns its controller, queues, lifecycle, workers, and evidence, even when swarms collaborate.",
   },
-  "workitem-a": {
-    title: "WorkItem (A)",
-    summary: "Canonical business payload envelope in Swarm A.",
-    bullets: [
-      "Carries payload and metadata together.",
-      "Flows through all work stages.",
-      "Keeps context consistent end-to-end.",
-    ],
-  },
-  "workitem-b": {
-    title: "WorkItem (B)",
-    summary: "Canonical business payload envelope in Swarm B.",
-    bullets: [
-      "Same envelope model as in Swarm A.",
-      "Supports independent pipeline processing.",
-      "Can be correlated across stages.",
-    ],
-  },
-  "worker-input-a": {
-    title: "Input Worker (A)",
-    summary: "Entry stage in work pipeline for Swarm A.",
-    bullets: [
-      "Consumes from source queue.",
-      "Normalizes or enriches incoming payloads.",
-      "Forwards WorkItem to processing stage.",
-    ],
-  },
-  "worker-processing-a": {
-    title: "Processing Worker (A)",
-    summary: "Middle stage executing business operation in Swarm A.",
-    bullets: [
-      "Runs core transaction logic.",
-      "Typically invokes HTTP/REST or other protocols.",
-      "Sends result to output stage.",
-    ],
-  },
-  "worker-output-a": {
-    title: "Output Worker (A)",
-    summary: "Final stage in work pipeline for Swarm A.",
-    bullets: [
-      "Publishes transformed/output payloads.",
-      "Updates downstream destinations.",
-      "Emits completion-oriented metrics/status.",
-    ],
-  },
-  "worker-input-b": {
-    title: "Input Worker (B)",
-    summary: "Entry stage in work pipeline for Swarm B.",
-    bullets: [
-      "Consumes from source queue.",
-      "Prepares WorkItems for processing.",
-      "Forwards to processing stage.",
-    ],
-  },
-  "worker-processing-b": {
-    title: "Processing Worker (B)",
-    summary: "Middle stage executing business operation in Swarm B.",
-    bullets: [
-      "Runs main transaction step.",
-      "Can call REST/protocol endpoints.",
-      "Forwards processed WorkItems.",
-    ],
-  },
-  "worker-output-b": {
-    title: "Output Worker (B)",
-    summary: "Final stage in work pipeline for Swarm B.",
-    bullets: [
-      "Publishes final payload.",
-      "Routes output to next state/destination.",
-      "Provides output-side metrics and signals.",
-    ],
+  redis: {
+    title: "Optional Redis hand-off",
+    description:
+      "Redis can hold shared dataset state for a scenario; it is not required for PocketHive lifecycle control.",
   },
 };
 
-const BASIC_LOOP_STEPS = [
+const MULTI_SWARM_REDIS_STEPS: RedisStep[] = [
   {
-    id: "ready",
     title: "Ready",
     kind: "dataset",
-    desc: "Record is available in Redis list Ready.",
+    actor: "Redis dataset state",
+    description:
+      "A record waits in Ready until Swarm A can process it.",
   },
   {
-    id: "auth",
-    title: "Auth Txn",
+    title: "Auth",
     kind: "worker",
-    desc: "A worker performs the operation and validates state.",
+    actor: "Swarm A workers",
+    description:
+      "Swarm A consumes the record and runs the authorization behavior defined by its scenario.",
   },
   {
-    id: "need",
     title: "TopUpNeeded",
     kind: "dataset",
-    desc: "If top-up is needed, record is moved to TopUpNeeded.",
+    actor: "Redis dataset state",
+    description:
+      "Swarm A writes a record that needs more balance to TopUpNeeded.",
   },
   {
-    id: "topup",
-    title: "Topup Txn",
+    title: "TopUp",
     kind: "worker",
-    desc: "A worker performs top-up operation and writes record back to Ready.",
+    actor: "Swarm B workers",
+    description:
+      "Swarm B consumes the record and runs its independently controlled top-up behavior.",
+  },
+  {
+    title: "Ready",
+    kind: "dataset",
+    actor: "Redis dataset state",
+    description:
+      "Swarm B returns the updated record to Ready and completes the optional loop.",
   },
 ];
 
-const CROSS_SWARM_STEPS = [
-  {
-    id: "ready-visible",
-    title: "Step 1",
-    desc: "Ready is visible on both lanes: as source for Swarm A and as target state for Swarm B.",
-    aActive: ["from", "wait"],
-    bActive: ["to", "wait"],
-  },
-  {
-    id: "a-auth",
-    title: "Step 2",
-    desc: "Swarm A runs Auth Txn while Swarm B waits for TopUpNeeded.",
-    aActive: ["op"],
-    bActive: ["wait"],
-  },
-  {
-    id: "topup-visible",
-    title: "Step 3",
-    desc: "TopUpNeeded is visible on both lanes while Swarm A waits for Ready and Swarm B waits for TopUpNeeded.",
-    aActive: ["to", "wait"],
-    bActive: ["from", "wait"],
-  },
-  {
-    id: "b-topup",
-    title: "Step 4",
-    desc: "Swarm B runs Topup Txn while Swarm A waits for Ready.",
-    aActive: ["wait"],
-    bActive: ["op"],
-  },
-  {
-    id: "ready-back",
-    title: "Step 5",
-    desc: "Ready becomes visible again on both lanes.",
-    aActive: ["from", "wait"],
-    bActive: ["to", "wait"],
-  },
+const ONE_SWARM_REDIS_STEPS: RedisStep[] = MULTI_SWARM_REDIS_STEPS.map((step) => {
+  if (step.title === "TopUp") {
+    return {
+      ...step,
+      actor: "Same swarm - top-up workers",
+      description:
+        "A top-up worker in the same swarm consumes the record and runs the next scenario behavior.",
+    };
+  }
+
+  return {
+    ...step,
+    actor: step.actor === "Swarm A workers" ? "Same swarm - auth workers" : step.actor,
+    description: step.description
+      .replace(/Swarm A/g, "The swarm")
+      .replace(/Swarm B/g, "The top-up worker"),
+  };
+});
+
+const LIFECYCLE_STEPS = [
+  "Create",
+  "READY",
+  "Start",
+  "RUNNING",
+  "Stop",
+  "STOPPED",
+  "Remove",
 ];
 
-function SwarmCard({
-  swarmId,
-  activeNodeId,
-  onNodeClick,
+function usePrefersReducedMotion(): boolean {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+
+  useEffect(() => {
+    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const updatePreference = () => setPrefersReducedMotion(query.matches);
+
+    updatePreference();
+    query.addEventListener("change", updatePreference);
+    return () => query.removeEventListener("change", updatePreference);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function OptionalViewButton({
+  label,
+  description,
+  pressed,
+  onClick,
 }: {
-  swarmId: "a" | "b";
-  activeNodeId: string;
-  onNodeClick: (id: string) => void;
+  label: string;
+  description: string;
+  pressed: boolean;
+  onClick: () => void;
 }): React.JSX.Element {
-  const title = swarmId === "a" ? "Swarm A" : "Swarm B";
-  const roleSuffix = swarmId === "a" ? "A" : "B";
   return (
-    <article className="iph-swarm">
-      <header className="iph-swarm-head">
-        <button
-          type="button"
-          className={`iph-chip ${activeNodeId === `swarm-${swarmId}` ? "is-active" : ""}`}
-          onClick={() => onNodeClick(`swarm-${swarmId}`)}
-        >
-          {title}
-        </button>
-        <span className="iph-badge">Runtime</span>
+    <button
+      type="button"
+      className="iph-option-card"
+      aria-label={label}
+      aria-pressed={pressed}
+      onClick={onClick}
+    >
+      <span>
+        <strong>{label}</strong>
+        <small>{description}</small>
+      </span>
+      <span className="iph-option-state" aria-hidden="true">
+        {pressed ? "On" : "Off"}
+      </span>
+    </button>
+  );
+}
+
+function FocusButton({
+  label,
+  value,
+  focus,
+  onChange,
+}: {
+  label: string;
+  value: PlaneFocus;
+  focus: PlaneFocus;
+  onChange: (value: PlaneFocus) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={focus === value}
+      onClick={() => onChange(value)}
+    >
+      {label}
+    </button>
+  );
+}
+
+function DetailNode({
+  detailKey,
+  title,
+  description,
+  selectedDetail,
+  onSelect,
+  className,
+}: {
+  detailKey: ArchitectureDetailKey;
+  title: string;
+  description: string;
+  selectedDetail: ArchitectureDetailKey;
+  onSelect: (detail: ArchitectureDetailKey) => void;
+  className?: string;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className={"iph-node" + (className ? " " + className : "")}
+      aria-pressed={selectedDetail === detailKey}
+      onClick={() => onSelect(detailKey)}
+    >
+      <strong>{title}</strong>
+      <span>{description}</span>
+    </button>
+  );
+}
+
+function WorkQueueButton({
+  selectedDetail,
+  onSelect,
+}: {
+  selectedDetail: ArchitectureDetailKey;
+  onSelect: (detail: ArchitectureDetailKey) => void;
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      className="iph-route-queue"
+      aria-label="RabbitMQ work queue"
+      aria-pressed={selectedDetail === "work-queue"}
+      onClick={() => onSelect("work-queue")}
+    >
+      <span aria-hidden="true">&rarr;</span>
+      <small>
+        RabbitMQ
+        <br />
+        queue
+      </small>
+      <span aria-hidden="true">&rarr;</span>
+    </button>
+  );
+}
+
+function ArchitectureLegend(): React.JSX.Element {
+  return (
+    <ul className="iph-legend" aria-label="Architecture legend">
+      <li>
+        <span className="iph-legend-mark iph-legend-mark--control" aria-hidden="true" />
+        <span><strong>Control</strong> - commands and status</span>
+      </li>
+      <li>
+        <span className="iph-legend-mark iph-legend-mark--work" aria-hidden="true" />
+        <span><strong>Work</strong> - WorkItems between workers</span>
+      </li>
+      <li>
+        <span className="iph-legend-mark iph-legend-mark--redis" aria-hidden="true" />
+        <span><strong>Optional Redis</strong> - dataset state</span>
+      </li>
+      <li>
+        <span className="iph-legend-mark iph-legend-mark--evidence" aria-hidden="true" />
+        <span><strong>Evidence</strong> - Journal, logs, metrics, Grafana</span>
+      </li>
+    </ul>
+  );
+}
+
+function SwarmArchitecture({
+  label,
+  focus,
+  selectedDetail,
+  onSelect,
+}: {
+  label: string;
+  focus: PlaneFocus;
+  selectedDetail: ArchitectureDetailKey;
+  onSelect: (detail: ArchitectureDetailKey) => void;
+}): React.JSX.Element {
+  const controlClass =
+    focus === "work" ? "is-muted" : focus === "control" ? "is-focused" : "";
+  const workClass =
+    focus === "control" ? "is-muted" : focus === "work" ? "is-focused" : "";
+
+  return (
+    <article className="iph-swarm-card" aria-label={label + " architecture"}>
+      <header className="iph-swarm-title">
+        <span>{label}</span>
+        <small>isolated runtime</small>
       </header>
 
-      <div className="iph-subcards">
-        <section className="iph-subcard iph-subcard-control">
-          <div className="iph-plane iph-control">Control Plane</div>
-          <div className="iph-row">
-            <button
-              type="button"
-              className={`iph-chip ${activeNodeId === `controller-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`controller-${swarmId}`)}
-            >
-              Swarm Controller ({roleSuffix})
-            </button>
-            <button
-              type="button"
-              className={`iph-chip ${activeNodeId === `control-queues-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`control-queues-${swarmId}`)}
-            >
-              Control Queues ({roleSuffix})
-            </button>
-          </div>
-        </section>
+      <section className={"iph-plane-panel iph-plane-panel--control " + controlClass}>
+        <span className="iph-plane-label">Control plane</span>
+        <div className="iph-node-row">
+          <DetailNode
+            detailKey="controller"
+            title="Swarm Controller"
+            description="starts workers; fans out lifecycle"
+            selectedDetail={selectedDetail}
+            onSelect={onSelect}
+          />
+          <span className="iph-direction" aria-hidden="true">&harr;</span>
+          <DetailNode
+            detailKey="control-queues"
+            title="RabbitMQ control"
+            description="commands, status, outcomes"
+            selectedDetail={selectedDetail}
+            onSelect={onSelect}
+          />
+        </div>
+      </section>
 
-        <section className="iph-subcard iph-subcard-work">
-          <div className="iph-plane iph-work">Work Plane</div>
-          <div className="iph-row">
-            <button
-              type="button"
-              className={`iph-chip ${activeNodeId === `work-queues-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`work-queues-${swarmId}`)}
-            >
-              Work Queues ({roleSuffix})
-            </button>
-            <button
-              type="button"
-              className={`iph-chip ${activeNodeId === `workitem-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`workitem-${swarmId}`)}
-            >
-              WorkItem ({roleSuffix})
-            </button>
-          </div>
-          <div className="iph-row iph-workers-row">
-            <button
-              type="button"
-              className={`iph-chip iph-chip-worker ${activeNodeId === `worker-input-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`worker-input-${swarmId}`)}
-            >
-              Input ({roleSuffix})
-            </button>
-            <span className="iph-arrow iph-worker-arrow">-&gt;</span>
-            <button
-              type="button"
-              className={`iph-chip iph-chip-worker ${activeNodeId === `worker-processing-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`worker-processing-${swarmId}`)}
-            >
-              Processing ({roleSuffix})
-            </button>
-            <span className="iph-arrow iph-worker-arrow">-&gt;</span>
-            <button
-              type="button"
-              className={`iph-chip iph-chip-worker ${activeNodeId === `worker-output-${swarmId}` ? "is-active" : ""}`}
-              onClick={() => onNodeClick(`worker-output-${swarmId}`)}
-            >
-              Output ({roleSuffix})
-            </button>
-          </div>
-        </section>
-      </div>
+      <section className={"iph-plane-panel iph-plane-panel--work " + workClass}>
+        <span className="iph-plane-label">Scenario worker route</span>
+        <div className="iph-worker-route" aria-label="Example scenario-defined worker route">
+          <DetailNode
+            detailKey="source-worker"
+            title="Source"
+            description="creates a WorkItem"
+            selectedDetail={selectedDetail}
+            onSelect={onSelect}
+            className="iph-node--worker"
+          />
+          <WorkQueueButton selectedDetail={selectedDetail} onSelect={onSelect} />
+          <DetailNode
+            detailKey="action-worker"
+            title="Action"
+            description="runs scenario behavior"
+            selectedDetail={selectedDetail}
+            onSelect={onSelect}
+            className="iph-node--worker"
+          />
+          <WorkQueueButton selectedDetail={selectedDetail} onSelect={onSelect} />
+          <DetailNode
+            detailKey="sink-worker"
+            title="Sink"
+            description="publishes the result"
+            selectedDetail={selectedDetail}
+            onSelect={onSelect}
+            className="iph-node--worker"
+          />
+        </div>
+      </section>
+
+      <button
+        type="button"
+        className="iph-evidence-strip"
+        aria-pressed={selectedDetail === "evidence"}
+        onClick={() => onSelect("evidence")}
+      >
+        <strong>Evidence</strong>
+        <span>Journal &middot; logs &middot; metrics &middot; Grafana</span>
+      </button>
     </article>
   );
 }
 
-function TwoSwarmLane({
-  title,
-  from,
-  op,
-  to,
-  activeKeys,
-  waitingText,
-  isActive,
-}: {
-  title: string;
-  from: string;
-  op: string;
-  to: string;
-  activeKeys: Array<"from" | "op" | "to" | "wait" | "idle">;
-  waitingText?: string;
-  isActive?: boolean;
-}): React.JSX.Element {
-  const isKeyActive = (key: "from" | "op" | "to" | "wait" | "idle") =>
-    activeKeys.includes(key);
+export function ArchitectureExplorer({
+  labelledBy,
+}: LabelledSectionProps): React.JSX.Element {
+  const [showSecondSwarm, setShowSecondSwarm] = useState(false);
+  const [showRedis, setShowRedis] = useState(false);
+  const [planeFocus, setPlaneFocus] = useState<PlaneFocus>("all");
+  const [selectedDetail, setSelectedDetail] =
+    useState<ArchitectureDetailKey>("orchestrator");
+  const focusLabelId = useId();
+  const selected = ARCHITECTURE_DETAILS[selectedDetail];
+
+  const toggleSecondSwarm = () => {
+    setShowSecondSwarm((current) => {
+      if (current) {
+        setShowRedis(false);
+        setSelectedDetail((detail) =>
+          detail === "multi-swarm" || detail === "redis"
+            ? "orchestrator"
+            : detail,
+        );
+      } else {
+        setSelectedDetail("multi-swarm");
+      }
+      return !current;
+    });
+  };
+
+  const toggleRedis = () => {
+    setShowRedis((current) => {
+      if (!current) {
+        setShowSecondSwarm(true);
+        setSelectedDetail("redis");
+      } else {
+        setSelectedDetail((detail) =>
+          detail === "redis" ? "multi-swarm" : detail,
+        );
+      }
+      return !current;
+    });
+  };
+
+  const viewSummary = [
+    showSecondSwarm ? "two independent swarms" : "one swarm",
+    planeFocus === "all" ? "both planes" : planeFocus + " plane focused",
+    showRedis ? "optional Redis visible" : "optional Redis hidden",
+  ].join("; ");
 
   return (
-    <article className={`iph-flow-card ${isActive ? "is-active" : ""}`}>
-      <h3>{title}</h3>
-      <div className="iph-flow-line">
-        <span className={`iph-flow-pill iph-flow-redis ${isKeyActive("from") ? "is-active" : ""}`}>
-          <span className="iph-flow-label">Dataset</span>
-          <span className="iph-flow-value">{from}</span>
-        </span>
-        <span className={`iph-arrow ${isKeyActive("from") || isKeyActive("op") ? "is-active" : ""}`}>-&gt;</span>
-        <span className={`iph-flow-pill iph-flow-op ${isKeyActive("op") ? "is-active" : ""}`}>
-          <span className="iph-flow-label">Workers</span>
-          <span className="iph-flow-value">{op}</span>
-        </span>
-        <span className={`iph-arrow ${isKeyActive("op") || isKeyActive("to") ? "is-active" : ""}`}>-&gt;</span>
-        <span className={`iph-flow-pill iph-flow-redis ${isKeyActive("to") ? "is-active" : ""}`}>
-          <span className="iph-flow-label">Dataset</span>
-          <span className="iph-flow-value">{to}</span>
-        </span>
+    <section
+      className="iph-card iph-card--architecture"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : "System map"}
+    >
+      <div className="iph-card-lead">
+        <p className="iph-eyebrow">Explore the current system</p>
+        <p>
+          Orchestrator coordinates isolated swarms over RabbitMQ. WorkItems move
+          worker-to-worker; evidence confirms outcomes.
+        </p>
       </div>
-      {waitingText ? (
-        <div className={`iph-wait ${isKeyActive("wait") ? "is-active" : ""}`}>
-          {waitingText}
+
+      <div className="iph-architecture-controls">
+        <div className="iph-option-group">
+          <span className="iph-control-label">Optional views</span>
+          <div className="iph-option-grid">
+            <OptionalViewButton
+              label="Second swarm"
+              description="Independent runtime"
+              pressed={showSecondSwarm}
+              onClick={toggleSecondSwarm}
+            />
+            <OptionalViewButton
+              label="Optional Redis"
+              description="Shared dataset state"
+              pressed={showRedis}
+              onClick={toggleRedis}
+            />
+          </div>
+        </div>
+
+        <div className="iph-focus-control">
+          <span id={focusLabelId} className="iph-control-label">Focus</span>
+          <div className="iph-segmented" role="group" aria-labelledby={focusLabelId}>
+            <FocusButton label="All" value="all" focus={planeFocus} onChange={setPlaneFocus} />
+            <FocusButton label="Control" value="control" focus={planeFocus} onChange={setPlaneFocus} />
+            <FocusButton label="Work" value="work" focus={planeFocus} onChange={setPlaneFocus} />
+          </div>
+        </div>
+      </div>
+
+      <p className="iph-visually-hidden" aria-live="polite">
+        Current view: {viewSummary}.
+      </p>
+
+      <ArchitectureLegend />
+
+      <button
+        type="button"
+        className="iph-orchestrator-node"
+        aria-pressed={selectedDetail === "orchestrator"}
+        onClick={() => setSelectedDetail("orchestrator")}
+      >
+        <span className="iph-plane-label">Global control owner</span>
+        <strong>Orchestrator</strong>
+        <span>lifecycle &rarr; controller &middot; live config &rarr; worker</span>
+      </button>
+      <div className="iph-control-connection" aria-label="Control-plane connection over RabbitMQ">
+        <span aria-hidden="true">&darr;</span>
+        <strong>RabbitMQ control plane</strong>
+        <span aria-hidden="true">&darr;</span>
+      </div>
+
+      <div className={"iph-swarm-grid" + (showSecondSwarm ? "" : " is-single")}>
+        <SwarmArchitecture
+          label="Swarm A"
+          focus={planeFocus}
+          selectedDetail={selectedDetail}
+          onSelect={setSelectedDetail}
+        />
+        {showSecondSwarm ? (
+          <SwarmArchitecture
+            label="Swarm B"
+            focus={planeFocus}
+            selectedDetail={selectedDetail}
+            onSelect={setSelectedDetail}
+          />
+        ) : null}
+      </div>
+
+      <p className="iph-architecture-note">
+        <strong>Boundary:</strong> startup and swarm-wide lifecycle go through the
+        controller; targeted live configuration goes directly to workers; business
+        WorkItems stay on the work plane.
+        {showSecondSwarm ? (
+          <span> Each swarm keeps its own controller, queues, lifecycle, and evidence.</span>
+        ) : null}
+      </p>
+
+      {showRedis ? (
+        <div className="iph-redis-bridge">
+          <span className="iph-plane-label">Optional Redis dataset hand-off</span>
+          <strong>Swarm A &rarr; TopUpNeeded &middot; Swarm B &rarr; Ready</strong>
+          <p>Dataset state only; Redis does not control the swarm lifecycle.</p>
         </div>
       ) : null}
-    </article>
+
+      <div className="iph-detail-panel" aria-live="polite" aria-atomic="true">
+        <span>Selected component</span>
+        <strong>{selected.title}</strong>
+        <p>{selected.description}</p>
+      </div>
+    </section>
+  );
+}
+
+function RedisSequence({
+  routeTitle,
+  labelledBy,
+  steps,
+}: {
+  routeTitle: string;
+  labelledBy?: string;
+  steps: RedisStep[];
+}): React.JSX.Element {
+  const [activeStep, setActiveStep] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const prefersReducedMotion = usePrefersReducedMotion();
+
+  useEffect(() => {
+    if (prefersReducedMotion) {
+      setIsPlaying(false);
+    }
+  }, [prefersReducedMotion]);
+
+  useEffect(() => {
+    if (!isPlaying || prefersReducedMotion) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setActiveStep((current) => (current + 1) % steps.length);
+    }, 2200);
+    return () => window.clearInterval(timer);
+  }, [isPlaying, prefersReducedMotion, steps.length]);
+
+  const selectStep = (step: number) => {
+    setIsPlaying(false);
+    setActiveStep(step);
+  };
+
+  const step = steps[activeStep];
+
+  return (
+    <section
+      className="iph-card iph-card--sequence"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : "Optional Redis collaboration"}
+    >
+      <div className="iph-card-lead iph-card-lead--split">
+        <div>
+          <p className="iph-eyebrow">Optional worked example</p>
+          <strong className="iph-route-title">{routeTitle}</strong>
+        </div>
+        <p>Redis is one possible dataset hand-off, not a required component.</p>
+      </div>
+
+      <ol className="iph-step-track" aria-label="Five-step optional Redis collaboration loop">
+        {steps.map((redisStep, index) => (
+          <li key={redisStep.title + "-" + index}>
+            <button
+              type="button"
+              className={"iph-sequence-step iph-sequence-step--" + redisStep.kind}
+              aria-pressed={activeStep === index}
+              onClick={() => selectStep(index)}
+            >
+              <span>Step {index + 1}</span>
+              <strong>{redisStep.title}</strong>
+              <small>{redisStep.actor}</small>
+            </button>
+          </li>
+        ))}
+      </ol>
+
+      <div className="iph-step-detail" aria-live="polite" aria-atomic="true">
+        <div>
+          <span>Step {activeStep + 1} of {steps.length}</span>
+          <strong>{step.title}</strong>
+          <p>{step.description}</p>
+        </div>
+        <strong>{step.actor}</strong>
+      </div>
+
+      <div className="iph-playback" aria-label="Optional Redis playback controls">
+        <button
+          type="button"
+          disabled={activeStep === 0}
+          onClick={() => selectStep(activeStep - 1)}
+        >
+          Previous
+        </button>
+        <span>Step {activeStep + 1} of {steps.length}</span>
+        <button
+          type="button"
+          disabled={activeStep === steps.length - 1}
+          onClick={() => selectStep(activeStep + 1)}
+        >
+          Next
+        </button>
+        <button
+          type="button"
+          disabled={prefersReducedMotion}
+          aria-label="Automatic playback"
+          aria-pressed={isPlaying}
+          onClick={() => setIsPlaying((current) => !current)}
+          title={
+            prefersReducedMotion
+              ? "Playback is disabled by your reduced-motion preference"
+              : undefined
+          }
+        >
+          {prefersReducedMotion ? "Playback unavailable" : isPlaying ? "Pause" : "Play"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+export function OptionalRedisCollaboration({
+  labelledBy,
+}: LabelledSectionProps): React.JSX.Element {
+  return (
+    <RedisSequence
+      routeTitle="Ready -> Auth -> TopUpNeeded -> TopUp -> Ready"
+      labelledBy={labelledBy}
+      steps={MULTI_SWARM_REDIS_STEPS}
+    />
+  );
+}
+
+export function LifecycleStrip({
+  labelledBy,
+}: LabelledSectionProps): React.JSX.Element {
+  return (
+    <section
+      className="iph-card iph-lifecycle"
+      aria-labelledby={labelledBy}
+      aria-label={labelledBy ? undefined : "Lifecycle and evidence"}
+    >
+      <div className="iph-card-lead iph-card-lead--split">
+        <div>
+          <p className="iph-eyebrow">Proof, not just requests</p>
+          <strong className="iph-route-title">Follow the state to completion</strong>
+        </div>
+        <p>Acceptance starts verification; runtime evidence finishes it.</p>
+      </div>
+
+      <ol className="iph-lifecycle-strip" aria-label="Swarm lifecycle">
+        {LIFECYCLE_STEPS.map((lifecycleStep) => (
+          <li key={lifecycleStep}>{lifecycleStep}</li>
+        ))}
+      </ol>
+
+      <div className="iph-proof-grid">
+        <div>
+          <strong>1 &middot; Accepted</strong>
+          <span>The UI or API accepted the action.</span>
+        </div>
+        <div>
+          <strong>2 &middot; Dispatched</strong>
+          <span>The command reached the intended swarm.</span>
+        </div>
+        <div>
+          <strong>3 &middot; Converged</strong>
+          <span>Status and evidence confirm the expected state.</span>
+        </div>
+      </div>
+    </section>
   );
 }
 
 export function CoreConceptsExplorer(): React.JSX.Element {
-  const [activeNodeId, setActiveNodeId] = useState("orchestrator");
-  const activeDetail = useMemo(
-    () => DETAILS[activeNodeId] ?? DETAILS.orchestrator,
-    [activeNodeId],
-  );
-
-  return (
-    <section className="iph-card">
-      <h2>Core Concepts Explorer</h2>
-      <p className="iph-subtitle">
-        Click cards to inspect responsibilities in the Orchestrator -&gt; Swarm A/B
-        topology.
-      </p>
-
-      <div className="iph-orchestrator-block">
-        <button
-          type="button"
-          className={`iph-chip iph-orchestrator ${activeNodeId === "orchestrator" ? "is-active" : ""}`}
-          onClick={() => setActiveNodeId("orchestrator")}
-        >
-          Orchestrator
-        </button>
-      </div>
-
-      <div className="iph-links-row" aria-hidden="true">
-        <span className="iph-link-column">
-          <span className="iph-link-line" />
-          <span className="iph-link-arrow">↓</span>
-        </span>
-        <span className="iph-link-column">
-          <span className="iph-link-line" />
-          <span className="iph-link-arrow">↓</span>
-        </span>
-      </div>
-
-      <div className="iph-swarms-grid">
-        <SwarmCard swarmId="a" activeNodeId={activeNodeId} onNodeClick={setActiveNodeId} />
-        <SwarmCard swarmId="b" activeNodeId={activeNodeId} onNodeClick={setActiveNodeId} />
-      </div>
-
-      <div className="iph-detail">
-        <h3>{activeDetail.title}</h3>
-        <p>{activeDetail.summary}</p>
-        <ul>
-          {activeDetail.bullets.map((bullet) => (
-            <li key={bullet}>{bullet}</li>
-          ))}
-        </ul>
-      </div>
-    </section>
-  );
+  return <ArchitectureExplorer />;
 }
 
 export function RedisBasicLoopExplorer(): React.JSX.Element {
-  const [basicStep, setBasicStep] = useState(0);
-  const [autoplayBasic, setAutoplayBasic] = useState(true);
-
-  useEffect(() => {
-    if (!autoplayBasic) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setBasicStep((prev) => (prev + 1) % BASIC_LOOP_STEPS.length);
-    }, 1800);
-    return () => clearInterval(timer);
-  }, [autoplayBasic]);
-
   return (
-    <section className="iph-card">
-      <div className="iph-card-head">
-        <h2>Basic Redis Loop</h2>
-        <button type="button" onClick={() => setAutoplayBasic((v) => !v)}>
-          {autoplayBasic ? "Pause autoplay" : "Start autoplay"}
-        </button>
-      </div>
-      <p className="iph-subtitle">
-        Redis acts as a dataset database. Workers perform operations and move records
-        between state lists.
-      </p>
-
-      <div className="iph-loop">
-        {BASIC_LOOP_STEPS.map((step, index) => {
-          const isActive = index === basicStep;
-          const isRedis = step.kind === "dataset";
-          return (
-            <React.Fragment key={step.id}>
-              <button
-                type="button"
-                className={`iph-step ${isActive ? "is-active" : ""} ${isRedis ? "iph-step-redis" : "iph-step-worker"}`}
-                onClick={() => setBasicStep(index)}
-              >
-                <span className="iph-step-label">{isRedis ? "Dataset" : "Workers"}</span>
-                <span className="iph-step-value">{step.title}</span>
-              </button>
-              {index < BASIC_LOOP_STEPS.length - 1 ? (
-                <span className={`iph-arrow ${isActive ? "is-active" : ""}`}>-&gt;</span>
-              ) : null}
-            </React.Fragment>
-          );
-        })}
-        <span className="iph-arrow iph-arrow-loop">-&gt;</span>
-      </div>
-
-      <div className="iph-detail">
-        <h3>{BASIC_LOOP_STEPS[basicStep].title}</h3>
-        <p>{BASIC_LOOP_STEPS[basicStep].desc}</p>
-      </div>
-    </section>
+    <RedisSequence
+      routeTitle="Ready -> Auth -> TopUpNeeded -> TopUp -> Ready"
+      labelledBy="one-swarm-loop"
+      steps={ONE_SWARM_REDIS_STEPS}
+    />
   );
 }
 
 export function RedisMultiSwarmExplorer(): React.JSX.Element {
-  const [crossStep, setCrossStep] = useState(0);
-  const [autoplayCross, setAutoplayCross] = useState(true);
-
-  useEffect(() => {
-    if (!autoplayCross) {
-      return;
-    }
-    const timer = setInterval(() => {
-      setCrossStep((prev) => (prev + 1) % CROSS_SWARM_STEPS.length);
-    }, 2200);
-    return () => clearInterval(timer);
-  }, [autoplayCross]);
-
-  const cross = CROSS_SWARM_STEPS[crossStep];
-  const laneAKeys = cross.aActive as Array<"from" | "op" | "to" | "wait" | "idle">;
-  const laneBKeys = cross.bActive as Array<"from" | "op" | "to" | "wait" | "idle">;
-
   return (
-    <section className="iph-card">
-      <div className="iph-card-head">
-        <h2>Two-Swarm Redis Collaboration</h2>
-        <button type="button" onClick={() => setAutoplayCross((v) => !v)}>
-          {autoplayCross ? "Pause autoplay" : "Start autoplay"}
-        </button>
-      </div>
-      <p className="iph-subtitle">
-        Swarm A writes to TopUpNeeded. Swarm B waits for records there, runs its
-        operation, then writes back to Ready.
-      </p>
-
-      <div className="iph-two-swarm-grid">
-        <TwoSwarmLane
-          title="Swarm A"
-          from="Ready"
-          op="Auth Txn"
-          to="TopUpNeeded"
-          activeKeys={laneAKeys}
-          waitingText="Waiting for records on Ready"
-          isActive={laneAKeys.length > 0 && !laneAKeys.includes("idle")}
-        />
-        <TwoSwarmLane
-          title="Swarm B"
-          from="TopUpNeeded"
-          op="Topup Txn"
-          to="Ready"
-          activeKeys={laneBKeys}
-          waitingText="Waiting for records on TopUpNeeded"
-          isActive={laneBKeys.length > 0 && !laneBKeys.includes("idle")}
-        />
-      </div>
-
-      <div className="iph-detail">
-        <h3>{cross.title}</h3>
-        <p>{cross.desc}</p>
-      </div>
-    </section>
+    <RedisSequence
+      routeTitle="Ready -> Auth -> TopUpNeeded -> TopUp -> Ready"
+      labelledBy="multi-swarm-hand-off"
+      steps={MULTI_SWARM_REDIS_STEPS}
+    />
   );
 }
 
 export default function InteractivePocketHiveExplorer(): React.JSX.Element {
   return (
     <div className="iph-wrap">
-      <CoreConceptsExplorer />
-      <RedisBasicLoopExplorer />
-      <RedisMultiSwarmExplorer />
+      <ArchitectureExplorer />
+      <OptionalRedisCollaboration />
+      <LifecycleStrip />
     </div>
   );
 }

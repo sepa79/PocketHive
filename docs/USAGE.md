@@ -1,262 +1,231 @@
-# Usage Guide
+# PocketHive usage reference
 
-## WebSocket Proxy (UI ↔ RabbitMQ)
-- The UI does not connect directly to `localhost:15674`. Instead, nginx proxies `/ws` to `rabbitmq:15674/ws` to avoid CORS issues.
-- Accessing the UI from a remote host is supported through this same-origin proxy.
-- When serving over HTTPS the app automatically uses `wss://`.
+This page collects operational details that do not belong in the first-run
+guides. Start with the [PocketHive application guide](guides/ui/application-guide.md)
+or [local quickstart](guides/onboarding/quickstart-15min.md).
 
-## Healthchecks
-- `rabbitmq`: built-in healthcheck via `rabbitmq-diagnostics ping`.
-- `ui`: HTTP `GET /healthz` returns `200 ok` (nginx); Compose healthcheck pings it every 10s.
+## Deployment boundary
 
-When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
+- A versioned Docker Compose package is the intended evaluation/local
+  distribution, but the `v0.15.35` package has not passed its clean-host gate.
+- HiveForge is the intended managed, production-like path, but its current
+  actions prepare and validate a stack without executing deploy/update/remove.
+- `./build-hive.sh` is the current working source-development entry point.
 
-## Docker Swarm mode (manager-only)
-- Swarm mode requires a **Docker Swarm manager**. Workers cannot create services, so the Orchestrator must connect to a manager node.
-- If you deploy the Orchestrator inside Swarm, schedule it on a manager node and mount the manager’s Docker socket.
-- If you target a remote engine, point `DOCKER_HOST` at a manager endpoint that has Swarm control available.
+See [deployment paths](guides/operators/deployment.md) before starting an
+environment.
 
-## Journal (Swarm vs Hive)
+### External deployment package
 
-PocketHive exposes two related timelines:
+The established external Compose/Portainer procedure remains:
 
-- **Swarm journal**: events tied to a single swarm run.
-- **Hive journal**: a Hive-level timeline (Orchestrator) that can be filtered by `swarmId`/`runId`.
+1. Create the package with `./package-deployment.sh` or
+   `package-deployment.bat`.
+2. Copy the generated `pockethive-deployment-<version>.tar.gz` or
+   `pockethive-deployment-<version>.zip` to the target.
+3. Extract it and enter the `pockethive` directory.
+4. Run `docker compose up -d` or import the bundled `docker-compose.yml` into
+   Portainer.
 
-### Storage backends (`POCKETHIVE_JOURNAL_SINK`)
+These commands describe the intended package workflow; the current archive
+still requires the clean-host qualification described above.
 
-The journal backend is selected via `pockethive.journal.sink` (env: `POCKETHIVE_JOURNAL_SINK`) on the **orchestrator** container. The Orchestrator propagates this value to the swarm-controller containers it launches.
+### Managed deployment with HiveForge
 
-- `postgres` (recommended; default in `docker-compose.yml`)
-  - Enables paginated APIs + runs + pin + Hive journal.
-  - Requires Postgres connection (`SPRING_DATASOURCE_*`) to be configured.
-- `file` (explicit lightweight mode)
-  - Disables Postgres-only APIs (they return `501 Not Implemented`).
-  - Swarm journal is read from `journal.ndjson` under the runtime root (see below).
+HiveForge is the recommended managed, production-like path. It uses an
+approved PocketHive git ref plus prebuilt registry-qualified images rather
+than the Compose archive. Configure the exact registry/version inputs, select
+`swarm-reduced` or `swarm-full`, and run the approved action through HiveForge.
 
-### Runtime root (`POCKETHIVE_SCENARIOS_RUNTIME_ROOT`)
+Current `v0.15.35` actions render and validate the Docker Swarm stack but do
+not yet execute deploy/update/remove. See
+[HiveForge integration](HIVEFORGE.md) for profiles, inputs, and completion
+gates.
 
-File-backed swarm journals live under:
+## Official ingress
 
-`$POCKETHIVE_SCENARIOS_RUNTIME_ROOT/<swarmId>/<runId>/journal.ndjson`
+The default local source stack exposes the PocketHive application at:
 
-In the default stack this is a bind mount:
-
-- Host: `/opt/pockethive/scenarios-runtime`
-- Containers: `/app/scenarios-runtime`
-
-The Orchestrator creates the runtime root directory on startup when configured.
-
-### How to enable file mode locally
-
-In `docker-compose.yml` under `orchestrator.environment`, set:
-
-- `POCKETHIVE_JOURNAL_SINK: file`
-
-Then rebuild/redeploy the stack via `./build-hive.sh` (or `docker compose down && docker compose up -d`).
-
-### UI behavior
-
-- The Hive UI’s mini-journal on a swarm card can switch between:
-  - **Swarm**: per-swarm journal entries
-  - **Hive**: Hive journal filtered by `swarmId`
-- Paginated Swarm and Hive journal views require the `postgres` backend.
-- In explicit `file` mode, Postgres-only requests return `501 Not Implemented`;
-  the UI reports that error and does not switch to another journal API.
-
-## Grafana (metrics + journal annotations)
-
-- Grafana UI: `http://localhost:8088/grafana/` (user/pass: `pockethive` / `pockethive`).
-- Dashboards:
-  - `PocketHive Journal` (`uid=pockethive-journal`) — Postgres-backed timeline + annotations (WARN/ERROR, lifecycle outcomes, journal backpressure).
-  - `Pipeline observability` (`uid=pockethive-pipeline`) — ClickHouse service metrics from `ph_metrics_samples` with Journal annotations overlaid.
-  - `PocketHive Pipeline Deep Dive` (`uid=pockethive-pipeline-detailed`) — ClickHouse runtime metrics and transaction drill-downs.
-  - ClickHouse transaction dashboards use `ph_tx_outcome_v2`.
-
-## ClickHouse tx_outcome v1 -> v2 migration
-
-Fresh ClickHouse volumes create only `ph_tx_outcome_v2`. Existing volumes may still contain the legacy `ph_tx_outcome_v1` table.
-
-The local ClickHouse service uses a small entrypoint wrapper that runs the official ClickHouse entrypoint, waits for ClickHouse readiness, and then runs the v1 -> v2 migration inside the same container. On startup it:
-
-- exits successfully when `ph_tx_outcome_v1` does not exist
-- migrates all `ph_tx_outcome_v1` rows into `ph_tx_outcome_v2` when v1 exists and v2 is empty
-- drops `ph_tx_outcome_v1` after a successful full migration
-- fails the ClickHouse container startup instead of appending into a non-empty v2 table, to avoid duplicate historical rows
-
-For manual migration or recovery, use the local wrapper:
-
-```bash
-bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh
+```text
+http://localhost:8088
 ```
 
-For date-bounded migration:
+Use this origin for customer and verification traffic:
+
+| Route | Purpose |
+| --- | --- |
+| `/` | PocketHive application |
+| `/docs/` | Documentation bundled with this UI build |
+| `/healthz` | UI ingress health |
+| `/orchestrator/*` | Orchestrator API proxy |
+| `/scenario-manager/*` | Scenario Manager API proxy |
+| `/auth/*` | Auth-service API proxy |
+| `/grafana/` | Grafana operator application |
+| `/rabbitmq/` | RabbitMQ advanced diagnostics |
+| `/redis/` | Redis advanced diagnostics |
+| `/wiremock/` | Local WireMock diagnostics |
+| `/ws` | Same-origin RabbitMQ Web-STOMP proxy |
+
+Browsers and customer tests must not replace these routes with direct backend
+container ports. When the ingress uses HTTPS, the application uses `wss://` for
+WebSocket traffic.
+
+Health check:
 
 ```bash
-bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --from 2026-02-01 --to 2026-02-22
+curl -fsS http://localhost:8088/healthz
 ```
 
-For a full rebuild of v2 from v1:
+## Application workflow
+
+When the stable platform starts, no customer swarm is running.
+
+1. Use **Scenarios** to inspect or edit a validated scenario bundle.
+2. Use **Hive → New swarm** to select a scenario, SUT, and network mode.
+3. Wait for the projected `READY` state and a fresh controller Snapshot.
+4. Start, wait for `RUNNING`, require a fresh Snapshot, and use **Scenario** to
+   confirm the intended workers are enabled and live.
+5. Observe Snapshot, topology, Journal, and Grafana as needed.
+6. Stop, wait for `STOPPED`, require a fresh Snapshot, and use **Scenario** to
+   confirm those workers are disabled and still live.
+7. Remove, require the correlated `swarm-remove` outcome with status `Removed`
+   in Journal, and then confirm that the swarm disappears from Hive.
+
+An action response proves request acceptance, not completion. `v0.15.35` also
+has a known readiness-ownership gap: projected `READY` can briefly precede the
+controller's stricter template/plan/readiness gate. If start returns
+`NotReady`, wait for fresh state rather than repeating it immediately.
+
+See [swarm lifecycle](guides/operators/swarm-lifecycle.md) for all states.
+
+## Current screens
+
+| Screen | Use |
+| --- | --- |
+| Home | Customer task entry points |
+| Scenarios | Scenario bundle workspace, validation, and upload |
+| Hive | Swarm creation, lifecycle, Snapshot, Scenario, Network, and Inspector |
+| Swarm topology | Scenario graph mapped to current runtime workers |
+| Journal | Swarm and Hive control/lifecycle history |
+| Proxy | Shared proxy stack, profiles, and per-swarm network support |
+| Buzz | Advanced recent control-plane inspection |
+| Connectivity | UI/service/control-plane connection diagnosis |
+| Users | Auth administration for users with auth `ADMIN` |
+| Help | Version-matched task guide hub |
+
+Legacy Bees/Nectar panels and the archived UI are not part of UI v2.
+
+## Journal
+
+PocketHive exposes:
+
+- a **Swarm Journal** for one swarm/run;
+- a **Hive Journal** for Orchestrator-level history, filterable by swarm/run.
+
+`POCKETHIVE_JOURNAL_SINK` selects the backend:
+
+| Value | Behavior |
+| --- | --- |
+| `postgres` | Default Compose mode; paginated Swarm/Hive APIs, runs, and pin support. |
+| `file` | Explicit lightweight mode; Postgres-only APIs return `501`, with per-run `journal.ndjson` under the configured runtime root. |
+
+The Orchestrator propagates the chosen sink to dynamic Swarm Controllers.
+There is no silent API fallback from Postgres to file mode.
+
+Raw Journal data can contain configuration, endpoints, identifiers, and
+payloads. Keep it collapsed unless needed and sanitize it before sharing.
+
+## Metrics and Grafana
+
+PocketHive product metrics are stored in ClickHouse and displayed through
+Grafana at `/grafana/`. The local Compose-only default login is
+`pockethive` / `pockethive`; it is not a production credential.
+
+Provisioned dashboards include:
+
+- PocketHive Journal;
+- Pipeline observability;
+- PocketHive Pipeline Deep Dive.
+
+Use [observability and troubleshooting](guides/operators/observability-troubleshooting.md)
+for evidence order. Grafana trends do not replace lifecycle outcome and status
+evidence.
+
+Existing ClickHouse volumes may require the documented `tx_outcome` migration.
+Read [Upgrading PocketHive](UPGRADING.md) before changing versions; do not run a
+destructive migration from an old standalone instruction.
+
+## Scenario Manager behavior
+
+Scenario Manager owns scenario workspaces, static validation, capability
+metadata, SUT/network metadata, and validated runtime preparation. The
+Orchestrator performs admission and run-specific resolution before launch.
+
+Scenario images require an explicit tag or digest unless the environment sets
+`POCKETHIVE_IMAGES_DEFAULT_TAG`. Digest-pinned references are preserved.
+Capability lookup normalizes the image name without registry, namespace, tag,
+or digest.
+
+Use the same-origin Scenario Manager route when an API check is required:
 
 ```bash
-bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --truncate-v2
+curl -fsS http://localhost:8088/scenario-manager/scenarios
 ```
 
-To manually drop v1 after a successful full-table migration:
+For guarded file authoring and dry-run validation, use
+[PocketHive MCP](guides/integrations/pockethive-mcp-and-bundles.md).
 
-```bash
-bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --drop-source-after-migration
-```
+## Worker configuration
 
-The wrapper copies and runs the underlying migration script inside the running `clickhouse` docker compose service:
+Scenario `template.bees[].config` is the logical runtime configuration source.
+The Swarm Controller injects IO and bootstrap config when it materializes
+workers. A targeted live patch is routed by the Orchestrator directly to the
+selected worker.
 
-- script: `clickhouse/migrate-tx-outcome-v1-to-v2.sh`
-- expected runtime: inside the running ClickHouse container
-- required tooling: `bash` and `clickhouse-client` only
+Live updates are limited:
 
-Manual operator flow:
+- only capability entries explicitly marked `liveMutable: true` can be offered
+  as normal live edits;
+- unsafe IO wiring, adapters, endpoints, protocols, credentials, and routes
+  require rematerialization;
+- the Redis dataset list-name exception is allowed only for an already stopped,
+  single-source worker under the documented runtime guard.
 
-1. Upload the script into a path already mounted into the ClickHouse container.
-2. Open a shell in the running ClickHouse container.
-   This can be done either with `docker exec` on the node that hosts the task, or via Portainer `Exec Console`.
-3. Run the script from inside that shell.
+See [technical architecture](ARCHITECTURE.md) for the exact config propagation
+paths and [worker capabilities](architecture/workerCapabilities.md) for the UI
+contract.
 
-Examples:
+## Queue guard scenarios
 
-```bash
-bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh
-```
+The controller feature flag
+`POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_FEATURES_BUFFER_GUARD_ENABLED`
+enables the feature globally. A scenario must still set
+`trafficPolicy.bufferGuard.enabled: true`.
 
-```bash
-bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh --from 2026-02-01 --to 2026-02-22
-```
+Operational guidance:
 
-```bash
-bash /mounted/path/migrate-tx-outcome-v1-to-v2.sh --truncate-v2
-```
-
-Operational behavior:
-
-- the script checks that `ph_tx_outcome_v1` exists
-- it creates `ph_tx_outcome_v2` if missing, using the repo v2 schema
-- it fails if `ph_tx_outcome_v2` is already non-empty, unless `--truncate-v2` is passed explicitly
-- it migrates day by day
-- after each day it compares `v1` and `v2` row counts and exits non-zero on mismatch
-
-## Scenario Manager API
-- nginx proxies `/scenario-manager/*` to the Scenario Manager service.
-- The service also exposes port `1081` on the host for direct API access.
-- Ensure the `scenario-manager` container is running and healthy before calling it.
-
-### Scenario image tags
-- Scenario images must include a tag or digest unless scenario-manager is configured with `POCKETHIVE_IMAGES_DEFAULT_TAG` (see `docker-compose.yml`).
-- When `POCKETHIVE_IMAGES_DEFAULT_TAG` is configured, scenario-manager applies that tag to image references without digests, including references that already include a tag. Digest-pinned image references are preserved.
-- Capability manifest lookup uses the canonical image name without registry, namespace, tag, or digest; runtime image references are not rewritten.
-
-Example listings:
-
-```bash
-curl -s http://localhost:1081/scenarios
-curl -s http://localhost:8088/scenario-manager/scenarios
-```
-
-Manual checks:
-- UI health: `curl -s http://localhost:8088/healthz` → `ok`.
-- RabbitMQ management UI: `http://localhost:15672`.
-
-## UI Panels
-- **Backgrounds**: selector for Bees / Network / Old; only the active background renders.
-- **Buzz**: logs STOMP traffic with IN, OUT and Other views and lists current binds and URLs in a Config tab.
-- **System Logs**: shows system and user actions such as connect/disconnect and edits of credentials.
-- **Hive**: lists live components grouped by swarm with per-swarm start/stop controls and an interactive topology tab.
-- **Nectar**: metric dropdown (TPS, latency, hops) and points input to adjust chart history.
-
-## UI Controls
-- **View tabs** switch between Hive, Buzz and Nectar panels.
-- **Menu (☰)** links to README, Buzz bindings, changelog and API docs.
-- **WebSocket eye** connects or disconnects from RabbitMQ.
-- **Monolith button** broadcasts a global `status-request` signal.
-- **Buzz view** displays IN, OUT and Other logs with a Config tab and Topic Sniffer.
-- **Hive view** provides per-swarm start/stop controls, topology, and settings drawers with confirmable config updates.
-
-## Swarm launch
-- Open the Hive view and choose **Create Swarm**.
-- Enter a swarm ID and select a scenario. The modal fetches scenario summaries from
-  `/scenario-manager/scenarios` and loads the chosen scenario's JSON from
-  `/scenario-manager/scenarios/{id}`.
-- Submit to create the swarm, then start it with the play button next to its entry.
-
-### Queue Guard scenarios
-- **Enablement:** The controller feature flag `POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_FEATURES_BUFFER_GUARD_ENABLED`
-  defaults to `true`, providing a global kill switch. Guard logic still runs only when the selected scenario sets
-  `trafficPolicy.bufferGuard.enabled: true`, so non-guarded swarms behave as before even with the flag on.
-- **Reference templates:**
-  - `local-rest-two-moderators` – deterministic WireMock delay, guard watches the `moderator-a-out` queue to keep a steady bracket.
-  - `local-rest-two-moderators-randomized` – generator targets `/api/guarded-random`, WireMock cycles through multiple latency slots, and guard reacts to bursty downstream pressure.
-- **Launch checklist:**
-  1. Create/start a swarm from one of the guard scenarios (UI modal or `/api/swarms/{id}/create` + `/start`).
-  2. Confirm the guard queue is exposed via ClickHouse metrics (`ph_swarm_queue_depth` in `ph_metrics_samples`, filtered by `swarmId` and `labels['queue']`) and logs report the guard state (`io.pockethive.swarmcontroller.guard` logger).
-  3. Monitor guard gauges (`ph_swarm_buffer_guard_depth`, `*_target`, `*_rate_per_sec`, `*_state`) in Grafana.
-- **Tuning tips:** Use `targetDepth` as the desired steady level, keep `minDepth`/`maxDepth` wide enough to avoid thrash, and start with adjustment percentages between 5‑20%. Set `backpressure.queueAlias` to the queue immediately downstream of the guard if you want automatic slowdown when processors fall behind.
-
-#### Guard configuration cheat‑sheet
-
-| Field | Description | Suggested Values |
-|-------|-------------|------------------|
-| `queueAlias` | Queue suffix to monitor (resolves via `traffic.queuePrefix`) | e.g. `moderator-a-out` |
-| `targetDepth` | Desired steady depth | Pick a midpoint the queue should hover around |
-| `minDepth` / `maxDepth` | Hysteresis bounds; guard only clamps when average depth crosses these | ~±20–30% around the target |
-| `samplePeriod` | How often the controller samples Rabbit (duration string) | 3–5 s for most swarms |
-| `movingAverageWindow` | Number of samples to average | 5–10 to smooth noise |
-| `adjust.maxIncreasePct` / `maxDecreasePct` | Max percentage per decision when filling/draining | Start with 5–15% |
-| `adjust.minRatePerSec` / `maxRatePerSec` | Hard bounds on the generator/moderator rate | Match the safe operating range for the producer |
-| `prefill.enabled` | When `true`, temporarily raises the target to pre-load the queue | `false` unless you need to warm up before a spike |
-| `prefill.lookahead` | Duration to stay in prefill mode | e.g. `30s`, `2m`; after this the guard returns to steady mode |
-| `prefill.liftPct` | Percentage to bump the target while prefill is active | 10–30% |
-| `backpressure.queueAlias` | Downstream queue to watch for high watermark events | `proc-out`, etc. |
-| `backpressure.highDepth` / `recoveryDepth` | Depth thresholds that enter/exit backpressure mode | Pick based on downstream capacity |
-| `backpressure.moderatorReductionPct` | How much to trim moderators when backpressure fires | 15–30% |
-
-> **Prefill usage:** When `prefill.enabled = true`, the guard enters a temporary **prefill** state for `lookahead`. During that window it raises the target depth by `liftPct` so the queue preloads ahead of a known spike. Once the lookahead duration expires the target snaps back to its baseline value.
-
-### Scenario and swarm API
-- Create swarms via the Orchestrator REST API: `POST /api/swarms/{swarmId}/create` with JSON such as:
-
-  ```json
-  {
-    "templateId": "rest",
-    "idempotencyKey": "create-rest-001"
-  }
-  ```
-
-  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `signal.swarm-create` message is published by clients.
-- Subscribe to control-plane outcomes and alerts to follow the lifecycle:
-  - `event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>` — emitted by the Orchestrator after the controller handshake completes.
-  - `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted once the plan is applied and bees are provisioned (idle by default).
-  - `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; `data.status` indicates success/failure.
-  - `event.alert.{type}.<swarmId>.*.*` — emitted for runtime/IO failures.
-- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` on your behalf and you can reuse the outcome/alert subscriptions above to track readiness.
-
-### Worker configuration overrides
-- Scenario definitions provide per-role overrides directly inside each bee's `config` map. The Scenario Manager passes those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap. No environment variables are used for logical scenario settings.
-- The `WorkItem` history policy is also configurable per worker via `config.historyPolicy` (values: `FULL`, `LATEST_ONLY`, `DISABLED`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
-  - `FULL` – every logical stage (scheduler seed, templating, worker onMessage, processor) appends a new step; history is preserved end-to-end.
-  - `LATEST_ONLY` – previous steps are collapsed so only the latest step remains (reindexed to `0`).
-  - `DISABLED` – history snapshots are dropped after each hop, but the current step is still retained as a single baseline.
-- Example snippet:
-  ```yaml
-  config:
-    historyPolicy: FULL
-    ratePerSec: 15
-    message:
-      path: /api/guarded
-      body: warmup
-  ```
-- Service defaults declared under `pockethive.worker.*` remain useful for local development, but once a swarm runs under the controller the scenario-supplied config is the single source of truth.
+- choose `queueAlias` from the scenario's queue suffixes;
+- start with a 3–5 second sample period and a 5–10 sample moving average;
+- set min/max depths wide enough to avoid oscillation;
+- keep rate adjustments bounded to the SUT's safe operating range;
+- use downstream backpressure thresholds only when the downstream capacity is
+  understood;
+- monitor guard metrics and Journal evidence through Grafana and PocketHive,
+  not by mutating controller-owned RabbitMQ topology.
 
 ## Troubleshooting
-- **WebSocket errors**: ensure UI health is `ok`, RabbitMQ is running and Web-STOMP is enabled; check browser network logs for `/ws`.
-- **Authentication**: RabbitMQ blocks remote logins for the built-in `guest` user; use the proxy or create a non-guest user.
-- **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
-- **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
-- **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.
+
+- UI is unreachable: check port `8088`, then `/healthz`.
+- Scenario is missing: check Scenario Manager through the ingress and validate
+  the bundle.
+- Creation/start/stop remains transitional: open the selected swarm's Journal
+  and confirm Snapshot freshness.
+- Action is unavailable: check lifecycle state and the user's grant scope.
+- Work does not reach the SUT: verify scenario topology, worker state, SUT
+  binding, then Proxy or a focused debug tap.
+- WebSocket state is stale: use Connectivity and confirm `/ws` through the same
+  origin.
+
+For lower-level source-development diagnostics, repository tools under
+`tools/diag/` and `tools/mcp-orchestrator-debug/` are contributor surfaces, not
+the normal customer workflow.

@@ -1,5 +1,12 @@
 # Workers Guide: Advanced
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Experienced scenario authors and PocketHive operators |
+| Prerequisites | Completion of [Workers Guide: Basics](workers-basics.md) and control-plane familiarity |
+| Expected outcome | A bounded multi-worker flow with observable runtime configuration |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 This guide focuses on production patterns, control-plane behavior, and
 how to model larger traffic flows with minimal worker duplication.
 
@@ -78,3 +85,11 @@ Reference: `docs/archive/http-sequence-worker.md`.
 For HTTP request construction, prefer `request-builder` as the canonical
 builder role. Keep `http-sequence` focused on journey orchestration, not
 on replacing low-level protocol handlers.
+
+## Troubleshooting
+
+Use the canonical [observability and troubleshooting guide](operators/observability-troubleshooting.md) for runtime evidence, and check control-plane behavior against the [worker guide](../control-plane/worker-guide.md).
+
+## Next step
+
+Apply these boundaries with the reusable flows in [Scenario Patterns](../scenarios/SCENARIO_PATTERNS.md), then validate the bundle with the [authoring and test tools](integrations/authoring-and-test-tools.md).

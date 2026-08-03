@@ -69,13 +69,23 @@ metrics, or an explicit disabled/test state for targets that intentionally do
 
 ## Queue depth snapshots
 
-Status events now include an optional `queueStats` object keyed by queue name. Each entry surfaces the latest broker snapshot for that queue:
+The Swarm Controller samples RabbitMQ queue depth, consumer count, and, when
+available, oldest-message age. In `v0.15.35`, those samples update Micrometer
+gauges:
 
-- `depth` — current message count in the queue.
-- `consumers` — number of active consumers bound to the queue.
-- `oldestAgeSec` (optional) — age, in seconds, of the oldest message when the broker exposes it.
+- `ph_swarm_queue_depth`
+- `ph_swarm_queue_consumers`
+- `ph_swarm_queue_oldest_age_seconds`
 
-Operators can correlate these numbers with the `queues` topology block to understand which bindings map to a growing backlog. Empty or unavailable stats simply omit the `queueStats` object.
+Each gauge carries `swarm` and `queue` tags. Query the stored metrics through
+Grafana/ClickHouse, or use the RabbitMQ application for advanced live
+diagnosis, and correlate the queue tag with the controller's runtime bindings.
+
+The control-event schema permits an optional
+`data.io.work.queueStats[queue] = {depth, consumers, oldestAgeSec?}` extension,
+and UI v2 can decode it for compatibility. Current production status emitters
+do not populate that extension, and the controller aggregate does not expose
+queue statistics. Do not treat a missing `queueStats` object as an empty queue.
 
 ## Postprocessor ClickHouse tx-outcomes sink
 
