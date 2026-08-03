@@ -65,6 +65,12 @@ The Unix helper also supports grouped execution so you do not need to rerun the 
 ./start-e2e-tests.sh --group data --tags @tcp-timeout
 ```
 
+An unfiltered run is the **full control-plane audit**: it must observe `signal`,
+`result`, `outcome`, `journal`, `alert`, and `metric`. A group, tag, or name
+filter is a targeted audit; it retains schema, routing, and operation-flow
+checks without requiring message families that the selected scenarios do not
+exercise.
+
 The Unix helper can load deployment target profiles from `deploy/e2e-targets/<name>.env`:
 
 ```bash

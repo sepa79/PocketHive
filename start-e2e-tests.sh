@@ -276,7 +276,16 @@ else
   RESOLVED_TAGS="not @wip"
 fi
 
-CMD=(./mvnw verify -pl e2e-tests -am "-Dcucumber.filter.tags=${RESOLVED_TAGS}")
+CONTROL_PLANE_AUDIT_SCOPE="FULL"
+if [[ ${#GROUP_NAMES[@]} -gt 0 || -n "${CUCUMBER_TAGS}" || -n "${CUCUMBER_NAME}" ]]; then
+  CONTROL_PLANE_AUDIT_SCOPE="TARGETED"
+fi
+
+CMD=(
+  ./mvnw verify -pl e2e-tests -am
+  "-Dcucumber.filter.tags=${RESOLVED_TAGS}"
+  "-Dpockethive.e2e.control-plane-audit-scope=${CONTROL_PLANE_AUDIT_SCOPE}"
+)
 if [[ -n "${CUCUMBER_NAME}" ]]; then
   CMD+=("-Dcucumber.filter.name=${CUCUMBER_NAME}")
 fi

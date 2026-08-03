@@ -6,6 +6,7 @@ import com.networknt.schema.ValidationMessage;
 import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture.CapturedMessage;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -24,12 +25,20 @@ public final class ControlEventsContractAudit {
   }
 
   public static void assertAllValid(List<CapturedMessage> messages) {
-    assertAllValid(messages, List.of());
+    assertAllValid(messages, new AuditExpectation(List.of(), Set.of()));
   }
 
   public static void assertAllValid(
       List<CapturedMessage> messages, List<ExpectedOperation> expectedOperations) {
+    assertAllValid(messages, new AuditExpectation(expectedOperations, Set.of()));
+  }
+
+  public static void assertAllValid(
+      List<CapturedMessage> messages, AuditExpectation expectation) {
     List<CapturedMessage> payloads = messages == null ? List.of() : messages;
+    AuditExpectation resolvedExpectation = expectation == null
+        ? new AuditExpectation(List.of(), Set.of())
+        : expectation;
     List<String> failures = new ArrayList<>();
     List<JsonNode> validEnvelopes = new ArrayList<>();
     for (CapturedMessage message : payloads) {
@@ -53,10 +62,25 @@ public final class ControlEventsContractAudit {
       }
     }
     commandFlowCoverage(
-        validEnvelopes, expectedOperations == null ? List.of() : expectedOperations, failures);
+        validEnvelopes, resolvedExpectation.expectedOperations(), failures);
+    familyCoverage(validEnvelopes, resolvedExpectation.requiredFamilies(), failures);
 
     if (!failures.isEmpty()) {
       Assertions.fail("Control-plane contract audit failed:\n- " + String.join("\n- ", failures));
+    }
+  }
+
+  private static void familyCoverage(
+      List<JsonNode> envelopes,
+      Set<ControlPlaneMessageFamily> requiredFamilies,
+      List<String> failures) {
+    for (ControlPlaneMessageFamily family : requiredFamilies) {
+      boolean observed = envelopes.stream().anyMatch(
+          envelope -> family.matchesEnvelope(
+              envelope.path("kind").asText(""), envelope.path("type").asText("")));
+      if (!observed) {
+        failures.add("coverage missing family=" + family.familyName());
+      }
     }
   }
 
@@ -82,7 +106,8 @@ public final class ControlEventsContractAudit {
 
   private static boolean hasMatchingSignal(
       List<JsonNode> envelopes, ExpectedOperation command) {
-    return envelopes.stream().anyMatch(envelope -> matchesOperation(envelope, "signal", command));
+    return envelopes.stream().anyMatch(
+        envelope -> matchesOperation(envelope, ControlPlaneMessageFamily.SIGNAL.familyName(), command));
   }
 
   private static boolean hasMatchingOperation(
@@ -119,6 +144,19 @@ public final class ControlEventsContractAudit {
         throw new IllegalArgumentException(field + " must not be blank");
       }
       return value.trim();
+    }
+  }
+
+  /** Explicit operation and message-family postconditions for a complete E2E audit. */
+  public record AuditExpectation(
+      List<ExpectedOperation> expectedOperations,
+      Set<ControlPlaneMessageFamily> requiredFamilies) {
+
+    public AuditExpectation {
+      expectedOperations = expectedOperations == null ? List.of() : List.copyOf(expectedOperations);
+      requiredFamilies = requiredFamilies == null || requiredFamilies.isEmpty()
+          ? Set.of()
+          : Set.copyOf(EnumSet.copyOf(requiredFamilies));
     }
   }
 
