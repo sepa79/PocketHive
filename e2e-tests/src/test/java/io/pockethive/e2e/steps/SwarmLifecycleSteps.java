@@ -1845,22 +1845,16 @@ public class SwarmLifecycleSteps {
     Bee bee = findBee(role);
     Map<String, Object> expectedConfig = bee.config();
     assertNotNull(expectedConfig, () -> "Template config is missing for role " + displayRole);
-    Map<String, Object> expectedWorkerConfig = toMap(expectedConfig.get("worker"));
-    assertFalse(expectedWorkerConfig.isEmpty(),
-        () -> "Template config must include a worker block for role " + displayRole);
-    Object expectedPolicy = expectedWorkerConfig.get("historyPolicy");
+    Object expectedPolicy = expectedConfig.get("historyPolicy");
     assertNotNull(expectedPolicy,
-        () -> "Template worker config must include historyPolicy for role " + displayRole);
+        () -> "Template config must include historyPolicy for role " + displayRole);
 
     Map<String, Object> snapshot = workerSnapshot(status, role);
     assertFalse(snapshot.isEmpty(), () -> "No worker snapshot found for role " + displayRole);
     Map<String, Object> appliedConfig = snapshotConfig(snapshot);
-    Map<String, Object> appliedWorkerConfig = toMap(appliedConfig.get("worker"));
-    assertFalse(appliedWorkerConfig.isEmpty(),
-        () -> "status-full config must include a worker block for role " + displayRole + ": " + appliedConfig);
-    Object appliedPolicy = appliedWorkerConfig.get("historyPolicy");
+    Object appliedPolicy = appliedConfig.get("historyPolicy");
     assertNotNull(appliedPolicy,
-        () -> "status-full worker config must include historyPolicy for role " + displayRole + ": " + appliedWorkerConfig);
+        () -> "status-full config must include historyPolicy for role " + displayRole + ": " + appliedConfig);
     assertEquals(expectedPolicy.toString(), appliedPolicy.toString(),
         () -> "Applied historyPolicy differs from the canonical template for role " + displayRole);
     LOGGER.info("History policy role={} expected={} applied={}", displayRole, expectedPolicy, appliedPolicy);
