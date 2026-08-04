@@ -10,15 +10,26 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class ControlPlaneRoutingTest {
 
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
 
     @Test
-    void signalRoutingUsesAllPlaceholder() {
-        String rk = ControlPlaneRouting.signal("config-update", null, "generator", null);
+    void signalRoutingUsesExplicitAllPlaceholder() {
+        String rk = ControlPlaneRouting.signal("config-update", "ALL", "generator", "ALL");
         assertThat(rk).isEqualTo("signal.config-update.ALL.generator.ALL");
+    }
+
+    @Test
+    void routingRejectsMissingSegmentsInsteadOfCreatingFanOut() {
+        assertThatThrownBy(() -> ControlPlaneRouting.signal("config-update", null, "generator", "instance"))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("signal swarmId");
+        assertThatThrownBy(() -> ControlPlaneRouting.event("metric", " ", ConfirmationScope.EMPTY))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("event type");
     }
 
     @Test
@@ -60,7 +71,7 @@ class ControlPlaneRoutingTest {
         ConfirmationScope scope = new ConfirmationScope("swarmA", "generator", "gen-1");
         Map<String, Object> document = new LinkedHashMap<>();
         document.put("signals", Map.of(
-            "broadcast", ControlPlaneRouting.signal("config-update", null, "generator", null),
+            "broadcast", ControlPlaneRouting.signal("config-update", "ALL", "generator", "ALL"),
             "scoped", ControlPlaneRouting.signal("status-request", "swarmA", "generator", "gen-1")
         ));
         document.put("events", Map.of(

@@ -205,7 +205,7 @@ public class SwarmController {
                     normalize(req.variablesProfileId()),
                     req.networkMode(),
                     normalize(req.networkProfileId()),
-                    Boolean.TRUE.equals(req.autoPullImages()),
+                    req.autoPullImages(),
                     corr,
                     req.idempotencyKey());
                 ScenarioPlan planDescriptor = fetchScenario(templateId);
@@ -321,7 +321,7 @@ public class SwarmController {
                 Map<String, Object> resolvedTimeline = json.convertValue(
                     timeline,
                     new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
-                boolean autoPull = Boolean.TRUE.equals(req.autoPullImages());
+                boolean autoPull = req.autoPullImages();
                 if (networkMode == NetworkMode.PROXIED && resolvedSutEnvironment == null) {
                     throw new IllegalStateException(
                         "networkMode=PROXIED requires resolved SUT environment for swarm '%s'".formatted(swarmId));

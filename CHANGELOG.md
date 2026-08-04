@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 ## [0.15.36]
 Timestamp: 2026-07-22T22:53:54Z
 
+- Control-plane scope contract: require every routing and envelope scope segment,
+  use the literal `ALL` for intentional fan-out, and reject `null`, blank and
+  non-canonical wildcard aliases instead of silently broadening delivery. The
+  journal migration canonicalizes historic blank scope fields to `ALL` and
+  prevents new non-canonical rows.
+- Create contract: require an explicit boolean `autoPullImages`; `null` can no
+  longer silently disable image preloading.
 - Breaking lifecycle contract: replace the mixed swarm/container status and
   implicit `enabled` state with independent runtime intent, workload intent,
   controller state, workload state, health, and resource state axes; legacy

@@ -110,7 +110,7 @@
         "templateId": { "$ref": "#/$defs/NonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
         "notes": { "$ref": "#/$defs/NullableNonEmptyString" },
-        "autoPullImages": { "type": ["boolean", "null"] },
+        "autoPullImages": { "type": "boolean" },
         "sutId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "variablesProfileId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "networkMode": { "type": "string", "enum": ["DIRECT", "PROXIED"] },

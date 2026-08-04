@@ -230,7 +230,7 @@ public class SwarmLifecycleSteps {
         scenarioDetails.id(),
         idempotencyKey,
         "e2e lifecycle create",
-        null,
+        false,
         sutId,
         variablesProfileId,
         resolveNetworkModeForScenario(),

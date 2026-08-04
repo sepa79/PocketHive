@@ -12,9 +12,17 @@ class SwarmCreateRequestTest {
     @Test
     void requestHasNoConstructorThatDeclaresNetworkModeForTheCaller() {
         assertThatThrownBy(() -> new SwarmCreateRequest(
-            "tpl-1", "idem", null, null, null, null, null, null))
+            "tpl-1", "idem", null, false, null, null, null, null))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("networkMode must be provided");
+    }
+
+    @Test
+    void requiresAnExplicitAutoPullImagesValue() {
+        assertThatThrownBy(() -> new SwarmCreateRequest(
+            "tpl-1", "idem", null, null, null, null, NetworkMode.DIRECT, null))
+            .isInstanceOf(IllegalArgumentException.class)
+            .hasMessageContaining("autoPullImages must be provided");
     }
 
     @Test
@@ -31,7 +39,7 @@ class SwarmCreateRequestTest {
             "tpl-1",
             "idem",
             null,
-            null,
+            false,
             null,
             null,
             NetworkMode.DIRECT,
@@ -46,7 +54,7 @@ class SwarmCreateRequestTest {
             "tpl-1",
             "idem",
             null,
-            null,
+            false,
             null,
             null,
             NetworkMode.PROXIED,
@@ -61,7 +69,7 @@ class SwarmCreateRequestTest {
             "tpl-1",
             "idem",
             null,
-            null,
+            false,
             null,
             null,
             NetworkMode.PROXIED,

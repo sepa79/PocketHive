@@ -270,6 +270,7 @@ class SwarmCreationMock1E2ETest {
                 "idempotencyKey", idempotencyKey,
                 "templateId", "local-rest",
                 "notes", "local-rest",
+                "autoPullImages", "false",
                 "networkMode", "DIRECT"));
 
         ResponseEntity<ControlResponse> response = rest.exchange(

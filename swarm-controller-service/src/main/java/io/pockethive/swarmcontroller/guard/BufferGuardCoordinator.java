@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
+import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
@@ -158,7 +159,8 @@ public final class BufferGuardCoordinator {
           java.util.UUID.randomUUID().toString(),
           java.util.UUID.randomUUID().toString(),
 	          patchData);
-      String rk = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, null);
+      String rk = ControlPlaneRouting.signal(
+          ControlPlaneSignals.CONFIG_UPDATE, swarmId, targetRole, ControlScope.ALL);
       log.info("buffer-guard config-update rk={} correlationId={}", rk, signal.correlationId());
       controlPublisher.publishSignal(new SignalMessage(rk, signal));
     } catch (Exception ex) {

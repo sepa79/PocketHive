@@ -20,6 +20,9 @@ public record SwarmCreateRequest(
     notes = ContractValues.optionalText(notes);
     sutId = ContractValues.optionalText(sutId);
     variablesProfileId = ContractValues.optionalText(variablesProfileId);
+    if (autoPullImages == null) {
+      throw new IllegalArgumentException("autoPullImages must be provided");
+    }
     if (networkMode == null) {
       throw new IllegalArgumentException("networkMode must be provided");
     }

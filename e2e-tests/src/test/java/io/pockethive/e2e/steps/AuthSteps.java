@@ -159,7 +159,7 @@ public class AuthSteps {
               templateId,
               nextIdempotencyKey(resolvedSwarmId, "create"),
               "auth e2e",
-              null,
+              false,
               null,
               null,
               NetworkMode.DIRECT,

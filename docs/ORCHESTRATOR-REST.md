@@ -714,7 +714,7 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
 }
 ```
 
-`networkMode` is required and must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
+`autoPullImages` and `networkMode` are required. `autoPullImages` must be a boolean; `null` and omission are rejected. `networkMode` must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
 
 **Response (202)**
 ```json

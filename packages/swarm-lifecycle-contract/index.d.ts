@@ -52,7 +52,7 @@ export type SwarmCreateRequest = {
   readonly "templateId": NonEmptyString
   readonly "idempotencyKey": NonEmptyString
   readonly "notes": NullableNonEmptyString
-  readonly "autoPullImages": boolean | null
+  readonly "autoPullImages": boolean
   readonly "sutId": NullableNonEmptyString
   readonly "variablesProfileId": NullableNonEmptyString
   readonly "networkMode": "DIRECT" | "PROXIED"
