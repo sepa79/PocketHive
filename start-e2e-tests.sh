@@ -283,6 +283,7 @@ fi
 
 CMD=(
   ./mvnw verify -pl e2e-tests -am
+  "-Dpockethive.e2e.environment=true"
   "-Dcucumber.filter.tags=${RESOLVED_TAGS}"
   "-Dpockethive.e2e.control-plane-audit-scope=${CONTROL_PLANE_AUDIT_SCOPE}"
 )

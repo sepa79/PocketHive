@@ -62,6 +62,7 @@ export const lifecycleEnumValues = Object.freeze({
     "RABBIT_QUEUE",
     "RABBIT_EXCHANGE",
     "RABBIT_BINDING",
+    "NETWORK_BINDING",
     "RUNTIME_DIRECTORY",
     "REGISTRY_ENTRY",
     "TERMINAL_EVIDENCE"

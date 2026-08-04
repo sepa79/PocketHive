@@ -99,7 +99,7 @@ export type SwarmStateView = {
   readonly "observation": Readonly<Record<string, unknown>> | null
 }
 
-export type RemoveResourceType = "CONTROLLER_RUNTIME" | "WORKER_RUNTIME" | "RABBIT_QUEUE" | "RABBIT_EXCHANGE" | "RABBIT_BINDING" | "RUNTIME_DIRECTORY" | "REGISTRY_ENTRY" | "TERMINAL_EVIDENCE"
+export type RemoveResourceType = "CONTROLLER_RUNTIME" | "WORKER_RUNTIME" | "RABBIT_QUEUE" | "RABBIT_EXCHANGE" | "RABBIT_BINDING" | "NETWORK_BINDING" | "RUNTIME_DIRECTORY" | "REGISTRY_ENTRY" | "TERMINAL_EVIDENCE"
 
 export type RemoveResource = {
   readonly "type": RemoveResourceType
