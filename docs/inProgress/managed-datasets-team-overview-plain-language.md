@@ -1,137 +1,132 @@
-# Managed Datasets, explained
+# Managed Datasets — Plain-language Guide
 
-Status: in progress — 24/7 and HA-compatible design tightened
+Status: proposed MVP; implementation and approval pending
 
-See the [MVP specification](managed-test-data-lifecycle-generic-spec.md) for
-exact behavior and tests.
+For exact requirements, see the
+[Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md).
 
-## Why this is needed
+## One-minute version
 
-Some tests need thousands of synthetic cards, accounts, or users that are slow
-to create but can be reused by several swarms. Managed Datasets provide one
-durable, controlled store instead of making each scenario manage its own data.
-The store can continuously replace expiring records during long-running tests.
+Managed Datasets let test swarms share synthetic System Under Test (SUT)
+records that are slow to create.
 
-## How it works
+The model has two steps:
 
-```mermaid
-flowchart TD
-  A["Refill WorkInput"] -->|grant WorkItem| B["Producer scenario"]
-  B -->|idempotent call| C["Selected SUT"]
-  B -->|result WorkItem| D["Dataset WorkOutput"]
-  D --> E[(PostgreSQL)]
-  E -->|verified local snapshot and refresh| F["Consumer WorkInput"]
-  F --> G["Traffic scenario"]
-  H["Managed Dataset housekeeping"] -->|bounded purge| E
+```text
+Provider run -> creates a Managed Dataset
+Consumer swarm -> selects that Managed Dataset
 ```
 
-- The Dataset Space defines data for one SUT Environment.
-- Scenario config names a logical `bindingRef`.
-- Scenario Binding freezes the exact Dataset and SUT versions before runtime.
-- The producer receives missing slots through `MANAGED_DATASET_REFILL` input.
-- Its final bee commits through `MANAGED_DATASET` output.
-- Consumers use `MANAGED_DATASET` input and select records from local memory.
+One provider owns each Dataset; many consumers may use it. Consumers do not
+configure the provider, copy the Dataset, or change its records.
 
-This is the normal PocketHive `WorkInput`, `WorkItem`, and `WorkOutput` model.
-Existing Rabbit `work.in/out`, worker status `workIn/workOut`, and swarm control
-remain unchanged.
+Create Swarm shows SUT-compatible Datasets. The operator chooses one exact
+`datasetId` per Dataset input. PocketHive rechecks it and never substitutes.
 
-## SUT configuration
+## The flow
 
-Provisioning behavior stays in the producer scenario bundle. It may use the
-selected `sut`, `vars`, request templates, result mappings, and private auth
-configuration. Missing context fails before the swarm starts. Credentials are
-never stored in the bundle, Dataset, or `WorkItem`.
+```mermaid
+flowchart LR
+  P["Provider run"] -->|creates records| D["Shared Managed Dataset"]
+  D -->|checked local snapshot| A["Consumer A"]
+  D -->|checked local snapshot| B["Consumer B"]
+  A -->|normal WorkItem| S["SUT"]
+  A -. source counts .-> E["Orchestrator evidence"]
+  S -. terminal counts .-> E
+  E --> MCP["PocketHive MCP verdict"]
+```
 
-## Refill safety
+Orchestrator stores the Dataset in PostgreSQL. Consumers select from their own
+checked local snapshots, so measured requests do not call PostgreSQL or
+Orchestrator. Normal PocketHive worker I/O remains unchanged.
 
-Each Dataset has fixed `minimumReady`, `targetReady`, and `maximumReady` values.
-For expiring data, records stop counting as renewal-ready before their expiry,
-so the refill input receives replacement slots early. The Dataset API reserves
-only those missing slots, including active reservations in the maximum.
-Multiple producers therefore cannot oversupply.
+## Important names
 
-Every SUT mutation uses a stable idempotency key:
+| Name | Status | Meaning |
+|---|---|---|
+| `Managed Dataset` | PROPOSED | Shared runtime record pool created by one provider and usable by many consumers |
+| `Dataset Space` | PROPOSED | Versioned SUT-specific catalogue of Dataset definitions |
+| `Scenario Binding` | PROPOSED | Frozen scenario, SUT, Dataset requirements, schema, and access |
+| `Qualification Evidence` | PROPOSED | Human-approved record proving one exact build and workload met the required profile |
+| `TrustedClock` | PROPOSED | Calibrated clock used to stop unsafe expiry decisions |
+| `Managed Dataset Selection Claim` | PROPOSED | Digest-protected `WorkItem` metadata identifying the selected record and validity |
+| `Managed Dataset Evidence Frame` | PROPOSED | Cumulative source or terminal report containing counts and checksums, never records |
+| `Managed Dataset Consumption Evidence` | PROPOSED | Orchestrator verdict for one consumer run, binding, Dataset, and time window |
 
-| Outcome | Meaning |
+After first use, this guide shortens the last three names to Selection Claim,
+Evidence Frame, and Consumption Evidence.
+
+## How creation and selection work
+
+Provider admission creates one Managed Dataset per Managed Dataset output.
+Retrying the same run and output returns the same `datasetId`; a new run creates
+a new Dataset. Ownership never changes.
+
+The consumer declares required shape and access. Create Swarm lists exact
+SUT-bound matches and disables unavailable ones. Orchestrator rechecks SUT,
+Dataset Space, schema, access, provider qualification, and availability,
+validates consumer qualification, then freezes both. Bindings may share the
+same Dataset.
+
+## How sharing and refill stay safe
+
+Each Dataset has one shared minimum, target, and maximum supply. The provider
+receives only missing slots. Stable idempotency keys make retries safe;
+uncertain SUT effects retain bounded capacity and are not retried blindly.
+
+The Dataset module reports one availability result:
+
+| Availability | Meaning |
 |---|---|
-| `COMPLETED` | Valid record committed with a durable receipt |
-| `FAILED` | Conclusively produced no usable record; reservation released |
-| `UNCERTAIN` | Effect may have happened; reservation retained and no blind retry |
+| `READY` | New and existing consumers may use the Dataset |
+| `DEGRADED` | Existing consumers may continue while records remain safe; new admission stops |
+| `UNAVAILABLE` | Admission and selection stop |
 
-Automatic mutating refill is rejected if the SUT cannot support idempotency.
-Repeated failures, unusable results, or unresolved uncertainty open a visible
-refill circuit instead of creating an endless mutation loop.
+Reason codes explain provider, supply, qualification, storage, contract, or
+safety failure. Consumer clock, snapshot, authorisation, and qualification
+failures affect only that run.
 
-Scenario authors choose the Dataset and consumer rate, not database or network
-tuning. PocketHive owns and enforces claim, polling, snapshot, memory, and
-connection limits. It checks aggregate replicas, memory, refill capacity,
-expiry bursts, retention, and database demand before startup. Unsafe or
-oversized configuration fails; refill retries are delayed and spread out
-rather than synchronised. Memory checks include both the active and next
-snapshot during an atomic refresh.
+## How consumers stay fast and safe
 
-Refill calls are rate-bounded, reported separately, and included in the total
-load sent to the SUT; they are not invisible background traffic.
+Each consumer rotates checked snapshots in the background. A failed refresh
+keeps the current view only while its records remain safe. Each selection adds
+a Selection Claim to the `WorkItem`; workers preserve it and the final guard
+rejects expired data. An unsafe TrustedClock stops only that consumer.
 
-## Continuous operation
+## What MCP can prove
 
-- An expiring long-running test must explicitly include a qualified refill
-  binding. PocketHive does not guess or start one automatically.
-- Consumers build a new snapshot in the background and switch to it atomically
-  before the old records become unsafe.
-- Every selection performs a final local expiry check; it never queries
-  PostgreSQL or Orchestrator on the measured request path.
-- Expiry metadata travels with the `WorkItem` and is checked again before each
-  worker invocation. Data that expires in a queue is reported as dropped and
-  never sent to the SUT.
-- Expired rows are removed later in small bounded batches. Snapshot hydration,
-  refill, and retention cannot consume the database capacity reserved for
-  normal Orchestrator control and journals.
-- After restart, PostgreSQL remains authoritative and consumers rehydrate a
-  current safe snapshot before traffic resumes.
+MVP proof covers a `ONE_TO_ONE` path with one Dataset source and one final SUT
+boundary. These boundaries send background Evidence Frames with counts and
+Selection Claim checksums. Intermediate workers only validate the claim.
 
-This supports continuously running tests within PocketHive's existing
-deployment availability. PostgreSQL remains authoritative, and durable leases
-and fences are required to prevent competing Dataset module replicas from
-applying the same housekeeping work. A consumer may use its current local
-snapshot only while it remains safe. The design is HA-compatible but remains
-unverified; the current deployment is not HA-qualified, and backup restore is
-separate work.
+Orchestrator compares source and terminal populations. Each consumer run,
+binding, Dataset, and window remains separate.
 
-## Why reconciliation is deferred
+| Verdict | Meaning |
+|---|---|
+| `CONFORMING` | Complete qualified evidence shows the selected Dataset reached the SUT boundary without observed loss, duplication, invalid claims, or expiry |
+| `NON_CONFORMING` | Complete evidence proves a contract violation |
+| `INSUFFICIENT_EVIDENCE` | Evidence is missing, late, unqualified, inactive, or unsupported; this never passes |
 
-The MVP refills expiring data to a fixed target and cleans up its own database.
-A full reconciler would inspect and repair SUT state, revalidate or correct
-records, deprovision SUT data, change live targets, and manage producer
-lifecycle. That is a later workflow capability.
+MCP requires exact swarm, run, binding, start, and end. It returns the frozen
+`datasetId` and Orchestrator verdict unchanged, with no fallback. This proves
+PocketHive's Dataset path, not SUT business correctness.
 
-## Consumer readiness
+## Example
 
-Consumers download and verify a revision in the background, then switch to it
-atomically. A failed refresh can use the current view only while it remains
-safe. Traffic uses local data, so measured requests do not call Orchestrator or
-PostgreSQL.
-
-- `READY`: renewal target met; refill and consumer views are healthy.
-- `DEGRADED`: safe traffic can continue, but renewal, refresh, purge, or uncertainty is late.
-- `STARVED`: too few safe records; the dependent consumer input stops.
-- `BLOCKED`: authorisation, clock, schema, quota, storage, service, refill circuit, or uncertainty prevents progress.
-
-There is no fallback to another Dataset, old snapshot, CSV, or Redis.
+A card provider creates one Dataset. Two payment swarms select it and use
+separate local snapshots. MCP may return different verdicts because their
+evidence remains separate; neither result changes the Dataset.
 
 ## MVP boundary
 
-Included: PostgreSQL, reusable synthetic records, proactive bounded refill,
-expiry-safe snapshot rotation, bounded retention, durable receipts, readiness,
-authorisation, and audit.
+Included: one provider and many consumers, explicit SUT-compatible selection,
+bounded refill, local snapshots, qualification, restart safety, and MCP proof.
 
-Deferred: generic SUT reconciliation/correction/deprovision, live target
-changes, automatic producer start/stop, Redis authority, exclusive/one-use
-records, multi-output, sensitive data, HA deployment and qualification, and
-backup restore.
+Deferred: multiple providers, ownership transfer, automatic selection or
+provider lifecycle, SUT reconciliation, sensitive or one-use data, Redis
+authority, complex-topology proof, and high-availability qualification.
 
-Before implementation, the team must approve the executable schemas/API,
-worker contracts, security model, idempotent SUT double, aggregate
-lifecycle/capacity profile, and evidence plan. Continuous-use approval requires
-at least a 24-hour resource soak, two expiry/refill cycles, and one purge cycle.
+Owners must approve closed creation, listing, Create Swarm, claim, frame,
+verdict, REST, MCP, security, and capacity contracts. Release requires sharing,
+expiry, restart, evidence, security, and 24-hour soak tests.
