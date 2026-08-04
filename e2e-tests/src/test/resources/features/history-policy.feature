@@ -1,4 +1,3 @@
-@wip
 Feature: WorkItem history policy configuration
 
   Background:

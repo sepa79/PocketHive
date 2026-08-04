@@ -557,14 +557,7 @@ public class SwarmLifecycleSteps {
 
     String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
     String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
-    StatusEvent status = workerStatusByRole.get(role);
-    String displayRole = actualRoleName(role);
-    assertNotNull(status, () -> "No status recorded for role " + displayRole);
-
-    Map<String, Object> snapshot = workerSnapshot(status, role);
-    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
-    Map<String, Object> config = snapshotConfig(snapshot);
-    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+    Map<String, Object> config = awaitWorkerFullConfig(role);
 
     assertEquals("structured", String.valueOf(config.get("mode")),
         "Expected mode=structured in clearing export config");
@@ -581,14 +574,7 @@ public class SwarmLifecycleSteps {
 
     String clearingKey = roleKey(CLEARING_EXPORT_ROLE);
     String role = clearingKey != null ? clearingKey : CLEARING_EXPORT_ROLE;
-    StatusEvent status = workerStatusByRole.get(role);
-    String displayRole = actualRoleName(role);
-    assertNotNull(status, () -> "No status recorded for role " + displayRole);
-
-    Map<String, Object> snapshot = workerSnapshot(status, role);
-    assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
-    Map<String, Object> config = snapshotConfig(snapshot);
-    assertFalse(config.isEmpty(), "Clearing export snapshot should include applied config");
+    Map<String, Object> config = awaitWorkerFullConfig(role);
 
     assertEquals("template", String.valueOf(config.get("mode")),
         "Expected mode=template in clearing export config");
@@ -1631,7 +1617,7 @@ public class SwarmLifecycleSteps {
     if (controlPlaneEvents != null) {
       controlPlaneEvents.close();
     }
-    if (!swarmRemoved && orchestratorClient != null && swarmId != null) {
+    if (!swarmRemoved && createResponse != null && orchestratorClient != null && swarmId != null) {
       try {
         if (!awaitSwarmRegistrationForCleanup()) {
           return;
@@ -1838,6 +1824,27 @@ public class SwarmLifecycleSteps {
       return copyMap(map);
     }
     return Map.of();
+  }
+
+  private Map<String, Object> awaitWorkerFullConfig(String role) {
+    String displayRole = actualRoleName(role);
+    String instance = workerInstances.get(role);
+    assertNotNull(instance, () -> "Missing instance for role " + displayRole);
+
+    SwarmAssertions.await("status-full config for role " + displayRole, () -> {
+      StatusEvent status = latestStatusFull(displayRole, instance)
+          .orElseThrow(() -> new AssertionError(
+              "No status-full captured for role " + displayRole + " instance=" + instance));
+      Map<String, Object> snapshot = workerSnapshot(status, role);
+      assertFalse(snapshot.isEmpty(), () -> "Missing worker snapshot for role " + displayRole);
+      assertFalse(snapshotConfig(snapshot).isEmpty(),
+          () -> "status-full missing applied config for role " + displayRole);
+    });
+
+    StatusEvent status = latestStatusFull(displayRole, instance)
+        .orElseThrow(() -> new AssertionError(
+            "No status-full captured for role " + displayRole + " instance=" + instance));
+    return snapshotConfig(workerSnapshot(status, role));
   }
 
   private void assertHistoryPolicyMatchesTemplate(String role, StatusEvent status) {

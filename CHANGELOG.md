@@ -90,6 +90,57 @@ Timestamp: 2026-07-22T22:53:54Z
   reserving an operation, preserve the originating execution failure when outcome
   publication also fails, and make auth E2E wait for accepted lifecycle operations
   before issuing dependent commands.
+- Removal postconditions: clear the canonical Network Proxy Manager binding and
+  verify its absence before registry, runtime-directory, worker, and queue
+  teardown; a successful REMOVE can no longer leave HTTP/HTTPS/TCPS routes
+  active.
+- History-policy E2E: tap the source exchange before generator traffic instead
+  of competing with the final-queue consumer, derive the expected history
+  policy from the canonical scenario template rather than a duplicated feature
+  literal, and match canonical worker roles exactly so `postprocessor` cannot
+  be mistaken for `processor`.
+- Release-gate activation: remove the stale `@wip` exclusions from the auth
+  rollout and history-policy contracts. Auth now takes the controller instance
+  only from the succeeded lifecycle operation target, and clearing-export
+  assertions wait for the canonical `status-full` config snapshot after the
+  worker applies configuration instead of inspecting an incomplete startup
+  snapshot.
+- Full control-plane audit: make control-plane capture mandatory, centralise
+  its six captured families (`signal`, `result`, `outcome`, `journal`, `alert`,
+  and `metric`), and fail the unfiltered E2E pack when any family is absent.
+  Filtered E2E runs remain targeted audits and do not require families their
+  selected scenarios intentionally do not emit.
+- Verification: the saved `large-swarm` target completed the full E2E pack on
+  2026-08-04 at 13:41 BST with **39 scenarios and 463 steps passed** in
+  19m13.169s. Surefire recorded **67 tests with zero failures, errors, or
+  skips** (Cucumber: 39/39); this includes the three former `@wip` release
+  scenarios. Its mandatory full audit captured 3,889 control-plane messages
+  and required `signal`, `result`, `outcome`, `journal`, `alert`, and `metric`
+  families. The official ingress returned an empty swarm registry after the
+  run. Targeted E2E also verifies that capture initialisation and schema/routing
+  checks remain active for filtered runs.
+- HAProxy NFS acceptance: on the large swarm, with Network Proxy Manager and
+  HAProxy on distinct nodes sharing the deployed runtime mount, a dedicated
+  ingress E2E proved desired/applied acknowledgement for a valid binding,
+  explicit ~10-second timeout for an invalid HAProxy candidate, retention of
+  the prior binding, and final removal. The test now clears only its own stale
+  bindings and selects a free acceptance port, preventing retry debris.
+- Release traceability: [the lifecycle control-plane verification matrix](docs/RELEASE_VERIFICATION_MATRIX.md)
+  records each workstream's commits, automated proof, large-swarm evidence, and
+  remaining release gate. It now records the HiveForge deployment receipt,
+  immutable Compose digest, and live application image digests for the
+  large-swarm E2E environment; the last two branch commits and current
+  acceptance additions are E2E-only and require no runtime-image redeploy.
+- Release gates: the final post-REMOVE canonical PocketHive MCP snapshot found
+  no swarm registry entry, workers, managers, exact RabbitMQ queues/exchanges,
+  or cleanup candidates. HiveMap's full code-quality comparison and the
+  complementary documentation SSOT comparison both passed; the previous HIGH
+  full-audit family-coverage finding is resolved, while the unrelated MEDIUM
+  large-coordinator maintainability finding remains tracked for separate work.
+- Swarm-full mount evidence: HiveForge's immutable Compose receipt and live
+  runtime report confirm healthy stateful services with the four dedicated
+  `/opt/pockethive-data/*/data` bindings and the HAProxy/Network Proxy Manager
+  shared NFS runtime mount.
 
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z

@@ -152,6 +152,6 @@ public class ScenarioDefaultsSteps {
     if (alias.isEmpty() || actual.isEmpty()) {
       return false;
     }
-    return alias.equals(actual) || actual.contains(alias) || alias.contains(actual);
+    return alias.equals(actual);
   }
 }

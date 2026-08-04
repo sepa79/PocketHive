@@ -95,6 +95,16 @@ Feature: Swarm lifecycle golden path
     Then the swarm is removed and lifecycle confirmations are recorded
     And the network binding is cleared
 
+  @haproxy-nfs @group-proxy
+  Scenario: HAProxy rejects an invalid candidate without losing the prior binding
+    Given the HAProxy NFS acceptance harness is initialised
+    When I apply a valid HAProxy NFS binding
+    Then the cross-node HAProxy handshake confirms the valid binding
+    When I apply a deliberately invalid HAProxy candidate
+    Then the candidate times out and the previous valid HAProxy binding remains active
+    When I clear the HAProxy NFS acceptance binding
+    Then the HAProxy NFS acceptance binding is absent
+
   @scenario-variables @group-lifecycle
   Scenario: Scenario variables are resolved and visible in template rendering
     And the "variables-demo" scenario template is requested

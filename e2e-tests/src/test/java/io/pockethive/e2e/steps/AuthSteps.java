@@ -190,6 +190,20 @@ public class AuthSteps {
         });
   }
 
+  @When("I remember the accepted lifecycle operation target instance as {string}")
+  public void iRememberTheAcceptedLifecycleOperationTargetInstanceAs(String key) {
+    ensureHarness();
+    assertNotNull(latestControlResponse, "Expected an accepted lifecycle operation");
+    var operation = activeOrchestratorClient.findOperation(latestControlResponse.operationUrl())
+        .orElseThrow(() -> new AssertionError("Accepted operation is not available"));
+    assertEquals(OperationState.SUCCEEDED, operation.state(),
+        () -> "Accepted operation did not succeed: " + operation);
+    String instance = operation.target().instance();
+    assertNotNull(instance, "Accepted operation target instance must be present");
+    assertFalse(instance.isBlank(), "Accepted operation target instance must not be blank");
+    placeholderResolver.rememberValue(key, instance);
+  }
+
   @When("I wait until swarm {string} becomes visible")
   public void iWaitUntilSwarmBecomesVisible(String swarmId) {
     ensureHarness();

@@ -186,19 +186,18 @@ Feature: Auth and scoped PocketHive access
     And I call "Orchestrator" "POST" "/api/control-plane/refresh" for the active user
     Then the API response status is 202
 
-  # Known flaky on large-swarm: registration can complete after the current visibility timeout.
-  @wip @known-flaky
   Scenario: Swarm-scoped admin APIs stay compatible with the auth rollout pack
     Given the admin provisions an e2e folder admin user
     And I authenticate as "local-bundle-runner"
     When I try to create swarm "auth-rollout-swarm" from template "local-rest"
     Then the create request is accepted
-    When I wait until swarm "auth-rollout-swarm" becomes visible
-    And I try to start swarm "auth-rollout-swarm"
+    And I wait for the accepted lifecycle operation to succeed
+    When I try to start swarm "auth-rollout-swarm"
     Then the API response status is 202
+    And I wait for the accepted lifecycle operation to succeed
+    And I remember the accepted lifecycle operation target instance as "controllerInstance"
     When I fetch the swarm snapshot for "auth-rollout-swarm" via the API
     Then the API response status is 200
-    And I remember the last response value at JSON pointer "/envelope/scope/instance" as "controllerInstance"
     When I authenticate as "local-e2e-folder-admin"
     And I call "Orchestrator" "POST" "/api/swarm-managers/{{swarm:auth-rollout-swarm}}/enabled" for the active user with body
       """
