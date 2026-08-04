@@ -1,359 +1,173 @@
-# Managed Datasets — Design Decisions and Rationale
+# Managed Datasets — MVP Decisions
 
-Status: in progress — design ready; team approval pending
+Status: in progress — 24/7 and HA-compatible design tightened; team and contract approval pending
 
-This document explains the important architecture decisions and their
-trade-offs. Start with
-[Managed Datasets, explained](managed-datasets-team-overview-plain-language.md)
-if the feature is new to you. Use the
-[normative specification](managed-test-data-lifecycle-generic-spec.md) for exact
-implementation and acceptance requirements.
+The [normative specification](managed-test-data-lifecycle-generic-spec.md)
+defines the exact behavior, acceptance criteria, and tests. This page explains
+the design choices.
 
 ## Decision requested
 
-Approve a Managed Dataset capability that:
-
-- stores reusable test records durably;
-- lets independent scenarios use those records through explicit bindings;
-- keeps records near an operator-defined target;
-- supports PostgreSQL first and Redis through a separate capability profile;
-- runs as a bounded module inside Orchestrator, with no new container;
-- keeps SUT calls in producer swarms;
-- keeps measured traffic on worker-local data;
-- uses existing PocketHive control and WorkItem paths;
-- exposes real authoring and status through product APIs, UI and MCP.
-
-This is approval of the design direction, not a claim that the feature already
-exists or has passed qualification.
-
-## The proposed shape
-
-~~~mermaid
-flowchart LR
-  SM[Scenario Manager<br/>packages, Spaces, registrations<br/>and bindings]
-
-  subgraph ORCH[Existing Orchestrator service]
-    OA[Orchestrator application]
-    MD[Managed Dataset module<br/>records, supply, readiness<br/>and recovery]
-    OA <--> MD
-  end
-
-  PG[(Existing PostgreSQL)]
-  RMQ[Existing RabbitMQ]
-  SC[Swarm Controller]
-  PS[Producer swarm]
-  CS[Consumer swarm]
-  SUT[System under test]
-
-  SM --> OA
-  MD <--> PG
-  OA -->|lifecycle through ph.control| RMQ
-  RMQ <--> SC
-  SC <--> PS
-  SC <--> CS
-  MD -->|bounded DATASET_SUPPLY| RMQ
-  PS -->|create or refresh| SUT
-  PS -->|commit results| MD
-  CS -->|background snapshot| MD
-  CS -->|traffic using local data| SUT
-~~~
-
-## Decision 1: Datasets are independent packages
-
-Dataset definitions live under:
-
-~~~text
-scenarios/managed-datasets/<datasetPackageId>/
-~~~
-
-A Dataset package is the versioned blueprint for one kind of Dataset. It is a
-folder of definition files that Scenario Manager validates and publishes as
-one unit, like a scenario bundle for reusable data.
-
-It is not a running application, Docker container, database, archive format or
-collection of records. Publishing it makes a definition available; it does not
-create runtime data.
-
-The package owns one Dataset's schema, field-subset contracts, mappings,
-projections, source definitions and policies. It contains no deployment
-settings, credentials or live records. A separate registration installs one
-published package version into a Dataset Space; producer swarms then create the
-live Managed Dataset records.
-
-Scenario bundles contain only their own Dataset requirements and scenario-owned
-assets. They do not copy Dataset definitions.
-
-**Why:** a Dataset can be reused and versioned without coupling scenario
-bundles or making one scenario aware of another.
-
-**Trade-off:** Scenario Manager must support a second package type alongside
-scenario bundles.
-
-## Decision 2: requirements and selections are separate
-
-A scenario requirement says what data the scenario needs. A Scenario Binding
-selects the concrete Dataset that will satisfy it.
-
-Consumer registration is explicit. PocketHive does not discover consumers by
-matching aliases, scanning other bundles or inspecting runtime workers.
-
-The current implementation has no Dataset requirement contract. Before
-implementation, the team must freeze one canonical contract for the reserved
-scenario-local datasets/requirements.yaml file and add fail-fast Scenario
-Manager loading and validation.
-
-The file is optional at bundle level:
-
-- absent means the scenario has no Managed Dataset dependency and follows the
-  existing runtime path;
-- present means it contains at least one requirement;
-- every declared requirement is mandatory in the MVP and must have exactly one
-  valid Scenario Binding mapping.
-
-There is no per-requirement optional flag. Unknown, empty, duplicate or
-unmapped requirements fail validation rather than being silently ignored.
-
-**Why:** scenarios remain portable while deployment-specific choices stay
-visible and auditable.
-
-**Trade-off:** a scenario that declares Dataset requirements cannot run until
-every mapping is supplied and validated. Scenarios that declare none are
-unaffected.
-
-## Decision 3: each Dataset owns its contracts
-
-The record schema defines every field in one Dataset. Package-local Dataset
-Contracts expose approved field subsets for particular uses.
-
-A contract is immutable with its package version. There is no shared live
-contract registry, inheritance or cross-Dataset fallback.
-
-**Why:** changing one contract cannot unexpectedly change many Datasets.
-
-**Trade-off:** similar Datasets may repeat a small field-subset definition.
-That duplication is safer than shared mutable coupling.
-
-## Decision 4: Dataset Space is the authority boundary
-
-A Dataset Space belongs to one immutable SUT Environment identity. It owns
-access policy, classification ceiling, quotas and allowed storage profiles.
-
-A registration installs one exact Dataset package version into one active
-Space and selects:
-
-- the Space-local Dataset alias;
-- one storage adapter;
-- one settings reference;
-- one capability profile.
-
-The package is portable; the registration is deployment-specific.
-
-**Why:** several Datasets can share an authority boundary without putting
-environment details into their definitions.
-
-**Trade-off:** package publication and deployment registration are separate
-operator actions.
-
-## Decision 5: the runtime module sits inside Orchestrator
-
-Dataset state is shared across swarms and outlives any individual Swarm
-Controller. The team does not want another application container for the first
-release.
-
-The Managed Dataset module therefore runs inside orchestrator-service, but
-behind a hexagonal boundary:
-
-- domain code depends on application-owned ports;
-- PostgreSQL, RabbitMQ, HTTP and scheduling are adapters;
-- Dataset tables use a dedicated schema, role and connection pool;
-- Dataset work uses bounded executors and bulkheads;
-- other Orchestrator packages cannot access Dataset repositories directly.
-
-**Why:** Managed Dataset state and its outbox row commit through one connection
-in one local PostgreSQL transaction. The relay publishes only after commit.
-This avoids another service and a distributed transaction manager.
-
-**Trade-off:** Dataset and Orchestrator share a process and availability
-boundary. Resource isolation and non-interference tests are release
-requirements.
-
-This placement does not move SUT-specific work into Orchestrator. Producer
-swarms still create, refresh, validate and remove records.
-
-## Decision 6: use existing control and work paths
-
-Managed Datasets add no new RabbitMQ control plane.
-
-| Existing path | Purpose |
-|---|---|
-| ph.control | Start, stop, configure and observe swarms |
-| Controller-owned WorkItem route | Deliver a bounded DATASET_SUPPLY operation to a ready producer |
-| Dataset API | Claim operations, commit records, download snapshots and read status |
-
-The order is mandatory:
-
-1. Orchestrator confirms through the existing lifecycle path that the producer
-   and its input are ready.
-2. The Dataset module reserves capacity and stores outbox intent.
-3. The outbox relay sends bounded work through the controller-owned route.
-4. The producer commits through the Dataset API.
-5. The durable Dataset receipt completes the operation.
-
-Rabbit acknowledgement is delivery evidence, not proof that a record was
-committed.
-
-## Decision 7: PostgreSQL first, Redis explicit
-
-The first full profile is POSTGRESQL/MANAGED_RECORDS_V1. It supports records,
-immutable revisions, schedules, operations, fences, receipts and transactional
-outbox state.
-
-REDIS/REDIS_COLLECTION_V1 is a separate, deferred profile. It may expose only
-the operations it implements and qualifies.
-
-Every registration names its adapter and settings explicitly. There is no
-default, automatic conversion or fallback.
-
-**Why:** Redis remains useful for collection-style scenarios without weakening
-the stronger managed-record lifecycle.
-
-**Trade-off:** a scenario requiring revisions or other unsupported behavior
-cannot bind to Redis.
-
-## Decision 8: output is preferred; interceptor is optional
-
-DATASET_UPSERT is the preferred producer output.
-
-Some workers already need RabbitMQ, Redis or another primary output. Those
-workers can explicitly enable one shared Managed Dataset publisher interceptor.
-It uses the same validation, idempotency and commit service as DATASET_UPSERT
-and reconciles partial completion.
-
-All workers gain this through the Worker SDK. They do not implement private
-variants.
-
-**Why:** the normal path stays simple while multi-output flows remain possible.
-
-**Trade-off:** the interceptor has a more complex failure boundary and must be
-used only when a second required output is unavoidable.
-
-## Decision 9: business outcome controls routing
-
-Network success alone does not prove that a source operation succeeded.
-
-Each source binding freezes a result policy. HTTP and TCP adapters extract
-protocol-specific evidence, then one shared evaluator produces:
-
-- COMPLETED;
-- FAILED;
-- PENDING;
-- UNCERTAIN.
-
-Completed records may enter the primary Dataset. Confirmed failures may enter a
-separately authorised remediation Dataset. Pending or uncertain operations stay
-under reconciliation and do not count as supply.
-
-Targets are configured and authorised before runtime. A response cannot invent
-a Dataset name.
-
-## Decision 10: traffic uses local snapshots
-
-Consumer workers download bounded, immutable Dataset revisions in the
-background. They validate the scope, revision and digest, then atomically
-activate the local view.
-
-During measured traffic, selection and remaining-validity checks are local.
-There is no request-time call to PostgreSQL, Redis, RabbitMQ, Orchestrator or a
-credential provider.
-
-**Why:** shared data management must not become a latency or availability
-dependency for every request.
-
-**Trade-off:** workers need bounded memory and an explicit revision-activation
-protocol.
-
-## Decision 11: readiness means fit for use
-
-Record count is only one readiness input.
-
-The frozen Dataset Fitness Contract also checks schema, relationships, source,
-classification, SUT Environment, validity and consumer projection. Its result
-is PASS, FAIL or UNKNOWN.
-
-A required Dataset starts new traffic only with a current PASS and matching
-worker revision acknowledgements. Unsafe depletion pauses the affected input
-before an invalid record can be selected.
-
-## Decision 12: UI and MCP are clients, not authorities
-
-The UI and PocketHive MCP use the same authorised Scenario Manager and
-Orchestrator services as other clients.
-
-They support real package/Space/registration/binding authoring and redacted
-runtime inspection. Release builds contain no dummy Dataset rows or successful
-fixture fallback.
-
-Agents remain untrusted clients. HiveGate approval does not replace product
-authentication, authorisation or validation. UI and MCP expose no raw record,
-secret, SQL or Redis-query operation.
-
-## What the MVP must prove
-
-The first qualified profile must demonstrate:
-
-- 50,000 eligible records with a 55,000 maximum;
-- at least two concurrent consumer swarms;
-- 1,000 measured requests per second for the agreed duration;
-- safe target increase and decrease during use;
-- zero central Dataset calls on measured request threads;
-- restart-safe operations, schedules and outbox delivery;
-- duplicate delivery without duplicate authoritative effects;
-- deterministic HTTP and TCP result classification;
-- no record or secret leakage through RabbitMQ, logs, metrics, UI or MCP;
-- Dataset load staying within agreed Orchestrator control-plane SLOs.
-
-Until that evidence exists, these are design targets rather than support
-claims.
-
-## Review checklist
-
-The team should confirm:
-
-- [ ] independent packages and package-local contracts are the right ownership
-  model;
-- [ ] the new scenario-local requirements contract is acceptable;
-- [ ] Dataset Space and registration responsibilities are clear;
-- [ ] the Orchestrator co-location trade-off is accepted;
-- [ ] existing control and WorkItem paths remain authoritative;
-- [ ] PostgreSQL-first and explicit Redis behavior are acceptable;
-- [ ] the output/interceptor split covers producer needs;
-- [ ] completed, failed and uncertain routing matches real source workflows;
-- [ ] local snapshots meet traffic performance needs;
-- [ ] the MVP qualification profile represents the first intended use case.
-
-## Gate status
-
-| Gate | Current state | Meaning |
-|---|---|---|
-| Design ready | Passed | The proposal is coherent enough for team review |
-| Team approved | Pending | Product, Architecture, Security, Operations, UX and QA accept the decisions |
-| Implementation ready | Pending | Canonical contracts, first use case and owners are approved |
-| MVP qualified | Not run | Implementation has passed correctness, recovery, capacity and security gates |
-
-## Research basis
-
-These sources explain the selected patterns. PocketHive contracts remain the
-authority:
-
-- [Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
-  for application-owned ports and replaceable adapters;
-- [Kubernetes controller pattern](https://kubernetes.io/docs/concepts/architecture/controller/)
-  for desired-versus-observed reconciliation;
-- [AWS transactional outbox guidance](https://docs.aws.amazon.com/prescriptive-guidance/latest/cloud-design-patterns/transactional-outbox.html)
-  for committing state and publication intent together;
-- [RabbitMQ confirms and acknowledgements](https://www.rabbitmq.com/docs/confirms)
-  for the delivery boundary;
-- [PostgreSQL SKIP LOCKED](https://www.postgresql.org/docs/current/sql-select.html)
-  for short competing scheduler claims;
-- [WCAG 2.2 status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)
-  for accessible asynchronous status.
+Approve a PostgreSQL-backed, continuously renewable vertical slice that uses
+PocketHive's native
+`WorkInput -> WorkItem -> worker -> WorkItem -> WorkOutput` pipeline.
+
+```mermaid
+flowchart TD
+  API["Managed Dataset module"] <--> PG[(PostgreSQL)]
+  API -->|bounded grants| IN["Producer WorkInput"]
+  IN -->|WorkItem| P["Producer scenario and SUT"]
+  P -->|typed WorkItem| OUT["Dataset WorkOutput"]
+  OUT --> API
+  API -->|background snapshot and refresh| C["Consumer WorkInput"]
+  C -->|local WorkItem| T["Traffic scenario"]
+  API -->|bounded retention| PG
+```
+
+## Key decisions
+
+### Use native worker I/O
+
+- Producer entry: `MANAGED_DATASET_REFILL` input.
+- Producer commit: `MANAGED_DATASET` output.
+- Consumer source: `MANAGED_DATASET` input.
+- Existing `WorkItem`, worker lifecycle, Rabbit topology, and status remain.
+- Each worker still has exactly one input and one output; multi-stage producers
+  use separate Rabbit-connected bees.
+
+There is no Dataset-specific Rabbit lane or multi-output interceptor.
+
+### Keep the documented Dataset model
+
+Dataset definitions stay in the SUT-scoped Dataset Space described by the
+PocketHive architecture proposal. Scenario I/O config names a logical
+`bindingRef`; Scenario Binding freezes exact Space, Dataset, schema, policy,
+access, and SUT versions before runtime.
+
+This removes the proposed Dataset package, registration, and duplicate
+`requirements.yaml` lifecycles. Runtime never resolves a live alias.
+
+### Keep SUT behavior in the scenario bundle
+
+Provisioning requests and result mapping are scenario behavior. Producer config
+may use resolved `sut`, `vars`, bundle templates, and private `authRef` data.
+Unknown context fails before provisioning; credentials never enter Dataset
+metadata or `WorkItem`.
+
+This avoids a generic SUT workflow language inside Orchestrator.
+
+### Include continuous renewal, defer reconciliation
+
+The MVP atomically grants only missing renewal-ready slots. Expiring records
+leave that count before they become unsafe, so the refill swarm creates
+replacements early. Active grants count against `maximumReady`, and retained
+old rows remain under separate row/byte quotas.
+
+Consumers rotate verified snapshots before expiry and perform a final local
+validity check. The Dataset module later purges expired rows in small bounded
+database batches. It never calls the SUT during refresh or purge.
+
+A full reconciler would also need SUT state discovery, revalidation,
+correction, deprovision, compensation, live target changes, and producer
+lifecycle management. That is a later workflow capability, not this MVP.
+The required expiry replacement and database housekeeping do not inspect or
+repair SUT state.
+
+### Make ambiguity visible
+
+Every SUT mutation uses a stable idempotency key. `COMPLETED` commits a record;
+`FAILED` releases its reservation; `UNCERTAIN` retains capacity and is not
+blindly retried. Automatic mutating refill is rejected if the SUT lacks a real
+idempotency mechanism.
+
+Broker acknowledgement or network success is not business evidence. Only a
+durable Dataset receipt completes a grant.
+
+Bounded failure, unusable-result, and uncertainty budgets stop a broken
+provider from driving an endless 24/7 mutation loop. Opening the circuit blocks
+refill visibly; it does not trigger automatic cleanup or reconciliation.
+
+### Keep traffic local
+
+The consumer input hydrates and verifies an immutable snapshot in the
+background, then selects records locally. A newer view is built off-thread and
+atomically replaces the old view before its records become unsafe. Measured
+request threads make no Dataset API, database, Redis, or credential-provider
+call. Validity metadata stays in the canonical `WorkItem`; the SDK checks it
+locally at each hop so an item that expires in a queue is dropped before the
+SUT call and reported instead of silently replaced.
+
+The MVP accepts only synthetic, non-secret records suitable for the existing
+`WorkItem` path.
+
+### Bound configuration before runtime
+
+Scenario authors set Dataset intent: `bindingRef`, consumer rate, and selection.
+A versioned platform profile owns polling/backoff, claim, hydration, memory,
+connection, clock, retention, and request limits, and bounds the Dataset's
+declared renewal lead. Admission reserves aggregate capacity across resolved
+replicas and rejects a Dataset whose largest expiry cohort cannot be replaced
+inside the proven renewal window. Values are not clamped or replaced.
+
+Memory admission covers both the active and next snapshot plus buffers and
+measured runtime overhead. The 55,000 × 4,096-byte example is about 429.7 MiB
+for two encoded views per consumer before Java overhead.
+
+Refill clients back off with jitter, and simultaneous snapshot hydration is
+staggered and bounded. Claim/commit, hydration, and retention have separate
+bulkheads so Dataset work cannot consume Orchestrator control/journal capacity.
+Refill SUT calls are rate-bounded, reported separately, and included in the
+run's total load budget. Effective limits remain visible in product status.
+
+### Define the 24/7 boundary
+
+Any run that can outlive its expiring records must name at least one qualified
+refill binding. PocketHive does not discover or start one implicitly. The
+Swarm Controller's existing AMQP-derived aggregate proves worker liveness,
+while bounded Dataset claim heartbeats and receipts prove path health and
+progress. PostgreSQL remains authoritative across process restart, and a
+consumer rehydrates a current safe snapshot before resuming.
+
+This supports continuous data operation in the existing PocketHive deployment.
+PostgreSQL remains authoritative, and durable leases and fences are required
+to stop competing module replicas from applying the same housekeeping work.
+Safe local snapshots provide bounded outage tolerance. Replica safety remains
+an evidence gate; the current deployment is not highly available, and full
+Orchestrator active-active operation, backup restore, and multi-region failover
+are not qualified.
+
+## Scope boundary
+
+Included:
+
+- PostgreSQL and immutable reusable records;
+- fixed minimum/target/maximum supply;
+- proactive expiry refill, snapshot rotation, bounded retention, and recovery;
+- bounded grants, durable receipts, local snapshots, and readiness;
+- explicit authorisation, idempotency, audit, and product status.
+
+Deferred:
+
+- generic SUT reconciliation, correction, revalidation, and deprovision;
+- live target changes and automatic producer start/stop;
+- Redis authority, exclusive/consumable records, sensitive data, and HA
+  deployment and qualification;
+- multi-output and generic protocol-result engines.
+
+Unsupported choices fail; nothing falls back.
+
+## Approval gates
+
+Implementation is blocked until the team approves:
+
+1. one executable schema/API source;
+2. worker enum, config, capability, and error contracts;
+3. one deterministic idempotent SUT double;
+4. the security model and uncertainty-resolution authority;
+5. a reproducible aggregate capacity/lifecycle profile and admission formula;
+6. expiry, refresh, retention, restart, replica-safety, control-SLO, and
+   24-hour soak evidence.
+
+The candidate profile of 50,000 target records, 55,000 maximum, two consumer
+swarms, and 1,000 requests/second remains unverified until tested across at
+least two expiry/refill cycles and one purge cycle.
