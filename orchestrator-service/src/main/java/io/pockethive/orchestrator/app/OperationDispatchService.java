@@ -5,6 +5,7 @@ import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -46,7 +47,14 @@ public final class OperationDispatchService {
       Duration timeout,
       Consumer<String> execution) {
     return dispatch(
-        swarmId, type, target, UUID.randomUUID().toString(), idempotencyKey, timeout, execution);
+        swarmId,
+        type,
+        target,
+        UUID.randomUUID().toString(),
+        idempotencyKey,
+        timeout,
+        runtimeForRegisteredSwarm(swarmId),
+        execution);
   }
 
   public void registerConfigExpectation(
@@ -62,15 +70,17 @@ public final class OperationDispatchService {
       String correlationId,
       String idempotencyKey,
       Duration timeout,
+      RuntimeMetadata runtime,
       Consumer<String> execution) {
     Objects.requireNonNull(timeout, "timeout");
     if (timeout.isZero() || timeout.isNegative()) {
       throw new IllegalArgumentException("timeout must be positive");
     }
     Objects.requireNonNull(execution, "execution");
+    Objects.requireNonNull(runtime, "runtime");
     Instant now = Instant.now();
     var reservation = operations.reserve(
-        swarmId, type, target, correlationId, idempotencyKey, now, now.plus(timeout));
+        swarmId, type, target, runtime, correlationId, idempotencyKey, now, now.plus(timeout));
     if (reservation.reused()) {
       return reservation;
     }
@@ -95,8 +105,7 @@ public final class OperationDispatchService {
           Instant.now());
       if (completion == io.pockethive.orchestrator.domain.OperationCompletion.COMPLETED) {
         try {
-          operations.findByCorrelation(correlationId)
-              .ifPresent(operation -> outcomes.publish(operation, runtimeMeta(swarmId)));
+          operations.findByCorrelation(correlationId).ifPresent(outcomes::publish);
         } catch (RuntimeException publicationFailure) {
           if (publicationFailure != failure) {
             failure.addSuppressed(publicationFailure);
@@ -152,18 +161,9 @@ public final class OperationDispatchService {
     return context;
   }
 
-  private Map<String, Object> runtimeMeta(String swarmId) {
-    Swarm swarm = swarms.find(swarmId).orElse(null);
-    if (swarm == null) {
-      return Map.of();
-    }
-    Map<String, Object> runtime = new LinkedHashMap<>();
-    if (swarm.templateId() != null) {
-      runtime.put("templateId", swarm.templateId());
-    }
-    if (swarm.getRunId() != null) {
-      runtime.put("runId", swarm.getRunId());
-    }
-    return Map.copyOf(runtime);
+  private RuntimeMetadata runtimeForRegisteredSwarm(String swarmId) {
+    Swarm swarm = swarms.find(swarmId)
+        .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
+    return swarm.runtimeMetadata();
   }
 }

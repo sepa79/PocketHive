@@ -235,6 +235,7 @@ async function runOfflinePoc() {
       await call(client, "swarm_create", {
         swarmId,
         templateId: BUNDLE_ID,
+        networkMode: "DIRECT",
         sutId: "wiremock-local",
         variablesProfileId: "default",
       });

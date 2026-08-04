@@ -709,12 +709,11 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
   "sutId": "optional; bundle-local SUT id",
   "variablesProfileId": "optional; required when variables.yaml defines profiles",
   "networkMode": "DIRECT",
-  "networkProfileId": null,
-  "notes": "optional"
+  "networkProfileId": null
 }
 ```
 
-`autoPullImages` and `networkMode` are required. `autoPullImages` must be a boolean; `null` and omission are rejected. `networkMode` must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
+Every property in this request is required. When no SUT, variables profile or network profile applies, clients must send that field explicitly as `null`; omission is invalid. Values must already be canonical: leading or trailing whitespace is rejected rather than normalized. `autoPullImages` must be a boolean; `null` is rejected. `networkMode` must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit non-null `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
 
 **Response (202)**
 ```json
@@ -741,7 +740,7 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
 **Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → internal **result:** `event.result.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → public **outcome:** `event.outcome.swarm-start.<swarmId>.orchestrator.<orchestratorInstance>`.
@@ -766,7 +765,7 @@ When the Controller is ready and the workload is already `RUNNING`, a new `START
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
 **Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → internal **result:** `event.result.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → public **outcome:** `event.outcome.swarm-stop.<swarmId>.orchestrator.<orchestratorInstance>`.
@@ -791,7 +790,7 @@ When the Controller is ready and the workload is already `STOPPED`, a new `STOP`
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
 The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and RabbitMQ target through the canonical observation ports, clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.

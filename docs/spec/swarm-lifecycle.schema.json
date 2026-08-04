@@ -23,6 +23,17 @@
         { "type": "null" }
       ]
     },
+    "CanonicalNonEmptyString": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^\\S(?:.*\\S)?$"
+    },
+    "NullableCanonicalNonEmptyString": {
+      "oneOf": [
+        { "$ref": "#/$defs/CanonicalNonEmptyString" },
+        { "type": "null" }
+      ]
+    },
     "RuntimeIntent": {
       "type": "string",
       "enum": ["PRESENT", "ABSENT"]
@@ -81,6 +92,18 @@
         }
       }
     },
+    "RuntimeMetadata": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["templateId", "runId"],
+      "properties": {
+        "templateId": { "$ref": "#/$defs/NonEmptyString" },
+        "runId": { "$ref": "#/$defs/NonEmptyString" },
+        "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "image": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
+      }
+    },
     "ControlResponse": {
       "type": "object",
       "additionalProperties": false,
@@ -96,26 +119,47 @@
     "ControlRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["idempotencyKey", "notes"],
+      "required": ["idempotencyKey"],
       "properties": {
-        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
-        "notes": { "$ref": "#/$defs/NullableNonEmptyString" }
+        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" }
       }
     },
     "SwarmCreateRequest": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["templateId", "idempotencyKey", "notes", "autoPullImages", "sutId", "variablesProfileId", "networkMode", "networkProfileId"],
+      "required": ["templateId", "idempotencyKey", "autoPullImages", "sutId", "variablesProfileId", "networkMode", "networkProfileId"],
       "properties": {
-        "templateId": { "$ref": "#/$defs/NonEmptyString" },
-        "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
-        "notes": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "templateId": { "$ref": "#/$defs/CanonicalNonEmptyString" },
+        "idempotencyKey": { "$ref": "#/$defs/CanonicalNonEmptyString" },
         "autoPullImages": { "type": "boolean" },
-        "sutId": { "$ref": "#/$defs/NullableNonEmptyString" },
-        "variablesProfileId": { "$ref": "#/$defs/NullableNonEmptyString" },
+        "sutId": { "$ref": "#/$defs/NullableCanonicalNonEmptyString" },
+        "variablesProfileId": { "$ref": "#/$defs/NullableCanonicalNonEmptyString" },
         "networkMode": { "type": "string", "enum": ["DIRECT", "PROXIED"] },
-        "networkProfileId": { "$ref": "#/$defs/NullableNonEmptyString" }
-      }
+        "networkProfileId": { "$ref": "#/$defs/NullableCanonicalNonEmptyString" }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": { "networkMode": { "const": "DIRECT" } },
+            "required": ["networkMode"]
+          },
+          "then": {
+            "properties": { "networkProfileId": { "type": "null" } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "networkMode": { "const": "PROXIED" } },
+            "required": ["networkMode"]
+          },
+          "then": {
+            "properties": {
+              "sutId": { "$ref": "#/$defs/CanonicalNonEmptyString" },
+              "networkProfileId": { "$ref": "#/$defs/CanonicalNonEmptyString" }
+            }
+          }
+        }
+      ]
     },
     "SwarmOperation": {
       "type": "object",
@@ -124,6 +168,7 @@
         "swarmId",
         "type",
         "target",
+        "runtime",
         "correlationId",
         "idempotencyKey",
         "state",
@@ -137,6 +182,7 @@
         "swarmId": { "$ref": "#/$defs/NonEmptyString" },
         "type": { "$ref": "#/$defs/OperationType" },
         "target": { "$ref": "#/$defs/Target" },
+        "runtime": { "$ref": "#/$defs/RuntimeMetadata" },
         "correlationId": { "$ref": "#/$defs/NonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NonEmptyString" },
         "state": { "$ref": "#/$defs/OperationState" },

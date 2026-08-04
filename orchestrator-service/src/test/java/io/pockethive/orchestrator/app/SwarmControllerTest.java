@@ -43,6 +43,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
+import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 class SwarmControllerTest {
@@ -98,7 +99,7 @@ class SwarmControllerTest {
         eq(OperationType.START), eq("alpha"), eq("idem-start"), eq(Duration.ofSeconds(180))))
         .thenReturn(reservation);
 
-    var response = controller.start("alpha", new ControlRequest("idem-start", null));
+    var response = controller.start("alpha", new ControlRequest("idem-start"));
 
     assertThat(response.getStatusCode().value()).isEqualTo(202);
     assertThat(response.getBody()).isNotNull();
@@ -115,7 +116,7 @@ class SwarmControllerTest {
         eq(OperationType.STOP), eq("alpha"), eq("idem-stop"), eq(Duration.ofSeconds(90))))
         .thenReturn(lifecycleReservation(OperationType.STOP, "corr-stop", "idem-stop"));
 
-    controller.stop("alpha", new ControlRequest("idem-stop", null));
+    controller.stop("alpha", new ControlRequest("idem-stop"));
     operations.recordResult(
         "alpha", OperationType.STOP, new Target("swarm-controller", "controller-1"),
         "corr-stop", "idem-stop", OperationState.SUCCEEDED,
@@ -125,7 +126,7 @@ class SwarmControllerTest {
         eq(OperationType.REMOVE), eq("alpha"), eq("idem-remove"), eq(Duration.ofSeconds(180))))
         .thenReturn(lifecycleReservation(OperationType.REMOVE, "corr-remove", "idem-remove"));
 
-    controller.remove("alpha", new ControlRequest("idem-remove", null));
+    controller.remove("alpha", new ControlRequest("idem-remove"));
 
     verify(lifecycleCommands).dispatch(
         OperationType.STOP, "alpha", "idem-stop", Duration.ofSeconds(90));
@@ -159,6 +160,39 @@ class SwarmControllerTest {
   }
 
   @Test
+  void lifecycleEndpointsRejectTheRetiredNotesField() throws Exception {
+    var mvc = MockMvcBuilders.standaloneSetup(controller)
+        .setMessageConverters(new MappingJackson2HttpMessageConverter(
+            new JacksonConfiguration().objectMapper()))
+        .build();
+
+    mvc.perform(post("/api/swarms/alpha/start")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"idempotencyKey\":\"idem-start\",\"notes\":\"retired\"}"))
+        .andExpect(status().isBadRequest());
+    mvc.perform(post("/api/swarms/new-swarm/create")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"templateId\":\"template-1\",\"idempotencyKey\":\"idem-create\","
+                + "\"autoPullImages\":false,\"sutId\":null,\"variablesProfileId\":null,"
+                + "\"networkMode\":\"DIRECT\",\"networkProfileId\":null,\"notes\":\"retired\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
+  void createRejectsOmittedNullableFieldsAtTheCanonicalJsonBoundary() throws Exception {
+    var mvc = MockMvcBuilders.standaloneSetup(controller)
+        .setMessageConverters(new MappingJackson2HttpMessageConverter(
+            new JacksonConfiguration().objectMapper()))
+        .build();
+
+    mvc.perform(post("/api/swarms/new-swarm/create")
+            .contentType(MediaType.APPLICATION_JSON)
+            .content("{\"templateId\":\"template-1\",\"idempotencyKey\":\"idem-create\","
+                + "\"autoPullImages\":false,\"networkMode\":\"DIRECT\"}"))
+        .andExpect(status().isBadRequest());
+  }
+
+  @Test
   void deniedCreateDoesNotReserveALifecycleOperation() throws Exception {
     var descriptor = new ScenarioClient.ScenarioTemplateDescriptor(
         "template-denied", "restricted/template-denied", "restricted/template-denied", "restricted", false);
@@ -175,8 +209,8 @@ class SwarmControllerTest {
 
     try {
       OrchestratorCurrentUserHolder.set(user);
-      assertThatThrownBy(() -> controller.create("denied-swarm", new SwarmCreateRequest(
-          "template-denied", "idem-denied", null, false, null, null, NetworkMode.DIRECT, null)))
+      assertThatThrownBy(() -> controller.create("denied-swarm", SwarmCreateRequest.of(
+          "template-denied", "idem-denied", false, null, null, NetworkMode.DIRECT, null)))
           .isInstanceOf(org.springframework.web.server.ResponseStatusException.class)
           .hasMessageContaining("403 FORBIDDEN");
     } finally {
@@ -191,6 +225,7 @@ class SwarmControllerTest {
     Instant now = Instant.now();
     var reservation = operations.reserve(
         "alpha", type, new Target("swarm-controller", "controller-1"),
+        new io.pockethive.swarm.model.lifecycle.RuntimeMetadata("template-1", "run-1"),
         correlationId, idempotencyKey, now, now.plusSeconds(180));
     operations.markDispatched(correlationId, now.plusMillis(1));
     return new SwarmOperationCoordinator.Reservation(

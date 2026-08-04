@@ -3211,11 +3211,12 @@ export function registerWorkflowTools(deps) {
           templateId: session.generated.bundleId,
           idempotencyKey: operation.idempotencyKeys.create || idempotencyKey(),
           autoPullImages: false,
+          sutId: operation.input.sutId || target?.id || null,
+          variablesProfileId: operation.input.variablesProfileId || null,
           networkMode: "DIRECT",
+          networkProfileId: null,
         };
         operation.idempotencyKeys.create = createBody.idempotencyKey;
-        if (operation.input.sutId || target?.id) createBody.sutId = operation.input.sutId || target.id;
-        if (operation.input.variablesProfileId) createBody.variablesProfileId = operation.input.variablesProfileId;
         operation.evidence.create = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/create`, { method: "POST", body: createBody });
         lifecycleOperationUrl(operation.evidence.create, "swarm.create");
         const apiAction = recordOperationApiAction(operation, {
@@ -4301,10 +4302,11 @@ export function registerWorkflowTools(deps) {
         templateId: session.generated.bundleId,
         idempotencyKey: idempotencyKey(),
         autoPullImages: false,
+        sutId: sutId || target?.id || null,
+        variablesProfileId: variablesProfileId || null,
         networkMode: "DIRECT",
+        networkProfileId: null,
       };
-      if (sutId || target?.id) createBody.sutId = sutId || target.id;
-      if (variablesProfileId) createBody.variablesProfileId = variablesProfileId;
       const create = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/create`, { method: "POST", body: createBody });
       const operationTimeoutMs = Math.min(readyTimeoutSec, 80) * 1000;
       const createOperation = requireSuccessfulLifecycleOperation(

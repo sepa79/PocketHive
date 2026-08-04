@@ -7,6 +7,7 @@ public record SwarmOperation(
     String swarmId,
     OperationType type,
     Target target,
+    RuntimeMetadata runtime,
     String correlationId,
     String idempotencyKey,
     OperationState state,
@@ -21,6 +22,7 @@ public record SwarmOperation(
     swarmId = ContractValues.requireText("swarmId", swarmId);
     type = Objects.requireNonNull(type, "type");
     target = Objects.requireNonNull(target, "target");
+    runtime = Objects.requireNonNull(runtime, "runtime");
     correlationId = ContractValues.requireText("correlationId", correlationId);
     idempotencyKey = ContractValues.requireText("idempotencyKey", idempotencyKey);
     state = Objects.requireNonNull(state, "state");
@@ -42,12 +44,13 @@ public record SwarmOperation(
       String swarmId,
       OperationType type,
       Target target,
+      RuntimeMetadata runtime,
       String correlationId,
       String idempotencyKey,
       Instant createdAt,
       Instant deadlineAt) {
     return new SwarmOperation(
-        swarmId, type, target, correlationId, idempotencyKey, OperationState.ACCEPTED,
+        swarmId, type, target, runtime, correlationId, idempotencyKey, OperationState.ACCEPTED,
         createdAt, null, deadlineAt, null, null);
   }
 
@@ -56,7 +59,7 @@ public record SwarmOperation(
       throw new IllegalStateException("Only an ACCEPTED operation can be dispatched");
     }
     return new SwarmOperation(
-        swarmId, type, target, correlationId, idempotencyKey, OperationState.DISPATCHED,
+        swarmId, type, target, runtime, correlationId, idempotencyKey, OperationState.DISPATCHED,
         createdAt, Objects.requireNonNull(at, "at"), deadlineAt, null, null);
   }
 
@@ -68,7 +71,7 @@ public record SwarmOperation(
       throw new IllegalArgumentException("Completion state must be terminal");
     }
     return new SwarmOperation(
-        swarmId, type, target, correlationId, idempotencyKey, terminalState,
+        swarmId, type, target, runtime, correlationId, idempotencyKey, terminalState,
         createdAt, dispatchedAt, deadlineAt, Objects.requireNonNull(at, "at"),
         Objects.requireNonNull(result, "result"));
   }

@@ -554,7 +554,7 @@ async function startAutoRefresh(swarmId: string) {
 async function createAndStart() {
   setProgress('Creating swarm...');
   await app.callServerTool({ name: 'swarm.create', arguments: {
-    swarmId, templateId, sutId, variablesProfileId
+    swarmId, templateId, networkMode: 'DIRECT', sutId, variablesProfileId
   }});
 
   setProgress('Waiting for workers to be ready...');

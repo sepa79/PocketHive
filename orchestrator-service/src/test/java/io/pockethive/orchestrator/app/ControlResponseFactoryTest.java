@@ -6,6 +6,7 @@ import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import io.pockethive.swarm.model.lifecycle.Target;
 import java.time.Duration;
@@ -24,6 +25,7 @@ class ControlResponseFactoryTest {
         "swarm-1",
         OperationType.CONFIG_UPDATE,
         new Target("generator", "gen-1"),
+        new RuntimeMetadata("template-1", "run-1"),
         "corr-1",
         "idem-1",
         now,

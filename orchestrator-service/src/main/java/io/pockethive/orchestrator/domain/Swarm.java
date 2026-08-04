@@ -12,6 +12,7 @@ import java.util.LinkedHashMap;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
 import io.pockethive.swarm.model.lifecycle.Health;
 import io.pockethive.swarm.model.lifecycle.RuntimeIntent;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
 import io.pockethive.swarm.model.lifecycle.WorkloadIntent;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
@@ -60,6 +61,11 @@ public class Swarm {
 
     public String getRunId() {
         return runId;
+    }
+
+    /** Immutable metadata used by every operation and outcome for this runtime. */
+    public RuntimeMetadata runtimeMetadata() {
+        return new RuntimeMetadata(templateId(), runId);
     }
 
     public void attachTemplate(SwarmTemplateMetadata metadata) {

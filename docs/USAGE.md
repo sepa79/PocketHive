@@ -232,7 +232,12 @@ Manual checks:
   ```json
   {
     "templateId": "rest",
-    "idempotencyKey": "create-rest-001"
+    "idempotencyKey": "create-rest-001",
+    "autoPullImages": false,
+    "sutId": null,
+    "variablesProfileId": null,
+    "networkMode": "DIRECT",
+    "networkProfileId": null
   }
   ```
 

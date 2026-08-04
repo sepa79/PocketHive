@@ -189,7 +189,7 @@ public class SwarmSignalListener {
       return;
     }
     SwarmOperation terminal = operations.findByCorrelation(result.correlationId()).orElseThrow();
-    outcomes.publish(terminal, runtimeMeta(terminal.swarmId()));
+    outcomes.publish(terminal);
   }
 
   void handleControllerStatusFull(String routingKey, JsonNode statusEnvelope) {
@@ -232,7 +232,7 @@ public class SwarmSignalListener {
         operation.correlationId(), operation.idempotencyKey(),
         terminalState(status), result, Instant.now());
     if (completion == OperationCompletion.COMPLETED) {
-      outcomes.publish(operations.findByCorrelation(operation.correlationId()).orElseThrow(), runtimeMeta(key.swarmId()));
+      outcomes.publish(operations.findByCorrelation(operation.correlationId()).orElseThrow());
     }
   }
 
@@ -284,7 +284,7 @@ public class SwarmSignalListener {
           OperationState.SUCCEEDED, result.data(), Instant.now());
       if (completion == OperationCompletion.COMPLETED) {
         SwarmOperation terminal = operations.findByCorrelation(correlationId).orElseThrow();
-        outcomes.publish(terminal, runtimeMeta(terminal.swarmId()));
+        outcomes.publish(terminal);
       }
     }
   }
@@ -342,14 +342,14 @@ public class SwarmSignalListener {
     operations.expire(Instant.now(), this::timeoutResult).forEach(operation -> {
       log.warn("Operation timed out type={} swarm={} correlation={}",
           operation.type(), operation.swarmId(), operation.correlationId());
-      outcomes.publish(operation, runtimeMeta(operation.swarmId()));
+      outcomes.publish(operation);
     });
     pendingConfigResults.keySet().removeIf(correlationId ->
         operations.findByCorrelation(correlationId).map(SwarmOperation::terminal).orElse(true));
     operations.operations().stream()
         .filter(SwarmOperation::terminal)
         .filter(operation -> !outcomes.isPublished(operation.correlationId()))
-        .forEach(operation -> outcomes.publish(operation, runtimeMeta(operation.swarmId())));
+        .forEach(outcomes::publish);
   }
 
   private void checkRemoveResults() {
@@ -386,8 +386,7 @@ public class SwarmSignalListener {
         operation.correlationId(), operation.idempotencyKey(),
         OperationState.FAILED, terminal, Instant.now());
     if (completion == OperationCompletion.COMPLETED) {
-      outcomes.publish(operations.findByCorrelation(operation.correlationId()).orElseThrow(),
-          runtimeMeta(operation.swarmId()));
+      outcomes.publish(operations.findByCorrelation(operation.correlationId()).orElseThrow());
     }
   }
 
@@ -400,7 +399,6 @@ public class SwarmSignalListener {
         || !result.idempotencyKey().equals(operation.idempotencyKey())) {
       throw new IllegalArgumentException("Remove result does not match the active operation identity");
     }
-    Map<String, Object> runtime = runtimeMeta(operation.swarmId());
     List<RemoveResource> removed = new ArrayList<>();
     List<RemoveResource> remaining = new ArrayList<>();
     List<RemoveError> errors = new ArrayList<>(result.errors());
@@ -497,7 +495,7 @@ public class SwarmSignalListener {
         terminalState(status), terminal, Instant.now());
     if (completion == OperationCompletion.COMPLETED) {
       SwarmOperation completed = operations.findByCorrelation(operation.correlationId()).orElseThrow();
-      outcomes.publish(completed, runtime);
+      outcomes.publish(completed);
     }
   }
 
@@ -629,16 +627,6 @@ public class SwarmSignalListener {
       }
     }
     return null;
-  }
-
-  private Map<String, Object> runtimeMeta(String swarmId) {
-    Swarm swarm = store.find(swarmId).orElse(null);
-    if (swarm == null) {
-      return Map.of();
-    }
-    return Map.of(
-        "templateId", requireText("templateId", swarm.templateId()),
-        "runId", requireText("runId", swarm.getRunId()));
   }
 
   private void journalResult(

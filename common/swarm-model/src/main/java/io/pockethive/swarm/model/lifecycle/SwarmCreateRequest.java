@@ -1,40 +1,109 @@
 package io.pockethive.swarm.model.lifecycle;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import io.pockethive.swarm.model.NetworkMode;
 
 /** Canonical REST request for creating a swarm runtime. */
-public record SwarmCreateRequest(
-    String templateId,
-    String idempotencyKey,
-    String notes,
-    Boolean autoPullImages,
-    String sutId,
-    String variablesProfileId,
-    NetworkMode networkMode,
-    String networkProfileId
-) {
+public final class SwarmCreateRequest {
 
-  public SwarmCreateRequest {
-    templateId = ContractValues.requireText("templateId", templateId);
-    idempotencyKey = ContractValues.requireText("idempotencyKey", idempotencyKey);
-    notes = ContractValues.optionalText(notes);
-    sutId = ContractValues.optionalText(sutId);
-    variablesProfileId = ContractValues.optionalText(variablesProfileId);
-    if (autoPullImages == null) {
-      throw new IllegalArgumentException("autoPullImages must be provided");
-    }
-    if (networkMode == null) {
-      throw new IllegalArgumentException("networkMode must be provided");
-    }
-    networkProfileId = ContractValues.optionalText(networkProfileId);
-    if (networkMode == NetworkMode.DIRECT && networkProfileId != null) {
-      throw new IllegalArgumentException("networkProfileId requires networkMode=PROXIED");
-    }
-    if (networkMode == NetworkMode.PROXIED && networkProfileId == null) {
-      throw new IllegalArgumentException("networkProfileId must be provided when networkMode=PROXIED");
-    }
-    if (networkMode == NetworkMode.PROXIED && sutId == null) {
-      throw new IllegalArgumentException("sutId must be provided when networkMode=PROXIED");
-    }
+  private final String templateId;
+  private final String idempotencyKey;
+  private final boolean autoPullImages;
+  private final String sutId;
+  private final String variablesProfileId;
+  private final NetworkMode networkMode;
+  private final String networkProfileId;
+
+  private SwarmCreateRequest(
+      String templateId,
+      String idempotencyKey,
+      boolean autoPullImages,
+      String sutId,
+      String variablesProfileId,
+      NetworkMode networkMode,
+      String networkProfileId) {
+    this.templateId = templateId;
+    this.idempotencyKey = idempotencyKey;
+    this.autoPullImages = autoPullImages;
+    this.sutId = sutId;
+    this.variablesProfileId = variablesProfileId;
+    this.networkMode = networkMode;
+    this.networkProfileId = networkProfileId;
+  }
+
+  /** Creates a typed request through the same canonical JSON Schema boundary as REST. */
+  public static SwarmCreateRequest of(
+      String templateId,
+      String idempotencyKey,
+      boolean autoPullImages,
+      String sutId,
+      String variablesProfileId,
+      NetworkMode networkMode,
+      String networkProfileId) {
+    return SwarmCreateRequestJsonCodec.fromArguments(
+        templateId,
+        idempotencyKey,
+        autoPullImages,
+        sutId,
+        variablesProfileId,
+        networkMode,
+        networkProfileId);
+  }
+
+  static SwarmCreateRequest fromValidatedValues(
+      String templateId,
+      String idempotencyKey,
+      boolean autoPullImages,
+      String sutId,
+      String variablesProfileId,
+      NetworkMode networkMode,
+      String networkProfileId) {
+    return new SwarmCreateRequest(
+        templateId,
+        idempotencyKey,
+        autoPullImages,
+        sutId,
+        variablesProfileId,
+        networkMode,
+        networkProfileId);
+  }
+
+  @JsonProperty("templateId")
+  public String templateId() {
+    return templateId;
+  }
+
+  @JsonProperty("idempotencyKey")
+  public String idempotencyKey() {
+    return idempotencyKey;
+  }
+
+  @JsonProperty("autoPullImages")
+  public boolean autoPullImages() {
+    return autoPullImages;
+  }
+
+  @JsonProperty("sutId")
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public String sutId() {
+    return sutId;
+  }
+
+  @JsonProperty("variablesProfileId")
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public String variablesProfileId() {
+    return variablesProfileId;
+  }
+
+  @JsonProperty("networkMode")
+  public NetworkMode networkMode() {
+    return networkMode;
+  }
+
+  @JsonProperty("networkProfileId")
+  @JsonInclude(JsonInclude.Include.ALWAYS)
+  public String networkProfileId() {
+    return networkProfileId;
   }
 }

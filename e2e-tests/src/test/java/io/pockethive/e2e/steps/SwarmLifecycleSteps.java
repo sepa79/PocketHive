@@ -226,10 +226,9 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("create");
     String sutId = resolveSutIdForScenario();
     String variablesProfileId = resolveVariablesProfileIdForScenario();
-    SwarmCreateRequest request = new SwarmCreateRequest(
+    SwarmCreateRequest request = SwarmCreateRequest.of(
         scenarioDetails.id(),
         idempotencyKey,
-        "e2e lifecycle create",
         false,
         sutId,
         variablesProfileId,
@@ -363,7 +362,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("start");
     startResponse = orchestratorClient.startSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle start"));
+        new ControlRequest(idempotencyKey));
     LOGGER.info("Start request correlation={} operationUrl={} outcomeTopic={}",
         startResponse.correlationId(), startResponse.operationUrl(), startResponse.outcomeTopic());
   }
@@ -1459,7 +1458,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("stop");
     stopResponse = orchestratorClient.stopSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle stop"));
+        new ControlRequest(idempotencyKey));
     LOGGER.info("Stop request correlation={} operationUrl={} outcomeTopic={}",
         stopResponse.correlationId(), stopResponse.operationUrl(), stopResponse.outcomeTopic());
   }
@@ -1470,7 +1469,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("stop-without-start");
     stopResponse = orchestratorClient.stopSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle stop without start"));
+        new ControlRequest(idempotencyKey));
     LOGGER.info("Stop without start request correlation={} operationUrl={} outcomeTopic={}",
         stopResponse.correlationId(), stopResponse.operationUrl(), stopResponse.outcomeTopic());
   }
@@ -1502,7 +1501,7 @@ public class SwarmLifecycleSteps {
     String idempotencyKey = idKey("remove");
     removeResponse = orchestratorClient.removeSwarm(
         swarmId,
-        new ControlRequest(idempotencyKey, "e2e lifecycle remove"));
+        new ControlRequest(idempotencyKey));
     LOGGER.info("Remove request correlation={} operationUrl={} outcomeTopic={}",
         removeResponse.correlationId(), removeResponse.operationUrl(), removeResponse.outcomeTopic());
   }
@@ -1623,7 +1622,7 @@ public class SwarmLifecycleSteps {
           return;
         }
         LOGGER.info("Attempting to remove swarm {} during cleanup", swarmId);
-        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup"), "cleanup"));
+        orchestratorClient.removeSwarm(swarmId, new ControlRequest(idKey("cleanup")));
       } catch (Exception ex) {
         LOGGER.warn("Cleanup remove failed for swarm {}", swarmId, ex);
       }

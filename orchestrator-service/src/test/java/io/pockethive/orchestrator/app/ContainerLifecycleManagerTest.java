@@ -75,6 +75,7 @@ class ContainerLifecycleManagerTest {
             "sw1",
             "img",
             "inst1",
+            "run-1",
             startupMetadata("tpl-1", "img", List.of()),
             false,
             null,
@@ -84,6 +85,7 @@ class ContainerLifecycleManagerTest {
 
         assertEquals("sw1", swarm.getId());
         assertEquals("inst1", swarm.getInstanceId());
+        assertEquals("run-1", swarm.getRunId());
         assertEquals("cid", swarm.getContainerId());
         assertEquals(ControllerState.PROVISIONING, swarm.getControllerState());
         assertTrue(registry.find("sw1").isPresent());
@@ -97,6 +99,7 @@ class ContainerLifecycleManagerTest {
         assertEquals("ph.control", env.get("POCKETHIVE_CONTROL_PLANE_EXCHANGE"));
         assertEquals("sw1", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_ID"));
         assertEquals("tpl-1", env.get("POCKETHIVE_TEMPLATE_ID"));
+        assertEquals("run-1", env.get("POCKETHIVE_JOURNAL_RUN_ID"));
         assertEquals("DIRECT", env.get("POCKETHIVE_NETWORK_MODE"));
         assertFalse(env.containsKey("RABBITMQ_HOST"));
         assertFalse(env.containsKey("RABBITMQ_PORT"));
@@ -164,6 +167,7 @@ class ContainerLifecycleManagerTest {
             "sw1",
             "img",
             "inst1",
+            "run-1",
             startupMetadata(
                 "tpl-1",
                 "img",
@@ -201,6 +205,7 @@ class ContainerLifecycleManagerTest {
             "sw1",
             "img",
             "inst1",
+            "run-1",
             startupMetadata("tpl-1", "img", List.of()),
             false,
             "wiremock-proxy-local",
@@ -229,6 +234,7 @@ class ContainerLifecycleManagerTest {
             "sw1",
             "swarm-controller:latest",
             "inst1",
+            "run-1",
             startupMetadata("tpl-1", "swarm-controller:latest", List.of()),
             false,
             null,
@@ -257,6 +263,7 @@ class ContainerLifecycleManagerTest {
             "sw1",
             "img",
             "inst1",
+            "run-1",
             startupMetadata("tpl-1", "img", List.of()),
             false,
             null,

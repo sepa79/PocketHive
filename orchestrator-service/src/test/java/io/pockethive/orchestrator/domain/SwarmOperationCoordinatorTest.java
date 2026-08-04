@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -18,15 +19,16 @@ class SwarmOperationCoordinatorTest {
   private static final Instant NOW = Instant.parse("2026-07-22T12:00:00Z");
   private static final Instant DEADLINE = NOW.plusSeconds(180);
   private static final Target CONTROLLER = new Target("swarm-controller", "controller-1");
+  private static final RuntimeMetadata RUNTIME = new RuntimeMetadata("template-1", "run-1");
 
   @Test
   void duplicateLogicalRequestReturnsTheOriginalOperationIdentity() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
 
     var first = coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, "correlation-1", "idempotency-1", NOW, DEADLINE);
+        "alpha", OperationType.START, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
     var duplicate = coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, "must-not-win", "idempotency-1", NOW.plusSeconds(1), DEADLINE);
+        "alpha", OperationType.START, CONTROLLER, RUNTIME, "must-not-win", "idempotency-1", NOW.plusSeconds(1), DEADLINE);
 
     assertThat(first.reused()).isFalse();
     assertThat(duplicate.reused()).isTrue();
@@ -41,10 +43,10 @@ class SwarmOperationCoordinatorTest {
     Target workerTwo = new Target("generator", "generator-2");
 
     var first = coordinator.reserve(
-        "alpha", OperationType.CONFIG_UPDATE, workerOne,
+        "alpha", OperationType.CONFIG_UPDATE, workerOne, RUNTIME,
         "correlation-1", "idempotency-1", NOW, DEADLINE);
     var second = coordinator.reserve(
-        "alpha", OperationType.CONFIG_UPDATE, workerTwo,
+        "alpha", OperationType.CONFIG_UPDATE, workerTwo, RUNTIME,
         "correlation-2", "idempotency-1", NOW, DEADLINE);
 
     assertThat(first.reused()).isFalse();
@@ -56,10 +58,10 @@ class SwarmOperationCoordinatorTest {
   void differentLifecycleCommandCannotOverwriteAnActiveOperation() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, "correlation-1", "idempotency-1", NOW, DEADLINE);
+        "alpha", OperationType.START, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
 
     assertThatThrownBy(() -> coordinator.reserve(
-        "alpha", OperationType.STOP, CONTROLLER, "correlation-2", "idempotency-2", NOW, DEADLINE))
+        "alpha", OperationType.STOP, CONTROLLER, RUNTIME, "correlation-2", "idempotency-2", NOW, DEADLINE))
         .isInstanceOf(OperationConflictException.class)
         .satisfies(error -> assertThat(((OperationConflictException) error).activeOperation().correlationId())
             .isEqualTo("correlation-1"));
@@ -73,7 +75,7 @@ class SwarmOperationCoordinatorTest {
   void resultCompletesOnlyTheExactFourPartIdentity() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, "correlation-1", "idempotency-1", NOW, DEADLINE);
+        "alpha", OperationType.START, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
     coordinator.markDispatched("correlation-1", NOW.plusSeconds(1));
     TerminalResult result = new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of());
 
@@ -100,7 +102,7 @@ class SwarmOperationCoordinatorTest {
   void lateResultAfterTimeoutCannotChangeTerminalState() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     coordinator.reserve(
-        "alpha", OperationType.START, CONTROLLER, "correlation-1", "idempotency-1", NOW, DEADLINE);
+        "alpha", OperationType.START, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
     coordinator.markDispatched("correlation-1", NOW.plusSeconds(1));
     coordinator.recordResult(
         "alpha", OperationType.START, CONTROLLER, "correlation-1", "idempotency-1",
@@ -123,7 +125,7 @@ class SwarmOperationCoordinatorTest {
   void expiryTerminatesEachDueOperationExactlyOnce() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     coordinator.reserve(
-        "alpha", OperationType.STOP, CONTROLLER, "correlation-1", "idempotency-1", NOW, DEADLINE);
+        "alpha", OperationType.STOP, CONTROLLER, RUNTIME, "correlation-1", "idempotency-1", NOW, DEADLINE);
     coordinator.markDispatched("correlation-1", NOW.plusSeconds(1));
 
     assertThat(coordinator.expire(DEADLINE, operation ->

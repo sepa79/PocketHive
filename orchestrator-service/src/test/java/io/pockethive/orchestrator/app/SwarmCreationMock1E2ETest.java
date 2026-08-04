@@ -47,6 +47,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
 import java.util.List;
@@ -265,13 +266,15 @@ class SwarmCreationMock1E2ETest {
 
         String swarmId = "mock-swarm";
         String idempotencyKey = UUID.randomUUID().toString();
-        HttpEntity<Map<String, String>> request = jsonRequest(
-            Map.of(
-                "idempotencyKey", idempotencyKey,
-                "templateId", "local-rest",
-                "notes", "local-rest",
-                "autoPullImages", "false",
-                "networkMode", "DIRECT"));
+        Map<String, Object> createBody = new LinkedHashMap<>();
+        createBody.put("idempotencyKey", idempotencyKey);
+        createBody.put("templateId", "local-rest");
+        createBody.put("autoPullImages", false);
+        createBody.put("sutId", null);
+        createBody.put("variablesProfileId", null);
+        createBody.put("networkMode", "DIRECT");
+        createBody.put("networkProfileId", null);
+        HttpEntity<Map<String, Object>> request = jsonRequest(createBody);
 
         ResponseEntity<ControlResponse> response = rest.exchange(
             "/api/swarms/{swarmId}/create",
@@ -559,7 +562,7 @@ class SwarmCreationMock1E2ETest {
         return ControlPlaneRouting.event("metric", type, scope);
     }
 
-    private HttpEntity<Map<String, String>> jsonRequest(Map<String, String> body) {
+    private HttpEntity<Map<String, Object>> jsonRequest(Map<String, Object> body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
         headers.set(HttpHeaders.AUTHORIZATION, TEST_AUTHORIZATION);

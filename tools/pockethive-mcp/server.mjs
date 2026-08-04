@@ -2917,13 +2917,21 @@ reg("swarm.create", "Create a new swarm from a scenario template", {
   if (networkMode === "PROXIED" && !networkProfileId?.trim()) {
     throw new Error("networkProfileId is required when networkMode is PROXIED");
   }
+  if (networkMode === "PROXIED" && !sutId?.trim()) {
+    throw new Error("sutId is required when networkMode is PROXIED");
+  }
   if (networkMode === "DIRECT" && networkProfileId !== undefined) {
     throw new Error("networkProfileId is only valid when networkMode is PROXIED");
   }
-  const body = { templateId, idempotencyKey: idempotencyKey(), autoPullImages: false, networkMode };
-  if (networkProfileId) body.networkProfileId = networkProfileId;
-  if (sutId) body.sutId = sutId;
-  if (variablesProfileId) body.variablesProfileId = variablesProfileId;
+  const body = {
+    templateId,
+    idempotencyKey: idempotencyKey(),
+    autoPullImages: false,
+    sutId: sutId ?? null,
+    variablesProfileId: variablesProfileId ?? null,
+    networkMode,
+    networkProfileId: networkProfileId ?? null,
+  };
   return await httpJson(`/api/swarms/${encodeURIComponent(swarmId)}/create`, { method: "POST", body });
 });
 

@@ -34,18 +34,6 @@
         "instance": { "$ref": "#/$defs/NonEmptyString" }
       }
     },
-    "RuntimeMeta": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["templateId", "runId"],
-      "properties": {
-        "templateId": { "$ref": "#/$defs/NonEmptyString" },
-        "runId": { "$ref": "#/$defs/NonEmptyString" },
-        "containerId": { "$ref": "#/$defs/NullableNonEmptyString" },
-        "image": { "$ref": "#/$defs/NullableNonEmptyString" },
-        "stackName": { "$ref": "#/$defs/NullableNonEmptyString" }
-      }
-    },
     "EnvelopeBase": {
       "type": "object",
       "additionalProperties": false,
@@ -69,7 +57,7 @@
         "scope": { "$ref": "#/$defs/Scope" },
         "correlationId": { "$ref": "#/$defs/NullableNonEmptyString" },
         "idempotencyKey": { "$ref": "#/$defs/NullableNonEmptyString" },
-        "runtime": { "$ref": "#/$defs/RuntimeMeta" },
+        "runtime": { "$ref": "swarm-lifecycle.schema.json#/$defs/RuntimeMetadata" },
         "data": { "type": "object" }
       }
     },
@@ -417,7 +405,7 @@
         "lastSeenAt": { "type": "string", "format": "date-time" },
         "stale": { "type": "boolean" },
         "tps": { "type": "integer", "minimum": 0 },
-        "runtime": { "$ref": "#/$defs/RuntimeMeta" },
+        "runtime": { "$ref": "swarm-lifecycle.schema.json#/$defs/RuntimeMetadata" },
         "config": { "type": "object", "additionalProperties": true },
         "ioState": { "$ref": "#/$defs/MetricIoState" }
       }

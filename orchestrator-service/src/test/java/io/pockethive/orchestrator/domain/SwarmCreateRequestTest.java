@@ -9,72 +9,53 @@ import org.junit.jupiter.api.Test;
 
 class SwarmCreateRequestTest {
 
-    @Test
-    void requestHasNoConstructorThatDeclaresNetworkModeForTheCaller() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
-            "tpl-1", "idem", null, false, null, null, null, null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("networkMode must be provided");
+  @Test
+    void typedFactoryRejectsMissingNetworkModeThroughTheCanonicalSchema() {
+        assertThatThrownBy(() -> SwarmCreateRequest.of(
+            "tpl-1", "idem", false, null, null, null, null))
+            .isInstanceOf(io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException.class)
+            .hasMessageStartingWith("Swarm create request schema validation failed:");
     }
 
     @Test
-    void requiresAnExplicitAutoPullImagesValue() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
-            "tpl-1", "idem", null, null, null, null, NetworkMode.DIRECT, null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("autoPullImages must be provided");
-    }
-
-    @Test
-    void rejectsMissingNetworkModeInTheWireConstructor() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
-            "tpl-1", "idem", null, false, null, null, null, null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("networkMode must be provided");
-    }
-
-    @Test
-    void rejectsProfileWithoutProxiedMode() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
+    void typedFactoryRejectsProfileWithoutProxiedMode() {
+        assertThatThrownBy(() -> SwarmCreateRequest.of(
             "tpl-1",
             "idem",
-            null,
             false,
             null,
             null,
             NetworkMode.DIRECT,
             "passthrough"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("networkProfileId requires networkMode=PROXIED");
+            .isInstanceOf(io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException.class)
+            .hasMessageStartingWith("Swarm create request schema validation failed:");
     }
 
     @Test
-    void requiresProfileForProxiedMode() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
+    void typedFactoryRequiresProfileForProxiedMode() {
+        assertThatThrownBy(() -> SwarmCreateRequest.of(
             "tpl-1",
             "idem",
-            null,
             false,
             null,
             null,
             NetworkMode.PROXIED,
             null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("networkProfileId must be provided when networkMode=PROXIED");
+            .isInstanceOf(io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException.class)
+            .hasMessageStartingWith("Swarm create request schema validation failed:");
     }
 
     @Test
-    void requiresSutForProxiedMode() {
-        assertThatThrownBy(() -> new SwarmCreateRequest(
+    void typedFactoryRequiresSutForProxiedMode() {
+        assertThatThrownBy(() -> SwarmCreateRequest.of(
             "tpl-1",
             "idem",
-            null,
             false,
             null,
             null,
             NetworkMode.PROXIED,
             "passthrough"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("sutId must be provided when networkMode=PROXIED");
+            .isInstanceOf(io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException.class)
+            .hasMessageStartingWith("Swarm create request schema validation failed:");
     }
 }

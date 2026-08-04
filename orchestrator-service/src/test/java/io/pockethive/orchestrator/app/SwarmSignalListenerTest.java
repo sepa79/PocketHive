@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.control.CommandOutcome;
 import io.pockethive.control.CommandResult;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.JournalEvent;
@@ -35,6 +36,7 @@ import io.pockethive.swarm.model.lifecycle.RemoveResult;
 import io.pockethive.swarm.model.lifecycle.RemoveError;
 import io.pockethive.swarm.model.lifecycle.RemoveResource;
 import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -185,6 +187,7 @@ class SwarmSignalListenerTest {
     Instant createdAt = Instant.now().minusSeconds(2);
     operations.reserve(
         SWARM_ID, OperationType.CONFIG_UPDATE, worker,
+        new io.pockethive.swarm.model.lifecycle.RuntimeMetadata("template-1", "run-1"),
         "config-corr", "config-idem", createdAt, createdAt.plusSeconds(60));
     operations.markDispatched("config-corr", createdAt.plusSeconds(1));
     operations.registerConfigExpectation(
@@ -371,10 +374,41 @@ class SwarmSignalListenerTest {
     verify(removeStore, never()).deleteSwarmRuntime(SWARM_ID);
   }
 
+  @Test
+  void retryPublishesPreRegistrationCreateOutcomeFromTheOperationRuntime() throws Exception {
+    store.remove(SWARM_ID);
+    RuntimeMetadata runtime = new RuntimeMetadata("template-1", "planned-run-1");
+    Instant now = Instant.now();
+    operations.reserve(
+        SWARM_ID, OperationType.CREATE, TARGET, runtime,
+        "create-corr", "create-idem", now, now.plusSeconds(30));
+    operations.markDispatched("create-corr", now.plusMillis(1));
+    operations.recordResult(
+        SWARM_ID, OperationType.CREATE, TARGET,
+        "create-corr", "create-idem", OperationState.FAILED,
+        new TerminalResult(TerminalStatus.FAILED, true, Map.of(
+            "target", TARGET,
+            "runtimeIntent", "PRESENT",
+            "controllerState", "UNKNOWN",
+            "workloadState", "UNKNOWN",
+            "startupArtifactSha256", "missing")),
+        now.plusSeconds(1));
+
+    listener.checkTimeouts();
+
+    assertThat(transport.events).singleElement().satisfies(event -> {
+      CommandOutcome outcome = (CommandOutcome) event.payload();
+      assertThat(outcome.runtime()).containsExactlyInAnyOrderEntriesOf(runtime.asControlPlaneRuntime());
+      assertThatCode(() -> codec.encode(outcome, event.routingKey())).doesNotThrowAnyException();
+    });
+  }
+
   private void reserveStart() {
     Instant now = Instant.now();
     operations.reserve(
-        SWARM_ID, OperationType.START, TARGET, "corr-1", "idem-1", now, now.plusSeconds(30));
+        SWARM_ID, OperationType.START, TARGET,
+        new io.pockethive.swarm.model.lifecycle.RuntimeMetadata("template-1", "run-1"),
+        "corr-1", "idem-1", now, now.plusSeconds(30));
     operations.markDispatched("corr-1", now.plusMillis(1));
   }
 
@@ -382,6 +416,7 @@ class SwarmSignalListenerTest {
     Instant now = Instant.now();
     operations.reserve(
         SWARM_ID, OperationType.REMOVE, TARGET,
+        new io.pockethive.swarm.model.lifecycle.RuntimeMetadata("template-1", "run-1"),
         "remove-corr", "remove-idem", now, now.plusSeconds(30));
     operations.markDispatched("remove-corr", now.plusMillis(1));
     return now;

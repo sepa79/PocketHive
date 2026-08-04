@@ -155,10 +155,9 @@ public class AuthSteps {
     try {
       ControlResponse response = activeOrchestratorClient.createSwarm(
           resolvedSwarmId,
-          new SwarmCreateRequest(
+          SwarmCreateRequest.of(
               templateId,
               nextIdempotencyKey(resolvedSwarmId, "create"),
-              "auth e2e",
               false,
               null,
               null,
@@ -223,7 +222,7 @@ public class AuthSteps {
     try {
       latestControlResponse = activeOrchestratorClient.stopSwarm(
           resolvedSwarmId,
-          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "stop"), "auth e2e stop"));
+          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "stop")));
       latestStatus = 202;
     } catch (WebClientResponseException ex) {
       latestStatus = ex.getStatusCode().value();
@@ -240,7 +239,7 @@ public class AuthSteps {
     try {
       latestControlResponse = activeOrchestratorClient.startSwarm(
           resolvedSwarmId,
-          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "start"), "auth e2e start"));
+          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "start")));
       latestStatus = 202;
     } catch (WebClientResponseException ex) {
       latestStatus = ex.getStatusCode().value();
@@ -257,7 +256,7 @@ public class AuthSteps {
     try {
       latestControlResponse = activeOrchestratorClient.removeSwarm(
           resolvedSwarmId,
-          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "remove"), "auth e2e remove"));
+          new ControlRequest(nextIdempotencyKey(resolvedSwarmId, "remove")));
       latestStatus = 202;
       swarmsToCleanup.remove(resolvedSwarmId);
     } catch (WebClientResponseException ex) {
@@ -390,7 +389,7 @@ public class AuthSteps {
       try {
         adminOrchestratorClient.removeSwarm(
             swarmId,
-            new ControlRequest(nextIdempotencyKey(swarmId, "cleanup"), "auth e2e cleanup"));
+            new ControlRequest(nextIdempotencyKey(swarmId, "cleanup")));
       } catch (WebClientResponseException.NotFound ignored) {
         continue;
       } catch (WebClientResponseException ex) {

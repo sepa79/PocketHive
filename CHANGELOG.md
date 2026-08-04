@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 ## [0.15.36]
 Timestamp: 2026-07-22T22:53:54Z
 
+- Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
+  operation and allocate CREATE's run id before launch, so failures before swarm
+  registration publish and retry their schema-complete terminal outcome.
+- Lifecycle API: remove the unused `notes` field from create/start/stop/remove
+  requests, remove the unused AMQP `swarmCreate` signal factory, and make Debug
+  Tap a raw message viewer rather than a second, partial WorkItem parser.
+- Lifecycle create boundary: validate the canonical request schema before REST
+  mapping and typed Java construction, require explicit `null` for absent nullable
+  inputs, reject non-canonical whitespace, and align MCP, workflow, VS Code and
+  POC create callers with the required network mode.
+- WorkItem data-plane: validate every Rabbit inbound and outbound JSON envelope
+  against the canonical WorkItem schema before mapping; remove codec/DTO and
+  builder copies of step-header wire validation, and reject incomplete
+  observability at the same boundary. Per-step headers now reject `null` values
+  at that boundary; removing a header is the only canonical representation.
 - Control-plane scope contract: require every routing and envelope scope segment,
   use the literal `ALL` for intentional fan-out, and reject `null`, blank and
   non-canonical wildcard aliases instead of silently broadening delivery. The

@@ -78,8 +78,15 @@ export async function swarmGet(swarmId: unknown): Promise<SwarmDetail> {
   return call('swarm_get', { swarmId: requireSwarmId(swarmId) }) as Promise<SwarmDetail>;
 }
 
-export async function swarmCreate(swarmId: string, templateId: string, sutId?: string, variablesProfileId?: string) {
-  return call('swarm_create', { swarmId, templateId, ...(sutId ? { sutId } : {}), ...(variablesProfileId ? { variablesProfileId } : {}) });
+export type SwarmCreateOptions = {
+  networkMode: 'DIRECT' | 'PROXIED';
+  sutId?: string;
+  variablesProfileId?: string;
+  networkProfileId?: string;
+};
+
+export async function swarmCreate(swarmId: string, templateId: string, options: SwarmCreateOptions) {
+  return call('swarm_create', { swarmId, templateId, ...options });
 }
 
 export async function swarmWaitReady(swarmId: unknown, timeoutSec = 90) {

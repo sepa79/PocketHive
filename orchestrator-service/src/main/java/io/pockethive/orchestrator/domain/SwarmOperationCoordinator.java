@@ -2,6 +2,7 @@ package io.pockethive.orchestrator.domain;
 
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.Target;
@@ -25,6 +26,7 @@ public final class SwarmOperationCoordinator {
       String swarmId,
       OperationType type,
       Target target,
+      RuntimeMetadata runtime,
       String correlationId,
       String idempotencyKey,
       Instant createdAt,
@@ -43,7 +45,7 @@ public final class SwarmOperationCoordinator {
       throw new IllegalArgumentException("correlationId already exists: " + correlationId);
     }
     SwarmOperation operation = SwarmOperation.accepted(
-        swarmId, type, target, correlationId, idempotencyKey, createdAt, deadlineAt);
+        swarmId, type, target, runtime, correlationId, idempotencyKey, createdAt, deadlineAt);
     correlationByRequest.put(key, operation.correlationId());
     operationsByCorrelation.put(operation.correlationId(), operation);
     return new Reservation(operation, false);

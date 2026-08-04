@@ -4,6 +4,10 @@ export type NonEmptyString = string
 
 export type NullableNonEmptyString = NonEmptyString | null
 
+export type CanonicalNonEmptyString = string
+
+export type NullableCanonicalNonEmptyString = CanonicalNonEmptyString | null
+
 export type RuntimeIntent = "PRESENT" | "ABSENT"
 
 export type WorkloadIntent = "RUNNING" | "STOPPED"
@@ -35,6 +39,14 @@ export type TerminalResult = {
   }
 }
 
+export type RuntimeMetadata = {
+  readonly "templateId": NonEmptyString
+  readonly "runId": NonEmptyString
+  readonly "containerId"?: NullableNonEmptyString
+  readonly "image"?: NullableNonEmptyString
+  readonly "stackName"?: NullableNonEmptyString
+}
+
 export type ControlResponse = {
   readonly "correlationId": NonEmptyString
   readonly "idempotencyKey": NonEmptyString
@@ -45,24 +57,23 @@ export type ControlResponse = {
 
 export type ControlRequest = {
   readonly "idempotencyKey": NonEmptyString
-  readonly "notes": NullableNonEmptyString
 }
 
 export type SwarmCreateRequest = {
-  readonly "templateId": NonEmptyString
-  readonly "idempotencyKey": NonEmptyString
-  readonly "notes": NullableNonEmptyString
+  readonly "templateId": CanonicalNonEmptyString
+  readonly "idempotencyKey": CanonicalNonEmptyString
   readonly "autoPullImages": boolean
-  readonly "sutId": NullableNonEmptyString
-  readonly "variablesProfileId": NullableNonEmptyString
+  readonly "sutId": NullableCanonicalNonEmptyString
+  readonly "variablesProfileId": NullableCanonicalNonEmptyString
   readonly "networkMode": "DIRECT" | "PROXIED"
-  readonly "networkProfileId": NullableNonEmptyString
+  readonly "networkProfileId": NullableCanonicalNonEmptyString
 }
 
 export type SwarmOperation = {
   readonly "swarmId": NonEmptyString
   readonly "type": OperationType
   readonly "target": Target
+  readonly "runtime": RuntimeMetadata
   readonly "correlationId": NonEmptyString
   readonly "idempotencyKey": NonEmptyString
   readonly "state": OperationState

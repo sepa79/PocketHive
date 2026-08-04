@@ -9,7 +9,6 @@ import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import java.util.HashSet;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
@@ -27,7 +26,7 @@ public final class OperationOutcomePublisher {
     this.instanceId = requireText("instanceId", instanceId);
   }
 
-  public synchronized boolean publish(SwarmOperation operation, Map<String, Object> runtime) {
+  public synchronized boolean publish(SwarmOperation operation) {
     Objects.requireNonNull(operation, "operation");
     if (!operation.terminal()) {
       throw new IllegalArgumentException("Only terminal operations can publish outcomes");
@@ -46,7 +45,7 @@ public final class OperationOutcomePublisher {
           scope,
           operation.correlationId(),
           operation.idempotencyKey(),
-          runtime,
+          operation.runtime().asControlPlaneRuntime(),
           operation.terminalResult());
       String routingKey = ControlPlaneRouting.event(
           CommandOutcome.KIND,

@@ -44,8 +44,11 @@ import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.SwarmCreateRequestJsonCodec;
+import io.pockethive.swarm.model.lifecycle.SwarmLifecycleContractException;
 import io.pockethive.swarm.model.lifecycle.OperationState;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.RuntimeMetadata;
 import io.pockethive.swarm.model.lifecycle.SwarmOperation;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -153,13 +156,18 @@ public class SwarmController {
     /**
      * POST {@code /api/swarms/{swarmId}/create} — bootstrap a new swarm controller container.
      * <p>
-     * The request body must include {@link SwarmCreateRequest#templateId()} and an {@code idempotencyKey}.
+     * The request body must conform to the canonical {@link SwarmCreateRequest} contract. Every field is
+     * required; absent SUT, variables-profile and network-profile selections are expressed as {@code null}.
      * Example payload:
      * <pre>{@code
      * {
      *   "templateId": "baseline-demo",
      *   "idempotencyKey": "ui-12345",
-     *   "notes": "seed demo swarm"
+     *   "autoPullImages": false,
+     *   "sutId": null,
+     *   "variablesProfileId": null,
+     *   "networkMode": "DIRECT",
+     *   "networkProfileId": null
      * }
      * }</pre>
      * We fetch the {@link SwarmTemplate}, persist the immutable filesystem startup artifact, and delegate
@@ -167,7 +175,18 @@ public class SwarmController {
      * to the authoritative operation resource and identifies its optional outcome notification topic.
      */
     @PostMapping("/{swarmId}/create")
-    public ResponseEntity<?> create(@PathVariable String swarmId, @RequestBody SwarmCreateRequest req) {
+    public ResponseEntity<?> create(
+        @PathVariable String swarmId,
+        @RequestBody JsonNode requestBody) {
+        try {
+            return create(swarmId, SwarmCreateRequestJsonCodec.fromJson(requestBody, json));
+        } catch (SwarmLifecycleContractException exception) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                HttpStatus.BAD_REQUEST, exception.getMessage(), exception);
+        }
+    }
+
+    ResponseEntity<?> create(String swarmId, SwarmCreateRequest req) {
         String path = "/api/swarms/" + swarmId + "/create";
         logRestRequest("POST", path, req);
         String templateId = req.templateId();
@@ -196,8 +215,15 @@ public class SwarmController {
         }
 
         String correlation = UUID.randomUUID().toString();
-        response = idempotentSend(
-            OperationType.CREATE, swarmId, operationTarget, req.idempotencyKey(), timeout.toMillis(), correlation, corr -> {
+        RuntimeMetadata runtime = new RuntimeMetadata(templateId, UUID.randomUUID().toString());
+        response = dispatchCreate(
+            swarmId,
+            operationTarget,
+            req.idempotencyKey(),
+            timeout.toMillis(),
+            correlation,
+            runtime,
+            corr -> {
                 log.info("[CTRL] swarm-create start swarm={} templateId={} sutId={} variablesProfileId={} networkMode={} networkProfileId={} autoPullImages={} correlation={} idempotencyKey={}",
                     swarmId,
                     templateId,
@@ -349,6 +375,7 @@ public class SwarmController {
                         swarmId,
                         image,
                         instanceId,
+                        runtime.runId(),
                         new SwarmTemplateMetadata(
                             templateId,
                             image,
@@ -584,33 +611,32 @@ public class SwarmController {
      * return its existing {@link ControlResponse}. Otherwise the shared dispatch service reserves the
      * operation before {@code action.accept(corr)} publishes the control message.
      */
-    private ResponseEntity<ControlResponse> idempotentSend(OperationType operationType, String swarmId, Target target, String idempotencyKey,
-                                                           long timeoutMs, java.util.function.Consumer<String> action) {
-        return idempotentSend(operationType, swarmId, target, idempotencyKey, timeoutMs, UUID.randomUUID().toString(), action);
-    }
-
-    private ResponseEntity<ControlResponse> idempotentSend(OperationType operationType, String swarmId, Target target, String idempotencyKey,
-                                                           long timeoutMs, String correlation,
+    private ResponseEntity<ControlResponse> dispatchCreate(String swarmId, Target target, String idempotencyKey,
+                                                           long timeoutMs, String correlation, RuntimeMetadata runtime,
                                                            java.util.function.Consumer<String> action) {
-        String signal = ControlPlaneOperations.signalForType(operationType);
         var reservation = operationDispatch.dispatch(
             swarmId,
-            operationType,
+            OperationType.CREATE,
             target,
             correlation,
             idempotencyKey,
             Duration.ofMillis(timeoutMs),
+            runtime,
             action);
         if (reservation.reused()) {
             var existing = reservation.operation();
             log.info("[CTRL] reuse signal={} swarm={} correlation={} idempotencyKey={}",
-                signal, swarmId, existing.correlationId(), idempotencyKey);
+                ControlPlaneSignals.SWARM_CREATE, swarmId, existing.correlationId(), idempotencyKey);
             return ResponseEntity.accepted().body(controlResponse(existing, timeoutMs));
         }
 
         ControlResponse resp = controlResponse(reservation.operation(), timeoutMs);
         log.info("[CTRL] issue signal={} swarm={} correlation={} idempotencyKey={} timeoutMs={}",
-            signal, swarmId, correlation, idempotencyKey, timeoutMs);
+            ControlPlaneSignals.SWARM_CREATE,
+            swarmId,
+            reservation.operation().correlationId(),
+            idempotencyKey,
+            timeoutMs);
         return ResponseEntity.accepted().body(resp);
     }
 
@@ -1096,12 +1122,6 @@ public class SwarmController {
 
     private AuthenticatedUserDto currentUser() {
         return OrchestratorCurrentUserHolder.get();
-    }
-
-    private Map<String, Object> runtimeMeta(String swarmId) {
-        Swarm swarm = store.find(swarmId)
-            .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
-        return Map.of("templateId", swarm.templateId(), "runId", swarm.getRunId());
     }
 
     private SwarmStateView toStateView(Swarm swarm) {

@@ -29,11 +29,12 @@ class SwarmOperationTest {
   private static final Instant CREATED = Instant.parse("2026-07-22T12:00:00Z");
   private static final Instant DEADLINE = Instant.parse("2026-07-22T12:03:00Z");
   private static final Target TARGET = new Target("swarm-controller", "controller-1");
+  private static final RuntimeMetadata RUNTIME = new RuntimeMetadata("template-1", "run-1");
 
   @Test
   void acceptedOperationHasOneExplicitIdentityAndNoImplicitTerminalState() {
     SwarmOperation operation = SwarmOperation.accepted(
-        "alpha", OperationType.START, TARGET, "correlation-1", "idempotency-1", CREATED, DEADLINE);
+        "alpha", OperationType.START, TARGET, RUNTIME, "correlation-1", "idempotency-1", CREATED, DEADLINE);
 
     assertEquals(OperationState.ACCEPTED, operation.state());
     assertNull(operation.dispatchedAt());
@@ -54,7 +55,7 @@ class SwarmOperationTest {
             "observedWorkloadState", WorkloadState.RUNNING));
 
     SwarmOperation accepted = SwarmOperation.accepted(
-        "alpha", OperationType.START, TARGET, "correlation-1", "idempotency-1", CREATED, DEADLINE);
+        "alpha", OperationType.START, TARGET, RUNTIME, "correlation-1", "idempotency-1", CREATED, DEADLINE);
     SwarmOperation dispatched = accepted.dispatch(dispatchedAt);
     SwarmOperation completed = dispatched.complete(OperationState.SUCCEEDED, result, completedAt);
 
@@ -69,7 +70,7 @@ class SwarmOperationTest {
   void operationStateMustMatchTerminalWireStatus() {
     TerminalResult failed = new TerminalResult(TerminalStatus.FAILED, true, Map.of());
     SwarmOperation dispatched = SwarmOperation.accepted(
-        "alpha", OperationType.START, TARGET, "correlation-1", "idempotency-1", CREATED, DEADLINE)
+        "alpha", OperationType.START, TARGET, RUNTIME, "correlation-1", "idempotency-1", CREATED, DEADLINE)
         .dispatch(CREATED.plusSeconds(1));
 
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> dispatched.complete(
@@ -81,7 +82,7 @@ class SwarmOperationTest {
   @Test
   void terminalOperationCannotBeCompletedOrDispatchedAgain() {
     SwarmOperation terminal = SwarmOperation.accepted(
-            "alpha", OperationType.STOP, TARGET, "correlation-2", "idempotency-2", CREATED, DEADLINE)
+            "alpha", OperationType.STOP, TARGET, RUNTIME, "correlation-2", "idempotency-2", CREATED, DEADLINE)
         .dispatch(CREATED.plusSeconds(1))
         .complete(
             OperationState.TIMED_OUT,
@@ -98,7 +99,7 @@ class SwarmOperationTest {
   @Test
   void coreIdentityNeverAcceptsBlankValues() {
     IllegalArgumentException error = assertThrows(IllegalArgumentException.class, () -> SwarmOperation.accepted(
-        " ", OperationType.START, TARGET, "correlation-1", "idempotency-1", CREATED, DEADLINE));
+        " ", OperationType.START, TARGET, RUNTIME, "correlation-1", "idempotency-1", CREATED, DEADLINE));
     assertTrue(error.getMessage().contains("swarmId"));
   }
 }

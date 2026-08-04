@@ -1,11 +1,14 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.worker.sdk.api.WorkItemContractException;
 import io.pockethive.worker.sdk.api.WorkerInfo;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.amqp.core.Message;
@@ -59,5 +62,16 @@ class RabbitWorkItemConverterTest {
         assertThat(roundTrip.steps()).element(1).extracting("payload").isEqualTo("templated");
         assertThat(roundTrip.steps()).element(2).extracting("payload")
             .isEqualTo("{\"path\":\"/test\",\"method\":\"POST\"}");
+    }
+
+    @Test
+    void rejectsInboundAmqpBodyThatViolatesTheCanonicalSchema() {
+        MessageProperties properties = new MessageProperties();
+        properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
+        Message invalid = new Message("{}".getBytes(StandardCharsets.UTF_8), properties);
+
+        assertThatThrownBy(() -> converter.fromMessage(invalid))
+            .isInstanceOf(WorkItemContractException.class)
+            .hasMessageStartingWith("WorkItem schema validation failed:");
     }
 }

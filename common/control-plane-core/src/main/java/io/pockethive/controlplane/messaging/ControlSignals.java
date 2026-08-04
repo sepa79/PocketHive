@@ -18,14 +18,6 @@ public final class ControlSignals {
     private ControlSignals() {
     }
 
-    public static ControlSignal swarmCreate(String origin,
-                                            ControlScope target,
-                                            String correlationId,
-                                            String idempotencyKey,
-                                            Map<String, Object> data) {
-        return signal(ControlPlaneSignals.SWARM_CREATE, origin, target, correlationId, idempotencyKey, data);
-    }
-
     public static ControlSignal swarmStart(String origin,
                                            ControlScope target,
                                            String correlationId,

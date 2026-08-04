@@ -67,8 +67,11 @@ Via Orchestrator REST (`docs/ORCHESTRATOR-REST.md`):
 {
   "templateId": "variables-demo",
   "idempotencyKey": "uuid-v4",
+  "autoPullImages": false,
   "sutId": "sut-A",
-  "variablesProfileId": "france"
+  "variablesProfileId": "france",
+  "networkMode": "DIRECT",
+  "networkProfileId": null
 }
 ```
 
@@ -76,7 +79,7 @@ If you run the local stack via `build-hive.sh`, you can also create it
 via the debug CLI:
 
 ```bash
-node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> variables-demo --sutId sut-A --variablesProfileId france
+node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> variables-demo --networkMode DIRECT --sutId sut-A --variablesProfileId france
 ```
 
 ## 3. SpEL helper: `eval(...)`

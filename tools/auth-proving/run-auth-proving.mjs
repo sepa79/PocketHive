@@ -434,9 +434,12 @@ async function resetWireMockRequests() {
 async function createAndStart(swarmId, templateId, sutId) {
   const createBody = {
     templateId,
-    sutId,
     idempotencyKey: `${runId}-${swarmId}-create`,
-    notes: `auth proving ${runId}`,
+    autoPullImages: false,
+    sutId,
+    variablesProfileId: null,
+    networkMode: "DIRECT",
+    networkProfileId: null,
   };
   await httpJson(`${ORCHESTRATOR}/api/swarms/${encodeURIComponent(swarmId)}/create`, {
     method: "POST",

@@ -125,6 +125,7 @@ class RuntimeReconciliationServiceTest {
     Instant now = Instant.now();
     var reservation = coordinator.reserve(
         "sw1", OperationType.REMOVE, new Target("swarm-controller", "controller-1"),
+        new io.pockethive.swarm.model.lifecycle.RuntimeMetadata("template-1", "run-1"),
         "corr-remove", "cleanup-idem", now, now.plusSeconds(180));
     coordinator.markDispatched("corr-remove", now.plusMillis(1));
     when(lifecycleCommands.dispatch(

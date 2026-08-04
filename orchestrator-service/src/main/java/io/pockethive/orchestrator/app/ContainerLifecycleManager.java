@@ -133,6 +133,7 @@ public class ContainerLifecycleManager {
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
+                            String runId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages,
                             String sutId,
@@ -145,12 +146,12 @@ public class ContainerLifecycleManager {
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
         NetworkMode resolvedNetworkMode = Objects.requireNonNull(networkMode, "networkMode");
-        String runId = java.util.UUID.randomUUID().toString();
+        String resolvedRunId = requireNonBlank(runId, "runId");
         MetricsSettings metrics = metricsSettings(properties.getMetrics());
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 metrics,
-                runId,
+                resolvedRunId,
                 properties.getDocker().getSocketPath(),
                 "ph." + resolvedSwarmId,
                 "ph." + resolvedSwarmId + ".hive");
@@ -211,10 +212,10 @@ public class ContainerLifecycleManager {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
-        env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
-        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
+        env.put("POCKETHIVE_JOURNAL_RUN_ID", resolvedRunId);
+        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, resolvedRunId, templateMetadata);
         log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
-            resolvedSwarmId, resolvedInstance, resolvedImage, runId);
+            resolvedSwarmId, resolvedInstance, resolvedImage, resolvedRunId);
         log.info("docker env: {}", redactEnv(env));
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
@@ -226,7 +227,7 @@ public class ContainerLifecycleManager {
             java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
-        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId, resolvedNetworkMode);
+        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, resolvedRunId, resolvedNetworkMode);
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
@@ -234,7 +235,7 @@ public class ContainerLifecycleManager {
         store.register(swarm);
         writeRuntimeOwnershipManifest(
             resolvedSwarmId,
-            runId,
+            resolvedRunId,
             resolvedInstance,
             resolvedImage,
             containerId,
