@@ -30,6 +30,8 @@ flowchart LR
   D -->|"checked local snapshot"| B["Consumer B"]
   A -->|"normal WorkItems"| M["Moderator / pipeline"]
   M --> S["SUT"]
+  A -.->|"small status report"| O["Orchestrator"]
+  M -.->|"SUT-attempt report"| O
 ```
 
 PostgreSQL is authoritative. Consumers select locally from a checked, read-only
@@ -44,44 +46,30 @@ provider.
 | `WorkOutput` | EXISTING | Adapter that publishes or saves a result. |
 | `Managed Dataset` | PROPOSED | Shared immutable runtime records created by one provider run; not a queue. |
 | `Scenario Binding` | PROPOSED | Frozen scenario, SUT, Dataset, schema and access requirements; not a provider selection. |
-| `Managed Dataset Selection Claim` | PROPOSED | Prebuilt Dataset, record and expiry label; not proof of SUT processing. |
+| `Managed Dataset Context` | PROPOSED | Small Dataset, binding, snapshot, record and timing label carried with a WorkItem. |
+| `ManagedDatasetConsumptionStatus` | PROPOSED | One current view showing whether a consumer selects safe records and reaches the SUT-attempt boundary. |
 
 ## How creation works
 
-The provider is a normal pipeline. Its first bee receives bounded refill work
-through a Managed Dataset `WorkInput`; its terminal bee saves mapped results
-through a separate Managed Dataset `WorkOutput`. The same `bindingRef` joins
-both ends to the created `datasetId`.
-
-SUT templates and mappings stay in the scenario bundle; secrets stay as
-references. Worker restart preserves the provider run and Dataset. A new run
-creates both anew. The Dataset module never starts or replaces a provider.
+The provider's first bee receives bounded refill work; its terminal bee saves
+mapped results. One `bindingRef` joins both to `datasetId`. Templates, mappings
+and secret references stay in the bundle. Worker restart preserves the run and
+Dataset; a new run creates both anew. The Dataset module never starts a provider.
 
 ## How consumers select and share
 
 Create Swarm lists SUT-compatible Datasets. The operator selects one exact
-`datasetId` for each `bindingRef`; Orchestrator rechecks and freezes it. If it
-becomes unsafe, PocketHive stops instead of substituting another Dataset.
-
-The consumer input includes `bindingRef` and `ratePerSec`. The rate supplies
-work; it neither depletes records nor drives refill. Moderator paces the SUT.
-
-The scenario owner must confirm that the SUT contract allows repeated,
-concurrent record use. Unique or single-use work is outside this design.
+`datasetId` per `bindingRef`; Orchestrator freezes it and never substitutes.
+`ratePerSec` supplies work but does not deplete records or drive refill.
+Moderator paces the SUT. The scenario owner must confirm that repeated,
+concurrent use is safe.
 
 ## How refill stays safe
 
-Each Dataset has explicit minimum, target and maximum ready levels. Expiring
-records stop counting as renewal-ready before they expire. That early warning
-creates refill work, giving the provider time to create replacements.
-
-Replacement headroom lets old and new records overlap. PocketHive rejects
-batch, capacity or headroom settings that cannot replace the largest expiry
-group in time.
-
-Exact grant and result retries return the earlier answer; changed replay fails.
-A timed-out grant releases its slot and rejects a late result without SUT
-investigation or repair.
+Each Dataset has explicit minimum, target and maximum levels. Expiring records
+trigger refill early; replacement headroom lets old and new records overlap.
+PocketHive rejects unsafe capacity settings. Exact retries return the earlier
+answer; a timed-out grant releases its slot and rejects late results.
 
 ## How continuous traffic behaves
 
@@ -95,23 +83,42 @@ while its records remain safe.
 | `DEGRADED` | Minimum safe supply remains, but target or background health is late; existing safe traffic continues and new admission stops. |
 | `UNAVAILABLE` | Safe supply, integrity, authorisation or the local snapshot is insufficient; admission and affected dispatch stop. |
 
-Database leases and fencing give one Orchestrator replica each background job.
-PostgreSQL HA belongs to infrastructure. During temporary control-plane
-failure, admitted consumers continue from verified safe snapshots.
+Leases and fencing give one Orchestrator replica each background job.
+Infrastructure owns PostgreSQL high availability. Consumers continue through a
+control-plane outage only from safe snapshots; bounded queues apply backpressure.
 
-Queues and in-flight work are bounded. Backpressure pauses dispatch at the
-limit. Metrics alert on refill, expiry, snapshot, queue, database and lease
-risk.
+## How PocketHive shows consumption
+
+`READY` means a Dataset can supply safe records. `CONSUMING` means an active
+consumer selects them and valid context reaches the SUT-attempt boundary.
+
+Each WorkItem carries only version, Dataset, binding, snapshot revision, record
+id, selection time and usable-until time. The final SDK guard rejects invalid,
+expired or mismatched context before calling the SUT.
+
+Workers report small cumulative counters in the background. Orchestrator owns
+the status; UI reads REST and MCP returns the same object. Each
+swarm/run/binding stays separate, with safety, rates, rejects and freshness.
+
+| Consumption state | Plain meaning |
+|---|---|
+| `CONSUMING` | Fresh source and terminal activity, safe snapshot, correct identity and all expected workers reporting. |
+| `DEGRADED` | Traffic still reaches the boundary, but refresh, rejection, pipeline delay or partial reporting needs attention. |
+| `NOT_CONSUMING` | Fresh mature status shows that an active binding is not selecting or reaching the boundary. |
+| `UNKNOWN` | Status is missing, stale, restarting or the run is intentionally inactive. PocketHive does not guess. |
+
+Run state is separate. Text/icons accompany colour. Reporting never blocks
+traffic; telemetry/UI contain no record values, credentials or record ids.
+Status proves operational flow to the boundary, not SUT acceptance, use limits
+or exactly-once delivery.
 
 ## MVP boundary
 
-The MVP includes shared reusable records, explicit Dataset selection, bounded
-refill, local snapshots, idempotent restart recovery, replica coordination and
-continuous-operation tests.
+Included: sharing, explicit selection, bounded refill, local snapshots, context
+rejection, UI/MCP status, restart recovery, replica safety and continuous-use
+tests.
 
-It excludes checkout, use limits, SUT reconciliation, automatic provider
-lifecycle, sensitive records and multi-region active-active operation. The
-previous qualification and consumption-evidence design, including evidence
-frames, approvals, window calculations, MCP verdicts and governance coupling,
-moves to a future milestone so it cannot create an MVP bootstrap cycle or slow
-the measured path.
+Excluded: checkout/use limits, SUT reconciliation, automatic provider
+lifecycle, sensitive records, multi-region active-active and audit-grade
+delivery evidence. Evidence frames, approvals and exact-use proof remain
+future work and cannot slow the measured path.
