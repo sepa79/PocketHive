@@ -5,183 +5,204 @@ Status: in progress; proposed MVP and canonical contract approval pending
 ## Decision required
 
 Approve the [Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md)
-as the normative design for shared test data with an explicit provider source
-and record allocation.
+as the normative design for durable shared test data.
 
 ```text
-provider binding selects SCHEDULER, CSV or REDIS
+provider binding selects exactly one SCHEDULER, CSV or REDIS source
 provider run creates one named Managed Dataset
-consumer run selects one exact Dataset Group
+consumer run selects one exact Dataset Group or workflow View
 ```
 
-An ungrouped Dataset has one internal Group, so simple cases still select only
-the Dataset in Create Swarm. A swarm with no Managed Dataset input supplies the
-explicit empty selection `datasetSelections: []`.
+An ungrouped Dataset has one internal Group. A swarm that needs no Managed
+Dataset uses `managedDatasetRequirements: []` and `datasetSelections: []`.
 
 ## Why this matters
 
-A provider swarm can create accounts, cards or other SUT objects once and make
-traffic-ready records available to many consumer swarms. Records may be
-partitioned by arbitrary schema-defined keys, not PocketHive fields.
+A provider swarm can create SUT objects once and make traffic-ready records
+available to many consumer swarms. Records may be partitioned by arbitrary
+schema-defined keys; these are not PocketHive fields.
 
-Managed Dataset is additive. `REDIS_DATASET` remains supported and unchanged.
-Each bee I/O binding explicitly selects one adapter and never migrates,
-substitutes or falls back.
+Managed Dataset is additive. Existing `REDIS_DATASET` remains supported and
+unchanged. Every bee I/O binding explicitly selects one adapter; PocketHive
+never migrates, substitutes or falls back between adapters or sources.
 
 ## MVP design
 
-- One provider run creates one named Managed Dataset per output binding. Worker
-  restart keeps it; a new run creates a new Dataset.
+Every Dataset freezes one Profile:
+
+| Profile | Payload and state | Consumer allocation |
+|---|---|---|
+| `REPLAY` | Immutable reusable record payload; no Record State | `SHARED` or `EXCLUSIVE_LEASE` |
+| `WORKFLOW` | Immutable record payload plus separately versioned mutable Record State, fixed named Views and declared State Transitions | `EXCLUSIVE_LEASE` only |
+
+`WORKFLOW` preserves the mutable-dataset capability needed by existing flows,
+but bounds it. A consumer claims a current member of one named View. Its
+declared completion supplies one complete next-state object. Orchestrator
+checks the live lease, expected state revision, allowed changed paths, state
+schema and target View, then updates state, materialised View memberships and
+lease in one transaction.
+
+Free-form tags, arbitrary selectors or patches, payload replacement, inferred
+SUT outcomes and cross-Dataset transactions remain outside the MVP.
+
+The rest of the design is common:
+
+- One provider run creates one named Dataset per Managed Dataset output
+  binding. Process restart keeps the run; a new provider run creates a new
+  Dataset.
 - Every provider binding chooses exactly one source: renewable `SCHEDULER`,
-  finite mounted `CSV` or a finite immutable `REDIS` list snapshot. There is no
-  omission, mixing, switching or fallback.
-- A Dataset Definition owns its name, record schema and explicit `UNGROUPED` or
-  bounded `GROUPED` fields. The provider binding resolves concrete Groups from
-  literals or only its non-secret `vars` and `sut` context before work.
-- The Dataset Definition bundle has one Draft 2020-12 root record schema. It may
-  compose exact versioned Dataset Schema Contracts and local `$defs`; Scenario
-  Manager compiles and freezes one schema digest with the Dataset.
-- Provider results populate an assigned frozen Group; they cannot create or
-  move Groups. Create Swarm freezes one compatible exact Dataset/Group per
-  consumer requirement.
-- One allocation mode applies to the whole Dataset. `SHARED` permits concurrent
-  reuse. `EXCLUSIVE_LEASE` keeps the Dataset shareable but makes each record
-  available to only one consumer WorkItem until durable release or expiry.
-- PostgreSQL owns Managed Dataset authority. Workers use authenticated
-  Orchestrator REST in the background and dispatch locally from verified Group
-  snapshots and, when required, bounded prefetched Record Leases.
+  finite mounted `CSV`, or a finite immutable `REDIS` list snapshot.
+- A Dataset Definition owns name, Profile, grouping, root record schema and,
+  for `WORKFLOW`, root state schema, Views and State Transitions.
+- Root schemas may compose exact immutable Dataset Schema Contract versions and
+  local `$defs`. Scenario Manager compiles and freezes separate record/state
+  digests.
+- The provider binding resolves concrete Groups before work and maps each
+  record plus, for `WORKFLOW`, its complete initial state. Results cannot create
+  or move Groups.
+- PostgreSQL is authoritative only for Managed Dataset. Workers use
+  authenticated Orchestrator REST for bounded background work and keep the
+  measured request path local.
+
+`EXCLUSIVE_LEASE` is specified but not production-qualified. Production
+approval requires concurrency, saturation, transition/release failure, expiry,
+restart, authority-outage and 24-hour soak gates to pass.
 
 ## Configuration ownership
 
 | Location | Owns |
 |---|---|
-| `scenarios/managed-dataset/<name>/` | One `dataset.yaml`, its root `record.schema.yaml`, required name/version, and `UNGROUPED` or `GROUPED` fields |
-| `scenarios/dataset-contracts/<name>/<version>/` | One immutable reusable `schema.yaml`; root record schemas pin exact versions |
-| Scenario Manager Dataset Space registry | Validates mounted packages, compiles the complete schema graph and stores its dependency versions and digest |
-| Provider Scenario Binding | Dataset Definition reference, exactly one Provider Source, concrete Groups, provider-only templates, mappings, one Dataset allocation policy, lifecycle, supply and capacity policy |
-| Consumer Scenario Template | Required `managedDatasetRequirements` array: compatibility, `READ`, allocation mode and local lease bounds; empty when no Managed Dataset is required |
-| Consumer Scenario Binding | Validates and freezes the Template requirements against one SUT Environment and Dataset Space |
-| Deployment profile | Managed Dataset client settings and bounds; Redis connection contracts containing endpoint, TLS, topology and credential reference |
-| Frozen Managed Dataset | Resolved definition, compiled schema digest, Group ids/keys, provider provenance and policy |
-| Create Swarm selection | Required array: one exact Dataset or Group per Managed Dataset `bindingRef`, or empty when none is required |
+| `scenarios/managed-dataset/<name>/` | `dataset.yaml`, `record.schema.yaml` and, for `WORKFLOW`, `state.schema.yaml`; name, version, Profile, grouping, Views and transitions |
+| `scenarios/dataset-contracts/<name>/<version>/` | One immutable reusable `schema.yaml`; record and state roots pin exact versions |
+| Scenario Manager Dataset Space registry | Package validation, complete schema compilation, dependency versions and opaque digests |
+| Provider Scenario Binding | Definition reference, exactly one Provider Source, concrete Groups, provider-only templates, record/initial-state mappings, Dataset allocation, lifecycle, supply and capacity policy |
+| Consumer Scenario Template | Required `managedDatasetRequirements`: Profile/access, allocation, and for `WORKFLOW` one View, allowed transitions and completion role |
+| Consumer Scenario Binding | Validates and freezes Template requirements against one SUT Environment and Dataset Space |
+| Create Swarm selection | One exact compatible Dataset/Group or workflow View per `bindingRef`; an explicit empty array when none is required |
+| Deployment profile | REST client settings, Redis connection contracts and positive Dataset/record/state/byte/View-membership limits |
+| Operator runbook | Retention horizon, logical and physical capacity forecasts, thresholds, response, backup/restore coordination and escalation; never direct PostgreSQL deletion |
 
-These registries share the existing `scenarios` mount alongside
-`scenarios/bundles/<name>/`. Only Scenario Manager reads them. Orchestrator
-receives the resolved definition and schema digest; workers never search
-mounted contract files. Invalid, unversioned, ranged, remote or cyclic
-references fail without selecting another contract. A failed reload publishes
-nothing, leaves the last valid registry revision active and reports the exact
-errors. Scenario Manager creates the digest once from its persisted complete
-schema artifact; every downstream component compares that opaque value.
+Only Scenario Manager reads the mounted registries. Orchestrator receives
+resolved definitions and compiled artifacts; workers never search mounted
+files. Invalid, unversioned, ranged, remote or cyclic references fail. A bad
+reload publishes nothing and leaves the last valid registry revision active;
+this is transaction safety, not schema-version fallback.
+
+Example workflow requirement:
 
 ```yaml
 managedDatasetRequirements:
   - bindingRef: inputRecords
     datasetDefinitionId: shared-records
-    access: READ
+    profile: WORKFLOW
+    access: READ_STATE_TRANSITION
     allocation:
       type: EXCLUSIVE_LEASE
       acquireBatchSize: 10
       maximumHeldRecordLeases: 20
       acquireInterval: PT1S
+    workflow:
+      viewId: available
+      allowedTransitionIds: [complete]
+      allowReleaseUnchanged: false
+      completionRole: dataset-completion
+      completionLagTolerance: PT30S
 ```
 
-The Definition is the only grouping schema. `name` is a non-secret display
-label; `datasetId` is identity. The Template requirement contains no runtime ids
-or provider templates; the Binding freezes it and the bee references it by
-`bindingRef`. `SHARED` uses only `allocation.type`. A swarm needing no Managed
-Dataset uses `managedDatasetRequirements: []` and `datasetSelections: []`.
+`REPLAY` instead uses `access: READ`, forbids the `workflow` block and permits
+`SHARED` or `EXCLUSIVE_LEASE`. Requirements contain no runtime ids, source
+settings or provider templates. The bee references one requirement by
+`bindingRef`.
 
-The Provider Source is configured once in the provider binding, outside the
-Dataset Definition and bee blocks:
+The Provider Source exists once in the provider binding:
 
 | Source | MVP contract |
 |---|---|
-| `SCHEDULER` | Renewable, Group-scoped authority grants drive provider work. |
-| `CSV` | One mounted provider-bundle artifact is parsed and imported once in stable row order. |
-| `REDIS` | One `connectionRef` and list name; the list is copied to a provider-run staging key and imported once in stable index order. The live list is never popped or changed. |
+| `SCHEDULER` | Renewable; Group-scoped authority grants drive provider work. |
+| `CSV` | One mounted provider-bundle artifact is validated and imported once in stable row order. |
+| `REDIS` | One deployment `connectionRef` and list name; PocketHive copies the list and imports the fixed copy once in stable index order. It never pops or changes the live list. |
 
-`CSV` and `REDIS` are non-expiring finite imports. PocketHive validates the
-complete source first, binds its content fingerprint once and publishes all
-Groups atomically only after every item is stored. A changed restart fails.
-Existing direct `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` inputs remain
-separate and unchanged.
-
-The deployment profile owns each referenced Redis endpoint, TLS mode, topology
-and credential reference; provider configuration does not duplicate them.
+Finite imports bind one content fingerprint and publish every Group atomically
+after all items pass validation. Existing direct `SCHEDULER`, `CSV_DATASET` and
+`REDIS_DATASET` inputs remain separate and unchanged.
 
 ## Runtime flow
 
 ```mermaid
 flowchart LR
-  PS["Required source<br/>SCHEDULER | CSV | REDIS"] --> P["Provider run"]
-  B["Provider binding: source, groups, vars, SUT, mappings"] --> P
-  P -->|"terminal WorkOutput"| D["Named Managed Dataset"]
-  D <--> PG[("PostgreSQL")]
-  CS["Create Swarm"] -->|"select exact Dataset / Group"| D
-  D -->|"snapshot; optional Record Leases"| C["Consumer WorkInput"]
-  C -->|"local WorkItems"| M["Moderator / normal pipeline"]
+  PS["SCHEDULER | CSV | REDIS"] --> P["Provider run"]
+  B["Provider binding"] --> P
+  P -->|"record + optional initial state"| D["Named Managed Dataset"]
+  D <--> PG[("PostgreSQL authority")]
+  CS["Create Swarm"] -->|"exact Group or View"| D
+  D -->|"payload snapshot + optional claim"| C["Consumer WorkInput"]
+  C -->|"local WorkItems"| M["Moderator / pipeline"]
   M --> SUT["SUT"]
-  C -.->|"selection status"| O["Orchestrator"]
+  M -->|"WORKFLOW only"| W["Completion WorkOutput"]
+  W -->|"atomic transition"| D
+  C -.->|"selection / claim status"| O["Orchestrator"]
   M -.->|"SUT-attempt status"| O
+  W -.->|"completion status"| O
   O --> V["Datasets UI / PocketHive MCP"]
 ```
 
-The provider's first and terminal bees receive source work and persist results
-for one frozen Group. `SCHEDULER` work uses refill grants driven by expiry and
-target supply, not traffic rate. `CSV` and `REDIS` use one bounded idempotent
-import; restart resumes the same items, and a bad or incomplete import exposes
-no records. Dataset creation freezes provider, binding version and source type;
-the first finite import binds the content fingerprint because the provider
-input cannot compute it earlier.
-
-The consumer bee references its requirement and declares rate, SUT-attempt role
-and safety bounds; Moderator still shapes traffic. In `EXCLUSIVE_LEASE`, the
-consumer input acquires in the background and dispatches each lease once. The
-SDK releases after role completion and output handoff. Failure holds the record
-until authority expiry; no renewal or fallback exists. Active leases do not
+`REPLAY + SHARED` selects round-robin from a verified local payload snapshot.
+Every exclusive consumer prefetches bounded authority leases in the
+background. `WORKFLOW` claims also carry current Record State and its revision;
+state eligibility never comes from a stale shared snapshot. Failure leaves the
+record unavailable until a valid retry, an explicitly allowed unchanged
+release or fixed expiry. No renewal or fallback exists. Active leases do not
 create refill demand.
 
-## Safety and evidence
+Replay keeps the schema-valid record as the normal WorkItem payload. Workflow
+uses one fixed payload object with `record` and `recordState`; state remains
+normal template data, never a header or observability field.
 
-Each WorkItem carries one structured global header in its JSON body with the
-Dataset/Group/binding identity, revision, record validity and allocation. An
-exclusive item also carries lease id and expiry. It is not a broker or
-observability header. One SDK guard blocks invalid identity, time or lease
-immediately before network I/O.
+## Safety and MCP evidence
 
-Orchestrator alone derives `ManagedDatasetConsumptionStatus`. PocketHive MCP
-returns that same read model and can show that:
+Each WorkItem carries one structured global header inside the normal JSON body.
+It contains Dataset, Group, binding, Profile, payload revision, record validity
+and allocation; a workflow item also contains View, lease and claimed state
+revision. It is neither a broker header nor observability context. The SDK
+preserves it and validates it immediately before SUT network I/O.
 
-1. the consumer selected a snapshot whose compiled record-schema digest matches
-   the frozen Dataset;
-2. it selected from the frozen `datasetId + groupId + allocation`; and
-3. valid context with the same identity reached the SUT-attempt boundary,
-   including a live matching Record Lease when required.
+Orchestrator alone derives `ManagedDatasetConsumptionStatus`. UI and
+PocketHive MCP return the same read model. `CONSUMING` requires fresh evidence
+that:
 
-Selection and guard report bounded counters through existing status. Missing or
-stale evidence is `UNKNOWN`, never green. Reporting cannot block traffic and
-does not claim SUT acceptance or exactly-once delivery.
+1. the selected payload snapshot matches the frozen record-schema digest;
+2. source and SUT boundaries report the same frozen Dataset, Group, Profile,
+   optional View and allocation;
+3. an exclusive attempt used a live matching Record Lease; and
+4. for `WORKFLOW`, a completion reporter confirms an allowed transition or
+   explicitly allowed unchanged release for the claimed state revision.
 
-## Product view and MVP boundary
+Missing, mismatched or stale evidence is never green. This proves which
+Dataset contract reached the scenario boundaries; it does not prove SUT
+business acceptance, exactly-once delivery or correctness of a declared
+business transition.
 
-The existing Datasets area shows the named parent, bounded Groups, safe Group
-keys, per-Group supply/availability and consumers. `READY` means that a Group
-can supply records; `CONSUMING` means a consumer is selecting that Group and
-reaching the SUT-attempt boundary.
+Orchestrator atomically reserves deployment-wide Dataset, record,
+record/state-byte and View-membership capacity. Exhaustion rejects new creation
+or supply without eviction or impact to existing safe consumers. MVP has no
+purge state machine; production requires an approved retention/capacity
+runbook for the declared operating horizon.
+
+## MVP boundary
 
 | Included | Deferred |
 |---|---|
-| One required `SCHEDULER`, `CSV` or `REDIS` Provider Source | Multiple sources, source switching/fallback, CSV rotation, Redis pop or finite-source refill |
-| Immutable records with explicit `SHARED` or durable `EXCLUSIVE_LEASE` allocation | Pop, depletion, use counts, lease renewal/transfer or exactly-once claims |
-| Explicit empty requirements/selections for swarms with no Managed Dataset | Optional bindings or implicit Dataset selection |
-| Provider-only Group template resolution | Runtime-created or result-derived Groups and live regrouping |
-| Exact versioned schema composition and Dataset-local `$defs` | `latest`, ranges, remote schema lookup, mixed per-record schemas or live schema upgrade |
-| Scheduler refill, atomic finite imports, per-Group snapshots and availability | Multi-Group selection, filters, joins and per-Group policy/ACL overrides |
+| `REPLAY`: immutable payload with `SHARED` or durable `EXCLUSIVE_LEASE` | Pop/depletion, use counts, lease renewal/transfer and exactly-once claims |
+| `WORKFLOW`: versioned Record State, fixed Views, declared transitions and exclusive claims | Free-form tags, arbitrary selectors/patches, runtime-created Views/transitions, payload replacement and cross-Dataset transactions |
+| One required `SCHEDULER`, `CSV` or `REDIS` source | Multiple sources, switching/fallback, CSV rotation, Redis pop and finite-source refill |
+| Explicit empty requirements/selections | Optional bindings or implicit Dataset selection |
+| Frozen Groups and provider-only template resolution | Runtime/result-created Groups and live regrouping |
+| Exact versioned schema composition and local `$defs` | `latest`, ranges, remote lookup, mixed per-record schemas and live schema upgrade |
 | REST/UI/MCP operational evidence | SUT reconciliation, audit proof and automatic provider lifecycle |
+| Storage limits plus operator runbook | Dataset retirement, purge, automatic deletion and direct PostgreSQL deletion |
 
 ## Next step
 
-Approve M0 contracts first, then implement authority, adapters and the one
-status model. Release only after the normative specification's functional,
-isolation, freshness, UI/MCP, overload, restart and soak gates pass.
+Approve M0 contracts first. Release only after the normative functional,
+isolation, mutation, evidence, storage-exhaustion, restart, failure and soak
+gates pass and the operator retention/capacity runbook is approved.
