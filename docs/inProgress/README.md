@@ -4,13 +4,13 @@ This directory contains only work that is actively being implemented or is waiti
 
 ## Current plans
 
-- `docs/inProgress/managed-test-data-lifecycle-generic-spec.md` – concise
-  Managed Dataset MVP specification, continuous lifecycle, HA-compatible
-  foundations, and delivery gates.
-- `docs/inProgress/managed-datasets-team-overview-plain-language.md` – short,
-  plain-language introduction to the Managed Dataset MVP.
-- `docs/inProgress/managed-datasets-team-design-overview.md` – architecture
-  decisions, scope cuts, rationale, and approval gates.
+- `docs/inProgress/managed-test-data-lifecycle-generic-spec.md` – normative
+  Managed Dataset MVP: shared reusable records, explicit selection, bounded
+  refill, local snapshots, restart and replica safety.
+- `docs/inProgress/managed-datasets-team-design-overview.md` – concise team
+  brief for the Managed Dataset architecture decision and MVP boundary.
+- `docs/inProgress/managed-datasets-team-overview-plain-language.md` – novice
+  guide to provider creation, consumer selection and safe sharing.
 - `docs/inProgress/processor-iso8583-v1-v2-plan.md` — active ISO8583 processor delivery and remaining V2 work.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` — implementation exists; production HiveGate registration remains.
 - Current PocketHive MCP/IDE reference documentation lives in `docs/plugins/pockethive/`.

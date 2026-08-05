@@ -1,572 +1,479 @@
 # Managed Test Data MVP Specification
 
-Status: proposed requirements; implementation and canonical contract approval pending
-Scope: Scenario Manager metadata, Orchestrator Managed Dataset module, Worker SDK adapters, PocketHive MCP evidence
+Status: in progress; proposed requirements, implementation and canonical contract approval pending
+Scope: Scenario Manager metadata, Orchestrator Managed Dataset module and Worker SDK adapters
 
 ## Decision required
 
-Approve a PostgreSQL-backed Managed Dataset MVP that:
+Approve a PostgreSQL-backed Managed Dataset MVP in which one provider run
+creates a Dataset and zero or many consumer swarms select it explicitly.
+Consumers dispatch reusable records from verified local snapshots through the
+existing `WorkInput -> WorkItem -> WorkOutput` pipeline.
 
-- uses PocketHive's existing `WorkInput -> WorkItem -> WorkOutput` pipeline;
-- keeps reusable synthetic records available through bounded refill;
-- reads from verified local snapshots on the measured path; and
-- proves, through PocketHive Model Context Protocol (MCP), whether a qualified
-  one-to-one scenario path consumed the intended Dataset correctly.
-
-The main trade-off is deliberate: one provider run owns each Managed Dataset,
-while any number of compatible consumer swarms may share it. Consumers select
-an existing `datasetId`; they never configure or replace its provider.
-Automatic provider lifecycle, general topology accounting, SUT reconciliation,
-sensitive data, and high-availability qualification are deferred.
+The design replaces Redis-style Dataset dependencies without copying Redis
+list semantics. Records are immutable, shared and reusable. There is no pop,
+depletion, use count, exclusive checkout, outcome-driven invalidation or
+automatic provider lifecycle.
 
 ## Goal
 
-Provider swarms create reusable synthetic records for a System Under Test
-(SUT). Independent consumer swarms use those records continuously without
-calling Orchestrator, PostgreSQL, or a credential provider on the measured
+Keep renewable synthetic SUT data available for continuous test traffic while
+keeping PostgreSQL, Orchestrator and credential-provider calls off the measured
 request path.
+
+```text
+provider WorkInput -> normal provider pipeline -> provider WorkOutput -> Managed Dataset
+Managed Dataset snapshot -> consumer WorkInput -> normal consumer pipeline -> SUT
+```
 
 ## Hard rules
 
 | Rule | Requirement |
 |---|---|
-| Existing pipeline | Managed Dataset I/O uses the canonical `WorkItem` and normal worker lifecycle. No Dataset-specific RabbitMQ lane. |
-| Explicit adapters | Every worker selects one input adapter and one output adapter. Existing logical multi-port topology remains supported. |
-| No fallback | Missing, stale, unsupported, or mismatched data fails explicitly. Never substitute another Dataset, adapter, provider, snapshot, CSV, or Redis source. |
-| Runtime authority | Orchestrator's Managed Dataset module owns runtime records in PostgreSQL. Scenario Manager owns authoring metadata only. |
-| Local measured path | Consumer selection and validity checks are local. Refresh and evidence emission run in bounded background bulkheads. |
-| Simple ownership | A provider run creates one Managed Dataset for each Managed Dataset output. The Dataset stores that exact provider provenance. |
-| Explicit selection | Create Swarm lists SUT-compatible Managed Datasets. The operator selects one exact `datasetId` for each consumer binding; PocketHive never auto-selects or substitutes one. |
-| Shared use | Zero or many compatible consumer bindings may read the same Managed Dataset. Consumers neither clone nor mutate it. |
-| Bounded proof | MVP consumption evidence supports `ONE_TO_ONE` paths only. Unsupported topology fails admission. |
-| Human approval | Qualification Evidence requires an identified human approval. AI, RAG, HiveMind, and MCP may present evidence but cannot approve it. |
-| Data classification | MVP records are synthetic, non-secret, size-bounded, and safe for the existing `WorkItem` path. |
-| Contract first | Implementation waits for approved closed schemas and canonical REST/tool contracts. |
+| Normal worker I/O | Managed Dataset adapters implement existing `WorkInput` and `WorkOutput`; no Dataset-specific RabbitMQ lane is added. |
+| Explicit configuration | Every adapter and setting is explicit under its adapter-specific block. Missing or unsupported values fail before provisioning. |
+| One creator | One provider run creates one Managed Dataset per Managed Dataset output binding. A worker-process restart keeps that provider-run identity; a new provider run gets a new identity and Dataset. |
+| Explicit consumers | Create Swarm requires one exact `datasetId` for each consumer `bindingRef`. A run stays pinned to it. There is no alias following, substitution or fallback. |
+| Shared records | Records are immutable and reusable by concurrent consumers. The scenario owner MUST confirm that repeated concurrent use is safe under the SUT contract. |
+| Local measured path | Selection, validity checks and claim copying are local. Snapshot refresh, refill and persistence are background/control-plane work. |
+| PostgreSQL authority | PostgreSQL owns records, grants, receipts, revisions and background-work leases. Redis is not an authority. |
+| No provider automation | The Dataset module never starts, stops, replaces, fails over or reconciles a provider swarm. |
+| No generic reconciliation | MVP never infers record state from a SUT result and never corrects, revalidates, deprovisions or retires SUT objects. |
+| Secrets by reference | Scenario bundles may contain SUT context, templates and mappings. They contain secret references, never secret values. |
+| No fallback | Invalid, stale, unavailable or mismatched configuration fails explicitly. PocketHive never switches Dataset, adapter, provider or snapshot implicitly. |
 
 ## Supported MVP
 
-- Reusable `SHARED` records with deterministic round-robin selection.
-- Fixed `minimumReady`, `targetReady`, and `maximumReady` supply levels.
-- Expiring and non-expiring records.
-- Proactive bounded refill and expiry-safe snapshot rotation.
-- Durable grants, receipts, idempotency, retention, and restart recovery.
-- One immutable provider identity per Managed Dataset and many consumers per
+- One immutable provider identity and zero or many consumers per Managed
   Dataset.
-- Explicit compatible-Dataset selection through Create Swarm.
-- Windowed one-to-one consumption evidence through PocketHive MCP.
-- Replica-safe background ownership using PostgreSQL leases and fences.
+- Explicit SUT-compatible Dataset listing and selection during Create Swarm.
+- `SHARED` allocation and deterministic `ROUND_ROBIN` local selection.
+- Non-expiring and expiring records.
+- Proactive refill to fixed minimum, target and maximum levels.
+- Durable idempotent grants and receipts with stale-grant recovery.
+- Verified immutable local snapshots with atomic replacement.
+- Replica-safe Orchestrator background work using PostgreSQL leases and
+  fencing.
+- A small deterministic Selection Claim needed for end-of-pipeline expiry
+  safety.
 
 ## Out of scope
 
-- Automatic provider start, stop, discovery, or substitution.
-- Multiple providers, provider transfer, or live rebinding for one Managed
-  Dataset.
-- Requiring a Simulation Program.
-- Generic SUT reconciliation, correction, revalidation, or deprovision.
-- Live supply-target changes.
-- Fan-out, filtering, joins, sampling, or multiple terminal boundaries in an
-  evidence-qualified path.
-- Exclusive or one-use records, sensitive data, Redis authority, and
-  multi-output interceptors.
-- Active-active Orchestrator, backup-restore qualification, and multi-region
-  operation.
-- Proof of SUT business correctness or proof against a malicious worker.
+- Record use counts, queue/pop semantics, bounded-use records, one-use records
+  and exclusive checkout.
+- SUT-outcome invalidation, SUT reconciliation, correction, revalidation,
+  deprovisioning and outcome-driven retirement.
+- Multiple providers, provider transfer, automatic provider start or failover,
+  and live consumer rebinding.
+- Sensitive records or secrets in Dataset records.
+- Active-active multi-region operation and application-owned PostgreSQL HA.
+- MVP consumption verdicts, qualification evidence, evidence frames, approval
+  workflows, window mathematics, and HiveGate or HiveMind coupling. These are a
+  future milestone and must not gate MVP provider or consumer traffic.
 
 ## Canonical terms
 
-| Term | Status | Meaning |
-|---|---|---|
-| `Dataset Space` | PROPOSED | SUT-scoped authoring namespace containing versioned Dataset definitions and access policy. It is not the runtime record store. |
-| `Scenario Binding` | PROPOSED | Validated link between scenario, SUT Environment, Dataset Space, Dataset, schema, policy, and access versions. Runtime uses an immutable snapshot. |
-| `Managed Dataset` | PROPOSED | Orchestrator-owned shared runtime record set created by one exact provider run from one resolved Dataset definition. It stores immutable provider provenance and may serve many consumer bindings. |
-| `Qualification Evidence` | PROPOSED | Approved, expiring record that one exact build and workload met the required safety and capacity profile. |
-| `TrustedClock` | PROPOSED | Explicit calibrated clock used by SDK expiry guards. |
-| `Managed Dataset Selection Claim` | PROPOSED | Digest-protected `WorkItem` metadata identifying the binding, record revision, validity, and selection event. |
-| `Managed Dataset Evidence Frame` | PROPOSED | Low-frequency cumulative SDK report for one worker process epoch and binding. |
-| `Managed Dataset Consumption Evidence` | PROPOSED | Orchestrator verdict for one swarm, run, binding, frozen Dataset, and exact UTC window. |
+| Term | Status | Meaning | Not the same as | Source | Allowed shorthand |
+|---|---|---|---|---|---|
+| `WorkInput` | EXISTING | Worker SDK adapter that supplies immutable `WorkItem`s to a worker. | SUT traffic pacing. | Worker SDK | None |
+| `WorkOutput` | EXISTING | Worker SDK adapter that publishes or persists a worker result. | A Dataset provider workflow. | Worker SDK | None |
+| `Dataset Space` | PROPOSED | SUT-scoped authoring namespace containing versioned Dataset definitions and access policy. | Runtime record storage. | SUT/Dataset model | None |
+| `Scenario Binding` | PROPOSED | Validated link between scenario, SUT Environment, Dataset Space, schema, policy and access versions. Runtime uses a frozen snapshot. | A provider dependency. | SUT/Dataset model | None |
+| `Managed Dataset` | PROPOSED | Orchestrator-owned runtime record set created by one provider run and readable by many compatible consumer bindings. | A Redis list or work queue. | This specification | `Dataset` after first use |
+| `Managed Dataset Selection Claim` | PROPOSED | Small deterministic `WorkItem` metadata identifying the selected binding, Dataset revision, record and validity. | Consumption evidence or security attestation. | This specification | `Selection Claim` after first use |
 
 The architecture proposal remains authoritative for `SUT Environment`,
-`Dataset Space`, and `Scenario Binding` meanings. This specification owns the
-Managed Dataset runtime and consumption-evidence proposal.
+`Dataset Space` and `Scenario Binding`. This specification owns proposed
+Managed Dataset runtime rules.
 
 ## Ownership
 
 | Concern | Owner | Must not own |
 |---|---|---|
-| Dataset definitions and binding requirements | Scenario Manager | Runtime records, Dataset selection, or refill execution |
-| Compatible-Dataset listing, admission, and run snapshot | Orchestrator | Automatic Dataset selection or live alias resolution |
-| Managed Datasets, provider provenance, availability, records, grants, frames, and verdicts | Orchestrator Managed Dataset module | Swarm lifecycle or SUT business logic |
-| Provider lifecycle | Operator or existing swarm lifecycle | Dataset module |
-| SUT request and result mapping | Provider scenario bundle | Generic Orchestrator workflow language |
-| Local selection, guards, counters | Consumer adapter and Worker SDK | Durable authority |
-| Agent-facing evidence | PocketHive MCP | Verdict recomputation or fallback evidence |
-| Approval and policy | Human approver; HiveGate when governed | Advisory AI or MCP |
+| Dataset definitions, schema and binding requirements | Scenario Manager | Runtime records or refill execution |
+| Candidate listing, admission and frozen run configuration | Orchestrator | Automatic Dataset or provider selection |
+| Records, grants, receipts, revisions, availability and leases | Orchestrator Managed Dataset module | Swarm lifecycle or SUT business logic |
+| Provider lifecycle | Operator and existing swarm lifecycle | Managed Dataset module |
+| SUT context, templates, mappings and secret references | Scenario bundle and existing resolution flow | Managed Dataset records |
+| Local snapshot, dispatch, selection and expiry guard | Managed Dataset `WorkInput` and Worker SDK | Durable authority or SUT traffic pacing |
+| SUT traffic pacing | Moderator | Dataset supply or refill demand |
+| PostgreSQL availability, replication, backup and recovery | Deployment infrastructure | Application fallback logic |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-  OP["Operator / existing lifecycle"] --> PROVIDER["Provider swarm"]
-  PROVIDER -->|creates and fills| API["Orchestrator Managed Dataset module"]
-  API <--> PG[("PostgreSQL authority")]
-  CREATE["Create Swarm"] -->|list compatible; select datasetId| API
-  API -->|verified snapshot| C1["Consumer A WorkInput"]
-  API -->|verified snapshot| C2["Consumer B WorkInput"]
-  C1 -->|local WorkItem| PATH["ONE_TO_ONE scenario path"]
-  PATH --> SUT["SUT attempt"]
-
-  C1 -. source frames .-> API
-  PATH -. terminal frames .-> API
-  API --> VERDICT["Consumption verdict"]
-  VERDICT --> MCP["PocketHive MCP"]
+  OP["Operator / existing swarm lifecycle"] --> P["Provider run"]
+  B["Scenario bundle: SUT context, templates, mappings, secret refs"] --> P
+  P -->|"Managed Dataset WorkOutput"| MD["Orchestrator Managed Dataset module"]
+  MD <--> PG[("PostgreSQL authority")]
+  CS["Create Swarm"] -->|"list compatible; select datasetId"| MD
+  MD -->|"background verified snapshot"| C1["Consumer A WorkInput"]
+  MD -->|"background verified snapshot"| C2["Consumer B WorkInput"]
+  C1 -->|"local WorkItems"| M["Moderator / normal pipeline"]
+  M --> SUT["SUT"]
 ```
 
-The Dataset module never invokes the SUT. Provider scenario bundles own SUT
-templates, resolved `sut`/`vars` context, private `authRef` selection, and typed
-result mapping.
+The measured path starts when a consumer selects a local record. It performs
+no PostgreSQL, Orchestrator, Scenario Manager or credential-provider call.
 
-## Dataset and binding contract
+## Dataset creation and selection
 
-A Scenario Binding declares Dataset requirements, not a runtime Dataset or
-provider. Provider admission creates and persists one Managed Dataset per
-`MANAGED_DATASET` output before workers start.
-
-Managed Dataset creation is idempotent for
+Provider admission creates the Managed Dataset before provider workers start.
+Creation is idempotent on
 `providerSwarmId + providerRunId + providerBindingRef`. Repeating the same
-request with the same contract returns the existing `datasetId`; changed
-content fails. A new provider run creates a new Dataset. Dataset ids are
-globally unique, tombstoned after retirement, and never reused.
+request and contract returns the same `datasetId`; changed content fails. A
+new provider run creates a new `providerRunId` and `datasetId`.
 
-Each Managed Dataset stores immutable Dataset definition/contract/schema,
-exact SUT Environment, Dataset Space/version, storage profile, supply/access
-policy, provider swarm/run/binding, and provider Qualification Evidence
-identities and digests.
+The Dataset stores immutable provider swarm, run and binding provenance plus
+the frozen SUT Environment, Dataset definition, schema and policy versions.
+Provider ownership never transfers.
 
-Only records, revisions, supply counters, availability, and operational reason
-codes change during the Dataset lifetime. Provider identity never changes.
-
-### Shared Dataset invariants
-
-- One Managed Dataset has exactly one provider run and zero or many consumers.
-- Multiple consumer bindings and swarms may select the same `datasetId`.
-- Supply thresholds apply once to the shared Dataset, not once per consumer.
-- Every consumer maintains its own bounded local snapshot and evidence scope.
-- Consumers have read-only access; they cannot refill, retire, or rebind it.
-- A consumer run remains pinned to its selected `datasetId`. A different
-  Dataset requires a new run admission.
-
-### Create Swarm selection
-
-For each Managed Dataset input, Create Swarm lists candidates bound to the
-selected SUT Environment. The shared validator requires exact Dataset
-Space/version, definition, record schema, storage profile, and `READ` access.
-Availability and reason codes allow unavailable candidates to appear disabled.
-
-The operator must explicitly select one candidate:
+For each consumer binding, Create Swarm lists Datasets whose frozen SUT,
+Dataset definition, schema and access contract match. The operator supplies:
 
 ```yaml
 datasetSelections:
   - bindingRef: inputCards
-    datasetId: cards-run-20260804
+    datasetId: cards-provider-run-20260805
 ```
 
-Both fields are required. Each Managed Dataset input has exactly one selection;
-other inputs have none. Bindings may share a Dataset. There is no default.
+Both fields are required. Orchestrator revalidates the exact Dataset and
+freezes its id into the run. Only `READY` candidates can be admitted;
+`DEGRADED` and `UNAVAILABLE` candidates remain visible with reason codes.
+Different bindings may select the same Dataset.
 
-The list is not admission authority. Orchestrator resolves the `datasetId`
-again, verifies compatibility, authorisation, qualification, and availability,
-then freezes Dataset, contract, provider, and both qualification digests into
-the run snapshot. Runtime never follows a mutable alias.
+## Worker I/O contract
 
-M0 must add the candidate read model and `datasetSelections` to the canonical
-Create Swarm contract before implementation.
+The examples below are normative for nesting and illustrative for names. M0
+must add the enum values and closed settings schemas to the canonical worker
+I/O contracts and capability manifests.
 
-The run snapshot also freezes scenario, SUT, Dataset Space, schema, policy,
-access, binding, topology, capability, plan, workload, worker image, SDK, and
-resolved Dataset I/O digests and versions.
+The first provider bee obtains refill grants through its input adapter:
 
-### Supply policy
+```yaml
+role: provider-source
+config:
+  inputs:
+    type: MANAGED_DATASET_REFILL
+    managedDatasetRefill:
+      bindingRef: refillCards
+      batchSize: 100
+  outputs:
+    type: RABBITMQ
+```
+
+The terminal provider bee persists mapped results through a separate output
+adapter:
+
+```yaml
+role: provider-store
+config:
+  inputs:
+    type: RABBITMQ
+  outputs:
+    type: MANAGED_DATASET
+    managedDataset:
+      bindingRef: refillCards
+```
+
+Both `bindingRef` values resolve the same provider binding. Orchestrator
+injects its created `datasetId` into both runtime adapter blocks. Work between
+the first and terminal bees follows normal PocketHive topology. The bundle's
+provider binding points to the SUT template and typed result mapping.
+
+A consumer declares its dispatch trigger under the adapter-specific block:
+
+```yaml
+role: dataset-source
+config:
+  inputs:
+    type: MANAGED_DATASET
+    managedDataset:
+      bindingRef: inputCards
+      ratePerSec: 500
+  outputs:
+    type: RABBITMQ
+```
+
+Create Swarm injects the selected `datasetId` into
+`config.inputs.managedDataset.datasetId` in the frozen runtime configuration.
+It is runtime materialisation, not an authoring default.
+
+`ratePerSec` controls how quickly `WorkInput` supplies `WorkItem`s. It does not
+consume records and is not refill demand. Moderator remains responsible for
+SUT traffic pacing.
+
+Adapter settings live only in the bee blocks above. Dataset definition,
+schema, lifecycle, supply and capacity policy live once in the versioned
+provider Scenario Binding resolved by `bindingRef`. A consumer Scenario Binding
+contains compatibility and `READ` requirements only; it never repeats or
+overrides provider policy. The frozen Managed Dataset stores the resolved
+provider policy.
+
+Supply fields are closed and explicit:
 
 | Field | Rule |
 |---|---|
-| `lifecycleMode` | Required: `NON_EXPIRING` or `EXPIRING` |
-| `minimumReady` | Required, non-negative |
-| `targetReady` | Required and `>= minimumReady` |
-| `maximumReady` | Required and `>= targetReady` |
-| `renewalLeadTime` | Required for `EXPIRING`; forbidden for `NON_EXPIRING` |
-| `selection` | MVP value `ROUND_ROBIN` |
-| `allocation` | MVP value `SHARED` |
-| retention limits | Explicit row, byte, receipt, grant, and tombstone limits; no defaults |
+| `allocation` | Required MVP value `SHARED` |
+| `selection` | Required MVP value `ROUND_ROBIN` |
+| `minimumReady`, `targetReady`, `maximumReady` | Required non-negative integers satisfying the stated invariant |
+| `replacementHeadroom` | Required non-negative integer; must be `0` for `NON_EXPIRING` |
+| `lifecycle` | Required tagged union: `NON_EXPIRING`, or `EXPIRING` with `renewalLeadTime` |
+| `maximumExpiryCohort` | Required positive integer for `EXPIRING`; forbidden for `NON_EXPIRING` |
+| capacity timings and limits | Required explicit values; no defaults, clamping or auto-tuning |
 
-Records are immutable. An expiring result must remain usable beyond commit by
-at least `renewalLeadTime`. Otherwise commit fails and releases the grant.
+## Safety invariants
 
-### Dataset availability
+### Counts and validity
 
-The Dataset module combines provider liveness, refill progress, safe supply,
-storage health, and provider qualification into one required Dataset
-availability state. Consumers use this state and do not independently monitor
-providers.
+- `0 <= minimumReady <= targetReady <= maximumReady`.
+- A record is **live** when its immutable commit and schema are valid and it is
+  either `NON_EXPIRING` or its `usableUntil` is later than authority time.
+- A record is **renewal-ready** when it is live and either non-expiring or its
+  `usableUntil` is later than `authorityTime + renewalLeadTime`.
+- `activeGrantedSlots` count unexpired grant items not yet completed or stale.
+- For expiring data,
+  `maximumStored = maximumReady + replacementHeadroom`; old live records and
+  their replacements may coexist only within this bound.
 
-| Availability | Selection rule |
-|---|---|
-| `READY` | New admission and selection are allowed |
-| `DEGRADED` | Existing consumers may select while records remain safe; new admission is rejected |
-| `UNAVAILABLE` | Admission and selection stop |
+### Refill
 
-Closed reason codes distinguish late refill, provider loss, supply below
-`minimumReady`, invalid provider qualification, storage failure, contract
-integrity failure, and lost safety horizon. An expiring Dataset may remain
-`DEGRADED` after provider loss while its records remain safe. A non-expiring
-Dataset does not require a running provider after safe supply has committed.
-There is no provider substitution.
-
-### Worker I/O
-
-```yaml
-# Provider scenario authoring: this output creates the Managed Dataset.
-inputs:
-  type: MANAGED_DATASET_REFILL
-  bindingRef: refillCards
-outputs:
-  type: MANAGED_DATASET
-  bindingRef: refillCards
-
-# Consumer scenario authoring: Create Swarm supplies the concrete datasetId.
-inputs:
-  type: MANAGED_DATASET
-  bindingRef: inputCards
-```
-
-Adapters are explicit and have no defaults. Unsupported values fail typed
-configuration binding. Adapter state appears through existing `workIn` and
-`workOut` status fields.
-
-## Qualification and time
-
-### Qualification Evidence
-
-Qualification Evidence is immutable. It contains identity, schema/payload
-digest, creation/expiry, state `ACTIVE | SUPERSEDED | REVOKED | EXPIRED`;
-image, SDK, Orchestrator, contract, environment, binding, topology, profile,
-plan, and workload digests; qualified load and safety results; and required
-`approvalMode: DIRECT_HUMAN | HIVEGATE`, approver, and approval reference.
-
-Provider and consumer qualifications are separate uses of the same contract:
-
-- provider evidence covers Dataset creation, refill, storage, and capacity; the
-  Managed Dataset stores its explicit reference; and
-- consumer evidence covers images, topology, rate, SDK, clock, and accounting.
-
-Dataset creation validates provider evidence; consumer admission validates
-both references. Invalid provider evidence makes the Dataset `UNAVAILABLE`.
-Invalid consumer evidence blocks only that run.
-
-### TrustedClock
-
-`CALIBRATED_SYSTEM_CLOCK` is the only MVP adapter. Its configuration requires
-a time-health source, maximum sample age, maximum skew, maximum uncertainty,
-and sample interval. Nothing defaults and there is no clock fallback.
-
-| State | Rule | Behaviour |
-|---|---|---|
-| `SYNCED` | Sample is current and offset plus uncertainty is within the configured bound | Selection and invocation may continue |
-| `STALE` | Sample is older than the configured maximum age | Refresh may download, but activation, selection, and invocation stop |
-| `UNSAFE` | No valid sample, unsynchronised source, backwards time, or excessive skew | The affected consumer stops selection and invocation |
-
-Absolute expiry uses:
+Refill starts proactively when
+`renewalReady + activeGrantedSlots < targetReady`. Records enter the refill
+deficit before expiry because they stop being renewal-ready at the renewal
+lead boundary.
 
 ```text
-latestPossibleNow = calibratedWallTime + effectiveUncertainty
+deficit = max(0, targetReady - renewalReady - activeGrantedSlots)
+
+maximumGrant = min(
+  deficit,
+  maximumReady - renewalReady - activeGrantedSlots,
+  maximumStored - liveStored - activeGrantedSlots,
+  configuredBatchSize
+)
 ```
 
-Elapsed waits and backoff use a monotonic clock.
+A non-positive `maximumGrant` creates no work. Counts and grant creation occur
+in one bounded PostgreSQL transaction.
 
-## WorkItem Selection Claim
-
-Managed Dataset items reserve two proposed global headers:
-
-| Shared constant | Header | Value |
-|---|---|---|
-| `MANAGED_DATASET_SELECTION_CLAIM` | `ph.dataset.selection.claim` | RFC 8785 canonical JSON |
-| `MANAGED_DATASET_SELECTION_CLAIM_DIGEST` | `ph.dataset.selection.claim-digest` | SHA-256 of the UTF-8 canonical claim bytes |
-
-Both are required together for Managed Dataset items and absent from other
-items. M0 must add the closed claim schema and header pairing to the canonical
-`docs/spec/` contracts before implementation.
-
-The claim contains only:
-
-- schema version, `selectionId`, binding and record-schema digests;
-- Dataset id, record revision, record id;
-- source worker instance, process epoch, and monotonic selection sequence;
-- selected time; and
-- explicit validity: `NON_EXPIRING` or `EXPIRING` with `usableUntil`.
-
-It contains no record value, credential, provider response, or free-form text.
-Every SDK hop parses the claim, validates the schema, recomputes the digest, and
-preserves both original strings. Invalid, missing, changed, oversized, or
-unknown-version claims fail before worker invocation.
-
-`selectionId` is SHA-256 over RFC 8785 canonical JSON containing exactly
-`bindingDigest`, `sourceWorkerInstanceId`, `sourceProcessEpoch`, and
-`selectionSequence`.
-
-Immediately before a SUT-calling worker, the SDK requires:
+For expiring data, admission requires
+`replacementHeadroom >= maximumExpiryCohort`. It also requires a positive
+refill window and enough declared provider capacity:
 
 ```text
-usableUntil > latestPossibleNow + maximumWorkerInvocationDuration
+refillWindow = renewalLeadTime - refillCycleInterval - maximumProviderCompletionTime
+providerCapacityRecordsPerSecond * refillWindow >= maximumExpiryCohort
 ```
 
-## Producer runtime
+### Idempotency and stale grants
 
-1. Provider admission creates or idempotently resolves the Managed Dataset for
-   each provider output before workers start.
-2. The refill adapter requests only that Dataset's deficit to `targetReady`.
-3. PostgreSQL atomically grants bounded slots. Active grants count against
-   `maximumReady`.
-4. The provider executes its scenario-defined SUT request with a stable
-   idempotency key.
-5. The output adapter records one result:
+- A grant request has a stable idempotency key. Exact replay returns the same
+  grant; reuse with changed content fails without mutation.
+- Each grant item has one stable provider-operation key and one receipt.
+  Exact receipt replay returns the stored result; changed replay fails.
+- A receipt commits one immutable valid record. A provider failure records no
+  record. MVP does not classify SUT outcomes or retire an existing record.
+- A grant item not receipted by `grantExpiresAt` becomes `STALE` in a fenced
+  transaction and releases its reserved slot. A late receipt is rejected.
+  Recovery performs no SUT call and creates no reconciliation work.
 
-| Result | Effect |
-|---|---|
-| `COMPLETED` | Commit one valid immutable record and durable receipt |
-| `FAILED` | Prove no usable effect and release the reservation |
-| `UNCERTAIN` | Retain bounded capacity; do not retry blindly |
+## Selection Claim and snapshots
 
-6. Replaying the same idempotency key and payload returns the prior result.
-   Reusing the key with different content fails with no mutation.
-7. Failure, unusable-result, and uncertainty budgets open the refill circuit.
-   Nothing starts a mutation storm or automatic reconciliation.
+The Selection Claim is retained because an expiring item may wait in the normal
+pipeline after source selection. M0 reserves shared header constant
+`MANAGED_DATASET_SELECTION_CLAIM` with wire name
+`ph.dataset.selection.claim`. Its value is closed, versioned JSON encoded once
+when the snapshot is built; Managed Dataset items require it and other items do
+not use it.
 
-## Consumer runtime
+Each snapshot record carries a prebuilt immutable Selection Claim containing
+only:
 
-1. Orchestrator materialises the explicitly selected `datasetId` into the
-   consumer's frozen runtime I/O configuration.
-2. A background task downloads a bounded keyset-paged snapshot as of one
-   revision.
-3. The adapter validates page digests, record schema, binding digest, and
-   `refreshBy` before activation.
-4. It builds the next immutable view off-thread and swaps atomically.
-5. Request threads select locally and create the Selection Claim.
-6. A failed refresh keeps the current view only while every selected record
-   remains safe. It never extends validity.
-7. Restart rehydrates a current safe snapshot from PostgreSQL before traffic
-   resumes.
+- contract version, `bindingRef`, `datasetId`, snapshot revision and record id;
+- validity type `NON_EXPIRING`; or
+- validity type `EXPIRING` with `usableUntil`.
 
-| Local consumer state | Meaning |
-|---|---|
-| `READY` | Selected Dataset is `READY` or safely `DEGRADED`; local snapshot and clock are safe |
-| `UNAVAILABLE` | Dataset, local snapshot, schema, authorisation, clock, or safety guard prevents selection |
+For the same binding, snapshot revision and record, the claim is identical.
+Dispatch copies the prebuilt claim into the normal `WorkItem`; it performs no
+hashing, signing, remote call, acknowledgement or evidence write. It adds no
+synchronous dependency: per-item work is a field copy and the expiry comparison
+already required for local selection. The claim is not proof of SUT correctness.
+Normal workers preserve it with the `WorkItem`. The final SUT-calling boundary
+rejects an expiring item when its local validity cannot cover the configured
+maximum invocation duration.
 
-Consumer state never changes Dataset ownership. Failure in one consumer does
-not mutate the shared Dataset or another consumer's snapshot.
+Snapshot refresh is background work:
 
-## Consumption evidence
+1. Fetch bounded, keyset-paged records at one PostgreSQL-backed revision.
+2. Verify Dataset id, binding, revision, schema, page digests, whole-snapshot
+   digest, record count, byte limit and validity horizon.
+3. Build the next immutable view outside request threads.
+4. Publish the complete view with one atomic reference replacement. Existing
+   readers finish on the old immutable view.
+5. On refresh failure, keep the last verified view only while its records
+   remain locally safe. Never extend validity.
 
-### Admission scope
+A consumer process starts traffic only after loading a verified snapshot. A
+temporary control-plane failure does not stop an already admitted consumer
+while its current snapshot remains safe.
 
-A consumer binding requiring proof declares:
+## Continuous operation and HA
 
-```yaml
-consumptionEvidence:
-  accountingPolicy: ONE_TO_ONE
-```
+- `providerRunId` belongs to the logical swarm run, not a worker process.
+  Worker replacement or restart receives the same id and resumes only its
+  durable grants. An explicitly new provider run receives a new id and Dataset.
+- Consumer runs remain pinned to their frozen `datasetId` across worker
+  restarts. If that Dataset is unsafe, the run stops dispatch; it never selects
+  another Dataset.
+- Orchestrator replicas claim Dataset background work through PostgreSQL lease
+  rows. Each successful acquisition increments a fencing token. Every
+  background mutation compares the current token in the same transaction;
+  work from an expired owner is rejected.
+- PostgreSQL replication, failover, backup, restore and recovery objectives are
+  infrastructure responsibilities. The application does not implement a
+  database fallback.
 
-The frozen path must have one Managed Dataset source, preserve exactly one
-Selection Claim through the path, and have one terminal SUT-attempt boundary.
-Fan-out, filtering, joins, sampling, multiple terminal boundaries, or live
-topology changes fail evidence admission. This restriction applies to MVP
-evidence only, not PocketHive topology in general.
+Availability is a closed enum. Orchestrator evaluates authority-side state for
+candidate admission. Each admitted consumer evaluates local state from its
+snapshot and last authority observation; Orchestrator does not claim to know
+local memory state.
 
-### Evidence Frames
+| State | Orchestrator candidate rule | Admitted consumer rule | Behaviour |
+|---|---|---|---|
+| `READY` | At least `targetReady` records are renewal-ready and refill/storage checks are within limits. | A verified snapshot has at least `targetReady` records safe through the invocation horizon and authority state is current. | New admission and dispatch are allowed. |
+| `DEGRADED` | At least `minimumReady` records are safe, but supply is below target or provider/refill/storage health is late within tolerance. | A verified snapshot has at least `minimumReady` safe records, but refresh or authority state is late, unknown or not `READY`. | New admission stops; this consumer continues dispatch. |
+| `UNAVAILABLE` | Fewer than `minimumReady` records are safe, integrity or authorisation fails, or the last authority observation exceeds tolerance. | Fewer than `minimumReady` local records are safe, snapshot integrity or authorisation fails, or records cannot cover the invocation horizon. | New admission stops; only a consumer whose own state is `UNAVAILABLE` stops dispatch. |
 
-Only the Dataset source and terminal SUT-attempt boundary emit Evidence Frames.
-Intermediate SDK hops validate and preserve the claim without accounting.
+For an existing consumer, local safety is decisive during a temporary
+control-plane outage. A central status change alone does not revoke a still
+valid immutable snapshot. An explicit operator stop still stops the run.
 
-Measured threads update in-memory counters only. A separate bounded worker
-flushes cumulative frames. Evidence emission never blocks selection, RabbitMQ
-acknowledgement, worker invocation, or a SUT call.
+Administrative qualification evidence is not an MVP runtime dependency. A
+future evidence expiry may block new admission, but MUST NOT unexpectedly stop
+already admitted traffic that remains safe under the frozen contract.
 
-Each frame includes:
+## Capacity and overload protection
 
-- frame identity, sequence, idempotency key, payload digest, emission time;
-- swarm, run, role, worker instance, process epoch, image, and SDK identity;
-- boundary `DATASET_SOURCE | SUT_ATTEMPT`, binding, Dataset, snapshot,
-  topology, accounting policy, and bucket identity;
-- observed interval, `completeThrough`, and TrustedClock state; and
-- the boundary's cumulative populations: source `selected`; terminal
-  `sutStarted`, `rejectedExpired`, `rejectedInvalid`, and
-  `duplicateObserved`.
+Admission fails before provisioning when any of these is false:
 
-Each population carries `count` and `tokenSum256`, the unsigned modular sum of
-Selection Claim ids. It detects accidental loss, duplication, or substitution
-without storing record ids, but not a malicious worker.
+- count thresholds and lifecycle fields are valid;
+- expiring data has sufficient `replacementHeadroom` and provider replacement
+  capacity;
+- `1 <= batchSize <= maximumSupportedBatchSize` for the selected adapter;
+- snapshot memory satisfies
+  `2 * maximumSnapshotBytes + snapshotDecodeOverheadBytes <= snapshotMemoryBudgetBytes`;
+  and
+- configured dispatch, provider, PostgreSQL connection and storage limits fit
+  the selected capability profile.
 
-Frames are cumulative per process epoch. Exact replay is idempotent; changed
-replay, sequence gaps, counter resets, identity changes, or decreasing
-`completeThrough` invalidate the epoch. Orchestrator subtracts frames to derive
-window populations.
+There are no unbounded Dataset queues. Refill grants and provider in-flight
+items are capped. Snapshot refresh is single-flight and coalesces a later
+request instead of queueing refresh tasks. Consumer dispatch has an explicit
+in-flight bound; when downstream capacity is full it pauses through normal
+backpressure rather than allocating more work or selecting alternate data.
+Any normal RabbitMQ work queue used by the scenario must have explicit length
+or byte limits. Overflow must signal pause/rejection; it must not silently drop
+or reroute work.
 
-M0 must add a closed Evidence Frame schema and exact ingestion contract before
-implementation.
+Consumer `ratePerSec` is workload supply, not record-depletion demand. Refill
+capacity is driven by expiry/replacement cohorts only.
 
-### Window finalisation
+Required metrics and alerts are:
 
-The frozen manifest and runtime timeline define expected source/terminal
-workers and epochs. MCP cannot override them; intermediate frames are rejected.
+- live, renewal-ready, stored, deficit, active-grant and stale-grant counts;
+- replacement headroom, refill request/completion rate and refill latency;
+- snapshot revision, age, records, bytes, refresh failures and time-to-unsafe;
+- dispatch offered, accepted, paused and rejected, plus in-flight depth;
+- lease acquisition, fencing rejection, transaction latency and database
+  errors; and
+- availability state and closed reason code.
 
-Orchestrator checks both count and `tokenSum256` across the two boundaries:
+Alerts fire before headroom, snapshot validity or bounded queue capacity is
+exhausted. Metrics and logs contain ids and counts, never record values or
+secrets.
 
-```text
-selectedDuringWindow + inFlightAtStart
-  = sutStartedDuringWindow
-  + terminalRejectedDuringWindow
-  + inFlightAtEnd
-```
+## Security
 
-A final window is bucket-aligned, has unchanged binding/topology, continuous
-expected epochs through `windowEnd`, elapsed evidence lag, qualified frames,
-and `SYNCED` clocks.
-
-| Verdict | Meaning |
-|---|---|
-| `CONFORMING` | Final window; qualified source and terminal frames complete; all scope, claim, clock, and population checks pass; at least one selection occurred; no invalid, expired, missing, or duplicate terminal item |
-| `NON_CONFORMING` | Complete evidence proves a contract violation |
-| `INSUFFICIENT_EVIDENCE` | Window is not final or evidence/scope is incomplete, stale, unqualified, inactive, or unsupported; never a pass |
-
-Reason codes are a closed enum. They must distinguish at least window not
-finalised, missing source or terminal epoch, sequence gap, topology change,
-clock/qualification failure, no active consumption, no selection,
-binding/claim failure, expiry at SUT, population mismatch, and duplicate
-terminal attempt.
-
-### Product API and MCP
-
-M0 must add these proposed contracts to the canonical owners:
-
-- `POST /api/managed-datasets/evidence-frames` — service-authenticated,
-  idempotent frame ingestion;
-- `GET /api/managed-datasets/consumption-evidence` — exact `swarmId`, `runId`,
-  `bindingRef`, `windowStart`, and `windowEnd`; and
-- `managed_dataset_consumption_evidence_get` — PocketHive MCP read-only facade
-  with the same five required inputs.
-
-MCP returns Orchestrator's verdict unchanged. It never recomputes or falls back
-to logs, taps, RabbitMQ, metrics, or database reads. `CONFORMING` passes,
-`NON_CONFORMING` fails, and `INSUFFICIENT_EVIDENCE` blocks.
-
-Responses contain scope, verdict, reason codes, finalisation, counts/checks,
-the frozen `datasetId`, provider and consumer Qualification Evidence digests,
-and frame-set digest. They never contain raw records, claims, payloads,
-credentials, or secrets.
-
-## Capacity, persistence, and resilience
-
-One versioned capability profile explicitly sets all polling, retry, timeout,
-clock, grant, snapshot, memory, connection, evidence, retention, and row/byte
-limits. Values do not default, clamp, or auto-tune.
-
-Admission calculates aggregate demand across all consumers of each shared
-Dataset and rejects
-when any of these cannot fit:
-
-- two snapshots plus decode/runtime overhead for every consumer replica;
-- provider refill rate and in-flight work;
-- largest expiry cohort inside its renewal window;
-- PostgreSQL locks, connections, storage, evidence, and retention budgets; or
-- Orchestrator control and journal reserves.
-
-PostgreSQL is authoritative. Claim, commit, snapshot, frame, and retention
-operations use bounded transactions, durable idempotency, leases, and fencing.
-Hydration uses keyset pagination. Retention runs in small batches and never
-deletes records protected by an active snapshot lease.
-
-## Security and observability
-
-- Authorise Dataset, binding, run, and evidence-window scope on every API.
-- Treat ids, cursors, templates, and record fields as hostile input.
-- Resolve SUT egress only through approved endpoints.
-- Keep credentials in the existing private configuration path.
-- Redact logs, metrics, journal, UI, MCP, and evidence.
-- Expose readiness, refill circuit, snapshot age, provider progress, clock
-  state, frame lag, and evidence verdict without exposing records.
-- Use `correlationId` for tracing and separate idempotency keys for mutation
+- Authorise Dataset, binding, SUT and run scope on every control-plane call.
+- Validate record schema, sizes, cursors, ids and template references as
+  hostile input.
+- Resolve SUT endpoints and secret references through existing approved paths
+  before traffic starts. Never store resolved credentials in records,
+  snapshots, claims, logs or metrics.
+- Use `correlationId` for tracing and distinct idempotency keys for mutation
   replay.
 
 ## Delivery plan
 
 | Milestone | Deliverable | Exit |
 |---|---|---|
-| M0 — contracts | Closed schemas for Dataset creation, compatible-Dataset listing, Create Swarm selection, runtime configs, claims, frames, verdicts; canonical REST and MCP contracts; capability profile | Contract owners and team approve; implementation may start |
-| M1 — authority | PostgreSQL records, grants, receipts, snapshots, frames, retention, authorisation | Contract, transaction, restart, and concurrency tests pass |
-| M2 — worker I/O | Three adapters, local snapshots, Selection Claim guards, TrustedClock, background frames | Provider and consumer scenario proves bounded runtime behaviour |
-| M3 — product proof | MCP/UI evidence views and operational status | Security, resilience, consumption-evidence, and performance gates pass |
+| M0 — contracts | Closed Dataset, Create Swarm selection, adapter config, snapshot, grant, receipt, claim, availability and capability schemas | Canonical owners and team approve before code starts |
+| M1 — authority | PostgreSQL records, revisions, grants, receipts, leases, fencing and bounded APIs | Transaction, concurrency, restart and replica tests pass |
+| M2 — adapters | Refill `WorkInput`, Dataset `WorkOutput`, consumer `WorkInput`, local snapshots and expiry guard | Shared provider/consumer scenario passes functional and overload tests |
+| M3 — continuous-use release | Metrics, alerts, security and 24-hour resilience qualification | Refill, expiry, restart, outage and soak gates pass |
+| Future — evidence | Optional qualification, consumption evidence, MCP views, approvals and governance integration | Separate design with no bootstrap cycle or measured-path dependency |
 
 ## Acceptance criteria
 
-The MVP is releasable only when:
+The MVP is releasable only when tests through official product APIs prove:
 
-1. unsupported or incomplete configuration fails before provisioning;
-2. provider and consumer adapters use the normal PocketHive pipeline;
-3. concurrent provider replicas cannot exceed one shared Dataset's `maximumReady`;
-4. durable receipt and idempotency rules survive restart and ambiguous replies;
-5. each Managed Dataset retains one immutable provider identity and is never
-   rebound;
-6. two consumer swarms can share one Dataset without cloning records,
-   interfering with each other, or combining evidence scopes;
-7. Create Swarm lists only compatible Datasets, requires explicit selection,
-   and rejects stale or unavailable choices at admission;
-8. consumer selection remains local and safe across refresh and restart;
-9. invalid or expired Selection Claims fail before SUT invocation;
-10. background evidence cannot slow or block the measured path;
-11. Orchestrator returns the correct three-state verdict for loss, duplication,
-   expiry, restart, late frames, and clean windows;
-12. MCP returns that exact verdict and fails closed without the product API;
-13. synthetic record content never appears in evidence or logs; and
-14. capacity, security, replica-safety, and retention tests pass through
-    official product APIs.
+1. invalid thresholds, lifecycle fields, headroom, batch size, memory or refill
+   capacity fail before provisioning;
+2. provider refill input and Dataset output are separate adapters on the first
+   and terminal bees, and the consumer input requires `bindingRef` and
+   `ratePerSec` under `managedDataset`;
+3. concurrent consumer swarms reuse the same immutable records without
+   depletion, checkout, use counts or cross-consumer mutation;
+4. repeated provider create/grant/receipt requests are idempotent and changed
+   replay fails;
+5. stale grants recover capacity, reject late receipts and perform no SUT
+   reconciliation;
+6. expiring cohorts refill before expiry without exceeding `maximumReady` or
+   `maximumStored` during replacement overlap;
+7. a provider worker restart preserves `providerRunId`, while a new provider
+   run creates a new Dataset;
+8. two Orchestrator replicas cannot both mutate background state under one
+   lease, and stale fencing tokens are rejected;
+9. a consumer stays on its exact `datasetId`; Dataset or control-plane failure
+   never causes substitution;
+10. a fully verified snapshot replaces the old view atomically, a failed
+    refresh preserves only a still-safe view, and invalid or expired records do
+    not reach the SUT boundary;
+11. packet-level dependency tests show no PostgreSQL, Orchestrator, Scenario
+    Manager or credential-provider calls on the measured path;
+12. `READY`, `DEGRADED` and `UNAVAILABLE` transitions match this specification,
+    including safe continuation during a temporary control-plane outage;
+13. overload tests reach configured bounds, apply backpressure and keep queue,
+    memory and transaction use within limits; and
+14. a 24-hour soak covers provider and consumer process restarts, two expiry
+    and refill cycles, one temporary control-plane outage and one PostgreSQL
+    failover exercise supplied by the deployment environment.
 
-Required test families:
+## Remaining risks
 
-| Area | Minimum evidence |
-|---|---|
-| Contracts | Closed-field, enum, digest, candidate-selection, boundary, and generated-type tests |
-| Refill | Concurrent grants, idempotent replay, uncertain effects, circuit, provider loss |
-| Sharing | Two swarms select one Dataset; isolated snapshots, failures, authorisation, and evidence |
-| Snapshots | Paging, digest, expiry, atomic swap, failed refresh, restart |
-| Claims | Canonical JSON, digest, hop preservation, expiry guard, hostile input |
-| Frames | Cumulative counters, token sums, replay conflict, gaps, restart epochs |
-| Verdicts | Clean, missing, late, topology change, loss, duplicate, invalid, expired |
-| Resilience | PostgreSQL timeout/deadlock/full disk, stale fences, clock loss |
-| Security | Object scope, egress, redaction canaries, secret scan |
-| Performance | Feature-off comparison, refill/expiry bursts, 24-hour soak |
-
-Continuous-use qualification requires at least 24 hours, two expiry/refill
-cycles, and one purge cycle. The candidate profile of 50,000 target records,
-55,000 maximum, two consumer swarms, and 1,000 requests/second remains
-unqualified until those tests pass.
-
-## Risks and open gates
-
-- Dataset Space and Scenario Binding are still proposed architecture.
-- Canonical schemas, REST endpoints, MCP tool contract, and shared constants do
-  not yet exist.
-- The current deployment is not HA-qualified.
-- `tokenSum256` is accidental-corruption evidence, not malicious-worker
-  attestation.
-- `ONE_TO_ONE` excludes valid complex scenarios from MVP proof; extending proof
-  requires a separate accounting design.
+- Shared reuse is safe only when the scenario's SUT contract tolerates
+  concurrent repeated use. The MVP does not detect a false declaration.
+- A stale provider operation may leave an unrecorded SUT object. The MVP
+  deliberately does not reconcile it.
+- PostgreSQL HA and the proposed contracts are not yet implemented or
+  qualified.
+- The Selection Claim supports local expiry safety and diagnostics; it does not
+  prove end-to-end consumption or resist a malicious worker.
 
 ## References
 
 - [PocketHive architecture](../ARCHITECTURE.md)
-- [Orchestrator REST contract](../ORCHESTRATOR-REST.md)
-- [WorkItem envelope schema](../spec/workitem-envelope.schema.json)
-- [SUT, Dataset Space, and Simulation Program model](../architecture/sut-dataset-simulation-model.md)
 - [Scenario contract](../scenarios/SCENARIO_CONTRACT.md)
-- [Worker capability catalogue](../architecture/workerCapabilities.md)
-- [Correlation and idempotency](../correlation-vs-idempotency.md)
-- [RFC 8785 JSON Canonicalization Scheme](https://www.rfc-editor.org/rfc/rfc8785)
-- [OpenTelemetry metrics data model](https://opentelemetry.io/docs/specs/otel/metrics/data-model/)
+- [Worker SDK](../../common/worker-sdk/README.md)
+- [SUT, Dataset Space and Simulation Program model](../architecture/sut-dataset-simulation-model.md)
+- [PocketHive correlation and idempotency](../correlation-vs-idempotency.md)
+- [AWS: make mutating operations idempotent](https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_prevent_interaction_failure_idempotent.html)
+- [PostgreSQL explicit locking](https://www.postgresql.org/docs/current/explicit-locking.html)
+- [PostgreSQL high availability, load balancing and replication](https://www.postgresql.org/docs/current/high-availability.html)
+- [Kubernetes leases and leader election](https://kubernetes.io/docs/concepts/architecture/leases/)
+- [Java 21 `AtomicReference`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/util/concurrent/atomic/AtomicReference.html)
+- [RabbitMQ flow control](https://www.rabbitmq.com/docs/flow-control)
+- [AWS: fail fast and limit queues](https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_mitigate_interaction_failure_fail_fast.html)
+- [AWS: rely on the data plane during control-plane failure](https://docs.aws.amazon.com/wellarchitected/latest/framework/rel_withstand_component_failures_avoid_control_plane.html)
