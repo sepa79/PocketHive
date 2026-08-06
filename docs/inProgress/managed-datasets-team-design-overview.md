@@ -30,8 +30,9 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   identity, state and lease only, including derived input; workers resolve
   immutable payload from local memory.
 - Revision hints mark a binding dirty. Controller reconciliation publishes only
-  the latest revision after a required minimum interval; worker background polls
-  load it. Failure preserves the old safe snapshot.
+  the latest revision. A minimum start interval and single-flight export bound
+  the rate; worker background polls load it. A retention grace protects slow
+  loads, and capacity pressure blocks publication instead of unsafe deletion.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context
@@ -61,7 +62,7 @@ flowchart LR
 | Source, Groups, allocation, lifecycle and mappings | Provider Scenario Binding |
 | Requirements and exact selection | Consumer template/binding and Create Swarm |
 | Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
-| Snapshot read, file publication and worker status aggregate | Swarm Controller |
+| Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
 
 ## Essential definitions
 
@@ -107,15 +108,19 @@ and the M2c/M2d capabilities remain required. All operational gates must pass.
 Local snapshots keep workers database-free and the measured path fast. The
 single Controller needs a restricted credential and explicit publication and
 recovery. Full snapshots trade simplicity for operating-horizon bandwidth,
-filesystem operations and all-worker restart fan-out; admission must fund them.
+Controller/worker filesystem operations, safe retention and all-worker restart
+fan-out; admission must fund them.
 Loaded workers may survive a short Controller outage, which is continuity rather
 than high availability. Derivation and `EXCLUSIVE_LEASE` still require
 concurrency, failure and soak qualification.
 
 ## Next step
 
-Approve the Release 1 model, then complete the M0 executable Scenario, worker,
-API, WorkItem, status and snapshot contracts before runtime implementation.
+Approve the Release 1 model. M0 then activates required
+`managedDatasetRequirements` under a new Scenario Protocol major, migrates every
+shipped scenario with requirements or `[]`, and makes Scenario Manager the only
+authoring validator with preserved version/digest evidence. Complete the
+remaining executable contracts before runtime implementation.
 
 ## Technical detail
 

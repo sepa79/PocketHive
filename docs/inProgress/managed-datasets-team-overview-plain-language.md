@@ -86,10 +86,18 @@ When an authority revision advances, Orchestrator sends the Controller a hint.
 The hint marks the binding dirty. The Controller also checks authoritative
 metadata on a bounded schedule, so a lost hint cannot prevent refresh. It
 publishes only the latest observed revision after a required minimum interval,
-preventing continuous back-to-back full exports. Workers poll `ACTIVE.json` on
-an explicit jittered background interval and atomically load a verified newer
-generation. Refresh failure preserves the old safe snapshot; filesystem events
-are not the correctness mechanism.
+which limits publication start rate. If one export lasts longer than the
+interval, the next may start when it finishes, so admission budgets both. Workers
+poll `ACTIVE.json` on an explicit jittered background interval and atomically
+load a verified newer generation. Refresh failure preserves the old safe
+snapshot; filesystem events are not the correctness mechanism.
+
+Inactive snapshots remain for a qualified grace period covering storage
+visibility, a hard worker-load maximum and clock skew. A slow load aborts safely.
+Active and live staging revisions are never removed; if protected revisions fill
+the available space, PocketHive blocks another publication instead of deleting
+one early. Snapshot Reader grants also cover the hard export and completion
+deadline; expiry never activates partial output.
 
 Workflow state and leases always come from bounded background authority calls,
 not snapshot files. An already-loaded safe worker may continue through a short
@@ -138,12 +146,19 @@ replay is the first implementation foundation, not the whole release. Mutable
 `WORKFLOW + EXCLUSIVE_LEASE` remains required parity. All capability and
 operational qualification milestones must pass before Release 1 is complete.
 
+Before implementation, PocketHive activates Dataset requirements under a new
+Scenario Protocol major because every scenario must declare requirements or
+`[]`. All shipped scenarios migrate together. Scenario Manager is the only
+authoring validator; UI, MCP, CLI, CI and agents use its result and
+version/digest evidence instead of running their own checks.
+
 Implementation starts only after one canonical contract owns every Scenario,
 worker, API, Context, status and snapshot shape. Production also requires
 concurrency, failure, restart, storage, capacity and every-node reschedule tests;
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
 worst-case all-worker restart, filesystem operation and operating-horizon export
-tests; pilot-powered paired performance trials; and a target-scale 24-hour soak.
+tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests;
+pilot-powered paired performance trials; and a target-scale 24-hour soak.
 
 Release 1 has no record expiry, reclamation or purge. Deployment limits and an
 approved retention runbook must fund every stored record within the declared
