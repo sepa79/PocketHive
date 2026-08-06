@@ -68,6 +68,9 @@ supported. Every source and authority entry uses the same bounded parser,
 schema validator and canonical JSON writer. It rejects ambiguous or oversized
 JSON. Schemas use a small approved keyword set; regex, external lookups and
 embedded-content evaluation are excluded so validation cost stays predictable.
+Every nested schema must state a type or exact value. Objects explicitly close
+their fields or type their map values; arrays explicitly type every item. Empty,
+descriptive-only and implicitly open schemas are invalid.
 Raw input bytes and the final canonical bytes have separate limits. Precise
 identifiers or higher-precision numbers use schema-typed strings.
 The WorkItem encoding must use the exact declared spelling and Managed Dataset
@@ -115,6 +118,10 @@ new records at its stored limit, so its operating horizon must be capacity-funde
 PostgreSQL is authoritative for Managed Dataset records, state, Views, leases,
 imports, lineage and idempotency. Redis remains authoritative only for the
 existing Redis Dataset option.
+
+Each authority-serving Orchestrator replica reserves limits for queued record
+bytes and active validation memory. One replica must sustain the complete
+admitted validation rate, including hot-replica and failover tests.
 
 Orchestrator grants a frozen publication but never proxies its bytes. The Swarm
 Controller reads it through one restricted PostgreSQL function and writes it to

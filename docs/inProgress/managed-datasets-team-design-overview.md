@@ -35,11 +35,13 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   create its Dataset through an explicit output binding. Requirements and those
   input/source bindings map one-to-one. Release 1 records are closed, bounded,
   non-null JSON objects. Every schema uses one small cost-bounded keyword set;
-  regex and external/content evaluation are excluded. Every source and authority
-  ingress uses one strict validation/canonicalisation path; the WorkItem decoder
-  rejects an invalid encoding rather than treating it as UTF-8. Groups and fixed
-  workflow Views select subsets; normal scenario steps may shape a downstream
-  request without changing the canonical snapshot record.
+  every applied schema resolves to an explicit type or exact value, and every
+  object/array declares its shape. Empty, implicitly open, regex and
+  external/content schemas are excluded. Every source and authority ingress uses
+  one strict validation/canonicalisation path; the WorkItem decoder rejects an
+  invalid encoding rather than treating it as UTF-8. Groups and fixed workflow
+  Views select subsets; normal scenario steps may shape a downstream request
+  without changing the canonical snapshot record.
 - PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
   bounded function and publishes an atomic revision. Workflow claims return
   identity, state and lease only, including derived input; workers resolve
@@ -131,7 +133,7 @@ and carried to the SUT-attempt boundary.
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
 | Versioned bundle requirements extension with fail-closed admission | A Scenario Protocol migration or silently ignored file |
-| Closed, cost-bounded JSON-object schemas and records through one validation path | Regex/external schema evaluation, open roots, other JSON roots, binary records or Dataset projection expressions |
+| Explicitly typed, closed and cost-bounded JSON-object schemas through one validation path | Empty/implicitly open schemas, regex/external evaluation, other JSON roots, binary records or Dataset projection expressions |
 | Concurrent immutable shared replay or exclusive workflow state | Shared replay combined with mutable Record State or Views |
 | Fixed `SYNTHETIC_NON_SENSITIVE` scope, counts and operational status | Record browsing/search, transition history or per-Dataset classification policy |
 
@@ -167,11 +169,15 @@ bundles need no migration and remain creatable in either rolling-upgrade order.
 Only Managed Dataset discovery and admission are disabled until Scenario Manager
 and Orchestrator both advertise requirements version 1. Bounded operational
 status is not record inspection or historical/audit reconstruction.
+Each authority-serving Orchestrator replica reserves bounded validation queue
+and working memory and qualifies the complete admitted validation rate. This
+costs headroom but keeps hot-replica and failover behaviour deterministic.
 
 ## Next step
 
-Approve the Release 1 model and staged delivery. M0 defines the cost-bounded
-Schema Profile and Record Codec measurements, then
+Approve the Release 1 model and staged delivery. M0 defines the constrained
+Schema Profile grammar, cost budget and per-replica Record Codec measurements,
+then
 `datasets/requirements.yaml` version 1, its single Scenario Manager parser and
 validator, the tagged `ABSENT`/`PRESENT` projection, authoring-contract
 advertisement and the fail-closed Scenario Manager/Orchestrator version and

@@ -58,6 +58,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Named identity | Every Dataset freezes a human-readable `name` and opaque `datasetId`. Groups never replace either. |
 | Frozen contract | Dataset name, SUT Environment, Dataset Space, Profile, schemas, Groups, Views, transitions, source and allocation never change for a runtime Dataset. |
 | One schema | Every Dataset freezes one resolved Draft 2020-12 record schema. `WORKFLOW` also freezes one state schema. |
+| Semantically constrained schema | Every applied schema resolves to an explicit type or exact value. Empty, annotation-only, implicitly open object and unconstrained array schemas fail publication. |
 | Cost-bounded schema | Every schema uses the closed Managed Dataset Schema Profile. Scenario Manager rejects unsupported keywords and over-budget evaluation graphs before publication; runtime validation performs no regex, network or content evaluation. |
 | Closed JSON-object records | Every Release 1 record is one non-null JSON object. Its resolved root declares `type: object` and `unevaluatedProperties: false`; array, primitive, `null` and binary roots fail. |
 | One strict record codec | Every source and authority ingress uses the same bounded Managed Dataset Record Codec for strict parsing, schema validation and RFC 8785 canonicalisation. The canonical WorkItem decoder validates the exact wire encoding before enum conversion and never trims, normalises or defaults it. |
@@ -178,7 +179,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Dataset Requirements Document | Optional versioned Scenario Bundle extension at `datasets/requirements.yaml`; when present it declares one or more Managed Dataset consumer requirements | `scenario.yaml`, Dataset Definition or concrete Create Swarm selection | Requirements Document |
 | Dataset Definition Bundle | Mounted package containing `dataset.yaml`, `record.schema.yaml` and optional `state.schema.yaml` | Scenario Bundle | Dataset Definition |
 | Dataset Schema Contract | Reusable immutable schema at one exact version | Runtime record or local `$defs` | Schema Contract |
-| Managed Dataset Schema Profile | Closed Draft 2020-12 keyword/value subset plus static evaluation budget compiled by Scenario Manager | General JSON Schema or runtime validator configuration | Schema Profile |
+| Managed Dataset Schema Profile | Closed Draft 2020-12 constrained-schema grammar, keyword/value subset and static evaluation budget compiled by Scenario Manager | General JSON Schema or runtime validator configuration | Schema Profile |
 | Managed Dataset Provider Source | Required tagged provider-work source: `SCHEDULER`, `CSV`, `REDIS` or `MANAGED_DATASET` | Consumer input or fallback chain | Provider Source |
 | Managed Dataset | Named Orchestrator-owned runtime parent created by one provider run and usable by compatible consumers | Redis list, queue or Group | Dataset |
 | Dataset Group | Frozen typed partition under one Dataset, identified by `groupId` and `groupKey` | Dataset name or query | Group |
@@ -366,19 +367,57 @@ Profile. The profile permits only:
   `maxItems`, `minProperties`, `maxProperties`, `required` and
   `dependentRequired`; and
 - structural applicators: `properties`, `additionalProperties`,
-  `propertyNames`, `prefixItems`, `items`, `unevaluatedProperties` and
-  `unevaluatedItems`.
+  `propertyNames`, `prefixItems`, `items` and `unevaluatedProperties`.
 
 All other keywords fail publication. In particular, `pattern`,
 `patternProperties`, `format`, `anyOf`, `oneOf`, `not`, `if`, `then`, `else`,
 `dependentSchemas`, `contains`, `uniqueItems`, `$anchor`, `$dynamicAnchor`,
 `$dynamicRef`, `$vocabulary`, `contentEncoding`, `contentMediaType` and
-`contentSchema` are forbidden at every depth. `$schema`, `$id` and `$defs` occur
-only at a document root; `$schema` names Draft 2020-12 and `$id` equals the
-package's canonical PocketHive id. Boolean subschemas are forbidden except
-closed `false` values on structural applicators. A later Profile extension may
-add one bounded keyword only with an executable cost, interoperability and
-qualification contract; there is no runtime switch.
+`contentSchema` are forbidden at every depth. `unevaluatedItems` is also
+forbidden; array remainder behaviour uses `items`. `$schema`, `$id` and `$defs`
+occur only at a document root; `$schema` names Draft 2020-12 and `$id` equals
+the package's canonical PocketHive id. Boolean subschemas are forbidden except
+closed `false` values on `items` or `unevaluatedProperties`. A later Profile
+extension may add one bounded keyword only with an executable semantic, cost,
+interoperability and qualification contract; there is no runtime switch.
+
+Every schema object that can apply to an instance has one semantic anchor:
+
+- `type` names one non-null type, or exactly that type plus `null`;
+- `const` fixes one exact value;
+- non-empty `enum` contains one non-null value type and may also contain `null`;
+- `$ref` resolves to one exact anchored schema; or
+- non-empty `allOf` contains independently anchored branches whose type
+  intersection is non-empty and resolves to one non-null type, optionally plus
+  `null`.
+
+Annotations do not provide an anchor. Empty, annotation-only, otherwise
+always-valid, ambiguous-union and contradictory schemas fail publication.
+Every declared `$defs` member and every schema beneath `properties`,
+`propertyNames`, `additionalProperties`, `prefixItems` or `items` follows the
+same rule. Type-specific keywords may appear only when the resolved non-null
+type matches: numeric bounds with `number` or `integer`, length bounds with
+`string`, array keywords with `array`, and object keywords with `object`.
+
+An object schema constrained only by `const` or `enum` needs no shape mode.
+Every other object schema explicitly uses one of these modes:
+
+- **closed object:** explicit `properties`, explicit `required` including `[]`,
+  and `unevaluatedProperties: false`; or
+- **typed map:** explicit `properties`, explicit `required` including `[]`, and
+  `additionalProperties` containing an anchored value schema.
+
+A closed object's direct `allOf` branches may be object composition fragments
+with explicit `type: object`, `properties` and `required`. Such a fragment may
+omit an openness keyword only when every path to it is that direct composition
+position beneath the closing `unevaluatedProperties: false`; it cannot be a
+record, property, map-value or array-item target by itself. No other object may
+omit its shape mode or use `additionalProperties: true`.
+
+An array schema constrained only by `const` or `enum` needs no item mode. Every
+other array schema uses either anchored `items` with no `prefixItems`, or
+non-empty anchored `prefixItems` plus explicit `items: false` or anchored
+`items`. No array relies on omitted item behaviour.
 
 Schemas may reference exact immutable
 `pockethive://dataset-contracts/<name>/<version>` contracts and local `$defs`.
@@ -398,9 +437,8 @@ Record and State roots declare `type: object` and
 `unevaluatedProperties: false`. Scenario Manager checks the resolved composed
 schema, not one fragment. `patternProperties` is always forbidden. A root
 `additionalProperties` rule cannot reopen arbitrary names. Authors place an
-extensible map under one declared property whose `additionalProperties` value is
-an object schema. Fragment-level `additionalProperties: false` does not replace
-root closure.
+extensible typed map under one declared property. Fragment-level
+`additionalProperties: false` does not replace resolved root closure.
 
 Scenario Manager is the only public authoring validator. Scenario, Dataset
 Definition and Schema Contract validation use its application services and
@@ -1578,9 +1616,9 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Snapshot limits | `maximumSnapshotBytes`, `maximumSnapshotChunkCount`, `maximumConcurrentSnapshotPublications`, `maximumConcurrentSnapshotWorkerLoads`, `maximumSnapshotPublicationBytesPerSecond`, `maximumSnapshotReadBytesPerSecond`, `maximumSnapshotExportsPerSecond`, `maximumPostgresSnapshotExportBytesPerSecond`, `maximumSnapshotReaderConnections`, `maximumSnapshotPageRecords`, `maximumSnapshotPageBytes`, `maximumRetainedSnapshotRevisionsPerBinding`, `maximumSnapshotCleanupOpsPerSecond` |
 | Refresh and SLO | `snapshotRevisionReconciliationInterval`, `snapshotRevisionReconciliationJitter`, `minimumSnapshotPublicationInterval`, `workerActiveReferencePollInterval`, `workerActiveReferencePollJitter`, `snapshotPublicationSlo`, `snapshotLoadStartupSlo`, `maximumSnapshotRefreshLatency`, `maximumSnapshotRefreshAttemptsPerRevision`, `snapshotRefreshRetryBackoff`, `snapshotRefreshFailureCooldown` |
 | Publication and retention time | `maximumSnapshotExportDuration`, `snapshotPublicationGrantDuration`, `snapshotReaderGrantSafetyMargin`, `maximumSnapshotLoadDuration`, `maximumStorageVisibilityDelay`, `inactiveSnapshotRetentionGrace`, `snapshotActivationEvidenceRetention` |
-| Qualified throughput | `qualifiedAuthorityRecordValidationsPerSecond`, `maximumManagedDatasetRecordValidationP99`, `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
+| Qualified throughput | `qualifiedAuthorityRecordValidationsPerSecondPerReplica`, `maximumManagedDatasetRecordValidationP99`, `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
 | Worker/filesystem | `maximumWorkerMemoryBytes`, `maximumWorkerSnapshotMemoryBytes`, `qualifiedWorkerBaseApplicationMemoryBytes`, `maximumWorkerDirectBufferMemoryBytes`, `minimumWorkerGcHeadroomBytes`, `maximumSnapshotDecodeIndexOverheadBytesPerWorker`, `maximumSnapshotGcPause`, `maximumManagedDatasetFilesystemBytes`, `maximumManagedDatasetFilesystemUtilisationPercent` and eligible-node storage capability |
-| Control plane | `maximumConcurrentManagedDatasetRecordValidations`, `maximumManagedDatasetValidationQueueDepth`, `maximumManagedDatasetValidationUtilisationPercent`, `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
+| Control plane | `maximumConcurrentManagedDatasetRecordValidations`, `maximumManagedDatasetValidationQueueDepth`, `maximumManagedDatasetValidationQueuedBytes`, `maximumManagedDatasetValidationWorkingMemoryBytes`, `qualifiedOrchestratorBaseApplicationMemoryBytes`, `minimumOrchestratorGcHeadroomBytes`, `maximumOrchestratorMemoryBytes`, `maximumManagedDatasetValidationUtilisationPercent`, `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
 
 Reservations use maximum record/state/lineage/membership bytes before dispatch.
 Completion cannot partially commit to fit capacity. Concurrent admission cannot
@@ -1596,7 +1634,18 @@ requiredAuthorityRecordValidationsPerSecond =
 
 requiredAuthorityValidationUtilisation =
   100 * requiredAuthorityRecordValidationsPerSecond
-  / qualifiedAuthorityRecordValidationsPerSecond
+  / qualifiedAuthorityRecordValidationsPerSecondPerReplica
+
+requiredAuthorityValidationMemoryBytesPerReplica =
+  maximumConcurrentManagedDatasetRecordValidations
+  * maximumManagedDatasetValidationWorkingMemoryBytes
+  + maximumManagedDatasetValidationQueuedBytes
+  + sum(admittedCompiledSchemaBytes)
+
+requiredOrchestratorMemoryBytesPerReplica =
+  qualifiedOrchestratorBaseApplicationMemoryBytes
+  + requiredAuthorityValidationMemoryBytesPerReplica
+  + minimumOrchestratorGcHeadroomBytes
 
 requiredActivationConfirmationRows(binding) =
   2  # latest checkpoint + one in-progress reservation
@@ -1668,14 +1717,29 @@ requiredPeakFilesystemWriteThroughput =
   sum(concurrentPublicationBytes) / snapshotPublicationSlo
 ```
 
-Admission requires `requiredAuthorityValidationUtilisation` not to exceed
-`maximumManagedDatasetValidationUtilisationPercent`. Authority validation uses
-one dedicated bounded executor and queue; it never runs on general control-plane
-or Controller-status threads and has no caller-runs fallback. Saturation returns
-`RATE_LIMITED` before mutation. Qualification drives provider and authority use
-of the same codec at twice the admitted ingress rate, using the largest record
-and highest-cost permitted schema, and must meet the declared p99 latency without
-starving control-plane work.
+`maximumManagedDatasetValidationUtilisationPercent` must be greater than zero
+and less than 100. Admission requires
+`requiredAuthorityValidationUtilisation` not to exceed it and
+`requiredOrchestratorMemoryBytesPerReplica` not to exceed
+`maximumOrchestratorMemoryBytes` on every authority-serving Orchestrator
+replica. Deployment admission never multiplies validation throughput by replica
+count: one qualified replica must sustain the complete admitted authority
+ingress, covering a hot replica and N-1 failover.
+
+Authority validation uses one dedicated bounded executor and queue; it never
+runs on general control-plane or Controller-status threads and has no caller-runs
+fallback. The queue retains only raw record bytes plus bounded request metadata,
+never parsed trees or canonical buffers. It enforces both
+`maximumManagedDatasetValidationQueueDepth` and
+`maximumManagedDatasetValidationQueuedBytes`; the byte limit counts the complete
+retained queue representation, including request metadata. Either limit returns
+`RATE_LIMITED` before mutation. `maximumManagedDatasetValidationWorkingMemoryBytes`
+covers one active validation's raw bytes, parsed tree, canonical buffer,
+validator state and bounded errors. Qualification drives the provider-to-authority
+path at twice admitted ingress with the largest record and highest-cost permitted
+schema, proves every authority replica stays within that working-memory bound,
+and meets the declared p99 latency without starving control-plane work. It also
+tests skew to one hot replica, replica loss and failover at the admitted rate.
 
 Release 1 has no wave-loading protocol. `applicableConcurrentWorkerLoads` is
 therefore every applicable worker that can restart or observe one activation
@@ -1799,7 +1863,7 @@ post-MVP shape becomes executable only at its named contract gate:
 | Contract | Canonical owner | Contract gate |
 |---|---|---|
 | Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` | M0 core; Profile extensions before their stage |
-| Schema Profile, static evaluation budget, record measurement points, validation executor and canonical bytes | `docs/spec/managed-dataset-schema-profile.schema.json`, `docs/spec/managed-dataset-api.schema.json` and one shared Managed Dataset Record Codec implementation | M0 |
+| Schema Profile grammar, static evaluation budget, record measurement points, per-replica validation memory/executor and canonical bytes | `docs/spec/managed-dataset-schema-profile.schema.json`, `docs/spec/managed-dataset-api.schema.json` and one shared Managed Dataset Record Codec implementation | M0 |
 | WorkItem `payloadEncoding` wire decoding | `docs/spec/workitem-envelope.schema.json` plus the single strict `WorkItemJsonCodec`/`WorkPayloadEncoding` path | M0 |
 | Dataset Requirements Document path, versioned shape, tagged projection, validation and version handshake | `docs/spec/managed-dataset-requirements.schema.json`, `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and the single Scenario Manager validator | M0 |
 | Provider binding | `docs/scenarios/SCENARIO_CONTRACT.md` plus `docs/architecture/workerCapabilities.md` and their single executable DTO/validator path | M0 `SCHEDULER`; source extensions before M2c/M2d |
@@ -1887,11 +1951,16 @@ Tests use official product APIs and prove:
    cannot change identity or create Groups. Resolved Record Schema roots require
    `type: object` and `unevaluatedProperties: false`; composed-schema tests prove
    undeclared root fields fail and named nested maps remain possible. The closed
-   Schema Profile accepts every permitted keyword/value form and rejects every
-   unsupported keyword at every depth. Adversarial tests cover regex keywords,
-   `format`, dynamic/external/content evaluation, nested combinators, repeated
-   references and every graph/branch/collection bound; over-budget publication
-   is atomic and leaves the last valid registry revision active. One
+   Schema Profile accepts every permitted anchored form and rejects empty,
+   annotation-only, mismatched-type, ambiguous-union and contradictory schemas.
+   Negative tests cover `{}`, `{"minimum": 0}`, scalar-accepting `properties`,
+   unconstrained `$defs`, implicitly open nested objects, missing/implicit
+   `required`, untyped map values, arrays with omitted or unconstrained items and
+   composition fragments consumed outside a closed parent. Adversarial tests
+   also cover unsupported keywords, regex, `format`, dynamic/external/content
+   evaluation, nested combinators, repeated references and every
+   graph/branch/collection bound; rejected publication is atomic and leaves the
+   last valid registry revision active. One
    cross-source conformance suite covers Scheduler output, CSV, Redis, Derivation
    and authority ingress. It accepts bounded schema-valid objects and rejects,
    where source-applicable, malformed UTF-8, duplicate names, trailing tokens,
@@ -1904,8 +1973,9 @@ Tests use official product APIs and prove:
    unknown values fail before enum conversion. Managed Dataset accepts the valid
    `utf-8` object and rejects valid `base64` with no fallback. Sustained
    largest-record/highest-cost-schema tests run provider plus authority
-   validation at twice admitted ingress, meet throughput and p99 limits, preserve
-   bounded queue/memory/GC use and prove control-plane work is not starved.
+   validation at twice admitted ingress, meet per-replica throughput and p99
+   limits, preserve the declared queue-item, queued-byte, working-memory and GC
+   bounds and prove control-plane work is not starved.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
    adapter/source with no migration or fallback. An absent Requirements Document
    plus `datasetSelections: []` works explicitly only with no Managed Dataset
@@ -2012,10 +2082,14 @@ Tests use official product APIs and prove:
 15. Concurrent admission treats every applicable worker as a simultaneous loader
     and applies mandatory peak/steady export, read/write bandwidth, Active
     Reference, worker-load, Controller publication, deactivation-marker, cleanup,
-    Activation Confirmation row/byte and total-memory calculations. It reaches
-    every storage, rate, memory, filesystem and transaction limit without
-    overcommit, eviction, evidence pruning, partial admission or impact to
-    existing safe consumers; alerts precede hard thresholds.
+    Activation Confirmation row/byte, validation queue-item/byte, active
+    validation working-memory and total-memory calculations. Validation
+    utilisation rejects zero, 100 and greater values. Every authority replica
+    sustains the complete admitted ingress within the utilisation and memory
+    limits; skew to one hot replica and N-1 failover do not overcommit or starve
+    control-plane work. Tests reach every storage, rate, memory, filesystem and
+    transaction limit without eviction, evidence pruning, partial admission or
+    impact to existing safe consumers; alerts precede hard thresholds.
 16. Maximum approved topology meets the 2% throughput/p95/p99 budget under the
     pilot-powered, predeclared paired-run method and passes startup, refresh, every-node
     reschedule, authority/storage impairment, PostgreSQL failover, Controller
