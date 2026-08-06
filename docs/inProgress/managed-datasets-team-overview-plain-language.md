@@ -68,8 +68,9 @@ supported. Every source and authority entry uses the same bounded parser,
 schema validator and canonical JSON writer. It rejects ambiguous or oversized
 JSON. Schemas use a small approved keyword set; regex, external lookups and
 embedded-content evaluation are excluded so validation cost stays predictable.
-Every nested schema must state a type or exact value. Objects explicitly close
-their fields or type their map values; arrays explicitly type every item. Empty,
+Every nested schema must state a type or exact value. Composed object schemas
+handle named fields first, then reject every extra field or apply one declared
+value schema to each extra field. Arrays explicitly type every item. Empty,
 descriptive-only and implicitly open schemas are invalid.
 Raw input bytes and the final canonical bytes have separate limits. Precise
 identifiers or higher-precision numbers use schema-typed strings.

@@ -366,20 +366,21 @@ Profile. The profile permits only:
   `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `minItems`,
   `maxItems`, `minProperties`, `maxProperties`, `required` and
   `dependentRequired`; and
-- structural applicators: `properties`, `additionalProperties`,
-  `propertyNames`, `prefixItems`, `items` and `unevaluatedProperties`.
+- structural applicators: `properties`, `propertyNames`, `prefixItems`, `items`
+  and `unevaluatedProperties`.
 
-All other keywords fail publication. In particular, `pattern`,
-`patternProperties`, `format`, `anyOf`, `oneOf`, `not`, `if`, `then`, `else`,
-`dependentSchemas`, `contains`, `uniqueItems`, `$anchor`, `$dynamicAnchor`,
-`$dynamicRef`, `$vocabulary`, `contentEncoding`, `contentMediaType` and
-`contentSchema` are forbidden at every depth. `unevaluatedItems` is also
-forbidden; array remainder behaviour uses `items`. `$schema`, `$id` and `$defs`
-occur only at a document root; `$schema` names Draft 2020-12 and `$id` equals
-the package's canonical PocketHive id. Boolean subschemas are forbidden except
-closed `false` values on `items` or `unevaluatedProperties`. A later Profile
-extension may add one bounded keyword only with an executable semantic, cost,
-interoperability and qualification contract; there is no runtime switch.
+All other keywords fail publication. In particular, `additionalProperties`,
+`pattern`, `patternProperties`, `format`, `anyOf`, `oneOf`, `not`, `if`, `then`,
+`else`, `dependentSchemas`, `contains`, `uniqueItems`, `$anchor`,
+`$dynamicAnchor`, `$dynamicRef`, `$vocabulary`, `contentEncoding`,
+`contentMediaType` and `contentSchema` are forbidden at every depth.
+`unevaluatedItems` is also forbidden; array remainder behaviour uses `items`.
+`$schema`, `$id` and `$defs` occur only at a document root; `$schema` names
+Draft 2020-12 and `$id` equals the package's canonical PocketHive id. Boolean
+subschemas are forbidden except closed `false` values on `items` or
+`unevaluatedProperties`. A later Profile extension may add one bounded keyword
+only with an executable semantic, cost, interoperability and qualification
+contract; there is no runtime switch.
 
 Every schema object that can apply to an instance has one semantic anchor:
 
@@ -394,7 +395,7 @@ Every schema object that can apply to an instance has one semantic anchor:
 Annotations do not provide an anchor. Empty, annotation-only, otherwise
 always-valid, ambiguous-union and contradictory schemas fail publication.
 Every declared `$defs` member and every schema beneath `properties`,
-`propertyNames`, `additionalProperties`, `prefixItems` or `items` follows the
+`propertyNames`, `unevaluatedProperties`, `prefixItems` or `items` follows the
 same rule. Type-specific keywords may appear only when the resolved non-null
 type matches: numeric bounds with `number` or `integer`, length bounds with
 `string`, array keywords with `array`, and object keywords with `object`.
@@ -405,14 +406,16 @@ Every other object schema explicitly uses one of these modes:
 - **closed object:** explicit `properties`, explicit `required` including `[]`,
   and `unevaluatedProperties: false`; or
 - **typed map:** explicit `properties`, explicit `required` including `[]`, and
-  `additionalProperties` containing an anchored value schema.
+  `unevaluatedProperties` containing an anchored value schema.
 
-A closed object's direct `allOf` branches may be object composition fragments
-with explicit `type: object`, `properties` and `required`. Such a fragment may
-omit an openness keyword only when every path to it is that direct composition
-position beneath the closing `unevaluatedProperties: false`; it cannot be a
-record, property, map-value or array-item target by itself. No other object may
-omit its shape mode or use `additionalProperties: true`.
+The selected `unevaluatedProperties` rule sits on the resolved object boundary
+that also evaluates its `$ref` and `allOf` composition. That boundary's direct
+`allOf` branches may be object composition fragments with explicit
+`type: object`, `properties` and `required`. A fragment omits the shape rule
+only when every path to it is that direct composition position beneath the
+resolved boundary; it cannot be a record, property, map-value or array-item
+target by itself. No other object may omit its shape mode, and
+`unevaluatedProperties: true` is forbidden.
 
 An array schema constrained only by `const` or `enum` needs no item mode. Every
 other array schema uses either anchored `items` with no `prefixItems`, or
@@ -430,15 +433,17 @@ must fit total `maximumCompiledSchemaNodes`, total
 `maximumSchemaEvaluationDepth`; each schema object must fit
 `maximumAllOfBranchesPerSchema`. Collection entries include every member of
 `$defs`, `properties`, `enum`, `required`, `dependentRequired` and
-`prefixItems`. Scenario Manager stores one compiled artifact and opaque
+`prefixItems`. A schema-valued `unevaluatedProperties` contributes one
+applicator branch and its complete reachable graph contributes to every
+applicable bound. Scenario Manager stores one compiled artifact and opaque
 `sha256:` digest; other components compare the digest and never recompile.
 
 Record and State roots declare `type: object` and
 `unevaluatedProperties: false`. Scenario Manager checks the resolved composed
-schema, not one fragment. `patternProperties` is always forbidden. A root
-`additionalProperties` rule cannot reopen arbitrary names. Authors place an
-extensible typed map under one declared property. Fragment-level
-`additionalProperties: false` does not replace resolved root closure.
+schema, not one fragment. `additionalProperties` and `patternProperties` are
+always forbidden. Record and State roots cannot use typed-map mode; authors
+place an extensible typed map under one declared property. Only the resolved
+object boundary owns `unevaluatedProperties`; composition fragments never do.
 
 Scenario Manager is the only public authoring validator. Scenario, Dataset
 Definition and Schema Contract validation use its application services and
@@ -1955,11 +1960,18 @@ Tests use official product APIs and prove:
    annotation-only, mismatched-type, ambiguous-union and contradictory schemas.
    Negative tests cover `{}`, `{"minimum": 0}`, scalar-accepting `properties`,
    unconstrained `$defs`, implicitly open nested objects, missing/implicit
-   `required`, untyped map values, arrays with omitted or unconstrained items and
-   composition fragments consumed outside a closed parent. Adversarial tests
-   also cover unsupported keywords, regex, `format`, dynamic/external/content
-   evaluation, nested combinators, repeated references and every
-   graph/branch/collection bound; rejected publication is atomic and leaves the
+   `required`, forbidden `additionalProperties`, untyped map values, arrays with
+   omitted or unconstrained items and composition fragments consumed outside a
+   resolved parent. Composed typed-map tests combine fixed fields from local
+   `$defs` references and exact external `$ref` targets through `allOf` with one
+   anchored `unevaluatedProperties` remainder. Declared fields use only their
+   declared schemas; only unevaluated fields use the remainder schema. A
+   declared-field fixture is valid under its own schema and invalid under the
+   remainder yet passes; valid and invalid remainder fixtures prove that only
+   the latter schema applies. Adversarial tests also cover unsupported keywords, regex,
+   `format`, dynamic/external/content evaluation, nested combinators, repeated
+   references and every graph/branch/collection bound; rejected publication is
+   atomic and leaves the
    last valid registry revision active. One
    cross-source conformance suite covers Scheduler output, CSV, Redis, Derivation
    and authority ingress. It accepts bounded schema-valid objects and rejects,

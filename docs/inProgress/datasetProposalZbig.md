@@ -292,7 +292,7 @@ authoritative.
 | Durable records shared by many swarms | One named Managed Dataset may serve zero or many compatible consumer swarms. | Reuses provider-created data without copying provider logic. |
 | One SUT scope | Dataset Space and Scenario Binding validate and freeze one SUT Environment. | Prevents cross-SUT selection and fallback. |
 | Name plus stable identity | Required `name` and opaque `datasetId`; Groups remain subordinate. | Keeps discovery human-readable and runtime identity stable. |
-| Generic versioned schema | One root schema composes exact immutable contracts and local `$defs` within an explicitly typed, closed and cost-bounded grammar. | Supports arbitrary domains without PocketHive business fields, implicit openness or unbounded evaluation. |
+| Generic versioned schema | One root schema composes exact immutable contracts and local `$defs` within an explicitly typed, composition-safe and cost-bounded grammar. | Supports arbitrary domains without PocketHive business fields, implicit openness or unbounded evaluation. |
 | PostgreSQL durability | PostgreSQL owns Managed Dataset runtime records, revisions, imports, state, Views and leases. | Provides atomic restart-safe authority. |
 | Direct bounded Controller snapshot read | Under a fenced grant, the Controller streams one immutable revision through the least-privilege PostgreSQL function adapter; Orchestrator never proxies bytes. | Keeps workers database-free without making Orchestrator a snapshot-byte bottleneck. |
 | Immutable payload | Payload is immutable in both canonical Profiles. | Keeps publication, caching and evidence deterministic. |
