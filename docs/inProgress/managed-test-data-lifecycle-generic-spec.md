@@ -60,7 +60,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Immutable payload | Record payload never changes and reaches workers only through a verified snapshot. Workflow claims return identity, state and lease data, never another payload copy. |
 | Explicit allocation | `REPLAY` uses `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. Modes never mix within one Dataset. |
 | Explicit consumers | A Scenario Template that needs no Managed Dataset declares `managedDatasetRequirements: []`, and Create Swarm declares `datasetSelections: []`. Otherwise every requirement has one exact compatible selection. |
-| Versioned activation | Making `managedDatasetRequirements` required is a breaking Scenario Contract change. M0 uses one persisted deployment-wide Maintenance Epoch to fence bundle mutation and swarm activation while every bundle is inventoried, migrated and validated and the exact v2 swarm set is drained and recreated. v2 absence never implies an empty requirement. |
+| Versioned activation | Making `managedDatasetRequirements` required is a breaking Scenario Contract change. M0 uses one Orchestrator-owned persisted Maintenance Epoch with a monotonic fencing token and closed phases while every bundle is inventoried, migrated and validated and the exact v2 swarm set is drained and recreated. Public lifecycle APIs remain fenced; only the exact epoch-bound upgrade operation may drain or restore captured swarms. v2 absence never implies an empty requirement. |
 | Provider-only templates | Group templates use only the Provider Scenario Binding's allowlisted non-secret `vars` and `sut` values. Consumers use resolved ids. |
 | One authoring validator | Scenario Manager alone validates Scenario, Dataset Definition and Schema Contract packages. UI, MCP, CLI, CI and agents delegate to it and preserve its version/digest evidence; none implements another validator. |
 | PostgreSQL authority | For Managed Dataset only, PostgreSQL owns runtime records, revisions, state, materialised View membership, imports, grants, lineage, leases, idempotency and background-work fencing. Files and worker memory are derivative. |
@@ -71,7 +71,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Deterministic refresh | Orchestrator sends a revision hint, the Controller reconciles authoritative metadata, and workers poll the Active Reference on explicit background intervals. Hints mark a binding dirty; they do not bypass its publication window. No notification or filesystem watcher is the correctness path. |
 | Bounded publication rate | Each dirty binding publishes only its latest observed revision. One required minimum interval bounds start-to-start rate; a long publication may still be followed immediately by the next, so admission covers both publications. |
 | Least-privilege publication | The Controller writes only its swarm publication directory. Applicable consumer-input workers mount only their binding read-only. Other workers get no Dataset mount. |
-| Safe snapshot cleanup | A qualified grace period covers storage visibility, the enforced worker-load maximum and clock skew. A deactivation marker remains outside its revision until safe deletion is acknowledged. Orchestrator retains the latest Activation Confirmation and every older confirmation whose predecessor is not acknowledged deleted. Recovery uses exact predecessor evidence; pressure never causes unsafe deletion or evidence pruning. |
+| Safe snapshot cleanup | A qualified grace period covers storage visibility, the enforced worker-load maximum and clock skew. A deactivation marker remains outside its revision until safe deletion is acknowledged. Orchestrator retains the latest Activation Confirmation, every unacknowledged predecessor and each acknowledged confirmation for a full evidence period measured from acknowledgement. Recovery uses exact predecessor evidence; pressure never causes unsafe deletion or evidence pruning. |
 | Bounded capacity | Deployment limits cover authoritative storage and Activation Confirmation evidence, mutation rates, snapshots, Controller publication and cleanup operations, complete restart fan-out, total worker memory and concurrency. Exhaustion rejects new work without eviction or fallback. |
 | No inferred lifecycle | Managed Dataset never starts, replaces, fails over or reconciles provider swarms or SUT objects. |
 | Bounded record lifecycle | Release 1 records are `NON_EXPIRING`. Replay can reuse them continuously; workflows that move records out of a ready View operate only within the admitted storage horizon. |
@@ -140,7 +140,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | SUT Environment (`EXISTING`) | Versioned environment and connection context used by a Scenario Binding | Dataset or provider | None |
 | Dataset Space | Scenario Manager registry of Dataset Definitions and Schema Contracts for one binding context | Runtime Dataset | None |
 | Scenario Binding | Frozen validated link between Scenario Template, SUT Environment, Dataset Space and variable profile | Provider dependency | None |
-| Scenario Protocol Maintenance Epoch | Persisted deployment-wide fenced upgrade state that blocks Scenario mutation and swarm activation while one closed bundle inventory is validated, drained and cut over | Normal editing or dual-major runtime | Maintenance Epoch |
+| Scenario Protocol Maintenance Epoch | Orchestrator-owned persisted deployment-wide upgrade state with one monotonic fencing token, frozen plan digest and closed durable phase; it blocks public Scenario mutation and swarm activation while one captured inventory is drained, cut over and restored | Normal editing, a general lifecycle bypass or dual-major runtime | Maintenance Epoch |
 | Dataset Definition Bundle | Mounted package containing `dataset.yaml`, `record.schema.yaml` and optional `state.schema.yaml` | Scenario Bundle | Dataset Definition |
 | Dataset Schema Contract | Reusable immutable schema at one exact version | Runtime record or local `$defs` | Schema Contract |
 | Managed Dataset Provider Source | Required tagged provider-work source: `SCHEDULER`, `CSV`, `REDIS` or `MANAGED_DATASET` | Consumer input or fallback chain | Provider Source |
@@ -157,7 +157,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Dataset Snapshot Reader | Swarm Controller port that streams one granted immutable revision through the deployment's explicit PostgreSQL function adapter | Orchestrator REST export or worker database access | Snapshot Reader |
 | Active Snapshot Reference | Atomic binding-level file selecting one completed publication and monotonic activation generation | PostgreSQL authority or a directory scan | Active Reference |
 | Snapshot Activation Confirmation | Orchestrator record of one fenced Controller's durable Active Reference replacement, its predecessor and generation | Publication completion or the Active Reference file | Activation Confirmation |
-| Snapshot Deletion Acknowledgement | Idempotent state on one Activation Confirmation recording that the current fenced Controller safely removed its predecessor revision | Deactivation marker or delete request | Deletion Acknowledgement |
+| Snapshot Deletion Acknowledgement | Idempotent state on one Activation Confirmation recording that the current fenced Controller safely removed its predecessor revision, with authority-set `predecessorDeletionAcknowledgedAt` | Deactivation marker or delete request | Deletion Acknowledgement |
 | Dataset Context | SDK-owned WorkItem identity and safety data | Observability or broker header | None |
 | Group Availability | Orchestrator authority read model for Group source, schema, integrity, supply and authority-storage health | Publication or consumer health | Availability |
 | Publication Status | Per-binding read model for Controller publication and Active Reference health against the authority revision | Worker loading or consumption proof | None |
@@ -180,9 +180,10 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Context construction/preservation/guard and local selection | Worker SDK adapters | Business outcome classification |
 | Storage, limits, clock health and connection references | Deployment capability profile | Scenario-selected infrastructure |
 | Retention horizon, alerts, response and backup/restore | Operator runbook | Direct row deletion or implicit purge |
-| Maintenance Epoch, inventory, staged roots and protocol cutover | Deployment upgrade workflow | Runtime defaulting or dual-major interpretation |
+| Maintenance Epoch record, fencing token, phase transitions and epoch-bound swarm commands | Orchestrator | Bundle validation, root mutation or a general lifecycle bypass |
+| Final inventory, frozen plan digest, staged roots and protocol cutover coordination | Deployment upgrade workflow | Independent maintenance state or unfenced swarm lifecycle |
 | Bundle mutation fence and final package validation | Scenario Manager | Swarm lifecycle or upgrade coordination |
-| Swarm create/start fence, v2 drain and bounded restoration | Orchestrator | Bundle validation or root switching |
+| Public swarm create/start/recreate fence and bounded drain/restoration execution | Orchestrator | Bundle validation or root switching |
 
 ## Architecture
 
@@ -225,19 +226,37 @@ declare an explicit `protocolVersion`. Because contract activation makes
 Protocol major and updates the supported version, DTO/validator and documentation.
 
 Preflight may prepare staged copies, but the authoritative migration starts only
-after the deployment upgrade workflow opens one persisted, deployment-wide and
-fenced Scenario Protocol Maintenance Epoch. It survives coordinator restart and
-ends only through an explicit successful cutover or completed rollback.
-The workflow owns this single epoch record; services never use independent
-maintenance flags.
-`maximumScenarioProtocolMaintenanceDuration` bounds the attempt. Expiry marks it
-failed and keeps every gate closed; it never triggers an automatic cutover,
+after the deployment upgrade workflow asks Orchestrator to open one persisted,
+deployment-wide Scenario Protocol Maintenance Epoch. Orchestrator owns the
+single epoch record, `epochId`, monotonic `epochFencingToken`, frozen inventory
+and plan digests, current phase and phase failure. The token advances on phase
+change or coordinator takeover. Scenario Manager and the deployment workflow
+consume this authority; services never use independent maintenance flags. An
+unavailable or unverifiable epoch state keeps their gates closed.
+
+The closed durable phases are `PREPARING`, `DRAINING_V2`, `CUTOVER_READY`,
+`RESTORING_NEW_MAJOR`, `ROLLING_BACK`, `RESTORING_V2`, `COMPLETED` and
+`ROLLED_BACK`. The forward path ends
+`RESTORING_NEW_MAJOR -> COMPLETED`. Pre-switch recovery ends
+`RESTORING_V2 -> ROLLED_BACK`; explicit post-switch rollback passes through
+`ROLLING_BACK` before the same restoration path. Restart resumes the recorded
+phase. Failure is recorded against that phase and permits only its declared
+resume or rollback transition. Only the two terminal phases reopen the gates.
+`maximumScenarioProtocolMaintenanceDuration` bounds the attempt. Expiry records
+failure and keeps every gate closed; it never triggers an automatic cutover,
 rollback or protocol fallback.
 
 While the epoch is active, Scenario Manager rejects bundle file writes, creates,
 imports, replacements, renames, moves, deletes and registry-changing reloads.
-Orchestrator rejects swarm create, start and recreate while allowing the exact
-stop/drain work required by migration. UI, MCP, CLI and agents cannot bypass
+Orchestrator rejects public swarm create, start and recreate. The authenticated
+deployment upgrade workflow is the only caller of a dedicated epoch-bound
+drain/restore command. Each request carries `epochId`, the current
+`epochFencingToken`, `expectedPhase`, one exact `capturedSwarmId`, the frozen
+plan digest and an idempotency key. The swarm must belong to the captured
+inventory. Exact replay returns its stable result even after a phase/token
+advance; a changed replay, stale or foreign token, wrong phase, unknown swarm or
+changed plan digest conflicts. This command is not accepted through the normal
+lifecycle API and grants no general bypass. UI, MCP, CLI and agents cannot evade
 these server-side gates. Operator-mounted source roots are read-only or frozen
 by the deployment adapter for the epoch; inability to fence a root fails
 preflight.
@@ -652,8 +671,8 @@ snapshot-byte fallback.
 | Begin publication | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications` | Controller swarm/run/binding only; reserves one bounded Activation Confirmation record and returns a fenced, expiring descriptor pinned to one revision/digest and one opaque Snapshot Reader grant |
 | Complete publication | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/complete` | Exact manifest/chunk/whole digests and fencing token; atomically completes the publication and returns the next binding-scoped `activationGeneration` |
 | Confirm activation | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/activation-confirmation` | Active fenced Controller only, after durable Active Reference replacement; repeats the explicit nullable predecessor tuple, new publication/revision, generation and Active Reference digest; exact replay returns one stable `activationConfirmationId`, changed replay conflicts |
-| Acknowledge predecessor deletion | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/{activationConfirmationId}/predecessor-deletion-acknowledgement` | Active fenced Controller only, after qualified deletion and durable absence verification; repeats predecessor publication/revision, generation and marker digest; exact replay returns the stable Deletion Acknowledgement, changed replay conflicts |
-| Lookup predecessor activation | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/by-predecessor/{predecessorPublicationId}?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the one retained authoritative confirmation and acknowledgement state or explicit `404`; no truncation or inferred chain |
+| Acknowledge predecessor deletion | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/{activationConfirmationId}/predecessor-deletion-acknowledgement` | Active fenced Controller only, after qualified deletion and durable absence verification; repeats predecessor publication/revision, generation and marker digest; exact replay returns the stable Deletion Acknowledgement with authority-set `predecessorDeletionAcknowledgedAt` and `confirmationPruneAfter`, changed replay conflicts |
+| Lookup predecessor activation | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/by-predecessor/{predecessorPublicationId}?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the one retained authoritative confirmation and acknowledgement state until `confirmationPruneAfter`, or explicit `404`; no truncation or inferred chain |
 | Reconcile publication | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the frozen selection, current authority revision, latest completed publication/generation and latest retained Activation Confirmation checkpoint for refresh and recovery, never record bytes |
 | Replay leases | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases` | `REPLAY + EXCLUSIVE_LEASE`; binding, completed snapshot revision, activation generation and requested count; returns record identity and lease only |
 | Workflow claims | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/views/{viewId}/record-leases` | Binding, completed snapshot revision, activation generation and requested count; returns `recordId`, complete state, state revision, lease, snapshot revision, activation generation and record-schema digest, never record payload |
@@ -784,8 +803,9 @@ grant and Snapshot Reader timeout with the same descriptor and cursor.
 `SNAPSHOT_READER_GRANT_INVALID` and `SNAPSHOT_ACTIVATION_CONFLICT` are terminal
 for that Controller attempt. No reader error switches transport or credential.
 Missing confirmation evidence, changed Deletion Acknowledgement replay and an
-active Maintenance Epoch are explicit failures; clients do not retry them
-automatically or bypass their owning gate.
+active Maintenance Epoch on a normal API are explicit failures; clients do not
+retry them automatically or bypass their owning gate. Only the dedicated
+epoch-bound upgrade command follows the fenced phase contract above.
 
 ## Safety and runtime behaviour
 
@@ -954,14 +974,22 @@ enters bounded recovery; it never rolls back or selects another revision.
 Begin publication reserves the confirmation row and maximum bytes needed after
 replacement. Capacity failure therefore blocks before export and can never leave
 an Active Reference unconfirmable. Orchestrator always retains the latest
-confirmed activation as the binding checkpoint. An older confirmation remains
-authoritative until its predecessor deletion is acknowledged and
-`snapshotActivationEvidenceRetention` has elapsed from
-`activationConfirmedAt`. A first activation with no predecessor remains until it
-is no longer latest and the same evidence period elapses. A completed but
-unconfirmed publication is never pruned. Activation and deletion idempotency
-evidence remains at least as long as its confirmation; expiry never undercuts
-that retention.
+confirmed activation as the binding checkpoint. An older confirmation with a
+predecessor remains authoritative indefinitely until its Deletion
+Acknowledgement is stored. Orchestrator sets:
+
+```text
+confirmationPruneAfter =
+  predecessorDeletionAcknowledgedAt
+  + snapshotActivationEvidenceRetention
+```
+
+The confirmation, acknowledgement, exact predecessor lookup and their
+idempotency evidence remain authoritative through that instant. A first
+activation with no predecessor remains until it is no longer latest and
+`activationConfirmedAt + snapshotActivationEvidenceRetention`. A completed but
+unconfirmed publication is never pruned. Evidence expiry never undercuts these
+rules.
 
 Workers read `ACTIVE.json`, never scan revision directories, and never choose the
 highest revision. They reject a generation lower than the last accepted one,
@@ -1074,9 +1102,25 @@ deletion, syncs the parent and verifies durable absence. It then submits the
 Deletion Acknowledgement. Deletion failure sends no acknowledgement. Lost
 responses replay the same acknowledgement from the retained marker; only a
 stable successful response permits marker removal. Orchestrator stores the
-acknowledgement on its confirmation and may prune that older confirmation only
-after the evidence period also elapses. Missing acknowledgement retains the
-confirmation even when the revision is absent.
+acknowledgement and its server timestamp on the confirmation. A lost successful
+response therefore leaves the complete confirmation and acknowledgement
+replayable for a fresh evidence period. Missing acknowledgement retains the
+confirmation indefinitely even when the revision is absent.
+
+The deployment validates:
+
+```text
+snapshotActivationEvidenceRetention >=
+  maximumControllerRecoveryTime
+  + managedDatasetClient.operationTimeout
+  + maximumClockSkew
+```
+
+For this calculation, `managedDatasetClient.operationTimeout` includes the
+complete bounded Deletion Acknowledgement retry horizon.
+An unresolved acknowledgement does not by itself stop publication because
+admission reserves its worst-case rows and bytes. Missing reservation blocks the
+next publication before export.
 
 `maximumRetainedSnapshotRevisionsPerBinding` and the confirmation row/byte
 limits are admission and reservation limits, not eviction instructions. If
@@ -1308,7 +1352,7 @@ Admission calculates worst-case demand for all bindings and concurrent work:
 
 ```text
 requiredActivationConfirmationRows(binding) =
-  1
+  2  # latest checkpoint + one in-progress reservation
   + maximumRetainedSnapshotRevisionsPerBinding(binding)
   + ceil(snapshotActivationEvidenceRetention
       / minimumSnapshotPublicationInterval(binding))
@@ -1387,11 +1431,12 @@ and deactivation-marker operations. It measures the actual metadata/open/close
 amplification behind every logical operation; admission uses that demand, not
 the logical count alone.
 
-The confirmation reservation covers the latest checkpoint, every predecessor
-that may remain protected, the complete evidence window and one in-progress
-publication. Admission rejects the binding if deployment-wide row or byte limits
-cannot fund the sum. It never assumes timely Deletion Acknowledgement or evidence
-pruning will create capacity.
+The confirmation reservation covers the latest checkpoint, one in-progress
+publication, every predecessor that may remain unacknowledged and every
+acknowledged confirmation in its post-acknowledgement replay window. Admission
+rejects the binding if deployment-wide row or byte limits cannot fund the sum.
+It never assumes timely Deletion Acknowledgement or evidence pruning will create
+capacity.
 
 `minimumSnapshotPublicationInterval` is the single per-binding publication-rate
 control; its derived maximum is `1 / interval`. The existing deployment-wide
@@ -1480,7 +1525,7 @@ Binding approval and M0 establishes one executable owner per public shape:
 | Contract | Canonical M0 owner |
 |---|---|
 | Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` |
-| Scenario Protocol activation, Maintenance Epoch, bundle inventory/migration and v2 swarm restoration | `docs/scenarios/SCENARIO_CONTRACT.md`, `docs/UPGRADING.md`, `docs/ORCHESTRATOR-REST.md` and the single Scenario Manager validator |
+| Scenario Protocol activation, Orchestrator-owned Maintenance Epoch/phase API, bundle inventory/migration and epoch-bound swarm restoration | `docs/scenarios/SCENARIO_CONTRACT.md`, `docs/UPGRADING.md`, `docs/ORCHESTRATOR-REST.md` and the single Scenario Manager validator |
 | Provider binding and `managedDatasetRequirements` | `docs/scenarios/SCENARIO_CONTRACT.md` plus its single executable Scenario DTO/validator |
 | Create Swarm discovery and `datasetSelections` | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` |
 | Adapter settings, capabilities, Outcome Mapping and completion | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types |
@@ -1515,9 +1560,13 @@ capabilities fail admission without fallback.
 Tests use official product APIs and prove:
 
 1. Scenario Manager is the only public authoring validator. A persisted fenced
-   Maintenance Epoch rejects bundle mutation/import/move/delete and swarm
-   create/start/recreate through every product API while the final inventory,
+   Maintenance Epoch rejects bundle mutation/import/move/delete and normal swarm
+   create/start/recreate through every public API while the final inventory,
    migration, validation, drain and cutover run. It survives coordinator restart;
+   Orchestrator owns its monotonic token and closed durable phase. Only the
+   authenticated upgrade workflow can submit an epoch-bound drain/restore for an
+   exact captured swarm and frozen plan digest. Exact replay is stable; stale or
+   foreign tokens, wrong phases, changed plans and uncaptured swarms conflict.
    operator-mounted roots remain read-only or frozen. The final inventory records
    every repository-shipped, operator-mounted and uploaded/persisted bundle,
    source, identity, old protocol, staged digest and validation evidence;
@@ -1535,8 +1584,9 @@ Tests use official product APIs and prove:
    validator/roots and exact v2 set. Staged and original roots remain available
    until acceptance or completed rollback. Successful validation returns the canonical
    declared/supported versions, Scenario Manager version, deterministic artifact
-   digest and applicable compiled schema digests. Epoch crash/resume, timeout,
-   rollback and restoration-failure tests prove planned-downtime behaviour.
+   digest and applicable compiled schema digests. Epoch crash/resume, takeover,
+   stale-coordinator, timeout, rollback and restoration-failure tests prove
+   planned-downtime behaviour without a public lifecycle bypass.
 2. Every Dataset freezes name, identity, SUT/Dataset Space, Profile, grouping,
    schemas, source, allocation and workflow contract. Group results and consumers
    cannot change identity or create Groups.
@@ -1598,8 +1648,10 @@ Tests use official product APIs and prove:
     Repeated activation during a boundary-slow load proves the hard load timeout
     and retention grace prevent early deletion. Recovery recreates a missing
     marker only from exact predecessor confirmation evidence, starts a fresh grace
-    and otherwise preserves protected files. Lost/replayed acknowledgement,
-    Controller outage beyond the grace, exact-lookup `404` and
+    and otherwise preserves protected files. A Deletion Acknowledgement delayed
+    beyond the activation-based evidence window and a lost successful response
+    remain exactly replayable through the full post-acknowledgement evidence
+    period. Controller outage beyond the grace, exact-lookup `404` and
     confirmation-at-capacity tests retain required evidence and block publication
     without shortening the grace.
 13. Dataset Context survives every transformation and the SDK guard rejects

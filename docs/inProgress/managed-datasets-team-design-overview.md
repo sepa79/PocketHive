@@ -36,8 +36,9 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   the rate; worker background polls load it. After atomic activation, the
   Controller records a fenced Snapshot Activation Confirmation. Its predecessor
   marker remains outside the revision until safe deletion is acknowledged.
-  Orchestrator retains the latest checkpoint and exact predecessor evidence;
-  absent proof or capacity protects the old revision and blocks publication.
+  Orchestrator retains each unacknowledged predecessor indefinitely and starts a
+  full replay-evidence period when acknowledgement is stored. Absent proof or
+  reserved capacity protects the old revision and blocks publication.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context
@@ -68,7 +69,8 @@ flowchart LR
 | Requirements and exact selection | Consumer template/binding and Create Swarm |
 | Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
 | Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
-| Maintenance Epoch authority, final inventory and protocol cutover | Deployment upgrade workflow |
+| Maintenance Epoch record, phases, fencing token and bounded swarm commands | Orchestrator |
+| Final inventory, frozen plans and protocol cutover | Deployment upgrade workflow |
 | Epoch bundle-mutation and swarm-activation gates | Scenario Manager and Orchestrator |
 
 ## Essential definitions
@@ -84,7 +86,7 @@ flowchart LR
 | Derivation | Proposed | One leased workflow record creates bounded downstream records | Outcome routing or clone |
 | Snapshot Activation Confirmation | Proposed | Orchestrator record of one fenced Controller's durable snapshot switch | Publication completion or deactivation marker |
 | Snapshot Deletion Acknowledgement | Proposed | Idempotent authority evidence that the Controller safely removed the predecessor revision | Deactivation marker or delete request |
-| Scenario Protocol Maintenance Epoch | Proposed | Persisted upgrade fence around final inventory, drain and cutover | Normal editing or dual-major runtime |
+| Scenario Protocol Maintenance Epoch | Proposed | Orchestrator-owned phased upgrade fence with one monotonic token and frozen plan | Normal editing, lifecycle bypass or dual-major runtime |
 | Group Availability | Proposed | Group authority health, with or without consumers | Publication or consumption health |
 | Publication Status | Proposed | Publication health for one binding | Worker loading or use |
 | Consumption Status | Proposed | Evidence of worker load, selection and SUT attempt | SUT acceptance or audit proof |
@@ -130,8 +132,11 @@ planned downtime, not a highly available upgrade.
 
 Approve the Release 1 model. M0 then activates required
 `managedDatasetRequirements` under a new Scenario Protocol major. One persisted
-Maintenance Epoch blocks bundle mutation and swarm create/start while final
-inventory, validation, exact v2 swarm drain and digest-checked cutover run.
+Maintenance Epoch blocks bundle mutation and public swarm create/start while
+final inventory, validation, exact v2 swarm drain and digest-checked cutover run.
+Only the upgrade workflow may use the fenced epoch-bound command to drain or
+restore a captured swarm from its frozen plan; stale tokens, phases or plans
+conflict.
 Pre-switch failure keeps the prior validator and roots selected and restores the
 drained set from frozen v2 plans within a declared bound. Post-switch recreation
 failure remains gated until explicit resume or rollback within the same bound.

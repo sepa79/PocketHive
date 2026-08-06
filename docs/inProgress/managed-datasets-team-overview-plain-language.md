@@ -107,12 +107,13 @@ absence and idempotently acknowledges deletion. Only a successful acknowledgemen
 allows marker removal.
 
 Orchestrator always retains the latest Activation Confirmation. It retains each
-older confirmation until predecessor deletion is acknowledged and its evidence
-period expires. Recovery looks up the exact confirmation for each predecessor;
-it never treats a truncated list as complete. A missing lookup protects the
-revision. Lost or replayed acknowledgement is safe. If confirmation rows or bytes
-reach their reserved limit, PocketHive blocks another publication instead of
-pruning required evidence.
+older confirmation indefinitely until predecessor deletion is acknowledged.
+Acknowledgement starts a fresh evidence period, so a lost successful response
+can still be replayed after a late deletion. Recovery looks up the exact
+confirmation for each predecessor; it never treats a truncated list as complete.
+A missing lookup protects the revision. Capacity reserves unacknowledged and
+recently acknowledged confirmations. If that reservation cannot be funded,
+PocketHive blocks another publication instead of pruning required evidence.
 
 Snapshot Reader grant lifetime covers begin-response transit, hard export,
 completion, clock skew and safety margin. After receiving the grant, the
@@ -168,10 +169,14 @@ operational qualification milestones must pass before Release 1 is complete.
 
 Before implementation, PocketHive activates Dataset requirements under a new
 Scenario Protocol major because every scenario must declare requirements or
-`[]`. The deployment opens one persisted Maintenance Epoch. Scenario Manager then
-rejects bundle write, import, replace, move and delete operations; Orchestrator
-rejects swarm create, start and recreate. Operator-mounted roots remain read-only
-or frozen. UI, MCP, CLI and agents cannot bypass these server-side gates.
+`[]`. Orchestrator owns one persisted Maintenance Epoch with a monotonic fencing
+token, frozen plan digest and closed durable phase. Scenario Manager then rejects
+bundle write, import, replace, move and delete operations; Orchestrator rejects
+public swarm create, start and recreate. Only the authenticated upgrade workflow
+can use the epoch-bound drain/restore command for a captured swarm and its exact
+frozen plan. Stale tokens, wrong phases, changed plans and uncaptured swarms
+conflict. Operator-mounted roots remain read-only or frozen. UI, MCP, CLI and
+agents cannot bypass these server-side gates.
 
 Inside the epoch, PocketHive performs the final inventory and digest validation,
 captures and drains the exact v2 swarm set, then rechecks every source, inventory
@@ -195,9 +200,10 @@ worst-case all-worker restart, filesystem operation and operating-horizon export
 tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests;
 crash tests around publication completion, Active Reference replacement,
 Snapshot Activation Confirmation, marker publication, revision deletion and
-Deletion Acknowledgement; lost/replayed acknowledgement, exact-predecessor lookup
-and confirmation-capacity tests; Maintenance Epoch mutation/create/start races,
-restart, rollback and drained-swarm restoration tests;
+Deletion Acknowledgement; late acknowledgement followed by a lost successful
+response, exact replay, exact-predecessor lookup and confirmation-capacity tests;
+Maintenance Epoch mutation/create/start races, restart, stale coordinator,
+changed-plan, uncaptured-swarm, rollback and restoration tests;
 pilot-powered paired performance trials; and a target-scale 24-hour soak.
 
 Release 1 has no record expiry, reclamation or purge. Deployment limits and an
