@@ -20,8 +20,10 @@ Managed Dataset does not replace `REDIS_DATASET`, `CSV_DATASET` or direct
 Every I/O binding names one adapter; PocketHive never migrates, substitutes or
 falls back between them.
 
-The Dataset option is additive at runtime. Activating its required Scenario
-fields is a breaking Scenario Protocol migration with planned maintenance.
+The Dataset option is additive. Scenario descriptors remain on their existing
+protocol; a consumer dependency is declared through one independently versioned
+`datasets/requirements.yaml` bundle extension. Existing bundles need no
+migration.
 
 Use Record State and named Views for lifecycle outcomes. Create a downstream
 Dataset only when successful processing produces records with independent
@@ -61,10 +63,10 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Bounded derivation | `MANAGED_DATASET` consumes one exact upstream `WORKFLOW + EXCLUSIVE_LEASE` selection and writes to one downstream Dataset. Only `SUCCESS` creates bounded records. |
 | Immutable payload | Record payload never changes and reaches workers only through a verified snapshot. Workflow claims return identity, state and lease data, never another payload copy. |
 | Explicit allocation | `REPLAY` uses `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. Modes never mix within one Dataset. |
-| Explicit consumers | A Scenario Template that needs no Managed Dataset declares `managedDatasetRequirements: []`, and Create Swarm declares `datasetSelections: []`. Otherwise every requirement has one exact compatible selection. |
-| Versioned activation | Making `managedDatasetRequirements` required is a breaking Scenario Contract change. M0 uses one Orchestrator-owned persisted Maintenance Epoch with a monotonic fencing token and closed phases while every bundle is inventoried, migrated and validated and the exact v2 swarm set is drained and recreated. Public lifecycle APIs remain fenced; only the exact epoch-bound upgrade operation may drain or restore captured swarms. v2 absence never implies an empty requirement. |
+| Explicit consumers | Absence of `datasets/requirements.yaml` means the Scenario Bundle has no Managed Dataset consumer dependency and Create Swarm requires `datasetSelections: []`. A provider-only Scenario may still create a Dataset through its explicit output binding. A present document is versioned, non-empty and gives every requirement one exact compatible selection. |
+| Versioned bundle extension | `datasets/requirements.yaml` has its own required `version`. Scenario Manager alone parses and validates it. A present document is rejected unless Scenario Manager, Orchestrator and the authoring/runtime contract advertise the exact supported version; no component may ignore it. Existing Scenario Protocol v2 descriptors remain unchanged. |
 | Provider-only templates | Group templates use only the Provider Scenario Binding's allowlisted non-secret `vars` and `sut` values. Consumers use resolved ids. |
-| One authoring validator | Scenario Manager alone validates Scenario, Dataset Definition and Schema Contract packages. UI, MCP, CLI, CI and agents delegate to it and preserve its version/digest evidence; none implements another validator. |
+| One authoring validator | Scenario Manager alone validates Scenario Bundles, Dataset Requirements Documents, Dataset Definitions and Schema Contracts. UI, MCP, CLI, CI and agents delegate to it and preserve its version/digest evidence; none implements another validator. |
 | PostgreSQL authority | For Managed Dataset only, PostgreSQL owns runtime records, revisions, state, materialised View membership, imports, grants, lineage, leases, idempotency and background-work fencing. Files and worker memory are derivative. |
 | Local measured path | Replay selection, prefetched workflow dispatch, immutable-record lookup, Context validation and counters use verified local memory. Authority claims return mutable state and leases only; authority and publication work remains background/control-plane work. |
 | Split publication boundary | Orchestrator validates and fences publication but never proxies snapshot bytes. Swarm Controller reads only the granted immutable revision through the explicit `DatasetSnapshotReader` PostgreSQL function adapter. Workers never access PostgreSQL. |
@@ -91,14 +93,14 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`; named Dataset, schema-defined Groups, versioned record schema, exact or empty consumer selection, PostgreSQL authority, verified local snapshots and REST/MCP consumption evidence | M0, M1a, M2a and M3a pass |
 | Mutable parity increment | `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`; versioned Record State, materialised Views, declared transitions, complete Outcome Mapping and local payload lookup | M1b, M2b and the mutable M3b gates pass; required before Managed Dataset covers existing mutable use cases |
 | Release 1 extensions | `REPLAY + EXCLUSIVE_LEASE`, finite `CSV` and `REDIS` imports, derived `MANAGED_DATASET` source and bounded Derivation | M2c, M2d and their M3b gates pass |
-| Release 1 completion | Every advertised Profile/source plus UI, operations, performance, continuity and target-scale soak qualification | Every M3b gate passes |
+| Release 1 completion | `SCHEDULER + REPLAY + SHARED`, `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`, `REPLAY + EXCLUSIVE_LEASE`, finite `CSV`, finite `REDIS`, bounded `MANAGED_DATASET` Derivation, the read-only UI projection and full qualification | Every named target and M3b gate passes; catalogue state never changes scope |
 
 The MVP is a capability-gated vertical slice, not a weakened safety profile.
-Scenario migration, schema ownership, explicit no-Dataset declarations,
-publication fencing, activation confirmation, terminal abandonment, retention,
-capacity admission, restart recovery, security and MCP evidence are MVP
-requirements. Unsupported Profiles and sources remain absent from the capability
-catalogue and fail admission without fallback.
+Bundle-extension validation, schema ownership, publication fencing, activation
+confirmation, terminal abandonment, retention, capacity admission, restart
+recovery, security and MCP evidence are MVP requirements. Unsupported Profiles
+and sources remain absent from the capability catalogue and fail admission
+without fallback.
 
 ## Release 1 target
 
@@ -144,8 +146,9 @@ catalogue and fail admission without fallback.
   snapshot access is limited to the canonical read function.
 - Per-worker snapshot pin/ack cleanup. Release 1 uses an enforced load maximum,
   durable deactivation evidence and a qualified retention grace.
-- Concurrent Scenario Protocol v2/new-major operation or implicit v2 migration.
-  Release 1 uses one explicit inventory, migration and activation gate.
+- Embedding Managed Dataset requirements in `scenario.yaml`, treating an
+  unsupported requirements version as absent, or maintaining two requirement
+  parsers.
 - SUT reconciliation, automatic revalidation/deprovisioning, audit proof,
   exactly-once claims, malicious-worker resistance and arbitrary-window delivery
   evidence.
@@ -159,7 +162,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | SUT Environment (`EXISTING`) | Versioned environment and connection context used by a Scenario Binding | Dataset or provider | None |
 | Dataset Space | Scenario Manager registry of Dataset Definitions and Schema Contracts for one binding context | Runtime Dataset | None |
 | Scenario Binding | Frozen validated link between Scenario Template, SUT Environment, Dataset Space and variable profile | Provider dependency | None |
-| Scenario Protocol Maintenance Epoch | Orchestrator-owned persisted deployment-wide upgrade state with one monotonic fencing token, frozen plan digest and closed durable phase; it blocks public Scenario mutation and swarm activation while one captured inventory is drained, cut over and restored | Normal editing, a general lifecycle bypass or dual-major runtime | Maintenance Epoch |
+| Dataset Requirements Document | Optional versioned Scenario Bundle extension at `datasets/requirements.yaml`; when present it declares one or more Managed Dataset consumer requirements | `scenario.yaml`, Dataset Definition or concrete Create Swarm selection | Requirements Document |
 | Dataset Definition Bundle | Mounted package containing `dataset.yaml`, `record.schema.yaml` and optional `state.schema.yaml` | Scenario Bundle | Dataset Definition |
 | Dataset Schema Contract | Reusable immutable schema at one exact version | Runtime record or local `$defs` | Schema Contract |
 | Managed Dataset Provider Source | Required tagged provider-work source: `SCHEDULER`, `CSV`, `REDIS` or `MANAGED_DATASET` | Consumer input or fallback chain | Provider Source |
@@ -189,7 +192,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Dataset/contract packages, restricted schema compilation and digests | Scenario Manager | Runtime records, leases or source choice |
 | Dataset Definition, Profile, schemas, grouping, Views and transitions | Dataset Definition Bundle | Scenario templates or runtime ids |
 | Source, Groups, mappings, allocation, lifecycle, supply and capacity | Provider Scenario Binding | Consumer selection or provider automation |
-| Required access/Profile/allocation and workflow View/transition | Consumer Scenario Template | Concrete Dataset ids or provider templates |
+| Required access/Profile/allocation and workflow View/transition | Dataset Requirements Document | Concrete Dataset ids or provider templates |
 | Frozen SUT/Dataset compatibility | Consumer Scenario Binding | Live rebinding |
 | Exact Dataset/Group/View choice or explicit empty choice | Create Swarm | Fallback or alias following |
 | Runtime records, state, memberships, imports, grants, lineage, leases and idempotency | Orchestrator Managed Dataset module | SUT calls, source parsing or filesystem publication |
@@ -199,18 +202,18 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Context construction/preservation/guard and local selection | Worker SDK adapters | Business outcome classification |
 | Storage, limits, clock health and connection references | Deployment capability profile | Scenario-selected infrastructure |
 | Retention horizon, alerts, response and backup/restore | Operator runbook | Direct row deletion or implicit purge |
-| Maintenance Epoch record, fencing token, phase transitions and epoch-bound swarm commands | Orchestrator | Bundle validation, root mutation or a general lifecycle bypass |
-| Final inventory, frozen plan digest, staged roots and protocol cutover coordination | Deployment upgrade workflow | Independent maintenance state or unfenced swarm lifecycle |
-| Bundle mutation fence and final package validation | Scenario Manager | Swarm lifecycle or upgrade coordination |
-| Public swarm create/start/recreate fence and bounded drain/restoration execution | Orchestrator | Bundle validation or root switching |
+| Dataset Requirements Document path, schema, parser, cross-validation and `artifactDigest` evidence | Scenario Manager | Concrete Dataset selection or a second validator |
+| Requirements-version compatibility and frozen runtime selections | Orchestrator | Parsing authoring YAML or ignoring an unsupported version |
 
 ## Architecture
 
 ```mermaid
 flowchart LR
+  R[Dataset Requirements Document] --> SM[Scenario Manager]
+  SM -->|validated projection + artifactDigest| O[Orchestrator Managed Dataset module]
   PS[Provider Source] --> P[Provider swarm]
   U[Upstream workflow View] -. MANAGED_DATASET source .-> P
-  P --> O[Orchestrator Managed Dataset module]
+  P --> O
   O <--> PG[(PostgreSQL authority)]
   O -->|fenced descriptor| SC[Swarm Controller]
   SC -->|granted read function| PG
@@ -233,6 +236,7 @@ Scenario Manager reads these fixed registry paths:
 
 ```text
 scenarios/bundles/<scenario-name>/scenario.yaml
+scenarios/bundles/<scenario-name>/datasets/requirements.yaml  # optional
 scenarios/managed-dataset/<dataset-name>/dataset.yaml
 scenarios/managed-dataset/<dataset-name>/record.schema.yaml
 scenarios/managed-dataset/<dataset-name>/state.schema.yaml  # WORKFLOW only
@@ -240,75 +244,64 @@ scenarios/dataset-contracts/<name>/<version>/schema.yaml
 ```
 
 Scenario descriptors continue to follow the canonical Scenario Contract and
-declare an explicit `protocolVersion`. Because contract activation makes
-`managedDatasetRequirements` mandatory, M0 assigns it to one new Scenario
-Protocol major and updates the supported version, DTO/validator and documentation.
+declare explicit Scenario Protocol v2. Managed Dataset does not add a field to
+`scenario.yaml` or change that protocol.
 
-Preflight may prepare staged copies, but the authoritative migration starts only
-after the deployment upgrade workflow asks Orchestrator to open one persisted,
-deployment-wide Scenario Protocol Maintenance Epoch. Orchestrator owns the
-single epoch record, `epochId`, monotonic `epochFencingToken`, frozen inventory
-and plan digests, current phase and phase failure. The token advances on phase
-change or coordinator takeover. Scenario Manager and the deployment workflow
-consume this authority; services never use independent maintenance flags. An
-unavailable or unverifiable epoch state keeps their gates closed.
+`datasets/requirements.yaml` is the only Dataset Requirements Document entry
+point inside a Scenario Bundle. It contains required integer `version: 1` and a
+non-empty `requirements` array. If the file is absent, the bundle has no Managed
+Dataset consumer dependency; a provider-only bundle may still declare an
+explicit Managed Dataset output. A present empty document, unknown version,
+unknown field, duplicate `bindingRef`, exceeded document/requirement limit,
+traversal, symlink escape or second requirements entry point is invalid; absence
+never triggers consumer Dataset discovery or a default.
 
-The closed durable phases are `PREPARING`, `DRAINING_V2`, `CUTOVER_READY`,
-`RESTORING_NEW_MAJOR`, `ROLLING_BACK`, `RESTORING_V2`, `COMPLETED` and
-`ROLLED_BACK`. The forward path ends
-`RESTORING_NEW_MAJOR -> COMPLETED`. Pre-switch recovery ends
-`RESTORING_V2 -> ROLLED_BACK`; explicit post-switch rollback passes through
-`ROLLING_BACK` before the same restoration path. Restart resumes the recorded
-phase. Failure is recorded against that phase and permits only its declared
-resume or rollback transition. Only the two terminal phases reopen the gates.
-`maximumScenarioProtocolMaintenanceDuration` bounds the attempt. Expiry records
-failure and keeps every gate closed; it never triggers an automatic cutover,
-rollback or protocol fallback.
+The document is static authoring configuration. Pebble, `eval(...)`, `vars`,
+`sut`, credentials and concrete runtime Dataset/Group/View ids are forbidden.
+Provider grouping templates remain in the Provider Scenario Binding; Create
+Swarm owns environment-specific selections.
 
-While the epoch is active, Scenario Manager rejects bundle file writes, creates,
-imports, replacements, renames, moves, deletes and registry-changing reloads.
-Orchestrator rejects public swarm create, start and recreate. The authenticated
-deployment upgrade workflow is the only caller of a dedicated epoch-bound
-drain/restore command. Each request carries `epochId`, the current
-`epochFencingToken`, `expectedPhase`, one exact `capturedSwarmId`, the frozen
-plan digest and an idempotency key. The swarm must belong to the captured
-inventory. Exact replay returns its stable result even after a phase/token
-advance; a changed replay, stale or foreign token, wrong phase, unknown swarm or
-changed plan digest conflicts. This command is not accepted through the normal
-lifecycle API and grants no general bypass. UI, MCP, CLI and agents cannot evade
-these server-side gates. Operator-mounted source roots are read-only or frozen
-by the deployment adapter for the epoch; inability to fence a root fails
-preflight.
+Scenario Manager loads the document in the same all-or-nothing bundle validation
+transaction as `scenario.yaml`. It cross-validates requirements against Scenario
+roles, provider/consumer adapter configuration, the capability catalogue,
+Dataset Definitions, schemas and binding rules. Scenario Manager returns one
+tagged projection:
 
-Inside the epoch, the workflow inventories every repository-shipped,
-operator-mounted and uploaded/persisted bundle visible from the configured
-Scenario roots. Each staged bundle explicitly declares complete requirements or
-`managedDatasetRequirements: []` and passes the Scenario Manager validator. The
-closed inventory records source/root, bundle key, original protocol, staged
-artifact digest and validation evidence. It also captures the exact v2 swarm set
-and immutable pre-drain recreation plans. Unreadable roots, duplicates,
-unaccounted bundles or mutable roots fail it.
+```text
+ABSENT  = {status: ABSENT, artifactDigest}
+PRESENT = {status: PRESENT, version: 1, artifactDigest, requirements: non-empty[]}
+```
 
-After draining that exact swarm set, the workflow re-reads every source-root,
-inventory and staged-artifact digest. Only an exact match permits one atomic
-switch of the new validator and all staged roots. Failure before that switch
-publishes no partial registry and keeps the prior validator and original roots
-selected; it does not claim the drained swarms were unchanged. Orchestrator must
-recreate the exact captured set from its frozen v2 plans within
-`maximumScenarioProtocolRecoveryDuration`.
+`ABSENT` is a validated tagged result after Scenario Manager proves the canonical
+path does not exist. An unreadable path, directory in place of the file or I/O
+failure is invalid, never `ABSENT`.
 
-After the switch, the epoch remains active until Orchestrator recreates and
-verifies the captured swarms from validated new-major bundles. Failure never
-switches back implicitly: the operator explicitly resumes new-major recreation
-or requests rollback. Rollback drains any new-major recreation, atomically
-reselects the prior validator/roots and restores the captured v2 set within the
-same recovery bound. Until recreation or rollback completes, every epoch gate
-remains fail-closed and reports the incomplete operation.
+`artifactDigest` is the existing deterministic digest of the complete validated
+Scenario Bundle, so changing the Requirements Document invalidates stale
+validation evidence. UI, MCP, CLI, CI, Orchestrator and workers never parse or
+revalidate its YAML. Orchestrator stores the tagged projection and artifact digest
+with the admitted Scenario Binding.
 
-Original and staged roots remain immutable until cutover acceptance or rollback
-completion. The migration is planned downtime. The deployment never runs both
-majors concurrently, and older majors never gain Managed Dataset meaning from
-an absent or ignored field; no compatibility shim or default is permitted.
+Scenario Manager advertises this exact authoring-contract entry:
+
+```yaml
+datasetRequirements:
+  path: datasets/requirements.yaml
+  supportedVersions: [1]
+  projection: /scenarios/{scenarioId}/dataset-requirements
+```
+
+The projection endpoint returns the tagged `ABSENT` or `PRESENT` contract above.
+A `PRESENT` bundle cannot be listed for Managed Dataset admission or prepared
+for runtime unless Orchestrator supports version 1. Its existing
+`POST /scenarios/{scenarioId}/runtime` request adds
+`acceptedDatasetRequirementsVersion: 1`; Scenario Manager rejects a missing or
+mismatched value only when the projection is `PRESENT`. An updated Orchestrator
+rejects a Scenario Manager that does not advertise the contract. Managed Dataset
+remains absent from the capability catalogue until the deployed Scenario Manager
+and Orchestrator both support version 1. Existing v2 bundles remain valid without
+modification; this compatibility gate is not a parser fallback or silent ignore
+rule.
 
 `dataset.yaml` is the only Dataset Definition entry point. Directory name must
 equal `id`; `version` is SemVer. Record and state roots use exact paths shown
@@ -517,7 +510,9 @@ horizon-bounded until a separately approved reclamation contract exists.
 ### Consumer requirements and Create Swarm
 
 ```yaml
-managedDatasetRequirements:
+# datasets/requirements.yaml
+version: 1
+requirements:
   - bindingRef: inputRecords
     datasetDefinitionId: shared-records
     profile: WORKFLOW
@@ -535,18 +530,20 @@ managedDatasetRequirements:
       completionLagTolerance: PT30S
 ```
 
-Requirement omission is invalid under the activated Scenario Protocol major;
-no Dataset requires an explicit empty array. `bindingRef` is unique.
-Compatibility requires the same SUT Environment, Dataset Space,
-Definition/version, Profile, access, allocation, schema digests and, for
-workflow, View/transition. A provider using `MANAGED_DATASET` references its
-upstream requirement; it is not both a normal consumer input and provider source
-for the same binding.
+The file is optional; when present, `requirements` is non-empty and `bindingRef`
+is unique. File absence explicitly means no Managed Dataset consumer requirement
+and requires `datasetSelections: []` at Create Swarm. It does not disable an
+explicit provider output binding. Compatibility requires the same SUT
+Environment, Dataset Space, Definition/version, Profile, access, allocation,
+schema digests and, for workflow, View/transition. A provider using
+`MANAGED_DATASET` references its upstream requirement; it is not both a normal
+consumer input and provider source for the same binding.
 
 Create Swarm lists only compatible named Dataset/Group/View choices. The request
-contains one selection per requirement or exactly `datasetSelections: []`. A
-selection freezes `datasetId`, `groupId`, optional `viewId`, Profile, allocation,
-schema digests and its admitted `revision` as the initial snapshot revision.
+contains one selection per requirement. An `ABSENT` Requirements Document
+requires exactly `datasetSelections: []`. A selection freezes `datasetId`,
+`groupId`, optional `viewId`, Profile, allocation, schema digests and its admitted
+`revision` as the initial snapshot revision.
 Completed activation generations may advance that revision within the same
 frozen selection; no identity, schema, Group, View, Profile or allocation may
 change. Empty or failed discovery never substitutes another choice. The Create
@@ -820,7 +817,7 @@ SNAPSHOT_REVISION_NOT_FOUND, SNAPSHOT_DIGEST_MISMATCH,
 SNAPSHOT_READER_GRANT_INVALID, SNAPSHOT_READER_UNAVAILABLE,
 SNAPSHOT_ACTIVATION_CONFLICT, SNAPSHOT_ACTIVATION_CONFIRMATION_NOT_FOUND,
 SNAPSHOT_DELETION_ACKNOWLEDGEMENT_CONFLICT, SNAPSHOT_STORAGE_UNAVAILABLE,
-SCENARIO_PROTOCOL_MAINTENANCE_ACTIVE,
+DATASET_REQUIREMENTS_VERSION_UNSUPPORTED,
 REDIS_STAGING_CLEANUP_FAILED,
 AUTHORITY_UNAVAILABLE
 ```
@@ -837,9 +834,9 @@ grant and Snapshot Reader timeout with the same descriptor and cursor.
 `SNAPSHOT_READER_GRANT_INVALID` and `SNAPSHOT_ACTIVATION_CONFLICT` are terminal
 for that Controller attempt. No reader error switches transport or credential.
 Missing confirmation evidence, changed Deletion Acknowledgement replay and an
-active Maintenance Epoch on a normal API are explicit failures; clients do not
-retry them automatically or bypass their owning gate. Only the dedicated
-epoch-bound upgrade command follows the fenced phase contract above.
+unsupported Dataset Requirements Document version are explicit failures;
+clients do not retry them automatically, ignore the document or bypass their
+owning gate.
 
 ## Safety and runtime behaviour
 
@@ -1408,6 +1405,7 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 
 | Limit group | Required limits |
 |---|---|
+| Authoring | `maximumDatasetRequirementsDocumentBytes`, `maximumDatasetRequirementsPerScenario` |
 | Authority storage | `maximumManagedDatasetCount`, `maximumManagedDatasetStoredRecords`, `maximumManagedDatasetStoredBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetStateBytes`, `maximumManagedDatasetViewMemberships`, `maximumManagedDatasetDerivationLineageRows`, `maximumManagedDatasetDerivationLineageBytes`, `maximumSnapshotActivationConfirmations`, `maximumSnapshotActivationConfirmationRecordBytes`, `maximumSnapshotActivationConfirmationBytes`, `maximumPendingSnapshotDeletionAcknowledgementsPerBinding`, `maximumIdempotencyRecords`, `maximumIdempotencyBytes` |
 | Mutations | `maximumLeaseAcquisitionsPerSecond`, `maximumLeaseReleasesPerSecond`, `maximumWorkflowTransitionsPerSecond`, `maximumDerivationCompletionsPerSecond` |
 | Derivation | `maximumDerivedRecordsPerSource`, `maximumConcurrentDerivationItems` |
@@ -1417,7 +1415,7 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Publication and retention time | `maximumSnapshotExportDuration`, `snapshotPublicationGrantDuration`, `snapshotReaderGrantSafetyMargin`, `maximumSnapshotLoadDuration`, `maximumStorageVisibilityDelay`, `inactiveSnapshotRetentionGrace`, `snapshotActivationEvidenceRetention` |
 | Qualified throughput | `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
 | Worker/filesystem | `maximumWorkerMemoryBytes`, `maximumWorkerSnapshotMemoryBytes`, `qualifiedWorkerBaseApplicationMemoryBytes`, `maximumWorkerDirectBufferMemoryBytes`, `minimumWorkerGcHeadroomBytes`, `maximumSnapshotDecodeIndexOverheadBytesPerWorker`, `maximumSnapshotGcPause`, `maximumManagedDatasetFilesystemBytes`, `maximumManagedDatasetFilesystemUtilisationPercent` and eligible-node storage capability |
-| Control plane | `maximumControllerRecoveryTime`, `maximumScenarioProtocolMaintenanceDuration`, `maximumScenarioProtocolRecoveryDuration`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
+| Control plane | `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
 
 Reservations use maximum record/state/lineage/membership bytes before dispatch.
 Completion cannot partially commit to fit capacity. Concurrent admission cannot
@@ -1615,8 +1613,8 @@ post-MVP shape becomes executable only at its named contract gate:
 | Contract | Canonical owner | Contract gate |
 |---|---|---|
 | Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` | M0 core; Profile extensions before their stage |
-| Scenario Protocol activation, Orchestrator-owned Maintenance Epoch/phase API, bundle inventory/migration and epoch-bound swarm restoration | `docs/scenarios/SCENARIO_CONTRACT.md`, `docs/UPGRADING.md`, `docs/ORCHESTRATOR-REST.md` and the single Scenario Manager validator | M0 |
-| Provider binding and `managedDatasetRequirements` | `docs/scenarios/SCENARIO_CONTRACT.md` plus its single executable Scenario DTO/validator | M0 `SCHEDULER`; source extensions before M2c/M2d |
+| Dataset Requirements Document path, versioned shape, tagged projection, validation and version handshake | `docs/spec/managed-dataset-requirements.schema.json`, `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and the single Scenario Manager validator | M0 |
+| Provider binding | `docs/scenarios/SCENARIO_CONTRACT.md` plus `docs/architecture/workerCapabilities.md` and their single executable DTO/validator path | M0 `SCHEDULER`; source extensions before M2c/M2d |
 | Create Swarm discovery and `datasetSelections` | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | M0 shared selection; View/lease extensions before M2b/M2c |
 | Adapter settings and capability declarations | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types | M0 core; each capability before advertisement |
 | Outcome Mapping and workflow completion | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types | Before M2b |
@@ -1634,7 +1632,7 @@ post-MVP shape becomes executable only at its named contract gate:
 
 | Milestone | Deliverable | Exit |
 |---|---|---|
-| M0 — MVP contracts | Approved shared-replay model and executable core schemas/types above | New Scenario Protocol major, persisted Maintenance Epoch, complete repository-shipped/operator-mounted/uploaded bundle inventory and migration, v2 swarm drain/restoration, authoritative validation evidence, core owners and review complete |
+| M0 — MVP contracts | Approved shared-replay model and executable core schemas/types above | Dataset Requirements Document v1, bundle path/validator/projection, authoring-contract advertisement, mixed-version fail-closed admission, unchanged v2 descriptor validation, authoritative `artifactDigest` evidence, core owners and review complete |
 | M1a — shared authority | PostgreSQL records, Groups, revisions, idempotency, Scheduler refill, publication reservation and fencing | Shared-path transaction, concurrency, retry, restart and replica tests pass |
 | M1b — mutable authority | Record State, materialised Views, leases, transitions and completion | Mutable-path transaction, concurrency, lease and restart tests pass |
 | M2a — snapshot foundation | `SCHEDULER + REPLAY + SHARED`, granted Snapshot Reader, Active Reference, typed mounts and local memory | Reader, grant-expiry, activation, retention, recovery, storage, digest, outage, reschedule and measured-path gates pass |
@@ -1642,20 +1640,29 @@ post-MVP shape becomes executable only at its named contract gate:
 | M2c — remaining sources | Replay exclusive plus finite CSV/Redis import and their authority state | Source/profile restart and isolation gates pass |
 | M2d — derived source | Managed Dataset source, lineage, explicit Outcome Mapping and atomic upstream/downstream completion | Lineage, redelivery, count, capacity and rollback gates pass |
 | M3a — MVP operations | Shared-path REST/MCP status, metrics, alerts, runbook, performance and target-scale 24-hour qualification | Shared functional, continuity, cost, storage and soak gates pass |
-| M3b — post-MVP operations | Incremental REST/MCP/UI and operational qualification for mutable workflow and each remaining source | Each capability passes its functional, continuity, accessibility, cost, storage and soak gates before advertisement |
+| M3b — post-MVP operations | Incremental REST/MCP, read-only UI projection of the Orchestrator status model and operational qualification for mutable workflow and each remaining source | Each capability passes its functional, continuity, accessibility, cost, storage and soak gates before advertisement |
+
+The required delivery order is:
+
+```text
+M0 -> M1a -> M2a -> M3a
+  = shared-replay MVP
+  -> M1b -> M2b -> mutable M3b
+  = mutable parity
+  -> M2c and M2d -> their M3b gates
+  = Release 1
+```
 
 These are delivery and qualification milestones, not separate product promises.
-M0, M1a, M2a and M3a form the shared-replay MVP. M1b and M2b add required
-mutable-dataset parity after its M3b gates pass. M2c and M2d add the remaining
-extensions after their M3b gates pass; all M3b gates complete Release 1. A build
-advertises only its completed Profiles and sources through the canonical
-capability contract; unsupported capabilities fail admission without fallback.
+The capability catalogue controls runtime availability only; it never removes a
+named target from Release 1. A build advertises only completed Profiles and
+sources; unsupported capabilities fail admission without fallback.
 
 ## Acceptance criteria
 
 Every stage applies all cross-cutting criteria below. Source/Profile clauses
 apply when that capability enters the delivery boundary. The shared-replay MVP
-must pass the Scenario migration, `SCHEDULER`, `REPLAY + SHARED`, no-Dataset,
+must pass the bundle-extension, `SCHEDULER`, `REPLAY + SHARED`, no-Dataset,
 snapshot, evidence, capacity, security, performance, failure and recovery
 clauses. Mutable parity adds workflow, View, lease, transition and Outcome
 clauses. Release 1 extensions add replay-exclusive, finite-import and Derivation
@@ -1664,40 +1671,27 @@ pass by fallback or partial implementation.
 
 Tests use official product APIs and prove:
 
-1. Scenario Manager is the only public authoring validator. A persisted fenced
-   Maintenance Epoch rejects bundle mutation/import/move/delete and normal swarm
-   create/start/recreate through every public API while the final inventory,
-   migration, validation, drain and cutover run. It survives coordinator restart;
-   Orchestrator owns its monotonic token and closed durable phase. Only the
-   authenticated upgrade workflow can submit an epoch-bound drain/restore for an
-   exact captured swarm and frozen plan digest. Exact replay is stable; stale or
-   foreign tokens, wrong phases, changed plans and uncaptured swarms conflict.
-   operator-mounted roots remain read-only or frozen. The final inventory records
-   every repository-shipped, operator-mounted and uploaded/persisted bundle,
-   source, identity, old protocol, staged digest and validation evidence;
-   Dataset-free scenarios declare `managedDatasetRequirements: []`. It also
-   captures the exact v2 swarm set and frozen recreation plans. Concurrent write,
-   import, move, delete, reload, create and start tests fail closed.
-   Unreadable, mutable, duplicate, unaccounted or v2 bundles block activation.
-   After the exact swarm set drains, source, inventory and staged digests are
-   rechecked before one atomic validator/root switch. Pre-switch failure preserves
-   the prior validator and original roots, publishes no partial registry and
-   restores the drained set from frozen v2 plans within
-   `maximumScenarioProtocolRecoveryDuration`; it does not claim the running
-   deployment was unchanged. Post-switch recreation failure remains gated until
-   explicit resume or rollback; rollback atomically restores the prior
-   validator/roots and exact v2 set. Staged and original roots remain available
-   until acceptance or completed rollback. Successful validation returns the canonical
-   declared/supported versions, Scenario Manager version, deterministic artifact
-   digest and applicable compiled schema digests. Epoch crash/resume, takeover,
-   stale-coordinator, timeout, rollback and restoration-failure tests prove
-   planned-downtime behaviour without a public lifecycle bypass.
+1. Scenario Manager is the only public authoring validator. Existing Scenario
+   Protocol v2 bundles without `datasets/requirements.yaml` remain valid and
+   produce the tagged `ABSENT` projection. A present document requires
+   `version: 1`, at least one requirement and unique `bindingRef` values;
+   malformed YAML, an unknown version or field, an empty or oversized list, an
+   oversized document, unreadable/non-file path, second entry point, path escape,
+   invalid role/capability/Definition reference or incompatible contract rejects
+   the complete bundle. Successful validation returns the tagged projection,
+   supported version, Scenario Manager version, deterministic complete-bundle
+   digest and applicable compiled schema digests. UI, MCP, CLI, CI and
+   Orchestrator preserve that evidence and do not revalidate YAML. Mixed-version
+   tests prove a present document cannot be listed, admitted or runtime-prepared
+   when Scenario Manager or Orchestrator omits or mismatches version 1; it is
+   never ignored. Requirements edits invalidate prior `artifactDigest` evidence.
 2. Every Dataset freezes name, identity, SUT/Dataset Space, Profile, grouping,
    schemas, source, allocation and workflow contract. Group results and consumers
    cannot change identity or create Groups.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
-   adapter/source with no migration or fallback. Empty Managed Dataset
-   requirements/selections work explicitly.
+   adapter/source with no migration or fallback. An absent Requirements Document
+   plus `datasetSelections: []` works explicitly; a present empty requirements
+   list is invalid.
 4. Scheduler, CSV, Redis and Managed Dataset sources enforce their exact tagged
    settings, capabilities, provenance and restart rules. Redis tests cover copy,
    per-command results, TTL, cleanup, collision and cluster slot safety without

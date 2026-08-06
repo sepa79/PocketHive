@@ -10,16 +10,18 @@ For exact requirements, see the
 A Managed Dataset is a proposed durable synthetic system-under-test (SUT) data
 option. One provider swarm creates it for many compatible consumers. Existing
 Redis Dataset, CSV Dataset and Scheduler adapters do not change.
-Adding the runtime option is additive, but activating its required Scenario
-fields needs one planned offline Scenario Protocol migration.
+`scenario.yaml` stays on Protocol v2. A consumer dependency uses one versioned
+`datasets/requirements.yaml` file inside its bundle.
 
 ```text
 provider -> named Managed Dataset -> explicit consumer selection -> normal scenario -> SUT
 ```
 
 Every choice is explicit. PocketHive never substitutes another adapter, source,
-Dataset, Group or View. A swarm that needs no Managed Dataset declares empty
-requirement and selection arrays.
+Dataset, Group or View. If the requirements file is absent, the scenario has no
+Managed Dataset consumer dependency and Create Swarm sends
+`datasetSelections: []`. A provider-only scenario can still create a Dataset
+through its explicit output binding.
 
 The full design is Release 1, not one MVP. Delivery starts with scheduled shared
 replay, then adds mutable-workflow parity, then the remaining sources and
@@ -32,12 +34,13 @@ Derivation. Safety and evidence are not deferred from the MVP.
 | Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`, named/grouped records, exact or empty consumer selection, local snapshots and REST/MCP evidence |
 | Mutable parity | `WORKFLOW + EXCLUSIVE_LEASE`, Record State, Views, transitions and complete Outcome Mapping |
 | Release 1 extensions | Replay exclusive, finite CSV/Redis import and bounded Managed Dataset Derivation |
-| Release 1 completion | UI and full operational, performance, continuity and soak qualification for every advertised capability |
+| Release 1 completion | Shared MVP, mutable workflow, replay exclusive, CSV, Redis, Managed Dataset Derivation, read-only UI and full qualification |
 
-The MVP still includes protocol migration, fencing, safe activation and cleanup,
+The MVP still includes bundle validation, fencing, safe activation and cleanup,
 terminal abandonment, capacity checks, restart recovery and security. A later
 capability is absent from the catalogue until its own gates pass; PocketHive does
-not substitute another capability.
+not substitute another capability. The later UI only displays the same
+Orchestrator status model; it does not calculate another result.
 
 ## Choose the right model
 
@@ -196,51 +199,30 @@ The shared-replay MVP is useful on its own but does not complete Release 1.
 Mutable `WORKFLOW + EXCLUSIVE_LEASE` remains required parity. Replay exclusive,
 finite CSV/Redis import and the bounded Managed Dataset derived source remain
 Release 1 extensions. Each boundary passes its applicable operational gates
-before PocketHive advertises it.
+before PocketHive advertises it. The capability catalogue reports runtime
+availability; it cannot remove a named target from Release 1.
 
-Before implementation, PocketHive activates Dataset requirements under a new
-Scenario Protocol major because every scenario must declare requirements or
-`[]`. Orchestrator owns one persisted Maintenance Epoch with a monotonic fencing
-token, frozen plan digest and closed durable phase. Scenario Manager then rejects
-bundle write, import, replace, move and delete operations; Orchestrator rejects
-public swarm create, start and recreate. Only the authenticated upgrade workflow
-can use the epoch-bound drain/restore command for a captured swarm and its exact
-frozen plan. Stale tokens, wrong phases, changed plans and uncaptured swarms
-conflict. Operator-mounted roots remain read-only or frozen. UI, MCP, CLI and
-agents cannot bypass these server-side gates.
+Before implementation, M0 defines Dataset Requirements Document version 1 at
+`datasets/requirements.yaml`. The file is optional, but when present it contains
+at least one requirement. Scenario Manager alone parses it, checks its Scenario
+roles, capabilities, Dataset Definitions and schemas, and includes it in the
+validated bundle `artifactDigest`. UI, MCP, CLI, CI and Orchestrator preserve
+that result instead of running their own YAML checks.
 
-Inside the epoch, PocketHive performs the final inventory and digest validation,
-captures and drains the exact v2 swarm set, then rechecks every source, inventory
-and staged digest before one cutover. Success activates the new validator and all
-migrated roots together. Failure before the switch keeps the prior validator and
-roots selected but does not pretend drained swarms are unchanged: Orchestrator
-restores the captured set from frozen v2 plans within a declared bound. Failure
-after the switch remains gated until an operator resumes new-major recreation or
-requests rollback within the same bound; PocketHive never switches back
-implicitly. Original and staged roots remain for rollback. This is planned
-downtime, and PocketHive never runs both majors concurrently. Scenario Manager
-remains the only authoring validator;
-UI, MCP, CLI, CI and agents preserve its result and version/digest evidence
-instead of running their own checks.
+Scenario Manager reports `ABSENT` with bundle evidence, or `PRESENT` with
+version, requirements and the same evidence. A present file is admitted only
+when Scenario Manager and Orchestrator both advertise version 1. An invalid,
+empty, unsupported or ignored file fails; it never becomes “no Dataset”.
+Existing Protocol v2 bundles without the file keep working unchanged, so this
+design needs no offline migration or swarm drain.
 
 Each capability starts only after one canonical contract owns its Scenario,
 worker, API, Context, status and snapshot shapes. The MVP does not wait for
-executable contracts for post-MVP capabilities. Production also requires
-concurrency, failure, restart, storage, capacity and every-node reschedule tests;
-zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
-worst-case all-worker restart, filesystem operation and operating-horizon export
-tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests;
-pre-completion abandonment, repeated reservation release, stale completion and
-completion/abandonment race tests; crash tests around publication completion,
-completed-but-unconfirmed recovery, Active Reference replacement,
-Snapshot Activation Confirmation, marker publication, revision deletion and
-Deletion Acknowledgement; late acknowledgement followed by a lost successful
-response, exact replay, exact-predecessor lookup, consecutive unavailable
-acknowledgements, binding-local pending-slot exhaustion/isolation/recovery and
-confirmation-capacity tests;
-Maintenance Epoch mutation/create/start races, restart, stale coordinator,
-changed-plan, uncaptured-swarm, rollback and restoration tests;
-pilot-powered paired performance trials; and a target-scale 24-hour soak.
+executable contracts for post-MVP capabilities. Before advertisement, each
+capability passes its applicable acceptance criteria. The MVP passes only the
+shared-path, bundle-extension, publication, evidence, security, capacity, recovery,
+performance and 24-hour soak gates. The normative specification contains the
+complete test matrix.
 
 Release 1 has no record expiry, reclamation or purge. Deployment limits and an
 approved retention runbook must fund every stored record within the declared
