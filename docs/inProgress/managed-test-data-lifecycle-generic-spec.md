@@ -54,22 +54,24 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | State before extra Datasets | Success, retryable failure, terminal failure and unknown remain Record State and named Views in one `WORKFLOW` Dataset. |
 | Explicit outcomes | A scenario-owned Outcome Normaliser emits one closed Outcome. A terminal Outcome Mapping handles all four classes, has no default and creates one complete next state. PocketHive never parses a SUT response to infer state. |
 | Bounded derivation | `MANAGED_DATASET` consumes one exact upstream `WORKFLOW + EXCLUSIVE_LEASE` selection and writes to one downstream Dataset. Only `SUCCESS` creates bounded records. |
-| Immutable payload | Record payload never changes. Workflow mutation affects separately versioned Record State only. |
+| Immutable payload | Record payload never changes and reaches workers only through a verified snapshot. Workflow claims return identity, state and lease data, never another payload copy. |
 | Explicit allocation | `REPLAY` uses `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. Modes never mix within one Dataset. |
 | Explicit consumers | A Scenario Template that needs no Managed Dataset declares `managedDatasetRequirements: []`, and Create Swarm declares `datasetSelections: []`. Otherwise every requirement has one exact compatible selection. |
 | Provider-only templates | Group templates use only the Provider Scenario Binding's allowlisted non-secret `vars` and `sut` values. Consumers use resolved ids. |
 | PostgreSQL authority | For Managed Dataset only, PostgreSQL owns runtime records, revisions, state, materialised View membership, imports, grants, lineage, leases, idempotency and background-work fencing. Files and worker memory are derivative. |
-| Local measured path | Replay selection, prefetched workflow dispatch, Context validation and counters use verified local memory. Authority and publication work remains background/control-plane work. |
+| Local measured path | Replay selection, prefetched workflow dispatch, immutable-record lookup, Context validation and counters use verified local memory. Authority claims return mutable state and leases only; authority and publication work remains background/control-plane work. |
 | Split publication boundary | Orchestrator validates and fences publication but never proxies snapshot bytes. Swarm Controller reads only the granted immutable revision through the explicit `DatasetSnapshotReader` PostgreSQL function adapter. Workers never access PostgreSQL. |
 | Explicit activation | One atomic Active Snapshot Reference selects the completed publication for a binding. Workers never infer it by scanning directories or choosing a revision. |
-| Deterministic refresh | Orchestrator sends a revision hint, the Controller reconciles authoritative metadata, and workers poll the Active Reference on explicit background intervals. No notification or filesystem watcher is the correctness path. |
+| Deterministic refresh | Orchestrator sends a revision hint, the Controller reconciles authoritative metadata, and workers poll the Active Reference on explicit background intervals. Hints mark a binding dirty; they do not bypass its publication window. No notification or filesystem watcher is the correctness path. |
+| Bounded publication rate | Each dirty binding publishes only its latest observed revision after one required minimum interval. Full-snapshot export rate, freshness and operating-horizon size must pass admission together. |
 | Least-privilege publication | The Controller writes only its swarm publication directory. Applicable consumer-input workers mount only their binding read-only. Other workers get no Dataset mount. |
-| Bounded capacity | Deployment limits cover authoritative storage, mutation rates, snapshots, filesystem, memory and concurrency. Exhaustion rejects new work without eviction or fallback. |
+| Bounded capacity | Deployment limits cover authoritative storage, mutation rates, snapshots, filesystem bytes and operations, complete restart fan-out, total worker memory and concurrency. Exhaustion rejects new work without eviction or fallback. |
 | No inferred lifecycle | Managed Dataset never starts, replaces, fails over or reconciles provider swarms or SUT objects. |
 | Bounded record lifecycle | Release 1 records are `NON_EXPIRING`. Replay can reuse them continuously; workflows that move records out of a ready View operate only within the admitted storage horizon. |
 | No implicit deletion | Release 1 has no record retirement, reclamation or Dataset purge state machine. Direct PostgreSQL deletion is prohibited; a runbook and deployment limits bound retained data. |
 | Continuity, not Controller HA | Release 1 has one active Controller per swarm. Fencing and deterministic restart recovery preserve publication safety; loaded workers may continue as defined, but multi-replica Controller election is not claimed. |
 | Separated status planes | Group Availability reports authority health only. Publication Status is per admitted binding. Consumption Status reports worker loading, selection and SUT-attempt evidence. A Group needs no consumer to be `AVAILABLE`. |
+| Small Controller deltas | Controller `status-full` may contain bounded reporter detail. Controller `status-delta` contains binding aggregates and digests only, never a reporter list. |
 | One evidence model | Orchestrator alone derives consumption status. REST, UI and MCP project that read model unchanged. Missing or stale evidence yields `UNKNOWN`, never green. |
 
 ## Release 1 target
@@ -381,7 +383,7 @@ deployment limit. Finite imports require each Group count within
 `targetReady..maximumReady` and publish all Groups only after full validation.
 Scheduler refill grants reserve capacity and stage receipts; one grant
 completion atomically commits the complete cohort and advances at most one
-payload revision per affected Group. Stale work publishes nothing.
+snapshot revision per affected Group. Stale work publishes nothing.
 
 Scheduler grant size is the minimum of requested batch, target deficit,
 `maximumReady` deficit, `maximumStored` deficit and every deployment reservation
@@ -563,13 +565,13 @@ snapshot-byte fallback.
 | Begin finite import | `POST /api/managed-datasets/{datasetId}/source-imports` | CSV/Redis only; source type/fingerprint, total item/byte and exact per-Group counts |
 | Import receipt | `PUT /api/managed-datasets/{datasetId}/source-imports/{importId}/items/{sourceItemKey}/receipt` | Exact Group, record and optional required workflow initial state; stable source-position identity |
 | Import completion | `PUT /api/managed-datasets/{datasetId}/source-imports/{importId}/complete` | Repeats fingerprint/counts; publishes all Groups atomically or none |
-| Derivation grant | `POST /api/managed-datasets/{destinationDatasetId}/derivation-grants` | Destination/source binding refs and batch; claims exact upstream View members and reserves maximum destination capacity |
+| Derivation grant | `POST /api/managed-datasets/{destinationDatasetId}/derivation-grants` | Destination/source binding refs, completed source snapshot revision, activation generation and batch; claims exact upstream View members, reserves maximum destination capacity and returns source identity/state/lease without payload |
 | Derivation completion | `PUT /api/managed-datasets/{destinationDatasetId}/derivation-grants/{derivationGrantId}/items/{derivationItemId}/completion` | Both bindings, provider key, source lease/View/revision, Outcome, mapping digest, next state and ordered records; changes both Datasets atomically |
 | Begin publication | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications` | Controller swarm/run/binding only; returns a fenced, expiring descriptor pinned to one revision/digest and one opaque Snapshot Reader grant |
 | Complete publication | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/complete` | Exact manifest/chunk/whole digests and fencing token; atomically completes the publication and returns the next binding-scoped `activationGeneration` |
 | Reconcile publication | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the frozen selection, current authority revision and latest completed publication/generation for refresh and deterministic recovery, never record bytes |
-| Replay leases | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases` | `REPLAY + EXCLUSIVE_LEASE`; binding, revision and requested count |
-| Workflow claims | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/views/{viewId}/record-leases` | Binding, payload revision and requested count; returns record, state, lease and state revision |
+| Replay leases | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases` | `REPLAY + EXCLUSIVE_LEASE`; binding, completed snapshot revision, activation generation and requested count; returns record identity and lease only |
+| Workflow claims | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/views/{viewId}/record-leases` | Binding, completed snapshot revision, activation generation and requested count; returns `recordId`, complete state, state revision, lease, snapshot revision, activation generation and record-schema digest, never record payload |
 | State transition | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases/{recordLeaseId}/state-transition` | Binding, claimed View/revision, transition, Outcome, mapping digest and complete next state; one transaction |
 | Unchanged release | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases/{recordLeaseId}/release` | Replay exclusive, or explicitly allowed workflow release with claimed View/revision only |
 
@@ -577,6 +579,14 @@ Every mutating request contains `bindingRef`, scoped `idempotencyKey` and the
 operation's expected identities/revisions. Responses repeat enough identity for
 the caller to reject mismatches. Schema errors return bounded keyword/JSON
 Pointer locations without values or unrestricted validator messages.
+
+Replay lease, workflow claim and Derivation-grant selection intersect the live
+eligible records with the requested completed snapshot revision. A record
+introduced after that revision is not eligible. The worker resolves each
+returned `recordId` only from the matching verified local snapshot and combines
+it with the returned workflow state when applicable. Missing identity, revision,
+activation generation or schema digest fails closed before dispatch; there is no
+authority-payload, REST or database fallback.
 
 The deployment injects one required `managedDatasetClient` with `baseUrl`,
 `serviceAuthRef`, `requestTimeout`, `operationTimeout`, `maximumAttempts` and
@@ -608,15 +618,18 @@ authors cannot select or override it.
 The canonical `ph_managed_dataset_snapshot_page` database function accepts
 `publicationId`, opaque grant token, fencing token, `afterRecordId` and bounded
 page limit. It verifies the
-authenticated reader role, hashed grant, Controller/run/binding identities,
+exact login role through `session_user`, hashed grant, Controller/run/binding identities,
 grant expiry, fencing token and pinned revision. It returns one closed page with
 those identities, ordered `{recordId, record}` rows, `nextRecordId` and
 `complete`. Changed identity, duplicate/out-of-order rows or an over-limit page
 fails publication. The role receives `CONNECT`, schema `USAGE` and function
 `EXECUTE` only. Connections enforce read-only transactions. The function is
-`STABLE` and `SECURITY DEFINER`, uses no dynamic SQL, has a fixed safe
-`search_path` and a non-login owner. Its migration revokes default `PUBLIC`
-execution in the same transaction.
+`STABLE` and `SECURITY DEFINER`; it never uses `current_user` to identify the
+caller because that becomes the function owner. It uses no dynamic SQL and sets
+`search_path = pg_catalog, ph_managed_dataset, pg_temp`. The trusted
+`ph_managed_dataset` schema and function have a non-login owner, and neither
+`PUBLIC` nor the reader role has schema `CREATE`. The migration revokes default
+`PUBLIC` execution in the same transaction.
 
 Closed errors are:
 
@@ -681,8 +694,9 @@ materialised memberships and lease in one transaction. Any failure changes none.
 Derivation bridges mutable workflow processing to independent reusable records;
 it is not physical outcome routing. Authority claims one upstream View member,
 reserves the configured maximum destination record/state/membership/lineage
-capacity and returns one item. The scenario and SUT call run without database
-locks.
+capacity and returns identity, state and lease only. The provider resolves the
+immutable source record from its exact verified local snapshot. The scenario and
+SUT call run without database locks.
 
 Terminal completion uses deterministic lock order and:
 
@@ -784,7 +798,10 @@ URI/digest, counts, bytes, chunk digests and whole digest. The Controller writes
 a staging directory, fsyncs files/directories, verifies counts/digests, writes
 `READY` last and publishes by one qualified atomic directory move. Symlinks,
 traversal, special files, partial revisions and cross-filesystem moves fail.
-Publications are immutable, single-flight and coalesce later revisions.
+Publications are immutable and single-flight. A binding records the highest
+observed authority revision as dirty and publishes only that revision when its
+bounded publication window opens. A later revision coalesces into the next
+window; no revision starts a back-to-back full export outside that schedule.
 
 The Controller then completes the publication through Orchestrator. Only a
 successful completion returns a monotonic `activationGeneration`. The Controller
@@ -813,16 +830,22 @@ signal.managed-dataset-revision-available.{swarmId}.swarm-controller.<instance>
 ```
 
 The closed payload contains `schemaVersion`, `datasetId`, `groupId` and
-`authorityRevision`. The signal accelerates refresh but is never authority or the
-correctness path. The Controller validates the frozen binding and reconciles the
-current authority revision through the metadata-only snapshot-activation API.
+`authorityRevision`. The signal accelerates detection but is never authority or
+the correctness path. It marks the binding dirty and records the highest
+observed revision; it does not start publication directly. The Controller
+validates the frozen binding and reconciles the current authority revision
+through the metadata-only snapshot-activation API.
 
 The Controller also reconciles every admitted binding on the required
 `snapshotRevisionReconciliationInterval` with bounded
 `snapshotRevisionReconciliationJitter`. Signal and scheduled reconciliation enter
-the same single-flight state machine. It publishes only the highest observed
-revision and coalesces a newer revision that arrives during publication. A lost,
-duplicated, delayed or out-of-order signal cannot regress or suppress refresh.
+the same single-flight state machine and set the same dirty state. The Controller
+may start a full publication only when `minimumSnapshotPublicationInterval` has
+elapsed since that binding's previous publication start. It exports the highest
+observed revision at that point. A newer revision arriving during publication
+keeps the binding dirty for the next window. A lost, duplicated, delayed or
+out-of-order signal cannot regress, suppress or accelerate refresh beyond the
+declared rate.
 
 Workers check `ACTIVE.json` on the required background
 `workerActiveReferencePollInterval` with bounded
@@ -831,16 +854,19 @@ and atomic local swap above. An equal generation does no work. Workers do not us
 `WatchService` or filesystem events as a correctness mechanism. Polling and load
 never occur on the measured request path.
 
-The deployment profile also requires positive `snapshotPublicationSlo`,
+The deployment profile also requires positive `minimumSnapshotPublicationInterval`,
+`snapshotPublicationSlo`,
 `snapshotLoadStartupSlo`, `maximumSnapshotRefreshLatency`,
 `maximumSnapshotRefreshAttemptsPerRevision`, `snapshotRefreshRetryBackoff` and
-`snapshotRefreshFailureCooldown`; jitter is non-negative and less than its
-interval. No field has an implicit default. The healthy-path bound must satisfy:
+`snapshotRefreshFailureCooldown`. Each jitter is a sampled additional delay in
+`[0, configuredJitter]`; it is non-negative and less than its interval. No field
+has an implicit default. The healthy-path bound must satisfy:
 
 ```text
 maximumSnapshotRefreshLatency >=
   snapshotRevisionReconciliationInterval
   + snapshotRevisionReconciliationJitter
+  + minimumSnapshotPublicationInterval
   + snapshotPublicationSlo
   + workerActiveReferencePollInterval
   + workerActiveReferencePollJitter
@@ -900,15 +926,34 @@ empty, and contains the complete entries owned by that worker. The same path in
 `status-delta`, when present, contains complete replacement entries only for
 changed keys. The worker envelope supplies role and instance.
 
-The Controller emits the same path as a bounded aggregate. Each aggregate entry
-contains `schemaVersion`, `runId`, `bindingRef`, `datasetId`, `groupId`,
-`profile`, optional `viewId`, `allocation`, `boundary`, `sampledAt`,
-`reporterRole`, `reporterInstance`, `processStartedAt` and `sampleSequence`.
-One entry exists per `bindingRef + boundary + reporterRole + reporterInstance`;
-process start and sample sequence define an epoch. Delta entries replace complete
-aggregate entries; they are never patches. Missing full baseline, restart,
-counter decrease or out-of-order sample yields `UNKNOWN` until two fresh samples
-exist. Reporter cardinality and aggregate bytes obey deployment limits.
+Controller `status-full.data.context.managedDatasetConsumption[]` contains the
+bounded complete reporter entries. Each entry contains `schemaVersion`, `runId`,
+`bindingRef`, `datasetId`, `groupId`, `profile`, optional `viewId`, `allocation`,
+`boundary`, `sampledAt`, `reporterRole`, `reporterInstance`, `processStartedAt`
+and `sampleSequence`. One entry exists per
+`bindingRef + boundary + reporterRole + reporterInstance`; process start and
+sample sequence define an epoch. Full status also contains the complete
+`data.context.managedDatasetConsumptionAggregate[]` described below.
+
+Controller `status-delta` never contains that reporter list. Its
+`data.context.managedDatasetConsumptionAggregate[]` contains complete replacement
+entries only for changed `bindingRef + boundary` keys. Each entry contains the
+binding identities, `aggregateSequence`, expected/fresh/stale reporter counts,
+`reporterSetDigest`, `freshnessWatermark`, `minimumLoadedActivationGeneration`
+and the closed aggregate counters for that boundary. `aggregateSequence` is
+monotonic within the Controller process epoch. `reporterSetDigest` is SHA-256
+over RFC 8785 canonical JSON containing only
+`reporterRole + reporterInstance + processStartedAt` tuples, sorted
+lexicographically by those fields. Counters, sequence numbers and sample times
+are excluded. The digest therefore changes only when reporter membership or an
+epoch changes, without carrying the reporter list.
+
+Orchestrator accepts a delta only after a matching full baseline. A changed
+reporter-set digest, counter decrease, missing baseline or out-of-order sample
+sets the affected status to `UNKNOWN` and sends the existing
+`signal.status-request` to the Controller. The replacement `status-full` must be
+accepted before rates or complete-reporter evidence resume. Full reporter
+cardinality, full/delta bytes and aggregate counts obey deployment limits.
 
 | Boundary | Required observations |
 |---|---|
@@ -1001,13 +1046,16 @@ colour and announces status changes accessibly.
 Orchestrator exposes the read model at:
 
 ```text
+GET /api/managed-datasets/{datasetId}/groups/{groupId}/status
 GET /api/managed-datasets/consumption-status?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}
 ```
 
-PocketHive MCP
-`managed_dataset_consumption_status_get(swarmId, runId, bindingRef)` delegates
-to that API without recalculation. UI uses product REST, never MCP. All surfaces
-show the frozen Dataset/Group/Profile/View/allocation, revision, activation
+The Group route returns Group Availability and authority evidence even when no
+consumer exists. PocketHive MCP
+`managed_dataset_group_status_get(datasetId, groupId)` and
+`managed_dataset_consumption_status_get(swarmId, runId, bindingRef)` delegate to
+their matching API without recalculation. UI uses product REST, never MCP. All
+surfaces show only their applicable frozen identities, revision, activation
 generation, digests, freshness, boundary checks and next action. Workflow may
 show accepted Outcome class/mapping digest; Derivation may show exact
 source/destination binding and committed count. They never expose record/state
@@ -1027,9 +1075,9 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Derivation | `maximumDerivedRecordsPerSource`, `maximumConcurrentDerivationItems` |
 | Source/import | `maximumFiniteSourceItems`, `maximumFiniteSourceBytes`, `maximumFiniteImportDuration`, `maximumRedisCopyDuration` plus explicit active grant/import and provider-receipt bounds |
 | Snapshot limits | `maximumSnapshotBytes`, `maximumSnapshotChunkCount`, `maximumConcurrentSnapshotPublications`, `maximumConcurrentSnapshotWorkerLoads`, `maximumSnapshotPublicationBytesPerSecond`, `maximumSnapshotReadBytesPerSecond`, `maximumSnapshotExportsPerSecond`, `maximumPostgresSnapshotExportBytesPerSecond`, `maximumSnapshotReaderConnections`, `maximumSnapshotPageRecords`, `maximumSnapshotPageBytes`, `maximumRetainedSnapshotRevisionsPerBinding` |
-| Refresh and SLO | `snapshotRevisionReconciliationInterval`, `snapshotRevisionReconciliationJitter`, `workerActiveReferencePollInterval`, `workerActiveReferencePollJitter`, `snapshotPublicationSlo`, `snapshotLoadStartupSlo`, `maximumSnapshotRefreshLatency`, `maximumSnapshotRefreshAttemptsPerRevision`, `snapshotRefreshRetryBackoff`, `snapshotRefreshFailureCooldown` |
-| Qualified throughput | `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond` |
-| Worker/filesystem | `maximumWorkerSnapshotMemoryBytes`, `maximumSnapshotDecodeIndexOverheadBytesPerWorker`, `maximumSnapshotGcPause`, `maximumManagedDatasetFilesystemBytes`, `maximumManagedDatasetFilesystemUtilisationPercent` and eligible-node storage capability |
+| Refresh and SLO | `snapshotRevisionReconciliationInterval`, `snapshotRevisionReconciliationJitter`, `minimumSnapshotPublicationInterval`, `workerActiveReferencePollInterval`, `workerActiveReferencePollJitter`, `snapshotPublicationSlo`, `snapshotLoadStartupSlo`, `maximumSnapshotRefreshLatency`, `maximumSnapshotRefreshAttemptsPerRevision`, `snapshotRefreshRetryBackoff`, `snapshotRefreshFailureCooldown` |
+| Qualified throughput | `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
+| Worker/filesystem | `maximumWorkerMemoryBytes`, `maximumWorkerSnapshotMemoryBytes`, `qualifiedWorkerBaseApplicationMemoryBytes`, `maximumWorkerDirectBufferMemoryBytes`, `minimumWorkerGcHeadroomBytes`, `maximumSnapshotDecodeIndexOverheadBytesPerWorker`, `maximumSnapshotGcPause`, `maximumManagedDatasetFilesystemBytes`, `maximumManagedDatasetFilesystemUtilisationPercent` and eligible-node storage capability |
 | Control plane | `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
 
 Reservations use maximum record/state/lineage/membership bytes before dispatch.
@@ -1042,29 +1090,62 @@ Admission calculates worst-case demand for all bindings and concurrent work:
 
 ```text
 snapshotFanoutBytes =
-  sum(snapshotBytes(binding) * concurrentWorkerLoads(binding))
+  sum(snapshotBytes(binding) * applicableConcurrentWorkerLoads(binding))
 
 requiredFilesystemReadThroughput =
   snapshotFanoutBytes / snapshotLoadStartupSlo
 
+activeReferenceReadOpsPerSecond =
+  sum(applicableWorkerCount(binding)
+      / workerActiveReferencePollInterval(binding))
+
+snapshotFileOpsPerSecond =
+  sum(applicableConcurrentWorkerLoads(binding)
+      * (snapshotChunkCount(binding) + snapshotManifestFileCount(binding))
+      / snapshotLoadStartupSlo)
+
+requiredSteadyStateSnapshotExportBytesPerSecond =
+  sum(operatingHorizonSnapshotBytes(binding)
+      / minimumSnapshotPublicationInterval(binding))
+
 requiredWorkerMemory(worker) =
-  sum(currentSnapshotBytes(binding)
+  qualifiedWorkerBaseApplicationMemoryBytes(worker)
+  + maximumWorkerDirectBufferMemoryBytes(worker)
+  + minimumWorkerGcHeadroomBytes(worker)
+  + sum(currentSnapshotBytes(binding)
       + nextSnapshotBytes(binding)
       + decodeAndIndexOverheadBytes(binding))
 
-requiredDatabaseExportThroughput =
+requiredPeakDatabaseExportThroughput =
   sum(concurrentPublicationBytes) / snapshotPublicationSlo
 
-requiredFilesystemWriteThroughput =
+requiredPeakFilesystemWriteThroughput =
   sum(concurrentPublicationBytes) / snapshotPublicationSlo
 ```
 
+Release 1 has no wave-loading protocol. `applicableConcurrentWorkerLoads` is
+therefore every applicable worker that can restart or observe one activation
+together; admission cannot substitute an optimistic configured subset. The
+snapshot manifest contract defines `snapshotManifestFileCount`. Storage
+qualification measures the actual metadata/open/close amplification behind each
+logical Active Reference and snapshot-file operation; admission uses the measured
+operation demand, not the logical count alone.
+
+`minimumSnapshotPublicationInterval` is the single per-binding publication-rate
+control; its derived maximum is `1 / interval`. The existing deployment-wide
+`maximumSnapshotExportsPerSecond` remains the aggregate cap. Admission uses the
+complete operating-horizon snapshot size, not the current size, and rejects a
+binding unless both peak and steady-state database/filesystem bandwidth,
+filesystem operations and `maximumSnapshotRefreshLatency` can be met.
+
 The sum of `decodeAndIndexOverheadBytes` for one worker uses the qualified
 adapter's declared bounds and cannot exceed
-`maximumSnapshotDecodeIndexOverheadBytesPerWorker`. Admission
-rejects demand above any configured rate limit, qualified throughput or eligible
-worker memory. It also reserves active, retained and in-progress staging bytes;
-it never assumes inactive cache cleanup will create capacity.
+`maximumSnapshotDecodeIndexOverheadBytesPerWorker`. Total required memory cannot
+exceed `maximumWorkerMemoryBytes`, and the Dataset portion cannot exceed
+`maximumWorkerSnapshotMemoryBytes`. Admission rejects demand above any configured
+rate limit, qualified throughput/operations or eligible worker memory. It also
+reserves active, retained and in-progress staging bytes; it never assumes
+inactive cache cleanup will create capacity.
 
 Qualification compares maximum approved snapshot size and worker fan-out with an
 equivalent preloaded-memory fixture. Managed Dataset throughput reduction and
@@ -1074,13 +1155,19 @@ PostgreSQL, Controller, Orchestrator, Scenario Manager, lease-authority or
 credential-provider calls.
 
 The performance plan predeclares topology, versions, data, SUT seed, worker
-placement, background load, warm-up, steady-state window, exact run count and
-invalidation rules. It runs at least five valid paired baseline/candidate trials
-in alternating order on the same qualified environment. No result is discarded
-after metrics are inspected. Every absolute threshold must pass, and the
-predeclared one-sided 95% confidence bound for each paired throughput, p95 and
-p99 regression must be at most 2%; insufficiently stable evidence is
-`NOT_QUALIFIED`, not a pass.
+placement, background load, warm-up, steady-state window, confidence method and
+invalidation rules. An independent pilot estimates the variance of paired
+percentage differences. Before qualification, the plan fixes the largest sample
+count required across throughput, p95 and p99 for a one-sided 5% significance
+level, at least 90% power and a 2% detectable regression; five valid pairs is a
+floor, not proof of adequate power. Pilot trials are not qualification trials.
+
+Qualification runs the fixed paired baseline/candidate count in alternating
+order on the same qualified environment. No result is discarded after metrics
+are inspected. Every absolute threshold must pass, and the predeclared one-sided
+95% confidence bound for each paired throughput, p95 and p99 regression must be
+at most 2%. An unjustified confidence method, unstable pilot or insufficient
+evidence is `NOT_QUALIFIED`, not a pass or an automatic method switch.
 
 Startup/load, refresh, reschedule, memory/GC,
 Snapshot Reader saturation, PostgreSQL infrastructure failover,
@@ -1128,11 +1215,12 @@ Binding approval and M0 establishes one executable owner per public shape:
 |---|---|
 | Dataset Definition, provider/consumer bindings and Create Swarm selection | `docs/scenarios/SCENARIO_CONTRACT.md` plus its executable schema |
 | Adapter settings, capabilities, Outcome Mapping and completion | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types |
-| Authority/publication/Derivation API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` |
+| Authority/publication/Derivation/status API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` |
 | Snapshot Reader page | `docs/spec/managed-dataset-snapshot-reader.schema.json`; its single PostgreSQL function migration and Controller port must conform to that shape |
 | Provider and Dataset Context | `docs/spec/workitem-envelope.schema.json` |
 | Revision-available signal and routing | `docs/spec/asyncapi.yaml` plus its single control-signal payload schema |
 | Consumption telemetry | `docs/spec/control-events.schema.json` |
+| Group and consumption status MCP tools | `tools/pockethive-mcp/server.mjs` tool schemas; each delegates to its owning REST API without recalculation |
 | Snapshot manifest/record envelope | `docs/spec/managed-dataset-snapshot.schema.json` |
 | Restricted schema profile | `docs/spec/managed-dataset-schema-profile.schema.json` plus conformance vectors |
 
@@ -1180,7 +1268,10 @@ Tests use official product APIs and prove:
    specified.
 7. Shared replay permits concurrent reuse. Exclusive allocation permits one
    active authority lease per record and rejects expired/mismatched Context at
-   the SUT boundary. Saturation, redelivery, crash and lease-expiry tests pass.
+   the SUT boundary. Workflow claims return no payload, claim only records in the
+   requested completed snapshot and resolve immutable data locally without
+   fallback. Saturation, missing-local-record, redelivery, crash and lease-expiry
+   tests pass.
 8. Workflow completion accepts only the closed four-case Outcome Mapping, exact
    transition and complete schema-valid next state. It changes state,
    memberships and lease atomically; missing/invalid output changes none.
@@ -1194,31 +1285,39 @@ Tests use official product APIs and prove:
 11. Orchestrator grants but never proxies snapshot bytes. The Controller's
     least-privilege Snapshot Reader can read only the fenced revision; reader
     saturation, invalid grants and credential/table-access attempts fail closed.
+    Its `SECURITY DEFINER` function verifies the exact `session_user`, uses the
+    declared trusted `search_path` ending in `pg_temp` and grants no schema create
+    or table privilege.
 12. Typed mounts grant only Controller read-write and applicable input-worker
     read-only access. Completion precedes monotonic atomic `ACTIVE.json`
     replacement; workers never scan directories and verify the exact revision
     before atomic local load. Failure preserves the old reference; stale
     Controllers cannot regress it; state/View/lease data never comes from files.
     Lost, duplicate, delayed and out-of-order revision signals are recovered by
-    bounded Controller reconciliation, and background worker polling loads the
-    new Active Reference within `maximumSnapshotRefreshLatency` without
-    `WatchService` correctness or measured-path filesystem access.
+    bounded Controller reconciliation. Signals only mark the binding dirty; the
+    minimum publication interval coalesces hot revisions and publishes the latest
+    within `maximumSnapshotRefreshLatency`. Background worker polling loads the
+    new Active Reference without `WatchService` correctness or measured-path
+    filesystem access.
 13. Dataset Context survives every transformation and the SDK guard rejects
     malformed, mismatched, expired or clock-unsafe work immediately before SUT
     network I/O. Measured-path packet/syscall tests observe no forbidden call.
-14. Worker status reaches only the Controller; the bounded Controller aggregate
-    preserves reporter identity and epoch and is the only Dataset status consumed
-    by Orchestrator. Group Availability, per-binding Publication Status and
-    Consumption Status yield their exact closed state/reason. REST, UI and MCP
-    return one read model and expose no prohibited data. Evidence proves declared
-    Dataset use, not SUT truth or exactly-once.
-15. Concurrent admission applies the mandatory fan-out, database/filesystem
-    throughput and current-plus-next worker-memory calculations. It reaches every
+14. Worker status reaches only the Controller; Controller `status-full` preserves
+    bounded reporter identity/epoch detail, while `status-delta` contains only
+    binding aggregates, reporter-set digest and watermarks. Digest/epoch change
+    requests a new full snapshot and yields `UNKNOWN` until accepted. Group
+    Availability, per-binding Publication Status and Consumption Status yield
+    their exact closed state/reason. The Group REST/MCP route remains observable
+    without a consumer. REST, UI and MCP expose no prohibited data. Evidence
+    proves declared Dataset use, not SUT truth or exactly-once.
+15. Concurrent admission treats every applicable worker as a simultaneous loader
+    and applies mandatory peak/steady export, read/write bandwidth, Active
+    Reference/file operations and total-memory calculations. It reaches every
     storage, rate, memory, filesystem and transaction limit without overcommit,
     eviction, partial admission or impact to existing safe consumers; alerts
     precede hard thresholds.
 16. Maximum approved topology meets the 2% throughput/p95/p99 budget under the
-    predeclared paired-run method and passes startup, refresh, every-node
+    pilot-powered, predeclared paired-run method and passes startup, refresh, every-node
     reschedule, authority/storage impairment, PostgreSQL failover, Controller
     restart/recovery within its configured time and 24-hour soak gates for all
     supported Profiles/sources. Unstable or insufficient evidence is
@@ -1247,6 +1346,9 @@ Tests use official product APIs and prove:
   Passing one driver/topology does not qualify another.
 - Per-swarm snapshots duplicate bytes. Snapshot Reader connections and PostgreSQL
   export rate require admission even though workers remain database-free.
+- Release 1 rewrites one complete snapshot per publication. The minimum interval,
+  dirty coalescing and operating-horizon admission bound that cost; incremental
+  segments require a later separately approved design if qualification fails.
 - Release 1 has no record expiry or purge. State-moving workflows eventually reach
   `maximumStored`; deployment limits/runbook must fund the complete operating
   horizon until a governed reclamation contract exists.
@@ -1271,6 +1373,8 @@ Tests use official product APIs and prove:
 - [PostgreSQL `SELECT` locking](https://www.postgresql.org/docs/current/sql-select.html)
 - [PostgreSQL `INSERT ... ON CONFLICT`](https://www.postgresql.org/docs/current/sql-insert.html)
 - [PostgreSQL privileges](https://www.postgresql.org/docs/current/ddl-priv.html)
+- [PostgreSQL session identity](https://www.postgresql.org/docs/current/functions-info.html)
+- [PostgreSQL `CREATE FUNCTION` security](https://www.postgresql.org/docs/current/sql-createfunction.html)
 - [PostgreSQL high availability](https://www.postgresql.org/docs/current/high-availability.html)
 - [Java `Files.move`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/Files.html)
 - [Java `WatchService`](https://docs.oracle.com/en/java/javase/21/docs/api/java.base/java/nio/file/WatchService.html)
@@ -1281,9 +1385,11 @@ Tests use official product APIs and prove:
 - [RabbitMQ flow control](https://www.rabbitmq.com/docs/flow-control)
 - [W3C PROV data model](https://www.w3.org/TR/prov-dm/)
 - [Docker volume behaviour](https://docs.docker.com/engine/storage/volumes/)
+- [Amazon EFS performance guidance](https://docs.aws.amazon.com/efs/latest/ug/performance-tips.html)
 - [OpenTelemetry metrics data model](https://opentelemetry.io/docs/specs/otel/metrics/data-model/)
 - [Prometheus label cardinality](https://prometheus.io/docs/practices/instrumentation/)
 - [Grafana k6 automated performance testing](https://grafana.com/docs/k6/latest/testing-guides/automated-performance-testing/)
 - [Grafana k6 thresholds](https://grafana.com/docs/k6/latest/using-k6/thresholds/)
+- [NIST sample-size guidance](https://www.itl.nist.gov/div898/handbook/prc/section2/prc222.htm)
 - [WCAG 2.2 use of colour](https://www.w3.org/WAI/WCAG22/Understanding/use-of-color.html)
 - [WCAG 2.2 status messages](https://www.w3.org/WAI/WCAG22/Understanding/status-messages.html)

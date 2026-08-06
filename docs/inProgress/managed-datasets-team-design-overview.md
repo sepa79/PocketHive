@@ -9,18 +9,14 @@ provider swarms create and compatible consumer swarms select explicitly.
 Existing `REDIS_DATASET`, `CSV_DATASET` and direct `SCHEDULER` adapters remain
 unchanged.
 
-Trade-off: verified local snapshots, one least-privilege Controller database
-reader and leases add background machinery, but keep Dataset authority off the
-measured request path. Arbitrary queries, record expiry/reclamation, payload
-mutation and exactly-once claims are not included.
+Trade-off: local snapshots, leases and one restricted Controller reader add
+background work but keep Dataset authority off the measured path. Arbitrary
+queries, reclamation, payload mutation and exactly-once claims are excluded.
 
 ## Why this matters
 
-Reusable system-under-test (SUT) data is often tied to Redis or recreated.
-Managed Dataset lets one swarm create schema-valid records for many consumers.
-
-Workflow outcomes remain Record State and named Views. Processing creates a new
-Dataset only for records with independent schema, identity or lifecycle.
+Managed Dataset lets one swarm create reusable, schema-valid
+system-under-test (SUT) records for many consumers instead of recreating them.
 
 ## Proposal
 
@@ -29,15 +25,18 @@ Dataset only for records with independent schema, identity or lifecycle.
   `MANAGED_DATASET` source, with no switching or fallback.
 - A consumer selects one exact Dataset, Group and optional View during Create
   Swarm, or explicit empty arrays when none is required.
-- PostgreSQL is authoritative. Orchestrator grants; the Controller reads through
-  one bounded function and publishes an atomic revision; workers use local memory.
-- Orchestrator sends revision hints, the Controller reconciles metadata, and
-  workers poll the active file in the background. Failure preserves the old safe
-  snapshot.
-- Workers report through the Controller aggregate. Orchestrator derives Group
-  Availability, per-binding Publication Status and Consumption Status for REST,
-  UI and PocketHive Model Context Protocol (MCP). A Group needs no consumer to
-  remain available; evidence never claims SUT acceptance or exactly-once.
+- PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
+  bounded function and publishes an atomic revision. Workflow claims return
+  identity, state and lease only, including derived input; workers resolve
+  immutable payload from local memory.
+- Revision hints mark a binding dirty. Controller reconciliation publishes only
+  the latest revision after a required minimum interval; worker background polls
+  load it. Failure preserves the old safe snapshot.
+- Workers report through the Controller. Full status retains bounded reporter
+  detail; deltas contain only small binding aggregates and digests. Orchestrator
+  derives the three status planes for REST, UI and PocketHive Model Context
+  Protocol (MCP). Group status remains visible with no consumer; evidence never
+  claims SUT acceptance or exactly-once.
 
 ## Where it sits
 
@@ -91,7 +90,7 @@ updates upstream state; other outcomes create none.
 |---|---|
 | `REPLAY + SHARED` or `EXCLUSIVE_LEASE` | Queue/pop or use-count semantics |
 | `WORKFLOW + EXCLUSIVE_LEASE` | Free-form tags, selectors or payload replacement |
-| Scheduler, finite CSV/Redis import and derived source | Source fallback, rotation or destructive Redis pop |
+| Scheduler, finite CSV/Redis import and bounded derived source/publication | Source fallback, rotation or destructive Redis pop |
 | Closed four-case Outcome Mapping with no default | SUT-result inference or reconciliation |
 | One atomic bounded derivation destination | Multi-destination fan-out or arbitrary cross-Dataset transactions |
 | Operational consumption evidence | Audit proof or exactly-once claims |
@@ -100,18 +99,18 @@ updates upstream state; other outcomes create none.
 ## Release boundary
 
 Release 1 includes both replay modes, mutable workflow, all four sources and
-bounded Derivation. M2a shared replay is a foundation, not the release. M2b
-mutable workflow is required parity. M2c and M2d remain separate milestones.
-All milestones and operational gates must pass.
+bounded Derivation. M2a shared replay is only the foundation; mutable workflow
+and the M2c/M2d capabilities remain required. All operational gates must pass.
 
 ## Main trade-off
 
 Local snapshots keep workers database-free and the measured path fast. The
-single active Controller needs a restricted database credential and explicit
-publication, activation and recovery. Loaded workers may continue through a
-short Controller outage; this is continuity, not Controller high availability.
-Derivation remains M2d and does not block M2a implementation. It and
-`EXCLUSIVE_LEASE` require concurrency, failure and soak qualification.
+single Controller needs a restricted credential and explicit publication and
+recovery. Full snapshots trade simplicity for operating-horizon bandwidth,
+filesystem operations and all-worker restart fan-out; admission must fund them.
+Loaded workers may survive a short Controller outage, which is continuity rather
+than high availability. Derivation and `EXCLUSIVE_LEASE` still require
+concurrency, failure and soak qualification.
 
 ## Next step
 

@@ -77,12 +77,19 @@ never scan directories. Applicable input workers mount it read-only, verify it
 and load local memory before readiness. Normal traffic makes no filesystem,
 PostgreSQL, Orchestrator or credential-provider call.
 
+An exclusive workflow or derived-input claim returns `recordId`, current state
+and lease, not a second copy of the immutable record. The worker finds that id
+only in the exact verified local snapshot. Missing or mismatched local data stops
+dispatch without an API or database fallback.
+
 When an authority revision advances, Orchestrator sends the Controller a hint.
-The Controller also checks authoritative metadata on a bounded schedule, so a
-lost hint cannot prevent refresh. Workers poll `ACTIVE.json` on an explicit
-jittered background interval and atomically load a verified newer generation.
-Refresh failure preserves the old safe snapshot; filesystem events are not the
-correctness mechanism.
+The hint marks the binding dirty. The Controller also checks authoritative
+metadata on a bounded schedule, so a lost hint cannot prevent refresh. It
+publishes only the latest observed revision after a required minimum interval,
+preventing continuous back-to-back full exports. Workers poll `ACTIVE.json` on
+an explicit jittered background interval and atomically load a verified newer
+generation. Refresh failure preserves the old safe snapshot; filesystem events
+are not the correctness mechanism.
 
 Workflow state and leases always come from bounded background authority calls,
 not snapshot files. An already-loaded safe worker may continue through a short
@@ -97,15 +104,18 @@ JSON body. The Worker SDK preserves it and checks Dataset, Group, revision,
 Profile, allocation, validity and any lease/View/state revision immediately
 before SUT network I/O.
 
-Workers report to the Swarm Controller. The Controller preserves worker identity
-and restart epoch in one bounded aggregate. Orchestrator consumes only that
-aggregate and derives the read model used unchanged by REST, UI and PocketHive
-Model Context Protocol (MCP).
+Workers report to the Swarm Controller. Controller full status preserves bounded
+worker identity and restart epoch detail. Periodic deltas contain only small
+per-binding counts, a reporter-set digest, freshness and minimum loaded activation
+generation. A changed digest requests a new full status and remains unknown until
+it arrives. Orchestrator consumes only Controller status and derives the read
+model used unchanged by REST, UI and PocketHive Model Context Protocol (MCP).
 
 Group Availability covers authority source, schema, integrity, supply and
 storage health. A Group can be available with no consumer. Publication Status is
 per admitted binding. Consumption Status covers worker loading, selection and
-the SUT-attempt boundary.
+the SUT-attempt boundary. A Group status REST endpoint and matching MCP tool make
+consumer-free availability visible.
 
 `CONSUMING` requires fresh matching evidence for:
 
@@ -132,7 +142,8 @@ Implementation starts only after one canonical contract owns every Scenario,
 worker, API, Context, status and snapshot shape. Production also requires
 concurrency, failure, restart, storage, capacity and every-node reschedule tests;
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
-and a target-scale 24-hour soak.
+worst-case all-worker restart, filesystem operation and operating-horizon export
+tests; pilot-powered paired performance trials; and a target-scale 24-hour soak.
 
 Release 1 has no record expiry, reclamation or purge. Deployment limits and an
 approved retention runbook must fund every stored record within the declared
