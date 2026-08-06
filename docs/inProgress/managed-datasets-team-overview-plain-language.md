@@ -62,11 +62,17 @@ A View selects records whose current Record State matches its fixed rule.
 Success, retry, failure and unknown can be Views over the same records without
 copying them. Create another Dataset only for independent output records.
 
-Each Release 1 record is one non-null JSON object. Array, primitive, `null` and
-binary records are not supported. Managed Dataset never projects selected
-fields: the verified local snapshot retains the complete canonical object. The
-normal scenario pipeline may still transform that object into the exact request
-sent to the SUT. This is payload shaping, not a data-redaction boundary.
+Each Release 1 record is one non-null JSON object with a closed root: undeclared
+top-level fields fail. Array, primitive, `null` and binary records are not
+supported. Every source and authority entry uses the same bounded parser,
+schema validator and canonical JSON writer. It rejects ambiguous or oversized
+JSON; precise identifiers or higher-precision numbers use schema-typed strings.
+The WorkItem encoding must use the exact declared spelling and Managed Dataset
+accepts only UTF-8—invalid values never default. Managed Dataset never projects
+selected fields: the verified local snapshot retains the complete canonical
+object. The normal scenario pipeline may still transform that object into the
+exact request sent to the SUT. This is payload shaping, not a data-redaction
+boundary.
 
 Shared replay has no mutable Record State or View. Many swarms may reuse the same
 immutable record concurrently. If flows must move a record between operational
@@ -237,7 +243,10 @@ empty, unsupported or ignored file fails; it never becomes “no Dataset”.
 Runtime preparation must present the exact validated bundle `artifactDigest`.
 Scenario Manager renders from that immutable snapshot; a changed bundle returns
 a conflict and requires explicit rediscovery rather than automatic Dataset
-reselection. The verified digest is frozen with the Scenario Binding.
+reselection. The conflict creates no binding, reservation, lease, snapshot or
+swarm runtime. Its idempotency key remains bound to the original request; a
+changed digest or selection is a new command with a new key. The verified digest
+is frozen with the Scenario Binding.
 
 Existing Protocol v2 bundles with no Managed Dataset binding keep working in
 either rolling-upgrade order, so this design needs no offline migration or swarm

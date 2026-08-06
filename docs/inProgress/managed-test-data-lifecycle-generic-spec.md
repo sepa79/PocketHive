@@ -58,7 +58,8 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Named identity | Every Dataset freezes a human-readable `name` and opaque `datasetId`. Groups never replace either. |
 | Frozen contract | Dataset name, SUT Environment, Dataset Space, Profile, schemas, Groups, Views, transitions, source and allocation never change for a runtime Dataset. |
 | One schema | Every Dataset freezes one resolved Draft 2020-12 record schema. `WORKFLOW` also freezes one state schema. |
-| JSON-object records | Every Release 1 record is one non-null JSON object whose root schema declares `type: object`. Array, primitive, `null` and binary roots fail; generic WorkItem encodings do not broaden this Dataset contract. |
+| Closed JSON-object records | Every Release 1 record is one non-null JSON object. Its resolved root declares `type: object` and `unevaluatedProperties: false`; array, primitive, `null` and binary roots fail. |
+| One strict record codec | Every source and authority ingress uses the same bounded Managed Dataset Record Codec for strict parsing, schema validation and RFC 8785 canonicalisation. The canonical WorkItem decoder validates the exact wire encoding before enum conversion and never trims, normalises or defaults it. |
 | State before extra Datasets | Success, retryable failure, terminal failure and unknown remain Record State and named Views in one `WORKFLOW` Dataset. |
 | Explicit outcomes | A scenario-owned Outcome Normaliser emits one closed Outcome. A terminal Outcome Mapping handles all four classes, has no default and creates one complete next state. PocketHive never parses a SUT response to infer state. |
 | Bounded derivation | `MANAGED_DATASET` consumes one exact upstream `WORKFLOW + EXCLUSIVE_LEASE` selection and writes to one downstream Dataset. Only `SUCCESS` creates bounded records. |
@@ -111,8 +112,8 @@ without fallback.
 
 - Required Dataset name; `UNGROUPED` or bounded `GROUPED` mode.
 - `REPLAY` immutable records with `SHARED` or `EXCLUSIVE_LEASE` allocation.
-- Non-null JSON-object record payloads; no array, primitive, `null` or binary
-  record roots.
+- Closed, bounded, non-null JSON-object record payloads; no array, primitive,
+  `null` or binary record roots.
 - `WORKFLOW` immutable records plus versioned Record State, materialised Views,
   declared transitions and `EXCLUSIVE_LEASE` allocation.
 - Exact versioned record/state schema graphs composed from reusable Dataset
@@ -181,6 +182,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Dataset Group | Frozen typed partition under one Dataset, identified by `groupId` and `groupKey` | Dataset name or query | Group |
 | Managed Dataset Profile | Frozen `REPLAY` or `WORKFLOW` behaviour | Per-consumer mode | Profile |
 | Managed Dataset Record | Immutable non-null JSON object plus authority identity and creation provenance | WorkItem step, mutable entity or binary blob | Record |
+| Managed Dataset Record Codec | One shared executable contract for strict record parsing, platform bounds, schema validation and RFC 8785 canonicalisation | General WorkItem codec or source-specific parser | Record Codec |
 | Record State | Versioned `WORKFLOW` JSON stored separately from immutable record payload | Tag bag or SUT truth | None |
 | Dataset View | Named materialised membership from fixed equality clauses over Record State | Runtime selector or copied Dataset | View |
 | State Transition | Declared change from one View to another through bounded mutable paths | SUT inference or arbitrary patch | Transition |
@@ -209,6 +211,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Exact Dataset/Group/View choice or explicit empty choice | Create Swarm | Fallback or alias following |
 | Runtime records, state, memberships, imports, grants, lineage, leases and idempotency | Orchestrator Managed Dataset module | SUT calls, source parsing or filesystem publication |
 | Source parsing and scenario result normalisation | Scenario-owned worker pipeline | Authority mutation |
+| Record parsing, bounds, schema validation and canonicalisation | Shared Managed Dataset Record Codec used by provider adapters and Orchestrator authority ingress | Source-specific record semantics, fallback or a second codec |
 | Publication grant, abandonment, completion, activation generation, Activation Confirmation and Deletion Acknowledgement | Orchestrator Managed Dataset module | Snapshot byte proxying or filesystem writes |
 | Granted snapshot read, filesystem publication and retention cleanup | Swarm Controller through `DatasetSnapshotReader` and the qualified storage adapter | Schema discovery, authority mutation or direct table access |
 | Context construction/preservation/guard and local selection | Worker SDK adapters | Business outcome classification |
@@ -327,6 +330,10 @@ caller, which must rediscover and submit a new selection; neither component
 reuses or automatically reselects. A missing or mismatched accepted version is
 rejected when the projection is `PRESENT`.
 Orchestrator freezes the verified digest with the admitted Scenario Binding.
+The `412` creates no Scenario Binding, capacity reservation, lease, snapshot
+publication/reference or swarm runtime. Its Create Swarm idempotency key remains
+bound to the original request; exact replay returns the same conflict. A changed
+digest or `datasetSelections` value is a new command with a new idempotency key.
 
 If Scenario Manager does not advertise the contract, an updated Orchestrator
 disables only Managed Dataset discovery and admission and omits its capabilities;
@@ -352,6 +359,13 @@ fail. A restricted versioned meta-schema forbids unknown keywords and bounds
 file/compiled bytes, references, depth, Views, clauses, transitions, mutable
 paths and validation errors. Scenario Manager stores one compiled artifact and
 opaque `sha256:` digest; other components compare the digest and never recompile.
+
+Record and State roots declare `type: object` and
+`unevaluatedProperties: false`. Scenario Manager checks the resolved composed
+schema, not one fragment, and rejects a root `additionalProperties` or
+`patternProperties` rule that reopens arbitrary root names. Authors place an
+extensible map under one declared, schema-bounded property. Fragment-level
+`additionalProperties: false` does not replace root closure.
 
 Scenario Manager is the only public authoring validator. Scenario, Dataset
 Definition and Schema Contract validation use its application services and
@@ -433,14 +447,36 @@ Views, so the example's outcome Views do not copy records.
 
 ### Record payload, subsets and history
 
-Every Release 1 record payload is one non-null JSON object. Its root Record
-Schema must declare `type: object`. The Managed Dataset provider/output boundary
-accepts only a `UTF_8` WorkItem current step containing one valid object and
-rejects array, string, number, boolean, `null` and `BASE64`/binary payloads with
-`RECORD_INVALID` before any receipt or mutation. The generic WorkItem text,
-arbitrary-JSON and binary helpers do not expand this adapter contract. Snapshot
-chunks keep the complete canonical object under `record`; consumers verify and
-load that unchanged object.
+Every Release 1 record payload is one non-null JSON object whose resolved Record
+Schema is closed at the root as defined above. The shared Managed Dataset Record
+Codec is the only record parser/normaliser. Provider-side use gives early
+feedback; Orchestrator authority ingress repeats the same executable contract
+on untrusted requests and is authoritative. Source handlers may locate bytes or
+construct a CSV object, but they do not own another record parser.
+
+For raw JSON, the Record Codec rejects malformed UTF-8, duplicate object names,
+trailing tokens, invalid JSON and strings/numbers that cannot be represented by
+RFC 8785. It enforces `maximumManagedDatasetRecordBytes`,
+`maximumManagedDatasetRecordNestingDepth`, total
+`maximumManagedDatasetRecordObjectMembers`, total
+`maximumManagedDatasetRecordArrayElements`, per-value
+`maximumManagedDatasetRecordStringBytes` and
+`maximumManagedDatasetRecordNumberCharacters` before schema validation. A valid
+object must then satisfy its exact compiled schema. The codec emits the RFC 8785
+bytes used for persistence, receipts, snapshot chunks and digests. Precise
+identifiers or numbers outside that interoperable number model use schema-typed
+strings. CSV-created objects enter the same bounds, schema and canonicalisation
+steps before a receipt.
+
+The canonical WorkItem wire decoder accepts only the exact schema values
+`utf-8` and `base64`; missing, blank, whitespace-padded, mixed-case and unknown
+values fail `CONTRACT_INVALID` before enum conversion. It never trims,
+normalises or defaults an encoding. Managed Dataset provider/output then accepts
+only a decoded `UTF_8` current step containing one valid object and rejects an
+exact `BASE64`/binary payload or another JSON root with `RECORD_INVALID` before
+any receipt or mutation. Generic WorkItem text, arbitrary-JSON and binary helpers
+do not expand this adapter contract. Snapshot chunks keep the complete canonical
+object under `record`; consumers verify and load that unchanged object.
 
 Groups provide frozen partitions over declared immutable record fields. Dataset
 Views provide fixed subsets over current `WORKFLOW` Record State. Create Swarm
@@ -1487,6 +1523,7 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Limit group | Required limits |
 |---|---|
 | Authoring | `maximumDatasetRequirementsDocumentBytes`, `maximumDatasetRequirementsPerScenario` |
+| Record parsing | `maximumManagedDatasetRecordNestingDepth`, `maximumManagedDatasetRecordObjectMembers`, `maximumManagedDatasetRecordArrayElements`, `maximumManagedDatasetRecordStringBytes`, `maximumManagedDatasetRecordNumberCharacters` |
 | Authority storage | `maximumManagedDatasetCount`, `maximumManagedDatasetStoredRecords`, `maximumManagedDatasetStoredBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetStateBytes`, `maximumManagedDatasetViewMemberships`, `maximumManagedDatasetDerivationLineageRows`, `maximumManagedDatasetDerivationLineageBytes`, `maximumSnapshotActivationConfirmations`, `maximumSnapshotActivationConfirmationRecordBytes`, `maximumSnapshotActivationConfirmationBytes`, `maximumPendingSnapshotDeletionAcknowledgementsPerBinding`, `maximumIdempotencyRecords`, `maximumIdempotencyBytes` |
 | Mutations | `maximumLeaseAcquisitionsPerSecond`, `maximumLeaseReleasesPerSecond`, `maximumWorkflowTransitionsPerSecond`, `maximumDerivationCompletionsPerSecond` |
 | Derivation | `maximumDerivedRecordsPerSource`, `maximumConcurrentDerivationItems` |
@@ -1699,6 +1736,8 @@ post-MVP shape becomes executable only at its named contract gate:
 | Contract | Canonical owner | Contract gate |
 |---|---|---|
 | Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` | M0 core; Profile extensions before their stage |
+| Record root closure, parser bounds, schema validation and canonical bytes | `docs/spec/managed-dataset-schema-profile.schema.json`, `docs/spec/managed-dataset-api.schema.json` and one shared Managed Dataset Record Codec implementation | M0 |
+| WorkItem `payloadEncoding` wire decoding | `docs/spec/workitem-envelope.schema.json` plus the single strict `WorkItemJsonCodec`/`WorkPayloadEncoding` path | M0 |
 | Dataset Requirements Document path, versioned shape, tagged projection, validation and version handshake | `docs/spec/managed-dataset-requirements.schema.json`, `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and the single Scenario Manager validator | M0 |
 | Provider binding | `docs/scenarios/SCENARIO_CONTRACT.md` plus `docs/architecture/workerCapabilities.md` and their single executable DTO/validator path | M0 `SCHEDULER`; source extensions before M2c/M2d |
 | Create Swarm discovery and `datasetSelections` | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | M0 shared selection; View/lease extensions before M2b/M2c |
@@ -1771,19 +1810,31 @@ Tests use official product APIs and prove:
    Dataset runtime preparation sends the accepted requirements version and
    `expectedArtifactDigest`; Scenario Manager validates, projects and renders
    from the same immutable bundle snapshot. An edit between discovery and
-   runtime preparation returns typed HTTP `412`, freezes no Scenario Binding and
-   forces explicit rediscovery without automatic reselection. Successful
-   admission freezes the verified digest. Mixed-version tests in both rolling
+   runtime preparation returns typed HTTP `412`, creates no binding, reservation,
+   lease, snapshot publication/reference or swarm runtime, and forces explicit
+   rediscovery without automatic reselection. Exact replay with the original
+   Create Swarm idempotency key returns the same conflict; a changed digest or
+   selection requires a new command and key. Successful admission freezes the
+   verified digest. Mixed-version tests in both rolling
    orders prove ordinary v2 scenarios remain creatable while Managed Dataset
    discovery/admission is disabled; a present document cannot be listed,
    admitted or runtime-prepared until both components support version 1 and is
    never ignored.
 2. Every Dataset freezes name, identity, SUT/Dataset Space, Profile, grouping,
    schemas, source, allocation and workflow contract. Group results and consumers
-   cannot change identity or create Groups. Record Schema roots require
-   `type: object`; provider, import, Derivation, authority, snapshot and consumer
-   tests accept non-null JSON objects and reject array, string, number, boolean,
-   `null` and `BASE64`/binary records before partial publication or dispatch.
+   cannot change identity or create Groups. Resolved Record Schema roots require
+   `type: object` and `unevaluatedProperties: false`; composed-schema tests prove
+   undeclared root fields fail and named nested maps remain possible. One
+   cross-source conformance suite covers Scheduler output, CSV, Redis, Derivation
+   and authority ingress. It accepts bounded schema-valid objects and rejects,
+   where source-applicable, malformed UTF-8, duplicate names, trailing tokens,
+   undeclared root fields, unsafe RFC 8785 strings/numbers, every parser limit,
+   array, string, number, boolean, `null` and binary records before partial
+   publication or dispatch. Snapshot round-trip tests reproduce the exact
+   canonical bytes and digest. The canonical WorkItem decoder accepts exact
+   lower-case `utf-8` and `base64` only; missing, blank, padded, mixed-case and
+   unknown values fail before enum conversion. Managed Dataset accepts the valid
+   `utf-8` object and rejects valid `base64` with no fallback.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
    adapter/source with no migration or fallback. An absent Requirements Document
    plus `datasetSelections: []` works explicitly only with no Managed Dataset
