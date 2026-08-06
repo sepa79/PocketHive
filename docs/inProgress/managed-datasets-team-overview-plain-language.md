@@ -21,6 +21,24 @@ Every choice is explicit. PocketHive never substitutes another adapter, source,
 Dataset, Group or View. A swarm that needs no Managed Dataset declares empty
 requirement and selection arrays.
 
+The full design is Release 1, not one MVP. Delivery starts with scheduled shared
+replay, then adds mutable-workflow parity, then the remaining sources and
+Derivation. Safety and evidence are not deferred from the MVP.
+
+## Delivery boundary
+
+| Boundary | What it delivers |
+|---|---|
+| Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`, named/grouped records, exact or empty consumer selection, local snapshots and REST/MCP evidence |
+| Mutable parity | `WORKFLOW + EXCLUSIVE_LEASE`, Record State, Views, transitions and complete Outcome Mapping |
+| Release 1 extensions | Replay exclusive, finite CSV/Redis import and bounded Managed Dataset Derivation |
+| Release 1 completion | UI and full operational, performance, continuity and soak qualification for every advertised capability |
+
+The MVP still includes protocol migration, fencing, safe activation and cleanup,
+terminal abandonment, capacity checks, restart recovery and security. A later
+capability is absent from the catalogue until its own gates pass; PocketHive does
+not substitute another capability.
+
 ## Choose the right model
 
 | Need | Use |
@@ -43,12 +61,12 @@ copying them. Create another Dataset only for independent output records.
 
 Every provider binding selects exactly one source:
 
-| Source | Behaviour |
-|---|---|
-| `SCHEDULER` | Bounded provider work until the Group reaches its stored target |
-| `CSV` | One finite validated import from a mounted file |
-| `REDIS` | One finite import from an immutable copy of a referenced list; the live list is never popped or changed |
-| `MANAGED_DATASET` | Bounded derived work from one exact upstream workflow View |
+| Source | Behaviour | First delivery |
+|---|---|---|
+| `SCHEDULER` | Bounded provider work until the Group reaches its stored target | Shared-replay MVP |
+| `CSV` | One finite validated import from a mounted file | Release 1 extension |
+| `REDIS` | One finite import from an immutable copy of a referenced list; the live list is never popped or changed | Release 1 extension |
+| `MANAGED_DATASET` | Bounded derived work from one exact upstream workflow View | Release 1 extension |
 
 CSV and Redis validate and fingerprint the complete input before any Group is
 visible. Failure blocks the import without fallback.
@@ -172,13 +190,13 @@ Missing, stale or mismatched evidence is never green. Status exposes no record
 identity, Outcome code or value. It proves the declared Dataset path operated,
 not SUT acceptance, business correctness or exactly-once delivery.
 
-## Release boundary
+## Release 1 completion
 
-Release 1 includes shared and exclusive replay, mutable workflow, Scheduler,
-finite CSV/Redis import and the bounded Managed Dataset derived source. Shared
-replay is the first implementation foundation, not the whole release. Mutable
-`WORKFLOW + EXCLUSIVE_LEASE` remains required parity. All capability and
-operational qualification milestones must pass before Release 1 is complete.
+The shared-replay MVP is useful on its own but does not complete Release 1.
+Mutable `WORKFLOW + EXCLUSIVE_LEASE` remains required parity. Replay exclusive,
+finite CSV/Redis import and the bounded Managed Dataset derived source remain
+Release 1 extensions. Each boundary passes its applicable operational gates
+before PocketHive advertises it.
 
 Before implementation, PocketHive activates Dataset requirements under a new
 Scenario Protocol major because every scenario must declare requirements or
@@ -205,8 +223,9 @@ remains the only authoring validator;
 UI, MCP, CLI, CI and agents preserve its result and version/digest evidence
 instead of running their own checks.
 
-Implementation starts only after one canonical contract owns every Scenario,
-worker, API, Context, status and snapshot shape. Production also requires
+Each capability starts only after one canonical contract owns its Scenario,
+worker, API, Context, status and snapshot shapes. The MVP does not wait for
+executable contracts for post-MVP capabilities. Production also requires
 concurrency, failure, restart, storage, capacity and every-node reschedule tests;
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
 worst-case all-worker restart, filesystem operation and operating-horizon export

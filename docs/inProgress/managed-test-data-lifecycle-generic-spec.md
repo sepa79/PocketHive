@@ -7,11 +7,13 @@ Worker SDK, UI and PocketHive Model Context Protocol (MCP)
 ## Decision required
 
 Approve Managed Dataset as an additive PostgreSQL-backed option for durable,
-reusable synthetic system-under-test (SUT) records. One provider run creates
-one named Dataset per output binding. Each provider binding selects exactly one
-`SCHEDULER`, `CSV`,
-`REDIS` or derived `MANAGED_DATASET` source. Compatible consumer swarms select
-one exact Dataset, Group and optional workflow View during Create Swarm.
+reusable synthetic system-under-test (SUT) records, delivered as a shared-replay
+MVP, a required mutable-workflow parity increment and then the remaining Release
+1 extensions. One provider run creates one named Dataset per output binding.
+Each provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or derived
+`MANAGED_DATASET` source. Compatible consumer swarms select one exact Dataset,
+Group and optional workflow View during Create Swarm. The MVP enables only
+`SCHEDULER + REPLAY + SHARED`.
 
 Managed Dataset does not replace `REDIS_DATASET`, `CSV_DATASET` or direct
 `SCHEDULER`. Existing adapters retain their current behaviour and configuration.
@@ -81,6 +83,22 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Separated status planes | Group Availability reports authority health only. Publication Status is per admitted binding. Consumption Status reports worker loading, selection and SUT-attempt evidence. A Group needs no consumer to be `AVAILABLE`. |
 | Small Controller deltas | Controller `status-full` may contain bounded reporter detail. Controller `status-delta` contains binding aggregates and digests only, never a reporter list. |
 | One evidence model | Orchestrator alone derives consumption status. REST, UI and MCP project that read model unchanged. Missing or stale evidence yields `UNKNOWN`, never green. |
+
+## Delivery boundary
+
+| Boundary | Required capability | Exit |
+|---|---|---|
+| Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`; named Dataset, schema-defined Groups, versioned record schema, exact or empty consumer selection, PostgreSQL authority, verified local snapshots and REST/MCP consumption evidence | M0, M1a, M2a and M3a pass |
+| Mutable parity increment | `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`; versioned Record State, materialised Views, declared transitions, complete Outcome Mapping and local payload lookup | M1b, M2b and the mutable M3b gates pass; required before Managed Dataset covers existing mutable use cases |
+| Release 1 extensions | `REPLAY + EXCLUSIVE_LEASE`, finite `CSV` and `REDIS` imports, derived `MANAGED_DATASET` source and bounded Derivation | M2c, M2d and their M3b gates pass |
+| Release 1 completion | Every advertised Profile/source plus UI, operations, performance, continuity and target-scale soak qualification | Every M3b gate passes |
+
+The MVP is a capability-gated vertical slice, not a weakened safety profile.
+Scenario migration, schema ownership, explicit no-Dataset declarations,
+publication fencing, activation confirmation, terminal abandonment, retention,
+capacity admission, restart recovery, security and MCP evidence are MVP
+requirements. Unsupported Profiles and sources remain absent from the capability
+catalogue and fail admission without fallback.
 
 ## Release 1 target
 
@@ -654,10 +672,12 @@ require an empty array.
 
 ## Authority API and failure contract
 
-M0 adds one canonical DTO schema and these authenticated background operations.
-Workers never connect to PostgreSQL. Controller snapshot access uses only the
-explicit Snapshot Reader contract below; it has no table privileges or REST
-snapshot-byte fallback.
+The following table is the full Release 1 API surface. M0 makes only the shared
+authority, Scheduler refill, publication, status and evidence shapes executable.
+Finite-import, workflow and Derivation shapes enter the same canonical schema at
+their M2c, M1b/M2b and M2d contract gates. Workers never connect to PostgreSQL.
+Controller snapshot access uses only the explicit Snapshot Reader contract below;
+it has no table privileges or REST snapshot-byte fallback.
 
 | Operation | Product API | Essential rule |
 |---|---|---|
@@ -1588,42 +1608,59 @@ unbounded workflow supply.
 
 `datasetProposalZbig.md` is non-normative design input and cannot override this
 specification. No runtime implementation starts before Dataset Space/Scenario
-Binding approval and M0 establishes one executable owner per public shape:
+Binding approval. M0 establishes one executable owner for every shared-replay
+MVP shape. The full architecture fixes the owners of later shapes now, but each
+post-MVP shape becomes executable only at its named contract gate:
 
-| Contract | Canonical M0 owner |
-|---|---|
-| Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` |
-| Scenario Protocol activation, Orchestrator-owned Maintenance Epoch/phase API, bundle inventory/migration and epoch-bound swarm restoration | `docs/scenarios/SCENARIO_CONTRACT.md`, `docs/UPGRADING.md`, `docs/ORCHESTRATOR-REST.md` and the single Scenario Manager validator |
-| Provider binding and `managedDatasetRequirements` | `docs/scenarios/SCENARIO_CONTRACT.md` plus its single executable Scenario DTO/validator |
-| Create Swarm discovery and `datasetSelections` | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` |
-| Adapter settings, capabilities, Outcome Mapping and completion | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types |
-| Authority/publication/Activation Confirmation/Deletion Acknowledgement/Derivation/status API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` |
-| Snapshot Reader page | `docs/spec/managed-dataset-snapshot-reader.schema.json`; its single PostgreSQL function migration and Controller port must conform to that shape |
-| Provider and Dataset Context | `docs/spec/workitem-envelope.schema.json` |
-| Revision-available signal and routing | `docs/spec/asyncapi.yaml` plus its single control-signal payload schema |
-| Consumption telemetry | `docs/spec/control-events.schema.json` |
-| Group and consumption status MCP tools | `tools/pockethive-mcp/server.mjs` tool schemas; each delegates to its owning REST API without recalculation |
-| Snapshot manifest/record envelope, Active Reference and binding-scoped deactivation marker | `docs/spec/managed-dataset-snapshot.schema.json` |
-| Restricted schema profile | `docs/spec/managed-dataset-schema-profile.schema.json` plus conformance vectors |
+| Contract | Canonical owner | Contract gate |
+|---|---|---|
+| Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` | M0 core; Profile extensions before their stage |
+| Scenario Protocol activation, Orchestrator-owned Maintenance Epoch/phase API, bundle inventory/migration and epoch-bound swarm restoration | `docs/scenarios/SCENARIO_CONTRACT.md`, `docs/UPGRADING.md`, `docs/ORCHESTRATOR-REST.md` and the single Scenario Manager validator | M0 |
+| Provider binding and `managedDatasetRequirements` | `docs/scenarios/SCENARIO_CONTRACT.md` plus its single executable Scenario DTO/validator | M0 `SCHEDULER`; source extensions before M2c/M2d |
+| Create Swarm discovery and `datasetSelections` | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | M0 shared selection; View/lease extensions before M2b/M2c |
+| Adapter settings and capability declarations | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types | M0 core; each capability before advertisement |
+| Outcome Mapping and workflow completion | `docs/architecture/workerCapabilities.md` plus manager/worker SDK types | Before M2b |
+| Shared authority, publication, Activation Confirmation, Deletion Acknowledgement, status API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | M0 |
+| Mutable state/View/lease API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | Before M1b |
+| Finite-import API and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | Before M2c |
+| Derivation API, lineage and errors | `docs/ORCHESTRATOR-REST.md` plus `docs/spec/managed-dataset-api.schema.json` | Before M2d |
+| Snapshot Reader page | `docs/spec/managed-dataset-snapshot-reader.schema.json`; its single PostgreSQL function migration and Controller port must conform to that shape | M0 |
+| Provider and Dataset Context | `docs/spec/workitem-envelope.schema.json` | M0 shared fields; workflow/Derivation fields before M2b/M2d |
+| Revision-available signal and routing | `docs/spec/asyncapi.yaml` plus its single control-signal payload schema | M0 |
+| Consumption telemetry | `docs/spec/control-events.schema.json` | M0 shared fields; capability fields before their stage |
+| Group and consumption status MCP tools | `tools/pockethive-mcp/server.mjs` tool schemas; each delegates to its owning REST API without recalculation | Before M3a; capability projections before their M3b gate |
+| Snapshot manifest/record envelope, Active Reference and binding-scoped deactivation marker | `docs/spec/managed-dataset-snapshot.schema.json` | M0 |
+| Restricted schema profile | `docs/spec/managed-dataset-schema-profile.schema.json` plus conformance vectors | M0 record profile; state profile before M1b |
 
 | Milestone | Deliverable | Exit |
 |---|---|---|
-| M0 — contracts | Approved model and canonical schemas/types above | New Scenario Protocol major, persisted Maintenance Epoch, complete repository-shipped/operator-mounted/uploaded bundle inventory and migration, v2 swarm drain/restoration, authoritative validation evidence, owners and review complete |
-| M1 — authority | PostgreSQL model, constraints, idempotency, imports/refill, leases, transitions, lineage and fencing | Transaction, concurrency, retry, restart and replica tests pass |
+| M0 — MVP contracts | Approved shared-replay model and executable core schemas/types above | New Scenario Protocol major, persisted Maintenance Epoch, complete repository-shipped/operator-mounted/uploaded bundle inventory and migration, v2 swarm drain/restoration, authoritative validation evidence, core owners and review complete |
+| M1a — shared authority | PostgreSQL records, Groups, revisions, idempotency, Scheduler refill, publication reservation and fencing | Shared-path transaction, concurrency, retry, restart and replica tests pass |
+| M1b — mutable authority | Record State, materialised Views, leases, transitions and completion | Mutable-path transaction, concurrency, lease and restart tests pass |
 | M2a — snapshot foundation | `SCHEDULER + REPLAY + SHARED`, granted Snapshot Reader, Active Reference, typed mounts and local memory | Reader, grant-expiry, activation, retention, recovery, storage, digest, outage, reschedule and measured-path gates pass |
 | M2b — mutable workflow | `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`, View claim/completion and Context guard | Mutable parity, failure, lease-expiry and overload gates pass |
-| M2c — remaining sources | Replay exclusive plus finite CSV/Redis import | Source/profile restart and isolation gates pass |
-| M2d — derived source | Managed Dataset source, explicit Outcome Mapping and atomic upstream/downstream completion | Lineage, redelivery, count, capacity and rollback gates pass |
-| M3 — operational release | REST/MCP/UI status, metrics, alerts, runbook and 24-hour qualification | Functional, continuity, accessibility, cost, storage and soak gates pass |
+| M2c — remaining sources | Replay exclusive plus finite CSV/Redis import and their authority state | Source/profile restart and isolation gates pass |
+| M2d — derived source | Managed Dataset source, lineage, explicit Outcome Mapping and atomic upstream/downstream completion | Lineage, redelivery, count, capacity and rollback gates pass |
+| M3a — MVP operations | Shared-path REST/MCP status, metrics, alerts, runbook, performance and target-scale 24-hour qualification | Shared functional, continuity, cost, storage and soak gates pass |
+| M3b — post-MVP operations | Incremental REST/MCP/UI and operational qualification for mutable workflow and each remaining source | Each capability passes its functional, continuity, accessibility, cost, storage and soak gates before advertisement |
 
 These are delivery and qualification milestones, not separate product promises.
-M2a is the shared-replay foundation; it is not the complete release. M2b is
-required mutable-dataset parity. Release 1 is complete only when M0 through M3,
-including M2c and M2d, pass. A pre-release build advertises only its completed
-Profiles and sources through the canonical capability contract; unsupported
-capabilities fail admission without fallback.
+M0, M1a, M2a and M3a form the shared-replay MVP. M1b and M2b add required
+mutable-dataset parity after its M3b gates pass. M2c and M2d add the remaining
+extensions after their M3b gates pass; all M3b gates complete Release 1. A build
+advertises only its completed Profiles and sources through the canonical
+capability contract; unsupported capabilities fail admission without fallback.
 
 ## Acceptance criteria
+
+Every stage applies all cross-cutting criteria below. Source/Profile clauses
+apply when that capability enters the delivery boundary. The shared-replay MVP
+must pass the Scenario migration, `SCHEDULER`, `REPLAY + SHARED`, no-Dataset,
+snapshot, evidence, capacity, security, performance, failure and recovery
+clauses. Mutable parity adds workflow, View, lease, transition and Outcome
+clauses. Release 1 extensions add replay-exclusive, finite-import and Derivation
+clauses. An unavailable capability is omitted from the catalogue; it does not
+pass by fallback or partial implementation.
 
 Tests use official product APIs and prove:
 
@@ -1744,8 +1781,9 @@ Tests use official product APIs and prove:
     requests a new full snapshot and yields `UNKNOWN` until accepted. Group
     Availability, per-binding Publication Status and Consumption Status yield
     their exact closed state/reason. The Group REST/MCP route remains observable
-    without a consumer. REST, UI and MCP expose no prohibited data. Evidence
-    proves declared Dataset use, not SUT truth or exactly-once.
+    without a consumer. MVP REST/MCP, and UI when introduced at M3b, expose no
+    prohibited data or recalculate status. Evidence proves declared Dataset use,
+    not SUT truth or exactly-once.
 15. Concurrent admission treats every applicable worker as a simultaneous loader
     and applies mandatory peak/steady export, read/write bandwidth, Active
     Reference, worker-load, Controller publication, deactivation-marker, cleanup,

@@ -4,8 +4,10 @@ Status: proposed Release 1; architecture and canonical contracts require approva
 
 ## Decision required
 
-Approve Managed Dataset Release 1 as a PostgreSQL-backed durable option that
-provider swarms create and compatible consumer swarms select explicitly.
+Approve the Managed Dataset Release 1 architecture and staged delivery: one
+shared-replay MVP, one required mutable-workflow parity increment, then the
+remaining sources and Derivation. Provider swarms create durable records and
+compatible consumer swarms select them explicitly.
 Existing `REDIS_DATASET`, `CSV_DATASET` and direct `SCHEDULER` adapters remain
 unchanged.
 
@@ -23,8 +25,9 @@ system-under-test (SUT) records for many consumers instead of recreating them.
 ## Proposal
 
 - A provider run creates one named Managed Dataset per output binding. Every
-  provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or
-  `MANAGED_DATASET` source, with no switching or fallback.
+  Release 1 provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or
+  `MANAGED_DATASET` source, with no switching or fallback. The MVP enables only
+  `SCHEDULER + REPLAY + SHARED`.
 - A consumer selects one exact Dataset, Group and optional View during Create
   Swarm, or explicit empty arrays when none is required.
 - PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
@@ -99,9 +102,10 @@ flowchart LR
 
 ## Example
 
-One provider creates a workflow Dataset. Another consumes its `ready` View under
-`EXCLUSIVE_LEASE`. `SUCCESS` atomically creates `1..N` downstream records and
-updates upstream state; other outcomes create none.
+One scheduled provider creates a named Dataset with schema-defined Groups.
+Several consumer swarms select one exact Group and replay its records from local
+memory. MCP shows whether the expected revision was published, loaded, selected
+and carried to the SUT-attempt boundary.
 
 ## Included / not included
 
@@ -116,11 +120,18 @@ updates upstream state; other outcomes create none.
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
 | One persisted offline new-major Maintenance Epoch | Concurrent v2/new-major support or implicit empty requirements |
 
-## Release boundary
+## Delivery boundary
 
-Release 1 includes both replay modes, mutable workflow, all four sources and
-bounded Derivation. M2a shared replay is only the foundation; mutable workflow
-and the M2c/M2d capabilities remain required. All operational gates must pass.
+| Boundary | Included | Completion rule |
+|---|---|---|
+| Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`, Groups, exact/empty selection, local snapshots and REST/MCP evidence | M0, M1a, M2a and M3a pass |
+| Mutable parity | `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`, Record State, Views, transitions and Outcome Mapping | M1b, M2b and mutable M3b gates pass |
+| Release 1 extensions | Replay exclusive, finite CSV/Redis import and bounded Managed Dataset Derivation | M2c, M2d and their M3b gates pass |
+| Release 1 completion | Every advertised capability plus UI and full operational qualification | Every M3b gate passes |
+
+Fencing, activation confirmation, abandonment, retention, capacity, recovery,
+security and evidence remain required in the MVP. Unsupported capabilities are
+not advertised and fail admission; PocketHive never substitutes one.
 
 ## Main trade-off
 
@@ -136,7 +147,7 @@ planned downtime, not a highly available upgrade.
 
 ## Next step
 
-Approve the Release 1 model. M0 then activates required
+Approve the Release 1 model and staged delivery. M0 then activates required
 `managedDatasetRequirements` under a new Scenario Protocol major. One persisted
 Maintenance Epoch blocks bundle mutation and public swarm create/start while
 final inventory, validation, exact v2 swarm drain and digest-checked cutover run.
@@ -147,8 +158,9 @@ Pre-switch failure keeps the prior validator and roots selected and restores the
 drained set from frozen v2 plans within a declared bound. Post-switch recreation
 failure remains gated until explicit resume or rollback within the same bound.
 Scenario Manager remains the only authoring validator with preserved
-version/digest evidence. Complete the remaining
-executable contracts before runtime implementation.
+version/digest evidence. Complete the MVP executable contracts, then deliver
+shared replay. Mutable parity and each remaining Release 1 extension receive
+their own contract gate before implementation.
 
 ## Technical detail
 
