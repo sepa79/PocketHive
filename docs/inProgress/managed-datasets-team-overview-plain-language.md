@@ -125,6 +125,14 @@ completion, clock skew and safety margin. After receiving the grant, the
 Controller separately verifies enough time remains for the work. Expiry never
 activates partial output.
 
+A failed export cannot consume authority capacity forever. The Controller asks
+Orchestrator to abandon it, or Orchestrator does so after both its descriptor and
+work lease expire. One transaction proves it never completed, prevents its fence
+from completing later and releases the reserved authority capacity. A completed
+export, lost completion response or uncertain Active Reference is never
+abandoned; recovery retains its capacity and finishes activation. Staging space
+remains counted until qualified cleanup removes it safely.
+
 Workflow state and leases always come from bounded background authority calls,
 not snapshot files. An already-loaded safe worker may continue through a short
 Controller or storage outage; a new or restarted worker stays unready. Release 1
@@ -203,7 +211,9 @@ concurrency, failure, restart, storage, capacity and every-node reschedule tests
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
 worst-case all-worker restart, filesystem operation and operating-horizon export
 tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests;
-crash tests around publication completion, Active Reference replacement,
+pre-completion abandonment, repeated reservation release, stale completion and
+completion/abandonment race tests; crash tests around publication completion,
+completed-but-unconfirmed recovery, Active Reference replacement,
 Snapshot Activation Confirmation, marker publication, revision deletion and
 Deletion Acknowledgement; late acknowledgement followed by a lost successful
 response, exact replay, exact-predecessor lookup, consecutive unavailable

@@ -41,7 +41,10 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   reserves one place; exhaustion blocks only that binding. Orchestrator retains
   the confirmation indefinitely and starts a full replay-evidence period when
   acknowledgement is stored. Absent proof keeps required evidence and any
-  retained revision protected.
+  retained revision protected. A never-completed export releases its authority
+  reservation only through fenced terminal abandonment. Completed or
+  activation-uncertain work stays reserved for recovery, and staging remains
+  filesystem-accounted until qualified cleanup.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context

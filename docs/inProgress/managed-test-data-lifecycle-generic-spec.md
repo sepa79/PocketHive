@@ -68,6 +68,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Split publication boundary | Orchestrator validates and fences publication but never proxies snapshot bytes. Swarm Controller reads only the granted immutable revision through the explicit `DatasetSnapshotReader` PostgreSQL function adapter. Workers never access PostgreSQL. |
 | Bounded publication grant | One expiring publication grant covers begin-publication response transit, the hard maximum snapshot export, completion operation, clock skew and explicit safety margin. Expiry preserves the old Active Reference and never activates partial output. |
 | Explicit activation | One atomic Active Snapshot Reference selects the completed publication for a binding. Publication completion is not activation: the fenced Controller confirms activation with Orchestrator only after durable replacement. Orchestrator retains one latest checkpoint and exact predecessor evidence. Workers never infer activation by scanning directories or choosing a revision. |
+| Terminal publication abandonment | Orchestrator releases a failed publication's pre-completion authority reservations only when one transaction makes the never-completed publication terminal and its fence unable to complete. Completed or activation-uncertain publications retain capacity and use recovery. Derivative staging remains protected until qualified cleanup. |
 | Deterministic refresh | Orchestrator sends a revision hint, the Controller reconciles authoritative metadata, and workers poll the Active Reference on explicit background intervals. Hints mark a binding dirty; they do not bypass its publication window. No notification or filesystem watcher is the correctness path. |
 | Bounded publication rate | Each dirty binding publishes only its latest observed revision. One required minimum interval bounds start-to-start rate; a long publication may still be followed immediately by the next, so admission covers both publications. |
 | Least-privilege publication | The Controller writes only its swarm publication directory. Applicable consumer-input workers mount only their binding read-only. Other workers get no Dataset mount. |
@@ -175,7 +176,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Exact Dataset/Group/View choice or explicit empty choice | Create Swarm | Fallback or alias following |
 | Runtime records, state, memberships, imports, grants, lineage, leases and idempotency | Orchestrator Managed Dataset module | SUT calls, source parsing or filesystem publication |
 | Source parsing and scenario result normalisation | Scenario-owned worker pipeline | Authority mutation |
-| Publication grant, completion, activation generation, Activation Confirmation and Deletion Acknowledgement | Orchestrator Managed Dataset module | Snapshot byte proxying or filesystem writes |
+| Publication grant, abandonment, completion, activation generation, Activation Confirmation and Deletion Acknowledgement | Orchestrator Managed Dataset module | Snapshot byte proxying or filesystem writes |
 | Granted snapshot read, filesystem publication and retention cleanup | Swarm Controller through `DatasetSnapshotReader` and the qualified storage adapter | Schema discovery, authority mutation or direct table access |
 | Context construction/preservation/guard and local selection | Worker SDK adapters | Business outcome classification |
 | Storage, limits, clock health and connection references | Deployment capability profile | Scenario-selected infrastructure |
@@ -669,11 +670,12 @@ snapshot-byte fallback.
 | Derivation grant | `POST /api/managed-datasets/{destinationDatasetId}/derivation-grants` | Destination/source binding refs, completed source snapshot revision, activation generation and batch; claims exact upstream View members, reserves maximum destination capacity and returns source identity/state/lease without payload |
 | Derivation completion | `PUT /api/managed-datasets/{destinationDatasetId}/derivation-grants/{derivationGrantId}/items/{derivationItemId}/completion` | Both bindings, provider key, source lease/View/revision, Outcome, mapping digest, next state and ordered records; changes both Datasets atomically |
 | Begin publication | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications` | Controller swarm/run/binding only; reserves one bounded Activation Confirmation record and, when a current activation can become its predecessor, one binding-local pending Deletion Acknowledgement slot; returns a fenced, expiring descriptor pinned to one revision/digest and one opaque Snapshot Reader grant |
+| Abandon publication | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/abandonment` | Active fenced Controller only; transition is permitted only from `OPEN` and repeats binding, publication, fence and a closed failure reason; atomically makes completion impossible and releases pre-completion authority reservations; exact replay is stable, changed replay or `COMPLETED` conflicts |
 | Complete publication | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/complete` | Exact manifest/chunk/whole digests and fencing token; atomically completes the publication and returns the next binding-scoped `activationGeneration` |
 | Confirm activation | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/activation-confirmation` | Active fenced Controller only, after durable Active Reference replacement; repeats the explicit nullable predecessor tuple, new publication/revision, generation and Active Reference digest; exact replay returns one stable `activationConfirmationId`, changed replay conflicts |
 | Acknowledge predecessor deletion | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/{activationConfirmationId}/predecessor-deletion-acknowledgement` | Active fenced Controller only, after qualified deletion and durable absence verification; repeats predecessor publication/revision, generation and marker digest; exact replay returns the stable Deletion Acknowledgement with authority-set `predecessorDeletionAcknowledgedAt` and `confirmationPruneAfter`, changed replay conflicts |
 | Lookup predecessor activation | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/by-predecessor/{predecessorPublicationId}?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the one retained authoritative confirmation and acknowledgement state until `confirmationPruneAfter`, or explicit `404`; no truncation or inferred chain |
-| Reconcile publication | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the frozen selection, current authority revision, latest completed publication/generation and latest retained Activation Confirmation checkpoint for refresh and recovery, never record bytes |
+| Reconcile publication | `GET /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation?swarmId={swarmId}&runId={runId}&bindingRef={bindingRef}` | Active Controller only; returns the frozen selection, current authority revision, current publication and closed state, latest completed publication/generation and latest retained Activation Confirmation checkpoint for refresh and recovery, never record bytes |
 | Replay leases | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases` | `REPLAY + EXCLUSIVE_LEASE`; binding, completed snapshot revision, activation generation and requested count; returns record identity and lease only |
 | Workflow claims | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/views/{viewId}/record-leases` | Binding, completed snapshot revision, activation generation and requested count; returns `recordId`, complete state, state revision, lease, snapshot revision, activation generation and record-schema digest, never record payload |
 | State transition | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/record-leases/{recordLeaseId}/state-transition` | Binding, claimed View/revision, transition, Outcome, mapping digest and complete next state; one transaction |
@@ -732,6 +734,17 @@ before the final page or publication completion fails that attempt. Staging may
 remain for safe cleanup, but the Controller never completes it or changes
 `ACTIVE.json`.
 
+For a terminal pre-completion failure, the Controller submits idempotent
+abandonment with `READER_TERMINAL`, `EXPORT_TERMINAL`, `GRANT_EXPIRED` or
+`CONTROLLER_SHUTDOWN`. If it cannot, Orchestrator reconciles after both the
+descriptor and publication work lease expire. Orchestrator locks the publication,
+verifies it is still `OPEN`, and in one transaction stores `ABANDONED`, invalidates
+that fence for completion and releases its pre-completion authority reservations.
+If completion won the race, abandonment returns `SNAPSHOT_PUBLICATION_CONFLICT`
+and releases nothing. A later completion against `ABANDONED` returns
+`GRANT_STALE`. Time, missing staging or Controller absence alone never releases
+capacity.
+
 The Controller also receives one required tagged `managedDatasetSnapshotReader`:
 
 ```yaml
@@ -782,6 +795,7 @@ IMPORT_STALE, DERIVATION_GRANT_STALE, RECORD_LEASE_NOT_FOUND,
 RECORD_LEASE_NOT_ACTIVE, RECORD_LEASE_EXPIRED, RECORD_LEASE_MISMATCH,
 STATE_REVISION_CONFLICT, STATE_TRANSITION_INVALID, IDEMPOTENCY_CONFLICT,
 IDEMPOTENCY_WINDOW_EXPIRED, SNAPSHOT_PUBLICATION_NOT_FOUND,
+SNAPSHOT_PUBLICATION_CONFLICT,
 SNAPSHOT_REVISION_NOT_FOUND, SNAPSHOT_DIGEST_MISMATCH,
 SNAPSHOT_READER_GRANT_INVALID, SNAPSHOT_READER_UNAVAILABLE,
 SNAPSHOT_ACTIVATION_CONFLICT, SNAPSHOT_ACTIVATION_CONFIRMATION_NOT_FOUND,
@@ -976,9 +990,30 @@ replacement. When a current activation can become the predecessor, the same
 transaction reserves one binding-local pending Deletion Acknowledgement slot;
 the first activation reserves none. Capacity failure therefore blocks before
 export and can never leave an Active Reference unconfirmable. Orchestrator
-always retains the latest confirmed activation as the binding checkpoint. An
-older confirmation with a predecessor remains authoritative indefinitely until
-its Deletion Acknowledgement is stored. Orchestrator sets:
+persists these closed transitions:
+
+```text
+publicationState:
+  OPEN -> COMPLETED   when publication completion commits
+  OPEN -> ABANDONED   only through fenced terminal abandonment
+
+pendingAcknowledgementReservationState:  # absent for the first activation
+  RESERVED -> PENDING_ACK   when Activation Confirmation commits
+  RESERVED -> RELEASED      when OPEN becomes ABANDONED
+  PENDING_ACK -> RELEASED   when Deletion Acknowledgement commits
+```
+
+`COMPLETED` is terminal for publication data and retains every reservation until
+activation recovery completes. A lost completion response, completed-but-
+unconfirmed publication or uncertain Active Reference can never become
+`ABANDONED`. Pre-completion abandonment releases the confirmation row/byte
+reservation and optional pending slot together. Activation Confirmation converts
+the row/byte reservation to retained evidence; Deletion Acknowledgement releases
+only the pending slot and starts the separately funded evidence window.
+
+Orchestrator always retains the latest confirmed activation as the binding
+checkpoint. An older confirmation with a predecessor remains authoritative
+indefinitely until its Deletion Acknowledgement is stored. Orchestrator sets:
 
 ```text
 confirmationPruneAfter =
@@ -1107,6 +1142,9 @@ revision remains for the full grace measured from its deactivation marker.
 Abandoned staging is removable only after its work lease and descriptor expire,
 its fencing token is no longer current and the same grace has elapsed from the
 later expiry.
+Authority-side `ABANDONED` releases only the pre-completion confirmation and
+pending-acknowledgement reservations. Staging bytes and filesystem operations
+remain capacity-accounted until this qualified cleanup durably removes them.
 
 After the grace, the current fenced Controller revalidates the Active Reference,
 confirmation, marker and generation, invokes the qualified idempotent storage
@@ -1161,12 +1199,16 @@ fences every publication descriptor, and the deployment must prevent concurrent
 Controller writers to one swarm publication directory. A compute/storage adapter
 that cannot guarantee this fails provisioning.
 
-On restart, the Controller obtains the frozen selections, latest completed
-publication/generation and latest retained Activation Confirmation checkpoint
-from Orchestrator. It validates the exact Active Reference and immutable revision
-and idempotently restores a missing or older reference. If the reference matches
-an unconfirmed completed publication, the Controller confirms it before any new
-publication. A corrupt, mismatched or newer unexplained reference fails recovery.
+On restart, the Controller obtains the frozen selections, current publication
+state, latest completed publication/generation and latest retained Activation
+Confirmation checkpoint from Orchestrator. An expired `OPEN` publication follows
+the fenced terminal-abandonment transition before another Begin. `ABANDONED` is
+never resumed, completed or activated; only its qualified staging cleanup
+remains. `COMPLETED` retains its authority reservations. The Controller validates
+the exact Active Reference and immutable revision and idempotently restores a
+missing or older reference. If the reference matches an unconfirmed completed
+publication, the Controller confirms it before any new publication. A corrupt,
+mismatched or newer unexplained reference fails recovery.
 
 For each retained inactive revision, the Controller performs the exact
 predecessor lookup. It recreates a missing marker only when that one confirmation
@@ -1453,6 +1495,10 @@ checkpoint may also be pending or inside the evidence window; reservation does
 not subtract that overlap. Admission rejects the binding if deployment-wide row
 or byte limits cannot fund the sum of all binding-local maxima. It never assumes
 timely Deletion Acknowledgement or evidence pruning will create capacity.
+One binding has at most one `OPEN` publication. Its pre-completion authority
+reservation is either converted to retained evidence after completion and
+activation or released by terminal `ABANDONED`; repeated pre-completion failures
+therefore cannot accumulate authority reservations.
 `maximumRetainedSnapshotRevisionsPerBinding` separately bounds derivative
 filesystem retention; it does not bound pending authority evidence.
 
@@ -1504,7 +1550,9 @@ load the previous revision at the hard duration boundary. It tests cleanup befor
 and after the retention grace; lost/replayed Deletion Acknowledgement; consecutive
 deleted predecessors whose acknowledgements cannot be stored; binding-local
 pending-slot exhaustion, isolation and recovery; confirmation-capacity blocking;
-and abandoned-staging recovery.
+pre-completion reader, export and grant failures; repeated authority-reservation
+release; stale completion rejection; completion/abandonment races;
+completed-but-unconfirmed recovery; and abandoned-staging recovery.
 
 The operator runbook owns the declared retention horizon, PostgreSQL/filesystem
 forecast, warning/action thresholds, backup/restore and escalation. Snapshot
@@ -1649,7 +1697,12 @@ Tests use official product APIs and prove:
     declared trusted `search_path` ending in `pg_temp` and grants no schema create
     or table privilege. Begin-response delay through `requestTimeout`, post-receipt
     remaining-time boundaries and grant expiry immediately before/after the final
-    page and completion prove incomplete output never activates.
+    page and completion prove incomplete output never activates. Begin followed
+    by terminal reader, export or grant failure reaches fenced `ABANDONED`,
+    releases the confirmation row/byte reservation and optional pending slot, and
+    permits another Begin. Repeated failures do not accumulate reservations; a
+    late completion returns `GRANT_STALE`, including after first-activation
+    abandonment where no pending slot existed.
 12. Typed mounts grant only Controller read-write and applicable input-worker
     read-only access. Completion precedes monotonic atomic `ACTIVE.json`
     replacement, which precedes fenced idempotent Activation Confirmation and the
@@ -1665,6 +1718,10 @@ Tests use official product APIs and prove:
     measured-path filesystem access. Crash injection before and after completion,
     Active Reference replacement, Activation Confirmation, marker publication,
     revision deletion and Deletion Acknowledgement proves deterministic recovery.
+    A completion/abandonment race has one atomic winner. A lost completion
+    response or crash after completion but before confirmation retains every
+    reservation, rejects abandonment and recovers through Activation
+    Confirmation.
     Repeated activation during a boundary-slow load proves the hard load timeout
     and retention grace prevent early deletion. Recovery recreates a missing
     marker only from exact predecessor confirmation evidence, starts a fresh grace
