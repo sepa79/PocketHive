@@ -62,6 +62,18 @@ A View selects records whose current Record State matches its fixed rule.
 Success, retry, failure and unknown can be Views over the same records without
 copying them. Create another Dataset only for independent output records.
 
+Each Release 1 record is one non-null JSON object. Array, primitive, `null` and
+binary records are not supported. Managed Dataset never projects selected
+fields: the verified local snapshot retains the complete canonical object. The
+normal scenario pipeline may still transform that object into the exact request
+sent to the SUT. This is payload shaping, not a data-redaction boundary.
+
+Shared replay has no mutable Record State or View. Many swarms may reuse the same
+immutable record concurrently. If flows must move a record between operational
+states, they use `WORKFLOW + EXCLUSIVE_LEASE`; only one flow may hold that record
+at a time. Shared reuse combined with concurrent metadata mutation is not
+supported.
+
 ## How data arrives
 
 Every provider binding selects exactly one source:
@@ -194,6 +206,13 @@ consumer-free availability visible.
 Missing, stale or mismatched evidence is never green. Status exposes no record
 identity, Outcome code or value. It proves the declared Dataset path operated,
 not SUT acceptance, business correctness or exactly-once delivery.
+
+Release 1 supports only the fixed `SYNTHETIC_NON_SENSITIVE` classification; it
+has no per-Dataset override. Providers must keep sensitive values out because
+PocketHive validates shape, not sensitivity. REST, UI and MCP expose bounded
+counts and operational status, not record browsing, value search or a record's
+transition history. Current state and aggregate evidence cannot reconstruct
+every past transition.
 
 ## Release 1 completion
 

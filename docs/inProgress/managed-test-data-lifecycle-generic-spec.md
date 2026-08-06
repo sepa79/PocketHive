@@ -58,11 +58,16 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Named identity | Every Dataset freezes a human-readable `name` and opaque `datasetId`. Groups never replace either. |
 | Frozen contract | Dataset name, SUT Environment, Dataset Space, Profile, schemas, Groups, Views, transitions, source and allocation never change for a runtime Dataset. |
 | One schema | Every Dataset freezes one resolved Draft 2020-12 record schema. `WORKFLOW` also freezes one state schema. |
+| JSON-object records | Every Release 1 record is one non-null JSON object whose root schema declares `type: object`. Array, primitive, `null` and binary roots fail; generic WorkItem encodings do not broaden this Dataset contract. |
 | State before extra Datasets | Success, retryable failure, terminal failure and unknown remain Record State and named Views in one `WORKFLOW` Dataset. |
 | Explicit outcomes | A scenario-owned Outcome Normaliser emits one closed Outcome. A terminal Outcome Mapping handles all four classes, has no default and creates one complete next state. PocketHive never parses a SUT response to infer state. |
 | Bounded derivation | `MANAGED_DATASET` consumes one exact upstream `WORKFLOW + EXCLUSIVE_LEASE` selection and writes to one downstream Dataset. Only `SUCCESS` creates bounded records. |
 | Immutable payload | Record payload never changes and reaches workers only through a verified snapshot. Workflow claims return identity, state and lease data, never another payload copy. |
 | Explicit allocation | `REPLAY` uses `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. Modes never mix within one Dataset. |
+| Selection, not projection | Groups partition immutable record fields; workflow Views select current state. Create Swarm freezes one exact Dataset/Group/optional View. Dataset-level selectors and field projections are forbidden; normal scenario processing may shape only its downstream WorkItem payload. |
+| No shared mutation | `REPLAY + SHARED` permits concurrent reuse but has no Record State, View or state mutation. Mutable workflow participation always holds one exclusive lease; concurrent shared use plus metadata mutation is unsupported. |
+| Bounded visibility | Product status exposes bounded counts, availability, publication and consumption evidence only. Release 1 has no record browse, value search, record-level MCP/UI inspection or transition-history reconstruction. |
+| Fixed classification | Release 1 supports only `SYNTHETIC_NON_SENSITIVE`; it is a fixed product boundary, not a per-Dataset field. Providers/operators must keep sensitive data out because PocketHive does not infer classification from payload values. |
 | Explicit consumers | `ABSENT` is valid only with no Managed Dataset consumer input or derived source and requires `datasetSelections: []`; a provider output alone remains valid. With `PRESENT`, requirements and Managed Dataset input/source bindings map one-to-one and every requirement receives one exact compatible selection. |
 | Versioned bundle extension | `datasets/requirements.yaml` has its own required `version`. Scenario Manager alone parses and validates it. A present document is rejected unless Scenario Manager, Orchestrator and the authoring/runtime contract advertise the exact supported version; no component may ignore it. Existing Scenario Protocol v2 descriptors remain unchanged. |
 | Provider-only templates | Group templates use only the Provider Scenario Binding's allowlisted non-secret `vars` and `sut` values. Consumers use resolved ids. |
@@ -106,6 +111,8 @@ without fallback.
 
 - Required Dataset name; `UNGROUPED` or bounded `GROUPED` mode.
 - `REPLAY` immutable records with `SHARED` or `EXCLUSIVE_LEASE` allocation.
+- Non-null JSON-object record payloads; no array, primitive, `null` or binary
+  record roots.
 - `WORKFLOW` immutable records plus versioned Record State, materialised Views,
   declared transitions and `EXCLUSIVE_LEASE` allocation.
 - Exact versioned record/state schema graphs composed from reusable Dataset
@@ -130,6 +137,8 @@ without fallback.
   per record, Group or consumer; lease renewal, transfer or manual checkout.
 - Free-form tags, arbitrary selectors or state patches, payload replacement,
   runtime-created Views/transitions and shared mutable snapshots.
+- Array, primitive, `null` or binary record roots; Dataset-level field
+  projection or shaping expressions.
 - Outcome-selected destination Datasets, multi-destination fan-out or arbitrary
   cross-Dataset transactions.
 - Exact Dataset clone, copy-on-write, aliases and in-place extension. A future
@@ -138,6 +147,8 @@ without fallback.
 - Multiple providers, transfer, automatic provider start/failover, source
   switching, rotating finite imports or destructive Redis pop.
 - Sensitive records or credentials in records/state.
+- Per-Dataset classification policies, record browsing/value search,
+  record-level MCP/UI inspection and per-record transition/metadata history.
 - Expiring records, record retirement/reclamation, Dataset purge and unbounded
   continuous workflow supply.
 - Active-active multi-region, application-owned PostgreSQL high availability,
@@ -169,6 +180,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Managed Dataset | Named Orchestrator-owned runtime parent created by one provider run and usable by compatible consumers | Redis list, queue or Group | Dataset |
 | Dataset Group | Frozen typed partition under one Dataset, identified by `groupId` and `groupKey` | Dataset name or query | Group |
 | Managed Dataset Profile | Frozen `REPLAY` or `WORKFLOW` behaviour | Per-consumer mode | Profile |
+| Managed Dataset Record | Immutable non-null JSON object plus authority identity and creation provenance | WorkItem step, mutable entity or binary blob | Record |
 | Record State | Versioned `WORKFLOW` JSON stored separately from immutable record payload | Tag bag or SUT truth | None |
 | Dataset View | Named materialised membership from fixed equality clauses over Record State | Runtime selector or copied Dataset | View |
 | State Transition | Declared change from one View to another through bounded mutable paths | SUT inference or arbitrary patch | Transition |
@@ -419,6 +431,34 @@ predicates. A transition validates `fromViewId`, permitted changed paths,
 complete next-state schema and `toViewId`. State may match other overlapping
 Views, so the example's outcome Views do not copy records.
 
+### Record payload, subsets and history
+
+Every Release 1 record payload is one non-null JSON object. Its root Record
+Schema must declare `type: object`. The Managed Dataset provider/output boundary
+accepts only a `UTF_8` WorkItem current step containing one valid object and
+rejects array, string, number, boolean, `null` and `BASE64`/binary payloads with
+`RECORD_INVALID` before any receipt or mutation. The generic WorkItem text,
+arbitrary-JSON and binary helpers do not expand this adapter contract. Snapshot
+chunks keep the complete canonical object under `record`; consumers verify and
+load that unchanged object.
+
+Groups provide frozen partitions over declared immutable record fields. Dataset
+Views provide fixed subsets over current `WORKFLOW` Record State. Create Swarm
+selects one exact Dataset, Group and optional View. Managed Dataset exposes no
+field projection, payload-shaping expression, dynamic selector or query. After
+selection, the normal scenario pipeline may append a transformed WorkItem step
+or render a SUT request from the record. That transformation never changes the
+canonical snapshot or authority record and is not a redaction boundary.
+
+`WORKFLOW` stores only the current complete typed Record State and monotonic
+`stateRevision`. Authority retains bounded mutation idempotency/provenance needed
+for retry and concurrency correctness; Derivation retains its declared lineage;
+Consumption Status remains aggregate operational evidence. Release 1 does not
+store or expose an inspectable per-record transition/metadata history and cannot
+reconstruct every past state. WorkItem step history is pipeline data, not Dataset
+audit history. A later history design requires a proven diagnostic or audit need
+and explicit retention, authorisation, capacity and inspection contracts.
+
 ### Provider binding and sources
 
 The Provider Scenario Binding owns one source and resolves the complete Group
@@ -627,9 +667,12 @@ another work type are forbidden. Derivation also carries one normal Dataset
 Context for the upstream record. Authors and intermediate workers cannot create
 or change either Context.
 
-`REPLAY` consumer payload is the record. `WORKFLOW` payload is
+`REPLAY` consumer current-step payload is the complete canonical record object as
+UTF-8 JSON. `WORKFLOW` payload is
 `{"record":...,"recordState":...}`. State remains normal scenario data, not
-observability context. Every worker preserves Dataset Context.
+observability context. Every worker preserves Dataset Context. Later scenario
+steps may shape a SUT request but cannot replace the canonical record in the
+loaded snapshot or write the shaped payload back to Dataset authority.
 
 The terminal workflow adapter is explicit:
 
@@ -866,6 +909,15 @@ owning gate.
 
 `SHARED` uses deterministic local `ROUND_ROBIN` over the verified snapshot and
 permits concurrent reuse. It never depletes supply.
+
+`REPLAY + SHARED` has no Record State, View or state-mutation operation. Many
+swarms may concurrently reuse the same immutable record, but none may mark or
+transition it. Independent swarms may participate in one `WORKFLOW`; each claim
+still obtains the sole active lease before reading or changing current state.
+The generic pattern “one flow marks a record for later remediation and another
+returns it to a ready View” is therefore supported only as exclusive declared
+state transitions. Concurrent shared use combined with metadata mutation is not
+supported.
 
 `EXCLUSIVE_LEASE` permits one active authority lease per record. Acquisition is
 bounded by `acquireBatchSize`, `maximumHeldRecordLeases`, per-Group
@@ -1420,6 +1472,13 @@ values, paths, Outcome codes, record/lease ids or unbounded identifiers. This
 proves the declared Dataset path operated, not SUT acceptance, business
 correctness, losslessness or exactly-once delivery.
 
+Release 1 discovery is bounded to Dataset/Group identity, counts, Availability,
+Publication Status and Consumption Status. No REST, UI or MCP surface lists
+record ids, browses payload/state values, searches records or retrieves a
+record's transition history. A later inspection capability requires a concrete
+diagnostic that bounded status cannot answer plus authorisation, pagination,
+rate limits, classification controls and evidence-retention rules.
+
 ## Capacity, performance and operations
 
 The deployment capability profile supplies positive values with no implicit
@@ -1617,8 +1676,13 @@ unbounded workflow supply.
   no table privilege and can execute only the canonical fenced read function;
   never expose its connection reference, grant token or fencing token to workers,
   status, metrics or normal logs.
-- Records are permitted synthetic non-sensitive data only. Publication storage
-  inherits deployment encryption, access, backup-exclusion and cleanup controls.
+- Release 1 has one fixed classification: `SYNTHETIC_NON_SENSITIVE`. It has no
+  per-Dataset classification setting or override. Providers and operators must
+  not submit sensitive data; PocketHive validates structure but does not infer
+  sensitivity from values. Publication storage inherits deployment encryption,
+  access, backup-exclusion and cleanup controls. Any sensitive-data capability
+  requires a later approved classification, storage, log, backup, inspection
+  and retention contract.
 - Context, status, metrics and normal logs contain ids/counts only. Never expose
   record/state values, record/lease/lineage ids, Outcome codes or credentials.
 - Use a new `correlationId` per transport attempt and the original idempotency
@@ -1716,7 +1780,10 @@ Tests use official product APIs and prove:
    never ignored.
 2. Every Dataset freezes name, identity, SUT/Dataset Space, Profile, grouping,
    schemas, source, allocation and workflow contract. Group results and consumers
-   cannot change identity or create Groups.
+   cannot change identity or create Groups. Record Schema roots require
+   `type: object`; provider, import, Derivation, authority, snapshot and consumer
+   tests accept non-null JSON objects and reject array, string, number, boolean,
+   `null` and `BASE64`/binary records before partial publication or dispatch.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
    adapter/source with no migration or fallback. An absent Requirements Document
    plus `datasetSelections: []` works explicitly only with no Managed Dataset
@@ -1737,16 +1804,24 @@ Tests use official product APIs and prove:
    generation may advance its initial revision; empty or failed discovery never
    substitutes another choice. A healthy Group with no consumer remains
    `AVAILABLE` while Publication and Consumption Status remain absent/unknown as
-   specified.
+   specified. Group tests partition only declared immutable fields; View tests
+   select only current workflow state. No Dataset API accepts a dynamic selector
+   or field projection. A scenario pipeline may shape a downstream WorkItem/SUT
+   request while the verified canonical snapshot record and its digest remain
+   unchanged.
 7. Shared replay permits concurrent reuse. Exclusive allocation permits one
    active authority lease per record and rejects expired/mismatched Context at
    the SUT boundary. Workflow claims return no payload, claim only records in the
    requested completed snapshot and resolve immutable data locally without
-   fallback. Saturation, missing-local-record, redelivery, crash and lease-expiry
+   fallback. Shared consumers cannot mutate Record State or View membership; two
+   workflow consumers cannot hold the same record lease. Saturation,
+   missing-local-record, redelivery, concurrent claim, crash and lease-expiry
    tests pass.
 8. Workflow completion accepts only the closed four-case Outcome Mapping, exact
    transition and complete schema-valid next state. It changes state,
-   memberships and lease atomically; missing/invalid output changes none.
+   memberships and lease atomically; missing/invalid output changes none. APIs
+   expose current state/revision and bounded correctness provenance only; tests
+   prove they cannot browse or reconstruct a per-record transition history.
 9. Derivation freezes one upstream requirement and one destination. `SUCCESS`
    commits the configured `1..N` records and lineage with the upstream transition;
    other outcomes commit zero. Failure changes neither Dataset; replay is
@@ -1809,8 +1884,9 @@ Tests use official product APIs and prove:
     Availability, per-binding Publication Status and Consumption Status yield
     their exact closed state/reason. The Group REST/MCP route remains observable
     without a consumer. MVP REST/MCP, and UI when introduced at M3b, expose no
-    prohibited data or recalculate status. Evidence proves declared Dataset use,
-    not SUT truth or exactly-once.
+    prohibited data or recalculate status. No surface lists record ids, browses or
+    searches values, or retrieves record history. Evidence proves declared
+    Dataset use, not SUT truth or exactly-once.
 15. Concurrent admission treats every applicable worker as a simultaneous loader
     and applies mandatory peak/steady export, read/write bandwidth, Active
     Reference, worker-load, Controller publication, deactivation-marker, cleanup,
@@ -1827,7 +1903,11 @@ Tests use official product APIs and prove:
 17. The production profile names one qualified storage adapter and every
     required limit. The approved retention runbook funds all non-expiring records
     for the operating horizon, backup/restore and escalation without authoritative
-    deletion or an unbounded-workflow claim.
+    deletion or an unbounded-workflow claim. Executable schemas expose no
+    per-Dataset classification override, reject any undeclared classification
+    field and identify the fixed `SYNTHETIC_NON_SENSITIVE` product boundary.
+    Security fixtures contain synthetic data and status/log tests expose no
+    record values; PocketHive makes no content-classification claim.
 
 ## Remaining risks
 

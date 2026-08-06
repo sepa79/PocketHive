@@ -33,7 +33,9 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   plus `datasetSelections: []` is valid only when the Scenario has no Managed
   Dataset consumer input or derived source; a provider-only scenario may still
   create its Dataset through an explicit output binding. Requirements and those
-  input/source bindings map one-to-one.
+  input/source bindings map one-to-one. Release 1 records are non-null JSON
+  objects. Groups and fixed workflow Views select subsets; normal scenario steps
+  may shape a downstream request without changing the canonical snapshot record.
 - PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
   bounded function and publishes an atomic revision. Workflow claims return
   identity, state and lease only, including derived input; workers resolve
@@ -125,6 +127,9 @@ and carried to the SUT-attempt boundary.
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
 | Versioned bundle requirements extension with fail-closed admission | A Scenario Protocol migration or silently ignored file |
+| Non-null JSON-object records and scenario-owned downstream shaping | Array, primitive, `null` or binary records; Dataset projection expressions |
+| Concurrent immutable shared replay or exclusive workflow state | Shared replay combined with mutable Record State or Views |
+| Fixed `SYNTHETIC_NON_SENSITIVE` scope, counts and operational status | Record browsing/search, transition history or per-Dataset classification policy |
 
 ## Delivery boundary
 
@@ -156,7 +161,8 @@ than high availability. Derivation and `EXCLUSIVE_LEASE` still require
 concurrency, failure and soak qualification. Existing Scenario Protocol v2
 bundles need no migration and remain creatable in either rolling-upgrade order.
 Only Managed Dataset discovery and admission are disabled until Scenario Manager
-and Orchestrator both advertise requirements version 1.
+and Orchestrator both advertise requirements version 1. Bounded operational
+status is not record inspection or historical/audit reconstruction.
 
 ## Next step
 
