@@ -1,4 +1,6 @@
-![PocketHive Logo](../docs-site/static/img/logo.svg)
+---
+slug: /system-architecture
+---
 
 # PocketHive — ARCHITECTURE
 

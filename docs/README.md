@@ -1,64 +1,76 @@
-# PocketHive Documentation
+# PocketHive documentation
 
-Welcome to the PocketHive documentation hub. Use these resources to understand the system, explore individual services, and contribute effectively.
+| Reader context | Details |
+| --- | --- |
+| Audience | Customers, evaluators, authors, operators, contributors, and AI assistants |
+| Prerequisites | None |
+| Expected outcome | Reach the shortest trustworthy page for your task |
+| Candidate source tested | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
 
-## Architecture
-- [System Architecture](ARCHITECTURE.md)
-- [Worker Capability Catalogue](architecture/workerCapabilities.md)
-- [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
-- [Network Proxy follow-ups](todo/network-proxy-followups.md)
-- [Documentation index](index.md)
+Customers use the version-matched site bundled at `/docs/`. Contributors and
+AI assistants use the same sources here, starting with the
+[project map](PROJECT_MAP.md) when they need implementation ownership.
 
-## Roadmap
-- [Release Notes](../CHANGELOG.md)
-- [Lifecycle Control-Plane Release Verification Matrix](RELEASE_VERIFICATION_MATRIX.md)
-- [Upgrading PocketHive](UPGRADING.md)
+GitHub Pages may publish a different branch or revision. Before following a
+command there, match its displayed candidate/release boundary to the exact
+source you intend to run. Prefer the bundled `/docs/` site for a running
+installation.
 
-## Usage
-- [Usage Guide](USAGE.md)
-- [HiveForge Deployment](HIVEFORGE.md)
-- Legacy UI helpers are archived under `archive/legacy-ui/`.
+## Choose by task
 
-## Guides
-- [Guides Hub](guides/README.md)
-- [Workers Basics](guides/workers-basics.md)
-- [Workers Advanced](guides/workers-advanced.md)
-- [Templating Basics](guides/templating-basics.md)
-- [Templating Advanced](guides/templating-advanced.md)
+| Goal | Start here | Result |
+| --- | --- | --- |
+| Understand PocketHive | [Interactive overview](guides/presentation/interactive-pockethive-overview.mdx) | See the customer journey, architecture, lifecycle, and optional collaboration pattern. |
+| Choose an evaluation path | [Start here](guides/onboarding/start-here.md) | Select the shortest guide for your environment. |
+| Run locally | [15-minute quickstart](guides/onboarding/quickstart-15min.md) | Build and apply the startup gates; run a swarm only when Connectivity is OK. |
+| Learn the application | [Application guide](guides/ui/application-guide.md) | Know which screen to use and what to verify. |
+| Create a scenario | [First scenario](guides/onboarding/first-scenario.md) | Author, validate, and deploy one guarded bundle; stop at the current Connectivity gate, then remove the deployed copy. |
+| Operate or investigate | [Swarm lifecycle](guides/operators/swarm-lifecycle.md) · [Troubleshooting](guides/operators/observability-troubleshooting.md) | Verify convergence and isolate failures. |
+| Choose a deployment path | [Deployment paths](guides/operators/deployment.md) | Distinguish working, candidate, and target paths. |
+| Automate with AI or an IDE | [PocketHive MCP](guides/integrations/pockethive-mcp-and-bundles.md) | Connect safely and run one guarded workflow. |
+| Change the code | [Project map](PROJECT_MAP.md) | Find the owning component, contract, implementation, and tests. |
 
-## Services
-- [Orchestrator](../orchestrator-service/README.md)
-- [Swarm Controller](../swarm-controller-service/README.md)
-- [Generator](../generator-service/README.md)
-- [Moderator](../moderator-service/README.md)
-- [Processor](../processor-service/README.md)
-- [Postprocessor](../postprocessor-service/README.md)
-- [Trigger](../trigger-service/README.md)
+The customer sidebar presents these pages as a short book. Detailed contracts,
+advanced authoring material, and maintenance evidence live in the separate
+reference sidebar.
 
-## Core Modules
-- [Topology Core](../common/topology-core/README.md)
+## Current release boundaries
 
-## SDK
-- [Worker SDK Quick Start](sdk/worker-sdk-quickstart.md)
+These docs describe the unreleased lifecycle candidate at `0524165e` (whose
+build still reports `0.15.35`); they do not designate a stable customer
+release.
 
-## Scenarios
-- [Scenario overview](scenarios/README.md)
-- [Scenario contract](scenarios/SCENARIO_CONTRACT.md)
-- [Scenario patterns](scenarios/SCENARIO_PATTERNS.md)
-- [Scenario templating (moved)](scenarios/SCENARIO_TEMPLATING.md)
-- [Scenario bundle workspace API spec](scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md)
+| Area | Current at tested source (`0524165e`) | Target; not current |
+| --- | --- | --- |
+| Deployment | Source build is available, but the tested candidate is blocked at the UI Connectivity gate. The Compose package is incomplete, and HiveForge renders and validates only. No path is documented as supported production deployment. | Qualified immutable releases deployed, verified, updated, and removed through HiveForge. |
+| PocketHive MCP | Repository-local client-owned stdio server with guarded bundle, lifecycle, evidence, diagnostic, and cleanup tools; two read-only MCP Apps; partial VS Code integration. The HTTP implementation is not customer-qualified. | Authenticated explicitly bound HTTP, public package, checkout-free setup, broader qualified Apps, and complete IDE coverage. |
 
-## UI v2
-- [UI v2 shell and flow](ui-v2/UI_V2_FLOW.md)
-- [Scenario workspace UI spec](ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md)
-- [Monaco offline spec](ui-v2/MONACO_OFFLINE_SPEC.md)
+Use the linked deployment and MCP guides for exact commands, evidence, and
+safety boundaries; this table is only the entry-point status summary.
 
-## Contributing
-- [Contributor Guide](../CONTRIBUTING.md)
-- [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
-- [Control Plane Testing Playbook](ci/control-plane-testing.md)
+## Canonical sources
 
-## MCP and IDE integrations
+| Topic | Owner |
+| --- | --- |
+| Shared terminology | [Glossary](GLOSSARY.md) |
+| System ownership and traceability | [Architecture](ARCHITECTURE.md) |
+| Repository and implementation entry points | [Project map](PROJECT_MAP.md) |
+| Lifecycle, signals, and configuration propagation | [System workflows](guides/concepts/system-workflows.md) |
+| Scenario topology | [Scenario contract](scenarios/SCENARIO_CONTRACT.md) |
+| Orchestrator HTTP API | [Orchestrator REST](ORCHESTRATOR-REST.md) |
+| Deployment support status | [Deployment paths](guides/operators/deployment.md) |
+| Screenshot provenance | [Screenshot evidence](guides/ui/screenshot-evidence.md) |
 
-- [PocketHive plugin reference](plugins/pockethive/README.md)
-- [Canonical MCP server](../tools/pockethive-mcp/README.md)
+Do not copy normative wire details into customer guides. Link to their owner.
+
+## Contributor path
+
+Read repository [`AGENTS.md`](../AGENTS.md), then the [glossary](GLOSSARY.md),
+[project map](PROJECT_MAP.md), [architecture](ARCHITECTURE.md), and the contract
+named for the component you will change. The contributor workflow is in
+[`CONTRIBUTING.md`](../CONTRIBUTING.md).
+
+Plans, review evidence, future work, history, and release notes remain in
+[`inProgress/`](inProgress/README.md), [`toBeReviewed/`](toBeReviewed/README.md),
+[`todo/`](todo/README.md), [`archive/`](archive/readme.md), and
+[`CHANGELOG.md`](../CHANGELOG.md); they are not customer contracts.

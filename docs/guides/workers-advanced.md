@@ -1,5 +1,12 @@
 # Workers Guide: Advanced
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Experienced scenario authors and PocketHive operators |
+| Prerequisites | Completion of [Workers Guide: Basics](workers-basics.md) and control-plane familiarity |
+| Expected outcome | A bounded multi-worker flow with observable runtime configuration |
+| Last verified source | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
+
 This guide focuses on production patterns, control-plane behavior, and
 how to model larger traffic flows with minimal worker duplication.
 
@@ -19,18 +26,22 @@ onboarding chains). This reduces container count and queue hops.
 ## 2. Control-plane config updates
 
 All workers should be treated as runtime-configurable components.
-Common operational loop:
+This loop applies only to a swarm that passed the
+[customer lifecycle](operators/swarm-lifecycle.md) preflight and completion
+gates. At the exact tested source, **Connectivity** cannot resolve
+`swarm-lifecycle.schema.json#/$defs/RuntimeMetadata`, so do not start a swarm or
+send config updates through this candidate UI.
+
+For a future corrected candidate, the common operational loop is:
 
 1. Start swarm with baseline config.
 2. Observe queue depth and throughput.
 3. Send `signal.config-update` for rate/feature tuning.
 4. Validate status snapshots and effective config.
 
-References:
-
-- `docs/ORCHESTRATOR-REST.md`
-- `docs/control-plane/worker-guide.md`
-- `docs/correlation-vs-idempotency.md`
+References: [Orchestrator API](../ORCHESTRATOR-REST.md),
+[control-plane worker guide](../control-plane/worker-guide.md), and
+[correlation versus idempotency](../correlation-vs-idempotency.md).
 
 ## 3. Continuous onboarding + parallel usage
 
@@ -46,7 +57,7 @@ Recommended pattern for long-running load growth:
 This pattern keeps producer and consumer lifecycles independent while
 sharing data through Redis as the handoff layer.
 
-Reference: `docs/scenarios/SCENARIO_PATTERNS.md`.
+Use the version-matched [Scenario Patterns](../scenarios/SCENARIO_PATTERNS.md).
 
 ## 4. Debugging without bloating WorkItems
 
@@ -62,7 +73,11 @@ Operational options:
 - Redis-backed capture keys with TTL,
 - durable queue + DLQ as a follow-up topology decision.
 
-Reference: `docs/archive/http-sequence-worker.md`.
+Use the current [worker capability catalogue](../architecture/workerCapabilities.md)
+for the `http-sequence` contract and
+[Scenario Patterns](../scenarios/SCENARIO_PATTERNS.md) for version-matched
+examples. The archived HTTP-sequence design note is historical and is not a
+customer contract.
 
 ## 5. Hardening checklist
 
@@ -78,3 +93,11 @@ Reference: `docs/archive/http-sequence-worker.md`.
 For HTTP request construction, prefer `request-builder` as the canonical
 builder role. Keep `http-sequence` focused on journey orchestration, not
 on replacing low-level protocol handlers.
+
+## Troubleshooting
+
+Use the canonical [observability and troubleshooting guide](operators/observability-troubleshooting.md) for runtime evidence, and check control-plane behavior against the [worker guide](../control-plane/worker-guide.md).
+
+## Next step
+
+Apply these boundaries with the reusable flows in [Scenario Patterns](../scenarios/SCENARIO_PATTERNS.md), then validate the bundle with the [authoring and test tools](integrations/authoring-and-test-tools.md).

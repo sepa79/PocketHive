@@ -1,5 +1,17 @@
 # WebAuth Loop Redis Scenario (5 Customers, Shared BAL/TOP)
 
+> **E2E fixture — non-terminating after seeding:** the Redis routes below form a
+> closed loop with no finite message cap or duration. Do not run it through the
+> current candidate while Connectivity is blocked. On a future corrected
+> candidate, first pass the customer lifecycle preflight, use a unique swarm ID,
+> time-box the run, then Stop, Remove, and verify absence. Use disposable Redis
+> data so recirculating list entries do not contaminate later tests.
+
+This is a routing and data-selection fixture with WebAuth-like BAL/TOP/RED
+labels, not a qualified WebAuth integration. Its executable template sends
+generic `POST /api/test` requests to `tcp-mock-server` and consumes only the
+`origin` and `currency` values from the customer profiles.
+
 Flow (closed loop):
 - `webauth.RED.<customer>` -> `webauth.BAL.shared`
 - `webauth.BAL.shared` -> `webauth.TOP.shared`

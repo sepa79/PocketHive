@@ -19,6 +19,7 @@ COPY archive/legacy-ui/assets/ /workspace/ui/assets/
 COPY archive/legacy-ui/assets/ /workspace/archive/legacy-ui/assets/
 ENV DOCS_URL=http://localhost:8088
 ENV DOCS_BASE_URL=/docs/
+ENV POCKETHIVE_APP_URL=/
 RUN npm run build
 
 # Serve with Nginx

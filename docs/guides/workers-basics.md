@@ -1,5 +1,12 @@
 # Workers Guide: Basics
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors configuring built-in PocketHive workers |
+| Prerequisites | Basic scenario YAML knowledge and the [scenario contract](../scenarios/SCENARIO_CONTRACT.md) |
+| Expected outcome | A small worker chain with explicit roles, queues, and configuration |
+| Last verified source | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
+
 This guide explains how to use built-in PocketHive workers in scenarios.
 
 ## 1. Worker model
@@ -11,7 +18,7 @@ Each bee in `scenario.yaml` defines:
 - `work` - queue aliases (`in` and `out`) used by the swarm work exchange.
 - `config` - worker runtime configuration (`worker`, `inputs`, `outputs`, optional `docker`).
 
-Reference: `docs/scenarios/SCENARIO_CONTRACT.md`.
+Use the version-matched [scenario contract](../scenarios/SCENARIO_CONTRACT.md).
 
 ## 2. Minimal HTTP flow
 
@@ -75,11 +82,21 @@ Common patterns:
 - `REDIS_DATASET` for shared, cross-swarm datasets.
 - `RABBITMQ` queue aliases for chaining workers.
 
-Reference: `docs/archive/worker-configurable-io-plan.md`; remaining work is tracked in `docs/todo/worker-configurable-io-followups.md`.
+Use the current [worker capability catalogue](../architecture/workerCapabilities.md)
+for per-role inputs and outputs, the
+[scenario contract](../scenarios/SCENARIO_CONTRACT.md) for bundle structure,
+and [Scenario Patterns](../scenarios/SCENARIO_PATTERNS.md) for supported
+composition examples. Archived plans and TODOs are historical, not runtime
+contracts.
 
-## 4. Runtime lifecycle
+## 4. Runtime lifecycle boundary
 
-The normal flow per swarm:
+At the exact tested source, the required UI **Connectivity** preflight fails on
+`swarm-lifecycle.schema.json#/$defs/RuntimeMetadata`. Stop before **New swarm**,
+**Create**, or **Start**; this worker guide does not override that customer
+lifecycle gate.
+
+For a future corrected candidate, the completion flow per swarm is:
 
 1. Create swarm from scenario template.
 2. Start swarm.
@@ -89,6 +106,7 @@ The normal flow per swarm:
 
 References:
 
+- [Customer swarm lifecycle](operators/swarm-lifecycle.md)
 - `docs/ORCHESTRATOR-REST.md`
 - `docs/ARCHITECTURE.md`
 
@@ -99,3 +117,11 @@ References:
 - Keep worker responsibilities narrow (SRP by role).
 - Use Scenario Variables for environment/profile-level differences.
 - Prefer `request-builder` and `http-sequence` over duplicating per-call workers.
+
+## Troubleshooting
+
+Check the scenario against the [canonical scenario contract](../scenarios/SCENARIO_CONTRACT.md). For runtime and queue symptoms, use the [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Continue with [Workers Guide: Advanced](workers-advanced.md) for control-plane and multi-swarm patterns.

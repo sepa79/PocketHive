@@ -22,10 +22,12 @@ For each image, the workflow publishes:
 - the exact project version, for example `0.15.20`
 - the version plus short commit SHA, for example `0.15.20-d6819e3`
 - the minor line, for example `0.15`
-- the release channel, either `stable` or `experimental`
+- the floating `latest` tag
 
-The workflow publishes `latest` only for stable minor versions. Do not use
-`latest` for HiveForge release/test deployment paths.
+The workflow updates `latest` on every successful image build; it does not
+publish `stable` or `experimental` channel tags. Use the exact version or the
+version-plus-SHA tag for immutable release, test, and HiveForge deployment
+paths.
 
 ## Published Images
 
@@ -35,8 +37,10 @@ PocketHive application images are published under:
 ghcr.io/<owner>/pockethive/<image>:<tag>
 ```
 
-The image list is defined by `tools/docker/image-manifest.sh` and currently
-includes:
+The release image set is defined by the matrix in
+`.github/workflows/publish-images.yml`. Repository build/push tooling mirrors
+the application-image inventory in `tools/docker/image-manifest.sh`. The
+publish workflow currently includes:
 
 - `jvm-base`
 - `auth-service`
@@ -50,6 +54,7 @@ includes:
 - `generator`
 - `request-builder`
 - `http-sequence`
+- `db-query`
 - `moderator`
 - `processor`
 - `postprocessor`
@@ -59,38 +64,95 @@ includes:
 Third-party infrastructure images such as RabbitMQ, Redis, Postgres, Grafana,
 ClickHouse, WireMock, and Toxiproxy are not published by this workflow.
 
-## Using Published Images
+## Using Published Images From A Source Checkout
+
+Use these commands only from a complete source checkout. The exact tested
+Linux/macOS and Windows archives are incomplete; if this page was copied into
+one of those archives, do not run its generated `DEPLOY.md`, start script,
+`docker compose pull`, or `docker compose up`. Return to the same release
+source checkout and preserve the failed artifact-audit evidence described in
+[Deployment Package](../DEPLOYMENT_PACKAGE.md#audit-the-archive-on-a-target-host).
 
 Create a `.env` file with an explicit registry prefix and version:
 
-```bash
+```text
 DOCKER_REGISTRY=ghcr.io/yourorg/pockethive/
-POCKETHIVE_VERSION=0.15.20
+POCKETHIVE_VERSION=<release-version>
 ```
 
-Then pull and start the Compose stack:
+Linux/macOS, Git Bash, or WSL:
 
 ```bash
+if [ -e .env ]; then
+  echo ".env already exists; review and edit it instead of overwriting it." >&2
+  exit 1
+fi
+cp .env.example .env
+```
+
+Windows PowerShell:
+
+```powershell
+if (Test-Path -LiteralPath .env) {
+  throw '.env already exists; review and edit it instead of overwriting it.'
+}
+Copy-Item .env.example .env
+```
+
+Edit `.env` with the explicit values above, then resolve, pull, and start the
+source checkout's Compose stack:
+
+```bash
+docker compose config
 docker compose pull
 docker compose up -d
+curl -fsS http://localhost:8088/healthz
+```
+
+On Windows PowerShell, use the same Docker commands and check ingress with:
+
+```powershell
+$Health = Invoke-RestMethod http://localhost:8088/healthz
+if ($Health -ne 'ok') { throw "Expected health body 'ok'; got '$Health'." }
+$Health
 ```
 
 Use `./build-hive.sh --quick` when you want a local rebuild/redeploy cycle. It
 builds local images and is not the pure "consume published GHCR images" path.
 
+This proves image resolution and source-checkout startup only. It does not
+qualify the incomplete archive, HiveForge execution, or the current UI
+lifecycle, which remains blocked at Connectivity.
+
 ## Authentication
 
 For private packages, log in to GHCR:
+
+Linux/macOS, Git Bash, or WSL:
 
 ```bash
 echo "$GITHUB_TOKEN" | docker login ghcr.io -u USERNAME --password-stdin
 ```
 
+Windows PowerShell:
+
+```powershell
+$env:GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
+```
+
 For non-GitHub Actions clients, use a Personal Access Token with `read:packages`
 scope:
 
+Linux/macOS, Git Bash, or WSL:
+
 ```bash
 echo "$PAT" | docker login ghcr.io -u USERNAME --password-stdin
+```
+
+Windows PowerShell:
+
+```powershell
+$env:PAT | docker login ghcr.io -u USERNAME --password-stdin
 ```
 
 ## Publishing From Your Fork
@@ -102,29 +164,49 @@ echo "$PAT" | docker login ghcr.io -u USERNAME --password-stdin
 4. Push a version tag that matches `pom.xml` `revision`, or run the workflow
    manually.
 
-Example:
+Linux/macOS, Git Bash, or WSL example:
 
 ```bash
-git tag v0.15.20
-git push origin v0.15.20
+RELEASE_VERSION="REPLACE_WITH_RELEASE_VERSION"
+if [ "$RELEASE_VERSION" = "REPLACE_WITH_RELEASE_VERSION" ]; then
+  echo "Set RELEASE_VERSION to the pom.xml revision before tagging." >&2
+  exit 1
+fi
+git tag "v${RELEASE_VERSION}"
+git push origin "v${RELEASE_VERSION}"
 ```
 
-Check packages at:
+Windows PowerShell example:
 
-```text
-https://github.com/orgs/YOURORG/packages
+```powershell
+$ReleaseVersion = 'REPLACE_WITH_RELEASE_VERSION'
+if ($ReleaseVersion -eq 'REPLACE_WITH_RELEASE_VERSION') {
+  throw 'Set ReleaseVersion to the pom.xml revision before tagging.'
+}
+git tag "v$ReleaseVersion"
+git push origin "v$ReleaseVersion"
 ```
+
+To find the published packages for either a personal account or an
+organization, open the repository on GitHub and use its **Packages** link, or
+open the owning account's **Packages** tab.
 
 ## Local Registry Build And Push
 
 GHCR is optional. For local test deployments, build and push the same image set
-to an explicit registry using the repo tooling:
+to an explicit registry using the repo tooling from Linux/macOS, Git Bash, or
+WSL:
 
 ```bash
+IMAGE_TAG="REPLACE_WITH_IMMUTABLE_TAG"
+if [ "$IMAGE_TAG" = "REPLACE_WITH_IMMUTABLE_TAG" ]; then
+  echo "Set IMAGE_TAG to an immutable development tag before publishing." >&2
+  exit 1
+fi
 tools/docker/remote-images.sh \
   --registry 192.168.88.54:5000 \
   --namespace pockethive \
-  --tag dev-YYYYMMDD-HHMM-g<sha> \
+  --tag "$IMAGE_TAG" \
   --push
 ```
 
@@ -135,7 +217,7 @@ For a HiveForge test deploy, pass the resulting registry and tag explicitly:
 
 ```text
 imageRepository.project=192.168.88.54:5000/pockethive
-release.imageTag=dev-YYYYMMDD-HHMM-g<sha>
+release.imageTag=REPLACE_WITH_THE_EXACT_IMAGE_TAG_ABOVE
 ```
 
 ## Troubleshooting

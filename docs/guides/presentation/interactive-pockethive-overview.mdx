@@ -1,92 +1,76 @@
 ---
-title: Interactive PocketHive Overview
-description: Core PocketHive concepts, Redis dataset pattern, and interactive flow walkthroughs.
+title: PocketHive overview
+description: A concise, interactive map of PocketHive architecture, optional collaboration, lifecycle, and next steps.
 slug: /
+pagination_label: "Overview - PocketHive"
 ---
 
-import {
-  CoreConceptsExplorer,
-  RedisBasicLoopExplorer,
-  RedisMultiSwarmExplorer,
-} from "@site/src/components/InteractivePocketHiveExplorer";
+import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
+import {
+  ArchitectureExplorer,
+  LifecycleStrip,
+  OptionalRedisCollaboration,
+} from "@site/src/components/InteractivePocketHiveExplorer";
 
-# Interactive PocketHive Overview
+# How PocketHive works
 
-<div style={{ textAlign: "center", marginBottom: "1.25rem" }}>
-  <img src={useBaseUrl("/img/logo.svg")} alt="PocketHive logo" width="620" />
+<div className="iph-product-hero">
+  <div className="iph-product-brand">
+    <img src={useBaseUrl("/img/logo.svg")} alt="PocketHive" />
+  </div>
+  <div className="iph-product-copy">
+    <p className="iph-eyebrow">From scenario to evidence</p>
+    <strong>Build a scenario once. Run it as an isolated swarm. Verify the outcome.</strong>
+    <p>PocketHive runs reusable scenario bundles as worker graphs while keeping control, workload, and evidence easy to follow.</p>
+  </div>
+</div>
+<div className="iph-reader-meta" aria-label="Reader context">
+  <div><strong>Audience</strong><span>Evaluators, customers, authors, and operators</span></div>
+  <div><strong>Prerequisites</strong><span>None</span></div>
+  <div><strong>Expected outcome</strong><span>Understand the system and choose the next guide</span></div>
+  <div><strong>Last verified source</strong><span><code>rewrite/lifecycle-control-plane@0524165e</code> (unreleased)</span></div>
 </div>
 
-PocketHive is a RabbitMQ-centric load and behavior simulator that orchestrates swarms
-of modular workers ("bees") to generate traffic, transform data, and emit results and telemetry.
+## System map
 
-## Key Ideas
+<ArchitectureExplorer labelledBy="system-map" />
 
-- **Scenario Plan**: a declarative plan the Orchestrator applies to create and configure swarms.
-- **Swarm**: a unit of execution made of small services forming a pipeline.
-- **Control vs Work/Data**:
-  - **Control**: commands, lifecycle, and configuration.
-  - **Work/Data**: main business payload stream through the pipeline.
-- **Observability first**: components emit logs and metrics for fast feedback.
+## Optional Redis collaboration
 
-## High-level Architecture
+<OptionalRedisCollaboration labelledBy="optional-redis-collaboration" />
 
-```mermaid
-flowchart LR
-  UI["UI (Hive Dashboard)"]
-  ORCH[Orchestrator]
-  S1["Swarm A"]
-  S2["Swarm B"]
-  S3["Swarm C"]
+## Lifecycle and evidence
 
-  UI -->|Start/Stop Scenario, Apply Plan| ORCH
-  ORCH <--> S1
-  ORCH <--> S2
-  ORCH <--> S3
-```
+<LifecycleStrip labelledBy="lifecycle-and-evidence" />
 
-This page is split into three groups:
+<nav className="iph-reference-strip" aria-label="Canonical PocketHive references">
+  <strong>Go deeper</strong>
+  <Link to="/GLOSSARY">Glossary</Link>
+  <Link to="/system-architecture">Architecture and contracts</Link>
+  <Link to="/guides/examples/redis-dataset-patterns">Optional Redis example</Link>
+</nav>
 
-1. Core concepts.
-2. Redis as a dataset database + basic loop.
-3. Multi-swarm collaboration using Redis handoff lists.
+## Troubleshooting
 
-## 1) Core Concepts
+Accepted does not mean complete. If the swarm does not reach the expected state, follow [observability and troubleshooting](../operators/observability-troubleshooting.md); use the [glossary](../../GLOSSARY.md) when a term is unclear.
 
-- **Orchestrator**: global control owner that creates and manages swarms.
-- **Swarm**: one runtime group of connected components for a scenario execution.
-- **Swarm Controller**: per-swarm manager responsible for local plan, worker status, and lifecycle actions.
-- **Workers (bees)**: role-based processing containers in the work pipeline.
-- **Control plane**: commands, outcomes, and status signals.
-- **Work plane**: business payload flow (WorkItems) across queues and workers.
+## Next step
 
-<CoreConceptsExplorer />
-
-## 2) Redis as a Dataset Database
-
-In most scenarios, Redis lists are used as a dataset-oriented state store.
-Instead of treating Redis only as cache, workers read input records from lists, execute business operations,
-and push updated records to target lists that represent the next state.
-
-Example - in the `Auth` / `Topup` pattern inside a swarm:
-
-- `Auth Txn` is a worker operation in a swarm.
-- Based on the response/business rule, the record is moved from `Ready` to `TopUpNeeded`.
-- `Topup Txn` performs the follow-up operation and writes the record back to `Ready`.
-
-This gives explicit, observable state transitions in Redis.
-
-<RedisBasicLoopExplorer />
-
-## 3) Multi-Swarm Collaboration with Redis
-
-Redis lists can also connect multiple swarms.
-For example:
-
-- one swarm reads from `Ready` and writes to `TopUpNeeded`,
-- another swarm waits for data on `TopUpNeeded`, performs dedicated operations,
-- and writes records back to `Ready`.
-
-The same pattern can be reused for other asynchronous flows where one swarm waits for specific data states.
-
-<RedisMultiSwarmExplorer />
+<div className="iph-next-grid">
+  <Link className="iph-next-card" to="/guides/onboarding/start-here/">
+    <strong>Evaluate</strong>
+    <span>Choose a setup path and see one useful result.</span>
+    <small>Start here &rarr;</small>
+  </Link>
+  <Link className="iph-next-card" to="/guides/onboarding/first-scenario/">
+    <strong>Build</strong>
+    <span>Create and validate a reusable scenario bundle.</span>
+    <small>Build a scenario &rarr;</small>
+  </Link>
+  <Link className="iph-next-card" to="/guides/operators/swarm-lifecycle/">
+    <strong>Operate</strong>
+    <span>Control a swarm and verify its final state.</span>
+    <small>Operate a swarm &rarr;</small>
+  </Link>
+</div>

@@ -15,7 +15,14 @@
     "mcp:start:http": "npm --prefix tools/pockethive-mcp run start:http",
     "mcp:test": "npm test --prefix tools/pockethive-mcp",
     "mcp:workflow-acceptance": "npm run acceptance:workflow --prefix tools/pockethive-mcp",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:docs": "node tools/docs-validation/run.mjs --profile local",
+    "test:docs:all": "node tools/docs-validation/run.mjs --profile all",
+    "test:docs:deployed": "node tools/docs-validation/run.mjs --profile deployed",
+    "test:docs:packaging": "node tools/docs-validation/run.mjs --profile packaging",
+    "test:docs:runtime": "node tools/docs-validation/run.mjs --profile runtime",
+    "test:docs:setup": "node tools/docs-validation/run.mjs --profile setup",
+    "test:docs:static": "node tools/docs-validation/run.mjs --profile static"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
@@ -38,6 +45,7 @@
     "lucide-react": "^0.460.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "saxes": "^6.0.0",
     "typescript-eslint": "^8.16.0",
     "vitest": "^4.1.8",
     "zustand": "^4.5.2"
