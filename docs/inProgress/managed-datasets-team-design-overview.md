@@ -12,6 +12,8 @@ unchanged.
 Trade-off: local snapshots, leases and one restricted Controller reader add
 background work but keep Dataset authority off the measured path. Arbitrary
 queries, reclamation, payload mutation and exactly-once claims are excluded.
+Runtime adapter behaviour is additive, but activation requires one planned
+offline Scenario Protocol migration.
 
 ## Why this matters
 
@@ -32,9 +34,10 @@ system-under-test (SUT) records for many consumers instead of recreating them.
 - Revision hints mark a binding dirty. Controller reconciliation publishes only
   the latest revision. A minimum start interval and single-flight export bound
   the rate; worker background polls load it. After atomic activation, the
-  Controller records a fenced Snapshot Activation Confirmation. Recovery uses
-  it to repair a missing deactivation marker with a fresh grace; absent proof
-  protects the old revision.
+  Controller records a fenced Snapshot Activation Confirmation. Its predecessor
+  marker remains outside the revision until safe deletion is acknowledged.
+  Orchestrator retains the latest checkpoint and exact predecessor evidence;
+  absent proof or capacity protects the old revision and blocks publication.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context
@@ -65,7 +68,8 @@ flowchart LR
 | Requirements and exact selection | Consumer template/binding and Create Swarm |
 | Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
 | Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
-| Bundle inventory, migration and protocol activation | Deployment preflight using Scenario Manager validation |
+| Maintenance Epoch authority, final inventory and protocol cutover | Deployment upgrade workflow |
+| Epoch bundle-mutation and swarm-activation gates | Scenario Manager and Orchestrator |
 
 ## Essential definitions
 
@@ -79,6 +83,8 @@ flowchart LR
 | View | Proposed | Materialised selection over Record State | A copied or separate Dataset |
 | Derivation | Proposed | One leased workflow record creates bounded downstream records | Outcome routing or clone |
 | Snapshot Activation Confirmation | Proposed | Orchestrator record of one fenced Controller's durable snapshot switch | Publication completion or deactivation marker |
+| Snapshot Deletion Acknowledgement | Proposed | Idempotent authority evidence that the Controller safely removed the predecessor revision | Deactivation marker or delete request |
+| Scenario Protocol Maintenance Epoch | Proposed | Persisted upgrade fence around final inventory, drain and cutover | Normal editing or dual-major runtime |
 | Group Availability | Proposed | Group authority health, with or without consumers | Publication or consumption health |
 | Publication Status | Proposed | Publication health for one binding | Worker loading or use |
 | Consumption Status | Proposed | Evidence of worker load, selection and SUT attempt | SUT acceptance or audit proof |
@@ -100,7 +106,7 @@ updates upstream state; other outcomes create none.
 | One atomic bounded derivation destination | Multi-destination fan-out or arbitrary cross-Dataset transactions |
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
-| One explicit new-major migration gate | Concurrent v2/new-major support or implicit empty requirements |
+| One persisted offline new-major Maintenance Epoch | Concurrent v2/new-major support or implicit empty requirements |
 
 ## Release boundary
 
@@ -117,17 +123,21 @@ Controller/worker filesystem operations, safe retention and all-worker restart
 fan-out; admission must fund them.
 Loaded workers may survive a short Controller outage, which is continuity rather
 than high availability. Derivation and `EXCLUSIVE_LEASE` still require
-concurrency, failure and soak qualification.
+concurrency, failure and soak qualification. Scenario Protocol activation is
+planned downtime, not a highly available upgrade.
 
 ## Next step
 
 Approve the Release 1 model. M0 then activates required
-`managedDatasetRequirements` under a new Scenario Protocol major. Deployment
-preflight inventories, stages and validates every repository-shipped,
-operator-mounted and uploaded/persisted bundle; remaining v2 bundles block
-activation and running v2 swarms are drained and recreated. Scenario Manager
-remains the only authoring validator with preserved version/digest evidence.
-Complete the remaining executable contracts before runtime implementation.
+`managedDatasetRequirements` under a new Scenario Protocol major. One persisted
+Maintenance Epoch blocks bundle mutation and swarm create/start while final
+inventory, validation, exact v2 swarm drain and digest-checked cutover run.
+Pre-switch failure keeps the prior validator and roots selected and restores the
+drained set from frozen v2 plans within a declared bound. Post-switch recreation
+failure remains gated until explicit resume or rollback within the same bound.
+Scenario Manager remains the only authoring validator with preserved
+version/digest evidence. Complete the remaining
+executable contracts before runtime implementation.
 
 ## Technical detail
 
