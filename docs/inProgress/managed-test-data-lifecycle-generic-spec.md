@@ -63,7 +63,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Bounded derivation | `MANAGED_DATASET` consumes one exact upstream `WORKFLOW + EXCLUSIVE_LEASE` selection and writes to one downstream Dataset. Only `SUCCESS` creates bounded records. |
 | Immutable payload | Record payload never changes and reaches workers only through a verified snapshot. Workflow claims return identity, state and lease data, never another payload copy. |
 | Explicit allocation | `REPLAY` uses `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. Modes never mix within one Dataset. |
-| Explicit consumers | Absence of `datasets/requirements.yaml` means the Scenario Bundle has no Managed Dataset consumer dependency and Create Swarm requires `datasetSelections: []`. A provider-only Scenario may still create a Dataset through its explicit output binding. A present document is versioned, non-empty and gives every requirement one exact compatible selection. |
+| Explicit consumers | `ABSENT` is valid only with no Managed Dataset consumer input or derived source and requires `datasetSelections: []`; a provider output alone remains valid. With `PRESENT`, requirements and Managed Dataset input/source bindings map one-to-one and every requirement receives one exact compatible selection. |
 | Versioned bundle extension | `datasets/requirements.yaml` has its own required `version`. Scenario Manager alone parses and validates it. A present document is rejected unless Scenario Manager, Orchestrator and the authoring/runtime contract advertise the exact supported version; no component may ignore it. Existing Scenario Protocol v2 descriptors remain unchanged. |
 | Provider-only templates | Group templates use only the Provider Scenario Binding's allowlisted non-secret `vars` and `sut` values. Consumers use resolved ids. |
 | One authoring validator | Scenario Manager alone validates Scenario Bundles, Dataset Requirements Documents, Dataset Definitions and Schema Contracts. UI, MCP, CLI, CI and agents delegate to it and preserve its version/digest evidence; none implements another validator. |
@@ -264,8 +264,18 @@ Swarm owns environment-specific selections.
 Scenario Manager loads the document in the same all-or-nothing bundle validation
 transaction as `scenario.yaml`. It cross-validates requirements against Scenario
 roles, provider/consumer adapter configuration, the capability catalogue,
-Dataset Definitions, schemas and binding rules. Scenario Manager returns one
-tagged projection:
+Dataset Definitions, schemas and binding rules. The Managed Dataset adapter graph
+must match exactly:
+
+- `ABSENT` is valid only when the Scenario has no `MANAGED_DATASET` consumer
+  input and no `MANAGED_DATASET` provider source. An explicit Managed Dataset
+  provider output alone remains valid with `ABSENT`.
+- With `PRESENT`, every requirement `bindingRef` references exactly one
+  `MANAGED_DATASET` consumer input or one `MANAGED_DATASET` provider source, and
+  every such input or source references exactly one requirement. Orphan,
+  duplicate and missing references invalidate the complete bundle.
+
+Scenario Manager returns one tagged projection:
 
 ```text
 ABSENT  = {status: ABSENT, artifactDigest}
@@ -278,9 +288,9 @@ failure is invalid, never `ABSENT`.
 
 `artifactDigest` is the existing deterministic digest of the complete validated
 Scenario Bundle, so changing the Requirements Document invalidates stale
-validation evidence. UI, MCP, CLI, CI, Orchestrator and workers never parse or
-revalidate its YAML. Orchestrator stores the tagged projection and artifact digest
-with the admitted Scenario Binding.
+validation evidence. Validation, projection and runtime rendering use one
+immutable validated bundle snapshot identified by that digest. UI, MCP, CLI, CI,
+Orchestrator and workers never parse or revalidate its YAML.
 
 Scenario Manager advertises this exact authoring-contract entry:
 
@@ -293,15 +303,27 @@ datasetRequirements:
 
 The projection endpoint returns the tagged `ABSENT` or `PRESENT` contract above.
 A `PRESENT` bundle cannot be listed for Managed Dataset admission or prepared
-for runtime unless Orchestrator supports version 1. Its existing
+for runtime unless Orchestrator supports version 1. Managed Dataset-aware use of
+the existing
 `POST /scenarios/{scenarioId}/runtime` request adds
-`acceptedDatasetRequirementsVersion: 1`; Scenario Manager rejects a missing or
-mismatched value only when the projection is `PRESENT`. An updated Orchestrator
-rejects a Scenario Manager that does not advertise the contract. Managed Dataset
-remains absent from the capability catalogue until the deployed Scenario Manager
-and Orchestrator both support version 1. Existing v2 bundles remain valid without
-modification; this compatibility gate is not a parser fallback or silent ignore
-rule.
+`acceptedDatasetRequirementsVersion: 1` and the required validated
+`expectedArtifactDigest: sha256:...`. Scenario Manager renders from that exact
+immutable bundle snapshot. If the current validated snapshot differs or is no
+longer available, it returns HTTP `412` with
+`SCENARIO_ARTIFACT_DIGEST_CONFLICT`. Orchestrator returns the conflict to the
+caller, which must rediscover and submit a new selection; neither component
+reuses or automatically reselects. A missing or mismatched accepted version is
+rejected when the projection is `PRESENT`.
+Orchestrator freezes the verified digest with the admitted Scenario Binding.
+
+If Scenario Manager does not advertise the contract, an updated Orchestrator
+disables only Managed Dataset discovery and admission and omits its capabilities;
+it does not reject Scenario Manager or ordinary Scenario Protocol v2 Create
+Swarm. Existing v2 bundles with no Managed Dataset input, source or output remain
+creatable in either rolling-upgrade order. A `PRESENT` bundle and a provider-only
+Managed Dataset bundle fail closed until the deployed Scenario Manager and
+Orchestrator both support version 1. This gate is not a parser fallback or silent
+ignore rule.
 
 `dataset.yaml` is the only Dataset Definition entry point. Directory name must
 equal `id`; `version` is SemVer. Record and state roots use exact paths shown
@@ -817,7 +839,7 @@ SNAPSHOT_REVISION_NOT_FOUND, SNAPSHOT_DIGEST_MISMATCH,
 SNAPSHOT_READER_GRANT_INVALID, SNAPSHOT_READER_UNAVAILABLE,
 SNAPSHOT_ACTIVATION_CONFLICT, SNAPSHOT_ACTIVATION_CONFIRMATION_NOT_FOUND,
 SNAPSHOT_DELETION_ACKNOWLEDGEMENT_CONFLICT, SNAPSHOT_STORAGE_UNAVAILABLE,
-DATASET_REQUIREMENTS_VERSION_UNSUPPORTED,
+DATASET_REQUIREMENTS_VERSION_UNSUPPORTED, SCENARIO_ARTIFACT_DIGEST_CONFLICT,
 REDIS_STAGING_CLEANUP_FAILED,
 AUTHORITY_UNAVAILABLE
 ```
@@ -1681,17 +1703,28 @@ Tests use official product APIs and prove:
    the complete bundle. Successful validation returns the tagged projection,
    supported version, Scenario Manager version, deterministic complete-bundle
    digest and applicable compiled schema digests. UI, MCP, CLI, CI and
-   Orchestrator preserve that evidence and do not revalidate YAML. Mixed-version
-   tests prove a present document cannot be listed, admitted or runtime-prepared
-   when Scenario Manager or Orchestrator omits or mismatches version 1; it is
-   never ignored. Requirements edits invalidate prior `artifactDigest` evidence.
+   Orchestrator preserve that evidence and do not revalidate YAML. Managed
+   Dataset runtime preparation sends the accepted requirements version and
+   `expectedArtifactDigest`; Scenario Manager validates, projects and renders
+   from the same immutable bundle snapshot. An edit between discovery and
+   runtime preparation returns typed HTTP `412`, freezes no Scenario Binding and
+   forces explicit rediscovery without automatic reselection. Successful
+   admission freezes the verified digest. Mixed-version tests in both rolling
+   orders prove ordinary v2 scenarios remain creatable while Managed Dataset
+   discovery/admission is disabled; a present document cannot be listed,
+   admitted or runtime-prepared until both components support version 1 and is
+   never ignored.
 2. Every Dataset freezes name, identity, SUT/Dataset Space, Profile, grouping,
    schemas, source, allocation and workflow contract. Group results and consumers
    cannot change identity or create Groups.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
    adapter/source with no migration or fallback. An absent Requirements Document
-   plus `datasetSelections: []` works explicitly; a present empty requirements
-   list is invalid.
+   plus `datasetSelections: []` works explicitly only with no Managed Dataset
+   consumer input or derived source; a provider output alone remains valid.
+   Every present requirement maps to exactly one Managed Dataset consumer input
+   or derived source and vice versa. Deleted sidecar, orphan requirement, missing
+   requirement and provider-only tests enforce this graph; a present empty
+   requirements list is invalid.
 4. Scheduler, CSV, Redis and Managed Dataset sources enforce their exact tagged
    settings, capabilities, provenance and restart rules. Redis tests cover copy,
    per-command results, TTL, cleanup, collision and cluster slot safety without

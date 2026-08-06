@@ -19,9 +19,11 @@ provider -> named Managed Dataset -> explicit consumer selection -> normal scena
 
 Every choice is explicit. PocketHive never substitutes another adapter, source,
 Dataset, Group or View. If the requirements file is absent, the scenario has no
-Managed Dataset consumer dependency and Create Swarm sends
+Managed Dataset consumer input or derived source and Create Swarm sends
 `datasetSelections: []`. A provider-only scenario can still create a Dataset
-through its explicit output binding.
+through its explicit output binding. When the file is present, each requirement
+must match exactly one Managed Dataset consumer input or derived source, and each
+such binding must have one requirement.
 
 The full design is Release 1, not one MVP. Delivery starts with scheduled shared
 replay, then adds mutable-workflow parity, then the remaining sources and
@@ -213,8 +215,16 @@ Scenario Manager reports `ABSENT` with bundle evidence, or `PRESENT` with
 version, requirements and the same evidence. A present file is admitted only
 when Scenario Manager and Orchestrator both advertise version 1. An invalid,
 empty, unsupported or ignored file fails; it never becomes “no Dataset”.
-Existing Protocol v2 bundles without the file keep working unchanged, so this
-design needs no offline migration or swarm drain.
+Runtime preparation must present the exact validated bundle `artifactDigest`.
+Scenario Manager renders from that immutable snapshot; a changed bundle returns
+a conflict and requires explicit rediscovery rather than automatic Dataset
+reselection. The verified digest is frozen with the Scenario Binding.
+
+Existing Protocol v2 bundles with no Managed Dataset binding keep working in
+either rolling-upgrade order, so this design needs no offline migration or swarm
+drain. Missing version support disables only Managed Dataset discovery and
+admission. A present requirements file stays unavailable until Scenario Manager
+and Orchestrator both support version 1.
 
 Each capability starts only after one canonical contract owns its Scenario,
 worker, API, Context, status and snapshot shapes. The MVP does not wait for

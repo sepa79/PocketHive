@@ -30,8 +30,10 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   `SCHEDULER + REPLAY + SHARED`.
 - A consumer dependency uses non-empty `datasets/requirements.yaml` and selects
   one exact Dataset, Group and optional View during Create Swarm. File absence
-  plus `datasetSelections: []` means no consumer dependency; a provider-only
-  scenario may still create its Dataset through an explicit output binding.
+  plus `datasetSelections: []` is valid only when the Scenario has no Managed
+  Dataset consumer input or derived source; a provider-only scenario may still
+  create its Dataset through an explicit output binding. Requirements and those
+  input/source bindings map one-to-one.
 - PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
   bounded function and publishes an atomic revision. Workflow claims return
   identity, state and lease only, including derived input; workers resolve
@@ -84,7 +86,7 @@ flowchart LR
 | Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
 | Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
 | Requirements file schema, parsing, validation and `artifactDigest` evidence | Scenario Manager |
-| Requirements-version handshake and frozen selections | Scenario Manager and Orchestrator |
+| Requirements-version/digest handshake and frozen selections | Scenario Manager and Orchestrator |
 
 ## Essential definitions
 
@@ -152,20 +154,22 @@ fan-out; admission must fund them.
 Loaded workers may survive a short Controller outage, which is continuity rather
 than high availability. Derivation and `EXCLUSIVE_LEASE` still require
 concurrency, failure and soak qualification. Existing Scenario Protocol v2
-bundles need no migration; a present requirements file runs only when Scenario
-Manager and Orchestrator both advertise version 1.
+bundles need no migration and remain creatable in either rolling-upgrade order.
+Only Managed Dataset discovery and admission are disabled until Scenario Manager
+and Orchestrator both advertise requirements version 1.
 
 ## Next step
 
 Approve the Release 1 model and staged delivery. M0 defines
 `datasets/requirements.yaml` version 1, its single Scenario Manager parser and
 validator, the tagged `ABSENT`/`PRESENT` projection, authoring-contract
-advertisement and the fail-closed Scenario Manager/Orchestrator version
-handshake. Existing v2 bundles remain unchanged. A present empty, invalid,
-unsupported or silently ignored document fails admission. Complete the MVP
-executable contracts, then deliver shared replay. Mutable parity and each
-remaining Release 1 extension receive their own contract gate before
-implementation.
+advertisement and the fail-closed Scenario Manager/Orchestrator version and
+`artifactDigest` handshake. Runtime preparation uses the exact validated bundle
+snapshot; a changed digest forces explicit rediscovery, never reselection.
+Existing v2 bundles remain unchanged. A present empty, invalid, unsupported or
+silently ignored document fails admission. Complete the MVP executable
+contracts, then deliver shared replay. Mutable parity and each remaining Release
+1 extension receive their own contract gate before implementation.
 
 ## Technical detail
 
