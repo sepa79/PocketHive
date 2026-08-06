@@ -72,7 +72,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Bounded publication rate | Each dirty binding publishes only its latest observed revision. One required minimum interval bounds start-to-start rate; a long publication may still be followed immediately by the next, so admission covers both publications. |
 | Least-privilege publication | The Controller writes only its swarm publication directory. Applicable consumer-input workers mount only their binding read-only. Other workers get no Dataset mount. |
 | Safe snapshot cleanup | A qualified grace period covers storage visibility, the enforced worker-load maximum and clock skew. A deactivation marker remains outside its revision until safe deletion is acknowledged. Orchestrator retains the latest Activation Confirmation, every unacknowledged predecessor and each acknowledged confirmation for a full evidence period measured from acknowledgement. Recovery uses exact predecessor evidence; pressure never causes unsafe deletion or evidence pruning. |
-| Bounded capacity | Deployment limits cover authoritative storage and Activation Confirmation evidence, mutation rates, snapshots, Controller publication and cleanup operations, complete restart fan-out, total worker memory and concurrency. Exhaustion rejects new work without eviction or fallback. |
+| Bounded capacity | Deployment limits cover authoritative storage and Activation Confirmation evidence, including a binding-local pending Deletion Acknowledgement limit, mutation rates, snapshots, Controller publication and cleanup operations, complete restart fan-out, total worker memory and concurrency. Exhaustion rejects new work without eviction or fallback. |
 | No inferred lifecycle | Managed Dataset never starts, replaces, fails over or reconciles provider swarms or SUT objects. |
 | Bounded record lifecycle | Release 1 records are `NON_EXPIRING`. Replay can reuse them continuously; workflows that move records out of a ready View operate only within the admitted storage horizon. |
 | No implicit deletion | Release 1 has no record retirement, reclamation or Dataset purge state machine. Direct PostgreSQL deletion is prohibited; a runbook and deployment limits bound retained data. |
@@ -668,7 +668,7 @@ snapshot-byte fallback.
 | Import completion | `PUT /api/managed-datasets/{datasetId}/source-imports/{importId}/complete` | Repeats fingerprint/counts; publishes all Groups atomically or none |
 | Derivation grant | `POST /api/managed-datasets/{destinationDatasetId}/derivation-grants` | Destination/source binding refs, completed source snapshot revision, activation generation and batch; claims exact upstream View members, reserves maximum destination capacity and returns source identity/state/lease without payload |
 | Derivation completion | `PUT /api/managed-datasets/{destinationDatasetId}/derivation-grants/{derivationGrantId}/items/{derivationItemId}/completion` | Both bindings, provider key, source lease/View/revision, Outcome, mapping digest, next state and ordered records; changes both Datasets atomically |
-| Begin publication | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications` | Controller swarm/run/binding only; reserves one bounded Activation Confirmation record and returns a fenced, expiring descriptor pinned to one revision/digest and one opaque Snapshot Reader grant |
+| Begin publication | `POST /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications` | Controller swarm/run/binding only; reserves one bounded Activation Confirmation record and, when a current activation can become its predecessor, one binding-local pending Deletion Acknowledgement slot; returns a fenced, expiring descriptor pinned to one revision/digest and one opaque Snapshot Reader grant |
 | Complete publication | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/complete` | Exact manifest/chunk/whole digests and fencing token; atomically completes the publication and returns the next binding-scoped `activationGeneration` |
 | Confirm activation | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-publications/{publicationId}/activation-confirmation` | Active fenced Controller only, after durable Active Reference replacement; repeats the explicit nullable predecessor tuple, new publication/revision, generation and Active Reference digest; exact replay returns one stable `activationConfirmationId`, changed replay conflicts |
 | Acknowledge predecessor deletion | `PUT /api/managed-datasets/{datasetId}/groups/{groupId}/snapshot-activation-confirmations/{activationConfirmationId}/predecessor-deletion-acknowledgement` | Active fenced Controller only, after qualified deletion and durable absence verification; repeats predecessor publication/revision, generation and marker digest; exact replay returns the stable Deletion Acknowledgement with authority-set `predecessorDeletionAcknowledgedAt` and `confirmationPruneAfter`, changed replay conflicts |
@@ -972,11 +972,13 @@ failure leaves the new Active Reference intact, marks publication degraded and
 enters bounded recovery; it never rolls back or selects another revision.
 
 Begin publication reserves the confirmation row and maximum bytes needed after
-replacement. Capacity failure therefore blocks before export and can never leave
-an Active Reference unconfirmable. Orchestrator always retains the latest
-confirmed activation as the binding checkpoint. An older confirmation with a
-predecessor remains authoritative indefinitely until its Deletion
-Acknowledgement is stored. Orchestrator sets:
+replacement. When a current activation can become the predecessor, the same
+transaction reserves one binding-local pending Deletion Acknowledgement slot;
+the first activation reserves none. Capacity failure therefore blocks before
+export and can never leave an Active Reference unconfirmable. Orchestrator
+always retains the latest confirmed activation as the binding checkpoint. An
+older confirmation with a predecessor remains authoritative indefinitely until
+its Deletion Acknowledgement is stored. Orchestrator sets:
 
 ```text
 confirmationPruneAfter =
@@ -990,6 +992,16 @@ activation with no predecessor remains until it is no longer latest and
 `activationConfirmedAt + snapshotActivationEvidenceRetention`. A completed but
 unconfirmed publication is never pruned. Evidence expiry never undercuts these
 rules.
+
+A Snapshot Activation Confirmation counts towards
+`maximumPendingSnapshotDeletionAcknowledgementsPerBinding` when it has a
+non-null predecessor and Orchestrator has not stored its Deletion
+Acknowledgement. It counts regardless of whether predecessor files or a
+deactivation marker still exist. Its binding-local reservation remains occupied
+until Orchestrator commits the acknowledgement. That transaction releases the
+pending reservation and places the confirmation under its separately reserved
+post-acknowledgement evidence window. A response lost after commit is therefore
+replayable but is not pending.
 
 Workers read `ACTIVE.json`, never scan revision directories, and never choose the
 highest revision. They reject a generation lower than the last accepted one,
@@ -1117,18 +1129,21 @@ snapshotActivationEvidenceRetention >=
 ```
 
 For this calculation, `managedDatasetClient.operationTimeout` includes the
-complete bounded Deletion Acknowledgement retry horizon.
-An unresolved acknowledgement does not by itself stop publication because
-admission reserves its worst-case rows and bytes. Missing reservation blocks the
-next publication before export.
+complete bounded Deletion Acknowledgement retry horizon. An unresolved
+acknowledgement does not by itself stop publication while its binding has a free
+reserved pending slot. Beginning the next applicable publication atomically
+reserves that slot; exhaustion blocks only that binding before export. Global
+admission reserves the sum of binding-local maxima, so one binding cannot borrow
+another binding's confirmation capacity.
 
-`maximumRetainedSnapshotRevisionsPerBinding` and the confirmation row/byte
-limits are admission and reservation limits, not eviction instructions. If
-count, byte or utilisation limits cannot retain every protected revision and
-confirmation, the Controller blocks another publication and reports
-`CAPACITY_EXCEEDED`; it never shortens the grace, deletes a protected revision or
-prunes required authority evidence. Cleanup itself is rate-limited and included
-in filesystem admission.
+`maximumRetainedSnapshotRevisionsPerBinding`,
+`maximumPendingSnapshotDeletionAcknowledgementsPerBinding` and the confirmation
+row/byte limits are separate admission and reservation limits, not eviction
+instructions. If count, byte or utilisation limits cannot retain every protected
+revision and confirmation, the Controller blocks another publication and
+reports `CAPACITY_EXCEEDED`; it never shortens the grace, deletes a protected
+revision or prunes required authority evidence. Cleanup itself is rate-limited
+and included in filesystem admission.
 
 Storage is deployment-selected and qualified for shared visibility, atomic
 moves, durability, reschedule and outage semantics. Missing, unhealthy or
@@ -1331,7 +1346,7 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 
 | Limit group | Required limits |
 |---|---|
-| Authority storage | `maximumManagedDatasetCount`, `maximumManagedDatasetStoredRecords`, `maximumManagedDatasetStoredBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetStateBytes`, `maximumManagedDatasetViewMemberships`, `maximumManagedDatasetDerivationLineageRows`, `maximumManagedDatasetDerivationLineageBytes`, `maximumSnapshotActivationConfirmations`, `maximumSnapshotActivationConfirmationRecordBytes`, `maximumSnapshotActivationConfirmationBytes`, `maximumIdempotencyRecords`, `maximumIdempotencyBytes` |
+| Authority storage | `maximumManagedDatasetCount`, `maximumManagedDatasetStoredRecords`, `maximumManagedDatasetStoredBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetStateBytes`, `maximumManagedDatasetViewMemberships`, `maximumManagedDatasetDerivationLineageRows`, `maximumManagedDatasetDerivationLineageBytes`, `maximumSnapshotActivationConfirmations`, `maximumSnapshotActivationConfirmationRecordBytes`, `maximumSnapshotActivationConfirmationBytes`, `maximumPendingSnapshotDeletionAcknowledgementsPerBinding`, `maximumIdempotencyRecords`, `maximumIdempotencyBytes` |
 | Mutations | `maximumLeaseAcquisitionsPerSecond`, `maximumLeaseReleasesPerSecond`, `maximumWorkflowTransitionsPerSecond`, `maximumDerivationCompletionsPerSecond` |
 | Derivation | `maximumDerivedRecordsPerSource`, `maximumConcurrentDerivationItems` |
 | Source/import | `maximumFiniteSourceItems`, `maximumFiniteSourceBytes`, `maximumFiniteImportDuration`, `maximumRedisCopyDuration` plus explicit active grant/import and provider-receipt bounds |
@@ -1353,7 +1368,7 @@ Admission calculates worst-case demand for all bindings and concurrent work:
 ```text
 requiredActivationConfirmationRows(binding) =
   2  # latest checkpoint + one in-progress reservation
-  + maximumRetainedSnapshotRevisionsPerBinding(binding)
+  + maximumPendingSnapshotDeletionAcknowledgementsPerBinding(binding)
   + ceil(snapshotActivationEvidenceRetention
       / minimumSnapshotPublicationInterval(binding))
 
@@ -1431,12 +1446,15 @@ and deactivation-marker operations. It measures the actual metadata/open/close
 amplification behind every logical operation; admission uses that demand, not
 the logical count alone.
 
-The confirmation reservation covers the latest checkpoint, one in-progress
-publication, every predecessor that may remain unacknowledged and every
-acknowledged confirmation in its post-acknowledgement replay window. Admission
-rejects the binding if deployment-wide row or byte limits cannot fund the sum.
-It never assumes timely Deletion Acknowledgement or evidence pruning will create
-capacity.
+The conservative confirmation reservation covers the latest checkpoint, one
+in-progress publication, every predecessor that may remain unacknowledged and
+every acknowledged confirmation in its post-acknowledgement replay window. A
+checkpoint may also be pending or inside the evidence window; reservation does
+not subtract that overlap. Admission rejects the binding if deployment-wide row
+or byte limits cannot fund the sum of all binding-local maxima. It never assumes
+timely Deletion Acknowledgement or evidence pruning will create capacity.
+`maximumRetainedSnapshotRevisionsPerBinding` separately bounds derivative
+filesystem retention; it does not bound pending authority evidence.
 
 `minimumSnapshotPublicationInterval` is the single per-binding publication-rate
 control; its derived maximum is `1 / interval`. The existing deployment-wide
@@ -1483,8 +1501,10 @@ storage/Controller outage and restart, refill/lease/transition/Derivation and a
 target-scale 24-hour soak must pass. Smaller topology success does not qualify a
 larger one. Storage qualification repeatedly activates revisions while workers
 load the previous revision at the hard duration boundary. It tests cleanup before
-and after the retention grace, lost/replayed Deletion Acknowledgement,
-confirmation-capacity blocking and abandoned-staging recovery.
+and after the retention grace; lost/replayed Deletion Acknowledgement; consecutive
+deleted predecessors whose acknowledgements cannot be stored; binding-local
+pending-slot exhaustion, isolation and recovery; confirmation-capacity blocking;
+and abandoned-staging recovery.
 
 The operator runbook owns the declared retention horizon, PostgreSQL/filesystem
 forecast, warning/action thresholds, backup/restore and escalation. Snapshot
@@ -1653,7 +1673,11 @@ Tests use official product APIs and prove:
     remain exactly replayable through the full post-acknowledgement evidence
     period. Controller outage beyond the grace, exact-lookup `404` and
     confirmation-at-capacity tests retain required evidence and block publication
-    without shortening the grace.
+    without shortening the grace. Consecutive deleted predecessors with
+    unavailable acknowledgements fill exactly the affected binding's pending
+    slots. Its next publication blocks while another admitted binding continues;
+    committed acknowledgements release pending capacity, remain replayable after
+    a lost response and allow the blocked binding to resume.
 13. Dataset Context survives every transformation and the SDK guard rejects
     malformed, mismatched, expired or clock-unsafe work immediately before SUT
     network I/O. Measured-path packet/syscall tests observe no forbidden call.

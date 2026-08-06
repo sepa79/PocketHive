@@ -36,9 +36,12 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   the rate; worker background polls load it. After atomic activation, the
   Controller records a fenced Snapshot Activation Confirmation. Its predecessor
   marker remains outside the revision until safe deletion is acknowledged.
-  Orchestrator retains each unacknowledged predecessor indefinitely and starts a
-  full replay-evidence period when acknowledgement is stored. Absent proof or
-  reserved capacity protects the old revision and blocks publication.
+  Each binding has an explicit limit for deletion acknowledgements not yet
+  stored, including after predecessor files are deleted. The next publication
+  reserves one place; exhaustion blocks only that binding. Orchestrator retains
+  the confirmation indefinitely and starts a full replay-evidence period when
+  acknowledgement is stored. Absent proof keeps required evidence and any
+  retained revision protected.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context

@@ -111,9 +111,14 @@ older confirmation indefinitely until predecessor deletion is acknowledged.
 Acknowledgement starts a fresh evidence period, so a lost successful response
 can still be replayed after a late deletion. Recovery looks up the exact
 confirmation for each predecessor; it never treats a truncated list as complete.
-A missing lookup protects the revision. Capacity reserves unacknowledged and
-recently acknowledged confirmations. If that reservation cannot be funded,
-PocketHive blocks another publication instead of pruning required evidence.
+A missing lookup protects the revision. Every confirmation with a predecessor
+but no stored deletion acknowledgement occupies one binding-local pending slot,
+even after its predecessor files are gone. PocketHive reserves a free slot before
+another applicable publication. Storing the acknowledgement releases that slot
+and starts the separately reserved replay-evidence period. Exhaustion blocks only
+that binding; other admitted bindings keep their reserved capacity. The retained
+snapshot limit separately bounds files and never substitutes for this evidence
+limit.
 
 Snapshot Reader grant lifetime covers begin-response transit, hard export,
 completion, clock skew and safety margin. After receiving the grant, the
@@ -201,7 +206,9 @@ tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests
 crash tests around publication completion, Active Reference replacement,
 Snapshot Activation Confirmation, marker publication, revision deletion and
 Deletion Acknowledgement; late acknowledgement followed by a lost successful
-response, exact replay, exact-predecessor lookup and confirmation-capacity tests;
+response, exact replay, exact-predecessor lookup, consecutive unavailable
+acknowledgements, binding-local pending-slot exhaustion/isolation/recovery and
+confirmation-capacity tests;
 Maintenance Epoch mutation/create/start races, restart, stale coordinator,
 changed-plan, uncaptured-swarm, rollback and restoration tests;
 pilot-powered paired performance trials; and a target-scale 24-hour soak.
