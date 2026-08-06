@@ -1,7 +1,7 @@
 # Dataset Proposal — Zbig
 
 > **Review disposition (2026-08-05):** non-normative design input. The
-> [Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md)
+> [Managed Test Data Release 1 Specification](managed-test-data-lifecycle-generic-spec.md)
 > is the proposed canonical design. The original proposal below is preserved
 > unchanged for traceability; its status, MVP boundary and open decisions are
 > historical and must not be used as implementation requirements. The
@@ -252,13 +252,15 @@ ideas without adopting open-ended tag/query/database semantics.
 | Name plus stable identity | Required `name` and opaque `datasetId`; Groups remain subordinate. | Keeps discovery human-readable and runtime identity stable. |
 | Generic versioned schema | One root schema composes exact immutable contracts and local `$defs`. | Supports arbitrary domains without PocketHive business fields. |
 | PostgreSQL durability | PostgreSQL owns Managed Dataset runtime records, revisions, imports, state, Views and leases. | Provides atomic restart-safe authority. |
+| Direct bounded Controller snapshot read | Under a fenced grant, the Controller streams one immutable revision through the least-privilege PostgreSQL function adapter; Orchestrator never proxies bytes. | Keeps workers database-free without making Orchestrator a snapshot-byte bottleneck. |
 | Immutable payload | Payload is immutable in both canonical Profiles. | Keeps publication, caching and evidence deterministic. |
 | Shared and exclusive use | `REPLAY` supports `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. | Covers concurrent reuse and temporary unavailability. |
 | Lease separate from business data | Record Leases remain authority state, never tags or payload fields. | Separates allocation safety from scenario state. |
 | Durable mutable availability | `WORKFLOW` uses versioned Record State, fixed Views and declared State Transitions. | Retains needed mutation through a bounded state machine. |
+| One bounded cross-Dataset transaction | Derivation atomically creates bounded independent downstream records, changes upstream state and releases its lease. | Supports chained provider/consumer flows without arbitrary cross-Dataset mutation. |
 | Explicit configuration and qualification | Sources, adapters, selections and transitions are explicit; target-scale performance and failure gates block release. | Follows NFF and prevents unproven behaviour reaching production. |
 
-### Rejected for the MVP
+### Rejected for Release 1
 
 | Rejected choice | Reason | Canonical replacement |
 |---|---|---|
@@ -269,23 +271,23 @@ ideas without adopting open-ended tag/query/database semantics.
 | Arbitrary selectors | Makes admission and query cost unpredictable. | Create Swarm freezes one exact Dataset/Group and optional workflow View. |
 | `PAYLOAD_REPLACE` | Breaks immutable revision identity and local snapshot safety. | Immutable payload plus separately versioned Record State. |
 | Tag mutation combined with lease release | Conflates allocation and business mutation and makes partial failure unclear. | One exact atomic transition, or an explicitly allowed unchanged release. |
-| Redis projection/outbox as the MVP distribution path | Adds another service, cache lifecycle and consistency plane without evidence it is needed. | Deployment-owned filesystem publication and worker local memory. |
+| Redis projection/outbox as the Release 1 distribution path | Adds another service, cache lifecycle and consistency plane without evidence it is needed. | Deployment-owned filesystem publication and worker local memory. |
 | Inferring state from a SUT result | A response or timeout cannot prove the intended business outcome. | Only explicit workflow completion may mutate state. |
 | Business-specific types or tags as PocketHive concepts | Leaks one domain into a generic platform contract. | Dataset schemas and scenario mappings own every domain field. |
 
-Rejected means excluded from this MVP architecture, not an undocumented
+Rejected means excluded from this Release 1 architecture, not an undocumented
 extension point. Reconsideration requires a separate approved design.
 
 ### Deferred
 
 | Deferred item | Reason | Reconsider when |
 |---|---|---|
-| Direct read-only Swarm Controller PostgreSQL export | Orchestrator-mediated export keeps one simpler authority and authorisation boundary. | Benchmarks prove Orchestrator export is the material bottleneck. |
+| Direct Controller table access or unrestricted export | Bypasses the fenced grant, canonical read function and least-privilege boundary. | A separately approved reader contract cannot be expressed by the bounded function adapter. |
 | Cross-swarm content-addressed snapshot reuse | Adds cache references, invalidation and cleanup complexity. | Per-swarm publication exceeds approved storage or startup targets. |
 | Object storage, Redis snapshot cache or another distribution service | Adds another operational plane and failure model. | Qualified shared filesystem adapters cannot meet a concrete deployment requirement. |
 | Dynamic tags, selectors, state patches or payload replacement | Requires a broader mutable-data, query and evidence contract. | A concrete use case cannot use bounded Record State, Views and transitions. |
 | Lease renewal/transfer, use counts or queue/pop semantics | Broadens allocation and recovery beyond fixed temporary exclusive use. | A measured scenario cannot be served safely by fixed-expiry leases. |
-| Runtime-created Views/transitions or cross-Dataset transactions | Makes capacity and concurrency behaviour dynamic. | A separate bounded workflow contract defines ownership and atomicity. |
+| Runtime-created Views/transitions or arbitrary cross-Dataset transactions | Makes capacity and concurrency behaviour dynamic. Release 1 permits only its fixed bounded Derivation. | A separate bounded contract defines another exact transaction, ownership and atomicity. |
 | Redis projection for external consumers | No current requirement justifies outbox, rebuild and consistency contracts. | A named consumer cannot use Managed Dataset or an existing explicit Redis path. |
 | Dataset retirement, purge and automatic deletion | Active-run safety, evidence and recovery are not defined. | A governed lifecycle contract is approved; until then limits and the runbook bound growth. |
 | Audit-grade history and delivery proof | Operational Consumption Status does not prove SUT acceptance or exactly-once delivery. | Audit requirements define trust, retention, privacy and verification owners. |

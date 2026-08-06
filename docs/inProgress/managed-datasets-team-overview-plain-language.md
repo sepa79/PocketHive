@@ -1,9 +1,9 @@
 # Managed Datasets — Plain-language Guide
 
-Status: proposed MVP; implementation and qualification pending
+Status: proposed Release 1; implementation and qualification pending
 
 For exact requirements, see the
-[Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md).
+[Managed Test Data Release 1 Specification](managed-test-data-lifecycle-generic-spec.md).
 
 ## One-minute version
 
@@ -28,7 +28,7 @@ requirement and selection arrays.
 | Make one record temporarily unavailable | `EXCLUSIVE_LEASE` |
 | Track processing stage or outcome | `WORKFLOW` Record State and named Views |
 | Create independently reusable output records | One bounded derived Dataset |
-| Copy a whole Dataset unchanged | Not MVP; future explicit clone operation |
+| Copy a whole Dataset unchanged | Not Release 1; future explicit clone operation |
 
 Groups may use arbitrary schema-defined fields. They are frozen before provider
 work starts and are not PocketHive business fields.
@@ -60,7 +60,7 @@ On `SUCCESS`, one PostgreSQL transaction creates `1..N` downstream records,
 stores lineage, changes upstream state and releases the lease. Other outcomes
 create none. Failure changes neither Dataset; exact retry returns the result.
 
-MVP records do not expire and are never purged. Shared replay can reuse them
+Release 1 records do not expire and are never purged. Shared replay can reuse them
 continuously. A workflow that moves records out of its ready View stops accepting
 new records at its stored limit, so its operating horizon must be capacity-funded.
 
@@ -77,11 +77,18 @@ never scan directories. Applicable input workers mount it read-only, verify it
 and load local memory before readiness. Normal traffic makes no filesystem,
 PostgreSQL, Orchestrator or credential-provider call.
 
+When an authority revision advances, Orchestrator sends the Controller a hint.
+The Controller also checks authoritative metadata on a bounded schedule, so a
+lost hint cannot prevent refresh. Workers poll `ACTIVE.json` on an explicit
+jittered background interval and atomically load a verified newer generation.
+Refresh failure preserves the old safe snapshot; filesystem events are not the
+correctness mechanism.
+
 Workflow state and leases always come from bounded background authority calls,
 not snapshot files. An already-loaded safe worker may continue through a short
-Controller or storage outage; a new or restarted worker stays unready. MVP has
-one active Controller and deterministic restart recovery. This is continuity,
-not Controller high availability.
+Controller or storage outage; a new or restarted worker stays unready. Release 1
+has one active Controller and deterministic restart recovery. This is
+continuity, not Controller high availability.
 
 ## How PocketHive shows correct use
 
@@ -90,8 +97,16 @@ JSON body. The Worker SDK preserves it and checks Dataset, Group, revision,
 Profile, allocation, validity and any lease/View/state revision immediately
 before SUT network I/O.
 
-Orchestrator derives one status used unchanged by REST, UI and PocketHive Model
-Context Protocol (MCP).
+Workers report to the Swarm Controller. The Controller preserves worker identity
+and restart epoch in one bounded aggregate. Orchestrator consumes only that
+aggregate and derives the read model used unchanged by REST, UI and PocketHive
+Model Context Protocol (MCP).
+
+Group Availability covers authority source, schema, integrity, supply and
+storage health. A Group can be available with no consumer. Publication Status is
+per admitted binding. Consumption Status covers worker loading, selection and
+the SUT-attempt boundary.
+
 `CONSUMING` requires fresh matching evidence for:
 
 1. the authority revision and schema;
@@ -107,12 +122,18 @@ not SUT acceptance, business correctness or exactly-once delivery.
 
 ## Release boundary
 
+Release 1 includes shared and exclusive replay, mutable workflow, Scheduler,
+finite CSV/Redis import and the bounded Managed Dataset derived source. Shared
+replay is the first implementation foundation, not the whole release. Mutable
+`WORKFLOW + EXCLUSIVE_LEASE` remains required parity. All capability and
+operational qualification milestones must pass before Release 1 is complete.
+
 Implementation starts only after one canonical contract owns every Scenario,
 worker, API, Context, status and snapshot shape. Production also requires
 concurrency, failure, restart, storage, capacity and every-node reschedule tests;
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
 and a target-scale 24-hour soak.
 
-The MVP has no record expiry, reclamation or purge. Deployment limits and an
+Release 1 has no record expiry, reclamation or purge. Deployment limits and an
 approved retention runbook must fund every stored record within the declared
 operating horizon. Expiring supply requires a later governed reclamation design.

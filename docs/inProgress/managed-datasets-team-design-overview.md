@@ -1,10 +1,10 @@
 # Managed Datasets — Team Brief
 
-Status: proposed MVP; architecture and canonical contracts require approval
+Status: proposed Release 1; architecture and canonical contracts require approval
 
 ## Decision required
 
-Approve Managed Dataset as a PostgreSQL-backed, durable test-data option that
+Approve Managed Dataset Release 1 as a PostgreSQL-backed durable option that
 provider swarms create and compatible consumer swarms select explicitly.
 Existing `REDIS_DATASET`, `CSV_DATASET` and direct `SCHEDULER` adapters remain
 unchanged.
@@ -24,17 +24,20 @@ Dataset only for records with independent schema, identity or lifecycle.
 
 ## Proposal
 
-- A provider run creates one named Managed Dataset per output binding.
-- Every provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or
-  `MANAGED_DATASET` source. There is no source switching or fallback.
+- A provider run creates one named Managed Dataset per output binding. Every
+  provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or
+  `MANAGED_DATASET` source, with no switching or fallback.
 - A consumer selects one exact Dataset, Group and optional View during Create
   Swarm, or explicit empty arrays when none is required.
-- PostgreSQL is authoritative. Orchestrator grants a frozen publication; the
-  Swarm Controller reads it through one bounded database function, publishes an
-  atomic file naming the completed revision, and workers use local memory on the
-  measured path.
-- REST, UI and PocketHive Model Context Protocol (MCP) expose the same evidence
-  without claiming SUT acceptance or exactly-once delivery.
+- PostgreSQL is authoritative. Orchestrator grants; the Controller reads through
+  one bounded function and publishes an atomic revision; workers use local memory.
+- Orchestrator sends revision hints, the Controller reconciles metadata, and
+  workers poll the active file in the background. Failure preserves the old safe
+  snapshot.
+- Workers report through the Controller aggregate. Orchestrator derives Group
+  Availability, per-binding Publication Status and Consumption Status for REST,
+  UI and PocketHive Model Context Protocol (MCP). A Group needs no consumer to
+  remain available; evidence never claims SUT acceptance or exactly-once.
 
 ## Where it sits
 
@@ -48,30 +51,33 @@ flowchart LR
   SC --> FS[(Shared snapshot storage)]
   FS --> C[Consumer local memory]
   C --> SUT[SUT]
+  C -->|worker status| SC
+  SC -->|bounded aggregate| O
   O --> E[REST / UI / MCP evidence]
 ```
 
 | Concern | Owner |
 |---|---|
-| Dataset name, Profile, schemas, grouping, Views and transitions | Dataset Definition in Scenario Manager Dataset Space |
-| Source, concrete Groups, allocation, lifecycle and mappings | Provider Scenario Binding |
-| Required Profile, allocation, View and transition | Consumer Scenario Template and Binding |
-| Exact Dataset selection | Create Swarm |
-| Records, state, leases, lineage and idempotency | Orchestrator Managed Dataset module in PostgreSQL |
-| Publication grant and activation generation | Orchestrator Managed Dataset module |
-| Snapshot read and publication | Swarm Controller using the explicit PostgreSQL function adapter and deployment-owned storage |
+| Definition, schemas, grouping, Views and transitions | Dataset Definition in Scenario Manager |
+| Source, Groups, allocation, lifecycle and mappings | Provider Scenario Binding |
+| Requirements and exact selection | Consumer template/binding and Create Swarm |
+| Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
+| Snapshot read, file publication and worker status aggregate | Swarm Controller |
 
 ## Essential definitions
 
 | Term | Status | Plain meaning | Not the same as |
 |---|---|---|---|
-| Managed Dataset | Proposed | Named durable records created by one provider run and reusable by compatible consumers | A Redis list or queue |
-| Dataset Space | Proposed | Versioned registry of Dataset Definitions and Schema Contracts used by Scenario Bindings | A runtime Dataset |
-| Group | Proposed | Frozen partition using arbitrary schema-defined key fields | A Dataset name or runtime filter |
-| `REPLAY` | Proposed | Immutable reusable records with shared or exclusive allocation | Mutable workflow state |
-| `WORKFLOW` | Proposed | Immutable records plus versioned Record State, fixed Views and declared transitions | Free-form tags or queries |
+| Managed Dataset | Proposed | Named durable records from one provider run, reusable by consumers | A Redis list or queue |
+| Dataset Space | Proposed | Versioned definitions and schemas used by Scenario Bindings | A runtime Dataset |
+| Group | Proposed | Frozen partition by schema-defined fields | A name or runtime filter |
+| `REPLAY` | Proposed | Immutable records with shared or exclusive allocation | Workflow state |
+| `WORKFLOW` | Proposed | Immutable records plus typed state, Views and transitions | Free-form tags or queries |
 | View | Proposed | Materialised selection over Record State | A copied or separate Dataset |
-| Derivation | Proposed | One leased workflow record creates bounded independent records in one downstream Dataset | Outcome routing or Dataset clone |
+| Derivation | Proposed | One leased workflow record creates bounded downstream records | Outcome routing or clone |
+| Group Availability | Proposed | Group authority health, with or without consumers | Publication or consumption health |
+| Publication Status | Proposed | Publication health for one binding | Worker loading or use |
+| Consumption Status | Proposed | Evidence of worker load, selection and SUT attempt | SUT acceptance or audit proof |
 
 ## Example
 
@@ -91,20 +97,27 @@ updates upstream state; other outcomes create none.
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
 
+## Release boundary
+
+Release 1 includes both replay modes, mutable workflow, all four sources and
+bounded Derivation. M2a shared replay is a foundation, not the release. M2b
+mutable workflow is required parity. M2c and M2d remain separate milestones.
+All milestones and operational gates must pass.
+
 ## Main trade-off
 
 Local snapshots keep workers database-free and the measured path fast. The
 single active Controller needs a restricted database credential and explicit
 publication, activation and recovery. Loaded workers may continue through a
 short Controller outage; this is continuity, not Controller high availability.
-Derivation remains M2d and does not block shared replay. It and
+Derivation remains M2d and does not block M2a implementation. It and
 `EXCLUSIVE_LEASE` require concurrency, failure and soak qualification.
 
 ## Next step
 
-Approve the model, then complete the M0 executable Scenario, worker, API,
-WorkItem, status and snapshot contracts before runtime implementation.
+Approve the Release 1 model, then complete the M0 executable Scenario, worker,
+API, WorkItem, status and snapshot contracts before runtime implementation.
 
 ## Technical detail
 
-- [Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md)
+- [Managed Test Data Release 1 Specification](managed-test-data-lifecycle-generic-spec.md)
