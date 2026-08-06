@@ -34,11 +34,12 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   Dataset consumer input or derived source; a provider-only scenario may still
   create its Dataset through an explicit output binding. Requirements and those
   input/source bindings map one-to-one. Release 1 records are closed, bounded,
-  non-null JSON objects. Every source and authority ingress uses one strict
-  validation/canonicalisation path; the WorkItem decoder rejects an invalid
-  encoding rather than treating it as UTF-8. Groups and fixed workflow Views
-  select subsets; normal scenario steps may shape a downstream request without
-  changing the canonical snapshot record.
+  non-null JSON objects. Every schema uses one small cost-bounded keyword set;
+  regex and external/content evaluation are excluded. Every source and authority
+  ingress uses one strict validation/canonicalisation path; the WorkItem decoder
+  rejects an invalid encoding rather than treating it as UTF-8. Groups and fixed
+  workflow Views select subsets; normal scenario steps may shape a downstream
+  request without changing the canonical snapshot record.
 - PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
   bounded function and publishes an atomic revision. Workflow claims return
   identity, state and lease only, including derived input; workers resolve
@@ -130,7 +131,7 @@ and carried to the SUT-attempt boundary.
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
 | Versioned bundle requirements extension with fail-closed admission | A Scenario Protocol migration or silently ignored file |
-| Closed, bounded JSON-object records through one validation path and scenario-owned downstream shaping | Open/unbounded roots, other JSON roots or binary records; Dataset projection expressions |
+| Closed, cost-bounded JSON-object schemas and records through one validation path | Regex/external schema evaluation, open roots, other JSON roots, binary records or Dataset projection expressions |
 | Concurrent immutable shared replay or exclusive workflow state | Shared replay combined with mutable Record State or Views |
 | Fixed `SYNTHETIC_NON_SENSITIVE` scope, counts and operational status | Record browsing/search, transition history or per-Dataset classification policy |
 
@@ -169,7 +170,8 @@ status is not record inspection or historical/audit reconstruction.
 
 ## Next step
 
-Approve the Release 1 model and staged delivery. M0 defines
+Approve the Release 1 model and staged delivery. M0 defines the cost-bounded
+Schema Profile and Record Codec measurements, then
 `datasets/requirements.yaml` version 1, its single Scenario Manager parser and
 validator, the tagged `ABSENT`/`PRESENT` projection, authoring-contract
 advertisement and the fail-closed Scenario Manager/Orchestrator version and

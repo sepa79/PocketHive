@@ -58,6 +58,7 @@ publication grant -> Controller database read -> active snapshot -> worker local
 | Named identity | Every Dataset freezes a human-readable `name` and opaque `datasetId`. Groups never replace either. |
 | Frozen contract | Dataset name, SUT Environment, Dataset Space, Profile, schemas, Groups, Views, transitions, source and allocation never change for a runtime Dataset. |
 | One schema | Every Dataset freezes one resolved Draft 2020-12 record schema. `WORKFLOW` also freezes one state schema. |
+| Cost-bounded schema | Every schema uses the closed Managed Dataset Schema Profile. Scenario Manager rejects unsupported keywords and over-budget evaluation graphs before publication; runtime validation performs no regex, network or content evaluation. |
 | Closed JSON-object records | Every Release 1 record is one non-null JSON object. Its resolved root declares `type: object` and `unevaluatedProperties: false`; array, primitive, `null` and binary roots fail. |
 | One strict record codec | Every source and authority ingress uses the same bounded Managed Dataset Record Codec for strict parsing, schema validation and RFC 8785 canonicalisation. The canonical WorkItem decoder validates the exact wire encoding before enum conversion and never trims, normalises or defaults it. |
 | State before extra Datasets | Success, retryable failure, terminal failure and unknown remain Record State and named Views in one `WORKFLOW` Dataset. |
@@ -177,6 +178,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Dataset Requirements Document | Optional versioned Scenario Bundle extension at `datasets/requirements.yaml`; when present it declares one or more Managed Dataset consumer requirements | `scenario.yaml`, Dataset Definition or concrete Create Swarm selection | Requirements Document |
 | Dataset Definition Bundle | Mounted package containing `dataset.yaml`, `record.schema.yaml` and optional `state.schema.yaml` | Scenario Bundle | Dataset Definition |
 | Dataset Schema Contract | Reusable immutable schema at one exact version | Runtime record or local `$defs` | Schema Contract |
+| Managed Dataset Schema Profile | Closed Draft 2020-12 keyword/value subset plus static evaluation budget compiled by Scenario Manager | General JSON Schema or runtime validator configuration | Schema Profile |
 | Managed Dataset Provider Source | Required tagged provider-work source: `SCHEDULER`, `CSV`, `REDIS` or `MANAGED_DATASET` | Consumer input or fallback chain | Provider Source |
 | Managed Dataset | Named Orchestrator-owned runtime parent created by one provider run and usable by compatible consumers | Redis list, queue or Group | Dataset |
 | Dataset Group | Frozen typed partition under one Dataset, identified by `groupId` and `groupKey` | Dataset name or query | Group |
@@ -203,7 +205,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 
 | Concern | Owner | Must not own |
 |---|---|---|
-| Dataset/contract packages, restricted schema compilation and digests | Scenario Manager | Runtime records, leases or source choice |
+| Dataset/contract packages, Schema Profile compilation, cost budget and digests | Scenario Manager | Runtime records, leases or source choice |
 | Dataset Definition, Profile, schemas, grouping, Views and transitions | Dataset Definition Bundle | Scenario templates or runtime ids |
 | Source, Groups, mappings, allocation, lifecycle, supply and capacity | Provider Scenario Binding | Consumer selection or provider automation |
 | Required access/Profile/allocation and workflow View/transition | Dataset Requirements Document | Concrete Dataset ids or provider templates |
@@ -212,6 +214,7 @@ All terms in this table are `PROPOSED` unless marked `EXISTING`.
 | Runtime records, state, memberships, imports, grants, lineage, leases and idempotency | Orchestrator Managed Dataset module | SUT calls, source parsing or filesystem publication |
 | Source parsing and scenario result normalisation | Scenario-owned worker pipeline | Authority mutation |
 | Record parsing, bounds, schema validation and canonicalisation | Shared Managed Dataset Record Codec used by provider adapters and Orchestrator authority ingress | Source-specific record semantics, fallback or a second codec |
+| Authority validation executor, queue and backpressure | Orchestrator Managed Dataset module | General control-plane executor, unbounded queue or caller-runs fallback |
 | Publication grant, abandonment, completion, activation generation, Activation Confirmation and Deletion Acknowledgement | Orchestrator Managed Dataset module | Snapshot byte proxying or filesystem writes |
 | Granted snapshot read, filesystem publication and retention cleanup | Swarm Controller through `DatasetSnapshotReader` and the qualified storage adapter | Schema discovery, authority mutation or direct table access |
 | Context construction/preservation/guard and local selection | Worker SDK adapters | Business outcome classification |
@@ -352,20 +355,52 @@ published `id + version`. A failed reload publishes no partial registry revision
 and leaves the last valid revision active; this is transaction safety, not
 version fallback.
 
-Each root is JSON Schema Draft 2020-12. It may reference exact immutable
+Each root is JSON Schema Draft 2020-12 under the closed Managed Dataset Schema
+Profile. The profile permits only:
+
+- identity/composition: `$schema`, `$id`, `$defs`, exact `$ref`, `$comment` and
+  bounded `allOf`;
+- annotations: `title` and `description`;
+- assertions: `type`, `enum`, `const`, `minimum`, `exclusiveMinimum`, `maximum`,
+  `exclusiveMaximum`, `multipleOf`, `minLength`, `maxLength`, `minItems`,
+  `maxItems`, `minProperties`, `maxProperties`, `required` and
+  `dependentRequired`; and
+- structural applicators: `properties`, `additionalProperties`,
+  `propertyNames`, `prefixItems`, `items`, `unevaluatedProperties` and
+  `unevaluatedItems`.
+
+All other keywords fail publication. In particular, `pattern`,
+`patternProperties`, `format`, `anyOf`, `oneOf`, `not`, `if`, `then`, `else`,
+`dependentSchemas`, `contains`, `uniqueItems`, `$anchor`, `$dynamicAnchor`,
+`$dynamicRef`, `$vocabulary`, `contentEncoding`, `contentMediaType` and
+`contentSchema` are forbidden at every depth. `$schema`, `$id` and `$defs` occur
+only at a document root; `$schema` names Draft 2020-12 and `$id` equals the
+package's canonical PocketHive id. Boolean subschemas are forbidden except
+closed `false` values on structural applicators. A later Profile extension may
+add one bounded keyword only with an executable cost, interoperability and
+qualification contract; there is no runtime switch.
+
+Schemas may reference exact immutable
 `pockethive://dataset-contracts/<name>/<version>` contracts and local `$defs`.
-Ranges, `latest`, HTTP(S), unresolved references, cycles and unsupported dialects
-fail. A restricted versioned meta-schema forbids unknown keywords and bounds
-file/compiled bytes, references, depth, Views, clauses, transitions, mutable
-paths and validation errors. Scenario Manager stores one compiled artifact and
-opaque `sha256:` digest; other components compare the digest and never recompile.
+Ranges, `latest`, anchors, HTTP(S), unresolved references, cycles and unsupported
+dialects fail. Scenario Manager compiles one cycle-free evaluation graph. Every
+reachable schema object, collection entry, applicator branch and `$ref`
+occurrence counts; repeated references do not collapse cost. The complete graph
+must fit total `maximumCompiledSchemaNodes`, total
+`maximumSchemaApplicatorBranches`, total `maximumSchemaCollectionEntries` and
+`maximumSchemaEvaluationDepth`; each schema object must fit
+`maximumAllOfBranchesPerSchema`. Collection entries include every member of
+`$defs`, `properties`, `enum`, `required`, `dependentRequired` and
+`prefixItems`. Scenario Manager stores one compiled artifact and opaque
+`sha256:` digest; other components compare the digest and never recompile.
 
 Record and State roots declare `type: object` and
 `unevaluatedProperties: false`. Scenario Manager checks the resolved composed
-schema, not one fragment, and rejects a root `additionalProperties` or
-`patternProperties` rule that reopens arbitrary root names. Authors place an
-extensible map under one declared, schema-bounded property. Fragment-level
-`additionalProperties: false` does not replace root closure.
+schema, not one fragment. `patternProperties` is always forbidden. A root
+`additionalProperties` rule cannot reopen arbitrary names. Authors place an
+extensible map under one declared property whose `additionalProperties` value is
+an object schema. Fragment-level `additionalProperties: false` does not replace
+root closure.
 
 Scenario Manager is the only public authoring validator. Scenario, Dataset
 Definition and Schema Contract validation use its application services and
@@ -381,8 +416,10 @@ Missing evidence, a digest mismatch or an unsupported version fails closed.
 The deployment supplies positive `maximumDatasetDefinitionBundles`,
 `maximumDatasetContractVersions`, `maximumSchemaBytesPerFile`,
 `maximumCompiledSchemaBytes`, `maximumSchemaReferences`,
-`maximumSchemaReferenceDepth`, `maximumRecordValidationErrors`,
-`maximumStateValidationErrors`, `maximumDatasetViews`,
+`maximumSchemaReferenceDepth`, `maximumCompiledSchemaNodes`,
+`maximumSchemaEvaluationDepth`, `maximumSchemaApplicatorBranches`,
+`maximumAllOfBranchesPerSchema`, `maximumSchemaCollectionEntries`,
+`maximumRecordValidationErrors`, `maximumStateValidationErrors`, `maximumDatasetViews`,
 `maximumDatasetViewClauses`, `maximumDatasetTransitions` and
 `maximumMutableStatePaths`. Exceeding any bound fails publication. Record roots
 use `$id: pockethive://managed-dataset/<id>/<version>/record`; workflow state
@@ -454,19 +491,28 @@ feedback; Orchestrator authority ingress repeats the same executable contract
 on untrusted requests and is authoritative. Source handlers may locate bytes or
 construct a CSV object, but they do not own another record parser.
 
-For raw JSON, the Record Codec rejects malformed UTF-8, duplicate object names,
-trailing tokens, invalid JSON and strings/numbers that cannot be represented by
-RFC 8785. It enforces `maximumManagedDatasetRecordBytes`,
+Before JSON/schema parsing or allocating a record tree, each streaming boundary
+enforces
+`maximumManagedDatasetRawRecordBytes` over the uninterpreted octets of one
+WorkItem payload, Redis element, logical CSV row including quoting/delimiters, or
+authority API record value. The transport envelope has its own larger bound.
+Malformed UTF-8, duplicate object names, trailing tokens, invalid JSON and
+strings/numbers outside RFC 8785 fail.
+
+During parsing, the Record Codec enforces
 `maximumManagedDatasetRecordNestingDepth`, total
 `maximumManagedDatasetRecordObjectMembers`, total
 `maximumManagedDatasetRecordArrayElements`, per-value
 `maximumManagedDatasetRecordStringBytes` and
-`maximumManagedDatasetRecordNumberCharacters` before schema validation. A valid
-object must then satisfy its exact compiled schema. The codec emits the RFC 8785
-bytes used for persistence, receipts, snapshot chunks and digests. Precise
-identifiers or numbers outside that interoperable number model use schema-typed
-strings. CSV-created objects enter the same bounds, schema and canonicalisation
-steps before a receipt.
+`maximumManagedDatasetRecordNumberCharacters`. String bytes mean the decoded
+property name or value re-encoded as UTF-8; number characters mean the original
+JSON number token before conversion. The codec then emits RFC 8785 bytes and
+enforces `maximumManagedDatasetRecordBytes` over that canonical object before
+schema evaluation. A valid object must satisfy its exact compiled schema. Those
+same canonical bytes are used for persistence, receipts, snapshot chunks and
+digests. Precise identifiers or numbers outside that interoperable number model
+use schema-typed strings. CSV-created objects enter the same raw-row, decoded
+string, canonical-byte, schema and receipt sequence; CSV performs no coercion.
 
 The canonical WorkItem wire decoder accepts only the exact schema values
 `utf-8` and `base64`; missing, blank, whitespace-padded, mixed-case and unknown
@@ -1523,7 +1569,8 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Limit group | Required limits |
 |---|---|
 | Authoring | `maximumDatasetRequirementsDocumentBytes`, `maximumDatasetRequirementsPerScenario` |
-| Record parsing | `maximumManagedDatasetRecordNestingDepth`, `maximumManagedDatasetRecordObjectMembers`, `maximumManagedDatasetRecordArrayElements`, `maximumManagedDatasetRecordStringBytes`, `maximumManagedDatasetRecordNumberCharacters` |
+| Schema evaluation | `maximumCompiledSchemaNodes`, `maximumSchemaEvaluationDepth`, `maximumSchemaApplicatorBranches`, `maximumAllOfBranchesPerSchema`, `maximumSchemaCollectionEntries` |
+| Record parsing | `maximumManagedDatasetRawRecordBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetRecordNestingDepth`, `maximumManagedDatasetRecordObjectMembers`, `maximumManagedDatasetRecordArrayElements`, `maximumManagedDatasetRecordStringBytes`, `maximumManagedDatasetRecordNumberCharacters` |
 | Authority storage | `maximumManagedDatasetCount`, `maximumManagedDatasetStoredRecords`, `maximumManagedDatasetStoredBytes`, `maximumManagedDatasetRecordBytes`, `maximumManagedDatasetStateBytes`, `maximumManagedDatasetViewMemberships`, `maximumManagedDatasetDerivationLineageRows`, `maximumManagedDatasetDerivationLineageBytes`, `maximumSnapshotActivationConfirmations`, `maximumSnapshotActivationConfirmationRecordBytes`, `maximumSnapshotActivationConfirmationBytes`, `maximumPendingSnapshotDeletionAcknowledgementsPerBinding`, `maximumIdempotencyRecords`, `maximumIdempotencyBytes` |
 | Mutations | `maximumLeaseAcquisitionsPerSecond`, `maximumLeaseReleasesPerSecond`, `maximumWorkflowTransitionsPerSecond`, `maximumDerivationCompletionsPerSecond` |
 | Derivation | `maximumDerivedRecordsPerSource`, `maximumConcurrentDerivationItems` |
@@ -1531,9 +1578,9 @@ defaults. Admission atomically reserves worst-case logical and physical use.
 | Snapshot limits | `maximumSnapshotBytes`, `maximumSnapshotChunkCount`, `maximumConcurrentSnapshotPublications`, `maximumConcurrentSnapshotWorkerLoads`, `maximumSnapshotPublicationBytesPerSecond`, `maximumSnapshotReadBytesPerSecond`, `maximumSnapshotExportsPerSecond`, `maximumPostgresSnapshotExportBytesPerSecond`, `maximumSnapshotReaderConnections`, `maximumSnapshotPageRecords`, `maximumSnapshotPageBytes`, `maximumRetainedSnapshotRevisionsPerBinding`, `maximumSnapshotCleanupOpsPerSecond` |
 | Refresh and SLO | `snapshotRevisionReconciliationInterval`, `snapshotRevisionReconciliationJitter`, `minimumSnapshotPublicationInterval`, `workerActiveReferencePollInterval`, `workerActiveReferencePollJitter`, `snapshotPublicationSlo`, `snapshotLoadStartupSlo`, `maximumSnapshotRefreshLatency`, `maximumSnapshotRefreshAttemptsPerRevision`, `snapshotRefreshRetryBackoff`, `snapshotRefreshFailureCooldown` |
 | Publication and retention time | `maximumSnapshotExportDuration`, `snapshotPublicationGrantDuration`, `snapshotReaderGrantSafetyMargin`, `maximumSnapshotLoadDuration`, `maximumStorageVisibilityDelay`, `inactiveSnapshotRetentionGrace`, `snapshotActivationEvidenceRetention` |
-| Qualified throughput | `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
+| Qualified throughput | `qualifiedAuthorityRecordValidationsPerSecond`, `maximumManagedDatasetRecordValidationP99`, `qualifiedPostgresSnapshotExportBytesPerSecond`, `qualifiedFilesystemSnapshotWriteBytesPerSecond`, `qualifiedFilesystemSnapshotReadBytesPerSecond`, `qualifiedFilesystemOperationsPerSecond` |
 | Worker/filesystem | `maximumWorkerMemoryBytes`, `maximumWorkerSnapshotMemoryBytes`, `qualifiedWorkerBaseApplicationMemoryBytes`, `maximumWorkerDirectBufferMemoryBytes`, `minimumWorkerGcHeadroomBytes`, `maximumSnapshotDecodeIndexOverheadBytesPerWorker`, `maximumSnapshotGcPause`, `maximumManagedDatasetFilesystemBytes`, `maximumManagedDatasetFilesystemUtilisationPercent` and eligible-node storage capability |
-| Control plane | `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
+| Control plane | `maximumConcurrentManagedDatasetRecordValidations`, `maximumManagedDatasetValidationQueueDepth`, `maximumManagedDatasetValidationUtilisationPercent`, `maximumControllerRecoveryTime`, status samples/reporters/payload bytes, API/UI refresh rate, background queues, transactions and open files |
 
 Reservations use maximum record/state/lineage/membership bytes before dispatch.
 Completion cannot partially commit to fit capacity. Concurrent admission cannot
@@ -1544,6 +1591,13 @@ Alerts fire before action thresholds.
 Admission calculates worst-case demand for all bindings and concurrent work:
 
 ```text
+requiredAuthorityRecordValidationsPerSecond =
+  sum(maximumAdmittedRecordIngressPerSecond(binding))
+
+requiredAuthorityValidationUtilisation =
+  100 * requiredAuthorityRecordValidationsPerSecond
+  / qualifiedAuthorityRecordValidationsPerSecond
+
 requiredActivationConfirmationRows(binding) =
   2  # latest checkpoint + one in-progress reservation
   + maximumPendingSnapshotDeletionAcknowledgementsPerBinding(binding)
@@ -1613,6 +1667,15 @@ requiredPeakDatabaseExportThroughput =
 requiredPeakFilesystemWriteThroughput =
   sum(concurrentPublicationBytes) / snapshotPublicationSlo
 ```
+
+Admission requires `requiredAuthorityValidationUtilisation` not to exceed
+`maximumManagedDatasetValidationUtilisationPercent`. Authority validation uses
+one dedicated bounded executor and queue; it never runs on general control-plane
+or Controller-status threads and has no caller-runs fallback. Saturation returns
+`RATE_LIMITED` before mutation. Qualification drives provider and authority use
+of the same codec at twice the admitted ingress rate, using the largest record
+and highest-cost permitted schema, and must meet the declared p99 latency without
+starving control-plane work.
 
 Release 1 has no wave-loading protocol. `applicableConcurrentWorkerLoads` is
 therefore every applicable worker that can restart or observe one activation
@@ -1736,7 +1799,7 @@ post-MVP shape becomes executable only at its named contract gate:
 | Contract | Canonical owner | Contract gate |
 |---|---|---|
 | Dataset Definition/Schema Contract package shape, validation, publication and evidence | `docs/scenarios/SCENARIO_MANAGER_MANAGED_DATASET_REST.md` plus `docs/spec/managed-dataset-authoring.schema.json` | M0 core; Profile extensions before their stage |
-| Record root closure, parser bounds, schema validation and canonical bytes | `docs/spec/managed-dataset-schema-profile.schema.json`, `docs/spec/managed-dataset-api.schema.json` and one shared Managed Dataset Record Codec implementation | M0 |
+| Schema Profile, static evaluation budget, record measurement points, validation executor and canonical bytes | `docs/spec/managed-dataset-schema-profile.schema.json`, `docs/spec/managed-dataset-api.schema.json` and one shared Managed Dataset Record Codec implementation | M0 |
 | WorkItem `payloadEncoding` wire decoding | `docs/spec/workitem-envelope.schema.json` plus the single strict `WorkItemJsonCodec`/`WorkPayloadEncoding` path | M0 |
 | Dataset Requirements Document path, versioned shape, tagged projection, validation and version handshake | `docs/spec/managed-dataset-requirements.schema.json`, `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and the single Scenario Manager validator | M0 |
 | Provider binding | `docs/scenarios/SCENARIO_CONTRACT.md` plus `docs/architecture/workerCapabilities.md` and their single executable DTO/validator path | M0 `SCHEDULER`; source extensions before M2c/M2d |
@@ -1753,7 +1816,6 @@ post-MVP shape becomes executable only at its named contract gate:
 | Consumption telemetry | `docs/spec/control-events.schema.json` | M0 shared fields; capability fields before their stage |
 | Group and consumption status MCP tools | `tools/pockethive-mcp/server.mjs` tool schemas; each delegates to its owning REST API without recalculation | Before M3a; capability projections before their M3b gate |
 | Snapshot manifest/record envelope, Active Reference and binding-scoped deactivation marker | `docs/spec/managed-dataset-snapshot.schema.json` | M0 |
-| Restricted schema profile | `docs/spec/managed-dataset-schema-profile.schema.json` plus conformance vectors | M0 record profile; state profile before M1b |
 
 | Milestone | Deliverable | Exit |
 |---|---|---|
@@ -1824,17 +1886,26 @@ Tests use official product APIs and prove:
    schemas, source, allocation and workflow contract. Group results and consumers
    cannot change identity or create Groups. Resolved Record Schema roots require
    `type: object` and `unevaluatedProperties: false`; composed-schema tests prove
-   undeclared root fields fail and named nested maps remain possible. One
+   undeclared root fields fail and named nested maps remain possible. The closed
+   Schema Profile accepts every permitted keyword/value form and rejects every
+   unsupported keyword at every depth. Adversarial tests cover regex keywords,
+   `format`, dynamic/external/content evaluation, nested combinators, repeated
+   references and every graph/branch/collection bound; over-budget publication
+   is atomic and leaves the last valid registry revision active. One
    cross-source conformance suite covers Scheduler output, CSV, Redis, Derivation
    and authority ingress. It accepts bounded schema-valid objects and rejects,
    where source-applicable, malformed UTF-8, duplicate names, trailing tokens,
-   undeclared root fields, unsafe RFC 8785 strings/numbers, every parser limit,
+   undeclared root fields, unsafe RFC 8785 strings/numbers, every raw, canonical,
+   structural and decoded-string limit,
    array, string, number, boolean, `null` and binary records before partial
    publication or dispatch. Snapshot round-trip tests reproduce the exact
    canonical bytes and digest. The canonical WorkItem decoder accepts exact
    lower-case `utf-8` and `base64` only; missing, blank, padded, mixed-case and
    unknown values fail before enum conversion. Managed Dataset accepts the valid
-   `utf-8` object and rejects valid `base64` with no fallback.
+   `utf-8` object and rejects valid `base64` with no fallback. Sustained
+   largest-record/highest-cost-schema tests run provider plus authority
+   validation at twice admitted ingress, meet throughput and p99 limits, preserve
+   bounded queue/memory/GC use and prove control-plane work is not starved.
 3. Existing Dataset adapters remain unchanged. Every binding selects one
    adapter/source with no migration or fallback. An absent Requirements Document
    plus `datasetSelections: []` works explicitly only with no Managed Dataset

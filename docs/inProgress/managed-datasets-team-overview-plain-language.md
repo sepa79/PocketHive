@@ -66,7 +66,10 @@ Each Release 1 record is one non-null JSON object with a closed root: undeclared
 top-level fields fail. Array, primitive, `null` and binary records are not
 supported. Every source and authority entry uses the same bounded parser,
 schema validator and canonical JSON writer. It rejects ambiguous or oversized
-JSON; precise identifiers or higher-precision numbers use schema-typed strings.
+JSON. Schemas use a small approved keyword set; regex, external lookups and
+embedded-content evaluation are excluded so validation cost stays predictable.
+Raw input bytes and the final canonical bytes have separate limits. Precise
+identifiers or higher-precision numbers use schema-typed strings.
 The WorkItem encoding must use the exact declared spelling and Managed Dataset
 accepts only UTF-8—invalid values never default. Managed Dataset never projects
 selected fields: the verified local snapshot retains the complete canonical
