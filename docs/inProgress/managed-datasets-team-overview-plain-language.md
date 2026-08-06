@@ -96,8 +96,16 @@ Inactive snapshots remain for a qualified grace period covering storage
 visibility, a hard worker-load maximum and clock skew. A slow load aborts safely.
 Active and live staging revisions are never removed; if protected revisions fill
 the available space, PocketHive blocks another publication instead of deleting
-one early. Snapshot Reader grants also cover the hard export and completion
-deadline; expiry never activates partial output.
+one early. After switching `ACTIVE.json`, the Controller records a fenced
+Snapshot Activation Confirmation—the Orchestrator record of the durable
+switch—before publishing the previous revision's deactivation marker. Recovery
+recreates a missing marker only from the verified reference and confirmation,
+then starts a fresh grace. Missing proof keeps the revision protected.
+
+Snapshot Reader grant lifetime covers begin-response transit, hard export,
+completion, clock skew and safety margin. After receiving the grant, the
+Controller separately verifies enough time remains for the work. Expiry never
+activates partial output.
 
 Workflow state and leases always come from bounded background authority calls,
 not snapshot files. An already-loaded safe worker may continue through a short
@@ -148,9 +156,13 @@ operational qualification milestones must pass before Release 1 is complete.
 
 Before implementation, PocketHive activates Dataset requirements under a new
 Scenario Protocol major because every scenario must declare requirements or
-`[]`. All shipped scenarios migrate together. Scenario Manager is the only
-authoring validator; UI, MCP, CLI, CI and agents use its result and
-version/digest evidence instead of running their own checks.
+`[]`. Deployment preflight inventories, stages and validates every
+repository-shipped, operator-mounted and uploaded/persisted bundle. Any remaining
+v2 bundle blocks activation. Running v2 swarms are drained before one cutover
+activates the new validator and all migrated roots together; failure leaves the
+v2 deployment unchanged. PocketHive does not run both majors concurrently.
+Scenario Manager is the only authoring validator; UI, MCP, CLI, CI and agents use
+its result and version/digest evidence instead of running their own checks.
 
 Implementation starts only after one canonical contract owns every Scenario,
 worker, API, Context, status and snapshot shape. Production also requires
@@ -158,6 +170,8 @@ concurrency, failure, restart, storage, capacity and every-node reschedule tests
 zero/one-to-many Derivation and rollback tests; maximum-size performance tests;
 worst-case all-worker restart, filesystem operation and operating-horizon export
 tests; slow-load activation and cleanup-grace tests; grant-expiry boundary tests;
+crash tests around publication completion, Active Reference replacement,
+Snapshot Activation Confirmation and marker publication;
 pilot-powered paired performance trials; and a target-scale 24-hour soak.
 
 Release 1 has no record expiry, reclamation or purge. Deployment limits and an

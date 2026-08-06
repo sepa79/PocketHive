@@ -31,8 +31,10 @@ system-under-test (SUT) records for many consumers instead of recreating them.
   immutable payload from local memory.
 - Revision hints mark a binding dirty. Controller reconciliation publishes only
   the latest revision. A minimum start interval and single-flight export bound
-  the rate; worker background polls load it. A retention grace protects slow
-  loads, and capacity pressure blocks publication instead of unsafe deletion.
+  the rate; worker background polls load it. After atomic activation, the
+  Controller records a fenced Snapshot Activation Confirmation. Recovery uses
+  it to repair a missing deactivation marker with a fresh grace; absent proof
+  protects the old revision.
 - Workers report through the Controller. Full status retains bounded reporter
   detail; deltas contain only small binding aggregates and digests. Orchestrator
   derives the three status planes for REST, UI and PocketHive Model Context
@@ -63,6 +65,7 @@ flowchart LR
 | Requirements and exact selection | Consumer template/binding and Create Swarm |
 | Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
 | Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
+| Bundle inventory, migration and protocol activation | Deployment preflight using Scenario Manager validation |
 
 ## Essential definitions
 
@@ -75,6 +78,7 @@ flowchart LR
 | `WORKFLOW` | Proposed | Immutable records plus typed state, Views and transitions | Free-form tags or queries |
 | View | Proposed | Materialised selection over Record State | A copied or separate Dataset |
 | Derivation | Proposed | One leased workflow record creates bounded downstream records | Outcome routing or clone |
+| Snapshot Activation Confirmation | Proposed | Orchestrator record of one fenced Controller's durable snapshot switch | Publication completion or deactivation marker |
 | Group Availability | Proposed | Group authority health, with or without consumers | Publication or consumption health |
 | Publication Status | Proposed | Publication health for one binding | Worker loading or use |
 | Consumption Status | Proposed | Evidence of worker load, selection and SUT attempt | SUT acceptance or audit proof |
@@ -96,6 +100,7 @@ updates upstream state; other outcomes create none.
 | One atomic bounded derivation destination | Multi-destination fan-out or arbitrary cross-Dataset transactions |
 | Operational consumption evidence | Audit proof or exactly-once claims |
 | Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
+| One explicit new-major migration gate | Concurrent v2/new-major support or implicit empty requirements |
 
 ## Release boundary
 
@@ -117,10 +122,12 @@ concurrency, failure and soak qualification.
 ## Next step
 
 Approve the Release 1 model. M0 then activates required
-`managedDatasetRequirements` under a new Scenario Protocol major, migrates every
-shipped scenario with requirements or `[]`, and makes Scenario Manager the only
-authoring validator with preserved version/digest evidence. Complete the
-remaining executable contracts before runtime implementation.
+`managedDatasetRequirements` under a new Scenario Protocol major. Deployment
+preflight inventories, stages and validates every repository-shipped,
+operator-mounted and uploaded/persisted bundle; remaining v2 bundles block
+activation and running v2 swarms are drained and recreated. Scenario Manager
+remains the only authoring validator with preserved version/digest evidence.
+Complete the remaining executable contracts before runtime implementation.
 
 ## Technical detail
 
