@@ -7,198 +7,188 @@ For exact requirements, see the
 
 ## One-minute version
 
-Managed Datasets let many test swarms reuse durable synthetic SUT records.
+Managed Datasets let many test swarms safely reuse durable synthetic SUT data.
 
 ```text
-Provider binding -> chooses exactly one Scheduler, CSV or Redis source
-Provider run -> creates one named Managed Dataset
-Consumer run -> chooses one exact Dataset Group or workflow View
+provider binding -> chooses exactly one Scheduler, CSV, Redis or Managed Dataset source
+provider run -> creates one named Managed Dataset
+consumer run -> chooses one exact Dataset Group or workflow View/transition
+Controller -> publishes the chosen records once for that swarm
+consumer workers -> verify and use them from local memory
 ```
 
-A provider swarm creates SUT objects once and shares traffic-ready records with
-consumer swarms. Arbitrary schema-defined keys may partition them; these are
-not PocketHive fields. Ungrouped data uses one internal Group.
-
-Managed Dataset is a new option. Existing Redis Dataset support does not
-change. Every bee input/output names one adapter, and PocketHive never silently
+The feature is optional and additive. Existing Redis Dataset, CSV Dataset and
+Scheduler adapters do not change. A swarm that needs no Managed Dataset uses
+explicit empty requirement and selection arrays. PocketHive never silently
 switches adapter, source, Dataset, Group or View.
 
-## Two clear Profiles
+## What is shared
 
-| Profile | Use it when | Behaviour |
-|---|---|---|
-| `REPLAY` | Consumers repeatedly use the same stable records | Record payload is immutable. `SHARED` allows concurrent reuse; `EXCLUSIVE_LEASE` temporarily reserves one record. |
-| `WORKFLOW` | Use changes whether a record is available for later work | Payload stays immutable. Separate versioned Record State may change through fixed named Views and declared State Transitions. Every use is exclusively leased. |
+A provider swarm can create reusable SUT records once for many consumer
+swarms. A Dataset keeps both a readable `name` and an opaque identity. Its
+records may be split by arbitrary schema-defined Group keys; these are not
+PocketHive fields. A Dataset without visible grouping has one internal Group.
 
-`WORKFLOW` keeps mutable datasets in the MVP without becoming a general
-database. A consumer claims a record from one named View. Its completion sends
-the full next state. PocketHive checks the lease, current state revision,
-allowed fields, state schema and target View, then changes state, View
-membership and lease together. A failure changes none of them.
+Each Dataset chooses one behaviour:
 
-The MVP does not support free-form tags, arbitrary filters or patches, payload
-replacement, inferred outcomes or changes spanning several Datasets.
-
-Exclusive leasing is not production-proven until concurrency, failure,
-restart, expiry and 24-hour soak tests pass.
-
-## Where configuration lives
-
-| Place | Plain meaning |
+| Profile | Plain meaning |
 |---|---|
-| `scenarios/managed-dataset/<name>/` | The Dataset Definition: `dataset.yaml`, `record.schema.yaml` and, for `WORKFLOW`, `state.schema.yaml`. It defines name, version, Profile, grouping, Views and transitions. |
-| `scenarios/dataset-contracts/<name>/<version>/` | One immutable reusable `schema.yaml`. Record and state schemas use exact versions. |
-| Scenario Manager | Validates mounted packages and compiles frozen record/state schema digests. Workers do not search these folders. |
-| Provider Scenario Binding | Chooses the Definition, exactly one source, concrete Groups, provider mappings, allocation, lifecycle and supply. Only its non-secret `vars` and `sut` values may resolve Group templates. |
-| Consumer Scenario Template | Declares each required Dataset Profile and allocation. A workflow requirement also declares one View, allowed transitions and one completion role. |
-| Consumer Scenario Binding | Checks and freezes those requirements against one SUT Environment and Dataset Space. |
-| Create Swarm | Requires one exact compatible Dataset/Group or View per requirement, or `datasetSelections: []` when none are required. |
-| Deployment profile | Owns REST client settings, Redis connections and positive Dataset, record, state, byte and View-membership limits. |
-| Operator runbook | Owns capacity forecasts, thresholds, response, backup/restore coordination and escalation. It cannot instruct direct PostgreSQL deletion. |
+| `REPLAY` | The record payload never changes. `SHARED` allows repeated concurrent reuse; `EXCLUSIVE_LEASE` temporarily reserves one record. |
+| `WORKFLOW` | The payload stays fixed, but separate versioned Record State may change through named Views and declared transitions. Every use is exclusively leased. |
 
-The schema roots may combine exact reusable contract versions and local
-`$defs`. `latest`, version ranges, remote lookup and fallback are unsupported.
-A failed reload publishes nothing and reports its errors; the last valid
-registry revision remains active.
+`WORKFLOW` keeps the mutable capability needed by current scenarios without
+turning PocketHive into a general database. One consumer requirement names one
+View and exactly one transition. A completion sends the full next state.
+PocketHive checks the live lease, current state revision, allowed fields, state
+schema and target View, then changes state, View memberships and lease together.
+A failure changes none of them.
 
-Example workflow requirement:
+Use state and named Views for success, retry, failure or other workflow stages.
+Views are overlapping selections over the same records; they are not extra
+Datasets and do not copy data.
 
-```yaml
-managedDatasetRequirements:
-  - bindingRef: inputRecords
-    datasetDefinitionId: shared-records
-    profile: WORKFLOW
-    access: READ_STATE_TRANSITION
-    allocation:
-      type: EXCLUSIVE_LEASE
-      acquireBatchSize: 10
-      maximumHeldRecordLeases: 20
-      acquireInterval: PT1S
-    workflow:
-      viewId: available
-      allowedTransitionIds: [complete]
-      allowReleaseUnchanged: false
-      completionRole: dataset-completion
-      completionLagTolerance: PT30S
-```
-
-A replay requirement uses `profile: REPLAY`, `access: READ`, no `workflow`
-block, and either allocation. A swarm needing no Managed Dataset uses both
-`managedDatasetRequirements: []` and `datasetSelections: []`.
-
-Every provider binding has one source:
-
-| Source | What it does |
+| Need | Use |
 |---|---|
-| `SCHEDULER` | Creates renewable provider work from bounded refill grants. |
-| `CSV` | Validates and imports one mounted provider-bundle file in stable row order. |
-| `REDIS` | Copies one referenced Redis list and imports the fixed copy in stable index order. It never pops or changes the live list. |
+| Partition records by stable schema-defined values | One Dataset with Groups |
+| Track processing stage or outcome | `WORKFLOW` Record State and named Views |
+| Temporarily prevent concurrent use | `EXCLUSIVE_LEASE` |
+| Create independently reusable output records | One bounded derived Dataset |
+| Copy an entire Dataset unchanged | Not MVP; use a future explicit clone operation |
 
-`CSV` and `REDIS` are finite, non-expiring imports. PocketHive validates the
-whole source, binds its fingerprint once and publishes all Groups together.
-Existing direct `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` inputs remain
-separate and unchanged.
+Create a derived Dataset only when its records need their own identity, schema,
+allocation, retention or lifecycle. Exact copy is a different concern: a
+future clone operation must pin one immutable source revision. Arbitrary
+filters or patches, free-form tags, payload replacement and multi-destination
+changes are outside this MVP.
 
-## The flow
+## Where the choices live
 
-```mermaid
-flowchart LR
-  PS["Scheduler | CSV | Redis"] --> P["Provider run"]
-  P -->|"record + optional initial state"| D["Named Managed Dataset"]
-  D <--> PG[("PostgreSQL authority")]
-  CS["Create Swarm"] -->|"exact Group or View"| D
-  D -->|"payload snapshot + optional claim"| C["Consumer"]
-  C -->|"local WorkItems"| M["Moderator / pipeline"]
-  M --> S["SUT"]
-  M -->|"workflow completion"| D
-  C -.->|"selection / claim status"| O["Orchestrator"]
-  M -.->|"SUT / completion status"| O
-  O --> U["UI / PocketHive MCP"]
-```
+| Place | Owns |
+|---|---|
+| Dataset Definition | Name, Profile, grouping, record schema and any workflow state schema, Views and transitions |
+| Versioned Dataset contracts | Reusable immutable schema parts; roots select exact versions |
+| Provider binding | Exactly one source, concrete Groups, provider-only templates/mappings, allocation, lifecycle and supply |
+| Consumer template | Required Profile and allocation; workflow View, one transition, completion role and release rule |
+| Consumer binding | Checks those requirements against one SUT Environment and Dataset Space |
+| Create Swarm | One exact compatible Dataset/Group or View per requirement, or `datasetSelections: []` |
+| Deployment profile | Connections, storage adapter, clock health and every safety/capacity limit |
+| Operator runbook | Capacity horizon, alerts, response, backup/restore and escalation |
 
-PostgreSQL is authoritative for Managed Dataset only. Measured SUT requests do
-not call PostgreSQL, Orchestrator or a credential service. Replay uses a checked
-local payload snapshot. Exclusive records and workflow View members are claimed
-in bounded background batches.
-
-For `WORKFLOW`, a claim carries current state and its revision. State is not
-chosen from a stale shared snapshot. A missing valid completion keeps the
-record unavailable until retry, an explicitly allowed unchanged release or
-lease expiry. PocketHive never guesses an outcome from the SUT response.
-
-Replay sends the record as the normal WorkItem payload. Workflow sends one
-fixed payload object with `record` and `recordState`, so templates can use both.
-Record State is normal data, not a header or observability field.
-
-## Continuous traffic and storage
-
-Each Group owns its supply and availability. `READY` means it can supply safe
-records; it does not mean a particular View has an available member. An empty
-or fully leased View pauses that consumer without changing selection or losing
-data.
-
-The Dataset parent shows total supply and the worst Group state. Temporary
-control-plane failure lets replay consumers finish safe local work and
-exclusive consumers finish only already held claims; new claims wait for
-authority recovery.
-
-Orchestrator reserves Dataset, record, state, byte and View-membership capacity
-before admitting work. A hard limit rejects new creation or supply. It does not
-delete data, change source or stop a safe existing consumer. MVP has no purge
-state machine, so production requires an approved retention and capacity
-runbook.
-
-## How PocketHive proves the selected data is used
-
-Each WorkItem carries one structured global header inside its normal JSON body:
+Definitions are mounted like Scenario Bundles:
 
 ```text
-schemaVersion, datasetId, groupId, bindingRef, profile, snapshotRevision,
-recordId, selectedAt, usableUntil, allocation, optional viewId/stateRevision
+scenarios/managed-dataset/<name>/
+scenarios/dataset-contracts/<name>/<version>/
 ```
 
-An exclusive allocation also carries lease identity and expiry. This is not an
-observability or broker header. The SDK preserves it and checks identity, time,
-View and lease immediately before SUT network I/O.
+Only Scenario Manager reads these folders. Schema references use exact
+versions. Invalid packages fail as a unit; PocketHive keeps the last valid
+registry revision rather than guessing another version.
 
-Selection, SUT-attempt and workflow-completion roles report bounded counters.
-Orchestrator owns one status calculation; UI and PocketHive MCP return the same
-result. `CONSUMING` requires matching fresh evidence for the frozen:
+## How data arrives
 
-```text
-datasetId + groupId + profile + optional viewId + allocation
-```
+Every provider binding has exactly one source:
 
-It also requires the matching record-schema digest, a valid exclusive lease
-when used, and, for `WORKFLOW`, the claimed state revision plus a successful
-allowed transition or explicitly allowed unchanged release. Missing,
-mismatched or stale evidence can never appear green.
-
-| Consumption state | Plain meaning |
+| Source | Behaviour |
 |---|---|
-| `CONSUMING` | Fresh selection and SUT activity use the exact frozen contract; workflow completion is also healthy when required. |
-| `DEGRADED` | Valid work continues, but refresh, rejection, delay, completion or partial reporting needs attention. |
-| `NOT_CONSUMING` | Fresh mature status shows that the active binding is not reaching its required boundaries. |
-| `UNKNOWN` | Evidence is missing, stale, restarting or intentionally inactive. PocketHive does not guess. |
+| `SCHEDULER` | Renewable provider work from bounded refill grants. A completed cohort publishes one new revision. |
+| `CSV` | Validate and import one mounted provider-bundle file in stable row order. |
+| `REDIS` | Copy one referenced list and import the fixed copy in stable index order. Never pop or alter the live list. |
+| `MANAGED_DATASET` | Lease records from one exact upstream workflow View and derive bounded independent records into one downstream Dataset. |
 
-This is operational evidence of Dataset use, not proof that the SUT accepted a
-request, delivery was exactly once or a declared business transition was
-correct. Status contains no record or Record State values and never blocks
-traffic.
+CSV and Redis imports are finite. PocketHive fingerprints and validates the
+whole input before publishing all Groups together. Redis uses a bounded owned
+staging key and treats copy, expiry or cleanup failure as an explicit failure;
+it never falls back to the live list.
 
-## Sensible MVP boundary
+For a Managed Dataset source, Create Swarm freezes one upstream
+`WORKFLOW + EXCLUSIVE_LEASE` selection and one downstream output. The scenario
+normalises its result to exactly one of `SUCCESS`, `RETRYABLE_FAILURE`,
+`TERMINAL_FAILURE` or `UNKNOWN`, then an explicit four-case mapping produces
+the upstream record's complete next state. There is no default case and
+PocketHive does not guess from a SUT response.
 
-Included: `REPLAY` with immutable payload and shared/exclusive reuse;
-`WORKFLOW` with versioned state, fixed Views, declared transitions and exclusive
-claims; exactly one Scheduler/CSV/Redis source; optional Dataset use through
-explicit empty arrays; Dataset-defined Groups; exact versioned record/state
-schemas; scheduler refill; atomic finite imports; checked payload snapshots;
-local safety guards; UI/MCP evidence; deployment-wide storage limits; and an
-operator retention/capacity runbook.
+`SUCCESS` creates the configured bounded `1..N` downstream records. Every
+other outcome creates zero. PocketHive commits those records, their lineage,
+the upstream state change and lease release in one PostgreSQL transaction. A
+failure changes neither Dataset; exact replay is idempotent. This supports
+chains of provider/consumer swarms without creating separate success, retry
+and failure Datasets.
 
-Deferred: queue/pop semantics, use counts, lease renewal/transfer, free-form
-tags, arbitrary filters/patches, runtime-created Views/transitions, payload
-replacement, cross-Dataset transactions, multi-Group queries, multiple or
-fallback sources, CSV rotation, Redis pop, finite-source refill, SUT
-reconciliation, automatic provider lifecycle, exactly-once/audit proof,
-Dataset retirement, purge and automatic deletion.
+## How consumers get fast local data
+
+PostgreSQL remains the authority for Managed Dataset records, revisions, state,
+Views, leases, imports, derivation lineage and workflow changes. Redis remains
+the authority for the existing Redis Dataset option only.
+
+For each selected Managed Dataset binding, the swarm's Controller asks
+Orchestrator for one exact record revision. It writes bounded record chunks, a
+manifest and a final `READY` marker to deployment-owned shared storage. Digests
+prove the files match the authority revision.
+
+The Controller can write only inside its swarm directory. Only workers that
+consume that binding receive a read-only mount; unrelated workers receive no
+Dataset mount. Scenario authors cannot set storage paths or permissions.
+Missing or unhealthy storage stops provisioning instead of being ignored.
+
+Each consumer worker checks the marker, manifest, schema and file digests, then
+loads an immutable snapshot into local memory before becoming ready. Normal
+traffic selects records from that memory. It does not call the filesystem,
+PostgreSQL, Controller, Orchestrator or a credential service on the measured
+SUT-request path.
+
+An already-loaded safe worker may continue during a temporary Controller or
+storage failure. A new or restarted worker stays unready until it can verify a
+publication. Workflow state and lease decisions always come from bounded
+background authority calls, never from the snapshot files.
+
+## How PocketHive proves the right data is used
+
+Each selected WorkItem carries a small structured Dataset Context inside the
+normal JSON body. It is not an observability or broker header. The SDK preserves
+it and checks the Dataset, Group, revision, Profile, allocation, validity and
+any lease/View/state revision immediately before SUT network I/O.
+
+Orchestrator calculates one status used unchanged by REST, the Datasets UI and
+PocketHive MCP. `CONSUMING` requires fresh matching evidence that:
+
+1. PostgreSQL identifies the expected revision and schema;
+2. the active Controller published that exact revision and digest;
+3. every expected input worker loaded that exact publication;
+4. local selection and the guarded SUT attempt report the same frozen Dataset,
+   Group, Profile, optional View and allocation;
+5. exclusive use had a valid lease; and
+6. workflow use completed the exact declared transition, or an explicitly
+   allowed unchanged release, for the claimed state revision, accepted Outcome
+   class and frozen mapping digest; and
+7. derivation used the frozen source/destination bindings and reports the
+   atomically committed downstream count.
+
+Missing, stale, partial or mismatched evidence can never appear green. The
+status proves which Dataset contract and declared mapping reached PocketHive's
+scenario boundaries. It exposes neither Outcome codes nor record identities.
+It does not prove that the SUT accepted the request, that delivery happened
+exactly once or that an authored business classification was correct.
+
+## What must pass before implementation and release
+
+Implementation starts only after the Dataset Space/Scenario Binding model and
+one canonical contract pack are approved. That pack owns Scenario, worker,
+API, Context, status, snapshot and restricted-schema shapes; examples in the
+requirements do not become duplicate contracts.
+
+Production release requires concurrency and failure tests, typed mount and
+digest tests, complete Outcome Mapping tests, zero/one-to-many derivation,
+atomic rollback, lineage and replay tests, every-node rescheduling,
+capacity/overload tests, Controller and storage outages, and a target-scale
+24-hour soak. At the largest approved snapshot and worker fan-out, throughput
+and p95/p99 latency overhead versus the same preloaded-memory workload must
+each be at most 2%.
+
+The deployment must also set hard count, rate, byte, filesystem, memory and
+concurrency limits and approve a retention/capacity runbook. The MVP has no
+purge state machine, so neither operators nor cache cleanup may directly delete
+authoritative PostgreSQL data or an active publication.
+
+`EXCLUSIVE_LEASE` and snapshot publication are fully specified but remain
+unproven until these qualification gates pass.

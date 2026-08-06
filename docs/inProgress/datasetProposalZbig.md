@@ -1,5 +1,13 @@
 # Dataset Proposal — Zbig
 
+> **Review disposition (2026-08-05):** non-normative design input. The
+> [Managed Test Data MVP Specification](managed-test-data-lifecycle-generic-spec.md)
+> is the proposed canonical design. The original proposal below is preserved
+> unchanged for traceability; its status, MVP boundary and open decisions are
+> historical and must not be used as implementation requirements. The
+> PocketHive response at the end records what was adopted, rejected or
+> deferred.
+
 Status: in progress; draft proposal, decision and canonical-contract approval pending
 
 ## Goal
@@ -227,3 +235,61 @@ combined as alternative semantics of the same adapter.
 5. Batch, lease, record-size, and selector limits.
 6. Whether Redis projection is needed after the PostgreSQL benchmark.
 7. REST, Worker I/O, capability-manifest, and observability contracts for MVP.
+
+## PocketHive review response
+
+The original comparison above is superseded. The canonical design now supports
+`REPLAY + SHARED`, `REPLAY + EXCLUSIVE_LEASE` and bounded mutable
+`WORKFLOW + EXCLUSIVE_LEASE`. It adopts the useful durability and sharing
+ideas without adopting open-ended tag/query/database semantics.
+
+### Adopted
+
+| Proposal idea | Canonical outcome | Reason |
+|---|---|---|
+| Durable records shared by many swarms | One named Managed Dataset may serve zero or many compatible consumer swarms. | Reuses provider-created data without copying provider logic. |
+| One SUT scope | Dataset Space and Scenario Binding validate and freeze one SUT Environment. | Prevents cross-SUT selection and fallback. |
+| Name plus stable identity | Required `name` and opaque `datasetId`; Groups remain subordinate. | Keeps discovery human-readable and runtime identity stable. |
+| Generic versioned schema | One root schema composes exact immutable contracts and local `$defs`. | Supports arbitrary domains without PocketHive business fields. |
+| PostgreSQL durability | PostgreSQL owns Managed Dataset runtime records, revisions, imports, state, Views and leases. | Provides atomic restart-safe authority. |
+| Immutable payload | Payload is immutable in both canonical Profiles. | Keeps publication, caching and evidence deterministic. |
+| Shared and exclusive use | `REPLAY` supports `SHARED` or `EXCLUSIVE_LEASE`; `WORKFLOW` requires `EXCLUSIVE_LEASE`. | Covers concurrent reuse and temporary unavailability. |
+| Lease separate from business data | Record Leases remain authority state, never tags or payload fields. | Separates allocation safety from scenario state. |
+| Durable mutable availability | `WORKFLOW` uses versioned Record State, fixed Views and declared State Transitions. | Retains needed mutation through a bounded state machine. |
+| Explicit configuration and qualification | Sources, adapters, selections and transitions are explicit; target-scale performance and failure gates block release. | Follows NFF and prevents unproven behaviour reaching production. |
+
+### Rejected for the MVP
+
+| Rejected choice | Reason | Canonical replacement |
+|---|---|---|
+| A second `DATASET` model with alternative semantics | Creates duplicate authority and incompatible worker behaviour. | One `MANAGED_DATASET` design; existing Dataset adapters stay separate and unchanged. |
+| Workers reading PostgreSQL directly | Couples workers to storage, credentials and indexes and adds database work to traffic generation. | Swarm Controller publishes one verified snapshot per binding; workers use local memory. |
+| PostgreSQL owning Dataset Definitions | Conflicts with the mounted, versioned Dataset Space registry. | Scenario Manager owns authoring contracts; PostgreSQL owns runtime data. |
+| Free-form mutable tags | Creates an unbounded state, query, indexing and concurrency model. | Typed Record State with declared paths, Views and transitions. |
+| Arbitrary selectors | Makes admission and query cost unpredictable. | Create Swarm freezes one exact Dataset/Group and optional workflow View. |
+| `PAYLOAD_REPLACE` | Breaks immutable revision identity and local snapshot safety. | Immutable payload plus separately versioned Record State. |
+| Tag mutation combined with lease release | Conflates allocation and business mutation and makes partial failure unclear. | One exact atomic transition, or an explicitly allowed unchanged release. |
+| Redis projection/outbox as the MVP distribution path | Adds another service, cache lifecycle and consistency plane without evidence it is needed. | Deployment-owned filesystem publication and worker local memory. |
+| Inferring state from a SUT result | A response or timeout cannot prove the intended business outcome. | Only explicit workflow completion may mutate state. |
+| Business-specific types or tags as PocketHive concepts | Leaks one domain into a generic platform contract. | Dataset schemas and scenario mappings own every domain field. |
+
+Rejected means excluded from this MVP architecture, not an undocumented
+extension point. Reconsideration requires a separate approved design.
+
+### Deferred
+
+| Deferred item | Reason | Reconsider when |
+|---|---|---|
+| Direct read-only Swarm Controller PostgreSQL export | Orchestrator-mediated export keeps one simpler authority and authorisation boundary. | Benchmarks prove Orchestrator export is the material bottleneck. |
+| Cross-swarm content-addressed snapshot reuse | Adds cache references, invalidation and cleanup complexity. | Per-swarm publication exceeds approved storage or startup targets. |
+| Object storage, Redis snapshot cache or another distribution service | Adds another operational plane and failure model. | Qualified shared filesystem adapters cannot meet a concrete deployment requirement. |
+| Dynamic tags, selectors, state patches or payload replacement | Requires a broader mutable-data, query and evidence contract. | A concrete use case cannot use bounded Record State, Views and transitions. |
+| Lease renewal/transfer, use counts or queue/pop semantics | Broadens allocation and recovery beyond fixed temporary exclusive use. | A measured scenario cannot be served safely by fixed-expiry leases. |
+| Runtime-created Views/transitions or cross-Dataset transactions | Makes capacity and concurrency behaviour dynamic. | A separate bounded workflow contract defines ownership and atomicity. |
+| Redis projection for external consumers | No current requirement justifies outbox, rebuild and consistency contracts. | A named consumer cannot use Managed Dataset or an existing explicit Redis path. |
+| Dataset retirement, purge and automatic deletion | Active-run safety, evidence and recovery are not defined. | A governed lifecycle contract is approved; until then limits and the runbook bound growth. |
+| Audit-grade history and delivery proof | Operational Consumption Status does not prove SUT acceptance or exactly-once delivery. | Audit requirements define trust, retention, privacy and verification owners. |
+| SUT reconciliation | PocketHive cannot safely infer ambiguous external outcomes. | A SUT-specific reconciliation contract has an explicit authority and idempotency model. |
+
+Deferred does not mean approved. Each item requires a separate design,
+canonical contract and qualification evidence.
