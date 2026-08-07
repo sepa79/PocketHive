@@ -357,10 +357,8 @@ public final class AuthRuntime {
                 form.put("grant_type", "password");
                 form.put("username", required(profile, "username"));
                 form.put("password", required(profile, "password"));
-                String clientId = optional(profile, "clientId");
-                if (clientId != null) {
-                    form.put("client_id", clientId);
-                }
+                form.put("client_id", required(profile, "clientId"));
+                form.put("client_secret", required(profile, "clientSecret"));
             } else {
                 throw new IllegalArgumentException("Auth type is not refreshable: " + profile.getType());
             }
@@ -376,7 +374,7 @@ public final class AuthRuntime {
                 .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("OAuth token endpoint returned " + response.statusCode());
+                throw new IllegalStateException("OAuth token endpoint returned " + response.statusCode() + ": " + response.body());
             }
             Map<String, Object> json = JSON.readValue(response.body(), new TypeReference<>() {});
             Object tokenObj = json.get("access_token");
