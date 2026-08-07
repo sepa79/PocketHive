@@ -1,0 +1,53 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: functional-swarm-ingress
+image:
+  name: functional-swarm-ingress
+ui:
+  label: "Functional Swarm ingress"
+  color: "#14b8a6"
+  shape: "triangle"
+  abbreviation: "FSI"
+config:
+  - name: inputs.type
+    type: string
+    liveMutable: false
+    required: true
+    options:
+      - "REDIS_DATASET"
+  - name: outputs.type
+    type: string
+    liveMutable: false
+    required: true
+    options:
+      - "RABBITMQ"
+  - name: template.templateRoot
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Template root
+      group: Template
+  - name: template.serviceId
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Service ID
+      group: Template
+  - name: template.callId
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Call ID
+      group: Template
+  - name: replyListPrefix
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Reply-list prefix
+      group: RPC
+actions: []
+panels: []

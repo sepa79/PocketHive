@@ -133,6 +133,9 @@ jobs:
           - name: request-builder
             dockerfile: Dockerfile.bees.local
             target: request-builder
+          - name: functional-swarm-ingress
+            dockerfile: Dockerfile.bees.local
+            target: functional-swarm-ingress
           - name: http-sequence
             dockerfile: Dockerfile.bees.local
             target: http-sequence
@@ -148,6 +151,9 @@ jobs:
           - name: postprocessor
             dockerfile: Dockerfile.bees.local
             target: postprocessor
+          - name: functional-swarm-reply
+            dockerfile: Dockerfile.bees.local
+            target: functional-swarm-reply
           - name: clearing-export
             dockerfile: Dockerfile.bees.local
             target: clearing-export
@@ -182,11 +188,13 @@ jobs:
             swarm-controller-service \
             generator-service \
             request-builder-service \
+            functional-swarm-ingress-service \
             http-sequence-service \
             db-query-service \
             moderator-service \
             processor-service \
             postprocessor-service \
+            functional-swarm-reply-service \
             clearing-export-service \
             trigger-service
           do

@@ -1,0 +1,83 @@
+protocolVersion: "2.0.0"
+id: functional-swarm-dsl-poc
+name: Functional Swarm DSL POC
+description: "Live Functional Swarm RPC proof: ingress validates the versioned request, Processor executes the canonical HTTP envelope, and the reply sink publishes one expiring response."
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: functional-swarm-ingress
+      image: functional-swarm-ingress:latest
+      config:
+        inputs:
+          type: REDIS_DATASET
+          redis:
+            host: redis
+            port: 6379
+            listName: pockethive.functional-swarm.poc.requests
+            sources: []
+            pickStrategy: ROUND_ROBIN
+            ratePerSec: 20
+            initialDelayMs: 0
+            tickIntervalMs: 1000
+            ssl: false
+        outputs:
+          type: RABBITMQ
+        template:
+          templateRoot: /app/scenario/templates/http
+          serviceId: functional-swarm-dsl
+          callId: invoke
+        replyListPrefix: pockethive.functional-swarm.poc.reply.
+      work:
+        out:
+          out: processor
+      ports:
+        - { id: out, direction: out }
+
+    - role: processor
+      image: processor:latest
+      config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+      work:
+        in:
+          in: processor
+        out:
+          out: reply
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+
+    - role: functional-swarm-reply
+      image: functional-swarm-reply:latest
+      config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
+        redis:
+          host: redis
+          port: 6379
+          ssl: false
+          operationTimeoutMs: 5000
+        replyListPrefix: pockethive.functional-swarm.poc.reply.
+        replyTtlSeconds: 30
+      work:
+        in:
+          in: reply
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: functional-swarm-ingress-to-processor
+      from: { role: functional-swarm-ingress, port: out }
+      to: { role: processor, port: in }
+    - id: processor-to-functional-swarm-reply
+      from: { role: processor, port: out }
+      to: { role: functional-swarm-reply, port: in }

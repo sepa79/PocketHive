@@ -1,5 +1,9 @@
 package io.pockethive.processor.handler;
 
+import io.pockethive.requestexecution.ApacheHttpRequestExecutor;
+import io.pockethive.requestexecution.HttpExecutionRequest;
+import io.pockethive.requestexecution.HttpExecutionResult;
+import io.pockethive.requestexecution.HttpTargetResolver;
 import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
@@ -16,20 +20,12 @@ import io.pockethive.worker.sdk.api.HttpResultEnvelope;
 import io.pockethive.worker.sdk.api.WorkItem;
 import io.pockethive.worker.sdk.api.WorkerContext;
 import java.net.URI;
-import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.apache.hc.client5.http.classic.HttpClient;
-import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
-import org.apache.hc.core5.http.ClassicHttpResponse;
-import org.apache.hc.core5.http.Header;
-import org.apache.hc.core5.http.io.HttpClientResponseHandler;
-import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 
 public class HttpProtocolHandler implements ProtocolHandler {
@@ -81,7 +77,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
     String path = requestInfo.path();
     String baseUrl = config.baseUrl();
     Map<String, Object> unresolvedRequest = requestMetadata(null, method, baseUrl, path);
-    boolean absolutePath = isAbsoluteHttpUri(path);
+    boolean absolutePath = HttpTargetResolver.isAbsoluteHttpUri(path);
     if (!absolutePath && (baseUrl == null || baseUrl.isBlank())) {
       logger.warn("No baseUrl configured; skipping HTTP call");
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1),
@@ -106,35 +102,20 @@ public class HttpProtocolHandler implements ProtocolHandler {
     long pacingMillis = 0L;
     try {
       pacingMillis = applyExecutionMode(config);
-      final long pacingMillisForHandler = pacingMillis;
       HttpClient client = selectClient(config);
-      HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
-      headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
-      body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
-
-      record CallOutcome(int statusCode, Map<String, List<String>> headers, String body, CallMetrics metrics) {
-      }
-
-      HttpClientResponseHandler<CallOutcome> handler = response -> {
-        long endMillis = clock.millis();
-        long totalDuration = Math.max(0L, endMillis - start);
-        long callDuration = Math.max(0L, totalDuration - pacingMillisForHandler);
-        long connectionLatency = Math.max(0L, pacingMillisForHandler);
-        int statusCode = response.getCode();
-
-        String responseBody = response.getEntity() == null ? "" : EntityUtils.toString(response.getEntity(), StandardCharsets.UTF_8);
-        logger.debug("HTTP RESPONSE {} {} -> {} latency={}ms body={}", method, target, statusCode, callDuration, responseBody);
-
-        boolean success = statusCode >= 200 && statusCode < 300;
-        CallMetrics metrics = success
-            ? CallMetrics.success(callDuration, connectionLatency, statusCode)
-            : CallMetrics.failure(callDuration, connectionLatency, statusCode);
-        metricsRecorder.record(metrics);
-
-        return new CallOutcome(statusCode, convertHeaders(response), responseBody, metrics);
-      };
-
-      CallOutcome outcome = client.execute(apacheRequest, handler);
+      HttpExecutionResult outcome = new ApacheHttpRequestExecutor(client).execute(
+          new HttpExecutionRequest(method, target, requestInfo.headers(), body.orElse(null)));
+      long endMillis = clock.millis();
+      long totalDuration = Math.max(0L, endMillis - start);
+      long callDuration = Math.max(0L, totalDuration - pacingMillis);
+      long connectionLatency = Math.max(0L, pacingMillis);
+      logger.debug("HTTP RESPONSE {} {} -> {} latency={}ms body={}",
+          method, target, outcome.statusCode(), callDuration, outcome.body());
+      boolean success = outcome.statusCode() >= 200 && outcome.statusCode() < 300;
+      CallMetrics metrics = success
+          ? CallMetrics.success(callDuration, connectionLatency, outcome.statusCode())
+          : CallMetrics.failure(callDuration, connectionLatency, outcome.statusCode());
+      metricsRecorder.record(metrics);
       HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
           mapper.convertValue(requestMeta, HttpResultEnvelope.HttpRequestInfo.class),
           new HttpResultEnvelope.HttpOutcome(
@@ -144,7 +125,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
               outcome.body(),
               null
           ),
-          new HttpResultEnvelope.HttpMetrics(outcome.metrics().durationMs(), outcome.metrics().connectionLatencyMs())
+          new HttpResultEnvelope.HttpMetrics(metrics.durationMs(), metrics.connectionLatencyMs())
       );
       ObjectNode result = mapper.valueToTree(resultEnvelope);
 
@@ -156,7 +137,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
           outcome.headers()
       );
 
-      WorkItem responseItem = ResponseBuilder.build(result, context.info(), outcome.metrics(), extractionHeaders);
+      WorkItem responseItem = ResponseBuilder.build(result, context.info(), metrics, extractionHeaders);
       WorkItem updated = message.addStep(context.info(), responseItem.asString(), responseItem.stepHeaders());
       return updated.toBuilder().contentType(responseItem.contentType()).build();
     } catch (Exception ex) {
@@ -231,33 +212,10 @@ public class HttpProtocolHandler implements ProtocolHandler {
   }
 
   private URI resolveTarget(String baseUrl, String path) {
-    if (isAbsoluteHttpUri(path)) {
-      try {
-        return URI.create(path);
-      } catch (IllegalArgumentException ex) {
-        return null;
-      }
-    }
     try {
-      return URI.create(baseUrl + (path == null ? "" : path));
+      return HttpTargetResolver.resolve(baseUrl, path);
     } catch (IllegalArgumentException ex) {
       return null;
-    }
-  }
-
-  private boolean isAbsoluteHttpUri(String path) {
-    if (path == null || path.isBlank()) {
-      return false;
-    }
-    try {
-      URI uri = URI.create(path);
-      if (!uri.isAbsolute() || uri.getScheme() == null) {
-        return false;
-      }
-      String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
-      return "http".equals(scheme) || "https".equals(scheme);
-    } catch (IllegalArgumentException ex) {
-      return false;
     }
   }
 
@@ -272,16 +230,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
       return sslVerify ? perThreadClient.get() : insecurePerThreadClient.get();
     }
     return sslVerify ? httpClient : insecureHttpClient;
-  }
-
-  private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {
-    Header[] headers = response.getHeaders();
-    if (headers == null || headers.length == 0) return Map.of();
-    Map<String, List<String>> result = new java.util.LinkedHashMap<>();
-    for (Header header : headers) {
-      result.computeIfAbsent(header.getName(), k -> new ArrayList<>()).add(header.getValue());
-    }
-    return result;
   }
 
   private Optional<String> extractBody(Object bodyValue) throws Exception {

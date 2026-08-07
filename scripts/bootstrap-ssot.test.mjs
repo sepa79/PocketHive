@@ -6,6 +6,8 @@ const root = resolve(import.meta.dirname, "..");
 const workerServices = [
   "db-query-service",
   "generator-service",
+  "functional-swarm-ingress-service",
+  "functional-swarm-reply-service",
   "http-sequence-service",
   "moderator-service",
   "network-proxy-manager-service",

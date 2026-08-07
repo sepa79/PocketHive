@@ -31,6 +31,9 @@
     <module>common/manager-sdk</module>
     <module>common/worker-sdk</module>
     <module>common/request-templates</module>
+    <module>common/request-execution</module>
+    <module>common/functional-swarm-contracts</module>
+    <module>common/functional-swarm-redis</module>
     <module>common/sink-clickhouse</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
@@ -49,6 +52,9 @@
     <module>tcp-mock-server</module>
     <module>request-builder-service</module>
     <module>http-sequence-service</module>
+    <module>functional-swarm-ingress-service</module>
+    <module>functional-swarm-reply-service</module>
+    <module>functional-swarm-dsl</module>
     <module>db-query-service</module>
     <module>e2e-tests</module>
     <module>tools/scenario-templating-check</module>

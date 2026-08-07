@@ -1,0 +1,8 @@
+serviceId: functional-swarm-dsl
+callId: invoke
+protocol: HTTP
+method: POST
+pathTemplate: /api/guarded
+headersTemplate:
+  content-type: text/plain
+bodyTemplate: "{{ payload }}"

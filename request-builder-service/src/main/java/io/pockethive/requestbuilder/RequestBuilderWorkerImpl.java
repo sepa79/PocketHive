@@ -19,11 +19,13 @@ import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
 import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.requesttemplates.HttpTemplateRenderer;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.RenderedHttpRequest;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -45,6 +47,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private final TemplateRenderer templateRenderer;
   private final MessageTemplateRenderer messageTemplateRenderer;
+  private final HttpTemplateRenderer httpTemplateRenderer;
   private final TemplateLoader templateLoader;
   private final RedisSequenceProperties redisProperties;
   private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
@@ -72,6 +75,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.redisProperties = redisProperties == null ? new RedisSequenceProperties() : redisProperties;
     this.messageTemplateRenderer = new MessageTemplateRenderer(templateRenderer);
+    this.httpTemplateRenderer = new HttpTemplateRenderer(templateRenderer);
   }
 
   @Override
@@ -137,20 +141,9 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
             tcpDef.resultRules()
         );
       } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
-        MessageTemplate template = MessageTemplate.builder()
-            .bodyType(MessageBodyType.HTTP)
-            .pathTemplate(httpDef.pathTemplate())
-            .methodTemplate(httpDef.method())
-            .bodyTemplate(httpDef.bodyTemplate())
-            .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
-            .build();
-
-        MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, effectiveSeed);
-
+        RenderedHttpRequest rendered = httpTemplateRenderer.render(httpDef, effectiveSeed);
         Map<String, String> headers = new HashMap<>(rendered.headers());
-
-        String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
+        String method = rendered.method();
         AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
             method, rendered.path(), headers, rendered.body());
         if (httpDef.authRef() != null) {
@@ -167,7 +160,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
                 headers,
                 resolveBodyValue(rendered.body(), isJson)
             ),
-            httpDef.resultRules()
+            rendered.resultRules()
         );
       } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
         envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);

@@ -13,6 +13,9 @@ FROM bee-runtime AS request-builder
 COPY .local-jars/request-builder-service.jar /app/app.jar
 COPY request-builder-service/templates /app/templates
 
+FROM bee-runtime AS functional-swarm-ingress
+COPY .local-jars/functional-swarm-ingress-service.jar /app/app.jar
+
 FROM bee-runtime AS http-sequence
 COPY .local-jars/http-sequence-service.jar /app/app.jar
 
@@ -30,6 +33,9 @@ COPY .local-jars/processor-service.jar /app/app.jar
 
 FROM bee-runtime AS postprocessor
 COPY .local-jars/postprocessor-service.jar /app/app.jar
+
+FROM bee-runtime AS functional-swarm-reply
+COPY .local-jars/functional-swarm-reply-service.jar /app/app.jar
 
 FROM bee-runtime AS clearing-export
 COPY .local-jars/clearing-export-service.jar /app/app.jar

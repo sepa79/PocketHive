@@ -164,9 +164,16 @@ clean_stack() {
 
   if $PRUNE_IMAGES; then
     echo "Pruning local PocketHive images..."
-    # Target only images built by this repo: core services and bees.
-    mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | awk '
-      $1 ~ /^(orchestrator|scenario-manager|network-proxy-manager|network-proxy-haproxy|tcp-mock-server|ui|swarm-controller|generator|request-builder|http-sequence|moderator|processor|postprocessor|clearing-export|trigger|pockethive-)/ { print $2 }')
+    # The image manifest owns the exact list of repository-built images.
+    declare -A managed_images=()
+    for image in "${POCKETHIVE_IMAGE_NAMES[@]}"; do
+      managed_images["${image}"]=1
+    done
+    mapfile -t ph_images < <(docker images --format '{{.Repository}} {{.ID}}' | while read -r repository image_id; do
+      if [[ -n "${managed_images[$repository]:-}" || "${repository}" == pockethive-* ]]; then
+        printf '%s\n' "${image_id}"
+      fi
+    done)
     for img in "${ph_images[@]}"; do
       if [[ -n "$img" ]]; then
         echo " - Removing image ${img}"

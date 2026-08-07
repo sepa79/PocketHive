@@ -1,0 +1,73 @@
+schemaVersion: "1.0"
+capabilitiesVersion: "1.0"
+role: functional-swarm-reply
+image:
+  name: functional-swarm-reply
+ui:
+  label: "Functional Swarm reply"
+  color: "#0ea5e9"
+  shape: "hexagon"
+  abbreviation: "FSR"
+config:
+  - name: inputs.type
+    type: string
+    liveMutable: false
+    required: true
+    options:
+      - "RABBITMQ"
+  - name: outputs.type
+    type: string
+    liveMutable: false
+    required: true
+    options:
+      - "NONE"
+  - name: redis.host
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Redis host
+      group: Redis
+  - name: redis.port
+    type: integer
+    liveMutable: false
+    required: true
+    min: 1
+    max: 65535
+    ui:
+      label: Redis port
+      group: Redis
+  - name: redis.ssl
+    type: boolean
+    liveMutable: false
+    required: true
+    ui:
+      label: Redis SSL
+      group: Redis
+  - name: redis.operationTimeoutMs
+    type: integer
+    liveMutable: false
+    required: true
+    min: 1
+    ui:
+      label: Redis operation timeout
+      group: Redis
+      unit: ms
+  - name: replyListPrefix
+    type: string
+    liveMutable: false
+    required: true
+    ui:
+      label: Reply-list prefix
+      group: RPC
+  - name: replyTtlSeconds
+    type: integer
+    liveMutable: false
+    required: true
+    min: 1
+    ui:
+      label: Reply TTL
+      group: RPC
+      unit: s
+actions: []
+panels: []

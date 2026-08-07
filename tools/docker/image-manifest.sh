@@ -51,11 +51,13 @@ register_pockethive_image ui ui "" ui-v2/Dockerfile . "" ui
 register_pockethive_image swarm-controller swarm-controller swarm-controller-service Dockerfile.bees.local . swarm-controller worker
 register_pockethive_image generator generator generator-service Dockerfile.bees.local . generator worker
 register_pockethive_image request-builder request-builder request-builder-service Dockerfile.bees.local . request-builder worker
+register_pockethive_image functional-swarm-ingress functional-swarm-ingress functional-swarm-ingress-service Dockerfile.bees.local . functional-swarm-ingress worker
 register_pockethive_image http-sequence http-sequence http-sequence-service Dockerfile.bees.local . http-sequence worker
 register_pockethive_image db-query db-query db-query-service Dockerfile.bees.local . db-query worker
 register_pockethive_image moderator moderator moderator-service Dockerfile.bees.local . moderator worker
 register_pockethive_image processor processor processor-service Dockerfile.bees.local . processor worker
 register_pockethive_image postprocessor postprocessor postprocessor-service Dockerfile.bees.local . postprocessor worker
+register_pockethive_image functional-swarm-reply functional-swarm-reply functional-swarm-reply-service Dockerfile.bees.local . functional-swarm-reply worker
 register_pockethive_image clearing-export clearing-export clearing-export-service Dockerfile.bees.local . clearing-export worker
 register_pockethive_image trigger trigger trigger-service Dockerfile.bees.local . trigger worker
 

@@ -619,6 +619,7 @@ Every row below has one authority. A module not named as the authority may call 
 | Controller journal append semantics | The explicitly configured `SwarmJournal` adapter | Controller lifecycle/control-plane producers pass canonical entries for their own swarm | Null-to-noop substitution, cross-swarm discard, serialization/append errors logged without propagation |
 | Worker bootstrap defaults | Shared `observability` Jackson auto-configuration and `logback-spring.xml` resource | Services may declare explicitly different behavior; a local primary mapper overrides the conditional shared bean | Package-only ObjectMapper configuration copies or byte-identical service logging resources |
 | HTTP request template contract | `common/request-templates` `HttpTemplateDefinition` | Request Builder, HTTP Sequence, Scenario Manager tooling | Same-named worker-sdk records or authoring metadata embedded in a parallel runtime contract |
+| Functional Swarm RPC wire contract | `docs/spec/functional-swarm-rpc.schema.json`; shared Java representation and codec in `common/functional-swarm-contracts` | Functional Swarm DSL client, Functional Swarm ingress and reply sink | Handwritten Redis request/reply maps, copied parsers or per-client reply-list conventions |
 
 `common/control-plane-core` contains transport-free ports and coordination rules only. Reusable concrete filesystem code belongs in a dedicated shared infrastructure module (target: `common/control-plane-filesystem`). Sharing one concrete adapter does not permit moving filesystem IO into the domain core.
 

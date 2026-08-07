@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.io/spec/functional-swarm-rpc.schema.json",
+  "title": "PocketHive Functional Swarm RPC request",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["protocolVersion", "requestId", "replyList", "invocation"],
+  "properties": {
+    "protocolVersion": {
+      "const": "1.0"
+    },
+    "requestId": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "replyList": {
+      "type": "string",
+      "minLength": 1
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["payload", "headers"],
+      "properties": {
+        "payload": {
+          "type": "string",
+          "minLength": 1
+        },
+        "headers": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}
