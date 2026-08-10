@@ -64,6 +64,11 @@ SCHEDULER WorkInput
 Before it starts, Orchestrator creates the Dataset and its full Group plan in
 `BUILDING`.
 
+Before creating anything, PocketHive checks each Dataset separately. Its total
+record target must not exceed Scheduler `maxMessages`, because one scheduled
+item can create at most one record in that Dataset. A larger schedule is valid;
+an impossible target creates no Dataset, ledger or capacity reservation.
+
 Each successful output:
 
 - identifies the frozen provider run and binding;
@@ -180,16 +185,19 @@ selection without a SUT attempt never turns it green.
 Loading and observed use are separate. Status shows guarded-attempt coverage as
 `observed/expected`:
 
-- `NOT_READY` — the exact copy is not loaded by every expected worker;
+- `NOT_READY` — no active consumer, or an expected worker is missing, stale or
+  has not loaded the exact copy;
 - `AWAITING_EVIDENCE` — loaded, but no current worker attempt observed;
 - `PARTIAL_EVIDENCE` — some, but not all, expected workers observed;
 - `CONSUMING` — every current worker epoch observed; and
 - `STALE_EVIDENCE` — earlier evidence is no longer fresh.
 
 Low or uneven traffic can therefore leave a healthy worker awaiting evidence;
-that is not proof of incorrect Dataset use. Create Swarm rejects a traffic,
-window and worker combination that cannot realistically exercise every worker.
-Worker replacement requires fresh evidence for the new epoch.
+that is not proof of incorrect Dataset use and does not block an otherwise
+valid Create Swarm. `staleAfter` decides whether a worker report is current;
+`evidenceWindow` decides whether an attempt is current. A stale worker stays in
+the expected count but cannot count as loaded or observed. Worker replacement
+changes its epoch and requires fresh evidence.
 
 Workers report to Swarm Controller. Controller sends bounded aggregates to
 Orchestrator. REST, MCP and later UI show that same status. They expose no record

@@ -420,10 +420,23 @@ providerDatasets:
 ```
 
 The Orchestrator renders Group keys once from the frozen Provider Scenario
-Binding, validates positive targets and atomically reserves the sum of all
-targets against PostgreSQL record/byte/idempotency and validation capacity.
-The admitted maximum stored record count for this Dataset equals that sum in
-the MVP.
+Binding and validates positive targets. Because MVP `outputOrdinal: 0` permits
+one record per issued item for each Dataset binding, admission checks each
+binding independently before provisioning:
+
+```text
+sum(group.targetRecords) <= scheduler.maxMessages
+```
+
+An overflow or failed inequality returns `PROVIDER_PLAN_UNATTAINABLE` and
+creates no Dataset, Provider Run ledger or capacity reservation. Equality is
+not required: a provider may process items without emitting records. This check
+proves only numerical feasibility; it does not predict scenario or SUT output.
+
+Only after every binding passes does Orchestrator atomically reserve each
+binding's target sum against PostgreSQL record/byte/idempotency and validation
+capacity. The admitted maximum stored record count for a Dataset equals that
+sum in the MVP.
 
 Provisioning is idempotent on
 `providerSwarmId + providerRunId + providerBindingRef`. Exact replay returns
@@ -604,14 +617,18 @@ inputs:
       reportInterval: PT5S
       staleAfter: PT20S
       evidenceWindow: PT1M
-      minimumSutAttemptRatePerSec: 100
-      minimumAttemptsPerWorker: 1
       pipelineLagTolerance: PT30S
 ```
 
 MVP supports only explicit `ROUND_ROBIN`. Each worker has an independent local
 cursor; duplicate concurrent use is valid. Selection does not move a record or
 change its availability.
+
+Observation durations are explicit and positive, and
+`reportInterval < staleAfter`. `evidenceWindow` is independent of `staleAfter`
+and may be shorter, equal or longer. Unknown fields and invalid duration
+relationships fail admission. Traffic rate, ramp, conditional execution and
+distribution are not observation-configuration validity checks.
 
 ## PostgreSQL projection reader
 
@@ -855,19 +872,49 @@ Consumption Status uses this closed MVP set:
 
 | Status | Meaning |
 |---|---|
-| `NOT_READY` | The exact projection is not loaded by every expected worker; Consumption Status makes no use claim. |
-| `AWAITING_EVIDENCE` | Every expected worker is loaded, but no current qualifying guarded attempt has been observed. |
-| `PARTIAL_EVIDENCE` | At least one but fewer than all expected workers has current matching selection and guarded-attempt evidence. |
-| `CONSUMING` | Every expected worker has current matching load, selection and guarded-attempt evidence. |
-| `STALE_EVIDENCE` | Previously observed evidence has aged beyond `staleAfter`; current use is unknown. |
+| `NOT_READY` | There is no active consumer, or an expected reporter is missing, stale or has not loaded the exact projection; Consumption Status makes no use claim. |
+| `AWAITING_EVIDENCE` | Every expected reporter is current and loaded, but no current or historical qualifying guarded attempt exists for the current reporter epochs. |
+| `PARTIAL_EVIDENCE` | At least one but fewer than all expected reporters has current matching selection and guarded-attempt evidence. |
+| `CONSUMING` | Every expected reporter has current matching load, selection and guarded-attempt evidence. |
+| `STALE_EVIDENCE` | Every expected reporter is current and loaded, no qualifying attempt is within `evidenceWindow`, and historical qualifying evidence exists for a current reporter epoch. |
 | `FAILED` | A closed mismatch, guard rejection or evidence-contract failure occurred. Lack of traffic alone is not `FAILED`. |
 
-Evaluation is deterministic: a closed error is `FAILED`; incomplete exact
-loading is `NOT_READY`; full current coverage is `CONSUMING`; non-zero partial
-coverage is `PARTIAL_EVIDENCE`; zero current coverage with older evidence is
-`STALE_EVIDENCE`; otherwise it is `AWAITING_EVIDENCE`. `expected` is the current
-enabled applicable reporter-epoch set from `status-full`; `observed` counts only
-fresh qualifying attempts from that set.
+`staleAfter` controls worker/Controller report freshness. `evidenceWindow`
+controls guarded-attempt freshness. `expected` is the current enabled
+applicable reporter-epoch set from authoritative swarm topology;
+`status-full` materialises that set. Report timeout does not change it. A stale
+reporter remains in that denominator until an authoritative topology or epoch
+change removes it, but cannot satisfy `currentReporters`, `loaded` or
+`observed`. `observed` counts only current expected reporters with matching
+qualifying evidence inside `evidenceWindow`.
+
+Evaluation uses this precedence:
+
+```text
+closed contract or guard error
+  -> FAILED
+
+expected == 0
+  -> NOT_READY with reason NO_ACTIVE_CONSUMER
+
+any expected reporter missing, stale or not loaded
+  -> NOT_READY
+
+expected > 0
+AND currentReporters == expected
+AND loaded == expected
+AND observed == expected
+  -> CONSUMING
+
+some but not all expected reporters have current qualifying evidence
+  -> PARTIAL_EVIDENCE
+
+no current evidence, but historical qualifying evidence exists
+  -> STALE_EVIDENCE
+
+otherwise
+  -> AWAITING_EVIDENCE
+```
 
 Every surface reports attempt evidence coverage as `observed/expected` and
 reports loaded coverage separately. `CONSUMING` requires fresh matching
@@ -877,27 +924,12 @@ selection and its correlated guarded SUT attempt within `evidenceWindow`. A
 Redis read, record count, projection activation or local selection alone cannot
 produce `CONSUMING`.
 
-Because `CONSUMING` requires every applicable worker, admission must prove the
-configured traffic/window can exercise that reporter set:
-
-```text
-minimumExpectedAttemptsOnLeastLoadedWorker =
-  admittedMinimumSutAttemptRatePerSecond
-  * evidenceWindowSeconds
-  * qualifiedMinimumWorkerTrafficShare
-
-minimumExpectedAttemptsOnLeastLoadedWorker
-  >= minimumAttemptsPerWorker
-```
-
-`qualifiedMinimumWorkerTrafficShare` is a measured lower bound for the exact
-routing and maximum admitted topology, including approved skew. Missing bounds,
-zero share or a failed inequality returns
-`DATASET_EVIDENCE_COVERAGE_UNATTAINABLE`; PocketHive does not lengthen the
-window, reduce the worker set or infer coverage automatically. The declared
-minimum SUT-attempt rate is not trusted by itself: Orchestrator checks it
-against the admitted scenario/rate plan and qualified evidence. A conditional
-pipeline with no enforceable lower attempt rate fails this admission gate.
+Create Swarm does not require a traffic plan to guarantee all-worker evidence.
+Low rate, ramping, conditional execution or skew may leave status at
+`AWAITING_EVIDENCE` or `PARTIAL_EVIDENCE`; that is truthful runtime observation,
+not a Dataset correctness failure. PocketHive does not lengthen the window,
+reduce the expected set or infer coverage. A future complete-evidence policy is
+out of scope until a concrete use case defines it.
 
 Workers report to Swarm Controller. Controller `status-full` retains bounded
 worker identities and epochs. `status-delta` contains only per-binding counts,
@@ -913,7 +945,7 @@ Required read surfaces:
 
 - Dataset/Group status, including `NO_ACTIVE_CONSUMER`;
 - swarm/binding Projection and Consumption Status;
-- expected/loaded/selecting/attempting reporter counts and explicit
+- expected/current/loaded/selecting/attempting reporter counts and explicit
   `observed/expected` evidence coverage;
 - frozen identities/digests/revision and minimum generation;
 - last evidence times, stale flags and closed failure reasons.
@@ -941,8 +973,8 @@ Required limit groups include:
   connections, operations and output buffers;
 - worker concurrent loads, Redis read throughput, startup SLO and local
   current/next/decode/index/base/direct-buffer/GC memory;
-- polling, evidence-window reporter samples/payload bytes, qualified minimum
-  worker traffic share and recovery time; and
+- polling, evidence-window reporter samples/payload bytes, observation timing
+  and recovery time; and
 - `maximumLoadedWorkerContinuityDuration` and the Controller recovery-time
   objective.
 
@@ -1097,7 +1129,7 @@ milestone is absent and rejected, not silently accepted.
 | A11 | With Redis unavailable, loaded workers continue only for the bounded outage window; cold/restarted workers fail closed until the exact projection is restored and verified. |
 | A12 | Instrumented measured traffic proves zero Redis, PostgreSQL, filesystem and control-plane/credential calls. |
 | A13 | Maximum projection creation, every-worker loading/restart, worker memory/GC, recovery, maximum topology and 24-hour soak gates pass. |
-| A14 | REST/MCP report load separately and expose attempt coverage as `observed/expected`; `CONSUMING` requires every current worker epoch. Redis access/dequeue/count alone never suffices and no attempt is not reported as incorrect use. |
+| A14 | REST/MCP report load separately and expose attempt coverage as `observed/expected`. Tests cover zero expected workers, a stale report with recent attempt evidence, a current report with expired evidence and `staleAfter < evidenceWindow`; precedence produces the documented state and never false `CONSUMING`. Redis access/dequeue/count alone never suffices. |
 | A15 | Existing scenarios and Scheduler, `CSV_DATASET` and `REDIS_DATASET` tests remain unchanged and pass through official ingress. |
 | A16 | Schema/Profile adversarial tests reject duplicate keys, open roots, unsupported keywords, excessive cost/structure and invalid WorkItem encodings consistently at every ingress. |
 | A17 | PostgreSQL and Redis cross-SUT/binding, stale fence/generation, expired grant, wrong ACL and secret-redaction tests fail closed. |
@@ -1105,7 +1137,8 @@ milestone is absent and rejected, not silently accepted.
 | A19 | Output redelivery before closure replays one receipt; committed redelivery after closure still replays it; a new late operation fails `PROVIDER_RECORD_FENCE_CLOSED`. Crash recovery uses the durable Provider Run ledger, not local counters. |
 | A20 | Several failed, abandoned and unconfirmed publications never reuse a generation. Crash after Redis activation, before PostgreSQL confirmation, followed by total Redis loss reserves a strictly higher generation. |
 | A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
-| A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Admission rejects traffic/window/topology combinations that cannot meet minimum per-worker evidence coverage. |
+| A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Replacement changes the expected epoch; old evidence cannot satisfy it. Partial coverage never becomes `CONSUMING`, and uncertain traffic distribution does not reject an otherwise valid Create Swarm. |
+| A23 | For each provider binding, target total above `maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger `maxMessages` pass. Multiple bindings are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
 
 Documentation is design evidence only. None of these gates is proven until its
 executable contract, implementation and recorded test result exist.
@@ -1115,7 +1148,7 @@ executable contract, implementation and recorded test result exist.
 | Review | Result |
 |---|---|
 | Engineering | One authority, one immutable projection model and one local measured path. No remote measured-path storage or provider-input architecture remains. |
-| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility, Redis bypass and evidence coverage are covered by A1-A22. |
+| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility, Redis bypass and evidence coverage are covered by A1-A23. |
 | Operations | `noeviction`, peak memory, cold/loaded outage behavior, total-loss reprojection and maximum-topology/soak gates are explicit. |
 | Security | Least-privilege PostgreSQL functions, trusted sole Redis writer, deny-by-default ACLs, Function non-authority and fixed non-sensitive classification are explicit. |
 | RST | Requirements, canonical terms, owners, deferred triggers and acceptance evidence trace to one architecture; no mutable availability lifecycle or implicit fallback exists. |
@@ -1129,7 +1162,7 @@ executable contract, implementation and recorded test result exist.
 | High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
-| Medium | Minimum worker traffic share and evidence-window feasibility are unmeasured. | Qualify routing skew/churn and admission maths under A22. |
+| Medium | Reporter/evidence timing and churn transitions are design-only. | Implement the closed precedence and qualify skew/churn under A14/A22. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |
 

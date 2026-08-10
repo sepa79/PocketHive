@@ -75,6 +75,10 @@ restart. It is provider-specific and does not make general WorkItem `messageId`
 mandatory. Every output passes the strict Record Codec, maps to one frozen Group
 and commits under an RFC 8785-derived idempotency key.
 
+Before creating anything, each Dataset binding requires
+`sum(targetRecords) <= maxMessages`. An impossible plan fails without a Dataset,
+ledger or capacity reservation; extra scheduled items remain valid.
+
 Exact retries return the same record. Changed retry content conflicts. Concurrent
 duplicates do not increase counts and unique writes above target fail.
 
@@ -126,10 +130,11 @@ The SDK attaches Dataset Context to the normal WorkItem body and preserves it
 through the pipeline. The declared SUT-attempt role validates it immediately
 before network I/O.
 
-Loading and consumption remain separate. Status reports attempt evidence as
-`observed/expected`: `AWAITING_EVIDENCE` means none, `PARTIAL_EVIDENCE` means
-some and `CONSUMING` means every current worker epoch has fresh matching
-evidence for:
+Loading and consumption remain separate. No active consumer, or any
+missing/stale/unloaded expected reporter, is `NOT_READY`. Otherwise status
+reports attempt evidence as `observed/expected`: `AWAITING_EVIDENCE` means none,
+`PARTIAL_EVIDENCE` means some and `CONSUMING` means every current worker epoch
+has fresh matching evidence for:
 
 1. the frozen Dataset/Group/schema/revision;
 2. active projection generation;
@@ -139,9 +144,12 @@ evidence for:
 
 Redis access or selection alone is insufficient. Worker status flows through
 Controller to the Orchestrator REST/MCP read model. No attempt means missing
-evidence, not incorrect use. Admission rejects traffic/window/topology plans
-that cannot exercise every expected worker. Guard arrival never proves SUT
-acceptance. Status exposes no records, keys, credentials or business outcomes.
+evidence, not incorrect use. `staleAfter` controls reporter freshness;
+`evidenceWindow` controls attempt freshness. A stale reporter remains expected
+but cannot count as loaded or observed. Low or skewed traffic may remain
+awaiting/partial and does not block an otherwise valid Create Swarm. Guard
+arrival never proves SUT acceptance. Status exposes no records, keys,
+credentials or business outcomes.
 
 ## MVP and later work
 
