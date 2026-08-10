@@ -34,23 +34,21 @@ Existing Scheduler, `CSV_DATASET` and `REDIS_DATASET` adapters do not change.
 |---|---|
 | Git | Definition/Contract review history |
 | Scenario Manager | the single validator and transactional catalogue publisher |
-| PostgreSQL | published catalogue, Dataset identity, records, Groups, revisions and idempotency |
-| Orchestrator | provisioning, admission, capacity, fencing and status |
+| PostgreSQL | published catalogue, provider completion ledger, records, Groups, revisions and idempotency |
+| Orchestrator | provisioning, admission, capacity, provider completion, fencing and status |
 | Swarm Controller | exact PostgreSQL reads and binding-scoped Redis projection/recovery |
 | Redis | rebuildable per-swarm projection only |
 | Workers | verified local index and measured-path selection |
 
-PostgreSQL remains correct if Redis loses recent writes or all data. Redis HA and
-persistence may shorten an outage but are not correctness dependencies.
-Orchestrator never proxies record bytes. Workers never access PostgreSQL.
+PostgreSQL remains correct after Redis loss. Redis HA may shorten an outage but
+is not authoritative. Orchestrator never proxies record bytes; workers never
+access PostgreSQL.
 
 ## Authoring and binding
 
-Dataset Definitions and composed Schema Contracts are exact-version,
-version-controlled artifacts. Scenario Manager publishes immutable
-`id + SemVer + SHA-256 digest` entries to PostgreSQL in one all-or-nothing
-import. Changed content under an existing version fails. Running bindings do not
-depend on Git, `latest`, ranges or automatic rebinding.
+Scenario Manager publishes exact-version Definitions and Contracts from Git to
+PostgreSQL in one transaction. Changed content under an existing version fails.
+Bindings use exact versions/digests—never `latest`, ranges or auto-rebinding.
 
 A consumer bundle may add:
 
@@ -58,10 +56,9 @@ A consumer bundle may add:
 datasets/requirements.yaml
 ```
 
-This independently versioned extension leaves Scenario Protocol v2 unchanged.
-Absence means no Managed Dataset consumer input. A provider-only output remains
-valid. Create Swarm freezes one SUT Environment, Dataset Space, Dataset, Group,
-Definition/Contract digests and authority revision.
+This extension leaves Scenario Protocol v2 unchanged. Absence means no Managed
+Dataset consumer input; provider-only output remains valid. Create Swarm freezes
+the SUT Environment, Dataset Space, Dataset, Group, digests and revision.
 
 ## Provider fill
 
@@ -71,18 +68,20 @@ The provider keeps a normal `SCHEDULER` WorkInput. Its terminal output is:
 MANAGED_DATASET WorkOutput(CREATE_RECORD)
 ```
 
-Before the provider starts, Orchestrator creates the Dataset and all rendered
-Groups in `BUILDING`. Every output requires a stable WorkItem message identity,
-passes the shared strict Record Codec, maps to exactly one frozen Group and
-commits under a stable idempotency key.
+Before start, Orchestrator creates the Dataset and Groups in `BUILDING`. The
+finite Scheduler ledger allocates one stable
+`providerItemId` per logical item and preserves it through retry, redelivery and
+restart. It is provider-specific and does not make general WorkItem `messageId`
+mandatory. Every output passes the strict Record Codec, maps to one frozen Group
+and commits under an RFC 8785-derived idempotency key.
 
 Exact retries return the same record. Changed retry content conflicts. Concurrent
 duplicates do not increase counts and unique writes above target fail.
 
-Consumers see nothing until every Group reaches its exact admitted target.
-PostgreSQL then seals revision 1 in one transaction. Underfill, provider failure
-or timeout leaves the Dataset unavailable with a closed reason. The MVP does not
-reconcile, replace, refill or fall back.
+Completion requires durable issuance closure, terminal issued items and zero
+in-flight. PostgreSQL then closes the record fence before counting. A committed
+retry still replays; a new late output fails. Exact targets seal revision 1;
+underfill, failure or timeout stays unavailable. There is no repair or fallback.
 
 ## Fast consumer path
 
@@ -94,24 +93,29 @@ same-slot Redis keys:
 - a manifest with Dataset, Group, schema/revision, count and content digests;
 - one Active Projection Reference with a monotonic Activation Generation.
 
-The Active Reference advances atomically only after every write and bounded
-verification succeeds. Partial projections stay invisible. Redis runs with
-`noeviction`; admission funds active, staging and recovery memory plus measured
-overhead and failover headroom.
+The Active Reference advances only after complete verification. Partial data is
+invisible. `noeviction` capacity covers active, staging, recovery and failover.
 
-Each binding names an admitted Managed Dataset Redis deployment profile.
-PocketHive never silently reuses or reconfigures an existing `REDIS_DATASET`
-endpoint; explicitly shared infrastructure must qualify both workloads.
+Orchestrator reserves each generation in PostgreSQL before Redis mutation. A
+new reservation is greater than every generation ever reserved for that
+binding, including failed or unconfirmed publications; no replacement reuses
+one after a crash or complete Redis loss.
 
-Controller has a prefix-restricted writer role and closed
-activation/reconciliation functions, not general record reads. Workers have
-binding-scoped read-only commands.
+Each binding names an admitted Redis profile. Existing `REDIS_DATASET`
+endpoints are never inferred or reconfigured; sharing requires joint
+qualification.
 
-Workers load bounded pages in the background, verify all identities, counts and
-digests, build the next local index and atomically swap only to a newer valid
-generation. Already-loaded workers may continue through a bounded Redis or
-Controller outage. Cold/restarted workers remain unready. Complete Redis loss
-causes deterministic reprojection from PostgreSQL at a higher generation.
+Controller is the trusted sole writer with a deny-by-default command/key ACL.
+The Redis Function supplies atomic validation and fencing, not separate
+authorisation. Controller cannot load/replace Functions, run `EVAL*`, discover
+keys or cross bindings; workers have binding-scoped read-only commands.
+Binding/environment credentials use the deployment's existing external secret
+injection and rotation mechanism.
+
+Workers background-load and verify bounded pages, then swap complete local
+indexes. Loaded workers may continue through a bounded outage; cold/restarted
+workers stay unready. Redis loss reprojects from PostgreSQL at a higher
+generation.
 
 Normal traffic selects `ROUND_ROBIN` from local memory. It makes no Redis,
 PostgreSQL or control-plane call.
@@ -122,7 +126,10 @@ The SDK attaches Dataset Context to the normal WorkItem body and preserves it
 through the pipeline. The declared SUT-attempt role validates it immediately
 before network I/O.
 
-`CONSUMING` requires fresh matching evidence for:
+Loading and consumption remain separate. Status reports attempt evidence as
+`observed/expected`: `AWAITING_EVIDENCE` means none, `PARTIAL_EVIDENCE` means
+some and `CONSUMING` means every current worker epoch has fresh matching
+evidence for:
 
 1. the frozen Dataset/Group/schema/revision;
 2. active projection generation;
@@ -130,10 +137,11 @@ before network I/O.
 4. local selection; and
 5. the correlated guarded SUT attempt.
 
-Redis access, record count or local selection alone is not enough. Worker status
-flows to Swarm Controller, then to the Orchestrator read model used unchanged by
-REST, MCP and future UI. Status exposes bounded identities/counts, not records,
-keys, credentials or business outcomes.
+Redis access or selection alone is insufficient. Worker status flows through
+Controller to the Orchestrator REST/MCP read model. No attempt means missing
+evidence, not incorrect use. Admission rejects traffic/window/topology plans
+that cannot exercise every expected worker. Guard arrival never proves SUT
+acceptance. Status exposes no records, keys, credentials or business outcomes.
 
 ## MVP and later work
 

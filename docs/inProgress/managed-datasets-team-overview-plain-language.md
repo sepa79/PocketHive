@@ -35,8 +35,8 @@ do today.
 - REST and MCP evidence for load, selection and the SUT-attempt boundary.
 
 The shared record is not removed or marked used after selection. There is no
-source, leased or used queue. A Redis read is not proof that traffic reached the
-SUT.
+availability queue or record movement. A Redis read is not proof that traffic
+reached the SUT.
 
 ## Where definitions live
 
@@ -67,18 +67,25 @@ Before it starts, Orchestrator creates the Dataset and its full Group plan in
 Each successful output:
 
 - identifies the frozen provider run and binding;
-- requires a stable WorkItem message ID;
+- carries a Scheduler-owned `providerItemId` allocated once for that logical
+  item and preserved through retry, redelivery and restart;
 - validates one record with the shared strict codec and schema;
 - assigns exactly one frozen Group; and
-- writes idempotently to PostgreSQL.
+- writes idempotently to PostgreSQL using an unambiguous canonical key.
 
 An exact retry returns the original result. The same retry key with different
-content fails. Concurrent duplicates do not increase counts.
+content fails. Concurrent duplicates do not increase counts. The provider ID is
+separate from the optional general WorkItem message ID, so this does not change
+Scenario Protocol v2.
 
-Consumers see no records until every Group reaches its exact target.
-PostgreSQL then seals revision 1 in one transaction. Underfill, overfill,
-provider failure or timeout leaves a clear unavailable result. PocketHive does
-not refill, repair, replace or choose another Dataset.
+The Dataset does not complete merely because a Scheduler process stops. First,
+Scheduler durably closes issuance. Every issued item must then finish, every
+successful output must be committed and in-flight count must reach zero.
+PostgreSQL closes the record fence before checking exact Group counts. A
+committed retry still returns its receipt after closure; a new late output
+fails. Exact targets seal revision 1. Underfill, failure or timeout remains
+unavailable. PocketHive does not refill, repair, replace or choose another
+Dataset.
 
 ## How a consumer chooses data
 
@@ -110,6 +117,11 @@ New projection keys are separate from the current keys. The Active Reference is
 changed atomically only after the complete projection is written and checked.
 Partial data is invisible.
 
+Before Redis is changed, Orchestrator permanently reserves the next generation
+in PostgreSQL. Every new generation is higher than all previous reservations,
+including failed and unconfirmed ones. A crash followed by total Redis loss can
+therefore rebuild at a higher generation without reuse or downgrade.
+
 Redis uses `noeviction`. Capacity is reserved for the current copy, a complete
 new copy and recovery headroom. If memory is exhausted, the new copy fails and
 the current copy remains.
@@ -118,9 +130,13 @@ The binding names the Redis deployment profile explicitly. PocketHive does not
 silently reuse or change an existing Redis Dataset endpoint. Sharing one Redis
 deployment is allowed only after both workloads and their capacity are checked.
 
-Controller can write only its projection prefix through a closed command set.
-Workers can only read their binding prefix. Neither can use Redis as Dataset or
-lease authority.
+Controller is the trusted sole writer. Its deny-by-default Redis account is
+limited to the exact projection commands and binding prefix. The Redis Function
+makes activation atomic and fenced; it is not a separate login or permission
+boundary. Controller cannot run ad-hoc scripts, administer Functions or cross
+bindings. Workers can only read their binding prefix. Binding/environment
+credentials use the deployment's existing external secret injection and
+rotation.
 
 ## How workers stay fast and safe
 
@@ -161,12 +177,27 @@ PocketHive reports three separate facts:
 `CONSUMING` needs the complete matching chain. Redis access, a record count or
 selection without a SUT attempt never turns it green.
 
+Loading and observed use are separate. Status shows guarded-attempt coverage as
+`observed/expected`:
+
+- `NOT_READY` — the exact copy is not loaded by every expected worker;
+- `AWAITING_EVIDENCE` — loaded, but no current worker attempt observed;
+- `PARTIAL_EVIDENCE` — some, but not all, expected workers observed;
+- `CONSUMING` — every current worker epoch observed; and
+- `STALE_EVIDENCE` — earlier evidence is no longer fresh.
+
+Low or uneven traffic can therefore leave a healthy worker awaiting evidence;
+that is not proof of incorrect Dataset use. Create Swarm rejects a traffic,
+window and worker combination that cannot realistically exercise every worker.
+Worker replacement requires fresh evidence for the new epoch.
+
 Workers report to Swarm Controller. Controller sends bounded aggregates to
 Orchestrator. REST, MCP and later UI show that same status. They expose no record
 values, record IDs, Redis keys, credentials or business outcome.
 
 This evidence proves PocketHive used the declared Dataset path. It does not prove
-that the SUT accepted the request or that a business transaction succeeded.
+that the SUT accepted or responded to the request, or that a business
+transaction succeeded.
 
 ## What comes later
 

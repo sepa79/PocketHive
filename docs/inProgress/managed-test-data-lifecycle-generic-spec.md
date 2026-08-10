@@ -63,14 +63,17 @@ The design must:
 4. A Scenario Binding freezes one SUT Environment, Dataset Space, Dataset,
    Group, Definition version/digest, Contract versions/digests and authority
    revision.
-5. Provider records are unavailable until every configured Group reaches its
-   exact target and PostgreSQL atomically seals revision 1.
+5. Provider records are unavailable until the Scheduler has durably closed
+   issuance, every issued item is terminal, the record-creation fence is
+   closed and PostgreSQL atomically seals an exact-target revision 1.
 6. Orchestrator provisions, authorises, fences and reports. It never proxies
    record bytes or selects records for measured traffic.
 7. Swarm Controller creates and reconciles Redis projections. Workers never
    access PostgreSQL.
 8. A Redis projection is immutable and invisible until its manifest and records
    are complete and its Active Projection Reference is atomically advanced.
+   Every Activation Generation is durably reserved before Redis mutation and
+   is never assigned to another publication.
 9. Workers load in the background, verify the complete projection and atomically
    replace local memory. Traffic makes no Redis, PostgreSQL, Controller,
    Orchestrator, Scenario Manager or credential-provider call.
@@ -81,6 +84,9 @@ The design must:
     revision.
 12. Existing `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` contracts and
     behavior remain unchanged.
+13. Swarm Controller is the trusted sole projection writer. Redis ACLs restrict
+    commands and binding keys; the Redis Function provides atomic validation
+    and fencing, not an independent authorisation boundary.
 
 ## MVP boundary
 
@@ -91,6 +97,7 @@ The design must:
 - optional Scenario Bundle `datasets/requirements.yaml` version 1;
 - one scheduled, bounded provider fill through terminal
   `MANAGED_DATASET CREATE_RECORD`;
+- a durable, fenced provider-item and completion barrier contract;
 - immutable JSON-object records and frozen Groups;
 - `REPLAY + SHARED` consumer bindings;
 - PostgreSQL authority revisions;
@@ -127,10 +134,12 @@ are approved.
 | Dataset Instance | One provider-created runtime Dataset in one SUT Environment and Dataset Space. |
 | Group | Frozen partition identified by an opaque `groupId` and exact schema-defined key. |
 | Provider Binding | Frozen plan that creates one Dataset Instance and its Groups. |
+| Provider Item ID | Proposed Scheduler-owned identity allocated once for one logical provider item, unique within its Provider Run and preserved through retry, redelivery and restart. It is not the optional general WorkItem `messageId`. |
+| Provider Completion Barrier | Proposed bounded PostgreSQL ledger proving issuance is closed, every issued item is terminal, in-flight count is zero and record creation is fenced before seal evaluation. It is not a workflow engine. |
 | Consumer Binding | Frozen selection of one sealed Dataset Instance and Group. |
 | Authority Revision | Immutable PostgreSQL record set sealed for a Dataset. MVP has revision 1 only. |
 | Redis Projection | Rebuildable, binding-scoped copy of one Group at one Authority Revision. |
-| Activation Generation | Orchestrator-owned monotonic number for projection activation/reprojection. It is not an Authority Revision. |
+| Activation Generation | Orchestrator-owned monotonic number durably reserved for one projection publication before Redis mutation. A new reservation exceeds every prior reservation for the binding. It is not an Authority Revision. |
 | Dataset Context | SDK-owned WorkItem context correlating the frozen binding, local selection and SUT-attempt guard. |
 
 Dataset, Group and projection identities are opaque. Dataset `name` is required
@@ -142,11 +151,12 @@ and human-readable but is never identity, secret or selection fallback.
 |---|---|---|
 | Git/repository | Authoring review and source history | Store runtime records or serve admitted traffic |
 | Scenario Manager | Validate complete catalogue imports and Scenario Bundles; publish one transaction | Mutate runtime records or perform data-plane work |
-| PostgreSQL | Published catalogue, Dataset identity, records, Groups, revisions, idempotency and future state/leases | Serve workers directly |
-| Orchestrator | Provision, admit, reserve, authorise, fence, assign generations and own the status read model | Proxy record bytes or select measured-path records |
+| PostgreSQL | Published catalogue, Dataset identity, provider-item/completion ledger, records, Groups, revisions, idempotency and future state/leases | Serve workers directly |
+| Orchestrator | Provision, admit, reserve, authorise, fence, close provider runs, assign generations and own the status read model | Proxy record bytes or select measured-path records |
 | Swarm Controller | Read exact sealed revisions, create/reconcile Redis projections and aggregate worker evidence | Become record authority or measured-path selector |
 | Redis | Hold immutable, per-swarm runtime projections | Become durable authority, lease authority or consumption evidence |
-| Worker SDK | Verify/load projections, select locally, preserve Dataset Context and guard SUT attempts | Query PostgreSQL or use remote data in measured traffic |
+| Provider Scheduler | Claim bounded provider items, preserve Provider Item IDs and report terminal outcomes | Infer completion from local counters or issue after durable closure |
+| Worker SDK | Preserve provider/consumer Dataset Context, verify/load projections, select locally and guard SUT attempts | Query PostgreSQL or use remote data in measured traffic |
 | Scenario | Create domain data and interpret SUT outcomes | Ask PocketHive to infer business success |
 
 This refines, rather than replaces, the approved PocketHive ownership rule:
@@ -422,7 +432,9 @@ Dataset and every Group in `BUILDING` before the provider starts.
 
 The provider has a normal PocketHive WorkInput, initially `SCHEDULER`.
 `output-only` means Managed Dataset is only its terminal WorkOutput; it never
-means a source-less swarm.
+means a source-less swarm. A Managed Dataset provider requires a finite
+`maxMessages > 0`; an unbounded Scheduler cannot satisfy the completion
+barrier.
 
 ```yaml
 # first provider bee
@@ -443,14 +455,46 @@ outputs:
 The scenario decides whether and what to write after its SUT work. Managed
 Dataset never interprets a response, regex, header or status code.
 
-### CREATE_RECORD
+### Provider item identity
+
+The general WorkItem `messageId` remains unchanged and may be absent. Managed
+Dataset providers instead use a protected Provider Item ID contract.
+
+At admission, PostgreSQL creates a bounded Provider Run ledger with
+`maxMessages` issuance slots. Each slot receives one opaque `providerItemId`.
+The ID is unique within `providerRunId`; no wider uniqueness is claimed. Before
+dispatch, the Scheduler claims one unissued slot under its current run fence.
+The claim commits before the WorkInput is delivered. A lost response, retry,
+redelivery or restart recovers and reuses that slot and ID; it never allocates
+a replacement for the same logical item.
+
+The Worker SDK carries `providerRunId`, `providerItemId` and the run fence in a
+protected Managed Dataset Provider Context through WorkInput. Terminal
+`MANAGED_DATASET` WorkOutput echoes that Context unchanged. Authors cannot set
+or rewrite it. This is a provider-specific extension and does not change
+Scenario Protocol v2.
+
+### `CREATE_RECORD`
 
 Every write:
 
 1. resolves the authenticated provider run and frozen binding;
-2. requires a stable non-empty WorkItem `messageId`;
-3. derives
-   `operationKey = sha256(providerRunId, bindingRef, messageId, outputOrdinal)`;
+2. requires the non-empty protected `providerItemId` and matching current run
+   fence;
+3. derives the operation key from RFC 8785 canonical UTF-8 JSON:
+
+   ```json
+   {
+     "bindingRef": "<bindingRef>",
+     "outputOrdinal": 0,
+     "providerItemId": "<providerItemId>",
+     "providerRunId": "<providerRunId>"
+   }
+   ```
+
+   The stored key is `sha256:` plus lowercase SHA-256 hex of those canonical
+   bytes. Fixed field names and canonical encoding prevent concatenation
+   ambiguity;
 4. accepts MVP `outputOrdinal: 0` only;
 5. validates the current UTF-8 payload with the Record Codec;
 6. derives and validates exactly one frozen Group from the record;
@@ -464,15 +508,64 @@ returns the original result. Different content under the same key returns
 prevent concurrent duplicates or over-target commits. A duplicate retry never
 increments Group or Dataset counts.
 
-When the finite provider run ends, Orchestrator invokes one fenced completion:
+An output is acknowledged only after its record or idempotent replay result is
+durably committed. A provider item may become terminal only after every
+successful Managed Dataset output from that item has such a receipt. An item
+that intentionally emits no record may still become terminal; final exact
+target evaluation decides whether the Dataset is usable.
 
-- if every Group count equals its exact target, one PostgreSQL transaction
-  freezes record order and Group digests, assigns Authority Revision 1 and moves
-  the Dataset to `SEALED`;
-- if a Group is under target or the provider failed/timed out, the Dataset moves
-  to `FAILED` with a closed reason and remains unavailable; and
-- a unique write above a Group target or total admitted capacity fails and
-  cannot be hidden by completion.
+### Provider completion barrier
+
+PostgreSQL stores the bounded Provider Completion Barrier: planned and issued
+item counts, each issued Provider Item ID and terminal outcome, derived
+`inFlightCount = issuedCount - terminalCount`, issuance closure, the
+record-creation fence, completion fence and final result. Terminal outcomes are
+the closed enum `SUCCEEDED`, `FAILED`, `TIMED_OUT` or `CANCELLED`.
+
+Completion follows this order:
+
+1. The current Scheduler run fence durably closes issuance. No unissued slot
+   can be claimed afterwards and no new logical WorkInput can be created.
+2. Every issued item reaches one terminal outcome. Terminal-outcome replay is
+   idempotent; changed outcome content conflicts. After a bounded run timeout,
+   only the current fenced Orchestrator may mark an abandoned item `TIMED_OUT`.
+3. Orchestrator requires `inFlightCount == 0`.
+4. One serializable PostgreSQL transaction locks the Provider Run and Dataset,
+   rechecks steps 1–3, closes the record-creation fence and only then evaluates
+   every Group count.
+5. Exact targets with every issued item `SUCCEEDED` freeze record order and
+   Group digests, assign Authority Revision 1 and move the Dataset to `SEALED`.
+   Underfill or any `FAILED`, `TIMED_OUT` or `CANCELLED` outcome moves it to
+   `FAILED` with a closed reason.
+
+The fence close, count evaluation and final result commit atomically. A crash
+before commit leaves the previous state retryable; a crash after commit replays
+the stored result. Completion is idempotent on `providerRunId + completionFence`.
+An exact duplicate returns the original result; a stale fence or changed command
+fails.
+
+Delivery rules are exact:
+
+| Arrival | Result |
+|---|---|
+| Exact `CREATE_RECORD` replay already committed, before or after closure | Return the original receipt; do not increment counts. |
+| Same operation key with changed content | `IDEMPOTENCY_CONFLICT`. |
+| New operation while the record-creation fence is open | Validate and commit normally. |
+| New operation after the record-creation fence closes | `PROVIDER_RECORD_FENCE_CLOSED`; no write. |
+| Completion while an output/item is in flight | `PROVIDER_RUN_NOT_DRAINED`; no fence close or count evaluation. |
+| Duplicate completion under the same fence | Return the stored completion result. |
+
+The idempotency lookup precedes the creation-fence check, so a committed output
+whose acknowledgement was lost remains replayable after closure. A new output
+cannot race the barrier: its issued item remains in flight until its durable
+receipt is recorded. Recovery uses only the PostgreSQL ledger and current
+fences, never local Scheduler counters.
+
+The completion result is therefore:
+
+- `SEALED` only when every Group equals its exact target;
+- `FAILED` for underfill, provider failure, timeout or cancellation; and
+- unchanged for a retryable `PROVIDER_RUN_NOT_DRAINED` response.
 
 No record is discoverable or projectable while `BUILDING`. Completion is
 idempotent and fenced. It never reconciles, replaces, refills or falls back.
@@ -510,12 +603,15 @@ inputs:
     consumptionObservation:
       reportInterval: PT5S
       staleAfter: PT20S
+      evidenceWindow: PT1M
+      minimumSutAttemptRatePerSec: 100
+      minimumAttemptsPerWorker: 1
       pipelineLagTolerance: PT30S
 ```
 
 MVP supports only explicit `ROUND_ROBIN`. Each worker has an independent local
-cursor; duplicate concurrent use is valid. There is no checkout, pop, source,
-lease or used collection.
+cursor; duplicate concurrent use is valid. Selection does not move a record or
+change its availability.
 
 ## PostgreSQL projection reader
 
@@ -600,6 +696,14 @@ projection, one complete staging projection, one bounded recovery projection,
 key/data-structure overhead, allocator fragmentation, client buffers,
 replication/failover headroom and non-Dataset use.
 
+Before any Redis mutation, Orchestrator locks the binding generation
+high-water mark, reserves a generation greater than every generation ever
+reserved for that binding, persists the publication ID/fence/generation as
+`RESERVED` and advances the high-water mark in one PostgreSQL transaction. A
+reserved generation belongs only to that publication. Exact retries of that
+publication retain it; no new or replacement publication may reuse it, even if
+the original publication failed, was abandoned or was never confirmed.
+
 The Controller:
 
 1. streams the exact PostgreSQL revision and verifies authority count/digest;
@@ -615,16 +719,45 @@ advances `active` only when the generation is greater than the current value.
 Exact retry returns the same result. Different content, lower/equal generation,
 missing keys or wrong slot fails without changing `active`.
 
-The Controller has a `projection-writer` credential: prefix-restricted mutation
-commands and the closed activation/reconciliation functions only. It has no
-general record retrieval, key discovery or administrative commands. The closed
-functions may inspect only named metadata/cardinality and return bounded
-verification results.
+The Redis Function is the bounded atomic validation and fencing mechanism. It
+is not a separate authorisation principal. Swarm Controller is the trusted,
+prefix-restricted sole projection writer; the design does not claim that Redis
+ACLs alone force every active-reference write through the Function.
+
+The `projection-writer` ACL starts from `reset -@all` and generated exact
+binding/environment key patterns. Its complete application command allowlist
+is `PING`, `ZADD`, `ZCARD`, `HSET`, `HGET`, `HMGET`, `HGETALL`, `DEL` and
+`FCALL`. Key access is limited to:
+
+```text
+ph:md:{<exact-swarmId>|<exact-bindingId>}:projection:*:records
+ph:md:{<exact-swarmId>|<exact-bindingId>}:projection:*:manifest
+ph:md:{<exact-swarmId>|<exact-bindingId>}:active
+```
+
+Writer code exposes only staged record/manifest writes, named cleanup and the
+constant approved activation/reconciliation Function calls. Direct Active
+Reference mutation is prohibited by the Controller port. Where a deployment
+also claims Redis ACL rejection of direct mutation, M0 must prove that exact
+selector configuration against the deployed Redis version; no such independent
+ACL guarantee is assumed by this MVP.
+
+`FCALL` ACLs restrict commands and keys, not the function name. The admitted
+Redis deployment therefore contains exactly the digest-pinned Managed Dataset
+library and approved entry points; an extra or changed function fails admission.
+Only those functions may inspect the declared keys and return bounded results.
+The Controller credential cannot call `FUNCTION` administration, `EVAL`,
+`EVALSHA`, `EVAL_RO`, `EVALSHA_RO`, `SCRIPT`, `FCALL_RO`, key discovery or any
+other command. `FUNCTION LOAD` with or without `REPLACE`, delete/flush/restore,
+ACL/configuration, module, debug and equivalent administration are deployment
+operator operations and unavailable to the Controller.
 
 Workers have binding-scoped `projection-reader` credentials with only the
-exact Active Reference, manifest and bounded sorted-set read commands. They have
-no mutation, discovery, scripting, publication or cross-binding access.
-Credentials are short-lived, injected privately and absent from status/logs.
+exact Active Reference, manifest and bounded `HGET`, `HMGET`, `HGETALL`,
+`ZCARD`, `ZRANGE` and `PING` commands. They have no mutation, discovery,
+scripting, publication or cross-binding access. Writer and reader credentials
+are binding- and environment-scoped, injected and rotated through the
+deployment's existing external secret mechanism, and absent from status/logs.
 
 ### Worker loading
 
@@ -655,14 +788,16 @@ Context and executes the normal pipeline. It performs no remote call.
 - Crash before activation: the old Active Reference remains; the recorded
   staging projection is deleted or rebuilt after fence reconciliation.
 - Crash after activation but before confirmation: recovery invokes the closed
-  reconciliation function. Exact active state is idempotently confirmed;
-  uncertainty never advances or deletes it.
+  reconciliation function. Exact active state is idempotently confirmed while
+  Redis retains it; uncertainty never advances or deletes it.
 - Redis failover loses recent writes: workers reject a missing, partial or older
   generation. Loaded workers keep their local generation; cold workers remain
   unready. Controller reconciles from PostgreSQL.
-- Complete Redis loss: Orchestrator issues a generation greater than every
-  confirmed generation and Controller deterministically reprojects the frozen
-  PostgreSQL revision.
+- Complete Redis loss: Orchestrator reserves a new generation greater than
+  every generation ever reserved for the binding, including failed, abandoned
+  and unconfirmed publications, then Controller deterministically reprojects
+  the frozen PostgreSQL revision. A crash after Redis activation but before
+  PostgreSQL confirmation cannot cause reuse or downgrade after that loss.
 - Controller outage: already-loaded workers may continue for the admitted
   `maximumLoadedWorkerContinuityDuration`. A local monotonic deadline stops new
   dispatch after that bound unless fresh Controller reconciliation extends it.
@@ -673,8 +808,7 @@ recovery never scans Redis. After a confirmed activation, Controller may remove
 only named non-active, non-staging derivative keys after atomically rechecking
 the Active Reference. Cleanup failure consumes reserved derivative capacity and
 may block another publication; it cannot delete PostgreSQL authority or the
-active projection. There is no filesystem marker, deletion acknowledgement or
-authority-evidence chain.
+active projection.
 
 Redis persistence, replication, Sentinel/Cluster or managed-service HA may
 reduce outage and rebuild time. They are continuity improvements only.
@@ -712,16 +846,66 @@ Status has three independent planes:
 | Projection Status | Per binding: requested, building, active, loaded or failed generation. |
 | Consumption Status | Per binding: expected reporters, load, local selection and guarded SUT-attempt evidence. |
 
-`CONSUMING` requires fresh matching evidence from every enabled applicable
-worker for the frozen Dataset/Group/schema/revision/projection generation, at
-least one local selection and its correlated guarded SUT attempt within the
-observation window. A Redis read, record count, projection activation or local
-selection alone cannot produce `CONSUMING`.
+Projection loading readiness and observed consumption are independent. A
+healthy worker may load the exact generation but receive no work during a low
+or skewed traffic window. Absence of an attempt is missing evidence, not proof
+of incorrect Dataset use.
+
+Consumption Status uses this closed MVP set:
+
+| Status | Meaning |
+|---|---|
+| `NOT_READY` | The exact projection is not loaded by every expected worker; Consumption Status makes no use claim. |
+| `AWAITING_EVIDENCE` | Every expected worker is loaded, but no current qualifying guarded attempt has been observed. |
+| `PARTIAL_EVIDENCE` | At least one but fewer than all expected workers has current matching selection and guarded-attempt evidence. |
+| `CONSUMING` | Every expected worker has current matching load, selection and guarded-attempt evidence. |
+| `STALE_EVIDENCE` | Previously observed evidence has aged beyond `staleAfter`; current use is unknown. |
+| `FAILED` | A closed mismatch, guard rejection or evidence-contract failure occurred. Lack of traffic alone is not `FAILED`. |
+
+Evaluation is deterministic: a closed error is `FAILED`; incomplete exact
+loading is `NOT_READY`; full current coverage is `CONSUMING`; non-zero partial
+coverage is `PARTIAL_EVIDENCE`; zero current coverage with older evidence is
+`STALE_EVIDENCE`; otherwise it is `AWAITING_EVIDENCE`. `expected` is the current
+enabled applicable reporter-epoch set from `status-full`; `observed` counts only
+fresh qualifying attempts from that set.
+
+Every surface reports attempt evidence coverage as `observed/expected` and
+reports loaded coverage separately. `CONSUMING` requires fresh matching
+evidence from every enabled applicable worker for the frozen
+Dataset/Group/schema/revision/projection generation, at least one local
+selection and its correlated guarded SUT attempt within `evidenceWindow`. A
+Redis read, record count, projection activation or local selection alone cannot
+produce `CONSUMING`.
+
+Because `CONSUMING` requires every applicable worker, admission must prove the
+configured traffic/window can exercise that reporter set:
+
+```text
+minimumExpectedAttemptsOnLeastLoadedWorker =
+  admittedMinimumSutAttemptRatePerSecond
+  * evidenceWindowSeconds
+  * qualifiedMinimumWorkerTrafficShare
+
+minimumExpectedAttemptsOnLeastLoadedWorker
+  >= minimumAttemptsPerWorker
+```
+
+`qualifiedMinimumWorkerTrafficShare` is a measured lower bound for the exact
+routing and maximum admitted topology, including approved skew. Missing bounds,
+zero share or a failed inequality returns
+`DATASET_EVIDENCE_COVERAGE_UNATTAINABLE`; PocketHive does not lengthen the
+window, reduce the worker set or infer coverage automatically. The declared
+minimum SUT-attempt rate is not trusted by itself: Orchestrator checks it
+against the admitted scenario/rate plan and qualified evidence. A conditional
+pipeline with no enforceable lower attempt rate fails this admission gate.
 
 Workers report to Swarm Controller. Controller `status-full` retains bounded
 worker identities and epochs. `status-delta` contains only per-binding counts,
 reporter-set digest, freshness watermark, minimum loaded generation and
 aggregate counters. A reporter-set/epoch change requires a new full snapshot.
+Worker churn removes the old epoch from `expected`, adds the new epoch and
+requires new evidence; attempts from the replaced epoch never satisfy the new
+coverage set.
 Orchestrator consumes Controller status only and owns the shared read model used
 unchanged by REST, MCP and future UI.
 
@@ -729,13 +913,14 @@ Required read surfaces:
 
 - Dataset/Group status, including `NO_ACTIVE_CONSUMER`;
 - swarm/binding Projection and Consumption Status;
-- expected/loaded/selecting/attempting reporter counts;
+- expected/loaded/selecting/attempting reporter counts and explicit
+  `observed/expected` evidence coverage;
 - frozen identities/digests/revision and minimum generation;
 - last evidence times, stale flags and closed failure reasons.
 
 REST and MCP expose no record values, record IDs, Redis keys, credentials or
 business outcome. Evidence proves the declared data path operated; it does not
-prove SUT acceptance, business correctness or exactly-once delivery.
+prove SUT acceptance, response, business correctness or exactly-once delivery.
 
 ## Capacity and performance
 
@@ -747,7 +932,8 @@ Required limit groups include:
 - catalogue artifacts/import bytes, Definitions, Contracts and requirements;
 - compiled Schema Profile nodes/depth/branches and validation throughput;
 - raw/canonical record bytes and parser structure;
-- PostgreSQL Dataset, record, byte and idempotency capacity;
+- PostgreSQL Dataset, provider-item/completion/generation rows, record, byte and
+  idempotency capacity;
 - concurrent provider writes and validation queue count/bytes/memory;
 - projection count/bytes/pages, concurrent publications and Controller DB/Redis
   throughput;
@@ -755,7 +941,8 @@ Required limit groups include:
   connections, operations and output buffers;
 - worker concurrent loads, Redis read throughput, startup SLO and local
   current/next/decode/index/base/direct-buffer/GC memory;
-- polling, status samples/reporters/payload bytes and recovery time; and
+- polling, evidence-window reporter samples/payload bytes, qualified minimum
+  worker traffic share and recovery time; and
 - `maximumLoadedWorkerContinuityDuration` and the Controller recovery-time
   objective.
 
@@ -846,11 +1033,17 @@ topology success does not qualify a larger topology.
   runtime fallback.
 - PostgreSQL roles have no table access. Reader and mutation functions are
   separately granted, bounded and audited.
-- Controller has no general PostgreSQL or Redis record browsing. Workers have no
-  PostgreSQL credential and read only their binding prefix.
+- Controller has no general PostgreSQL or Redis record browsing. It is the
+  trusted sole Redis writer and can invoke only the shipped projection port.
+  Workers have no PostgreSQL credential and read only their binding prefix.
 - Redis requires authenticated TLS where traffic crosses a trust boundary,
-  explicit command allowlists, read/write key permissions and disabled
-  dangerous/admin commands.
+  deny-by-default command allowlists, exact binding key patterns and a
+  digest-pinned Function catalogue. The executable ACL manifest and deployed
+  Redis version are M0 contract evidence; unsupported selectors fail admission.
+- Controller and worker credentials cannot administer Functions, scripts,
+  ACLs, configuration or modules. `EVAL*`, `SCRIPT` and unapproved `FCALL`
+  attempts fail. The Function supplies atomicity/fencing, not a second identity
+  or privilege boundary.
 - Secrets, source paths, Redis keys, record values and record identities are
   absent from normal logs, status, REST, MCP and future UI.
 - All external requests, records, schemas, pages and status payloads have byte,
@@ -862,13 +1055,16 @@ No implementation starts until M0 establishes one executable SSOT for:
 
 1. Dataset Definition, Schema Contract and catalogue import/evidence;
 2. Dataset Requirements Document version 1 and Scenario Manager projection;
-3. provider plan, Dataset selection and frozen Scenario Binding;
+3. provider plan, Provider Item ID/Run ledger, completion barrier, Dataset
+   selection and frozen Scenario Binding;
 4. `MANAGED_DATASET` input/output capability and config;
-5. Record Codec, WorkItem Dataset Context and provider output receipt;
-6. PostgreSQL catalogue, Dataset lifecycle, idempotency and Reader Grant API;
-7. Redis key/manifest/Active Reference and activation/reconciliation function;
+5. Record Codec, WorkItem Provider/Dataset Context and provider output receipt;
+6. PostgreSQL catalogue, Dataset lifecycle, provider completion, idempotency,
+   generation reservation and Reader Grant API;
+7. Redis key/manifest/Active Reference, exact ACL manifest and
+   activation/reconciliation Function;
 8. worker loading/selection/SUT-attempt guard;
-9. Controller full/delta aggregate; and
+9. Controller full/delta aggregate, reporter epochs and evidence coverage; and
 10. Orchestrator REST/MCP status and error codes.
 
 Delivery sequence:
@@ -890,22 +1086,26 @@ milestone is absent and rejected, not silently accepted.
 |---|---|
 | A1 | Atomic catalogue import; exact replay is idempotent; changed content under an existing version rejects the whole import and preserves the previous catalogue. |
 | A2 | Runtime binding freezes exact Definition/Contract versions and digests; `latest`, range, mismatch and automatic rebind fail. |
-| A3 | Concurrent exact provider retries create one record/result; changed content conflicts. |
+| A3 | Provider Item IDs are non-empty, run-scoped and stable across retry, redelivery and restart; RFC 8785 operation-key vectors are collision-unambiguous. Concurrent exact retries create one record/result and changed content conflicts. |
 | A4 | All Groups become visible only in one exact-target seal transaction; no partial Dataset/Group is discoverable or projectable. |
-| A5 | Underfill, overfill, duplicate retry, provider failure and completion retry produce the documented closed states/reasons. |
+| A5 | Completion racing an in-flight output returns `PROVIDER_RUN_NOT_DRAINED`; issuance closure, zero in-flight, record-fence closure and count evaluation occur in order. Underfill, overfill, duplicate completion and completion retry produce the documented states/reasons. |
 | A6 | Partial Redis write, missing manifest, wrong count/digest/identity and stale/lower generation never replace Active Reference or worker memory. |
-| A7 | Crash injection before/after staging, activation and Orchestrator confirmation recovers idempotently without exposing partial data. |
-| A8 | Complete Redis loss deterministically rebuilds the exact PostgreSQL revision with a higher generation. |
+| A7 | Crash injection before/after staging, generation reservation, activation and PostgreSQL confirmation recovers idempotently without exposing partial data. |
+| A8 | Complete Redis loss deterministically rebuilds the exact PostgreSQL revision with a generation higher than every prior reservation, including an activation that crashed before confirmation. |
 | A9 | Redis failover losing recent acknowledged projection writes cannot lose authority or downgrade loaded/restarted workers. |
 | A10 | `noeviction` memory exhaustion preserves current active projections, fails staging explicitly and isolates admitted bindings. |
-| A11 | Loaded workers continue for the bounded outage window; cold/restarted workers stay unready until the exact projection is restored. |
-| A12 | Instrumented measured traffic proves zero Redis, PostgreSQL and control-plane/credential calls. |
+| A11 | With Redis unavailable, loaded workers continue only for the bounded outage window; cold/restarted workers fail closed until the exact projection is restored and verified. |
+| A12 | Instrumented measured traffic proves zero Redis, PostgreSQL, filesystem and control-plane/credential calls. |
 | A13 | Maximum projection creation, every-worker loading/restart, worker memory/GC, recovery, maximum topology and 24-hour soak gates pass. |
-| A14 | REST/MCP `CONSUMING` requires matching worker load, local selection and guarded SUT-attempt evidence; Redis access/dequeue/count alone never suffices. |
+| A14 | REST/MCP report load separately and expose attempt coverage as `observed/expected`; `CONSUMING` requires every current worker epoch. Redis access/dequeue/count alone never suffices and no attempt is not reported as incorrect use. |
 | A15 | Existing scenarios and Scheduler, `CSV_DATASET` and `REDIS_DATASET` tests remain unchanged and pass through official ingress. |
 | A16 | Schema/Profile adversarial tests reject duplicate keys, open roots, unsupported keywords, excessive cost/structure and invalid WorkItem encodings consistently at every ingress. |
-| A17 | PostgreSQL and Redis cross-SUT/binding, stale fence, expired grant, wrong ACL and secret-redaction tests fail closed. |
+| A17 | PostgreSQL and Redis cross-SUT/binding, stale fence/generation, expired grant, wrong ACL and secret-redaction tests fail closed. |
 | A18 | Statistical performance trials meet the preserved 2% bounds with predeclared power/confidence and no result selection. |
+| A19 | Output redelivery before closure replays one receipt; committed redelivery after closure still replays it; a new late operation fails `PROVIDER_RECORD_FENCE_CLOSED`. Crash recovery uses the durable Provider Run ledger, not local counters. |
+| A20 | Several failed, abandoned and unconfirmed publications never reuse a generation. Crash after Redis activation, before PostgreSQL confirmation, followed by total Redis loss reserves a strictly higher generation. |
+| A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
+| A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Admission rejects traffic/window/topology combinations that cannot meet minimum per-worker evidence coverage. |
 
 Documentation is design evidence only. None of these gates is proven until its
 executable contract, implementation and recorded test result exist.
@@ -914,21 +1114,22 @@ executable contract, implementation and recorded test result exist.
 
 | Review | Result |
 |---|---|
-| Engineering | One authority, one immutable projection model and one local measured path. No filesystem or provider-input architecture remains. |
-| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility and evidence are covered by A1-A18. |
+| Engineering | One authority, one immutable projection model and one local measured path. No remote measured-path storage or provider-input architecture remains. |
+| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility, Redis bypass and evidence coverage are covered by A1-A22. |
 | Operations | `noeviction`, peak memory, cold/loaded outage behavior, total-loss reprojection and maximum-topology/soak gates are explicit. |
-| Security | Least-privilege PostgreSQL function, prefix/command-restricted Redis roles, closed status and fixed non-sensitive classification are explicit. |
-| RST | Requirements, canonical terms, owners, deferred triggers and acceptance evidence trace to one architecture; no queue/used lifecycle or implicit fallback exists. |
+| Security | Least-privilege PostgreSQL functions, trusted sole Redis writer, deny-by-default ACLs, Function non-authority and fixed non-sensitive classification are explicit. |
+| RST | Requirements, canonical terms, owners, deferred triggers and acceptance evidence trace to one architecture; no mutable availability lifecycle or implicit fallback exists. |
 
 ## Remaining risks
 
 | Severity | Risk | Required closure |
 |---|---|---|
 | High | Redis and worker memory amplification at maximum fan-out is unmeasured. | M2/M3 capacity measurements and maximum-topology qualification. |
-| High | Controller activation/recovery function and stale-fence behavior are design-only. | Executable same-slot contract plus crash/failover tests A6-A10. |
-| High | Provider output concurrency and exact-target sealing are design-only. | PostgreSQL transaction/idempotency tests A3-A5. |
+| High | Controller activation/recovery Function, deployed ACL selectors and stale-fence behavior are design-only. | Executable same-slot/ACL contract plus bypass, crash and failover tests A6-A10/A21. |
+| High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
+| Medium | Minimum worker traffic share and evidence-window feasibility are unmeasured. | Qualify routing skew/churn and admission maths under A22. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |
 
@@ -943,6 +1144,8 @@ executable contract, implementation and recorded test result exist.
 - [Redis replication and acknowledged-write loss](https://redis.io/docs/latest/operate/oss_and_stack/management/replication/)
 - [Redis persistence trade-offs](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/)
 - [Redis ACL key permissions](https://redis.io/docs/latest/operate/oss_and_stack/management/security/acl/)
+- [Redis `FCALL` key declaration and invocation](https://redis.io/docs/latest/commands/fcall/)
+- [Redis programmability and Function atomicity](https://redis.io/docs/latest/develop/programmability/)
 - [Redis Cluster hash tags](https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/)
 - [Redis Functions and atomic execution](https://redis.io/docs/latest/develop/programmability/functions-intro/)
 - [Redis pipelining](https://redis.io/docs/latest/develop/using-commands/pipelining/)

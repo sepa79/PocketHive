@@ -258,16 +258,16 @@ mechanism may still have full coverage through a safer design.
 | Temporary exclusivity | `NONE` in MVP | `DEFERRED` | No lease or used lifecycle. PostgreSQL remains the future lease authority. | Approved flow must require temporary unavailability. |
 | Mutable dirty/ready state | `NONE` in MVP | `DEFERRED` | Shared replay has no state or View. | Approved cross-swarm workflow cannot use independent immutable output. |
 | Prevent tag typos | `FULL` for MVP | `REJECTED` | Free-form tag bags do not exist; the immutable Record Schema is closed. | Future workflow requires a separate typed state contract. |
-| Redis distribution | `FULL` | `BOUNDED` | Controller writes an immutable binding-scoped projection; workers verify and load local memory. | Partial, stale, OOM and loss tests. |
+| Redis distribution | `FULL` | `BOUNDED` | Trusted Controller writes an immutable binding-scoped projection; the Function provides atomic fencing and workers load local memory. | ACL/Function bypass, partial, stale, OOM and loss tests. |
 | Stable identity, name and versions | `FULL` | `ADOPTED` | Required name, opaque IDs, exact SemVer/digest and transactional catalogue publication. | Changed-content import fails. |
 | One durable source of truth | `FULL` | `BOUNDED` | Git is authoring history; PostgreSQL is published runtime authority. | Authority/owner anti-drift tests. |
 | Explicit worker I/O | `FULL` | `BOUNDED` | Normal `SCHEDULER` provider input, terminal `MANAGED_DATASET CREATE_RECORD`, explicit consumer input. | M0 capability/config tests. |
-| Atomic creation | `FULL` | `BOUNDED` | Stable provider idempotency plus exact-target seal transaction. Generic mutation is absent. | Concurrent retry/underfill/overfill tests. |
+| Atomic creation | `FULL` | `BOUNDED` | Stable Provider Item IDs, a drained completion barrier and exact-target seal transaction. Generic mutation is absent. | Redelivery, in-flight race, duplicate completion, underfill and overfill tests. |
 | Practical high throughput | `PARTIAL` | `BOUNDED` | Workers select from verified local memory; no remote measured-path calls. | 2% performance gates and 24-hour soak. |
-| Provider-created supply | `FULL` for initial fill | `BOUNDED` | One finite scheduled provider run creates a sealed revision. | Fill/seal/failure tests. |
+| Provider-created supply | `FULL` for initial fill | `BOUNDED` | One finite scheduled provider run closes issuance, drains issued items and creates one sealed revision. | Fill, completion-race, crash and failure tests. |
 | Renewal/refill | `NONE` in MVP | `DEFERRED` | Shared records do not expire or deplete. | Approved expiring/depleting or mutable supply. |
 | Do not infer SUT truth | `FULL` | `ADOPTED` | Scenario decides whether to emit a record; Dataset never interprets SUT output. | Missing/ambiguous output creates nothing. |
-| Bounded status without value exposure | `FULL` | `BOUNDED` | REST/MCP report authority, projection, worker load, selection and guarded attempt. | Redis access alone never reports `CONSUMING`. |
+| Bounded status without value exposure | `FULL` | `BOUNDED` | REST/MCP report authority, projection, load and guarded-attempt coverage as `observed/expected`. | Low/skewed traffic never becomes false failure or false `CONSUMING`. |
 | Retain inventory | `PARTIAL` | `BOUNDED` | MVP records are non-expiring; admission funds the declared storage horizon. | Retirement/reclamation needs a separate safety contract. |
 
 ### Adopted
