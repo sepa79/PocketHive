@@ -1,196 +1,162 @@
-# Managed Datasets — Team Brief
+# Managed Datasets — Team Design Brief
 
-Status: proposed Release 1; architecture and canonical contracts require approval
+Status: proposed shared-replay MVP; implementation and qualification pending
 
-## Decision required
+The exact contract is the
+[Managed Dataset Shared-Replay MVP Specification](managed-test-data-lifecycle-generic-spec.md).
 
-Approve the Managed Dataset Release 1 architecture and staged delivery: one
-shared-replay MVP, one required mutable-workflow parity increment, then the
-remaining sources and Derivation. Provider swarms create durable records and
-compatible consumer swarms select them explicitly.
-Existing `REDIS_DATASET`, `CSV_DATASET` and direct `SCHEDULER` adapters remain
-unchanged.
+## Decision
 
-Trade-off: local snapshots, leases and one restricted Controller reader add
-background work but keep Dataset authority off the measured path. Arbitrary
-queries, reclamation, payload mutation and exactly-once claims are excluded.
-Scenario descriptors stay on Protocol v2; consumer dependencies use one
-independently versioned Scenario Bundle requirements file.
+Build one durable shared-record path:
 
-## Why this matters
+```text
+Git Dataset catalogue
+  -> Scenario Manager validates/publishes
+  -> PostgreSQL authority
 
-Managed Dataset lets one swarm create reusable, schema-valid
-system-under-test (SUT) records for many consumers instead of recreating them.
+SCHEDULER -> provider/SUT pipeline -> MANAGED_DATASET CREATE_RECORD
 
-## Proposal
-
-- A provider run creates one named Managed Dataset per output binding. Every
-  Release 1 provider binding selects exactly one `SCHEDULER`, `CSV`, `REDIS` or
-  `MANAGED_DATASET` source, with no switching or fallback. The MVP enables only
-  `SCHEDULER + REPLAY + SHARED`.
-- A consumer dependency uses non-empty `datasets/requirements.yaml` and selects
-  one exact Dataset, Group and optional View during Create Swarm. File absence
-  plus `datasetSelections: []` is valid only when the Scenario has no Managed
-  Dataset consumer input or derived source; a provider-only scenario may still
-  create its Dataset through an explicit output binding. Requirements and those
-  input/source bindings map one-to-one. Release 1 records are closed, bounded,
-  non-null JSON objects. Every schema uses one small cost-bounded keyword set;
-  every applied schema resolves to an explicit type or exact value, and every
-  object/array declares its final shape after composition. Empty, implicitly
-  open, regex and external/content schemas are excluded. Every source and
-  authority ingress uses one strict validation/canonicalisation path; the
-  WorkItem decoder rejects an invalid encoding rather than treating it as
-  UTF-8. Groups and fixed workflow Views select subsets; normal scenario steps
-  may shape a downstream request without changing the canonical snapshot
-  record.
-- PostgreSQL is authoritative. Orchestrator grants; the Controller reads one
-  bounded function and publishes an atomic revision. Workflow claims return
-  identity, state and lease only, including derived input; workers resolve
-  immutable payload from local memory.
-- Revision hints mark a binding dirty. Controller reconciliation publishes only
-  the latest revision. A minimum start interval and single-flight export bound
-  the rate; worker background polls load it. After atomic activation, the
-  Controller records a fenced Snapshot Activation Confirmation. Its predecessor
-  marker remains outside the revision until safe deletion is acknowledged.
-  Each binding has an explicit limit for deletion acknowledgements not yet
-  stored, including after predecessor files are deleted. The next publication
-  reserves one place; exhaustion blocks only that binding. Orchestrator retains
-  the confirmation indefinitely and starts a full replay-evidence period when
-  acknowledgement is stored. Absent proof keeps required evidence and any
-  retained revision protected. A never-completed export releases its authority
-  reservation only through fenced terminal abandonment. Completed or
-  activation-uncertain work stays reserved for recovery, and staging remains
-  filesystem-accounted until qualified cleanup.
-- Workers report through the Controller. Full status retains bounded reporter
-  detail; deltas contain only small binding aggregates and digests. Orchestrator
-  derives the three status planes for REST, UI and PocketHive Model Context
-  Protocol (MCP). Group status remains visible with no consumer; evidence never
-  claims SUT acceptance or exactly-once.
-
-## Where it sits
-
-```mermaid
-flowchart LR
-  R[Dataset requirements file] --> SM[Scenario Manager]
-  SM -->|validated projection| O[Orchestrator]
-  P[Provider swarm] --> O
-  U[Upstream workflow View] -. derived source .-> P
-  O <--> PG[(PostgreSQL authority)]
-  O -->|fenced descriptor| SC[Swarm Controller]
-  SC -->|granted read function| PG
-  SC --> FS[(Shared snapshot storage)]
-  FS --> C[Consumer local memory]
-  C --> SUT[SUT]
-  C -->|worker status| SC
-  SC -->|bounded aggregate| O
-  O --> E[REST / UI / MCP evidence]
+Orchestrator admits/fences
+  -> Swarm Controller projects one sealed revision to Redis
+  -> workers verify and load local memory
+  -> normal traffic -> SUT
 ```
 
-| Concern | Owner |
+The MVP is only `REPLAY + SHARED`. Records are immutable, non-expiring and
+reusable by many swarms. Groups partition them by arbitrary fields declared by
+the Dataset schema; PocketHive supplies no business fields.
+
+Existing Scheduler, `CSV_DATASET` and `REDIS_DATASET` adapters do not change.
+
+## Why this split
+
+| Component | Owns |
 |---|---|
-| Definition, schemas, grouping, Views and transitions | Dataset Definition in Scenario Manager |
-| Source, Groups, allocation, lifecycle and mappings | Provider Scenario Binding |
-| Consumer requirements | Dataset Requirements Document validated by Scenario Manager |
-| Exact Dataset/Group/View selection | Create Swarm and the frozen Scenario Binding |
-| Records, state, leases, lineage, grants and read models | Orchestrator Managed Dataset module |
-| Snapshot read, file publication, retention cleanup and worker status aggregate | Swarm Controller |
-| Requirements file schema, parsing, validation and `artifactDigest` evidence | Scenario Manager |
-| Requirements-version/digest handshake and frozen selections | Scenario Manager and Orchestrator |
+| Git | Definition/Contract review history |
+| Scenario Manager | the single validator and transactional catalogue publisher |
+| PostgreSQL | published catalogue, Dataset identity, records, Groups, revisions and idempotency |
+| Orchestrator | provisioning, admission, capacity, fencing and status |
+| Swarm Controller | exact PostgreSQL reads and binding-scoped Redis projection/recovery |
+| Redis | rebuildable per-swarm projection only |
+| Workers | verified local index and measured-path selection |
 
-## Essential definitions
+PostgreSQL remains correct if Redis loses recent writes or all data. Redis HA and
+persistence may shorten an outage but are not correctness dependencies.
+Orchestrator never proxies record bytes. Workers never access PostgreSQL.
 
-| Term | Status | Plain meaning | Not the same as |
-|---|---|---|---|
-| Managed Dataset | Proposed | Named durable records from one provider run, reusable by consumers | A Redis list or queue |
-| Dataset Space | Proposed | Versioned definitions and schemas used by Scenario Bindings | A runtime Dataset |
-| Group | Proposed | Frozen partition by schema-defined fields | A name or runtime filter |
-| `REPLAY` | Proposed | Immutable records with shared or exclusive allocation | Workflow state |
-| `WORKFLOW` | Proposed | Immutable records plus typed state, Views and transitions | Free-form tags or queries |
-| View | Proposed | Materialised selection over Record State | A copied or separate Dataset |
-| Derivation | Proposed | One leased workflow record creates bounded downstream records | Outcome routing or clone |
-| Snapshot Activation Confirmation | Proposed | Orchestrator record of one fenced Controller's durable snapshot switch | Publication completion or deactivation marker |
-| Snapshot Deletion Acknowledgement | Proposed | Idempotent authority evidence that the Controller safely removed the predecessor revision | Deactivation marker or delete request |
-| Dataset Requirements Document | Proposed | Optional versioned `datasets/requirements.yaml`; when present it declares one or more consumer needs | `scenario.yaml` or a concrete Dataset selection |
-| Group Availability | Proposed | Group authority health, with or without consumers | Publication or consumption health |
-| Publication Status | Proposed | Publication health for one binding | Worker loading or use |
-| Consumption Status | Proposed | Evidence of worker load, selection and SUT attempt | SUT acceptance or audit proof |
+## Authoring and binding
 
-## Example
+Dataset Definitions and composed Schema Contracts are exact-version,
+version-controlled artifacts. Scenario Manager publishes immutable
+`id + SemVer + SHA-256 digest` entries to PostgreSQL in one all-or-nothing
+import. Changed content under an existing version fails. Running bindings do not
+depend on Git, `latest`, ranges or automatic rebinding.
 
-One scheduled provider creates a named Dataset with schema-defined Groups.
-Several consumer swarms select one exact Group and replay its records from local
-memory. MCP shows whether the expected revision was published, loaded, selected
-and carried to the SUT-attempt boundary.
+A consumer bundle may add:
 
-## Included / not included
+```text
+datasets/requirements.yaml
+```
 
-| Included | Not included |
-|---|---|
-| `REPLAY + SHARED` or `EXCLUSIVE_LEASE` | Queue/pop or use-count semantics |
-| `WORKFLOW + EXCLUSIVE_LEASE` | Free-form tags, selectors or payload replacement |
-| Scheduler, finite CSV/Redis import and bounded derived source/publication | Source fallback, rotation or destructive Redis pop |
-| Closed four-case Outcome Mapping with no default | SUT-result inference or reconciliation |
-| One atomic bounded derivation destination | Multi-destination fan-out or arbitrary cross-Dataset transactions |
-| Operational consumption evidence | Audit proof or exactly-once claims |
-| Non-expiring records and bounded fill-to-target | Record expiry, reclamation or purge |
-| Versioned bundle requirements extension with fail-closed admission | A Scenario Protocol migration or silently ignored file |
-| Explicitly typed, composition-safe and cost-bounded JSON-object schemas through one validation path | Empty/implicitly open schemas, regex/external evaluation, other JSON roots, binary records or Dataset projection expressions |
-| Concurrent immutable shared replay or exclusive workflow state | Shared replay combined with mutable Record State or Views |
-| Fixed `SYNTHETIC_NON_SENSITIVE` scope, counts and operational status | Record browsing/search, transition history or per-Dataset classification policy |
+This independently versioned extension leaves Scenario Protocol v2 unchanged.
+Absence means no Managed Dataset consumer input. A provider-only output remains
+valid. Create Swarm freezes one SUT Environment, Dataset Space, Dataset, Group,
+Definition/Contract digests and authority revision.
 
-## Delivery boundary
+## Provider fill
 
-| Boundary | Included | Completion rule |
-|---|---|---|
-| Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`, Groups, exact/empty selection, local snapshots and REST/MCP evidence | M0, M1a, M2a and M3a pass |
-| Mutable parity | `SCHEDULER + WORKFLOW + EXCLUSIVE_LEASE`, Record State, Views, transitions and Outcome Mapping | M1b, M2b and mutable M3b gates pass |
-| Release 1 extensions | Replay exclusive, finite CSV/Redis import and bounded Managed Dataset Derivation | M2c, M2d and their M3b gates pass |
-| Release 1 completion | Shared MVP, mutable workflow, replay exclusive, CSV, Redis, Managed Dataset Derivation, read-only UI and full qualification | Every named target and M3b gate passes |
+The provider keeps a normal `SCHEDULER` WorkInput. Its terminal output is:
 
-Fencing, activation confirmation, abandonment, retention, capacity, recovery,
-security and evidence remain required in the MVP. Unsupported capabilities are
-not advertised and fail admission; PocketHive never substitutes one.
+```text
+MANAGED_DATASET WorkOutput(CREATE_RECORD)
+```
 
-Required order: `M0 -> M1a -> M2a -> M3a`, then
-`M1b -> M2b -> mutable M3b`, then `M2c and M2d -> their M3b gates`.
-The capability catalogue controls availability; it cannot redefine Release 1.
-The M3b UI only projects the Orchestrator status model; it adds no status logic.
+Before the provider starts, Orchestrator creates the Dataset and all rendered
+Groups in `BUILDING`. Every output requires a stable WorkItem message identity,
+passes the shared strict Record Codec, maps to exactly one frozen Group and
+commits under a stable idempotency key.
 
-## Main trade-off
+Exact retries return the same record. Changed retry content conflicts. Concurrent
+duplicates do not increase counts and unique writes above target fail.
 
-Local snapshots keep workers database-free and the measured path fast. The
-single Controller needs a restricted credential and explicit publication and
-recovery. Full snapshots trade simplicity for operating-horizon bandwidth,
-Controller/worker filesystem operations, safe retention and all-worker restart
-fan-out; admission must fund them.
-Loaded workers may survive a short Controller outage, which is continuity rather
-than high availability. Derivation and `EXCLUSIVE_LEASE` still require
-concurrency, failure and soak qualification. Existing Scenario Protocol v2
-bundles need no migration and remain creatable in either rolling-upgrade order.
-Only Managed Dataset discovery and admission are disabled until Scenario Manager
-and Orchestrator both advertise requirements version 1. Bounded operational
-status is not record inspection or historical/audit reconstruction.
-Each authority-serving Orchestrator replica reserves bounded validation queue
-and working memory and qualifies the complete admitted validation rate. This
-costs headroom but keeps hot-replica and failover behaviour deterministic.
+Consumers see nothing until every Group reaches its exact admitted target.
+PostgreSQL then seals revision 1 in one transaction. Underfill, provider failure
+or timeout leaves the Dataset unavailable with a closed reason. The MVP does not
+reconcile, replace, refill or fall back.
 
-## Next step
+## Fast consumer path
 
-Approve the Release 1 model and staged delivery. M0 defines the constrained
-Schema Profile grammar, cost budget and per-replica Record Codec measurements,
-then
-`datasets/requirements.yaml` version 1, its single Scenario Manager parser and
-validator, the tagged `ABSENT`/`PRESENT` projection, authoring-contract
-advertisement and the fail-closed Scenario Manager/Orchestrator version and
-`artifactDigest` handshake. Runtime preparation uses the exact validated bundle
-snapshot; a changed digest forces explicit rediscovery, never reselection.
-That conflict creates no binding or runtime state. The original idempotency key
-remains bound to its request; a changed digest or selection uses a new key.
-Existing v2 bundles remain unchanged. A present empty, invalid, unsupported or
-silently ignored document fails admission. Complete the MVP executable
-contracts, then deliver shared replay. Mutable parity and each remaining Release
-1 extension receive their own contract gate before implementation.
+For each admitted consumer binding, Controller streams the exact sealed Group
+through a least-privilege PostgreSQL function. It writes new versioned,
+same-slot Redis keys:
 
-## Technical detail
+- immutable ordered records;
+- a manifest with Dataset, Group, schema/revision, count and content digests;
+- one Active Projection Reference with a monotonic Activation Generation.
 
-- [Managed Test Data Release 1 Specification](managed-test-data-lifecycle-generic-spec.md)
+The Active Reference advances atomically only after every write and bounded
+verification succeeds. Partial projections stay invisible. Redis runs with
+`noeviction`; admission funds active, staging and recovery memory plus measured
+overhead and failover headroom.
+
+Each binding names an admitted Managed Dataset Redis deployment profile.
+PocketHive never silently reuses or reconfigures an existing `REDIS_DATASET`
+endpoint; explicitly shared infrastructure must qualify both workloads.
+
+Controller has a prefix-restricted writer role and closed
+activation/reconciliation functions, not general record reads. Workers have
+binding-scoped read-only commands.
+
+Workers load bounded pages in the background, verify all identities, counts and
+digests, build the next local index and atomically swap only to a newer valid
+generation. Already-loaded workers may continue through a bounded Redis or
+Controller outage. Cold/restarted workers remain unready. Complete Redis loss
+causes deterministic reprojection from PostgreSQL at a higher generation.
+
+Normal traffic selects `ROUND_ROBIN` from local memory. It makes no Redis,
+PostgreSQL or control-plane call.
+
+## Evidence
+
+The SDK attaches Dataset Context to the normal WorkItem body and preserves it
+through the pipeline. The declared SUT-attempt role validates it immediately
+before network I/O.
+
+`CONSUMING` requires fresh matching evidence for:
+
+1. the frozen Dataset/Group/schema/revision;
+2. active projection generation;
+3. every applicable worker loading that generation;
+4. local selection; and
+5. the correlated guarded SUT attempt.
+
+Redis access, record count or local selection alone is not enough. Worker status
+flows to Swarm Controller, then to the Orchestrator read model used unchanged by
+REST, MCP and future UI. Status exposes bounded identities/counts, not records,
+keys, credentials or business outcomes.
+
+## MVP and later work
+
+Included safety is not optional: exact versioning, fencing, idempotency, capacity,
+crash recovery, ACLs, evidence, maximum-topology performance and 24-hour soak
+qualification all gate the MVP.
+
+Deferred capabilities remain absent and fail admission:
+
+- `EXCLUSIVE_LEASE` when temporary unavailability is approved;
+- mutable state/Views when a cross-swarm workflow needs them;
+- Managed Dataset provider input/refill when supply can expire or deplete;
+- additional Managed Dataset import/derivation sources for a named use case;
+- retirement/purge when the bounded initial-fill storage horizon requires it;
+- record queries, tags, replacement and audit history only with separate bounded
+  contracts.
+
+Future leases and mutable state stay authoritative in PostgreSQL. A Redis list
+or Stream may later distribute candidates but can never grant a lease.
+
+## Approval gate
+
+This is ready for M0 executable-contract work, not implementation approval by
+documentation alone. The main unproven risks are Redis/worker memory at maximum
+fan-out, Controller activation/failover behavior, provider concurrency and
+target-scale performance/soak results.

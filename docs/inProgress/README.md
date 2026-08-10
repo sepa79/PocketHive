@@ -5,11 +5,11 @@ This directory contains only work that is actively being implemented or is waiti
 ## Current plans
 
 - `docs/inProgress/managed-test-data-lifecycle-generic-spec.md` – normative
-  Managed Dataset Release 1: shared reusable records, explicit selection, bounded
-  refill, local snapshots, operational consumption status, restart and replica
-  safety.
+  Managed Dataset shared-replay MVP: versioned catalogue, bounded initial fill,
+  PostgreSQL authority, Redis runtime projections, worker-local traffic and
+  consumption evidence.
 - `docs/inProgress/managed-datasets-team-design-overview.md` – concise team
-  brief for the Managed Dataset architecture decision and Release 1 boundary.
+  brief for the Managed Dataset architecture and MVP boundary.
 - `docs/inProgress/managed-datasets-team-overview-plain-language.md` – novice
   guide to provider creation, consumer selection, safe sharing and consumption
   visibility.

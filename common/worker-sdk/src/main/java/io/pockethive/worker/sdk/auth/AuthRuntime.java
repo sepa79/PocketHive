@@ -347,7 +347,7 @@ public final class AuthRuntime {
         }
     }
 
-    private TokenRecord refreshOAuth(String tokenKey, String fingerprint, AuthProfile profile) {
+ private TokenRecord refreshOAuth(String tokenKey, String fingerprint, AuthProfile profile) {
         try {
             Map<String, String> form = new LinkedHashMap<>();
             if (profile.getType() == AuthType.OAUTH2_CLIENT_CREDENTIALS) {
@@ -358,10 +358,8 @@ public final class AuthRuntime {
                 form.put("grant_type", "password");
                 form.put("username", required(profile, "username"));
                 form.put("password", required(profile, "password"));
-                String clientId = optional(profile, "clientId");
-                if (clientId != null) {
-                    form.put("client_id", clientId);
-                }
+                form.put("client_id", required(profile, "clientId"));
+                form.put("client_secret", required(profile, "clientSecret"));
             } else {
                 throw new IllegalArgumentException("Auth type is not refreshable: " + profile.getType());
             }

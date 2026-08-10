@@ -1,278 +1,194 @@
 # Managed Datasets — Plain-language Guide
 
-Status: proposed Release 1; implementation and qualification pending
+Status: proposed shared-replay MVP; implementation and qualification pending
 
-For exact requirements, see the
-[Managed Test Data Release 1 Specification](managed-test-data-lifecycle-generic-spec.md).
+For exact rules, see the
+[Managed Dataset Shared-Replay MVP Specification](managed-test-data-lifecycle-generic-spec.md).
 
 ## One-minute version
 
-A Managed Dataset is a proposed durable synthetic system-under-test (SUT) data
-option. One provider swarm creates it for many compatible consumers. Existing
-Redis Dataset, CSV Dataset and Scheduler adapters do not change.
-`scenario.yaml` stays on Protocol v2. A consumer dependency uses one versioned
-`datasets/requirements.yaml` file inside its bundle.
+A Managed Dataset lets one provider swarm create reusable SUT records for many
+consumer swarms.
 
 ```text
-provider -> named Managed Dataset -> explicit consumer selection -> normal scenario -> SUT
+scheduled provider -> SUT -> PostgreSQL Managed Dataset
+                                  |
+                                  v
+consumer Controller -> Redis copy -> worker memory -> SUT traffic
 ```
 
-Every choice is explicit. PocketHive never substitutes another adapter, source,
-Dataset, Group or View. If the requirements file is absent, the scenario has no
-Managed Dataset consumer input or derived source and Create Swarm sends
-`datasetSelections: []`. A provider-only scenario can still create a Dataset
-through its explicit output binding. When the file is present, each requirement
-must match exactly one Managed Dataset consumer input or derived source, and each
-such binding must have one requirement.
+PostgreSQL is the source of truth. Redis is a fast, rebuildable copy for one
+consumer swarm. Workers load that copy before they become ready, then use only
+local memory while generating traffic.
 
-The full design is Release 1, not one MVP. Delivery starts with scheduled shared
-replay, then adds mutable-workflow parity, then the remaining sources and
-Derivation. Safety and evidence are not deferred from the MVP.
+Existing Scheduler, CSV Dataset and Redis Dataset options keep working as they
+do today.
 
-## Delivery boundary
+## What the MVP supports
 
-| Boundary | What it delivers |
-|---|---|
-| Shared-replay MVP | `SCHEDULER + REPLAY + SHARED`, named/grouped records, exact or empty consumer selection, local snapshots and REST/MCP evidence |
-| Mutable parity | `WORKFLOW + EXCLUSIVE_LEASE`, Record State, Views, transitions and complete Outcome Mapping |
-| Release 1 extensions | Replay exclusive, finite CSV/Redis import and bounded Managed Dataset Derivation |
-| Release 1 completion | Shared MVP, mutable workflow, replay exclusive, CSV, Redis, Managed Dataset Derivation, read-only UI and full qualification |
+- immutable JSON-object records;
+- one required Dataset name plus stable IDs and versions;
+- Groups based on arbitrary fields declared by the Dataset schema;
+- one bounded scheduled provider run;
+- many consumers reusing the same records at the same time;
+- exact Dataset/Group selection at Create Swarm;
+- REST and MCP evidence for load, selection and the SUT-attempt boundary.
 
-The MVP still includes bundle validation, fencing, safe activation and cleanup,
-terminal abandonment, capacity checks, restart recovery and security. A later
-capability is absent from the catalogue until its own gates pass; PocketHive does
-not substitute another capability. The later UI only displays the same
-Orchestrator status model; it does not calculate another result.
+The shared record is not removed or marked used after selection. There is no
+source, leased or used queue. A Redis read is not proof that traffic reached the
+SUT.
 
-## Choose the right model
+## Where definitions live
 
-| Need | Use |
-|---|---|
-| Partition records by stable schema-defined values | One Dataset with Groups |
-| Reuse immutable records concurrently | `REPLAY + SHARED` |
-| Make one record temporarily unavailable | `EXCLUSIVE_LEASE` |
-| Track processing stage or outcome | `WORKFLOW` Record State and named Views |
-| Create independently reusable output records | One bounded derived Dataset |
-| Copy a whole Dataset unchanged | Not Release 1; future explicit clone operation |
+Dataset Definitions and reusable Schema Contracts are stored in version control
+for normal review. Scenario Manager validates a complete catalogue update and
+publishes it to PostgreSQL.
 
-Groups may use arbitrary schema-defined fields. They are frozen before provider
-work starts and are not PocketHive business fields.
+Each published version has exact content and a SHA-256 digest. Changing content
+without changing the version fails the whole import. Running swarms use the
+published PostgreSQL copy, so a Git outage or later file removal does not change
+their binding.
 
-A View selects records whose current Record State matches its fixed rule.
-Success, retry, failure and unknown can be Views over the same records without
-copying them. Create another Dataset only for independent output records.
+There is no `latest`, automatic upgrade or fallback to a similar Dataset.
 
-Each Release 1 record is one non-null JSON object with a closed root: undeclared
-top-level fields fail. Array, primitive, `null` and binary records are not
-supported. Every source and authority entry uses the same bounded parser,
-schema validator and canonical JSON writer. It rejects ambiguous or oversized
-JSON. Schemas use a small approved keyword set; regex, external lookups and
-embedded-content evaluation are excluded so validation cost stays predictable.
-Every nested schema must state a type or exact value. Composed object schemas
-handle named fields first, then reject every extra field or apply one declared
-value schema to each extra field. Arrays explicitly type every item. Empty,
-descriptive-only and implicitly open schemas are invalid.
-Raw input bytes and the final canonical bytes have separate limits. Precise
-identifiers or higher-precision numbers use schema-typed strings.
-The WorkItem encoding must use the exact declared spelling and Managed Dataset
-accepts only UTF-8—invalid values never default. Managed Dataset never projects
-selected fields: the verified local snapshot retains the complete canonical
-object. The normal scenario pipeline may still transform that object into the
-exact request sent to the SUT. This is payload shaping, not a data-redaction
-boundary.
+## How a provider creates data
 
-Shared replay has no mutable Record State or View. Many swarms may reuse the same
-immutable record concurrently. If flows must move a record between operational
-states, they use `WORKFLOW + EXCLUSIVE_LEASE`; only one flow may hold that record
-at a time. Shared reuse combined with concurrent metadata mutation is not
-supported.
+The provider remains a normal PocketHive scenario:
 
-## How data arrives
+```text
+SCHEDULER WorkInput
+  -> scenario logic and SUT calls
+  -> MANAGED_DATASET WorkOutput(CREATE_RECORD)
+```
 
-Every provider binding selects exactly one source:
+Before it starts, Orchestrator creates the Dataset and its full Group plan in
+`BUILDING`.
 
-| Source | Behaviour | First delivery |
-|---|---|---|
-| `SCHEDULER` | Bounded provider work until the Group reaches its stored target | Shared-replay MVP |
-| `CSV` | One finite validated import from a mounted file | Release 1 extension |
-| `REDIS` | One finite import from an immutable copy of a referenced list; the live list is never popped or changed | Release 1 extension |
-| `MANAGED_DATASET` | Bounded derived work from one exact upstream workflow View | Release 1 extension |
+Each successful output:
 
-CSV and Redis validate and fingerprint the complete input before any Group is
-visible. Failure blocks the import without fallback.
+- identifies the frozen provider run and binding;
+- requires a stable WorkItem message ID;
+- validates one record with the shared strict codec and schema;
+- assigns exactly one frozen Group; and
+- writes idempotently to PostgreSQL.
 
-A Managed Dataset source requires one upstream
-`WORKFLOW + EXCLUSIVE_LEASE` selection and one downstream output. A four-case
-Outcome Mapping handles `SUCCESS`, `RETRYABLE_FAILURE`, `TERMINAL_FAILURE` and
-`UNKNOWN`, with no default or SUT-response inference.
+An exact retry returns the original result. The same retry key with different
+content fails. Concurrent duplicates do not increase counts.
 
-On `SUCCESS`, one PostgreSQL transaction creates `1..N` downstream records,
-stores lineage, changes upstream state and releases the lease. Other outcomes
-create none. Failure changes neither Dataset; exact retry returns the result.
+Consumers see no records until every Group reaches its exact target.
+PostgreSQL then seals revision 1 in one transaction. Underfill, overfill,
+provider failure or timeout leaves a clear unavailable result. PocketHive does
+not refill, repair, replace or choose another Dataset.
 
-Release 1 records do not expire and are never purged. Shared replay can reuse them
-continuously. A workflow that moves records out of its ready View stops accepting
-new records at its stored limit, so its operating horizon must be capacity-funded.
+## How a consumer chooses data
 
-## How consumers stay fast
+A consumer bundle can contain the optional file:
 
-PostgreSQL is authoritative for Managed Dataset records, state, Views, leases,
-imports, lineage and idempotency. Redis remains authoritative only for the
-existing Redis Dataset option.
+```text
+datasets/requirements.yaml
+```
 
-Each authority-serving Orchestrator replica reserves limits for queued record
-bytes and active validation memory. One replica must sustain the complete
-admitted validation rate, including hot-replica and failover tests.
+It declares the exact Definition version/digest required by each Managed Dataset
+input. It does not change Scenario Protocol v2. If the file is absent, the
+scenario has no Managed Dataset consumer and sends an empty Dataset selection.
+A provider-only scenario may still write a Dataset.
 
-Orchestrator grants a frozen publication but never proxies its bytes. The Swarm
-Controller reads it through one restricted PostgreSQL function and writes it to
-shared storage. Atomic `ACTIVE.json` selects the completed revision; workers
-never scan directories. Applicable input workers mount it read-only, verify it
-and load local memory before readiness. Normal traffic makes no filesystem,
-PostgreSQL, Orchestrator or credential-provider call.
+Create Swarm shows compatible sealed Datasets and Groups for the same SUT
+Environment and Dataset Space. The caller makes an explicit selection. An empty
+list or mismatch fails; PocketHive never chooses automatically.
 
-An exclusive workflow or derived-input claim returns `recordId`, current state
-and lease, not a second copy of the immutable record. The worker finds that id
-only in the exact verified local snapshot. Missing or mismatched local data stops
-dispatch without an API or database fallback.
+## Why Redis is used
 
-When an authority revision advances, Orchestrator sends the Controller a hint.
-The hint marks the binding dirty. The Controller also checks authoritative
-metadata on a bounded schedule, so a lost hint cannot prevent refresh. It
-publishes only the latest observed revision after a required minimum interval,
-which limits publication start rate. If one export lasts longer than the
-interval, the next may start when it finishes, so admission budgets both. Workers
-poll `ACTIVE.json` on an explicit jittered background interval and atomically
-load a verified newer generation. Refresh failure preserves the old safe
-snapshot; filesystem events are not the correctness mechanism.
+The Controller reads one exact sealed PostgreSQL revision and creates a private
+Redis projection for that consumer swarm. The projection contains:
 
-Inactive snapshots remain for a qualified grace period covering storage
-visibility, a hard worker-load maximum and clock skew. A slow load aborts safely.
-Active and live staging revisions are never removed; if protected revisions fill
-the available space, PocketHive blocks another publication instead of deleting
-one early. After switching `ACTIVE.json`, the Controller records a fenced
-Snapshot Activation Confirmation—the Orchestrator record of the durable
-switch—before publishing the previous revision's deactivation marker. The marker
-stays outside that revision, so it survives deletion and a lost response. After
-the grace, the Controller rechecks safety, deletes the revision, verifies durable
-absence and idempotently acknowledges deletion. Only a successful acknowledgement
-allows marker removal.
+- ordered immutable records;
+- a manifest with Dataset, Group, schema, revision, count and content digests;
+- an Active Projection Reference with a monotonic generation.
 
-Orchestrator always retains the latest Activation Confirmation. It retains each
-older confirmation indefinitely until predecessor deletion is acknowledged.
-Acknowledgement starts a fresh evidence period, so a lost successful response
-can still be replayed after a late deletion. Recovery looks up the exact
-confirmation for each predecessor; it never treats a truncated list as complete.
-A missing lookup protects the revision. Every confirmation with a predecessor
-but no stored deletion acknowledgement occupies one binding-local pending slot,
-even after its predecessor files are gone. PocketHive reserves a free slot before
-another applicable publication. Storing the acknowledgement releases that slot
-and starts the separately reserved replay-evidence period. Exhaustion blocks only
-that binding; other admitted bindings keep their reserved capacity. The retained
-snapshot limit separately bounds files and never substitutes for this evidence
-limit.
+New projection keys are separate from the current keys. The Active Reference is
+changed atomically only after the complete projection is written and checked.
+Partial data is invisible.
 
-Snapshot Reader grant lifetime covers begin-response transit, hard export,
-completion, clock skew and safety margin. After receiving the grant, the
-Controller separately verifies enough time remains for the work. Expiry never
-activates partial output.
+Redis uses `noeviction`. Capacity is reserved for the current copy, a complete
+new copy and recovery headroom. If memory is exhausted, the new copy fails and
+the current copy remains.
 
-A failed export cannot consume authority capacity forever. The Controller asks
-Orchestrator to abandon it, or Orchestrator does so after both its descriptor and
-work lease expire. One transaction proves it never completed, prevents its fence
-from completing later and releases the reserved authority capacity. A completed
-export, lost completion response or uncertain Active Reference is never
-abandoned; recovery retains its capacity and finishes activation. Staging space
-remains counted until qualified cleanup removes it safely.
+The binding names the Redis deployment profile explicitly. PocketHive does not
+silently reuse or change an existing Redis Dataset endpoint. Sharing one Redis
+deployment is allowed only after both workloads and their capacity are checked.
 
-Workflow state and leases always come from bounded background authority calls,
-not snapshot files. An already-loaded safe worker may continue through a short
-Controller or storage outage; a new or restarted worker stays unready. Release 1
-has one active Controller and deterministic restart recovery. This is
-continuity, not Controller high availability.
+Controller can write only its projection prefix through a closed command set.
+Workers can only read their binding prefix. Neither can use Redis as Dataset or
+lease authority.
 
-## How PocketHive shows correct use
+## How workers stay fast and safe
 
-Each selected WorkItem carries a structured Dataset Context inside the normal
-JSON body. The Worker SDK preserves it and checks Dataset, Group, revision,
-Profile, allocation, validity and any lease/View/state revision immediately
-before SUT network I/O.
+Workers fetch records in bounded pages in the background. They verify the
+Dataset, Group, revision, schema, count, content digest and activation
+generation, then build a complete local index. They swap local memory only when
+the new copy is fully valid and newer.
 
-Workers report to the Swarm Controller. Controller full status preserves bounded
-worker identity and restart epoch detail. Periodic deltas contain only small
-per-binding counts, a reporter-set digest, freshness and minimum loaded activation
-generation. A changed digest requests a new full status and remains unknown until
-it arrives. Orchestrator consumes only Controller status and derives the read
-model used unchanged by REST, UI and PocketHive Model Context Protocol (MCP).
+Traffic uses local `ROUND_ROBIN` selection. From selection until the SUT network
+attempt, there is no call to Redis, PostgreSQL, Controller, Orchestrator,
+Scenario Manager or a credential service.
 
-Group Availability covers authority source, schema, integrity, supply and
-storage health. A Group can be available with no consumer. Publication Status is
-per admitted binding. Consumption Status covers worker loading, selection and
-the SUT-attempt boundary. A Group status REST endpoint and matching MCP tool make
-consumer-free availability visible.
+If Redis or Controller is briefly unavailable:
 
-`CONSUMING` requires fresh matching evidence for:
+- an already-loaded worker may keep using its verified local copy for the
+  admitted continuity window;
+- a new or restarted worker stays unready; and
+- total Redis loss is repaired by rebuilding the exact PostgreSQL revision with
+  a higher generation.
 
-1. the authority revision and schema;
-2. the Controller publication;
-3. every expected worker's loaded snapshot;
-4. local selection and the guarded SUT attempt;
-5. any required lease and workflow transition; and
-6. for Derivation, the frozen source/destination bindings and committed count.
+Redis persistence and HA can reduce downtime, but PostgreSQL plus reprojection is
+what keeps the design correct. This is loaded-worker continuity, not full
+Controller HA.
 
-Missing, stale or mismatched evidence is never green. Status exposes no record
-identity, Outcome code or value. It proves the declared Dataset path operated,
-not SUT acceptance, business correctness or exactly-once delivery.
+## How MCP proves correct use
 
-Release 1 supports only the fixed `SYNTHETIC_NON_SENSITIVE` classification; it
-has no per-Dataset override. Providers must keep sensitive values out because
-PocketHive validates shape, not sensitivity. REST, UI and MCP expose bounded
-counts and operational status, not record browsing, value search or a record's
-transition history. Current state and aggregate evidence cannot reconstruct
-every past transition.
+The SDK attaches protected Dataset Context to each selected WorkItem. Every
+pipeline step preserves it. The declared SUT client checks it immediately before
+starting network I/O.
 
-## Release 1 completion
+PocketHive reports three separate facts:
 
-The shared-replay MVP is useful on its own but does not complete Release 1.
-Mutable `WORKFLOW + EXCLUSIVE_LEASE` remains required parity. Replay exclusive,
-finite CSV/Redis import and the bounded Managed Dataset derived source remain
-Release 1 extensions. Each boundary passes its applicable operational gates
-before PocketHive advertises it. The capability catalogue reports runtime
-availability; it cannot remove a named target from Release 1.
+1. Group Availability — is the sealed authority healthy?
+2. Projection Status — is the exact Redis generation active and loaded?
+3. Consumption Status — did each expected worker load, select and reach the
+   guarded SUT-attempt boundary recently?
 
-Before implementation, M0 defines Dataset Requirements Document version 1 at
-`datasets/requirements.yaml`. The file is optional, but when present it contains
-at least one requirement. Scenario Manager alone parses it, checks its Scenario
-roles, capabilities, Dataset Definitions and schemas, and includes it in the
-validated bundle `artifactDigest`. UI, MCP, CLI, CI and Orchestrator preserve
-that result instead of running their own YAML checks.
+`CONSUMING` needs the complete matching chain. Redis access, a record count or
+selection without a SUT attempt never turns it green.
 
-Scenario Manager reports `ABSENT` with bundle evidence, or `PRESENT` with
-version, requirements and the same evidence. A present file is admitted only
-when Scenario Manager and Orchestrator both advertise version 1. An invalid,
-empty, unsupported or ignored file fails; it never becomes “no Dataset”.
-Runtime preparation must present the exact validated bundle `artifactDigest`.
-Scenario Manager renders from that immutable snapshot; a changed bundle returns
-a conflict and requires explicit rediscovery rather than automatic Dataset
-reselection. The conflict creates no binding, reservation, lease, snapshot or
-swarm runtime. Its idempotency key remains bound to the original request; a
-changed digest or selection is a new command with a new key. The verified digest
-is frozen with the Scenario Binding.
+Workers report to Swarm Controller. Controller sends bounded aggregates to
+Orchestrator. REST, MCP and later UI show that same status. They expose no record
+values, record IDs, Redis keys, credentials or business outcome.
 
-Existing Protocol v2 bundles with no Managed Dataset binding keep working in
-either rolling-upgrade order, so this design needs no offline migration or swarm
-drain. Missing version support disables only Managed Dataset discovery and
-admission. A present requirements file stays unavailable until Scenario Manager
-and Orchestrator both support version 1.
+This evidence proves PocketHive used the declared Dataset path. It does not prove
+that the SUT accepted the request or that a business transaction succeeded.
 
-Each capability starts only after one canonical contract owns its Scenario,
-worker, API, Context, status and snapshot shapes. The MVP does not wait for
-executable contracts for post-MVP capabilities. Before advertisement, each
-capability passes its applicable acceptance criteria. The MVP passes only the
-shared-path, bundle-extension, publication, evidence, security, capacity, recovery,
-performance and 24-hour soak gates. The normative specification contains the
-complete test matrix.
+## What comes later
 
-Release 1 has no record expiry, reclamation or purge. Deployment limits and an
-approved retention runbook must fund every stored record within the declared
-operating horizon. Expiring supply requires a later governed reclamation design.
+The MVP deliberately defers:
+
+- exclusive leases and temporary unavailability;
+- mutable workflow state and Views;
+- Managed Dataset provider input and automatic refill;
+- additional Managed Dataset imports or derivation;
+- expiry, purge and retirement;
+- tags, arbitrary queries, payload replacement and record browsing.
+
+Provider input/refill is reconsidered only when approved data can expire/deplete
+or mutable workflow needs controlled replenishment. Shared MVP records do not
+need refill because they are immutable, non-expiring and reusable for 24/7
+traffic.
+
+Future lease and workflow authority stays in PostgreSQL. Redis may distribute
+candidate IDs later, but a Redis list or Stream can never grant a lease.
+
+## What “ready” means
+
+The documentation is ready to define M0 executable contracts. The feature is not
+proven until catalogue, provider concurrency, projection crash/failover, memory,
+evidence, maximum-topology performance and 24-hour soak tests pass.
