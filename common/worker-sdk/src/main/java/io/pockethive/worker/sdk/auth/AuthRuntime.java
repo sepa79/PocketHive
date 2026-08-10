@@ -357,8 +357,19 @@ public final class AuthRuntime {
                 form.put("grant_type", "password");
                 form.put("username", required(profile, "username"));
                 form.put("password", required(profile, "password"));
-                form.put("client_id", required(profile, "clientId"));
-                form.put("client_secret", required(profile, "clientSecret"));
+
+              String clientId = optional(profile, "clientId");
+              String clientSecret = optional(profile, "clientSecret");
+              if ((clientId == null) != (clientSecret == null)) {
+                throw new IllegalArgumentException(
+                  "OAUTH2_PASSWORD_GRANT requires both clientId and clientSecret, or neither"
+                );
+              }
+              if (clientId != null) {
+                form.put("client_id", clientId);
+                form.put("client_secret", clientSecret);
+              }
+
             } else {
                 throw new IllegalArgumentException("Auth type is not refreshable: " + profile.getType());
             }
