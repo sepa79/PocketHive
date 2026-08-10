@@ -374,7 +374,7 @@ public final class AuthRuntime {
                 .build();
             HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
-                throw new IllegalStateException("OAuth token endpoint returned " + response.statusCode() + ": " + response.body());
+                throw new IllegalStateException("OAuth token endpoint returned " + response.statusCode());
             }
             Map<String, Object> json = JSON.readValue(response.body(), new TypeReference<>() {});
             Object tokenObj = json.get("access_token");
