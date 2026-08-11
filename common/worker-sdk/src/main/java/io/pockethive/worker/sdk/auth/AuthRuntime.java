@@ -359,15 +359,12 @@ public final class AuthRuntime {
                 form.put("password", required(profile, "password"));
 
               String clientId = optional(profile, "clientId");
-              String clientSecret = optional(profile, "clientSecret");
-              if ((clientId == null) != (clientSecret == null)) {
-                throw new IllegalArgumentException(
-                  "OAUTH2_PASSWORD_GRANT requires both clientId and clientSecret, or neither"
-                );
-              }
               if (clientId != null) {
                 form.put("client_id", clientId);
-                form.put("client_secret", clientSecret);
+                String clientSecret = optional(profile, "clientSecret");
+                if (clientSecret != null) {
+                  form.put("client_secret", clientSecret);
+                }
               }
 
             } else {
