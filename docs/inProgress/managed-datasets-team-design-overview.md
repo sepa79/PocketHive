@@ -69,15 +69,23 @@ MANAGED_DATASET WorkOutput(CREATE_RECORD)
 ```
 
 Before start, Orchestrator creates the Dataset and Groups in `BUILDING`. The
-finite Scheduler ledger allocates one stable
+Create Swarm plan names one exact finite `schedulerRole`. Authoritative scenario
+topology must show that role reaching every terminal Managed Dataset binding in
+the Provider Run, with no other Scheduler reaching them. Orchestrator freezes
+the role, resolved config digest, positive `maxMessages`, run ID/fence and
+binding set. A second independent Scheduler requires a separate Provider Run;
+nothing is inferred from order, name or image.
+
+The finite Scheduler ledger allocates one stable
 `providerItemId` per logical item and preserves it through retry, redelivery and
 restart. It is provider-specific and does not make general WorkItem `messageId`
 mandatory. Every output passes the strict Record Codec, maps to one frozen Group
 and commits under an RFC 8785-derived idempotency key.
 
 Before creating anything, each Dataset binding requires
-`sum(targetRecords) <= maxMessages`. An impossible plan fails without a Dataset,
-ledger or capacity reservation; extra scheduled items remain valid.
+`sum(targetRecords) <= frozenProviderRun.maxMessages`. An absent, ambiguous,
+unbounded, mismatched or impossible plan fails without a Dataset, ledger or
+capacity reservation; extra scheduled items remain valid.
 
 Exact retries return the same record. Changed retry content conflicts. Concurrent
 duplicates do not increase counts and unique writes above target fail.
@@ -145,11 +153,15 @@ has fresh matching evidence for:
 Redis access or selection alone is insufficient. Worker status flows through
 Controller to the Orchestrator REST/MCP read model. No attempt means missing
 evidence, not incorrect use. `staleAfter` controls reporter freshness;
-`evidenceWindow` controls attempt freshness. A stale reporter remains expected
-but cannot count as loaded or observed. Low or skewed traffic may remain
-awaiting/partial and does not block an otherwise valid Create Swarm. Guard
-arrival never proves SUT acceptance. Status exposes no records, keys,
-credentials or business outcomes.
+`evidenceWindow` controls attempt freshness. Both windows must cover the
+qualified worst-case next-report, worker-to-Controller, aggregation,
+Controller-to-Orchestrator and clock-skew delay. Equality is current; a shorter
+window fails before creation. Duplicate, older and replaced-epoch reports cannot
+regress or create coverage. A stale reporter remains expected but cannot count
+as loaded or observed. Low or skewed traffic may remain awaiting/partial and
+does not block an otherwise valid Create Swarm; there is no traffic-rate or
+all-worker admission gate. Guard arrival never proves SUT acceptance. Status
+exposes no records, keys, credentials or business outcomes.
 
 ## MVP and later work
 
@@ -174,5 +186,6 @@ or Stream may later distribute candidates but can never grant a lease.
 
 This is ready for M0 executable-contract work, not implementation approval by
 documentation alone. The main unproven risks are Redis/worker memory at maximum
-fan-out, Controller activation/failover behavior, provider concurrency and
-target-scale performance/soak results.
+fan-out, Controller activation/failover behavior, Scheduler-source and provider
+concurrency, qualified observation delivery/ordering and target-scale
+performance/soak results.

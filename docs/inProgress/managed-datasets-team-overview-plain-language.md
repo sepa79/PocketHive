@@ -64,10 +64,18 @@ SCHEDULER WorkInput
 Before it starts, Orchestrator creates the Dataset and its full Group plan in
 `BUILDING`.
 
+The Create Swarm plan names one exact finite Scheduler role. PocketHive verifies
+from the scenario topology that this Scheduler, and no other, reaches every
+Managed Dataset output in the Provider Run. It freezes that role, its config
+digest, positive `maxMessages`, run ID/fence and binding set. A second independent
+Scheduler needs a separate Provider Run; PocketHive never guesses from order,
+name or image.
+
 Before creating anything, PocketHive checks each Dataset separately. Its total
-record target must not exceed Scheduler `maxMessages`, because one scheduled
-item can create at most one record in that Dataset. A larger schedule is valid;
-an impossible target creates no Dataset, ledger or capacity reservation.
+record target must not exceed the frozen Provider Run `maxMessages`, because one
+scheduled item can create at most one record in that Dataset. A larger schedule
+is valid; an absent, ambiguous, unbounded, mismatched or impossible plan creates
+no Dataset, ledger or capacity reservation.
 
 Each successful output:
 
@@ -195,9 +203,14 @@ Loading and observed use are separate. Status shows guarded-attempt coverage as
 Low or uneven traffic can therefore leave a healthy worker awaiting evidence;
 that is not proof of incorrect Dataset use and does not block an otherwise
 valid Create Swarm. `staleAfter` decides whether a worker report is current;
-`evidenceWindow` decides whether an attempt is current. A stale worker stays in
-the expected count but cannot count as loaded or observed. Worker replacement
-changes its epoch and requires fresh evidence.
+`evidenceWindow` decides whether an attempt is current. Both must be at least the
+qualified worst-case time for the next worker report, both delivery hops,
+Controller aggregation and accepted clock skew. Equality remains current; a
+shorter window fails before creation. Older, duplicate, delayed or replaced-worker
+reports cannot create false coverage. A stale worker stays in the expected count
+but cannot count as loaded or observed. Worker replacement changes its epoch and
+requires fresh evidence. Low traffic is still valid; no traffic-rate or
+all-worker evidence promise is required at admission.
 
 Workers report to Swarm Controller. Controller sends bounded aggregates to
 Orchestrator. REST, MCP and later UI show that same status. They expose no record
@@ -230,4 +243,5 @@ candidate IDs later, but a Redis list or Stream can never grant a lease.
 
 The documentation is ready to define M0 executable contracts. The feature is not
 proven until catalogue, provider concurrency, projection crash/failover, memory,
-evidence, maximum-topology performance and 24-hour soak tests pass.
+Scheduler-source topology, evidence delivery/ordering, maximum-topology
+performance and 24-hour soak tests pass.

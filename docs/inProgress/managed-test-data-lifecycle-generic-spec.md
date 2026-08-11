@@ -63,28 +63,30 @@ The design must:
 4. A Scenario Binding freezes one SUT Environment, Dataset Space, Dataset,
    Group, Definition version/digest, Contract versions/digests and authority
    revision.
-5. Provider records are unavailable until the Scheduler has durably closed
+5. One Provider Run freezes exactly one finite upstream Scheduler authoring
+   role and supplies every Managed Dataset output binding in that run.
+6. Provider records are unavailable until the Scheduler has durably closed
    issuance, every issued item is terminal, the record-creation fence is
    closed and PostgreSQL atomically seals an exact-target revision 1.
-6. Orchestrator provisions, authorises, fences and reports. It never proxies
+7. Orchestrator provisions, authorises, fences and reports. It never proxies
    record bytes or selects records for measured traffic.
-7. Swarm Controller creates and reconciles Redis projections. Workers never
+8. Swarm Controller creates and reconciles Redis projections. Workers never
    access PostgreSQL.
-8. A Redis projection is immutable and invisible until its manifest and records
+9. A Redis projection is immutable and invisible until its manifest and records
    are complete and its Active Projection Reference is atomically advanced.
    Every Activation Generation is durably reserved before Redis mutation and
    is never assigned to another publication.
-9. Workers load in the background, verify the complete projection and atomically
+10. Workers load in the background, verify the complete projection and atomically
    replace local memory. Traffic makes no Redis, PostgreSQL, Controller,
    Orchestrator, Scenario Manager or credential-provider call.
-10. `REPLAY + SHARED` never makes a record unavailable after use. Redis access,
+11. `REPLAY + SHARED` never makes a record unavailable after use. Redis access,
     dequeue or movement is not consumption evidence.
-11. Missing, unknown, stale or incompatible configuration fails explicitly.
+12. Missing, unknown, stale or incompatible configuration fails explicitly.
     PocketHive never substitutes another Dataset, Group, adapter, source or
     revision.
-12. Existing `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` contracts and
+13. Existing `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` contracts and
     behavior remain unchanged.
-13. Swarm Controller is the trusted sole projection writer. Redis ACLs restrict
+14. Swarm Controller is the trusted sole projection writer. Redis ACLs restrict
     commands and binding keys; the Redis Function provides atomic validation
     and fencing, not an independent authorisation boundary.
 
@@ -134,6 +136,7 @@ are approved.
 | Dataset Instance | One provider-created runtime Dataset in one SUT Environment and Dataset Space. |
 | Group | Frozen partition identified by an opaque `groupId` and exact schema-defined key. |
 | Provider Binding | Frozen plan that creates one Dataset Instance and its Groups. |
+| Provider Run | One fenced initial-fill execution bound to one exact finite upstream Scheduler role and the terminal Managed Dataset bindings it supplies. |
 | Provider Item ID | Proposed Scheduler-owned identity allocated once for one logical provider item, unique within its Provider Run and preserved through retry, redelivery and restart. It is not the optional general WorkItem `messageId`. |
 | Provider Completion Barrier | Proposed bounded PostgreSQL ledger proving issuance is closed, every issued item is terminal, in-flight count is zero and record creation is fenced before seal evaluation. It is not a workflow engine. |
 | Consumer Binding | Frozen selection of one sealed Dataset Instance and Group. |
@@ -401,10 +404,11 @@ fails closed until Scenario Manager and Orchestrator both advertise version 1.
 
 ### Binding and initial fill
 
-The provider Create Swarm request supplies one explicit plan for each terminal
-`MANAGED_DATASET` output:
+The provider Create Swarm request supplies one explicit `schedulerRole` and one
+plan for each terminal `MANAGED_DATASET` output in that Provider Run:
 
 ```yaml
+schedulerRole: provider-source
 providerDatasets:
   - bindingRef: supplyRecords
     name: Shared Records
@@ -419,13 +423,44 @@ providerDatasets:
         targetRecords: 1000
 ```
 
-The Orchestrator renders Group keys once from the frozen Provider Scenario
+`schedulerRole` is the exact unique `template.bees[].role` authoring key. It is
+never inferred from array order, role naming, image, work routing or a fallback.
+It is Managed Dataset admission metadata, not a change to the Scheduler or
+Scenario Protocol v2 contracts. Ordinary scenarios still need no such field.
+The authoritative `topology` graph must prove that:
+
+- the selected role exists and declares `inputs.type: SCHEDULER`;
+- its resolved `inputs.scheduler.maxMessages` is positive;
+- every terminal binding in the Provider Run is reachable from that role;
+- no different Scheduler role can reach any of those terminal outputs; and
+- every listed Dataset binding belongs to that same frozen Provider Run.
+
+Missing topology cannot prove reachability and fails closed. An unrelated
+Scheduler outside the selected paths remains unrelated; it never becomes an
+implicit source. A second independent Scheduler requires a separate provider
+Create Swarm command and Provider Run. Aggregate multi-source issuance and a
+multi-source completion barrier are outside the MVP.
+
+Before any side effect, Orchestrator freezes the Scheduler authoring role, the
+digest of its exact validated resolved input configuration, its positive
+`maxMessages`, Provider Run ID and fence, and the complete terminal binding
+set. Source validation returns one closed error:
+
+```text
+PROVIDER_SCHEDULER_SOURCE_REQUIRED
+PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS
+PROVIDER_SCHEDULER_UNBOUNDED
+PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH
+```
+
+The Orchestrator then renders Group keys once from the frozen Provider Scenario
 Binding and validates positive targets. Because MVP `outputOrdinal: 0` permits
 one record per issued item for each Dataset binding, admission checks each
 binding independently before provisioning:
 
 ```text
-sum(group.targetRecords) <= scheduler.maxMessages
+for each Dataset binding in the Provider Run:
+  sum(group.targetRecords) <= frozenProviderRun.maxMessages
 ```
 
 An overflow or failed inequality returns `PROVIDER_PLAN_UNATTAINABLE` and
@@ -443,11 +478,11 @@ Provisioning is idempotent on
 the same `datasetId`; changed content conflicts. PostgreSQL creates the
 Dataset and every Group in `BUILDING` before the provider starts.
 
-The provider has a normal PocketHive WorkInput, initially `SCHEDULER`.
+The provider has the selected normal PocketHive WorkInput, initially
+`SCHEDULER`.
 `output-only` means Managed Dataset is only its terminal WorkOutput; it never
-means a source-less swarm. A Managed Dataset provider requires a finite
-`maxMessages > 0`; an unbounded Scheduler cannot satisfy the completion
-barrier.
+means a source-less swarm. The selected role and exact finite configuration are
+the same ones frozen in the Provider Run.
 
 ```yaml
 # first provider bee
@@ -474,7 +509,8 @@ The general WorkItem `messageId` remains unchanged and may be absent. Managed
 Dataset providers instead use a protected Provider Item ID contract.
 
 At admission, PostgreSQL creates a bounded Provider Run ledger with
-`maxMessages` issuance slots. Each slot receives one opaque `providerItemId`.
+`frozenProviderRun.maxMessages` issuance slots. Each slot receives one opaque
+`providerItemId`.
 The ID is unique within `providerRunId`; no wider uniqueness is claimed. Before
 dispatch, the Scheduler claims one unissued slot under its current run fence.
 The claim commits before the WorkInput is delivered. A lost response, retry,
@@ -600,7 +636,8 @@ The admitted Consumer Binding freezes:
 - Definition/Contract versions and digests;
 - `REPLAY + SHARED`;
 - Authority Revision and Group content digest; and
-- worker loading, polling, memory and evidence limits.
+- worker loading, polling, memory, qualified observation-delivery bounds and
+  evidence limits.
 
 ```yaml
 inputs:
@@ -624,11 +661,50 @@ MVP supports only explicit `ROUND_ROBIN`. Each worker has an independent local
 cursor; duplicate concurrent use is valid. Selection does not move a record or
 change its availability.
 
-Observation durations are explicit and positive, and
-`reportInterval < staleAfter`. `evidenceWindow` is independent of `staleAfter`
-and may be shorter, equal or longer. Unknown fields and invalid duration
-relationships fail admission. Traffic rate, ramp, conditional execution and
-distribution are not observation-configuration validity checks.
+Managed Dataset evidence uses the existing worker-to-Controller-to-Orchestrator
+status path; it adds no event bus or immediate evidence channel. M0 qualifies
+and versions this deployment bound:
+
+```text
+maximumObservationDeliveryAge =
+  maximumTimeUntilNextWorkerReport
+  + maximumWorkerToControllerDeliveryDuration
+  + maximumControllerAggregationDuration
+  + maximumControllerToOrchestratorDeliveryDuration
+  + maximumAcceptedClockSkew
+```
+
+`maximumTimeUntilNextWorkerReport` is no shorter than `reportInterval` and
+includes the actual periodic worker `status-delta` cadence and scheduling
+jitter. Controller aggregation includes the bounded `status-full` refresh
+required by a reporter-set or epoch change. The Controller-to-Orchestrator term
+includes its actual `status-delta` publication cadence. The transport terms
+include the qualified at-least-once delivery and processing bounds.
+`maximumAcceptedClockSkew` is the frozen
+`sutAttemptGuard.maximumClockSkew`; there is no second clock-skew setting. No
+component is assumed to take zero time.
+
+Admission freezes the resolved component bounds and requires:
+
+```text
+reportInterval > 0
+staleAfter > 0
+evidenceWindow > 0
+reportInterval < staleAfter
+maximumObservationDeliveryAge <= staleAfter
+maximumObservationDeliveryAge <= evidenceWindow
+```
+
+`staleAfter` and `evidenceWindow` remain independent semantics; either may be
+shorter only when both cover the qualified delivery bound. An age equal to its
+limit is current; an age greater than the limit is stale or expired. A window
+that cannot cover the bound fails before swarm creation with
+`DATASET_OBSERVATION_WINDOW_UNATTAINABLE`. Unknown fields and other invalid
+duration relationships also fail admission.
+
+Traffic rate, ramp, conditional execution and distribution are not
+observation-configuration validity checks. Create Swarm does not require a
+minimum attempt count or guaranteed all-worker traffic.
 
 ## PostgreSQL projection reader
 
@@ -938,6 +1014,23 @@ aggregate counters. A reporter-set/epoch change requires a new full snapshot.
 Worker churn removes the old epoch from `expected`, adds the new epoch and
 requires new evidence; attempts from the replaced epoch never satisfy the new
 coverage set.
+
+The M0 status contract adds monotonic ordering to this existing path. Each
+worker report carries its worker instance, restart epoch and increasing report
+sequence; each Controller aggregate carries its Controller fence/epoch and
+increasing aggregate sequence. An exact duplicate is idempotent. Reused sequence
+with changed content fails, and an older sequence cannot regress current load,
+reporter or evidence state.
+
+Evidence age is evaluated from validated event time, never arrival order. A
+report arriving after its attempt evidence has expired cannot create
+`CONSUMING`; a future or otherwise invalid timestamp outside the accepted
+clock-skew bound fails closed. Bounded report loss makes the unchanged expected
+reporter stale and therefore `NOT_READY`; it never shrinks the denominator or
+creates false coverage. With continuous valid attempts and delivery inside all
+qualified component bounds, current evidence becomes observable within
+`maximumObservationDeliveryAge`.
+
 Orchestrator consumes Controller status only and owns the shared read model used
 unchanged by REST, MCP and future UI.
 
@@ -973,7 +1066,8 @@ Required limit groups include:
   connections, operations and output buffers;
 - worker concurrent loads, Redis read throughput, startup SLO and local
   current/next/decode/index/base/direct-buffer/GC memory;
-- polling, evidence-window reporter samples/payload bytes, observation timing
+- polling, evidence-window reporter samples/payload bytes, status queue and
+  processing bounds, `maximumObservationDeliveryAge`, monotonic-ordering state
   and recovery time; and
 - `maximumLoadedWorkerContinuityDuration` and the Controller recovery-time
   objective.
@@ -1021,6 +1115,9 @@ requiredWorkerMemory(worker) =
   + maximumDirectBufferMemory
   + minimumGcHeadroom
   + sum(currentLocalIndex + nextLocalIndex + decodeAndIndexOverhead)
+
+maximumObservationDeliveryAge <=
+  min(staleAfter, evidenceWindow)
 ```
 
 `maximumManagedDatasetValidationUtilisationPercent` is greater than 0 and
@@ -1051,8 +1148,9 @@ most 2%.
 
 Qualification also covers projection creation, Redis page loading, maximum
 worker memory/GC, every-worker restart, Controller restart, Redis failover/loss,
-PostgreSQL failover, maximum topology and a target-scale 24-hour soak. Smaller
-topology success does not qualify a larger topology.
+PostgreSQL failover, observation delivery/ordering under bounded queue pressure
+and churn, maximum topology and a target-scale 24-hour soak. Smaller topology
+success does not qualify a larger topology.
 
 ## Security
 
@@ -1096,7 +1194,8 @@ No implementation starts until M0 establishes one executable SSOT for:
 7. Redis key/manifest/Active Reference, exact ACL manifest and
    activation/reconciliation Function;
 8. worker loading/selection/SUT-attempt guard;
-9. Controller full/delta aggregate, reporter epochs and evidence coverage; and
+9. Controller full/delta aggregate, reporter epochs, monotonic ordering,
+   qualified observation-delivery bounds and evidence coverage; and
 10. Orchestrator REST/MCP status and error codes.
 
 Delivery sequence:
@@ -1138,7 +1237,9 @@ milestone is absent and rejected, not silently accepted.
 | A20 | Several failed, abandoned and unconfirmed publications never reuse a generation. Crash after Redis activation, before PostgreSQL confirmation, followed by total Redis loss reserves a strictly higher generation. |
 | A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
 | A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Replacement changes the expected epoch; old evidence cannot satisfy it. Partial coverage never becomes `CONSUMING`, and uncertain traffic distribution does not reject an otherwise valid Create Swarm. |
-| A23 | For each provider binding, target total above `maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger `maxMessages` pass. Multiple bindings are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
+| A23 | For each binding, target total above `frozenProviderRun.maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger frozen bound pass. Two bindings using the same run are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
+| A24 | One exact finite `schedulerRole` whose authoritative topology reaches every terminal binding succeeds. Missing/unknown/non-Scheduler or zero/unbounded sources, multiple reachable Scheduler sources and topology mismatch return the closed source error before side effects. An unrelated Scheduler is ignored, while bindings that need different sources require separate Provider Runs. |
+| A25 | Admission rejects `staleAfter` or `evidenceWindow` below `maximumObservationDeliveryAge` with `DATASET_OBSERVATION_WINDOW_UNATTAINABLE`; equality passes. Delayed, expired, clock-skewed, duplicate, out-of-order and replaced-epoch reports cannot regress or falsely advance status. Continuous valid attempts become observable within the qualified bound; Controller delay, bounded report loss and worker churn preserve precedence and the expected denominator. |
 
 Documentation is design evidence only. None of these gates is proven until its
 executable contract, implementation and recorded test result exist.
@@ -1148,7 +1249,7 @@ executable contract, implementation and recorded test result exist.
 | Review | Result |
 |---|---|
 | Engineering | One authority, one immutable projection model and one local measured path. No remote measured-path storage or provider-input architecture remains. |
-| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility, Redis bypass and evidence coverage are covered by A1-A23. |
+| QA | Lifecycle, idempotency, crash windows, downgrade, partial visibility, Redis bypass and evidence coverage are covered by A1-A25. |
 | Operations | `noeviction`, peak memory, cold/loaded outage behavior, total-loss reprojection and maximum-topology/soak gates are explicit. |
 | Security | Least-privilege PostgreSQL functions, trusted sole Redis writer, deny-by-default ACLs, Function non-authority and fixed non-sensitive classification are explicit. |
 | RST | Requirements, canonical terms, owners, deferred triggers and acceptance evidence trace to one architecture; no mutable availability lifecycle or implicit fallback exists. |
@@ -1162,7 +1263,8 @@ executable contract, implementation and recorded test result exist.
 | High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
-| Medium | Reporter/evidence timing and churn transitions are design-only. | Implement the closed precedence and qualify skew/churn under A14/A22. |
+| Medium | Scheduler-source topology and Provider Run freezing are design-only. | Implement exact-role/digest freezing and source/topology tests A23/A24. |
+| Medium | Observation delivery, monotonic ordering and churn transitions are design-only. | Qualify every delivery component, clock skew, queue pressure and precedence under A14/A22/A25. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |
 
