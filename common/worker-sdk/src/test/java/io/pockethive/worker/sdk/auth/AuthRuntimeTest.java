@@ -341,6 +341,82 @@ class AuthRuntimeTest {
     }
 
     @Test
+    void rejectsPasswordGrantWithClientSecretButNoClientId() throws Exception {
+        Path templates = profiles("""
+            profiles:
+              "api:pw":
+                type: OAUTH2_PASSWORD_GRANT
+                storage:
+                  mode: REDIS
+                  tokenKey: api:pw
+                tokenUrl: http://auth/token
+                username: user
+                password: pass
+                clientSecret: orphan-secret
+            """);
+
+        assertThatThrownBy(() -> runtime(
+            templates,
+            List.of(ref("api:pw", AuthApplyAs.HTTP_AUTHORIZATION_BEARER)),
+            Map.of(),
+            new TestContext(),
+            (template, ignored) -> template))
+            .isInstanceOf(AuthFailureException.class)
+            .hasMessageContaining("clientSecret without clientId");
+    }
+
+    @Test
+    void acceptsPasswordGrantWithClientIdAndNoClientSecret() throws Exception {
+        Path templates = profiles("""
+            profiles:
+              "api:pw":
+                type: OAUTH2_PASSWORD_GRANT
+                storage:
+                  mode: REDIS
+                  tokenKey: api:pw
+                tokenUrl: http://auth/token
+                username: user
+                password: pass
+                clientId: my-client
+            """);
+
+        AuthRuntime runtime = runtime(
+            templates,
+            List.of(ref("api:pw", AuthApplyAs.HTTP_AUTHORIZATION_BEARER)),
+            Map.of(),
+            new TestContext(),
+            (template, ignored) -> template);
+
+        assertThat(runtime.active()).isTrue();
+    }
+
+    @Test
+    void acceptsPasswordGrantWithBothClientIdAndClientSecret() throws Exception {
+        Path templates = profiles("""
+            profiles:
+              "api:pw":
+                type: OAUTH2_PASSWORD_GRANT
+                storage:
+                  mode: REDIS
+                  tokenKey: api:pw
+                tokenUrl: http://auth/token
+                username: user
+                password: pass
+                clientId: my-client
+                clientSecret: my-secret
+            """);
+
+        AuthRuntime runtime = runtime(
+            templates,
+            List.of(ref("api:pw", AuthApplyAs.HTTP_AUTHORIZATION_BEARER)),
+            Map.of(),
+            new TestContext(),
+            (template, ignored) -> template);
+
+        assertThat(runtime.active()).isTrue();
+    }
+
+    @Test
     void reportsOnlyFirstFailureThenRecoveryWithRedactedStatus() throws Exception {
         clearAuthFailureState();
         TestContext context = new TestContext();
