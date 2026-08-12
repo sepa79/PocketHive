@@ -64,12 +64,20 @@ SCHEDULER WorkInput
 Before it starts, Orchestrator creates the Dataset and its full Group plan in
 `BUILDING`.
 
-The Create Swarm plan names one exact finite Scheduler role. PocketHive verifies
-from the scenario topology that this Scheduler, and no other, reaches every
-Managed Dataset output in the Provider Run. It freezes that role, its config
-digest, positive `maxMessages`, run ID/fence and binding set. A second independent
-Scheduler needs a separate Provider Run; PocketHive never guesses from order,
-name or image.
+The Create Swarm plan explicitly names one finite Scheduler role; PocketHive
+never guesses it. The logical topology and the fully rendered runtime queue
+wiring must agree that this Scheduler reaches every exact Managed Dataset output,
+and no other Scheduler reaches one through either view. PocketHive checks every
+port, `work.out`/`work.in` queue pair, terminal role and `bindingRef`. Missing or
+disagreeing details fail before it creates a Dataset, ledger or capacity
+reservation.
+
+PocketHive freezes the role, topology digest, runtime-wiring digest, Scheduler
+config digest, positive `maxMessages`, run ID/fence and binding set. A changed
+retry conflicts. An unrelated Scheduler outside both paths is ignored; a second
+source needs a separate Provider Run. These extra admission checks do not change
+ordinary Scenario Protocol v2 scenarios, and queue wiring never chooses the
+Scheduler.
 
 Before creating anything, PocketHive checks each Dataset separately. Its total
 record target must not exceed the frozen Provider Run `maxMessages`, because one
@@ -243,5 +251,6 @@ candidate IDs later, but a Redis list or Stream can never grant a lease.
 
 The documentation is ready to define M0 executable contracts. The feature is not
 proven until catalogue, provider concurrency, projection crash/failover, memory,
-Scheduler-source topology, evidence delivery/ordering, maximum-topology
+Scheduler-source topology/wiring agreement, evidence delivery/ordering,
+maximum-topology
 performance and 24-hour soak tests pass.

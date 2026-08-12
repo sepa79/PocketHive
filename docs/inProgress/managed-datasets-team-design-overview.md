@@ -69,12 +69,18 @@ MANAGED_DATASET WorkOutput(CREATE_RECORD)
 ```
 
 Before start, Orchestrator creates the Dataset and Groups in `BUILDING`. The
-Create Swarm plan names one exact finite `schedulerRole`. Authoritative scenario
-topology must show that role reaching every terminal Managed Dataset binding in
-the Provider Run, with no other Scheduler reaching them. Orchestrator freezes
-the role, resolved config digest, positive `maxMessages`, run ID/fence and
-binding set. A second independent Scheduler requires a separate Provider Run;
-nothing is inferred from order, name or image.
+Create Swarm plan explicitly names one finite `schedulerRole`; PocketHive never
+infers it. Validated logical topology and fully rendered `work.out`/`work.in`
+queue wiring must agree that this role reaches every exact terminal binding,
+and no other Scheduler may reach one through either representation. Missing or
+disagreeing ports, work entries, queues, terminal roles or `bindingRef` values
+fail before any Dataset, ledger or capacity reservation.
+
+Orchestrator freezes the role, topology digest, runtime-binding digest,
+Scheduler config digest, positive `maxMessages`, run ID/fence and binding set.
+A changed retry conflicts. An unrelated Scheduler outside both paths is ignored;
+a second independent source requires a separate Provider Run. This admission
+rule does not change Scenario Protocol v2 or let runtime wiring choose a role.
 
 The finite Scheduler ledger allocates one stable
 `providerItemId` per logical item and preserves it through retry, redelivery and
@@ -186,6 +192,7 @@ or Stream may later distribute candidates but can never grant a lease.
 
 This is ready for M0 executable-contract work, not implementation approval by
 documentation alone. The main unproven risks are Redis/worker memory at maximum
-fan-out, Controller activation/failover behavior, Scheduler-source and provider
-concurrency, qualified observation delivery/ordering and target-scale
+fan-out, Controller activation/failover behavior, Scheduler-source
+topology/wiring agreement, provider concurrency, qualified observation
+delivery/ordering and target-scale
 performance/soak results.

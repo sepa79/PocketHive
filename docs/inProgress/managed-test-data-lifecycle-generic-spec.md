@@ -63,8 +63,10 @@ The design must:
 4. A Scenario Binding freezes one SUT Environment, Dataset Space, Dataset,
    Group, Definition version/digest, Contract versions/digests and authority
    revision.
-5. One Provider Run freezes exactly one finite upstream Scheduler authoring
-   role and supplies every Managed Dataset output binding in that run.
+5. One Provider Run freezes exactly one caller-selected finite upstream
+   Scheduler authoring role. Validated topology and fully rendered runtime
+   wiring must agree that it supplies every Managed Dataset output binding in
+   that run, with no competing Scheduler path.
 6. Provider records are unavailable until the Scheduler has durably closed
    issuance, every issued item is terminal, the record-creation fence is
    closed and PostgreSQL atomically seals an exact-target revision 1.
@@ -136,7 +138,7 @@ are approved.
 | Dataset Instance | One provider-created runtime Dataset in one SUT Environment and Dataset Space. |
 | Group | Frozen partition identified by an opaque `groupId` and exact schema-defined key. |
 | Provider Binding | Frozen plan that creates one Dataset Instance and its Groups. |
-| Provider Run | One fenced initial-fill execution bound to one exact finite upstream Scheduler role and the terminal Managed Dataset bindings it supplies. |
+| Provider Run | One fenced initial-fill execution bound to one explicit finite upstream Scheduler role, agreeing logical topology and resolved runtime wiring, and the terminal Managed Dataset bindings it supplies. |
 | Provider Item ID | Proposed Scheduler-owned identity allocated once for one logical provider item, unique within its Provider Run and preserved through retry, redelivery and restart. It is not the optional general WorkItem `messageId`. |
 | Provider Completion Barrier | Proposed bounded PostgreSQL ledger proving issuance is closed, every issued item is terminal, in-flight count is zero and record creation is fenced before seal evaluation. It is not a workflow engine. |
 | Consumer Binding | Frozen selection of one sealed Dataset Instance and Group. |
@@ -423,28 +425,46 @@ providerDatasets:
         targetRecords: 1000
 ```
 
-`schedulerRole` is the exact unique `template.bees[].role` authoring key. It is
-never inferred from array order, role naming, image, work routing or a fallback.
-It is Managed Dataset admission metadata, not a change to the Scheduler or
-Scenario Protocol v2 contracts. Ordinary scenarios still need no such field.
-The authoritative `topology` graph must prove that:
+`schedulerRole` is the exact unique `template.bees[].role` authoring key. The
+caller selects it; PocketHive never infers it from array order, role naming,
+image, topology, queue wiring or a fallback. It is Managed Dataset admission
+metadata, not a change to the Scheduler or Scenario Protocol v2 contracts.
+Ordinary scenarios still need no such field.
 
-- the selected role exists and declares `inputs.type: SCHEDULER`;
-- its resolved `inputs.scheduler.maxMessages` is positive;
-- every terminal binding in the Provider Run is reachable from that role;
-- no different Scheduler role can reach any of those terminal outputs; and
-- every listed Dataset binding belongs to that same frozen Provider Run.
+PocketHive's Scenario Contract makes `topology` the logical graph and `work`
+queue suffixes the runtime wiring. Managed Dataset admission therefore accepts
+a Scheduler source only when the explicit `schedulerRole` reaches every
+terminal Managed Dataset output in both the validated topology and the fully
+rendered, validated SwarmPlan wiring, and no other Scheduler reaches those
+outputs through either representation.
 
-Missing topology cannot prove reachability and fails closed. An unrelated
-Scheduler outside the selected paths remains unrelated; it never becomes an
-implicit source. A second independent Scheduler requires a separate provider
-Create Swarm command and Provider Run. Aggregate multi-source issuance and a
-multi-source completion barrier are outside the MVP.
+For every edge on the selected provider path, admission proves that:
 
-Before any side effect, Orchestrator freezes the Scheduler authoring role, the
-digest of its exact validated resolved input configuration, its positive
-`maxMessages`, Provider Run ID and fence, and the complete terminal binding
-set. Source validation returns one closed error:
+- source and destination roles exist;
+- the topology port IDs exist on those roles with `out` and `in` directions;
+- the source port maps to the corresponding `work.out` entry and the
+  destination port maps to the corresponding `work.in` entry;
+- both fully resolved queue suffixes exist and are equal;
+- the terminal role owns the declared `MANAGED_DATASET` output and exact
+  `bindingRef`;
+- the selected role declares `inputs.type: SCHEDULER`, its exact resolved input
+  configuration has positive `maxMessages` and, on retry, matches the frozen
+  digest; and
+- no different Scheduler reaches a terminal binding through either topology
+  or equal resolved runtime queues.
+
+Every listed binding must belong to that Provider Run. Runtime wiring verifies
+the explicit selection and detects competing sources; it never selects the
+Scheduler or supplies missing logical edges. Missing topology, missing `work`
+wiring, unresolved queues or any disagreement fails before Dataset, Provider
+Run ledger or capacity reservation creation with
+`PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. An unrelated Scheduler outside both
+representations remains unrelated. A second independent Scheduler requires a
+separate provider Create Swarm command and Provider Run. Aggregate multi-source
+issuance and a multi-source completion barrier are outside the MVP.
+
+Source validation completes before every provisioning side effect and returns
+one closed error on failure:
 
 ```text
 PROVIDER_SCHEDULER_SOURCE_REQUIRED
@@ -452,6 +472,19 @@ PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS
 PROVIDER_SCHEDULER_UNBOUNDED
 PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH
 ```
+
+Only successful admission may persist a Provider Run. Its immutable evidence
+freezes the explicit Scheduler role, validated topology digest, fully resolved
+runtime-binding digest, exact resolved Scheduler input-configuration digest,
+positive `maxMessages`, Provider Run ID and fence, and complete terminal
+Managed Dataset binding set. The M0 digest contract covers the relevant roles,
+ports, edges, `work` directions, port keys, resolved queue suffixes, terminal
+outputs and binding references from the same immutable rendered SwarmPlan.
+
+An exact retry revalidates and compares the frozen role, digests and binding
+set before any new side effect. A changed topology, runtime wiring, Scheduler
+configuration or binding membership under the same command/idempotency identity
+conflicts; it never reuses or mutates the existing Provider Run.
 
 The Orchestrator then renders Group keys once from the frozen Provider Scenario
 Binding and validates positive targets. Because MVP `outputOrdinal: 0` permits
@@ -1238,7 +1271,7 @@ milestone is absent and rejected, not silently accepted.
 | A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
 | A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Replacement changes the expected epoch; old evidence cannot satisfy it. Partial coverage never becomes `CONSUMING`, and uncertain traffic distribution does not reject an otherwise valid Create Swarm. |
 | A23 | For each binding, target total above `frozenProviderRun.maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger frozen bound pass. Two bindings using the same run are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
-| A24 | One exact finite `schedulerRole` whose authoritative topology reaches every terminal binding succeeds. Missing/unknown/non-Scheduler or zero/unbounded sources, multiple reachable Scheduler sources and topology mismatch return the closed source error before side effects. An unrelated Scheduler is ignored, while bindings that need different sources require separate Provider Runs. |
+| A24 | One exact finite `schedulerRole` succeeds only when topology ports and fully rendered `work.out`/`work.in` queues agree through every path to the exact terminal role and `bindingRef`. Queue-suffix disagreement, absent topology, missing/wrong-direction `work` entries, unresolved queues or terminal-plan mismatch fails with `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`; a second Scheduler reaching through only topology or only runtime queues fails as ambiguous, while one outside both paths is ignored. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. A retry with a changed topology or runtime-binding digest conflicts, and every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
 | A25 | Admission rejects `staleAfter` or `evidenceWindow` below `maximumObservationDeliveryAge` with `DATASET_OBSERVATION_WINDOW_UNATTAINABLE`; equality passes. Delayed, expired, clock-skewed, duplicate, out-of-order and replaced-epoch reports cannot regress or falsely advance status. Continuous valid attempts become observable within the qualified bound; Controller delay, bounded report loss and worker churn preserve precedence and the expected denominator. |
 
 Documentation is design evidence only. None of these gates is proven until its
@@ -1263,7 +1296,7 @@ executable contract, implementation and recorded test result exist.
 | High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
-| Medium | Scheduler-source topology and Provider Run freezing are design-only. | Implement exact-role/digest freezing and source/topology tests A23/A24. |
+| Medium | Scheduler-source topology/wiring agreement and Provider Run freezing are design-only. | Implement exact-role/digest freezing and dual-representation source tests A23/A24. |
 | Medium | Observation delivery, monotonic ordering and churn transitions are design-only. | Qualify every delivery component, clock skew, queue pressure and precedence under A14/A22/A25. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |
