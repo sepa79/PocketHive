@@ -80,9 +80,11 @@ can reach the terminal through either graph is ambiguous.
 
 Before comparing graphs, PocketHive reserves a bounded processing slot and
 memory, then checks explicit deployment limits for graph size, queue-suffix
-length, possible connections and evidence size. Overflow or a busy admission
-pool fails before creating anything; work is never placed on an unbounded
-queue.
+length, possible connections and evidence size. An oversized plan or overflow
+fails permanently. A busy slot or shared-memory pool returns a retryable busy
+result with a bounded delay; the caller retries the unchanged request with the
+same idempotency key. Neither result creates anything, and work is never placed
+on an internal waiting queue.
 
 PocketHive freezes the role, canonical `topologyDigest` and
 `runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run

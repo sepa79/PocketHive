@@ -85,9 +85,11 @@ either graph is ambiguous.
 
 Before graph work, Orchestrator reserves bounded concurrency and memory, then
 checks explicit qualified limits for plan structure, suffix bytes, derived
-Cartesian edges and canonical evidence bytes. Overflow or saturation fails
-before any Dataset, ledger or capacity reservation; no unbounded or caller-runs
-executor is allowed.
+Cartesian edges and canonical evidence bytes. A plan-limit or overflow failure
+is non-retryable. Temporary slot or shared-memory pressure returns retryable
+`PROVIDER_GRAPH_ADMISSION_BUSY` with a bounded delay; the exact retry reuses its
+idempotency key and creates nothing before capacity is available. No waiting or
+caller-runs executor is allowed.
 
 Orchestrator freezes the role, canonical `topologyDigest`, canonical
 `runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run

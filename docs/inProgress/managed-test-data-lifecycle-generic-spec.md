@@ -541,6 +541,7 @@ PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS
 PROVIDER_SCHEDULER_UNBOUNDED
 PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH
 PROVIDER_GRAPH_LIMIT_EXCEEDED
+PROVIDER_GRAPH_ADMISSION_BUSY
 ```
 
 Evaluation order is closed: validate the explicit selected role and its finite
@@ -552,11 +553,12 @@ then compare the relevant node and edge sets. Graph construction, reachability
 or agreement failure returns `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. No later
 check replaces an earlier failure with a fallback.
 
-`PROVIDER_GRAPH_LIMIT_EXCEEDED` returns only the closed limit `dimension` and
-its configured positive `maximum`. It never returns queue suffixes, secrets,
-record data or canonical preimage content. Arithmetic overflow reports
-`DERIVED_RUNTIME_EDGES`; admission-slot or memory-budget saturation reports
-`CONCURRENT_GRAPH_ADMISSIONS` or `GRAPH_ADMISSION_WORKING_MEMORY_BYTES`.
+`PROVIDER_GRAPH_LIMIT_EXCEEDED` is non-retryable for that exact request. It
+returns `retryable: false`, the closed limit `dimension` and its configured
+positive `maximum`. It never returns queue suffixes, secrets, record data or
+canonical preimage content. Derived-edge arithmetic overflow reports
+`DERIVED_RUNTIME_EDGES`; a plan whose estimated working memory exceeds its
+per-admission budget reports `GRAPH_ADMISSION_WORKING_MEMORY_BYTES`.
 
 ```text
 dimension =
@@ -568,9 +570,28 @@ dimension =
   | QUEUE_SUFFIX_UTF8_BYTES
   | DERIVED_RUNTIME_EDGES
   | GRAPH_EVIDENCE_PREIMAGE_BYTES
-  | CONCURRENT_GRAPH_ADMISSIONS
   | GRAPH_ADMISSION_WORKING_MEMORY_BYTES
 ```
+
+`PROVIDER_GRAPH_ADMISSION_BUSY` is the only graph-admission saturation error.
+It means either no concurrency slot or no full reservation from the shared
+graph-admission memory pool is currently available. Its closed response is:
+
+```text
+code = PROVIDER_GRAPH_ADMISSION_BUSY
+retryable = true
+resource = CONCURRENCY_SLOT | SHARED_ADMISSION_MEMORY
+1 <= retryAfterMs <= maximumProviderGraphAdmissionRetryAfterMs
+```
+
+The response creates no Dataset, Provider Run ledger, capacity reservation,
+swarm runtime or persisted command outcome. It does not consume the
+idempotency key. A retry uses the exact same Create Swarm request and
+idempotency key no earlier than `retryAfterMs`; once an attempt acquires
+admission resources, normal Create Swarm idempotency prevents duplicate
+provisioning. Changed request content still requires a new idempotency key.
+There is no internal waiting queue, caller-runs execution or automatic adapter
+fallback.
 
 ### Provider Run graph evidence
 
@@ -1307,6 +1328,7 @@ Provider Graph admission adds these mandatory deployment-qualified settings:
 | `maximumProviderGraphEvidencePreimageBytes` | Combined canonical UTF-8 bytes of `topologyDigest` and `runtimeBindingDigest` preimages. |
 | `maximumConcurrentProviderGraphAdmissions` | Graph admissions allowed to execute concurrently. |
 | `maximumProviderGraphAdmissionWorkingMemoryBytes` | Reserved working memory for one admission, including graph/suffix indexes, traversals, sorting and both canonical preimages. |
+| `maximumProviderGraphAdmissionRetryAfterMs` | Inclusive positive upper bound for the server-selected `retryAfterMs` returned on transient graph-admission saturation. |
 | `providerGraphAdmissionSlo` | Maximum qualified admission duration at every structural maximum above. |
 
 Every setting is present, positive and explicitly qualified for the deployed
@@ -1317,12 +1339,15 @@ capability advertisement.
 The graph executor has exactly
 `maximumConcurrentProviderGraphAdmissions` workers and no waiting task queue.
 Failure to acquire a slot or its full working-memory reservation rejects
-immediately with `PROVIDER_GRAPH_LIMIT_EXCEEDED`; it never queues without a
-bound or caller-runs on request/control threads. Structural counts and suffix
-sizes are checked before graph/index construction. Every multiplication and
-accumulation, including structural and UTF-8 byte totals, uses overflow-safe
-arithmetic. An overflow reports its corresponding closed dimension. Derived
-edge arithmetic is checked before any Cartesian materialisation.
+immediately with retryable `PROVIDER_GRAPH_ADMISSION_BUSY` and a positive
+server-selected `retryAfterMs` no greater than the configured maximum; it never
+queues or caller-runs on request/control threads. The bound is qualified with
+maximum-concurrency tests so retry timing does not create an admission storm.
+Structural counts and suffix sizes are checked before graph/index construction.
+Every multiplication and accumulation, including structural and UTF-8 byte
+totals, uses overflow-safe arithmetic. An overflow reports its corresponding
+closed non-retryable dimension. Derived edge arithmetic is checked before any
+Cartesian materialisation.
 
 The implementation supplies a qualified monotonic memory estimator for its
 exact graph representation. For each plan:
@@ -1517,7 +1542,7 @@ milestone is absent and rejected, not silently accepted.
 | A23 | For each binding, target total above `frozenProviderRun.maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger frozen bound pass. Two bindings using the same run are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
 | A24a | Linear, diamond, fan-out, fan-in and cyclic fixtures prove bounded forward/reverse Provider-Relevant Subgraph construction without path enumeration. The explicit finite `schedulerRole` succeeds only when both graphs reach each exact terminal and their relevant node/edge sets agree. Duplicate suffix fixtures expose every possible publisher-consumer edge and never select one. Topology-only/runtime-only connectivity, absent topology, missing or wrong-direction ports/work, empty or unresolved queues and terminal role/`bindingRef` mismatch return `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. Any other Scheduler reaching the terminal through either complete graph returns `PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS`; only one unable to reach it in both complete graphs is ignored. A fixture where `S1` reaches `T` in both graphs and independent `S2` also reaches `T` in both rejects as ambiguous even though `S2` is not reachable from `S1` and is outside `S1`'s Provider-Relevant Subgraphs. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. Every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
 | A24b | Canonical vectors reject duplicate role, port, edge, work and binding identities. Semantically identical maps and arrays in different authoring orders produce identical `topologyDigest` and `runtimeBindingDigest`; any covered topology, port, resolved wiring, suffix or terminal-binding change produces a different digest. Exact retry reproduces both digests; a changed retry conflicts before provisioning and leaves zero Dataset, Provider Run ledger and capacity reservations. |
-| A24c | Every Provider Graph structural, suffix-byte, derived-edge, evidence-byte, concurrency and working-memory limit succeeds exactly at its maximum and fails at maximum plus one before provisioning. One heavily duplicated suffix reaches the Cartesian boundary; several suffix products accumulate exactly; multiplication/addition overflow fails closed. Evidence-byte overflow occurs before hashing/persistence. Maximum concurrent admissions stay within the qualified heap with no waiting or caller-runs; one additional admission rejects. The maximum admitted topology meets `providerGraphAdmissionSlo` and its memory budget. Every failure creates no Dataset, Provider Run ledger or capacity reservation and exposes only the dimension and maximum. |
+| A24c | Every per-plan Provider Graph structural, suffix-byte, derived-edge, evidence-byte and working-memory limit succeeds exactly at its maximum and fails non-retryably at maximum plus one before provisioning. One heavily duplicated suffix reaches the Cartesian boundary; several suffix products accumulate exactly; multiplication/addition overflow fails closed. Evidence-byte overflow occurs before hashing/persistence. Maximum concurrent admissions stay within the qualified heap; one additional valid request, and a valid request facing unavailable shared admission memory, return retryable `PROVIDER_GRAPH_ADMISSION_BUSY` with the closed resource and `retryAfterMs` inside its configured bound, no internal waiting queue and zero side effects. After capacity is released, retrying the exact request with the same idempotency key succeeds once without duplicate provisioning. Zero or negative retry bounds prevent advertisement; saturated-client qualification proves the configured bound does not breach heap, executor or request-rate limits. The maximum admitted topology meets `providerGraphAdmissionSlo` and its memory budget. |
 | A25 | Admission rejects `staleAfter` or `evidenceWindow` below `maximumObservationDeliveryAge` with `DATASET_OBSERVATION_WINDOW_UNATTAINABLE`; equality passes. Delayed, expired, clock-skewed, duplicate, out-of-order and replaced-epoch reports cannot regress or falsely advance status. Continuous valid attempts become observable within the qualified bound; Controller delay, bounded report loss and worker churn preserve precedence and the expected denominator. |
 
 Documentation is design evidence only. None of these gates is proven until its
