@@ -78,6 +78,12 @@ by several outputs or inputs represents every possible connection, never a
 guessed one. Unrelated graph components are ignored; a second Scheduler that
 can reach the terminal through either graph is ambiguous.
 
+Before comparing graphs, PocketHive reserves a bounded processing slot and
+memory, then checks explicit deployment limits for graph size, queue-suffix
+length, possible connections and evidence size. Overflow or a busy admission
+pool fails before creating anything; work is never placed on an unbounded
+queue.
+
 PocketHive freezes the role, canonical `topologyDigest` and
 `runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run
 ID/fence and binding set. Stable sorting plus RFC 8785 and SHA-256 make

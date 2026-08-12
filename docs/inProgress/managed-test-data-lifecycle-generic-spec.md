@@ -454,6 +454,38 @@ possible publisher-to-consumer edges. Admission never chooses one connection.
 Runtime wiring verifies topology; it never creates or substitutes for a
 missing logical edge.
 
+Orchestrator is the authoritative Provider Graph admission owner after it
+receives the immutable, fully rendered and validated SwarmPlan. Before graph
+construction it:
+
+1. atomically acquires one bounded graph-admission slot and reserves the full
+   configured per-admission working-memory budget, releasing both on every
+   terminal outcome;
+2. validates complete-plan role, port, topology-edge, resolved-work-entry and
+   terminal-binding counts plus every resolved suffix's exact UTF-8 byte length
+   against the mandatory limits in [Capacity and performance](#capacity-and-performance);
+3. groups work entries by exact non-empty resolved suffix and uses checked
+   multiplication and addition to calculate:
+
+   ```text
+   derivedRuntimeEdgeCount =
+     sumForEachNonEmptyQueueSuffix(
+       outputEntryCount(queueSuffix)
+       * inputEntryCount(queueSuffix)
+     )
+   ```
+
+4. rejects arithmetic overflow or a sum above
+   `maximumProviderGraphDerivedRuntimeEdges` before creating any Cartesian
+   edge; and
+5. constructs and compares the two graphs within the reserved memory budget.
+
+Equality with a configured maximum is admitted; only a greater value fails.
+An implementation may retain suffix groups and traverse their implied edges
+instead of materialising every Runtime Graph edge, but it must prove exactly
+the same potential publisher-to-consumer connections and reachability as the
+Cartesian graph. It may not reduce the counted edge total or select one edge.
+
 For graph `G`, selected Scheduler role `S` and terminal role `T`, admission
 computes the **Provider-Relevant Subgraph** as follows:
 
@@ -492,10 +524,13 @@ Scheduler or supplies missing logical edges. Missing topology, missing `work`
 wiring, unresolved or empty queue suffixes, invalid ports, logical/runtime
 disagreement or terminal mismatch fails before Dataset, Provider Run ledger or
 capacity reservation creation with
-`PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. An unrelated Scheduler outside both
-representations remains unrelated. A second independent Scheduler requires a
-separate provider Create Swarm command and Provider Run. Aggregate multi-source
-issuance and a multi-source completion barrier are outside the MVP.
+`PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. A different Scheduler is unrelated to a
+terminal only when it cannot reach that terminal through either complete
+Logical Graph or complete Runtime Graph. Whether it belongs to the selected
+Scheduler's Provider-Relevant Subgraphs is irrelevant. A second independent
+Scheduler source requires a separate provider Create Swarm command and Provider
+Run. Aggregate multi-source issuance and a multi-source completion barrier are
+outside the MVP.
 
 Source validation completes before every provisioning side effect and returns
 one closed error on failure:
@@ -505,15 +540,37 @@ PROVIDER_SCHEDULER_SOURCE_REQUIRED
 PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS
 PROVIDER_SCHEDULER_UNBOUNDED
 PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH
+PROVIDER_GRAPH_LIMIT_EXCEEDED
 ```
 
 Evaluation order is closed: validate the explicit selected role and its finite
-configuration; build and validate both graphs; require the selected role to
-reach the terminal in both; reject another Scheduler reaching that terminal
-through either graph as `PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS`; then compare the
-relevant node and edge sets. Graph construction, reachability or agreement
-failure returns `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. No later check replaces
-an earlier failure with a fallback.
+configuration; reserve graph-admission resources; validate every graph limit
+and derived-edge calculation; build and validate both graphs; require the
+selected role to reach the terminal in both; reject another Scheduler reaching
+that terminal through either graph as `PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS`;
+then compare the relevant node and edge sets. Graph construction, reachability
+or agreement failure returns `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. No later
+check replaces an earlier failure with a fallback.
+
+`PROVIDER_GRAPH_LIMIT_EXCEEDED` returns only the closed limit `dimension` and
+its configured positive `maximum`. It never returns queue suffixes, secrets,
+record data or canonical preimage content. Arithmetic overflow reports
+`DERIVED_RUNTIME_EDGES`; admission-slot or memory-budget saturation reports
+`CONCURRENT_GRAPH_ADMISSIONS` or `GRAPH_ADMISSION_WORKING_MEMORY_BYTES`.
+
+```text
+dimension =
+  PROVIDER_ROLES
+  | TOTAL_PORTS
+  | TOPOLOGY_EDGES
+  | WORK_ENTRIES
+  | TERMINAL_BINDINGS
+  | QUEUE_SUFFIX_UTF8_BYTES
+  | DERIVED_RUNTIME_EDGES
+  | GRAPH_EVIDENCE_PREIMAGE_BYTES
+  | CONCURRENT_GRAPH_ADMISSIONS
+  | GRAPH_ADMISSION_WORKING_MEMORY_BYTES
+```
 
 ### Provider Run graph evidence
 
@@ -571,6 +628,12 @@ every terminal Managed Dataset output in the complete plan:
   ]
 }
 ```
+
+The encoder first completes both canonical preimages in a bounded buffer and
+uses checked addition to compare their combined UTF-8 byte count with
+`maximumProviderGraphEvidencePreimageBytes`. Crossing the limit aborts before
+SHA-256 is invoked or evidence is persisted; byte-count overflow fails with
+the same limit dimension.
 
 Canonical encoding rules are exact:
 
@@ -1230,6 +1293,62 @@ Required limit groups include:
 - `maximumLoadedWorkerContinuityDuration` and the Controller recovery-time
   objective.
 
+Provider Graph admission adds these mandatory deployment-qualified settings:
+
+| Setting | Exact scope |
+|---|---|
+| `maximumProviderGraphRoles` | Complete SwarmPlan Bee role count. |
+| `maximumProviderGraphPorts` | Sum of all Bee port definitions. |
+| `maximumProviderGraphTopologyEdges` | Complete validated `topology.edges` count. |
+| `maximumProviderGraphWorkEntries` | Complete resolved `work.in` plus `work.out` entry count. |
+| `maximumProviderGraphTerminalBindings` | Complete terminal Managed Dataset binding count. |
+| `maximumProviderGraphQueueSuffixUtf8Bytes` | Maximum UTF-8 bytes in each exact non-empty resolved suffix. |
+| `maximumProviderGraphDerivedRuntimeEdges` | Sum of every checked output-count × input-count suffix product. |
+| `maximumProviderGraphEvidencePreimageBytes` | Combined canonical UTF-8 bytes of `topologyDigest` and `runtimeBindingDigest` preimages. |
+| `maximumConcurrentProviderGraphAdmissions` | Graph admissions allowed to execute concurrently. |
+| `maximumProviderGraphAdmissionWorkingMemoryBytes` | Reserved working memory for one admission, including graph/suffix indexes, traversals, sorting and both canonical preimages. |
+| `providerGraphAdmissionSlo` | Maximum qualified admission duration at every structural maximum above. |
+
+Every setting is present, positive and explicitly qualified for the deployed
+Orchestrator build, JVM and canonicalisation library. There are no defaults.
+Missing, zero, negative or unqualified settings prevent Managed Dataset
+capability advertisement.
+
+The graph executor has exactly
+`maximumConcurrentProviderGraphAdmissions` workers and no waiting task queue.
+Failure to acquire a slot or its full working-memory reservation rejects
+immediately with `PROVIDER_GRAPH_LIMIT_EXCEEDED`; it never queues without a
+bound or caller-runs on request/control threads. Structural counts and suffix
+sizes are checked before graph/index construction. Every multiplication and
+accumulation, including structural and UTF-8 byte totals, uses overflow-safe
+arithmetic. An overflow reports its corresponding closed dimension. Derived
+edge arithmetic is checked before any Cartesian materialisation.
+
+The implementation supplies a qualified monotonic memory estimator for its
+exact graph representation. For each plan:
+
+```text
+requiredProviderGraphAdmissionWorkingMemory(plan) =
+  qualifiedRolePortTopologyWorkAndBindingIndexBytes(plan)
+  + qualifiedSuffixGroupingAndTraversalBytes(plan)
+  + maximumProviderGraphEvidencePreimageBytes
+  + qualifiedGraphLibraryOverhead
+  + qualifiedPerAdmissionHeadroom
+
+requiredProviderGraphAdmissionMemory =
+  maximumConcurrentProviderGraphAdmissions
+  * maximumProviderGraphAdmissionWorkingMemoryBytes
+  + qualifiedGraphExecutorOverhead
+  + minimumGcHeadroom
+```
+
+Both calculations use checked arithmetic. A plan whose required working memory
+exceeds the per-admission limit fails before graph construction. Orchestrator
+capacity reserves `requiredProviderGraphAdmissionMemory` in addition to base
+application, non-Dataset control-plane and validation memory. Qualification
+must prove that the maximum admitted plan remains within this heap budget and
+`providerGraphAdmissionSlo` under maximum admitted concurrency.
+
 Admission uses measured representation sizes for the qualified PostgreSQL,
 Redis and client versions:
 
@@ -1343,8 +1462,8 @@ No implementation starts until M0 establishes one executable SSOT for:
 
 1. Dataset Definition, Schema Contract and catalogue import/evidence;
 2. Dataset Requirements Document version 1 and Scenario Manager projection;
-3. provider plan, Provider Item ID/Run ledger, completion barrier, Dataset
-   selection and frozen Scenario Binding;
+3. provider plan, bounded graph admission/digests, Provider Item ID/Run ledger,
+   completion barrier, Dataset selection and frozen Scenario Binding;
 4. `MANAGED_DATASET` input/output capability and config;
 5. Record Codec, WorkItem Provider/Dataset Context and provider output receipt;
 6. PostgreSQL catalogue, Dataset lifecycle, provider completion, idempotency,
@@ -1396,8 +1515,9 @@ milestone is absent and rejected, not silently accepted.
 | A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
 | A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Replacement changes the expected epoch; old evidence cannot satisfy it. Partial coverage never becomes `CONSUMING`, and uncertain traffic distribution does not reject an otherwise valid Create Swarm. |
 | A23 | For each binding, target total above `frozenProviderRun.maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger frozen bound pass. Two bindings using the same run are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
-| A24a | Linear, diamond, fan-out, fan-in and cyclic fixtures prove bounded forward/reverse Provider-Relevant Subgraph construction without path enumeration. The explicit finite `schedulerRole` succeeds only when both graphs reach each exact terminal and their relevant node/edge sets agree. Duplicate suffix fixtures expose every possible publisher-consumer edge and never select one. Topology-only/runtime-only connectivity, absent topology, missing or wrong-direction ports/work, empty or unresolved queues and terminal role/`bindingRef` mismatch return `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. A competitor reaching the terminal through only one graph returns the ambiguous-source error; a Scheduler outside both relevant subgraphs is ignored. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. Every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
+| A24a | Linear, diamond, fan-out, fan-in and cyclic fixtures prove bounded forward/reverse Provider-Relevant Subgraph construction without path enumeration. The explicit finite `schedulerRole` succeeds only when both graphs reach each exact terminal and their relevant node/edge sets agree. Duplicate suffix fixtures expose every possible publisher-consumer edge and never select one. Topology-only/runtime-only connectivity, absent topology, missing or wrong-direction ports/work, empty or unresolved queues and terminal role/`bindingRef` mismatch return `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. Any other Scheduler reaching the terminal through either complete graph returns `PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS`; only one unable to reach it in both complete graphs is ignored. A fixture where `S1` reaches `T` in both graphs and independent `S2` also reaches `T` in both rejects as ambiguous even though `S2` is not reachable from `S1` and is outside `S1`'s Provider-Relevant Subgraphs. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. Every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
 | A24b | Canonical vectors reject duplicate role, port, edge, work and binding identities. Semantically identical maps and arrays in different authoring orders produce identical `topologyDigest` and `runtimeBindingDigest`; any covered topology, port, resolved wiring, suffix or terminal-binding change produces a different digest. Exact retry reproduces both digests; a changed retry conflicts before provisioning and leaves zero Dataset, Provider Run ledger and capacity reservations. |
+| A24c | Every Provider Graph structural, suffix-byte, derived-edge, evidence-byte, concurrency and working-memory limit succeeds exactly at its maximum and fails at maximum plus one before provisioning. One heavily duplicated suffix reaches the Cartesian boundary; several suffix products accumulate exactly; multiplication/addition overflow fails closed. Evidence-byte overflow occurs before hashing/persistence. Maximum concurrent admissions stay within the qualified heap with no waiting or caller-runs; one additional admission rejects. The maximum admitted topology meets `providerGraphAdmissionSlo` and its memory budget. Every failure creates no Dataset, Provider Run ledger or capacity reservation and exposes only the dimension and maximum. |
 | A25 | Admission rejects `staleAfter` or `evidenceWindow` below `maximumObservationDeliveryAge` with `DATASET_OBSERVATION_WINDOW_UNATTAINABLE`; equality passes. Delayed, expired, clock-skewed, duplicate, out-of-order and replaced-epoch reports cannot regress or falsely advance status. Continuous valid attempts become observable within the qualified bound; Controller delay, bounded report loss and worker churn preserve precedence and the expected denominator. |
 
 Documentation is design evidence only. None of these gates is proven until its
@@ -1422,7 +1542,7 @@ executable contract, implementation and recorded test result exist.
 | High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
-| Medium | Scheduler-source topology/wiring agreement and Provider Run freezing are design-only. | Implement exact-role/digest freezing and dual-representation source tests A23/A24a-A24b. |
+| Medium | Scheduler-source graph limits, topology/wiring agreement and Provider Run freezing are design-only. | Implement bounded graph admission, exact-role/digest freezing and dual-representation source tests A23/A24a-A24c. |
 | Medium | Observation delivery, monotonic ordering and churn transitions are design-only. | Qualify every delivery component, clock skew, queue pressure and precedence under A14/A22/A25. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |

@@ -83,6 +83,12 @@ duplicate suffixes cannot silently select one connection. An unrelated graph
 component is ignored, but a second Scheduler reaching the terminal through
 either graph is ambiguous.
 
+Before graph work, Orchestrator reserves bounded concurrency and memory, then
+checks explicit qualified limits for plan structure, suffix bytes, derived
+Cartesian edges and canonical evidence bytes. Overflow or saturation fails
+before any Dataset, ledger or capacity reservation; no unbounded or caller-runs
+executor is allowed.
+
 Orchestrator freezes the role, canonical `topologyDigest`, canonical
 `runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run
 ID/fence and binding set. The graph digests use closed versioned shapes, stable
