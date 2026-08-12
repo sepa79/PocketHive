@@ -139,6 +139,7 @@ are approved.
 | Group | Frozen partition identified by an opaque `groupId` and exact schema-defined key. |
 | Provider Binding | Frozen plan that creates one Dataset Instance and its Groups. |
 | Provider Run | One fenced initial-fill execution bound to one explicit finite upstream Scheduler role, agreeing logical topology and resolved runtime wiring, and the terminal Managed Dataset bindings it supplies. |
+| Provider-Relevant Subgraph | Proposed per-graph nodes and edges that participate in a directed walk from the explicit Scheduler role to one terminal Managed Dataset role. It is computed by bounded reachability, not path enumeration. |
 | Provider Item ID | Proposed Scheduler-owned identity allocated once for one logical provider item, unique within its Provider Run and preserved through retry, redelivery and restart. It is not the optional general WorkItem `messageId`. |
 | Provider Completion Barrier | Proposed bounded PostgreSQL ledger proving issuance is closed, every issued item is terminal, in-flight count is zero and record creation is fenced before seal evaluation. It is not a workflow engine. |
 | Consumer Binding | Frozen selection of one sealed Dataset Instance and Group. |
@@ -438,26 +439,59 @@ terminal Managed Dataset output in both the validated topology and the fully
 rendered, validated SwarmPlan wiring, and no other Scheduler reaches those
 outputs through either representation.
 
-For every edge on the selected provider path, admission proves that:
+Admission constructs two directed role graphs from the same immutable, fully
+rendered and validated SwarmPlan snapshot. Both have one node for every unique
+SwarmPlan Bee `role`:
 
-- source and destination roles exist;
-- the topology port IDs exist on those roles with `out` and `in` directions;
-- the source port maps to the corresponding `work.out` entry and the
-  destination port maps to the corresponding `work.in` entry;
-- both fully resolved queue suffixes exist and are equal;
-- the terminal role owns the declared `MANAGED_DATASET` output and exact
-  `bindingRef`;
-- the selected role declares `inputs.type: SCHEDULER`, its exact resolved input
-  configuration has positive `maxMessages` and, on retry, matches the frozen
-  digest; and
-- no different Scheduler reaches a terminal binding through either topology
-  or equal resolved runtime queues.
+- the **Logical Graph** contains every exact `topology` edge, retaining its
+  edge ID and source/destination role and port endpoints; and
+- the **Runtime Graph** contains one potential delivery edge for every
+  `work.out` and `work.in` entry whose exact resolved queue suffix is the same
+  non-empty string. The edge retains both roles, both port keys and that suffix.
+
+A suffix used by several outputs or inputs creates the full Cartesian set of
+possible publisher-to-consumer edges. Admission never chooses one connection.
+Runtime wiring verifies topology; it never creates or substitutes for a
+missing logical edge.
+
+For graph `G`, selected Scheduler role `S` and terminal role `T`, admission
+computes the **Provider-Relevant Subgraph** as follows:
+
+```text
+forward(G, S) = nodes reachable from S, including S
+reverse(G, T) = nodes from which T is reachable, including T
+relevantNodes(G, S, T) = forward(G, S) intersect reverse(G, T)
+relevantEdges(G, S, T) = edges whose source and destination are relevantNodes
+```
+
+This uses one forward and one reverse traversal per graph and terminal. It does
+not enumerate paths, so diamonds, fan-out, fan-in and cycles remain bounded by
+the admitted node, edge and terminal-binding limits.
+
+For each terminal binding, admission requires:
+
+- `S` reaches `T` in both graphs;
+- the two Provider-Relevant Subgraphs have the same role nodes and canonical
+  edge tuples `(sourceRole, sourcePort, destinationRole, destinationPort,
+  resolvedQueueSuffix)`;
+- each relevant topology source/destination port exists on its role, has
+  `out`/`in` direction respectively, maps to the same-key `work.out`/`work.in`
+  entry and resolves to the edge tuple's exact non-empty equal suffix;
+- no logical-only or runtime-only relevant node or edge exists;
+- `T` owns the declared `outputs.type: MANAGED_DATASET`, operation
+  `CREATE_RECORD` and exact `bindingRef` in the Provider Run plan;
+- `S` declares `inputs.type: SCHEDULER`, its exact resolved configuration has
+  positive `maxMessages` and, on retry, matches the frozen digest; and
+- no other role whose resolved input type is `SCHEDULER` reaches `T` through
+  either complete graph. A competitor visible in only one graph is still
+  ambiguous.
 
 Every listed binding must belong to that Provider Run. Runtime wiring verifies
 the explicit selection and detects competing sources; it never selects the
 Scheduler or supplies missing logical edges. Missing topology, missing `work`
-wiring, unresolved queues or any disagreement fails before Dataset, Provider
-Run ledger or capacity reservation creation with
+wiring, unresolved or empty queue suffixes, invalid ports, logical/runtime
+disagreement or terminal mismatch fails before Dataset, Provider Run ledger or
+capacity reservation creation with
 `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. An unrelated Scheduler outside both
 representations remains unrelated. A second independent Scheduler requires a
 separate provider Create Swarm command and Provider Run. Aggregate multi-source
@@ -473,18 +507,109 @@ PROVIDER_SCHEDULER_UNBOUNDED
 PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH
 ```
 
-Only successful admission may persist a Provider Run. Its immutable evidence
-freezes the explicit Scheduler role, validated topology digest, fully resolved
-runtime-binding digest, exact resolved Scheduler input-configuration digest,
-positive `maxMessages`, Provider Run ID and fence, and complete terminal
-Managed Dataset binding set. The M0 digest contract covers the relevant roles,
-ports, edges, `work` directions, port keys, resolved queue suffixes, terminal
-outputs and binding references from the same immutable rendered SwarmPlan.
+Evaluation order is closed: validate the explicit selected role and its finite
+configuration; build and validate both graphs; require the selected role to
+reach the terminal in both; reject another Scheduler reaching that terminal
+through either graph as `PROVIDER_SCHEDULER_SOURCE_AMBIGUOUS`; then compare the
+relevant node and edge sets. Graph construction, reachability or agreement
+failure returns `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. No later check replaces
+an earlier failure with a fallback.
 
-An exact retry revalidates and compares the frozen role, digests and binding
-set before any new side effect. A changed topology, runtime wiring, Scheduler
-configuration or binding membership under the same command/idempotency identity
-conflicts; it never reuses or mutates the existing Provider Run.
+### Provider Run graph evidence
+
+M0 defines two closed canonical JSON preimages. Both are built from the same
+SwarmPlan snapshot used for admission; unknown fields and nullable/defaultable
+aliases are not permitted in either evidence shape.
+
+`topologyDigest` covers the complete validated topology, every SwarmPlan Bee
+role identity and that role's complete validated port definitions. A role with
+no ports has an explicit empty `ports` array:
+
+```json
+{
+  "contract": "pockethive.managed-dataset.provider-topology",
+  "version": 1,
+  "topologyVersion": 1,
+  "roles": [
+    {"role": "provider-source", "ports": [{"id": "out", "direction": "out"}]},
+    {"role": "provider-terminal", "ports": [{"id": "in", "direction": "in"}]}
+  ],
+  "edges": [
+    {
+      "id": "edge-1",
+      "from": {"role": "provider-source", "port": "out"},
+      "to": {"role": "provider-terminal", "port": "in"},
+      "selector": {"state": "ABSENT"}
+    }
+  ]
+}
+```
+
+An existing selector uses
+`{"state":"PRESENT","policy":<exact string or null>,"expr":<exact string or null>}`.
+The explicit state distinguishes absence from a present selector object; no
+value is invented.
+
+`runtimeBindingDigest` covers every resolved `work.in`/`work.out` entry and
+every terminal Managed Dataset output in the complete plan:
+
+```json
+{
+  "contract": "pockethive.managed-dataset.provider-runtime-bindings",
+  "version": 1,
+  "work": [
+    {"role": "provider-source", "direction": "out", "port": "out", "queueSuffix": "providerQ"},
+    {"role": "provider-terminal", "direction": "in", "port": "in", "queueSuffix": "providerQ"}
+  ],
+  "terminalBindings": [
+    {
+      "bindingRef": "supplyRecords",
+      "role": "provider-terminal",
+      "outputType": "MANAGED_DATASET",
+      "operation": "CREATE_RECORD"
+    }
+  ]
+}
+```
+
+Canonical encoding rules are exact:
+
+- role identity is `role`; port identity is `(role, id)`; topology-edge
+  identity is `id`; work identity is `(role, direction, port)`; terminal
+  binding identity is `bindingRef`; duplicates are never deduplicated. Existing
+  SwarmPlan validation retains its closed error; a duplicate reaching Managed
+  Dataset graph admission returns `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH` before
+  side effects;
+- roles sort by `role`; ports by `id`; edges by `id`; work entries by `role`,
+  then `direction` (`in` before `out`), then `port`; terminal bindings by
+  `bindingRef`;
+- the encoder preserves every validated string from the rendered plan exactly;
+  it performs no trimming, case folding or null/default substitution;
+- the closed shape is encoded as canonical UTF-8 bytes with RFC 8785 JSON
+  Canonicalization Scheme and hashed with SHA-256; each digest is `sha256:` plus
+  lowercase hexadecimal; and
+- secrets, environment/configuration values, materialised runtime instance
+  IDs, counters, status and other mutable runtime state are excluded. The
+  Scheduler input-configuration digest remains separate.
+
+Sorting makes semantically identical maps and arrays independent of authoring
+order. Any covered topology, port, resolved work entry, queue suffix or
+terminal-output/binding change changes its canonical preimage. Provider
+relevance controls source agreement only; both digests cover the complete
+authoring semantics above, including otherwise unrelated graph components, so
+an exact retry cannot hide a plan change.
+
+Only successful admission may persist a Provider Run. Its immutable evidence
+freezes the explicit Scheduler role, `topologyDigest`, `runtimeBindingDigest`,
+exact resolved Scheduler input-configuration digest,
+positive `maxMessages`, Provider Run ID and fence, and complete terminal
+Managed Dataset binding set.
+
+An exact retry rebuilds and must reproduce both graph digests, then compares the
+frozen role, Scheduler configuration digest and binding set before any new side
+effect. Any topology, port, resolved wiring, terminal binding, Scheduler
+configuration or binding-membership change under the same command/idempotency
+identity conflicts; it never reuses or mutates the existing Provider Run.
 
 The Orchestrator then renders Group keys once from the frozen Provider Scenario
 Binding and validates positive targets. Because MVP `outputOrdinal: 0` permits
@@ -1271,7 +1396,8 @@ milestone is absent and rejected, not silently accepted.
 | A21 | Executable Redis tests reject cross-binding reads/writes, unknown or unapproved `FCALL`, all `FUNCTION` administration including load/replace, `EVAL*`, `SCRIPT` and stale-generation activation. The Controller port rejects direct Active Reference mutation; any claimed ACL-level rejection is separately proven against the deployed version. |
 | A22 | Low-rate, skewed-worker and worker-churn tests produce `NOT_READY`, `AWAITING_EVIDENCE`, `PARTIAL_EVIDENCE`, `CONSUMING` and `STALE_EVIDENCE` truthfully. Replacement changes the expected epoch; old evidence cannot satisfy it. Partial coverage never becomes `CONSUMING`, and uncertain traffic distribution does not reject an otherwise valid Create Swarm. |
 | A23 | For each binding, target total above `frozenProviderRun.maxMessages` returns `PROVIDER_PLAN_UNATTAINABLE` before provisioning; equality and a larger frozen bound pass. Two bindings using the same run are checked independently, and rejection leaves no Dataset, Provider Run ledger or capacity reservation. |
-| A24 | One exact finite `schedulerRole` succeeds only when topology ports and fully rendered `work.out`/`work.in` queues agree through every path to the exact terminal role and `bindingRef`. Queue-suffix disagreement, absent topology, missing/wrong-direction `work` entries, unresolved queues or terminal-plan mismatch fails with `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`; a second Scheduler reaching through only topology or only runtime queues fails as ambiguous, while one outside both paths is ignored. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. A retry with a changed topology or runtime-binding digest conflicts, and every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
+| A24a | Linear, diamond, fan-out, fan-in and cyclic fixtures prove bounded forward/reverse Provider-Relevant Subgraph construction without path enumeration. The explicit finite `schedulerRole` succeeds only when both graphs reach each exact terminal and their relevant node/edge sets agree. Duplicate suffix fixtures expose every possible publisher-consumer edge and never select one. Topology-only/runtime-only connectivity, absent topology, missing or wrong-direction ports/work, empty or unresolved queues and terminal role/`bindingRef` mismatch return `PROVIDER_SCHEDULER_TOPOLOGY_MISMATCH`. A competitor reaching the terminal through only one graph returns the ambiguous-source error; a Scheduler outside both relevant subgraphs is ignored. Missing/unknown/non-Scheduler and zero/unbounded sources retain their closed errors. Every rejection creates no Dataset, Provider Run ledger or capacity reservation. |
+| A24b | Canonical vectors reject duplicate role, port, edge, work and binding identities. Semantically identical maps and arrays in different authoring orders produce identical `topologyDigest` and `runtimeBindingDigest`; any covered topology, port, resolved wiring, suffix or terminal-binding change produces a different digest. Exact retry reproduces both digests; a changed retry conflicts before provisioning and leaves zero Dataset, Provider Run ledger and capacity reservations. |
 | A25 | Admission rejects `staleAfter` or `evidenceWindow` below `maximumObservationDeliveryAge` with `DATASET_OBSERVATION_WINDOW_UNATTAINABLE`; equality passes. Delayed, expired, clock-skewed, duplicate, out-of-order and replaced-epoch reports cannot regress or falsely advance status. Continuous valid attempts become observable within the qualified bound; Controller delay, bounded report loss and worker churn preserve precedence and the expected denominator. |
 
 Documentation is design evidence only. None of these gates is proven until its
@@ -1296,7 +1422,7 @@ executable contract, implementation and recorded test result exist.
 | High | Provider Item ID, completion-barrier concurrency and exact-target sealing are design-only. | PostgreSQL/Scheduler transaction, redelivery and crash tests A3-A5/A19. |
 | Medium | Strict Schema Profile may reject valid but complex team schemas. | M0 corpus review; expand only with bounded semantics and performance evidence. |
 | Medium | One active Controller provides continuity, not Controller HA. | Publish recovery time objective and test it; design HA separately if required. |
-| Medium | Scheduler-source topology/wiring agreement and Provider Run freezing are design-only. | Implement exact-role/digest freezing and dual-representation source tests A23/A24. |
+| Medium | Scheduler-source topology/wiring agreement and Provider Run freezing are design-only. | Implement exact-role/digest freezing and dual-representation source tests A23/A24a-A24b. |
 | Medium | Observation delivery, monotonic ordering and churn transitions are design-only. | Qualify every delivery component, clock skew, queue pressure and precedence under A14/A22/A25. |
 | Medium | Non-expiring PostgreSQL records need an operating-horizon capacity/runbook. | Admission forecast, backup/restore and explicit future retirement trigger. |
 | Low | Per-swarm projections duplicate shared data. | Revisit only after measured memory pressure; do not introduce cross-swarm cache implicitly. |

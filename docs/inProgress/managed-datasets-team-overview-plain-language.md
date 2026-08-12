@@ -72,12 +72,19 @@ port, `work.out`/`work.in` queue pair, terminal role and `bindingRef`. Missing o
 disagreeing details fail before it creates a Dataset, ledger or capacity
 reservation.
 
-PocketHive freezes the role, topology digest, runtime-wiring digest, Scheduler
-config digest, positive `maxMessages`, run ID/fence and binding set. A changed
-retry conflicts. An unrelated Scheduler outside both paths is ignored; a second
-source needs a separate Provider Run. These extra admission checks do not change
-ordinary Scenario Protocol v2 scenarios, and queue wiring never chooses the
-Scheduler.
+PocketHive finds the relevant part of each graph with bounded forward and
+reverse searches; it does not list every possible path. A queue suffix shared
+by several outputs or inputs represents every possible connection, never a
+guessed one. Unrelated graph components are ignored; a second Scheduler that
+can reach the terminal through either graph is ambiguous.
+
+PocketHive freezes the role, canonical `topologyDigest` and
+`runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run
+ID/fence and binding set. Stable sorting plus RFC 8785 and SHA-256 make
+authoring order irrelevant while any covered wiring change produces a
+different digest. A changed retry conflicts. These admission checks do not
+change ordinary Scenario Protocol v2 scenarios, and queue wiring never chooses
+the Scheduler.
 
 Before creating anything, PocketHive checks each Dataset separately. Its total
 record target must not exceed the frozen Provider Run `maxMessages`, because one

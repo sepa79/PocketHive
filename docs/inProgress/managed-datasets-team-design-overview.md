@@ -76,11 +76,19 @@ and no other Scheduler may reach one through either representation. Missing or
 disagreeing ports, work entries, queues, terminal roles or `bindingRef` values
 fail before any Dataset, ledger or capacity reservation.
 
-Orchestrator freezes the role, topology digest, runtime-binding digest,
-Scheduler config digest, positive `maxMessages`, run ID/fence and binding set.
-A changed retry conflicts. An unrelated Scheduler outside both paths is ignored;
-a second independent source requires a separate Provider Run. This admission
-rule does not change Scenario Protocol v2 or let runtime wiring choose a role.
+For each terminal, Orchestrator uses bounded forward/reverse reachability to
+compare the complete relevant logical and runtime subgraphs; it never enumerates
+paths. Equal queue suffixes create every possible publisher-consumer edge, so
+duplicate suffixes cannot silently select one connection. An unrelated graph
+component is ignored, but a second Scheduler reaching the terminal through
+either graph is ambiguous.
+
+Orchestrator freezes the role, canonical `topologyDigest`, canonical
+`runtimeBindingDigest`, Scheduler config digest, positive `maxMessages`, run
+ID/fence and binding set. The graph digests use closed versioned shapes, stable
+identity sorting, RFC 8785 and SHA-256. A covered change on retry conflicts.
+This admission rule does not change Scenario Protocol v2 or let runtime wiring
+choose a role.
 
 The finite Scheduler ledger allocates one stable
 `providerItemId` per logical item and preserves it through retry, redelivery and
