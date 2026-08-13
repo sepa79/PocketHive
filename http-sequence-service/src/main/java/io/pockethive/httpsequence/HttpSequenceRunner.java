@@ -34,6 +34,7 @@ final class HttpSequenceRunner {
   private final TemplateRenderer templateRenderer;
   private final TemplateLoader templateLoader;
   private final HttpCallExecutor httpExecutor;
+  private final HttpSequenceTargetResolver targetResolver;
   private final RedisDebugCaptureStore debugCaptureStore;
   private final RedisSequenceProperties redisProperties;
   private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
@@ -51,6 +52,7 @@ final class HttpSequenceRunner {
       TemplateRenderer templateRenderer,
       TemplateLoader templateLoader,
       HttpCallExecutor httpExecutor,
+      HttpSequenceTargetResolver targetResolver,
       RedisSequenceProperties redisProperties
   ) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
@@ -58,6 +60,7 @@ final class HttpSequenceRunner {
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.httpExecutor = Objects.requireNonNull(httpExecutor, "httpExecutor");
+    this.targetResolver = Objects.requireNonNull(targetResolver, "targetResolver");
     this.debugCaptureStore = new RedisDebugCaptureStore(mapper, redisProperties);
     this.redisProperties = Objects.requireNonNull(redisProperties, "redisProperties");
   }
@@ -84,6 +87,7 @@ final class HttpSequenceRunner {
     boolean failed = false;
     int totalCapturedBytes = 0;
     try {
+      List<HttpSequenceTargetResolver.BaseTarget> baseTargets = targetResolver.resolveBases(config);
       reloadTemplatesIfNeeded(config);
       AuthRuntime authRuntime = AuthRuntime.forTemplates(
           config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
@@ -102,8 +106,9 @@ final class HttpSequenceRunner {
 
         HttpCallExecutor.RenderedCall rendered =
             renderCall(httpDef, serviceId, step.callId(), payload, current, context, authRuntime);
+        HttpSequenceTargetResolver.ResolvedTarget target = targetResolver.resolve(baseTargets.get(i), rendered.path());
 
-        HttpCallAttempt attempt = executeWithRetry(config, step, rendered, context);
+        HttpCallAttempt attempt = executeWithRetry(step, target, rendered);
         HttpCallExecutor.HttpCallResult result = attempt.result();
 
         long durationMs = attempt.totalDurationMs();
@@ -122,7 +127,7 @@ final class HttpSequenceRunner {
           }
           if ((totalCapturedBytes + bodyBytes) <= config.debugCapture().maxJourneyBytes()) {
             totalCapturedBytes += bodyBytes;
-            debugRef = debugCaptureStore.store(info, config.baseUrl(), serviceId, step.callId(), rendered, result,
+            debugRef = debugCaptureStore.store(info, target, serviceId, step.callId(), rendered, result,
                 config.debugCapture());
           }
         }
@@ -134,7 +139,7 @@ final class HttpSequenceRunner {
         applySetters(step, payload, current, context);
 
         current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
-            attempts, sha256, debugRef, bodyPreview, null);
+            attempts, sha256, debugRef, bodyPreview, target, null);
 
         if (isError && !step.continueOnNon2xx()) {
           failed = true;
@@ -244,10 +249,9 @@ final class HttpSequenceRunner {
         .toList();
   }
 
-  private HttpCallAttempt executeWithRetry(HttpSequenceWorkerConfig worker,
-                                          HttpSequenceWorkerConfig.Step step,
-                                          HttpCallExecutor.RenderedCall rendered,
-                                          WorkerContext context) {
+  private HttpCallAttempt executeWithRetry(HttpSequenceWorkerConfig.Step step,
+                                           HttpSequenceTargetResolver.ResolvedTarget target,
+                                           HttpCallExecutor.RenderedCall rendered) {
     HttpSequenceWorkerConfig.Retry retry = step.retry();
     int maxAttempts = retry == null ? 1 : retry.maxAttempts();
     if (maxAttempts <= 0) {
@@ -258,7 +262,7 @@ final class HttpSequenceRunner {
     HttpCallExecutor.HttpCallResult last = null;
     for (int attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        last = httpExecutor.execute(worker.baseUrl(), rendered);
+        last = httpExecutor.execute(target.uri(), rendered);
       } catch (Exception ex) {
         last = new HttpCallExecutor.HttpCallResult(-1, Map.of(), "", ex.toString());
       }
@@ -465,30 +469,36 @@ final class HttpSequenceRunner {
                                    String sha256,
                                    String debugRef,
                                    String bodyPreview,
+                                   HttpSequenceTargetResolver.ResolvedTarget target,
                                    String error) {
     Map<String, Object> stepHeaders = new LinkedHashMap<>();
-    stepHeaders.put("x-ph-http-seq-step-index", stepIndex);
+    stepHeaders.put(HttpSequenceHeaders.STEP_INDEX, stepIndex);
     if (step != null && step.id() != null) {
-      stepHeaders.put("x-ph-http-seq-step-id", step.id());
+      stepHeaders.put(HttpSequenceHeaders.STEP_ID, step.id());
     }
-    stepHeaders.put("x-ph-http-seq-service-id", serviceId);
-    stepHeaders.put("x-ph-http-seq-call-id", callId);
-    stepHeaders.put("x-ph-http-seq-status", result.statusCode());
-    stepHeaders.put("x-ph-http-seq-duration-ms", durationMs);
-    stepHeaders.put("x-ph-http-seq-attempts", attempts);
-    stepHeaders.put("x-ph-http-seq-sha256", sha256);
-    stepHeaders.put("x-ph-http-seq-response-bytes", result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length);
+    stepHeaders.put(HttpSequenceHeaders.SERVICE_ID, serviceId);
+    stepHeaders.put(HttpSequenceHeaders.CALL_ID, callId);
+    stepHeaders.put(HttpSequenceHeaders.STATUS, result.statusCode());
+    stepHeaders.put(HttpSequenceHeaders.DURATION_MS, durationMs);
+    stepHeaders.put(HttpSequenceHeaders.ATTEMPTS, attempts);
+    stepHeaders.put(HttpSequenceHeaders.SHA256, sha256);
+    stepHeaders.put(HttpSequenceHeaders.RESPONSE_BYTES,
+        result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length);
+    stepHeaders.put(HttpSequenceHeaders.TARGET_SOURCE, target.source().name());
+    if (target.sutEndpointId() != null) {
+      stepHeaders.put(HttpSequenceHeaders.SUT_ENDPOINT_ID, target.sutEndpointId());
+    }
     if (bodyPreview != null && !bodyPreview.isEmpty()) {
-      stepHeaders.put("x-ph-http-seq-body-preview", bodyPreview);
+      stepHeaders.put(HttpSequenceHeaders.BODY_PREVIEW, bodyPreview);
     }
     if (debugRef != null) {
-      stepHeaders.put("x-ph-http-seq-debug-ref", debugRef);
+      stepHeaders.put(HttpSequenceHeaders.DEBUG_REF, debugRef);
     }
     if (result.error() != null) {
-      stepHeaders.put("x-ph-http-seq-error", result.error());
+      stepHeaders.put(HttpSequenceHeaders.ERROR, result.error());
     }
     if (error != null && !error.isBlank()) {
-      stepHeaders.put("x-ph-http-seq-failure", error);
+      stepHeaders.put(HttpSequenceHeaders.FAILURE, error);
     }
     String nextPayload = serializePayload(payload);
     return current.addStep(context.info(), nextPayload, stepHeaders).toBuilder().contentType("application/json").build();
@@ -639,7 +649,7 @@ final class HttpSequenceRunner {
     }
 
     String store(WorkerInfo info,
-                 String baseUrl,
+                 HttpSequenceTargetResolver.ResolvedTarget target,
                  String serviceId,
                  String callId,
                  HttpCallExecutor.RenderedCall request,
@@ -654,6 +664,10 @@ final class HttpSequenceRunner {
       node.put("serviceId", serviceId);
       node.put("callId", callId);
       node.put("status", result.statusCode());
+      node.put("targetSource", target.source().name());
+      if (target.sutEndpointId() != null) {
+        node.put("sutEndpointId", target.sutEndpointId());
+      }
       if (result.error() != null) {
         node.put("error", result.error());
       }
@@ -664,7 +678,7 @@ final class HttpSequenceRunner {
       if (capture.includeRequest() && request != null) {
         ObjectNode req = mapper.createObjectNode();
         req.put("method", request.method());
-        req.put("url", (baseUrl == null ? "" : baseUrl) + (request.path() == null ? "" : request.path()));
+        req.put("url", target.uri().toString());
         req.set("headers", mapper.valueToTree(request.headers()));
         String requestBody = request.body() == null ? "" : request.body();
         req.put("body", truncateUtf8(requestBody, capture.maxBodyBytes()));

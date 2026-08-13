@@ -42,6 +42,7 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
         templateRenderer,
         new TemplateLoader(),
         new ApacheHttpCallExecutor(pooled),
+        new DefaultHttpSequenceTargetResolver(),
         redisProperties
     );
   }

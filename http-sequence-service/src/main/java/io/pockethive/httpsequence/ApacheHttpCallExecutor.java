@@ -1,5 +1,6 @@
 package io.pockethive.httpsequence;
 
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.Objects;
@@ -20,19 +21,9 @@ final class ApacheHttpCallExecutor implements HttpCallExecutor {
   }
 
   @Override
-  public HttpCallResult execute(String baseUrl, RenderedCall call) throws Exception {
+  public HttpCallResult execute(URI target, RenderedCall call) throws Exception {
+    Objects.requireNonNull(target, "target");
     Objects.requireNonNull(call, "call");
-    if (baseUrl == null || baseUrl.isBlank()) {
-      throw new IllegalArgumentException("baseUrl is required");
-    }
-
-    String path = call.path() == null ? "" : call.path();
-    java.net.URI target;
-    try {
-      target = java.net.URI.create(baseUrl + path);
-    } catch (IllegalArgumentException ex) {
-      throw new IllegalArgumentException("Invalid baseUrl/path: " + ex.getMessage(), ex);
-    }
 
     HttpUriRequestBase request = new HttpUriRequestBase(call.method(), target);
     call.headers().forEach(request::addHeader);

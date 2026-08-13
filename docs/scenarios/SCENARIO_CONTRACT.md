@@ -203,6 +203,39 @@ tag, or digest, so `processor:0.15`, `processor:latest`, and
 metadata, not a deployment tag; runtime image tags come from the scenario or
 deployment environment. Each entry maps a UI field to a path in `config`.
 
+### HTTP Sequence targets
+
+HTTP Sequence keeps one required worker `baseUrl`. A step with no target
+override uses that URL, preserving existing scenarios. A step may instead
+declare exactly one optional override:
+
+```yaml
+config:
+  baseUrl: "{{ sut.endpoints['identity'].baseUrl }}"
+  steps:
+    - id: create-customer
+      callId: create-customer
+    - id: open-account
+      callId: open-account
+      sutEndpointId: accounts
+    - id: notify-audit
+      callId: notify-audit
+      baseUrl: http://audit-sandbox:9080/audit
+```
+
+- `sutEndpointId` selects the matching key in the bound
+  `SutEnvironment.endpoints` map.
+- The selected endpoint must have kind `HTTP` or `HTTPS`, matching its
+  `baseUrl` scheme.
+- Step `baseUrl` is a literal absolute HTTP(S) base URI. It is not templated.
+- A step must not declare both fields. Blank or invalid overrides are errors.
+- An invalid override fails before HTTP I/O and never falls back to worker
+  `baseUrl`.
+- Retry uses the same resolved URI for every attempt.
+
+The scenario protocol remains `2.0.0`. This additive worker contract is
+versioned by `scenario-manager-service/capabilities/http-sequence.latest.yaml`.
+
 ### IO configuration examples
 
 **Scheduler generator (ticks only):**
