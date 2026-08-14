@@ -11,6 +11,10 @@ Use this folder for:
 - workflow experiments,
 - design notes that are still pre-plan.
 
+Current draft concept specs:
+
+- [Production Load Pack MCP Spec](production-load-pack-mcp-spec.md)
+
 Move documents out of `docs/concepts` once they become:
 
 - an implementation plan,
