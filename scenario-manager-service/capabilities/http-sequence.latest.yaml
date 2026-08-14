@@ -1,5 +1,5 @@
 schemaVersion: "1.0"
-capabilitiesVersion: "1.1"
+capabilitiesVersion: "1.2"
 role: http-sequence
 image:
   name: http-sequence
@@ -45,6 +45,7 @@ config:
     ui:
       label: Steps
       group: Journey
+      description: "Each step may set either sutEndpointId or a literal baseUrl override"
   - name: debugCapture
     type: json
     liveMutable: true

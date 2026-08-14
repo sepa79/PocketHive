@@ -1,0 +1,10 @@
+id: local-services
+name: PocketHive local services
+type: test
+endpoints:
+  default:
+    kind: HTTP
+    baseUrl: http://scenario-manager:8080/actuator
+  auth:
+    kind: HTTP
+    baseUrl: http://auth-service:8080/actuator

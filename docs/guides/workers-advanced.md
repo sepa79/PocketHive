@@ -16,6 +16,26 @@ Prefer `http-sequence` when one logical transaction requires multiple
 ordered REST calls with data flowing between steps (for example,
 onboarding chains). This reduces container count and queue hops.
 
+HTTP Sequence keeps a required worker `baseUrl`. Only steps that target a
+different authority need an override:
+
+```yaml
+config:
+  baseUrl: "{{ sut.endpoints['identity'].baseUrl }}"
+  steps:
+    - { id: login, callId: login }
+    - id: account
+      callId: account
+      sutEndpointId: accounts
+    - id: audit
+      callId: audit
+      baseUrl: http://audit-sandbox:9080/audit
+```
+
+Use `sutEndpointId` for a named endpoint in the bound SUT environment. Use
+step `baseUrl` only for an explicit literal HTTP(S) target. Do not set both.
+An invalid override fails without retrying against worker `baseUrl`.
+
 ## 2. Control-plane config updates
 
 All workers should be treated as runtime-configurable components.

@@ -11,6 +11,7 @@ import io.pockethive.worker.sdk.api.WorkerContext;
 import io.pockethive.worker.sdk.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.templating.TemplateRenderer;
+import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
@@ -61,8 +62,11 @@ class HttpSequenceRunnerTest {
     WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
 
     assertThat(executor.calls()).hasSize(2);
+    assertThat(executor.targets()).containsExactly(URI.create("http://sut/a"), URI.create("http://sut/b"));
     assertThat(out.steps()).hasSize(3); // seed + step A + step B
     assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-call-id", "B");
+    assertThat(out.stepHeaders()).containsEntry(
+        HttpSequenceHeaders.TARGET_SOURCE, HttpSequenceTargetResolver.TargetSource.WORKER_BASE_URL.name());
   }
 
   @Test
@@ -108,10 +112,51 @@ class HttpSequenceRunnerTest {
     WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
 
     assertThat(executor.calls()).hasSize(3);
+    assertThat(executor.targets()).containsOnly(URI.create("http://sut/a"));
     assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-status", 200);
     assertThat(out.stepHeaders()).containsEntry("x-ph-http-seq-attempts", 3);
     assertThat(out.payload()).contains("result");
     assertThat(out.payload()).contains("location");
+  }
+
+  @Test
+  void retryKeepsTheSameResolvedSutEndpointUri() throws Exception {
+    writeTemplate("A");
+    RecordingExecutor executor = new RecordingExecutor();
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(503, Map.of(), "retry", null));
+    executor.enqueue(new HttpCallExecutor.HttpCallResult(200, Map.of(), "ok", null));
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+    HttpSequenceWorkerConfig.Retry retry = new HttpSequenceWorkerConfig.Retry(
+        2, 0, 1.0, 0, List.of("5xx"));
+    HttpSequenceWorkerConfig.Step step = new HttpSequenceWorkerConfig.Step(
+        "sut", "A", null, false, retry, List.of(), List.of(), "accounts", null);
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://worker:8080",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(step),
+        new HttpSequenceWorkerConfig.DebugCapture(
+            HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of(),
+        Map.of("authProfile", Map.of("sut", Map.of(
+            "id", "sut-1",
+            "endpoints", Map.of("accounts", Map.of(
+                "kind", "HTTP", "baseUrl", "http://accounts:9080/api")))))
+    );
+
+    WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.targets()).containsExactly(
+        URI.create("http://accounts:9080/api/a"),
+        URI.create("http://accounts:9080/api/a"));
+    assertThat(out.stepHeaders())
+        .containsEntry(HttpSequenceHeaders.ATTEMPTS, 2)
+        .containsEntry(HttpSequenceHeaders.TARGET_SOURCE,
+            HttpSequenceTargetResolver.TargetSource.SUT_ENDPOINT.name())
+        .containsEntry(HttpSequenceHeaders.SUT_ENDPOINT_ID, "accounts");
   }
 
   @Test
@@ -210,6 +255,7 @@ class HttpSequenceRunnerTest {
         new io.pockethive.templating.PebbleTemplateRenderer(),
         new TemplateLoader(),
         executor,
+        new DefaultHttpSequenceTargetResolver(),
         new RedisSequenceProperties());
     WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
     WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
@@ -234,6 +280,78 @@ class HttpSequenceRunnerTest {
             .containsEntry("Authorization", "Bearer http://wiremock:8080/sequence-token"));
   }
 
+  @Test
+  void runsOneJourneyAcrossWorkerSutAndLiteralTargets() throws Exception {
+    writeTemplate("A");
+    writeTemplate("B");
+    writeTemplate("C");
+
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://worker:8080/root",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(
+            new HttpSequenceWorkerConfig.Step("worker", "A", null, false, null, List.of(), List.of()),
+            new HttpSequenceWorkerConfig.Step(
+                "sut", "B", null, false, null, List.of(), List.of(), "accounts", null),
+            new HttpSequenceWorkerConfig.Step(
+                "literal", "C", null, false, null, List.of(), List.of(), null, "http://audit:9080/audit")
+        ),
+        new HttpSequenceWorkerConfig.DebugCapture(
+            HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of(),
+        Map.of("authProfile", Map.of("sut", Map.of(
+            "id", "sut-1",
+            "endpoints", Map.of("accounts", Map.of(
+                "kind", "HTTPS", "baseUrl", "https://accounts:10443/api")))))
+    );
+
+    WorkItem out = runner.run(seed, new TestWorkerContext(info), config);
+
+    assertThat(executor.targets()).containsExactly(
+        URI.create("http://worker:8080/root/a"),
+        URI.create("https://accounts:10443/api/b"),
+        URI.create("http://audit:9080/audit/c"));
+    assertThat(out.stepHeaders())
+        .containsEntry(HttpSequenceHeaders.TARGET_SOURCE,
+            HttpSequenceTargetResolver.TargetSource.STEP_BASE_URL.name())
+        .doesNotContainKey(HttpSequenceHeaders.SUT_ENDPOINT_ID);
+  }
+
+  @Test
+  void invalidLaterOverrideFailsBeforeEarlierStepCanSendTraffic() throws Exception {
+    writeTemplate("A");
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"seed\":true}").contentType("application/json").build();
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://worker:8080",
+        tempDir.toString(),
+        "default",
+        1,
+        List.of(
+            new HttpSequenceWorkerConfig.Step("worker", "A", null, false, null, List.of(), List.of()),
+            new HttpSequenceWorkerConfig.Step(
+                "missing", "B", null, false, null, List.of(), List.of(), "missing", null)
+        ),
+        new HttpSequenceWorkerConfig.DebugCapture(
+            HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of(),
+        Map.of("authProfile", Map.of("sut", Map.of("id", "sut-1", "endpoints", Map.of())))
+    );
+
+    assertThatThrownBy(() -> runner.run(seed, new TestWorkerContext(info), config))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("steps[1].sutEndpointId references unknown SUT endpoint 'missing'");
+    assertThat(executor.targets()).isEmpty();
+  }
+
   private HttpSequenceRunner newRunner(RecordingExecutor executor) {
     ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     TemplateRenderer templateRenderer = (template, context) -> template == null ? "" : template;
@@ -245,6 +363,7 @@ class HttpSequenceRunnerTest {
         templateRenderer,
         new TemplateLoader(),
         executor,
+        new DefaultHttpSequenceTargetResolver(),
         redis
     );
   }
@@ -264,6 +383,7 @@ class HttpSequenceRunnerTest {
   private static final class RecordingExecutor implements HttpCallExecutor {
     private final ArrayDeque<HttpCallResult> results = new ArrayDeque<>();
     private final java.util.List<RenderedCall> calls = new java.util.ArrayList<>();
+    private final java.util.List<URI> targets = new java.util.ArrayList<>();
 
     void enqueue(HttpCallResult result) {
       results.add(result);
@@ -273,8 +393,13 @@ class HttpSequenceRunnerTest {
       return List.copyOf(calls);
     }
 
+    java.util.List<URI> targets() {
+      return List.copyOf(targets);
+    }
+
     @Override
-    public HttpCallResult execute(String baseUrl, RenderedCall call) {
+    public HttpCallResult execute(URI target, RenderedCall call) {
+      targets.add(target);
       calls.add(call);
       return results.isEmpty()
           ? new HttpCallResult(200, Map.of(), "", null)

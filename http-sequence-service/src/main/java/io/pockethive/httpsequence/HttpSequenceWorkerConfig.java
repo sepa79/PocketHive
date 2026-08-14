@@ -33,6 +33,9 @@ public record HttpSequenceWorkerConfig(
     serviceId = requireNonBlank(serviceId, "serviceId");
     threadCount = requirePositive(threadCount, "threadCount");
     steps = List.copyOf(Objects.requireNonNull(steps, "steps"));
+    for (int index = 0; index < steps.size(); index++) {
+      validateStepTarget(steps.get(index), index);
+    }
     debugCapture = Objects.requireNonNull(debugCapture, "debugCapture");
     vars = vars == null ? Map.of() : Map.copyOf(vars);
     privateConfig = privateConfig == null ? Map.of() : Map.copyOf(privateConfig);
@@ -63,8 +66,20 @@ public record HttpSequenceWorkerConfig(
       boolean continueOnNon2xx,
       Retry retry,
       List<Extract> extracts,
-      List<SetValue> set
+      List<SetValue> set,
+      String sutEndpointId,
+      String baseUrl
   ) {
+
+    public Step(String id,
+                String callId,
+                String serviceId,
+                boolean continueOnNon2xx,
+                Retry retry,
+                List<Extract> extracts,
+                List<SetValue> set) {
+      this(id, callId, serviceId, continueOnNon2xx, retry, extracts, set, null, null);
+    }
 
     public Step {
       id = normalise(id);
@@ -73,6 +88,8 @@ public record HttpSequenceWorkerConfig(
       retry = retry == null ? Retry.defaults() : retry;
       extracts = extracts == null ? List.of() : List.copyOf(extracts);
       set = set == null ? List.of() : List.copyOf(set);
+      sutEndpointId = trim(sutEndpointId);
+      baseUrl = trim(baseUrl);
     }
   }
 
@@ -169,6 +186,26 @@ public record HttpSequenceWorkerConfig(
     }
     String trimmed = value.trim();
     return trimmed.isEmpty() ? null : trimmed;
+  }
+
+  private static String trim(String value) {
+    return value == null ? null : value.trim();
+  }
+
+  private static void validateStepTarget(Step step, int index) {
+    if (step == null) {
+      throw new IllegalArgumentException("steps[" + index + "] is required");
+    }
+    if (step.sutEndpointId() != null && step.baseUrl() != null) {
+      throw new IllegalArgumentException(
+          "steps[" + index + "] must not declare both sutEndpointId and baseUrl");
+    }
+    if (step.sutEndpointId() != null && step.sutEndpointId().isBlank()) {
+      throw new IllegalArgumentException("steps[" + index + "].sutEndpointId must not be blank");
+    }
+    if (step.baseUrl() != null && step.baseUrl().isBlank()) {
+      throw new IllegalArgumentException("steps[" + index + "].baseUrl must not be blank");
+    }
   }
 
   private static String requireNonBlank(String value, String field) {

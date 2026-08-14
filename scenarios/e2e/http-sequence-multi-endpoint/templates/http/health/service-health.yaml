@@ -1,0 +1,7 @@
+serviceId: health
+callId: service-health
+protocol: HTTP
+method: GET
+pathTemplate: /health
+headersTemplate: {}
+bodyTemplate: ""

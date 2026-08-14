@@ -1,0 +1,72 @@
+protocolVersion: "2.0.0"
+id: http-sequence-multi-endpoint
+name: HTTP Sequence - Multi Endpoint
+description: Proves worker, selected-SUT, and hardcoded step targets in one compatible journey.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 1
+            maxMessages: 1
+        message:
+          bodyType: SIMPLE
+          body: '{"scenario":"http-sequence-multi-endpoint"}'
+          headers:
+            content-type: application/json
+      work:
+        out:
+          out: sequence
+      ports:
+        - { id: out, direction: out }
+    - role: http-sequence
+      image: http-sequence:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        templateRoot: /app/scenario/templates/http
+        serviceId: health
+        threadCount: 1
+        debugCapture:
+          mode: NONE
+        steps:
+          - id: worker-default
+            callId: service-health
+          - id: selected-sut
+            callId: service-health
+            sutEndpointId: auth
+          - id: hardcoded-step
+            callId: service-health
+            baseUrl: http://ui:8088/scenario-manager/actuator
+      work:
+        in:
+          in: sequence
+        out:
+          out: post
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in:
+          in: post
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { port: out, role: generator }
+      to: { port: in, role: http-sequence }
+    - id: e2
+      from: { port: out, role: http-sequence }
+      to: { port: in, role: postprocessor }
