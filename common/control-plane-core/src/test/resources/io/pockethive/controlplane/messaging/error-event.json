@@ -1,9 +1,9 @@
 {
-  "routingKey": "event.outcome.swarm-stop.swarm-A.generator.gen-1",
+  "routingKey": "event.result.swarm-stop.swarm-A.generator.gen-1",
   "payload": {
     "timestamp": "2024-01-02T00:00:00Z",
-    "version": "1",
-    "kind": "outcome",
+    "version": "2",
+    "kind": "result",
     "type": "swarm-stop",
     "origin": "gen-1",
     "scope": {
@@ -21,7 +21,13 @@
       "status": "Failed",
       "retryable": true,
       "context": {
-        "stack": "trace"
+        "target": {
+          "role": "generator",
+          "instance": "gen-1"
+        },
+        "requestedWorkloadState": "STOPPED",
+        "observedWorkloadState": "RUNNING",
+        "nonConvergedWorkers": []
       }
     }
   }

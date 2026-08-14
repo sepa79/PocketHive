@@ -1,5 +1,12 @@
 # WebAuth Redemption Redis Scenario
 
+> **Authoring example only:** do not run the checked-in bundle as a local
+> customer scenario. Its `webauth-local` SUT points to
+> `http://tcp-mock-server:8080`, while the template sends
+> `GET /webauth/xmlauth`; the bundled mock has no matching route. Configure an
+> explicit WebAuth-compatible SUT and requalify the bundle before creating a
+> swarm.
+
 Flow:
 - input list: `webauth.RED.custA`
 - callId: `webauth-redemption`

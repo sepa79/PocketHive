@@ -67,4 +67,20 @@ class SutEndpointTest {
         assertThrows(IllegalArgumentException.class,
             () -> new SutEndpoint("HTTP", "http://wiremock:8080", " "));
     }
+
+    @Test
+    void normalizesEnvironmentTextAtCanonicalBoundary() {
+        SutEnvironment environment = new SutEnvironment(
+            " wiremock-local ", " WireMock local ", " sandbox ", Map.of());
+
+        assertEquals("wiremock-local", environment.id());
+        assertEquals("WireMock local", environment.name());
+        assertEquals("sandbox", environment.type());
+    }
+
+    @Test
+    void rejectsMissingEndpoints() {
+        assertThrows(IllegalArgumentException.class,
+            () -> new SutEnvironment("wiremock-local", "WireMock local", "sandbox", null));
+    }
 }

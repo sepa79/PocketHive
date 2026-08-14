@@ -54,6 +54,10 @@ service container configuration (e.g. `http://localhost:8088/orchestrator`, `htt
 `http://localhost:1083` for auth-service, `rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`).
 Override any of these values by exporting the environment variables before launching the helper.
 
+The environment Cucumber suite is deliberately activated only by these wrappers.
+Plain `./mvnw test` still runs the E2E module's local unit and contract tests,
+but does not guess an environment, credentials, audit scope, or ingress target.
+
 The Unix helper also supports grouped execution so you do not need to rerun the entire 20-minute pack while iterating:
 
 ```bash
@@ -64,6 +68,12 @@ The Unix helper also supports grouped execution so you do not need to rerun the 
 ./start-e2e-tests.sh --group lifecycle,proxy
 ./start-e2e-tests.sh --group data --tags @tcp-timeout
 ```
+
+An unfiltered run is the **full control-plane audit**: it must observe `signal`,
+`result`, `outcome`, `journal`, `alert`, and `metric`. A group, tag, or name
+filter is a targeted audit; it retains schema, routing, and operation-flow
+checks without requiring message families that the selected scenarios do not
+exercise.
 
 The Unix helper can load deployment target profiles from `deploy/e2e-targets/<name>.env`:
 

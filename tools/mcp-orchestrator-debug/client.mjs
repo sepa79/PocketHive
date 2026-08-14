@@ -70,10 +70,10 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs list-templates\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs get-scenario <scenarioId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> [notes]\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId> [notes]\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId> [notes]\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId> [notes]\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> <templateId> --networkMode <DIRECT|PROXIED>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs start-swarm <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs stop-swarm <swarmId>\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm <swarmId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs status-request <swarmId> <role> <instanceId>\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs check-queues <queueName> [<queueName>...]\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs tap-queue <exchange> <routingKey> [queueName]\n" +
@@ -91,7 +91,7 @@ function printUsage() {
       "  node tools/mcp-orchestrator-debug/client.mjs swarm-snapshot foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs worker-configs foo\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs list-templates\n" +
-      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults\n" +
+      "  node tools/mcp-orchestrator-debug/client.mjs create-swarm foo local-rest-defaults --networkMode DIRECT\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs start-swarm foo --record\n" +
       "  node tools/mcp-orchestrator-debug/client.mjs remove-swarm foo --record\n" +
@@ -172,26 +172,27 @@ const COMMANDS = [
     params: [
       "swarmId",
       "templateId",
-      "[notes]",
       "[--sutId <sutId>]",
       "[--variablesProfileId <profileId>]",
+      "--networkMode <DIRECT|PROXIED>",
+      "[--networkProfileId <profileId>]",
       "[--record]",
     ],
   },
   {
     name: "start-swarm",
     description: "Start swarm via POST /api/swarms/{swarmId}/start",
-    params: ["swarmId", "[notes]", "[--record]"],
+    params: ["swarmId", "[--record]"],
   },
   {
     name: "stop-swarm",
     description: "Stop swarm via POST /api/swarms/{swarmId}/stop",
-    params: ["swarmId", "[notes]", "[--record]"],
+    params: ["swarmId", "[--record]"],
   },
   {
     name: "remove-swarm",
     description: "Remove swarm via POST /api/swarms/{swarmId}/remove",
-    params: ["swarmId", "[notes]", "[--record]"],
+    params: ["swarmId", "[--record]"],
   },
   {
     name: "status-request",
@@ -408,22 +409,33 @@ async function main() {
       await withOptionalRecording(async () => {
         const swarmId = args[1];
         const templateId = args[2];
-        const rest = args.slice(3);
-        const notes = rest[0] && !rest[0].startsWith("--") ? rest[0] : undefined;
-        const flags = parseFlags(rest);
+        const flags = parseFlags(args.slice(3));
         if (!swarmId || !templateId) {
           console.error("create-swarm requires <swarmId> and <templateId>");
           process.exit(1);
+        }
+        const networkMode = String(flags.networkMode || "").trim();
+        if (!new Set(["DIRECT", "PROXIED"]).has(networkMode)) {
+          throw new Error("create-swarm requires --networkMode DIRECT or --networkMode PROXIED");
+        }
+        if (networkMode === "PROXIED" && !flags.networkProfileId) {
+          throw new Error("create-swarm requires --networkProfileId when --networkMode PROXIED");
+        }
+        if (networkMode === "PROXIED" && !flags.sutId) {
+          throw new Error("create-swarm requires --sutId when --networkMode PROXIED");
+        }
+        if (networkMode === "DIRECT" && flags.networkProfileId) {
+          throw new Error("--networkProfileId is only valid with --networkMode PROXIED");
         }
         await verifyTemplateIsRunnable(templateId);
         const body = {
           templateId,
           idempotencyKey: randomIdempotencyKey(),
-          ...(notes ? { notes } : {}),
-          ...(flags.sutId ? { sutId: String(flags.sutId) } : {}),
-          ...(flags.variablesProfileId
-            ? { variablesProfileId: String(flags.variablesProfileId) }
-            : {}),
+          autoPullImages: false,
+          networkMode,
+          sutId: flags.sutId ? String(flags.sutId) : null,
+          variablesProfileId: flags.variablesProfileId ? String(flags.variablesProfileId) : null,
+          networkProfileId: flags.networkProfileId ? String(flags.networkProfileId) : null,
         };
         const resp = await httpJson(
           `/api/swarms/${encodeURIComponent(swarmId)}/create`,
@@ -440,14 +452,12 @@ async function main() {
     if (subcommand === "start-swarm") {
       await withOptionalRecording(async () => {
         const swarmId = args[1];
-        const notes = args[2];
         if (!swarmId) {
           console.error("start-swarm requires <swarmId>");
           process.exit(1);
         }
         const body = {
           idempotencyKey: randomIdempotencyKey(),
-          ...(notes ? { notes } : {}),
         };
         const resp = await httpJson(
           `/api/swarms/${encodeURIComponent(swarmId)}/start`,
@@ -464,14 +474,12 @@ async function main() {
     if (subcommand === "stop-swarm") {
       await withOptionalRecording(async () => {
         const swarmId = args[1];
-        const notes = args[2];
         if (!swarmId) {
           console.error("stop-swarm requires <swarmId>");
           process.exit(1);
         }
         const body = {
           idempotencyKey: randomIdempotencyKey(),
-          ...(notes ? { notes } : {}),
         };
         const resp = await httpJson(
           `/api/swarms/${encodeURIComponent(swarmId)}/stop`,
@@ -488,14 +496,12 @@ async function main() {
     if (subcommand === "remove-swarm") {
       await withOptionalRecording(async () => {
         const swarmId = args[1];
-        const notes = args[2];
         if (!swarmId) {
           console.error("remove-swarm requires <swarmId>");
           process.exit(1);
         }
         const body = {
           idempotencyKey: randomIdempotencyKey(),
-          ...(notes ? { notes } : {}),
         };
         const resp = await httpJson(
           `/api/swarms/${encodeURIComponent(swarmId)}/remove`,

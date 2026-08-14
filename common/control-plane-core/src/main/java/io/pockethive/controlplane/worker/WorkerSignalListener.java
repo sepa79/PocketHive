@@ -30,8 +30,7 @@ public interface WorkerSignalListener {
     }
 
     /**
-     * Convenience context wrapper that exposes the raw signal envelope and payload.
+     * Convenience context wrapper exposing the validated canonical signal envelope.
      */
-    record WorkerSignalContext(ControlSignalEnvelope envelope, String payload) { }
+    record WorkerSignalContext(ControlSignalEnvelope envelope) { }
 }
-

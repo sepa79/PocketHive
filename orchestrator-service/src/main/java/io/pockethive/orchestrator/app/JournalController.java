@@ -3,6 +3,7 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -497,14 +498,11 @@ public class JournalController {
   }
 
   private static String sanitizeSegment(String id) {
-    if (id == null || id.isBlank()) {
+    try {
+      return RuntimeFilesystemLayout.requireSegment(id, "swarmId");
+    } catch (IllegalArgumentException ex) {
       return null;
     }
-    String cleaned = java.nio.file.Paths.get(id).getFileName().toString();
-    if (!cleaned.equals(id) || cleaned.contains("..") || cleaned.isBlank()) {
-      return null;
-    }
-    return cleaned;
   }
 
   public record SwarmRunSummary(

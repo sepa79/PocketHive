@@ -8,6 +8,5 @@ public final class ControlPlaneEnvelopeVersion {
     private ControlPlaneEnvelopeVersion() {
     }
 
-    public static final String CURRENT = "1";
+    public static final String CURRENT = "2";
 }
-

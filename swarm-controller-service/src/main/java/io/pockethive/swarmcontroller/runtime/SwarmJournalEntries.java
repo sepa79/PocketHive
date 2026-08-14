@@ -3,7 +3,7 @@ package io.pockethive.swarmcontroller.runtime;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.CommandResult;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import java.util.Map;
@@ -24,12 +24,25 @@ public final class SwarmJournalEntries {
     return fromSignal(mapper, SwarmJournal.Direction.OUT, routingKey, signal);
   }
 
-  public static SwarmJournal.SwarmJournalEntry inOutcome(ObjectMapper mapper, String routingKey, CommandOutcome outcome) {
-    return fromOutcome(mapper, SwarmJournal.Direction.IN, routingKey, outcome);
-  }
-
-  public static SwarmJournal.SwarmJournalEntry outOutcome(ObjectMapper mapper, String routingKey, CommandOutcome outcome) {
-    return fromOutcome(mapper, SwarmJournal.Direction.OUT, routingKey, outcome);
+  public static SwarmJournal.SwarmJournalEntry outResult(ObjectMapper mapper, String routingKey, CommandResult result) {
+    Objects.requireNonNull(mapper, "mapper");
+    Objects.requireNonNull(result, "result");
+    Map<String, Object> raw = asRaw(mapper, result);
+    return new SwarmJournal.SwarmJournalEntry(
+        result.timestamp(),
+        requireSwarmId(result.scope(), "result.scope"),
+        result.data().status() == io.pockethive.swarm.model.lifecycle.TerminalStatus.SUCCEEDED ? "INFO" : "ERROR",
+        SwarmJournal.Direction.OUT,
+        result.kind(),
+        result.type(),
+        result.origin(),
+        result.scope(),
+        result.correlationId(),
+        result.idempotencyKey(),
+        routingKey,
+        mapper.convertValue(result.data(), MAP_TYPE),
+        raw,
+        null);
   }
 
   public static SwarmJournal.SwarmJournalEntry inAlert(ObjectMapper mapper, String routingKey, AlertMessage alert) {
@@ -95,32 +108,6 @@ public final class SwarmJournalEntries {
         signal.idempotencyKey(),
         routingKey,
         signal.data(),
-        raw,
-        null
-    );
-  }
-
-  private static SwarmJournal.SwarmJournalEntry fromOutcome(ObjectMapper mapper,
-                                                            SwarmJournal.Direction direction,
-                                                            String routingKey,
-                                                            CommandOutcome outcome) {
-    Objects.requireNonNull(mapper, "mapper");
-    Objects.requireNonNull(direction, "direction");
-    Objects.requireNonNull(outcome, "outcome");
-    Map<String, Object> raw = asRaw(mapper, outcome);
-    return new SwarmJournal.SwarmJournalEntry(
-        outcome.timestamp(),
-        requireSwarmId(outcome.scope(), "outcome.scope"),
-        "INFO",
-        direction,
-        outcome.kind(),
-        outcome.type(),
-        outcome.origin(),
-        outcome.scope(),
-        outcome.correlationId(),
-        outcome.idempotencyKey(),
-        routingKey,
-        outcome.data(),
         raw,
         null
     );

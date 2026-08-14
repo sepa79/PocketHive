@@ -1,175 +1,152 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.Logger;
-import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
-import io.pockethive.orchestrator.domain.HiveJournal;
-import io.pockethive.swarm.model.NetworkMode;
-import java.time.Instant;
-import java.util.Optional;
-import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.extension.ExtendWith;
-import org.mockito.Mock;
-import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.test.system.CapturedOutput;
-import org.springframework.boot.test.system.OutputCaptureExtension;
-
-import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
-import static org.mockito.Mockito.when;
-import org.slf4j.LoggerFactory;
 
-@ExtendWith({MockitoExtension.class, OutputCaptureExtension.class})
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.orchestrator.domain.HiveJournal;
+import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.Health;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
+import io.pockethive.control.ControlScope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import java.time.Instant;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
+
 class ControllerStatusListenerTest {
-    @Mock
-    SwarmStore store;
 
-    @Mock
-    ControlPlaneStatusRequestPublisher statusRequests;
+  private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+  private final ControlPlaneCodec codec = ControlPlaneCodec.create();
 
-    @Mock
-    SwarmSignalListener swarmSignals;
+  @Test
+  void fullStatusUpdatesOnlyCanonicalObservationAxes() {
+    SwarmStore store = new SwarmStore();
+    Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT);
+    store.register(swarm);
+    ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
+    SwarmSignalListener signals = mock(SwarmSignalListener.class);
+    ControllerStatusListener listener = listener(store, requests, signals);
 
-    @Test
-    void updatesRegistry() throws Exception {
-	        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
-		        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
-		        when(store.find("sw1")).thenReturn(Optional.of(swarm));
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-        String json = """
-            {
-              "timestamp": "2024-01-01T00:00:00Z",
-              "version": "1",
-              "kind": "metric",
-              "type": "status-delta",
-              "origin": "inst1",
-              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {"enabled": true, "context": {"swarmStatus": "RUNNING"}}
-            }
-	            """;
-        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
-        // RUNNING + workloadsEnabled=true should drive the registry into RUNNING
-        // using the normal lifecycle helper.
-        verify(store).markStartConfirmed("sw1");
-    }
-
-    @Test
-    void updatesRegistryFromTopLevelFlags() throws Exception {
-	        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
-	        swarm.transitionTo(SwarmLifecycleStatus.CREATING);
-	        swarm.transitionTo(SwarmLifecycleStatus.READY);
-	        swarm.transitionTo(SwarmLifecycleStatus.STARTING);
-	        swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
-		        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
-		        when(store.find("sw1")).thenReturn(Optional.of(swarm));
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-        String json = """
-            {
-              "timestamp": "2024-01-01T00:00:00Z",
-              "version": "1",
-              "kind": "metric",
-              "type": "status-delta",
-              "origin": "inst1",
-              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {"enabled": false, "context": {"swarmStatus": "STOPPED"}}
-            }
-	            """;
-        listener.handle(json, "event.metric.status-delta.sw1.swarm-controller.inst1");
-        // STOPPED + workloadsEnabled=false should map to STOPPING -> STOPPED
-        verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPING);
-        verify(store).updateStatus("sw1", SwarmLifecycleStatus.STOPPED);
-    }
-
-    @Test
-    void hydratesNetworkMetadataFromControllerStatus() throws Exception {
-        Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1");
-        swarm.updateControllerStatusFull(new ObjectMapper().readTree("{\"data\":{}}"), Instant.now());
-        when(store.find("sw1")).thenReturn(Optional.of(swarm));
-        ControllerStatusListener listener =
-            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-        String json = """
-            {
-              "timestamp": "2024-01-01T00:00:00Z",
-              "version": "1",
-              "kind": "metric",
-              "type": "status-full",
-              "origin": "inst1",
-              "scope": {"swarmId":"sw1","role":"swarm-controller","instance":"inst1"},
-              "runtime": {"runId":"run-1"},
-              "correlationId": null,
-              "idempotencyKey": null,
-              "data": {
-                "enabled": false,
-                "context": {
-                  "swarmStatus": "READY",
-                  "sutId": "wiremock-proxy-local",
-                  "networkMode": "DIRECT",
-                  "networkProfileId": null
-                }
-              }
-            }
-            """;
-
-        listener.handle(json, "event.metric.status-full.sw1.swarm-controller.inst1");
-
-        assertThat(swarm.getSutId()).isEqualTo("wiremock-proxy-local");
-        assertThat(swarm.getNetworkMode()).isEqualTo(NetworkMode.DIRECT);
-        assertThat(swarm.getNetworkProfileId()).isNull();
-    }
-
-    @Test
-		    void statusLogsEmitAtDebug(CapturedOutput output) {
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-        Logger logger = (Logger) LoggerFactory.getLogger(ControllerStatusListener.class);
-        Level previous = logger.getLevel();
-        logger.setLevel(Level.INFO);
-        try {
-            listener.handle("{}", "event.metric.status-delta.sw1.swarm-controller.inst1");
-            assertThat(output).doesNotContain("[CTRL] RECV rk=event.metric.status-delta.sw1.swarm-controller.inst1");
-        } finally {
-            logger.setLevel(previous);
+    String json = status("status-full", """
+        {
+          "controllerState":"READY",
+          "workloadState":"RUNNING",
+          "health":"HEALTHY",
+          "sutId":"wiremock-proxy-local",
+          "networkMode":"DIRECT",
+          "networkProfileId":null
         }
+        """);
+    listener.handle(json, "event.metric.status-full.sw1.swarm-controller.inst1");
+
+    assertThat(swarm.getControllerState()).isEqualTo(ControllerState.READY);
+    assertThat(swarm.getWorkloadState()).isEqualTo(WorkloadState.RUNNING);
+    assertThat(swarm.getHealth()).isEqualTo(Health.HEALTHY);
+    assertThat(swarm.getSutId()).isEqualTo("wiremock-proxy-local");
+    assertThat(swarm.getNetworkMode()).isEqualTo(NetworkMode.DIRECT);
+    verify(signals).handleControllerStatusFull(
+        eq("event.metric.status-full.sw1.swarm-controller.inst1"),
+        org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void deltaWithoutBaselineRequestsFullSnapshotAndDoesNotInventState() {
+    SwarmStore store = new SwarmStore();
+    store.register(new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT));
+    ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
+    SwarmSignalListener signals = mock(SwarmSignalListener.class);
+    ControllerStatusListener listener = listener(store, requests, signals);
+
+    listener.handle(status("status-delta", """
+        {"controllerState":"READY","workloadState":"STOPPED","health":"HEALTHY"}
+        """), "event.metric.status-delta.sw1.swarm-controller.inst1");
+
+    verify(requests).requestStatusForSwarm(eq("sw1"), anyString(), anyString());
+    assertThat(store.find("sw1").orElseThrow().getControllerState())
+        .isEqualTo(ControllerState.PROVISIONING);
+  }
+
+  @Test
+  void statusNeverReconstructsAnUnregisteredSwarm() {
+    SwarmStore store = new SwarmStore();
+    ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
+    SwarmSignalListener signals = mock(SwarmSignalListener.class);
+    ControllerStatusListener listener = listener(store, requests, signals);
+
+    listener.handle(status("status-full", """
+        {"controllerState":"READY","workloadState":"STOPPED","health":"HEALTHY"}
+        """), "event.metric.status-full.sw1.swarm-controller.inst1");
+
+    assertThat(store.find("sw1")).isEmpty();
+    verifyNoInteractions(requests, signals);
+  }
+
+  @Test
+  void rejectsMissingTransportIdentityWithoutThrowing() {
+    SwarmStore store = mock(SwarmStore.class);
+    ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
+    SwarmSignalListener signals = mock(SwarmSignalListener.class);
+    ControllerStatusListener listener = listener(store, requests, signals);
+
+    assertThatCode(() -> listener.handle("{}", " ")).doesNotThrowAnyException();
+    assertThatCode(() -> listener.handle(" ", "event.metric.status-full.sw1.swarm-controller.inst1"))
+        .doesNotThrowAnyException();
+    verifyNoInteractions(store, requests, signals);
+  }
+
+  private ControllerStatusListener listener(
+      SwarmStore store,
+      ControlPlaneStatusRequestPublisher requests,
+      SwarmSignalListener signals) {
+    return new ControllerStatusListener(
+        store,
+        mapper,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
+        requests,
+        signals,
+        HiveJournal.noop());
+  }
+
+  private String status(String type, String contextJson) {
+    try {
+      var contextNode = (com.fasterxml.jackson.databind.node.ObjectNode) mapper.readTree(contextJson);
+      contextNode.putIfAbsent("startupReady", mapper.getNodeFactory().booleanNode(true));
+      contextNode.putIfAbsent("watermarkAt", mapper.getNodeFactory().textNode("2026-07-22T12:00:00Z"));
+      contextNode.putIfAbsent("controllerState", mapper.getNodeFactory().textNode("READY"));
+      contextNode.putIfAbsent("workloadState", mapper.getNodeFactory().textNode("STOPPED"));
+      contextNode.putIfAbsent("health", mapper.getNodeFactory().textNode("HEALTHY"));
+      Map<String, Object> context = mapper.convertValue(contextNode, Map.class);
+      Map<String, Object> data = new LinkedHashMap<>();
+      data.put("context", context);
+      if ("status-full".equals(type)) {
+        context.put("startupArtifactSha256", "a".repeat(64));
+        context.put("expectedWorkers", java.util.List.of());
+        context.put("workers", java.util.List.of());
+        data.put("config", Map.of());
+        data.put("startedAt", "2026-07-22T12:00:00Z");
+        data.put("io", Map.of());
+        data.put("ioState", Map.of());
+      } else {
+        data.put("ioState", Map.of());
+      }
+      StatusMetric status = new StatusMetric(
+          Instant.parse("2026-07-22T12:00:00Z"), "2", "metric", type, "inst1",
+          new ControlScope("sw1", "swarm-controller", "inst1"), null, null,
+          Map.of("templateId", "tpl-1", "runId", "run-1"), data);
+      return codec.encode(status, "event.metric." + type + ".sw1.swarm-controller.inst1");
+    } catch (Exception exception) {
+      throw new IllegalStateException(exception);
     }
-
-    @Test
-		    void handleRejectsBlankRoutingKey() {
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-
-        assertThatCode(() -> listener.handle("{}", "  "))
-            .doesNotThrowAnyException();
-        verifyNoInteractions(store, statusRequests, swarmSignals);
-	    }
-
-    @Test
-		    void handleRejectsNullRoutingKey() {
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-
-        assertThatCode(() -> listener.handle("{}", null))
-            .doesNotThrowAnyException();
-        verifyNoInteractions(store, statusRequests, swarmSignals);
-	    }
-
-    @Test
-		    void handleRejectsBlankPayload() {
-		        ControllerStatusListener listener =
-		            new ControllerStatusListener(store, new ObjectMapper(), statusRequests, swarmSignals, HiveJournal.noop());
-
-        assertThatCode(() -> listener.handle(" ", "event.metric.status-delta.sw1.swarm-controller.inst1"))
-            .doesNotThrowAnyException();
-        verifyNoInteractions(store, statusRequests, swarmSignals);
-	    }
+  }
 }

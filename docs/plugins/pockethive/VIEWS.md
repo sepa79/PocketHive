@@ -37,12 +37,14 @@ ENVIRONMENT                    [Switch ▾]
   [●green] local  CONNECTED  (active)
   ─────────────────────────────────────────────
   SWARMS on local                [+ New]
-    [●green] <swarm-id-a>    RUNNING
-      N bees · template: <template-id>
+    [●green] <swarm-id-a>    RUNNING · HEALTHY
+      controller READY · N bees · template: <template-id>
       inline: [▶ Start][■ Stop][View][Journal][Queues]
       context menu: Start | Stop | Remove... | Clone
-    [◐cyan]  <swarm-id-b>    READY
-    [○grey]  <swarm-id-c>    STOPPED
+    [◐cyan]  <swarm-id-b>    UNAVAILABLE · UNKNOWN
+      controller PROVISIONING
+    [●green] <swarm-id-c>    STOPPED · HEALTHY
+      controller READY
   ─────────────────────────────────────────────
   [Manage environments...]
 
@@ -67,8 +69,10 @@ Empty state (no environments):
 
 ### Refresh strategy
 - Auto-refresh swarm list every 5 seconds when view is visible
-- HAL eye status updates immediately on swarm action
+- HAL eye colour represents `health`; workload and Controller observation remain separate labels
 - Environment health dots update every 30 seconds
+
+The view may format these fields into compact labels, but it must not create or consume a combined lifecycle enum. Action availability is derived from intent, observation and the active operation, never from the display label.
 
 ---
 
@@ -147,7 +151,7 @@ SWARM  [<swarm-id> ▾]   <- pre-selected when opened from Hive context
   "<validation error detail>"
 [ok]   swarm-start       14:32:05
 [ok]   config-update     14:32:04  generator
-[ok]   swarm-template    14:32:03
+[ok]   filesystem-startup 14:32:03
 [ok]   swarm-create      14:32:00
 
 [Load more]

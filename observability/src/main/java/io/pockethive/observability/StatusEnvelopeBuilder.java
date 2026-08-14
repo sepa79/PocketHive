@@ -2,6 +2,7 @@ package io.pockethive.observability;
 
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlRuntime;
+import io.pockethive.control.StatusMetric;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -20,7 +21,7 @@ import java.util.Set;
  */
 public class StatusEnvelopeBuilder {
 
-    private static final String ENVELOPE_VERSION = "1";
+    private static final String ENVELOPE_VERSION = io.pockethive.control.ControlPlaneEnvelopeVersion.CURRENT;
     private static final Set<String> RESERVED_DATA_FIELDS = Set.of(
         "enabled",
         "tps",
@@ -45,6 +46,7 @@ public class StatusEnvelopeBuilder {
     private final Map<String, Object> filesystemIoState = new LinkedHashMap<>();
 
     private boolean workPlaneEnabled = true;
+    private boolean enabledRequired = true;
     private boolean tpsEnabled = true;
     private boolean filesystemEnabled = false;
 
@@ -67,7 +69,7 @@ public class StatusEnvelopeBuilder {
     public StatusEnvelopeBuilder() {
         root.put("timestamp", Instant.now().toString());
         root.put("version", ENVELOPE_VERSION);
-        root.put("kind", "metric");
+        root.put("kind", StatusMetric.KIND);
         root.put("type", null);
         root.put("origin", null);
         scope.put("swarmId", null);
@@ -138,6 +140,15 @@ public class StatusEnvelopeBuilder {
      */
     public StatusEnvelopeBuilder enabled(boolean enabled) {
         data.put("enabled", enabled);
+        return this;
+    }
+
+    /** Declares whether this component contract carries {@code data.enabled}. */
+    public StatusEnvelopeBuilder enabledRequired(boolean required) {
+        this.enabledRequired = required;
+        if (!required) {
+            data.remove("enabled");
+        }
         return this;
     }
 
@@ -394,14 +405,14 @@ public class StatusEnvelopeBuilder {
     }
 
     /**
-     * Serialise the collected fields into a JSON document.
+     * Build the canonical typed status envelope.
      */
-    public String toJson() {
+    public StatusMetric toEnvelope() {
         String type = (String) root.get("type");
         if (type == null || type.isBlank()) {
             throw new IllegalStateException("type must be set before serialising status envelope");
         }
-        boolean isFull = "status-full".equals(type);
+        boolean isFull = StatusMetric.STATUS_FULL.equals(type);
 
         if (!publishes.isEmpty()) {
             context.put("publishes", List.copyOf(publishes));
@@ -444,7 +455,7 @@ public class StatusEnvelopeBuilder {
             data.putIfAbsent("context", Map.copyOf(context));
         }
 
-        if (!data.containsKey("enabled")) {
+        if (enabledRequired && !data.containsKey("enabled")) {
             throw new IllegalStateException("status metrics must include data.enabled");
         }
         if (tpsEnabled && !data.containsKey("tps")) {
@@ -478,7 +489,9 @@ public class StatusEnvelopeBuilder {
         }
 
         Map<String, Object> canonicalData = new LinkedHashMap<>();
-        canonicalData.put("enabled", data.get("enabled"));
+        if (enabledRequired) {
+            canonicalData.put("enabled", data.get("enabled"));
+        }
         if (tpsEnabled && data.containsKey("tps")) {
             canonicalData.put("tps", data.get("tps"));
         }
@@ -493,7 +506,24 @@ public class StatusEnvelopeBuilder {
             canonicalData.put("io", Objects.requireNonNullElse(data.get("io"), Collections.emptyMap()));
         }
 
-        root.put("data", canonicalData);
-        return ControlPlaneJson.write(root, "status envelope");
+        return new StatusMetric(
+            Instant.parse((String) root.get("timestamp")),
+            (String) root.get("version"),
+            (String) root.get("kind"),
+            type,
+            (String) root.get("origin"),
+            new ControlScope(
+                (String) scope.get("swarmId"),
+                (String) scope.get("role"),
+                (String) scope.get("instance")),
+            null,
+            null,
+            castMap(root.get("runtime")),
+            canonicalData);
+    }
+
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> castMap(Object value) {
+        return value == null ? null : (Map<String, Object>) value;
     }
 }

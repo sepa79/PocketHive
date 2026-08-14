@@ -43,7 +43,10 @@
     },
     "StepHeaders": {
       "type": "object",
-      "additionalProperties": true,
+      "description": "Per-step headers. A null value is not stored; producers remove a header instead.",
+      "additionalProperties": {
+        "not": { "type": "null" }
+      },
       "required": [
         "ph.step.service",
         "ph.step.instance"

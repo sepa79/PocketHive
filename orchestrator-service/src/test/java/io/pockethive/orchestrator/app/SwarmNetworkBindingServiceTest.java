@@ -1,8 +1,12 @@
 package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +23,7 @@ import io.pockethive.swarm.model.NetworkBinding;
 import io.pockethive.swarm.model.NetworkMode;
 import java.time.Instant;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -65,9 +70,57 @@ class SwarmNetworkBindingServiceTest {
     }
 
     @Test
+    void clearBindingAndVerifyAbsentUsesTheBindingSutAndRemoveOperationIdentity() throws Exception {
+        SwarmNetworkBindingService service = service();
+        NetworkBinding existing = proxiedBinding();
+        when(networkProxyClient.findBinding("sw1"))
+            .thenReturn(Optional.of(existing), Optional.empty());
+        when(networkProxyClient.clearSwarm(eq("sw1"), any(), eq("corr-1"), eq("idem-1")))
+            .thenReturn(directBinding());
+
+        service.clearBindingAndVerifyAbsent(
+            "sw1", "corr-1", "idem-1", "orchestrator", "swarm-remove", "orchestrator");
+
+        verify(networkProxyClient).clearSwarm(
+            eq("sw1"),
+            argThat(request -> request.sutId().equals("sut-a")
+                && request.requestedBy().equals("orchestrator")
+                && request.reason().equals("swarm-remove")),
+            eq("corr-1"),
+            eq("idem-1"));
+        verify(networkProxyClient, times(2)).findBinding("sw1");
+    }
+
+    @Test
+    void clearBindingAndVerifyAbsentFailsWhenTheBindingRemains() throws Exception {
+        SwarmNetworkBindingService service = service();
+        NetworkBinding existing = proxiedBinding();
+        when(networkProxyClient.findBinding("sw1"))
+            .thenReturn(Optional.of(existing), Optional.of(existing));
+        when(networkProxyClient.clearSwarm(eq("sw1"), any(), eq("corr-1"), eq("idem-1")))
+            .thenReturn(directBinding());
+
+        assertThatThrownBy(() -> service.clearBindingAndVerifyAbsent(
+            "sw1", "corr-1", "idem-1", "orchestrator", "swarm-remove", "orchestrator"))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Failed to clear and verify network proxy binding");
+    }
+
+    @Test
+    void clearBindingAndVerifyAbsentTreatsAnAlreadyAbsentBindingAsAchieved() throws Exception {
+        SwarmNetworkBindingService service = service();
+        when(networkProxyClient.findBinding("sw1")).thenReturn(Optional.empty());
+
+        service.clearBindingAndVerifyAbsent(
+            "sw1", "corr-1", "idem-1", "orchestrator", "swarm-remove", "orchestrator");
+
+        verify(networkProxyClient, never()).clearSwarm(any(), any(), any(), any());
+    }
+
+    @Test
     void publishControllerNetworkContextPublishesConfigUpdateSignal() throws Exception {
         SwarmNetworkBindingService service = service();
-        Swarm swarm = new Swarm("sw1", "controller-1", "cid-1", "run-1");
+        Swarm swarm = new Swarm("sw1", "controller-1", "cid-1", "run-1", NetworkMode.DIRECT);
         swarm.setSutId("sut-a");
 
         service.publishControllerNetworkContext(
@@ -87,7 +140,7 @@ class SwarmNetworkBindingServiceTest {
                 "sw1",
                 "swarm-controller",
                 "controller-1"));
-        ControlSignal signal = mapper.readValue(message.payload().toString(), ControlSignal.class);
+        ControlSignal signal = (ControlSignal) message.payload();
         assertThat(signal.type()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
         assertThat(signal.scope().swarmId()).isEqualTo("sw1");
         assertThat(signal.scope().role()).isEqualTo("swarm-controller");
@@ -105,6 +158,18 @@ class SwarmNetworkBindingServiceTest {
             hiveJournal,
             publisher,
             controlPlaneProperties());
+    }
+
+    private static NetworkBinding proxiedBinding() {
+        return new NetworkBinding(
+            "sw1", "sut-a", NetworkMode.PROXIED, "passthrough", NetworkMode.PROXIED,
+            "orchestrator", Instant.parse("2026-03-16T16:00:00Z"), List.of());
+    }
+
+    private static NetworkBinding directBinding() {
+        return new NetworkBinding(
+            "sw1", "sut-a", NetworkMode.DIRECT, null, NetworkMode.DIRECT,
+            "orchestrator", Instant.parse("2026-03-16T16:00:00Z"), List.of());
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {

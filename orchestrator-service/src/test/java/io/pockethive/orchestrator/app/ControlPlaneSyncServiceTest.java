@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import java.time.Clock;
@@ -44,8 +46,8 @@ class ControlPlaneSyncServiceTest {
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
 
         when(store.all()).thenReturn(List.of(
-            new Swarm("sw1", "controller-1", "cid-1", "run-1"),
-            new Swarm("sw2", "controller-2", "cid-2", "run-2")
+            new Swarm("sw1", "controller-1", "cid-1", "run-1", NetworkMode.DIRECT),
+            new Swarm("sw2", "controller-2", "cid-2", "run-2", NetworkMode.DIRECT)
         ));
 
         ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorSignals, publisher, clock);

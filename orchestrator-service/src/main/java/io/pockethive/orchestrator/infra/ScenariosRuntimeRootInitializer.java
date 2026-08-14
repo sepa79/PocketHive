@@ -1,9 +1,9 @@
 package io.pockethive.orchestrator.infra;
 
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import jakarta.annotation.PostConstruct;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -12,11 +12,14 @@ import org.springframework.stereotype.Component;
 public class ScenariosRuntimeRootInitializer {
 
   private static final Logger log = LoggerFactory.getLogger(ScenariosRuntimeRootInitializer.class);
-  private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
+  private final Path root;
+
+  public ScenariosRuntimeRootInitializer(RuntimeFilesystemLayout layout) {
+    this.root = layout.localRoot();
+  }
 
   @PostConstruct
   public void ensureRuntimeRootExists() {
-    Path root = Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
     try {
       Files.createDirectories(root);
       log.info("Scenarios runtime root: {}", root);

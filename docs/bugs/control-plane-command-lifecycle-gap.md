@@ -1,8 +1,10 @@
 # Control-plane commands lack a unified completion protocol
 
 **Area:** Control-plane architecture / Orchestrator lifecycle tracking  
-**Status:** Open  
-**Impact:** Commands can be accepted by the Orchestrator but never reach a reliable completed/failed/timeout state.
+**Status:** Resolved by the 0.15.35 lifecycle/control-plane cutover
+**Impact:** Historical finding; retained as design evidence, not as the current contract.
+
+> Resolution: `SwarmOperation` is now the single operation authority for create/start/stop/remove/config-update, executor `result` is distinct from Orchestrator `outcome`, deadlines are explicit, and remove completion is filesystem-authoritative. The remainder of this document describes the superseded implementation.
 
 ---
 

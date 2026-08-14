@@ -3,12 +3,12 @@ package io.pockethive.orchestrator.app;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -36,13 +36,13 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/swarms")
 public class SwarmJournalController {
     private static final Logger log = LoggerFactory.getLogger(SwarmJournalController.class);
-    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     private final ObjectMapper json;
     private final JdbcTemplate jdbc;
     private final SwarmStore store;
     private final OrchestratorEndpointAuthorization endpointAuthorization;
+    private final RuntimeFilesystemLayout runtimeLayout;
 
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
@@ -50,11 +50,13 @@ public class SwarmJournalController {
     public SwarmJournalController(ObjectMapper json,
                                   JdbcTemplate jdbc,
                                   SwarmStore store,
-                                  OrchestratorEndpointAuthorization endpointAuthorization) {
+                                  OrchestratorEndpointAuthorization endpointAuthorization,
+                                  RuntimeFilesystemLayout runtimeLayout) {
         this.json = json;
         this.jdbc = jdbc;
         this.store = store;
         this.endpointAuthorization = endpointAuthorization;
+        this.runtimeLayout = runtimeLayout;
     }
 
     /**
@@ -368,7 +370,7 @@ public class SwarmJournalController {
         if ("postgres".equalsIgnoreCase(journalSink)) {
             return readJournalEntriesFromPostgres(swarmId, requestedRunId, severityFilter);
         }
-        Path root = Paths.get(SCENARIOS_RUNTIME_ROOT).toAbsolutePath().normalize();
+        Path root = runtimeLayout.localRoot();
         String cleanedId = sanitizeSegment(swarmId);
         if (cleanedId == null) {
             return null;
@@ -377,10 +379,7 @@ public class SwarmJournalController {
         if (runId == null) {
             return null;
         }
-        Path dir = root.resolve(cleanedId).normalize();
-        if (!dir.startsWith(root)) {
-            return null;
-        }
+        Path dir = runtimeLayout.swarmRoot(cleanedId);
         Path journal = dir.resolve(runId).resolve("journal.ndjson");
         if (!Files.isRegularFile(journal)) {
             return null;
@@ -927,14 +926,11 @@ public class SwarmJournalController {
     }
 
     private static String sanitizeSegment(String id) {
-        if (id == null || id.isBlank()) {
+        try {
+            return RuntimeFilesystemLayout.requireSegment(id, "swarmId");
+        } catch (IllegalArgumentException ex) {
             return null;
         }
-        String cleaned = Paths.get(id).getFileName().toString();
-        if (!cleaned.equals(id) || cleaned.contains("..") || cleaned.isBlank()) {
-            return null;
-        }
-        return cleaned;
     }
 
     static String normalizeSeverityFilter(String severity) {

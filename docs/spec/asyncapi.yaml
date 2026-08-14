@@ -1,11 +1,11 @@
 asyncapi: 2.6.0
 info:
   title: PocketHive Control & Traffic API
-  version: 0.6.0
+  version: 1.0.0
   description: "AsyncAPI specification documenting PocketHive messaging contracts.\n\
-    - ph.control \u2014 swarm-aware control plane covering signals (commands) and event streams (outcomes, metrics, alerts).\n\
+    - ph.control \u2014 swarm-aware control plane covering signals, internal executor results, public outcomes, metrics and alerts.\n\
     - Signals publish with routing keys `signal.<type>.<swarmId>.<role>.<instance>`.\n\
-    - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.outcome.swarm-start.*`, `event.metric.status-full.*`, `event.alert.{type}.*`).\n\
+    - All non-signal messages publish with routing keys `event.<category>.<name>.<swarmId>.<role>.<instance>` (for example `event.result.swarm-start.*`, `event.outcome.swarm-start.*`, `event.journal.work-journal.*`, `event.metric.status-full.*`).\n\
     - ph.{swarmId}.hive \u2014 traffic exchange for workload messages (generator \u2192 moderator \u2192 processor).\n"
 servers:
   control-ws:
@@ -32,8 +32,6 @@ channels:
         schema:
           type: string
           enum:
-          - swarm-template
-          - swarm-plan
           - swarm-start
           - swarm-stop
           - swarm-remove
@@ -64,6 +62,41 @@ channels:
           durable: true
         routingKey: signal.{type}.{swarm}.{role}.{instance}
 
+  exchange/ph.control/event.result.{type}.{swarm}.{role}.{instance}:
+    parameters:
+      type:
+        description: AMQP executor command name; remove uses filesystem result.json instead
+        schema:
+          type: string
+          enum:
+          - swarm-start
+          - swarm-stop
+          - config-update
+      swarm:
+        description: Swarm whose executor produced the result
+        schema:
+          type: string
+      role:
+        description: Executor role
+        schema:
+          type: string
+      instance:
+        description: Concrete executor instance
+        schema:
+          type: string
+    subscribe:
+      summary: Internal executor evidence consumed by the Orchestrator operation coordinator
+      message:
+        $ref: '#/components/messages/CommandResult'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: event.result.{type}.{swarm}.{role}.{instance}
+
   exchange/ph.control/event.outcome.{type}.{swarm}.{role}.{instance}:
     parameters:
       type:
@@ -72,8 +105,6 @@ channels:
           type: string
           enum:
           - swarm-create
-          - swarm-template
-          - swarm-plan
           - swarm-start
           - swarm-stop
           - swarm-remove
@@ -83,15 +114,16 @@ channels:
         schema:
           type: string
       role:
-        description: "Role affected by the outcome (or ALL for wildcard fan-out). This field is intentionally not an enum: roles are flexible."
+        description: Public operation owner; always orchestrator
         schema:
           type: string
+          const: orchestrator
       instance:
-        description: Specific instance that produced the outcome (or ALL for wildcard fan-out)
+        description: Orchestrator instance that terminalized the operation
         schema:
           type: string
     subscribe:
-      summary: Outcomes emitted for control-plane commands (success and error)
+      summary: Sole public terminal outcomes emitted by the Orchestrator
       message:
         $ref: '#/components/messages/CommandOutcome'
     bindings:
@@ -102,6 +134,33 @@ channels:
           type: topic
           durable: true
         routingKey: event.outcome.{type}.{swarm}.{role}.{instance}
+
+  exchange/ph.control/event.journal.work-journal.{swarm}.{role}.{instance}:
+    parameters:
+      swarm:
+        description: Swarm whose worker produced the journal evidence
+        schema:
+          type: string
+      role:
+        description: Concrete worker role
+        schema:
+          type: string
+      instance:
+        description: Concrete worker instance
+        schema:
+          type: string
+    subscribe:
+      summary: Correlated non-terminal worker evidence consumed for journaling only
+      message:
+        $ref: '#/components/messages/JournalEvent'
+    bindings:
+      amqp:
+        is: routingKey
+        exchange:
+          name: ph.control
+          type: topic
+          durable: true
+        routingKey: event.journal.work-journal.{swarm}.{role}.{instance}
 
   exchange/ph.control/event.metric.{type}.{swarm}.{role}.{instance}:
     parameters:
@@ -180,6 +239,13 @@ components:
       schemaFormat: application/schema+json;version=draft/2020-12
       payload:
         $ref: './control-events.schema.json#/$defs/ControlSignal'
+    CommandResult:
+      name: CommandResult
+      title: "Control — Executor result"
+      contentType: application/json
+      schemaFormat: application/schema+json;version=draft/2020-12
+      payload:
+        $ref: './control-events.schema.json#/$defs/CommandResult'
     CommandOutcome:
       name: CommandOutcome
       title: "Control \u2014 Outcome"
@@ -187,6 +253,13 @@ components:
       schemaFormat: application/schema+json;version=draft/2020-12
       payload:
         $ref: './control-events.schema.json#/$defs/CommandOutcome'
+    JournalEvent:
+      name: JournalEvent
+      title: "Control — Non-terminal journal evidence"
+      contentType: application/json
+      schemaFormat: application/schema+json;version=draft/2020-12
+      payload:
+        $ref: './control-events.schema.json#/$defs/JournalEvent'
     ControlMetricStatusFull:
       name: ControlMetricStatusFull
       title: "Control \u2014 Metric (status-full)"

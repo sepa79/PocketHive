@@ -440,7 +440,7 @@ output:
   required:
     swarmId: string
     scenarioId: string | null
-    lifecycle: object
+    state: object
     queues: object
     journal: object
     metrics: object
@@ -1116,6 +1116,7 @@ input:
     swarmId: string
     sutId: string
     variablesProfileId: string
+    captureTapSample: boolean
     readyTimeoutSec: number
 sideEffects:
   files: none
@@ -1175,6 +1176,7 @@ input:
     swarmId: string
     sutId: string
     variablesProfileId: string
+    captureTapSample: boolean
 output:
   required:
     operationId: string
@@ -1203,7 +1205,7 @@ output:
   required:
     operationId: string
     status: running | succeeded | failed | cancelled
-    phase: upload | mock-config | create | wait-ready | start | complete | failed | cancelled
+    phase: upload | mock-config | create | wait-create | wait-ready | start | wait-start | complete | failed | cancelled
     nextPollAfterMs: number
     evidence: object
     lastStep: object | null
@@ -1248,6 +1250,11 @@ Polling semantics are explicit: `status` never advances a lifecycle operation,
 and `resume` advances one bounded phase. When the returned operation or
 `workflow_result.nextAction` contains `nextPollAfterMs`, agents should wait that
 interval before the next `resume` call rather than holding a tool call open.
+Deploy never treats the controller projection as completion of create: it waits
+for the create operation resource to reach `SUCCEEDED` before polling readiness
+or dispatching start. Set `captureTapSample=true` on deploy when the following
+strict verification must observe short-lived startup traffic; deploy then opens
+the tap immediately before start and verification reuses it.
 
 ```yaml
 name: workflow_verify
@@ -1523,7 +1530,8 @@ output:
     patchSummary: object
     mergedConfigSummary: object
     response: object
-    watch: object
+    operationUrl: string
+    outcomeTopic: string
     evidenceNext: array
 sideEffects:
   files: none
@@ -1535,7 +1543,7 @@ allowedSources:
   - PocketHive Orchestrator: POST /api/components/{role}/{instance}/config
 writeScope:
   - runtime component config for the targeted swarm/role/instance
-evidenceValue: Proves Orchestrator accepted the control-plane update request and gives watch topics for outcome/alert evidence.
+evidenceValue: Proves Orchestrator accepted the update and identifies the canonical operation resource and terminal outcome topic.
 failureModes:
   - CURRENT_CONFIG_UNAVAILABLE
   - EMPTY_PATCH_REJECTED
@@ -1544,9 +1552,10 @@ phase: 1.6
 ```
 
 Before a patch containing `inputs.redis.listName`, the agent must call
-`swarm_get` and verify an explicit `STOPPED` status. Dispatch acceptance from
-`swarm_stop` is not completion evidence. Running, transitional, unknown, or
-stale state must block the call; agents must not infer or bypass this rule.
+`swarm_get` and verify both `workloadIntent=STOPPED` and a fresh
+`workloadState=STOPPED`. Dispatch acceptance from `swarm_stop` is not completion
+evidence. Running, transitional, unknown, or stale observation must block the
+call; agents must not infer or bypass this rule.
 
 The tool must read the latest exact `status-full` config for the target
 component before sending an update. It may use journaled Orchestrator evidence
@@ -1560,9 +1569,6 @@ The preview and update tools must share the same merge logic, and that logic
 must be covered by automated tests.
 
 Agents must treat `accepted=true` as dispatch evidence only. To prove the
-component applied the update, follow the returned watch topics, read
-`debug_journal`, or inspect status / `metrics_query` output for the targeted
-component.
-
-`debug_config_update` remains as a compatibility alias, but new workflows should
-prefer `component_config_update`.
+component applied the update, poll the returned `operationUrl` to a terminal
+state and optionally corroborate it with `debug_journal`, target status, or
+`metrics_query` output.

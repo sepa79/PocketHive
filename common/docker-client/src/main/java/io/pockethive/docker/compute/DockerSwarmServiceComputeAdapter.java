@@ -100,25 +100,21 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
 
   @Override
   public void stopManager(String managerId) {
-    if (managerId == null || managerId.isBlank()) {
-      return;
-    }
-    String serviceId = managerServices.remove(managerId);
+    String resolvedManagerId = requireNonBlank(managerId, "managerId");
+    String serviceId = managerServices.get(resolvedManagerId);
     // If the caller passed the raw service id, fall back to using it directly.
     if (serviceId == null) {
-      serviceId = managerId;
+      serviceId = resolvedManagerId;
     }
     log.info("Removing Swarm service for manager {}", serviceId);
-    try {
-      dockerClient.removeServiceCmd(serviceId).exec();
-      // Block until Swarm has drained manager tasks so that upstream
-      // components (like the orchestrator) can safely delete the
-      // swarm-controller control queue without racing against a still
-      // running manager process.
-      waitForServiceDrain(serviceId);
-    } catch (RuntimeException e) {
-      log.warn("Failed to remove manager service {}: {}", serviceId, e.getMessage());
-    }
+    dockerClient.removeServiceCmd(serviceId).exec();
+    // Block until Swarm has drained manager tasks so that upstream
+    // components (like the orchestrator) can safely delete the
+    // swarm-controller control queue without racing against a still
+    // running manager process.
+    waitForServiceDrain(serviceId);
+    String removedServiceId = serviceId;
+    managerServices.entrySet().removeIf(entry -> removedServiceId.equals(entry.getValue()));
   }
 
   @Override
@@ -160,10 +156,8 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
 
   @Override
   public void removeWorkers(String topologyId) {
-    if (topologyId == null || topologyId.isBlank()) {
-      return;
-    }
-    List<String> ids = workerServicesByTopology.remove(topologyId);
+    String resolvedTopology = requireNonBlank(topologyId, "topologyId");
+    List<String> ids = workerServicesByTopology.get(resolvedTopology);
     if (ids == null || ids.isEmpty()) {
       return;
     }
@@ -171,13 +165,13 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     List<String> copy = new ArrayList<>(ids);
     Collections.reverse(copy);
     for (String id : copy) {
-      try {
-        log.info("Removing Swarm service {} for topology {}", id, topologyId);
-        dockerClient.removeServiceCmd(id).exec();
-        waitForServiceDrain(id);
-      } catch (RuntimeException e) {
-        log.warn("Failed to remove worker service {}: {}", id, e.getMessage());
-      }
+      log.info("Removing Swarm service {} for topology {}", id, resolvedTopology);
+      dockerClient.removeServiceCmd(id).exec();
+      waitForServiceDrain(id);
+      ids.remove(id);
+    }
+    if (ids.isEmpty()) {
+      workerServicesByTopology.remove(resolvedTopology, ids);
     }
   }
 
@@ -225,12 +219,13 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
           Thread.sleep(pollIntervalMs);
         } catch (InterruptedException ie) {
           Thread.currentThread().interrupt();
-          return;
+          throw new IllegalStateException(
+              "Interrupted while waiting for Swarm service " + serviceId + " to drain", ie);
         }
       }
-      log.warn("Timed out waiting for Swarm service {} to drain tasks", serviceId);
+      throw new IllegalStateException("Timed out waiting for Swarm service " + serviceId + " to drain tasks");
     } catch (RuntimeException e) {
-      log.warn("Error while waiting for Swarm service {} to drain: {}", serviceId, e.getMessage());
+      throw new IllegalStateException("Unable to observe Swarm service " + serviceId + " drain", e);
     }
   }
 

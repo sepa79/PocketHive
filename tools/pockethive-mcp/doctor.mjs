@@ -150,7 +150,7 @@ function expandConfigVariables(value, baseDir) {
 
 function resolvePath(baseDir, value) {
   const path = expandConfigVariables(value, baseDir).trim();
-  return isAbsolute(path) ? path : resolve(baseDir, path);
+  return isAbsolute(path) ? resolve(path) : resolve(baseDir, path);
 }
 
 function parseJsonStringArrayEnv(name) {

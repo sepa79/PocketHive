@@ -50,12 +50,12 @@ jobs:
         working-directory: docs-site
         run: npm ci
 
-      - name: Build docs
+      - name: Build and verify rendered docs
         working-directory: docs-site
         env:
           DOCS_URL: ${{ env.DOCS_URL }}
           DOCS_BASE_URL: ${{ env.DOCS_BASE_URL }}
-        run: npm run build
+        run: npm run test:docs:rendered
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

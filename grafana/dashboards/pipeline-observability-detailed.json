@@ -25,7 +25,7 @@
         "name": "Swarm lifecycle outcomes",
         "rawQuery": true,
         "type": "tags",
-        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(swarm_id,''),' ',COALESCE(type,''),' ',COALESCE(data->>'status','')) AS text, CONCAT('lifecycle,',severity,',',type) AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND scope = 'SWARM'\n  AND kind = 'outcome'\n  AND type IN ('swarm-create','swarm-template','swarm-start','swarm-stop','swarm-remove')\n  AND swarm_id ~ '${swarm:regex}'\nORDER BY ts DESC, id DESC\nLIMIT 500"
+        "query": "SELECT extract(epoch from ts) * 1000 AS time, CONCAT(COALESCE(swarm_id,''),' ',COALESCE(type,''),' ',COALESCE(data->>'status','')) AS text, CONCAT('lifecycle,',severity,',',type) AS tags\nFROM journal_event\nWHERE $__timeFilter(ts)\n  AND scope = 'SWARM'\n  AND kind = 'outcome'\n  AND type IN ('swarm-create','swarm-start','swarm-stop','swarm-remove')\n  AND swarm_id ~ '${swarm:regex}'\nORDER BY ts DESC, id DESC\nLIMIT 500"
       }
     ]
   },

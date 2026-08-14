@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.control.ControlPlaneEnvelope;
 import io.pockethive.controlplane.messaging.EventMessage;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.manager.ports.ControlPlanePort;
@@ -18,13 +19,12 @@ public final class SwarmControlPlanePortAdapter implements ControlPlanePort {
   }
 
   @Override
-  public void publishSignal(String routingKey, String payload) {
+  public void publishSignal(String routingKey, ControlPlaneEnvelope payload) {
     publisher.publishSignal(new SignalMessage(routingKey, payload));
   }
 
   @Override
-  public void publishEvent(String routingKey, String payload) {
+  public void publishEvent(String routingKey, ControlPlaneEnvelope payload) {
     publisher.publishEvent(new EventMessage(routingKey, payload));
   }
 }
-

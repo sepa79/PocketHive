@@ -70,3 +70,31 @@ test("tools/list never emits array schemas without items", async () => {
     );
   });
 });
+
+test("swarm_create exposes an explicit network mode", async () => {
+  await withClient(async (client) => {
+    const { tools } = await client.listTools();
+    const swarmCreate = tools.find((tool) => tool.name === "swarm_create");
+
+    assert.ok(swarmCreate, "swarm_create tool must be listed");
+    assert.ok(swarmCreate.inputSchema.required.includes("networkMode"));
+    assert.deepEqual(swarmCreate.inputSchema.properties.networkMode.enum, ["DIRECT", "PROXIED"]);
+  });
+});
+
+test("swarm_create rejects proxied mode without a SUT before issuing HTTP", async () => {
+  await withClient(async (client) => {
+    const result = await client.callTool({
+      name: "swarm_create",
+      arguments: {
+        swarmId: "schema-test",
+        templateId: "template-test",
+        networkMode: "PROXIED",
+        networkProfileId: "profile-test",
+      },
+    });
+
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /sutId is required when networkMode is PROXIED/);
+  });
+});

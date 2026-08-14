@@ -3,7 +3,7 @@ package io.pockethive.swarmcontroller.infra.amqp;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Tags;
-import io.pockethive.swarmcontroller.QueueStats;
+import io.pockethive.manager.runtime.QueueStats;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -112,4 +112,3 @@ public final class SwarmQueueMetrics {
     return Tags.of("swarm", swarmId, "queue", queueName);
   }
 }
-

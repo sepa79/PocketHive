@@ -18,6 +18,7 @@ config:
       unit: msg/s
   - name: inputs.scheduler.maxMessages
     type: integer
+    default: 0
     liveMutable: true
     required: true
     min: 0

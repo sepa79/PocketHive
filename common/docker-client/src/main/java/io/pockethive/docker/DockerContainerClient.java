@@ -4,6 +4,8 @@ import com.github.dockerjava.api.DockerClient;
 import com.github.dockerjava.api.command.CreateContainerCmd;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
+import com.github.dockerjava.api.exception.NotFoundException;
+import com.github.dockerjava.api.exception.NotModifiedException;
 import com.github.dockerjava.api.model.HostConfig;
 
 import java.io.FileNotFoundException;
@@ -112,8 +114,20 @@ public class DockerContainerClient {
     }
 
     public void stopAndRemoveContainer(String containerId) {
-        callDocker("stop container", () -> dockerClient.stopContainerCmd(containerId).exec());
-        callDocker("remove container", () -> dockerClient.removeContainerCmd(containerId).exec());
+        try {
+            callDocker("stop container", () -> dockerClient.stopContainerCmd(containerId).exec());
+        } catch (NotModifiedException ignored) {
+            // Docker reports 304 when the container is already stopped. That already satisfies
+            // the stop postcondition, so removal must continue.
+        } catch (NotFoundException ignored) {
+            // The remove operation is idempotent: an absent container already satisfies it.
+            return;
+        }
+        try {
+            callDocker("remove container", () -> dockerClient.removeContainerCmd(containerId).exec());
+        } catch (NotFoundException ignored) {
+            // The container may disappear between stop and remove; absence is the postcondition.
+        }
     }
 
     /**

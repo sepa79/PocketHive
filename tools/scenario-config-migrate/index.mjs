@@ -18,26 +18,6 @@ const INPUT_CONFIG_ROOT = "inputs";
 const OUTPUT_CONFIG_ROOT = "outputs";
 const TYPE_CONFIG_LEAF = "type";
 const NO_SAFE_VALUE = Symbol("NO_SAFE_VALUE");
-const EXPLICIT_IO_VALUES = new Map([
-  ["inputs.scheduler.ratePerSec", 0],
-  ["inputs.scheduler.maxMessages", 0],
-  ["inputs.redis.port", 6379],
-  ["inputs.redis.ssl", false],
-  ["inputs.redis.pickStrategy", "ROUND_ROBIN"],
-  ["inputs.redis.ratePerSec", 1],
-  ["inputs.csv.ratePerSec", 1],
-  ["inputs.csv.rotate", false],
-  ["inputs.csv.skipHeader", true],
-  ["inputs.csv.delimiter", ","],
-  ["inputs.csv.charset", "UTF-8"],
-  ["inputs.csv.startupDelaySeconds", 0],
-  ["inputs.csv.tickIntervalMs", 1000],
-  ["outputs.redis.port", 6379],
-  ["outputs.redis.ssl", false],
-  ["outputs.redis.sourceStep", "LAST"],
-  ["outputs.redis.pushDirection", "RPUSH"],
-  ["outputs.redis.maxLen", -1],
-]);
 
 export async function runScenarioConfigMigration({
   command,
@@ -457,6 +437,7 @@ function addIoRequirementsFromManifest(manifest, requirements, file) {
     .map((entry) => ({
       path: trimToNull(entry.name),
       allowBlank: entry.allowBlank === true,
+      defaultValue: Object.hasOwn(entry, "default") ? entry.default : NO_SAFE_VALUE,
     }))
     .filter((entry) => entry.path);
   if (requiredEntries.length > 0) {
@@ -573,13 +554,13 @@ function migrateSelectedIoRequiredConfig(config, context) {
       if (hasPathValue(config, entry.path, entry.allowBlank)) {
         continue;
       }
-      handleMissingSelectedIoConfig(config, entry.path, context);
+      handleMissingSelectedIoConfig(config, entry.path, context, entry.defaultValue);
     }
   }
 }
 
-function handleMissingSelectedIoConfig(config, dottedPath, context) {
-  const value = explicitIoValueFor(config, dottedPath);
+function handleMissingSelectedIoConfig(config, dottedPath, context, defaultValue = NO_SAFE_VALUE) {
+  const value = defaultValue;
   const path = `template.bees[${context.beeIndex}].config.${dottedPath}`;
   if (value === NO_SAFE_VALUE) {
     addError(context, {
@@ -608,33 +589,6 @@ function handleMissingSelectedIoConfig(config, dottedPath, context) {
   if (context.migrate) {
     setPathValue(config, dottedPath, value, context);
   }
-}
-
-function explicitIoValueFor(config, dottedPath) {
-  if (dottedPath === "inputs.redis.listName") {
-    return hasRedisDatasetSource(config) ? "" : NO_SAFE_VALUE;
-  }
-  if (dottedPath === "inputs.redis.sources") {
-    return hasRedisDatasetSource(config) ? [] : NO_SAFE_VALUE;
-  }
-  if (dottedPath === "outputs.redis.routes") {
-    return hasRedisOutputTarget(config) ? [] : NO_SAFE_VALUE;
-  }
-  if (dottedPath === "outputs.redis.targetListTemplate" || dottedPath === "outputs.redis.defaultList") {
-    return hasRedisOutputTarget(config) ? "" : NO_SAFE_VALUE;
-  }
-  return EXPLICIT_IO_VALUES.has(dottedPath) ? EXPLICIT_IO_VALUES.get(dottedPath) : NO_SAFE_VALUE;
-}
-
-function hasRedisDatasetSource(config) {
-  return hasNonBlankPath(config, "inputs.redis.listName")
-    || hasNonEmptySequencePath(config, "inputs.redis.sources");
-}
-
-function hasRedisOutputTarget(config) {
-  return hasNonEmptySequencePath(config, "outputs.redis.routes")
-    || hasNonBlankPath(config, "outputs.redis.targetListTemplate")
-    || hasNonBlankPath(config, "outputs.redis.defaultList");
 }
 
 function handleMissingIoSelector(root, selectorPath, blocks, context) {
@@ -906,19 +860,6 @@ function hasPathValue(map, dottedPath, allowBlank = false) {
     return typeof value !== "string" || allowBlank || value.trim().length > 0;
   }
   return true;
-}
-
-function hasNonBlankPath(map, dottedPath) {
-  const node = getPathNode(map, dottedPath);
-  if (!isScalar(node)) {
-    return false;
-  }
-  return trimToNull(node.value) !== null;
-}
-
-function hasNonEmptySequencePath(map, dottedPath) {
-  const node = getPathNode(map, dottedPath);
-  return isSeq(node) && node.items.length > 0;
 }
 
 function getPathNode(map, dottedPath) {

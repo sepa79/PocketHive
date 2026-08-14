@@ -11,10 +11,15 @@ import com.networknt.schema.ValidationMessage;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.Set;
 
 public final class ControlEventsSchemaValidator {
 
+  private static final String CONTROL_SCHEMA_ID =
+      "https://pockethive.dev/docs/spec/control-events.schema.json";
+  private static final String LIFECYCLE_SCHEMA_ID =
+      "https://pockethive.dev/docs/spec/swarm-lifecycle.schema.json";
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final JsonSchema SCHEMA = loadSchema();
 
@@ -46,9 +51,14 @@ public final class ControlEventsSchemaValidator {
   private static JsonSchema loadSchema() {
     Path schemaPath = locateRepoSchema();
     try {
-      JsonNode schemaNode = MAPPER.readTree(schemaPath.toFile());
-      JsonSchemaFactory factory = JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012);
-      return factory.getSchema(schemaNode);
+      Path lifecyclePath = schemaPath.resolveSibling("swarm-lifecycle.schema.json");
+      JsonSchemaFactory factory = JsonSchemaFactory.builder(
+              JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V202012))
+          .addUriMappings(Map.of(
+              CONTROL_SCHEMA_ID, schemaPath.toUri().toString(),
+              LIFECYCLE_SCHEMA_ID, lifecyclePath.toUri().toString()))
+          .build();
+      return factory.getSchema(schemaPath.toUri());
     } catch (Exception e) {
       throw new IllegalStateException("Failed to load schema from " + schemaPath, e);
     }

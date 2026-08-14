@@ -209,7 +209,7 @@ You can use these tools to answer questions like:
 
 - “Did the `config-update` for this generator instance actually go out?”
 - “Which `status-full` events were emitted for swarm `foo`?”
-- “What exactly was in the `ready.swarm-remove` confirmation payload?”
+- “What exactly was in the terminal `swarm-remove` outcome payload?”
 
 To clear the buffered recording, call `control.start-recording` again or delete
 `tools/mcp-orchestrator-debug/control-recording.jsonl`.

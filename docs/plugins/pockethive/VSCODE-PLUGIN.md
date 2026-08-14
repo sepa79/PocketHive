@@ -212,11 +212,14 @@ ENVIRONMENT                    [Switch ▾]
   [●green] local  CONNECTED  (active)
   ─────────────────────────────────────────────
   SWARMS on local                [+ New]
-  [●green] <swarm-id-a>    RUNNING   N bees
+  [●green] <swarm-id-a>    RUNNING · HEALTHY   N bees
+    controller READY
     [▶ Start][■ Stop]  [View][Journal][Queues]
     context menu: Remove... | Clone
-  [◐cyan]  <swarm-id-b>    READY     N bees
-  [○grey]  <swarm-id-c>    STOPPED   N bees
+  [◐cyan]  <swarm-id-b>    UNAVAILABLE · UNKNOWN   N bees
+    controller PROVISIONING
+  [●green] <swarm-id-c>    STOPPED · HEALTHY   N bees
+    controller READY
   ─────────────────────────────────────────────
   [Manage environments...]
 
@@ -226,6 +229,10 @@ Empty state (no environments):
 ```
 
 Remove is context menu only — never inline. Confirm modal required.
+
+The labels render independent workload observation, Controller observation and
+health fields returned by `swarm_list`; the tree must not define a combined
+lifecycle state or use a display label as action policy.
 
 Tree item context values:
 - `swarmRunning` — inline: Stop, View, Journal, Queues; menu: Remove

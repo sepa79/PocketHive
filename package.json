@@ -5,6 +5,8 @@
   "description": "Development tooling for PocketHive",
   "scripts": {
     "build": "echo \"no build step\"",
+    "contracts:generate": "node scripts/generate-swarm-lifecycle-contract.mjs && node scripts/generate-scenario-config-defaults.mjs",
+    "contracts:check": "node scripts/generate-swarm-lifecycle-contract.mjs --check && node scripts/generate-scenario-config-defaults.mjs --check",
     "lint": "npm run lint --prefix ui-v2",
     "mcp:agentic-evals": "npm run acceptance:agentic --prefix tools/pockethive-mcp",
     "mcp:doctor": "npm --prefix tools/pockethive-mcp run doctor --",
@@ -13,11 +15,19 @@
     "mcp:start:http": "npm --prefix tools/pockethive-mcp run start:http",
     "mcp:test": "npm test --prefix tools/pockethive-mcp",
     "mcp:workflow-acceptance": "npm run acceptance:workflow --prefix tools/pockethive-mcp",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:docs": "node tools/docs-validation/run.mjs --profile local",
+    "test:docs:all": "node tools/docs-validation/run.mjs --profile all",
+    "test:docs:deployed": "node tools/docs-validation/run.mjs --profile deployed",
+    "test:docs:packaging": "node tools/docs-validation/run.mjs --profile packaging",
+    "test:docs:runtime": "node tools/docs-validation/run.mjs --profile runtime",
+    "test:docs:setup": "node tools/docs-validation/run.mjs --profile setup",
+    "test:docs:static": "node tools/docs-validation/run.mjs --profile static"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "amqplib": "^0.10.4",
+    "yaml": "^2.8.2",
     "zod": "^3.24.1"
   },
   "devDependencies": {
@@ -35,6 +45,7 @@
     "lucide-react": "^0.460.0",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
+    "saxes": "^6.0.0",
     "typescript-eslint": "^8.16.0",
     "vitest": "^4.1.8",
     "zustand": "^4.5.2"

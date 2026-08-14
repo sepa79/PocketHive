@@ -333,12 +333,10 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
     swarmId: "sw1",
     runId: "run-1",
     includeRunning: false,
-    includeRabbit: true,
-    overrideRegisteredSwarmState: true
+    includeRabbit: true
   });
   const execution = await handlers.get("runtime.cleanup.execute")({
     swarmId: "sw1",
-    overrideRegisteredSwarmState: true,
     candidateSetHash: "sha256:abc",
     candidateIds: ["lifecycle:swarm:sw1"],
     idempotencyKey: "idem-1",
@@ -355,8 +353,6 @@ test("runtime cleanup tools delegate to orchestrator cleanup API when httpJson i
   ]);
   assert.deepEqual(calls.map((call) => call.options.method), ["GET", "POST", "POST"]);
   assert.equal(calls[1].options.body.includeRabbit, true);
-  assert.equal(calls[1].options.body.overrideRegisteredSwarmState, true);
-  assert.equal(calls[2].options.body.overrideRegisteredSwarmState, true);
   assert.equal(calls[2].options.body.actor, "alice");
   assert.equal(calls[2].options.body.idempotencyKey, "idem-1");
 });
@@ -513,11 +509,18 @@ test("runtime context reads Rabbit topology from Orchestrator", async () => {
     runId: "run-1",
     includeRabbit: true
   }, {
-    manifestRoot: "__missing_manifest_root__",
     httpJson: async (path, options) => {
       calls.push({ path, options });
       if (path === "/api/runtime/debug/resources/list") {
         return { workers: [], managers: [], blocked: [] };
+      }
+      if (path === "/api/runtime/debug/manifest") {
+        return {
+          swarmId: "swarm-1",
+          runId: "run-1",
+          runtimeObjects: [],
+          rabbit: { controlQueues: [], workQueues: [], exchanges: [] }
+        };
       }
       if (path === "/api/runtime/debug/rabbit/topology") {
         return {
@@ -600,7 +603,7 @@ function runtimeManifest(overrides = {}) {
 
 function runtimeCapabilities(overrides = {}) {
   return {
-    runtimeDebugContractVersion: "3",
+    runtimeDebugContractVersion: "4",
     cleanupContractVersion: "3",
     runtimeDebugReadsBackedByOrchestrator: true,
     cleanupPlanHasExecutionRisk: true,

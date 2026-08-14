@@ -11,6 +11,7 @@ ui:
 config:
   - name: forwardToOutput
     type: boolean
+    default: false
     liveMutable: true
     required: true
     ui:
@@ -18,6 +19,7 @@ config:
       group: Output
   - name: txOutcomeSinkMode
     type: string
+    default: "NONE"
     liveMutable: true
     required: true
     options:
@@ -28,6 +30,7 @@ config:
       group: Output
   - name: dropTxOutcomeWithoutCallId
     type: boolean
+    default: true
     liveMutable: true
     required: true
     ui:

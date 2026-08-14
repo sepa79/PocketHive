@@ -4,6 +4,7 @@ import {
   resolveScenarioId as resolveScenarioIdTarget,
   resolveSwarmId as resolveSwarmIdTarget,
 } from '../targetResolver';
+import type { SwarmSummary } from '../types';
 
 async function call(name: string, args: Record<string, unknown> = {}): Promise<unknown> {
   const client = getMcpClient();
@@ -77,12 +78,26 @@ export async function swarmGet(swarmId: unknown): Promise<SwarmDetail> {
   return call('swarm_get', { swarmId: requireSwarmId(swarmId) }) as Promise<SwarmDetail>;
 }
 
-export async function swarmCreate(swarmId: string, templateId: string, sutId?: string, variablesProfileId?: string) {
-  return call('swarm_create', { swarmId, templateId, ...(sutId ? { sutId } : {}), ...(variablesProfileId ? { variablesProfileId } : {}) });
+export type SwarmCreateOptions = {
+  networkMode: 'DIRECT' | 'PROXIED';
+  sutId?: string;
+  variablesProfileId?: string;
+  networkProfileId?: string;
+};
+
+export async function swarmCreate(swarmId: string, templateId: string, options: SwarmCreateOptions) {
+  return call('swarm_create', { swarmId, templateId, ...options });
 }
 
 export async function swarmWaitReady(swarmId: unknown, timeoutSec = 90) {
-  return call('swarm_wait_ready', { swarmId: requireSwarmId(swarmId), timeoutSec }) as Promise<{ ready: boolean; swarmStatus: string }>;
+  return call('swarm_wait_ready', { swarmId: requireSwarmId(swarmId), timeoutSec }) as Promise<{
+    ready: boolean;
+    swarmId: string;
+    controllerState: string;
+    workloadState: string;
+    polls: number;
+    message?: string;
+  }>;
 }
 
 export async function swarmStart(swarmId: unknown) {
@@ -223,17 +238,8 @@ export interface ScenarioDetail {
   template?: { image?: string; bees?: unknown[] };
 }
 
-export interface SwarmSummary {
-  id: string;
-  status?: string;
-  health?: string;
-  templateId?: string;
-}
-
-export interface SwarmDetail {
-  id?: string;
-  envelope?: { data?: { context?: { swarmStatus?: string; totals?: { desired: number; healthy: number } } } };
-}
+export type { SwarmSummary } from '../types';
+export type SwarmDetail = SwarmSummary;
 
 export interface HealthResult {
   orchestrator: string;

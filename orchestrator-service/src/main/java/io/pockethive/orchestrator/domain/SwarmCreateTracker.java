@@ -15,7 +15,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class SwarmCreateTracker {
     public enum Phase {
         CONTROLLER,
-        TEMPLATE,
         START,
         STOP
     }
@@ -59,12 +58,6 @@ public class SwarmCreateTracker {
 
     public Optional<Pending> remove(String instanceId) {
         return Optional.ofNullable(controllers.remove(instanceId));
-    }
-
-    public void expectTemplate(Pending base, Duration timeout) {
-        if (base == null) return;
-        operations.put(key(base.swarmId(), Phase.TEMPLATE),
-            base.next(Phase.TEMPLATE, deadline(timeout)));
     }
 
     public void expectStart(String swarmId, String correlationId, String idempotencyKey, Duration timeout) {

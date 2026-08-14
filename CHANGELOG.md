@@ -2,6 +2,168 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.36]
+Timestamp: 2026-07-22T22:53:54Z
+
+- Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
+  operation and allocate CREATE's run id before launch, so failures before swarm
+  registration publish and retry their schema-complete terminal outcome.
+- Lifecycle API: remove the unused `notes` field from create/start/stop/remove
+  requests, remove the unused AMQP `swarmCreate` signal factory, and make Debug
+  Tap a raw message viewer rather than a second, partial WorkItem parser.
+- Lifecycle create boundary: validate the canonical request schema before REST
+  mapping and typed Java construction, require explicit `null` for absent nullable
+  inputs, reject non-canonical whitespace, and align MCP, workflow, VS Code and
+  POC create callers with the required network mode.
+- WorkItem data-plane: validate every Rabbit inbound and outbound JSON envelope
+  against the canonical WorkItem schema before mapping; remove codec/DTO and
+  builder copies of step-header wire validation, and reject incomplete
+  observability at the same boundary. Per-step headers now reject `null` values
+  at that boundary; removing a header is the only canonical representation.
+- Control-plane scope contract: require every routing and envelope scope segment,
+  use the literal `ALL` for intentional fan-out, and reject `null`, blank and
+  non-canonical wildcard aliases instead of silently broadening delivery. The
+  journal migration canonicalizes historic blank scope fields to `ALL` and
+  prevents new non-canonical rows.
+- Create contract: require an explicit boolean `autoPullImages`; `null` can no
+  longer silently disable image preloading.
+- Breaking lifecycle contract: replace the mixed swarm/container status and
+  implicit `enabled` state with independent runtime intent, workload intent,
+  controller state, workload state, health, and resource state axes; legacy
+  lifecycle fields and envelopes are not accepted.
+- Lifecycle operations: make the correlation-specific REST operation resource
+  authoritative, publish one orchestrator-owned terminal outcome notification,
+  and scope idempotency to operation type, swarm, exact target, and key.
+- Lifecycle convergence: complete create only after the controller verifies the
+  filesystem startup artifact, and complete start, stop, and enabled config
+  updates only after fresh worker observations match the requested intent.
+- Controller state authority: remove the parallel `ManagerRuntimeCore` workload
+  and readiness machine; scenarios now use a command-only lifecycle port and a
+  read-only projection derived from the single Controller lifecycle core.
+- Controller capability SSOT: replace silent lifecycle defaults with mandatory
+  core, scenario, and buffer-guard capability interfaces, and use the single
+  Manager SDK `QueueStats` value throughout Controller runtime and metrics.
+- Control-plane contract SSOT: construct public lifecycle responses in one
+  Orchestrator factory and dispatch lifecycle commands by canonical operation
+  type instead of transport strings.
+- TypeScript contract SSOT: generate one shared lifecycle package from the JSON
+  schema for the Hive UI and VS Code extension, reject compatibility status
+  aliases, and gate consumer builds against stale generated artifacts.
+- Explicit network selection: remove null-to-`DIRECT` coercion and compatibility
+  create constructors; create, binding, update, launch, and status boundaries
+  now require a declared canonical network mode.
+- SUT contract SSOT: delete the Scenario Manager `SutEnvironment` DTO and its
+  divergent validation, use the shared model directly for registry and bundle
+  APIs, reject missing/blank canonical fields, and remove unused runtime
+  `ui.panelId` metadata instead of retaining a compatibility projection.
+- Filesystem lifecycle handoff: start controllers from a versioned immutable
+  swarm artifact with a verified SHA-256 digest, and coordinate swarm removal
+  through correlation-specific filesystem request/result artifacts instead of
+  a fragile RabbitMQ teardown acknowledgement.
+- Lifecycle consumers and documentation: migrate the Hive UI, PocketHive MCP,
+  VS Code extension, E2E tests, schemas, AsyncAPI, REST documentation, and
+  runtime diagnostics to the canonical operation and state contracts.
+- Explicit failure semantics: reject invalid core registry identities, require
+  an explicitly composed Controller journal, and propagate cross-swarm,
+  serialization, and append failures instead of silently discarding them.
+- Bootstrap and template SSOT: provide one conditional Jackson
+  auto-configuration and shared worker logging defaults from `observability`,
+  and delete the unused divergent worker-sdk HTTP template record.
+- UI packaging: include the generated shared lifecycle contract in the Docker
+  build workspace so container builds consume the same package as local UI
+  and extension builds.
+- Agent lifecycle tooling: require callers to select `DIRECT` or `PROXIED`
+  explicitly when creating a swarm and require a profile only for the proxied
+  adapter; remove the MCP-side hard-coded network mode.
+- Idempotent Docker removal: treat an already stopped or already absent
+  container as satisfying the corresponding teardown postcondition, so a
+  failed partial create can still be removed completely.
+- Health journaling: establish the first observed health value as the baseline
+  instead of serializing a fake transition whose previous value is null.
+- Test boundaries: exclude archived legacy UI sources from the active root
+  Vitest suite; the current UI remains covered by its own package suite.
+- Scenario authoring defaults SSOT: declare safe required config defaults in
+  capability manifests, generate the MCP defaults projection from those
+  manifests, and make the scenario migrator consume the same manifest contract
+  instead of maintaining a second defaults table.
+- Workflow lifecycle ordering: wait for the correlation-specific create
+  operation to succeed before readiness polling and start dispatch, including
+  the resumable deploy path, so controller readiness cannot race an active
+  create operation.
+- Strict workflow evidence: allow deploy to explicitly pre-arm a debug tap
+  before start traffic, then reuse that tap during verification without
+  weakening strict proof requirements or crossing swarm identities.
+- Startup artifact JSON correctness: preserve legal null values inside the
+  immutable scenario plan rather than passing arbitrary JSON through
+  `Map.copyOf`.
+- Control-plane result ownership: terminal worker results identify the concrete
+  executor even for broadcast signals, and Orchestrator ignores valid results
+  whose correlation belongs to controller-internal operations.
+- Workflow cleanup acceptance: wait for the correlation-specific remove
+  operation to succeed and verify the swarm registry postcondition before
+  reporting teardown, while still attempting bundle cleanup after a failure.
+- Network proxy NFS reliability: replace cross-node `inotify` reloads with
+  SHA-256 polling, validated HAProxy reloads, and an applied-digest handshake;
+  binding mutations now fail explicitly unless HAProxy confirms the exact
+  desired configuration.
+- Lifecycle API failure semantics: return the active canonical operation as
+  `409 Conflict` for concurrent lifecycle requests, include the schema-required
+  nullable resource in remove errors, reject unauthorized create requests before
+  reserving an operation, preserve the originating execution failure when outcome
+  publication also fails, and make auth E2E wait for accepted lifecycle operations
+  before issuing dependent commands.
+- Removal postconditions: clear the canonical Network Proxy Manager binding and
+  verify its absence before registry, runtime-directory, worker, and queue
+  teardown; a successful REMOVE can no longer leave HTTP/HTTPS/TCPS routes
+  active.
+- History-policy E2E: tap the source exchange before generator traffic instead
+  of competing with the final-queue consumer, derive the expected history
+  policy from the canonical scenario template rather than a duplicated feature
+  literal, and match canonical worker roles exactly so `postprocessor` cannot
+  be mistaken for `processor`.
+- Release-gate activation: remove the stale `@wip` exclusions from the auth
+  rollout and history-policy contracts. Auth now takes the controller instance
+  only from the succeeded lifecycle operation target, and clearing-export
+  assertions wait for the canonical `status-full` config snapshot after the
+  worker applies configuration instead of inspecting an incomplete startup
+  snapshot.
+- Full control-plane audit: make control-plane capture mandatory, centralise
+  its six captured families (`signal`, `result`, `outcome`, `journal`, `alert`,
+  and `metric`), and fail the unfiltered E2E pack when any family is absent.
+  Filtered E2E runs remain targeted audits and do not require families their
+  selected scenarios intentionally do not emit.
+- Verification: the saved `large-swarm` target completed the full E2E pack on
+  2026-08-04 at 13:41 BST with **39 scenarios and 463 steps passed** in
+  19m13.169s. Surefire recorded **67 tests with zero failures, errors, or
+  skips** (Cucumber: 39/39); this includes the three former `@wip` release
+  scenarios. Its mandatory full audit captured 3,889 control-plane messages
+  and required `signal`, `result`, `outcome`, `journal`, `alert`, and `metric`
+  families. The official ingress returned an empty swarm registry after the
+  run. Targeted E2E also verifies that capture initialisation and schema/routing
+  checks remain active for filtered runs.
+- HAProxy NFS acceptance: on the large swarm, with Network Proxy Manager and
+  HAProxy on distinct nodes sharing the deployed runtime mount, a dedicated
+  ingress E2E proved desired/applied acknowledgement for a valid binding,
+  explicit ~10-second timeout for an invalid HAProxy candidate, retention of
+  the prior binding, and final removal. The test now clears only its own stale
+  bindings and selects a free acceptance port, preventing retry debris.
+- Release traceability: [the lifecycle control-plane verification matrix](docs/RELEASE_VERIFICATION_MATRIX.md)
+  records each workstream's commits, automated proof, large-swarm evidence, and
+  remaining release gate. It now records the HiveForge deployment receipt,
+  immutable Compose digest, and live application image digests for the
+  large-swarm E2E environment; the last two branch commits and current
+  acceptance additions are E2E-only and require no runtime-image redeploy.
+- Release gates: the final post-REMOVE canonical PocketHive MCP snapshot found
+  no swarm registry entry, workers, managers, exact RabbitMQ queues/exchanges,
+  or cleanup candidates. HiveMap's full code-quality comparison and the
+  complementary documentation SSOT comparison both passed; the previous HIGH
+  full-audit family-coverage finding is resolved, while the unrelated MEDIUM
+  large-coordinator maintainability finding remains tracked for separate work.
+- Swarm-full mount evidence: HiveForge's immutable Compose receipt and live
+  runtime report confirm healthy stateful services with the four dedicated
+  `/opt/pockethive-data/*/data` bindings and the HAProxy/Network Proxy Manager
+  shared NFS runtime mount.
+
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 
@@ -231,17 +393,12 @@ Timestamp: 2026-06-18T15:27:35Z
   control-plane topology descriptors for label-gated Docker/RabbitMQ cleanup,
   removing the duplicate `TrafficTopology` naming helper.
 - RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
-  descriptor-derived worker control queues only when worker labels and registry
-  state prove the instance is stale; registered swarms that are not explicitly
-  stopped keep shared queues, and derived worker control queues obey the same
-  `includeRunning` gate as their worker runtime object.
-- Runtime cleanup safety: allow pre-run registered swarms to be aborted through
-  `LIFECYCLE_REMOVE_SWARM`, keep running swarms and swarms in `REMOVING` state
-  blocked, and return the required lifecycle action when execute targets a
-  blocked lifecycle candidate.
-- Runtime cleanup emergency path: add hash-bound
-  `overrideRegisteredSwarmState` for rare break-glass lifecycle removal of
-  `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` registered swarms.
+  descriptor-derived worker control queues only for unregistered orphan
+  resources proven by labels and ownership evidence.
+- Runtime cleanup safety: every registered swarm is removable only through the
+  canonical FS-backed `LIFECYCLE_REMOVE_SWARM` operation. Cleanup execution
+  reports `DISPATCHED` with its correlation and operation URL; direct
+  Docker/RabbitMQ candidates and lifecycle ownership overrides are forbidden.
 - Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
   reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
   a local Docker socket fallback for worker or swarm-controller manager debug.

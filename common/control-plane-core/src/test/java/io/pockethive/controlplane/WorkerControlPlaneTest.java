@@ -6,6 +6,7 @@ import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +18,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 class WorkerControlPlaneTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ControlPlaneCodec codec = ControlPlaneCodec.create();
     private WorkerControlPlane plane;
 
     @BeforeEach
     void setUp() {
-        plane = WorkerControlPlane.builder(mapper).build();
+        plane = WorkerControlPlane.builder(codec).build();
     }
 
     @Test
@@ -38,7 +40,8 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "signal.config-update.sw1.generator.inst", listener);
+        plane.consume(codec.encode(signal, "signal.config-update.sw1.generator.inst"),
+            "signal.config-update.sw1.generator.inst", listener);
 
         WorkerConfigCommand command = ref.get();
         assertThat(command).isNotNull();
@@ -55,7 +58,8 @@ class WorkerControlPlaneTest {
             Map.of("enabled", "false"));
         AtomicReference<WorkerConfigCommand> ref = new AtomicReference<>();
 
-        plane.consume(mapper.writeValueAsString(signal), "signal.config-update.sw1.generator.inst", new WorkerSignalListener() {
+        plane.consume(codec.encode(signal, "signal.config-update.sw1.generator.inst"),
+            "signal.config-update.sw1.generator.inst", new WorkerSignalListener() {
             @Override
             public void onConfigUpdate(WorkerConfigCommand command) {
                 ref.set(command);
@@ -80,7 +84,8 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "signal.status-request.sw1.generator.inst", listener);
+        plane.consume(codec.encode(signal, "signal.status-request.sw1.generator.inst"),
+            "signal.status-request.sw1.generator.inst", listener);
 
         WorkerStatusRequest request = ref.get();
         assertThat(request).isNotNull();
@@ -90,7 +95,7 @@ class WorkerControlPlaneTest {
     @Test
     void forwardsUnsupportedSignals() throws Exception {
         ControlSignal signal = ControlSignal.forInstance(
-            "unknown", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
+            "swarm-start", "sw1", "generator", "inst", "orchestrator-1", "corr", "idem",
             null);
         AtomicReference<WorkerSignalListener.WorkerSignalContext> ref = new AtomicReference<>();
 
@@ -101,11 +106,11 @@ class WorkerControlPlaneTest {
             }
         };
 
-        plane.consume(mapper.writeValueAsString(signal), "signal.unknown", listener);
+        plane.consume(codec.encode(signal, "signal.swarm-start.sw1.generator.inst"),
+            "signal.swarm-start.sw1.generator.inst", listener);
 
         WorkerSignalListener.WorkerSignalContext context = ref.get();
         assertThat(context).isNotNull();
         assertThat(context.envelope().signal()).isEqualTo(signal);
-        assertThat(context.payload()).contains("\"unknown\"");
     }
 }

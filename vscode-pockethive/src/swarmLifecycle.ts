@@ -1,3 +1,14 @@
+import {
+  parseControllerState,
+  parseLifecycleAxes,
+  parseTerminalStatus,
+  parseWorkloadState,
+  type ControllerState,
+  type LifecycleAxes,
+  type TerminalStatus,
+  type WorkloadState,
+} from '@pockethive/swarm-lifecycle-contract';
+
 export type SwarmLifecycleAction = 'start' | 'stop';
 
 const OUTCOME_TYPE_BY_ACTION: Record<SwarmLifecycleAction, string> = {
@@ -5,15 +16,11 @@ const OUTCOME_TYPE_BY_ACTION: Record<SwarmLifecycleAction, string> = {
   stop: 'swarm-stop',
 };
 
-export type SwarmLifecycleState = {
-  status: string;
-  health?: string;
-  enabled?: boolean;
-};
+export type SwarmLifecycleState = LifecycleAxes;
 
 export type SwarmLifecycleOutcome = {
   type: string;
-  status: string;
+  status: TerminalStatus;
   timestamp?: string;
   correlationId?: string;
   retryable?: boolean;
@@ -21,57 +28,38 @@ export type SwarmLifecycleOutcome = {
 };
 
 export type SwarmReadyResult = {
-  ready?: boolean;
-  swarmStatus?: string;
-  totals?: {
-    desired?: number;
-    healthy?: number;
-    running?: number;
-    enabled?: number;
-  };
+  ready: boolean;
+  controllerState: ControllerState;
+  workloadState: WorkloadState;
 };
 
 export function summarizeSwarmLifecycle(detail: unknown): SwarmLifecycleState {
-  if (!detail || typeof detail !== 'object') {
-    return { status: 'UNKNOWN' };
-  }
-  const record = detail as Record<string, unknown>;
-  const envelope = objectValue(record.envelope);
-  const data = objectValue(envelope?.data);
-  const context = objectValue(data?.context);
-
-  return {
-    status: stringValue(context?.swarmStatus) ?? stringValue(record.status) ?? 'UNKNOWN',
-    health: stringValue(context?.swarmHealth) ?? stringValue(record.health),
-    enabled: booleanValue(data?.enabled) ?? booleanValue(record.workEnabled),
-  };
+  return parseLifecycleAxes(detail);
 }
 
 export function isExpectedLifecycleState(action: SwarmLifecycleAction, state: SwarmLifecycleState): boolean {
-  const status = state.status.toUpperCase();
   if (action === 'start') {
-    return state.enabled === true || status === 'RUNNING';
+    return state.workloadState === 'RUNNING' && state.observationStale === false;
   }
-  return state.enabled === false || status === 'STOPPED' || status === 'READY';
+  return state.workloadState === 'STOPPED' && state.observationStale === false;
 }
 
 export function shouldWaitForStartReadiness(state: SwarmLifecycleState): boolean {
-  return state.status.toUpperCase() === 'READY' && state.enabled !== true;
+  return state.controllerState !== 'READY'
+    || state.workloadState !== 'STOPPED'
+    || state.observationStale;
 }
 
 export function formatLifecycleState(state: SwarmLifecycleState): string {
-  const parts = [state.status];
-  if (typeof state.enabled === 'boolean') parts.push(state.enabled ? 'enabled' : 'disabled');
-  if (state.health) parts.push(`health ${state.health}`);
+  const parts = [`controller ${state.controllerState}`, `workload ${state.workloadState}`, `health ${state.health}`];
+  if (state.observationStale) parts.push('observation stale');
   return parts.join(' / ');
 }
 
 export function extractLifecycleCorrelationId(response: unknown): string | undefined {
   const record = objectValue(response);
   if (!record) return undefined;
-  return stringValue(record.correlationId)
-    ?? stringValue(objectValue(record.watch)?.correlationId)
-    ?? stringValue(objectValue(record.envelope)?.correlationId);
+  return stringValue(record.correlationId);
 }
 
 export function findLifecycleOutcome(
@@ -96,7 +84,7 @@ export function findLifecycleOutcome(
 }
 
 export function formatLifecycleOutcome(outcome: SwarmLifecycleOutcome): string {
-  const parts = [outcome.status];
+  const parts: string[] = [outcome.status];
   const context = formatLifecycleContext(outcome.context);
   if (context) parts.push(`(${context})`);
   if (typeof outcome.retryable === 'boolean') parts.push(outcome.retryable ? 'retryable' : 'not retryable');
@@ -105,34 +93,19 @@ export function formatLifecycleOutcome(outcome: SwarmLifecycleOutcome): string {
 
 export function summarizeReadyResult(result: unknown): SwarmReadyResult {
   const record = objectValue(result);
-  const totals = objectValue(record?.totals);
+  if (!record) throw new Error('Swarm readiness result must be an object');
   return {
-    ready: booleanValue(record?.ready),
-    swarmStatus: stringValue(record?.swarmStatus),
-    totals: totals
-      ? {
-          desired: numberValue(totals.desired),
-          healthy: numberValue(totals.healthy),
-          running: numberValue(totals.running),
-          enabled: numberValue(totals.enabled),
-        }
-      : undefined,
+    ready: requiredBoolean(record.ready, 'ready'),
+    controllerState: parseControllerState(record.controllerState),
+    workloadState: parseWorkloadState(record.workloadState),
   };
 }
 
 export function formatReadyResult(result: SwarmReadyResult): string {
   const parts: string[] = [];
-  if (typeof result.ready === 'boolean') parts.push(result.ready ? 'ready' : 'not ready');
-  if (result.swarmStatus) parts.push(`status ${result.swarmStatus}`);
-  const totals = result.totals;
-  if (totals) {
-    const totalParts: string[] = [];
-    if (typeof totals.desired === 'number') totalParts.push(`desired ${totals.desired}`);
-    if (typeof totals.healthy === 'number') totalParts.push(`healthy ${totals.healthy}`);
-    if (typeof totals.running === 'number') totalParts.push(`running ${totals.running}`);
-    if (typeof totals.enabled === 'number') totalParts.push(`enabled ${totals.enabled}`);
-    if (totalParts.length) parts.push(totalParts.join(', '));
-  }
+  parts.push(result.ready ? 'ready' : 'not ready');
+  parts.push(`controller ${result.controllerState}`);
+  parts.push(`workload ${result.workloadState}`);
   return parts.join(' / ') || 'not ready';
 }
 
@@ -151,8 +124,8 @@ function outcomeFromEntry(entry: Record<string, unknown>): SwarmLifecycleOutcome
   const data = objectValue(entry.data) ?? objectValue(envelope?.data);
   const kind = stringValue(entry.kind) ?? stringValue(envelope?.kind);
   const type = stringValue(entry.type) ?? stringValue(envelope?.type);
-  const status = stringValue(data?.status);
-  if (kind !== 'outcome' || !type || !status) return undefined;
+  if (kind !== 'outcome' || !type || data?.status === undefined) return undefined;
+  const status = parseTerminalStatus(data.status);
   return {
     type,
     status,
@@ -193,6 +166,12 @@ function stringValue(value: unknown): string | undefined {
 
 function booleanValue(value: unknown): boolean | undefined {
   return typeof value === 'boolean' ? value : undefined;
+}
+
+function requiredBoolean(value: unknown, field: string): boolean {
+  const parsed = booleanValue(value);
+  if (parsed === undefined) throw new Error(`Swarm contract field '${field}' is required`);
+  return parsed;
 }
 
 function numberValue(value: unknown): number | undefined {

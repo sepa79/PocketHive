@@ -2,6 +2,8 @@ package io.pockethive.controlplane.topology;
 
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.ControlPlaneRoles;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -11,7 +13,7 @@ import java.util.Set;
 
 public final class SwarmControllerControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
-    private static final String ROLE = "swarm-controller";
+    private static final String ROLE = ControlPlaneRoles.SWARM_CONTROLLER;
 
     private final String swarmId;
     private final String controlQueuePrefix;
@@ -37,8 +39,6 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         // Lifecycle commands must target a concrete controller instance.
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, ROLE, "ALL"));
@@ -50,8 +50,8 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", ROLE, "ALL"));
         Set<String> events = Set.of(
-            statusEventPattern("status-full"),
-            statusEventPattern("status-delta"),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_FULL),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_DELTA),
             alertEventPattern()
         );
         return Optional.of(new ControlQueueDescriptor(queueName, signals, events));
@@ -73,14 +73,12 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         );
         Set<String> lifecycleRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN)
         );
         Set<String> statusEvents = Set.of(
-            statusEventPattern("status-full"),
-            statusEventPattern("status-delta")
+            statusEventPattern(ControlPlaneEventTypes.STATUS_FULL),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_DELTA)
         );
         Set<String> otherEvents = Set.of(
             alertEventPattern()

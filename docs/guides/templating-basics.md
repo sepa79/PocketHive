@@ -1,5 +1,12 @@
 # Templating Guide: Basics
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors building dynamic payloads and request envelopes |
+| Prerequisites | Basic scenario YAML knowledge and the [scenario variables contract](../scenarios/SCENARIO_VARIABLES.md) |
+| Expected outcome | A small, validated template using the current Pebble and constrained SpEL surface |
+| Last verified source | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
+
 PocketHive uses **Pebble** templates with a constrained **SpEL**
 (`eval`) helper for dynamic payloads, headers and request envelopes.
 
@@ -54,30 +61,35 @@ See `scenarios/e2e/variables-demo/`:
   SUT-scoped `customerId`
 - `sut/` defines `sut-A` and `sut-B` (bundle-local SSOT)
 
-### How to run
+### Runtime fields and current gate
 
-Create the swarm with both:
+A future create request must supply both:
 
 - `sutId` (required when `sut`-scoped variables exist)
 - `variablesProfileId` (required when any variables exist)
 
-Via Orchestrator REST (`docs/ORCHESTRATOR-REST.md`):
+The following object documents the relevant Orchestrator request fields; it is
+not a command to submit against the current candidate:
 
 ```json
 {
   "templateId": "variables-demo",
   "idempotencyKey": "uuid-v4",
+  "autoPullImages": false,
   "sutId": "sut-A",
-  "variablesProfileId": "france"
+  "variablesProfileId": "france",
+  "networkMode": "DIRECT",
+  "networkProfileId": null
 }
 ```
 
-If you run the local stack via `build-hive.sh`, you can also create it
-via the debug CLI:
-
-```bash
-node tools/mcp-orchestrator-debug/client.mjs create-swarm <swarmId> variables-demo --sutId sut-A --variablesProfileId france
-```
+At the exact tested source, **Connectivity** fails on
+`swarm-lifecycle.schema.json#/$defs/RuntimeMetadata`. Stop before creating this
+swarm. Once a corrected candidate passes that preflight, use a unique swarm ID
+and the version-matched [customer lifecycle](operators/swarm-lifecycle.md),
+retain the returned correlation/operation evidence, and remove and verify the
+disposable swarm. `tools/mcp-orchestrator-debug/` is maintainer diagnostics,
+not a customer execution path.
 
 ## 3. SpEL helper: `eval(...)`
 
@@ -90,11 +102,13 @@ headers:
 ```
 
 The `eval` helper is backed by `SpelTemplateEvaluator` and runs in a
-restricted `SimpleEvaluationContext`.
+restricted `StandardEvaluationContext` with type references, method and
+constructor resolution, and bean lookup disabled.
 
 ### Root variables
 
-- `payload` - raw payload string.
+- `payload` - current payload. Depending on the rendering boundary, valid JSON
+  is available as a parsed object/map or as its raw JSON string.
 - `headers` - map of global WorkItem headers (top-level).
 - `workItem` - full `WorkItem` instance (steps, step headers,
   payloads).
@@ -113,20 +127,26 @@ The following SpEL functions are available (via `#name(...)`):
 - `#hmac_sha256_hex(key, value)` - HMAC-SHA256 in hex.
 - `#regex_match(input, pattern)` - boolean.
 - `#regex_extract(input, pattern, group)` - string (empty if no match).
-- `#json_path(payload, path)` - JSONPath extractor; returns a string.
+- `#json_path(payload, path)` - JSON Pointer extractor; accepts the current
+  payload as either a parsed object/map or a JSON string and returns a string.
 - `#date_format(instant, pattern)` - format `now` or provided Instant.
+- `#datetime_offset(offset, pattern)` - format the current UTC time after an
+  explicit offset such as `+2d`, `-1month`, or `3h`, using a Java date/time
+  pattern.
 - `#sequence(key, mode, format)` - Redis-backed sequence generator.
 - `#sequenceWith(key, mode, format, startOffset, maxSequence)` -
   sequence with explicit start/max.
-- `#resetSequence(key)` - deletes the Redis counter; returns `true`
-  when removed.
+- `#resetSequence(key)` - destructive one-shot helper that deletes the shared
+  Redis counter and returns `true` when removed. Never place it in a repeating
+  runtime template; use the guarded reset procedure in the
+  [advanced guide](templating-advanced.md#reset-destructive-one-shot-only).
 
-Example - weighted call selection using plain SpEL:
+Example - weighted call selection using the current Pebble helper (do not wrap
+it in `eval(...)`):
 
 ```yaml
 headers:
-  x-ph-call-id: |
-    {{ eval("#randInt(0,99) < 40 ? 'redis-balance' : (#randInt(0,99) < 80 ? 'redis-topup' : 'redis-auth')") }}
+  x-ph-call-id: "{{ pickWeighted('redis-balance', 40, 'redis-topup', 40, 'redis-auth', 20) }}"
 ```
 
 ## 4. JSON field access
@@ -148,7 +168,7 @@ with JSON Pointer syntax (RFC 6901):
 ```yaml
 body: |
   {
-    "customerId": "{{ eval(\"#json_path(workItem.payload(), '/customerId')\") }}"
+    "customerId": "{{ eval(\"#json_path(payload, '/customerId')\") }}"
   }
 ```
 
@@ -158,8 +178,10 @@ Common JSON Pointer patterns:
 - Nested field: `/customer/code`
 - Array element: `/items/0/id`
 
-Note: `#json_path` expects a JSON string as first argument, so use
-`workItem.payload()` instead of `payload`.
+Use the `payload` root variable here. Direct method calls such as
+`workItem.payload()` are intentionally disabled in the restricted SpEL
+context; `#json_path` accepts both parsed JSON objects/maps and raw JSON
+strings.
 
 ## 5. Safety baseline
 
@@ -168,3 +190,11 @@ Note: `#json_path` expects a JSON string as first argument, so use
 - Use `vars.*` for environment/profile differences instead of duplicating
   templates.
 - Validate templates before long e2e/perf runs.
+
+## Troubleshooting
+
+Check variable resolution against the [scenario variables contract](../scenarios/SCENARIO_VARIABLES.md). For runtime rendering evidence, use the canonical [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Continue with [Templating Guide: Advanced](templating-advanced.md) for current sequence helpers, request templates, and validation tooling.

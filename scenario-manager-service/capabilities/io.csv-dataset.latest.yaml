@@ -17,6 +17,7 @@ config:
       group: CSV
   - name: inputs.csv.ratePerSec
     type: number
+    default: 1
     liveMutable: true
     required: true
     min: 0
@@ -27,6 +28,7 @@ config:
       unit: msg/s
   - name: inputs.csv.rotate
     type: boolean
+    default: false
     liveMutable: false
     required: true
     ui:
@@ -34,6 +36,7 @@ config:
       group: CSV
   - name: inputs.csv.skipHeader
     type: boolean
+    default: true
     liveMutable: false
     required: true
     ui:
@@ -41,6 +44,7 @@ config:
       group: CSV
   - name: inputs.csv.delimiter
     type: string
+    default: ","
     liveMutable: false
     required: true
     ui:
@@ -48,6 +52,7 @@ config:
       group: CSV
   - name: inputs.csv.charset
     type: string
+    default: "UTF-8"
     liveMutable: false
     required: true
     ui:
@@ -55,6 +60,7 @@ config:
       group: CSV
   - name: inputs.csv.startupDelaySeconds
     type: integer
+    default: 0
     liveMutable: false
     required: true
     min: 0
@@ -64,6 +70,7 @@ config:
       unit: s
   - name: inputs.csv.tickIntervalMs
     type: integer
+    default: 1000
     liveMutable: false
     required: true
     min: 100

@@ -6,6 +6,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,34 +34,16 @@ public class SwarmStore {
     }
 
     public Swarm register(Swarm swarm) {
-        if (swarm == null) {
-            return null;
-        }
-        swarms.put(swarm.getId(), swarm);
+        Objects.requireNonNull(swarm, "swarm");
+        String swarmId = requireSwarmId(swarm.getId());
+        swarms.put(swarmId, swarm);
         log.info("SwarmStore: registered swarm id={} instance={} container={}",
             swarm.getId(), swarm.getInstanceId(), swarm.getContainerId());
         return swarm;
     }
 
     public Optional<Swarm> find(String id) {
-        return Optional.ofNullable(swarms.get(id));
-    }
-
-    public boolean ensureDiscoveredSwarm(String swarmId, String controllerInstance, String runId) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return false;
-        }
-        if (find(swarmId).isPresent()) {
-            return false;
-        }
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            return false;
-        }
-        Swarm swarm = new Swarm(swarmId, controllerInstance, controllerInstance, runId);
-        register(swarm);
-        updateStatus(swarmId, SwarmLifecycleStatus.CREATING);
-        updateStatus(swarmId, SwarmLifecycleStatus.READY);
-        return true;
+        return Optional.ofNullable(swarms.get(requireSwarmId(id)));
     }
 
     public Collection<Swarm> all() {
@@ -68,101 +51,38 @@ public class SwarmStore {
     }
 
     public void remove(String id) {
-        Swarm removed = swarms.remove(id);
+        String swarmId = requireSwarmId(id);
+        Swarm removed = swarms.remove(swarmId);
         if (removed != null) {
             log.info("SwarmStore: removed swarm id={} instance={} container={}",
                 removed.getId(), removed.getInstanceId(), removed.getContainerId());
         } else {
-            log.info("SwarmStore: remove called for unknown swarm id={}", id);
+            log.info("SwarmStore: remove called for unknown swarm id={}", swarmId);
         }
     }
 
-    public void updateStatus(String id, SwarmLifecycleStatus status) {
-        Swarm swarm = swarms.get(id);
-        if (swarm != null) {
-            SwarmLifecycleStatus previous = swarm.getStatus();
-            // Idempotency guard: control-plane outcome events can be duplicated/redelivered.
-            // Re-applying the same status would throw and trigger AMQP requeue loops (redelivery storms).
-            if (previous == status) {
-                log.info("SwarmStore: duplicate status update id={} status={} (ignoring)", id, status);
-                return;
-            }
-            swarm.transitionTo(status);
-            if (previous != status) {
-                log.info("SwarmStore: status change id={} {} -> {}", id, previous, status);
-            }
-        }
-    }
-
-    public void markTemplateApplied(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        if (swarm.getStatus() == SwarmLifecycleStatus.CREATING) {
-            swarm.transitionTo(SwarmLifecycleStatus.READY);
-        }
-    }
-
-    public void markStartIssued(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        SwarmLifecycleStatus status = swarm.getStatus();
-        if (status == SwarmLifecycleStatus.STARTING || status == SwarmLifecycleStatus.RUNNING) {
-            return;
-        }
-        if (status == SwarmLifecycleStatus.READY || status == SwarmLifecycleStatus.STOPPED) {
-            swarm.transitionTo(SwarmLifecycleStatus.STARTING);
-        }
-    }
-
-    public void markStartConfirmed(String id) {
-        Swarm swarm = swarms.get(id);
-        if (swarm == null) {
-            return;
-        }
-        SwarmLifecycleStatus status = swarm.getStatus();
-        if (status == SwarmLifecycleStatus.RUNNING) {
-            return;
-        }
-        if (status == SwarmLifecycleStatus.READY || status == SwarmLifecycleStatus.STOPPED) {
-            swarm.transitionTo(SwarmLifecycleStatus.STARTING);
-        }
-        if (swarm.getStatus() == SwarmLifecycleStatus.STARTING) {
-            swarm.transitionTo(SwarmLifecycleStatus.RUNNING);
-        }
-    }
-
-    /**
-     * Remove swarms whose swarm-controller stopped reporting status metrics.
-     * <p>
-     * This is intentionally strict: only swarms that have a recorded controller status timestamp and
-     * have not been seen for at least {@code failedAfter} are pruned.
-     */
+    /** Marks stale observation unknown; status traffic never creates or deletes registry entries. */
     public void pruneStaleControllers(Duration failedAfter) {
         pruneStaleControllers(failedAfter, Instant.now());
     }
 
     void pruneStaleControllers(Duration failedAfter, Instant now) {
-        if (failedAfter == null || failedAfter.isNegative() || failedAfter.isZero()) {
-            return;
+        Objects.requireNonNull(failedAfter, "failedAfter");
+        Objects.requireNonNull(now, "now");
+        if (failedAfter.isNegative() || failedAfter.isZero()) {
+            throw new IllegalArgumentException("failedAfter must be positive");
         }
-        if (now == null) {
-            return;
-        }
-        swarms.values().removeIf(s -> {
+        swarms.values().forEach(s -> {
             Instant lastSeenAt = s.getControllerStatusReceivedAt();
             if (lastSeenAt == null) {
-                return false;
+                return;
             }
             if (!now.isAfter(lastSeenAt.plus(failedAfter))) {
-                return false;
+                return;
             }
-            log.info("SwarmStore: pruning stale swarm id={} instance={} container={} lastSeenAt={}",
+            log.info("SwarmStore: marking stale observation id={} instance={} container={} lastSeenAt={}",
                 s.getId(), s.getInstanceId(), s.getContainerId(), lastSeenAt);
-            return true;
+            s.markObservationStale();
         });
     }
 
@@ -171,10 +91,10 @@ public class SwarmStore {
     }
 
     public void cacheControllerStatusFull(String swarmId, JsonNode envelope, Instant receivedAt) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return;
-        }
-        Swarm swarm = swarms.get(swarmId);
+        String canonicalSwarmId = requireSwarmId(swarmId);
+        Objects.requireNonNull(envelope, "envelope");
+        Objects.requireNonNull(receivedAt, "receivedAt");
+        Swarm swarm = swarms.get(canonicalSwarmId);
         if (swarm == null) {
             return;
         }
@@ -182,10 +102,10 @@ public class SwarmStore {
     }
 
     public DeltaApplyResult applyControllerStatusDelta(String swarmId, JsonNode deltaEnvelope, Instant receivedAt) {
-        if (swarmId == null || swarmId.isBlank()) {
-            return DeltaApplyResult.SWARM_NOT_FOUND;
-        }
-        Swarm swarm = swarms.get(swarmId);
+        String canonicalSwarmId = requireSwarmId(swarmId);
+        Objects.requireNonNull(deltaEnvelope, "deltaEnvelope");
+        Objects.requireNonNull(receivedAt, "receivedAt");
+        Swarm swarm = swarms.get(canonicalSwarmId);
         if (swarm == null) {
             return DeltaApplyResult.SWARM_NOT_FOUND;
         }
@@ -243,5 +163,13 @@ public class SwarmStore {
                 }
             }
         }
+    }
+
+    private static String requireSwarmId(String swarmId) {
+        Objects.requireNonNull(swarmId, "swarmId");
+        if (swarmId.isBlank() || !swarmId.equals(swarmId.trim())) {
+            throw new IllegalArgumentException("swarmId must be non-blank and normalized");
+        }
+        return swarmId;
     }
 }

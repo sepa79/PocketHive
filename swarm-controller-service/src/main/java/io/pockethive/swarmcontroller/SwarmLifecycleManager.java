@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.DockerClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
@@ -15,12 +16,10 @@ import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.TrafficPolicy;
-import io.pockethive.swarmcontroller.QueueStats;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
-import io.pockethive.swarmcontroller.infra.docker.DockerWorkloadProvisioner;
-import io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import java.util.Map;
 import java.util.Objects;
@@ -56,16 +55,19 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                DockerClient dockerClient,
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
+                               ControlPlaneCodec controlPlaneCodec,
                                RabbitProperties rabbitProperties,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
-                               ClickHouseSinkProperties clickHouseSink) {
-    this(amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, instanceId, properties, meterRegistry,
+                               ClickHouseSinkProperties clickHouseSink,
+                               io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
+    this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitProperties, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
-        clickHouseSink);
+        clickHouseSink,
+        runtimeFilesystemMount);
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -73,20 +75,21 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         DockerClient dockerClient,
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
+                        ControlPlaneCodec controlPlaneCodec,
                         RabbitProperties rabbitProperties,
                         String instanceId,
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                         WorkerSettings workerSettings,
-                        ClickHouseSinkProperties clickHouseSink) {
+                        ClickHouseSinkProperties clickHouseSink,
+                        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
-    this.journal = journal != null ? journal : io.pockethive.swarmcontroller.runtime.SwarmJournal.noop();
-    ControlPlanePublisher controlPublisher =
-        new AmqpControlPlanePublisher(rabbit, properties.getControlExchange());
+    this.journal = Objects.requireNonNull(journal, "journal");
+    ControlPlanePublisher controlPublisher = new AmqpControlPlanePublisher(
+        rabbit, properties.getControlExchange(), Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec"));
     SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
-    WorkloadProvisioner workloadProvisioner = new DockerWorkloadProvisioner(docker);
     ComputeAdapter computeAdapter;
     ComputeAdapterType adapterType = properties.getDocker() == null
         ? ComputeAdapterType.DOCKER_SINGLE
@@ -113,16 +116,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         docker,
         rabbitProperties,
         properties,
-        meterRegistry,
         controlPublisher,
         topology,
-        workloadProvisioner,
         computeAdapter,
         queueMetrics,
         configFanout,
         this.journal,
         instanceId,
-        clickHouseSink);
+        clickHouseSink,
+        runtimeFilesystemMount);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,
@@ -181,14 +183,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void remove() {
-    core.remove();
+  public java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> remove() {
+    java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> removed = core.remove();
     bufferGuard.onRemove();
+    return removed;
   }
 
   @Override
-  public SwarmStatus getStatus() {
-    return core.getStatus();
+  public io.pockethive.swarm.model.lifecycle.WorkloadState getWorkloadState() {
+    return core.getWorkloadState();
   }
 
   @Override
@@ -216,6 +219,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
+  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
+      long cutoffMillis, boolean expectedEnabled) {
+    return core.nonConvergedWorkersSince(cutoffMillis, expectedEnabled);
+  }
+
+  @Override
   public void updateEnabled(String role, String instance, boolean enabled) {
     core.updateEnabled(role, instance, enabled);
   }
@@ -223,6 +232,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public SwarmMetrics getMetrics() {
     return core.getMetrics();
+  }
+
+  @Override
+  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> expectedWorkers() {
+    return core.expectedWorkers();
   }
 
   @Override
@@ -264,6 +278,11 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   @Override
   public TrafficPolicy trafficPolicy() {
     return core.trafficPolicy();
+  }
+
+  @Override
+  public String sutId() {
+    return core.sutId();
   }
 
   public boolean bufferGuardActive() {

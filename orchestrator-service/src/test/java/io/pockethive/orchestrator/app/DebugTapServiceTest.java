@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -30,7 +32,7 @@ class DebugTapServiceTest {
         AmqpAdmin amqp = recordingAmqpAdmin(declaredBindings, deletedQueues);
         RabbitTemplate rabbit = new RabbitTemplate();
 
-        Swarm swarm = new Swarm("sw1", "inst-1", "c1", "run-1");
+        Swarm swarm = new Swarm("sw1", "inst-1", "c1", "run-1", NetworkMode.DIRECT);
         swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
             "tpl-1",
             "swarm-controller:latest",

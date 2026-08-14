@@ -115,7 +115,7 @@ flowchart LR
 flowchart LR
   G["Generator"] --> Q1(("Buffer before Moderator")) --> M["Moderator<br/>(admit slowed)"] --> Q2(("Queue to Processor<br/>(growing)")) --> P["Processor"]
   C["Swarm Controller"]
-  C -. "watch" .-> Q2
+  C -. "observe depth" .-> Q2
   C -. "lower admit" .-> M
   C -. "lower speed" .-> G
 
@@ -133,4 +133,3 @@ flowchart LR
   class N1,N2 comment;
 
 ```
-

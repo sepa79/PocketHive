@@ -139,8 +139,6 @@ class ControlPlaneTopologyDescriptorsTest {
         assertThat(routes.lifecycleSignals())
             .containsExactlyInAnyOrder(
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-                ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN),
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN),
                 ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", ControlPlaneRouteCatalog.INSTANCE_TOKEN));
         assertThat(routes.statusEvents())
@@ -173,7 +171,8 @@ class ControlPlaneTopologyDescriptorsTest {
             .isEqualTo(CONTROL_QUEUE_PREFIX + ".orchestrator." + INSTANCE);
         assertThat(queue.signalBindings()).isEmpty();
         assertThat(queue.eventBindings())
-            .containsExactlyInAnyOrder("event.outcome.#");
+            .containsExactlyInAnyOrder(
+                "event.result.#", "event.journal.work-journal.#", "event.alert.alert.#");
 
         Collection<QueueDescriptor> additional = descriptor.additionalQueues(INSTANCE);
         assertThat(additional)
@@ -183,7 +182,9 @@ class ControlPlaneTopologyDescriptorsTest {
 
         ControlPlaneRouteCatalog routes = descriptor.routes();
         assertThat(routes.lifecycleEvents())
-            .containsExactlyInAnyOrder("event.outcome.#");
+            .containsExactlyInAnyOrder("event.result.#");
+        assertThat(routes.otherEvents())
+            .containsExactlyInAnyOrder("event.alert.alert.#", "event.journal.work-journal.#");
         assertThat(routes.statusEvents())
             .containsExactlyInAnyOrder("event.metric.status-full.*.swarm-controller.*", "event.metric.status-delta.*.swarm-controller.*");
     }
@@ -273,8 +274,6 @@ class ControlPlaneTopologyDescriptorsTest {
         LinkedHashSet<String> merged = new LinkedHashSet<>(expectedSwarmControllerConfigSignals(instanceSegment));
         merged.addAll(expectedSwarmControllerStatusSignals(instanceSegment));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, SWARM_ID, "swarm-controller", instanceSegment));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, SWARM_ID, "swarm-controller", instanceSegment));
-        merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, SWARM_ID, "swarm-controller", instanceSegment));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, SWARM_ID, "swarm-controller", instanceSegment));
         merged.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, SWARM_ID, "swarm-controller", instanceSegment));
         return Set.copyOf(merged);

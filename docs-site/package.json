@@ -11,7 +11,8 @@
     "build": "docusaurus build",
     "serve": "docusaurus serve",
     "clear": "docusaurus clear",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:docs:rendered": "node scripts/check-rendered-docs.mjs"
   },
   "dependencies": {
     "@docusaurus/core": "^3.5.2",
@@ -28,6 +29,7 @@
     "@docusaurus/tsconfig": "^3.5.2",
     "@types/react": "^18.2.66",
     "@types/react-dom": "^18.2.22",
+    "playwright-core": "1.55.1",
     "typescript": "^5.5.4"
   },
   "overrides": {

@@ -3,6 +3,12 @@
 Agent-facing MCP tools for PocketHive scenario authoring, deployment, runtime
 verification, and evidence reporting.
 
+This is the single PocketHive MCP implementation. Checked-in client examples
+use the server ID `pockethive-bundles`; that ID does not refer to a second MCP.
+The tested lifecycle candidate distribution is repository-local because
+`@pockethive/mcp-server` is not available from the configured public npm
+registry.
+
 This server is intentionally not a shell or devops wrapper. It talks to
 PocketHive APIs, reads and writes guarded bundle files under `BUNDLES_ROOT`,
 and returns structured evidence for agents and IDEs.
@@ -15,8 +21,10 @@ From the PocketHive repo root:
 npm run mcp:setup
 ```
 
-Point the server at a running PocketHive stack and a separate scenario-bundles
-checkout:
+Point the server at a running PocketHive stack and an explicit bundle root.
+The root's immediate children must be bundle folders containing
+`scenario.yaml`; verify whether a team repository root or its `bundles/` child
+has that shape:
 
 ```bash
 export POCKETHIVE_BASE_URL=http://localhost:8088
@@ -26,8 +34,8 @@ export POCKETHIVE_GRAFANA_USERNAME=pockethive
 export POCKETHIVE_GRAFANA_PASSWORD=pockethive
 export POCKETHIVE_GRAFANA_CLICKHOUSE_DATASOURCE_UID=clickhouse
 export POCKETHIVE_ROOT=/absolute/path/to/PocketHive
-export BUNDLES_ROOT=/absolute/path/to/pockethive-scenario-bundles
-export PH_BUNDLES_ROOTS='["/absolute/path/to/pockethive-scenario-bundles"]'
+export BUNDLES_ROOT=/absolute/path/to/scenario-bundles-root
+export PH_BUNDLES_ROOTS='["/absolute/path/to/scenario-bundles-root"]'
 ```
 
 Run the doctor:
@@ -42,17 +50,14 @@ Start stdio MCP:
 npm run mcp:start
 ```
 
-Start Streamable HTTP MCP for IDEs and assistants:
+Configure normal IDE and assistant access as a client-owned stdio process.
 
-```bash
-npm run mcp:start:http
-```
-
-Assistant configs should connect to:
-
-```text
-http://localhost:3100/mcp
-```
+> [!WARNING]
+> The current Streamable HTTP implementation binds beyond loopback and has no
+> inbound client authentication. `POCKETHIVE_AUTH_USERNAME` and
+> `POCKETHIVE_AUTH_TOKEN` authenticate MCP-to-PocketHive calls only. Do not run
+> `mcp:start:http` on a shared host or untrusted network; it is not a
+> customer-qualified connection path.
 
 Runtime debug tools are exposed through this same PocketHive MCP surface. Do not
 start a separate runtime-debug MCP for normal product use.
@@ -64,8 +69,8 @@ Use this decision table when configuring an agent or IDE:
 | Need | Use |
 |---|---|
 | Normal agent/IDE MCP access | `tools/pockethive-mcp` |
-| Streamable HTTP endpoint | `http://localhost:3100/mcp` via `npm run mcp:start:http` |
-| Stdio endpoint | `npm run mcp:start` |
+| Customer-qualified connection | Client-owned stdio via `npm run mcp:start` |
+| Streamable HTTP implementation | Test-only until explicit bind and inbound authentication controls are implemented |
 | Runtime cleanup/log/version tools | `tools/pockethive-mcp` |
 | Low-level terminal diagnostics only | `tools/mcp-orchestrator-debug/client.mjs` |
 
@@ -397,7 +402,7 @@ curl -X DELETE \
 | Symptom | First check |
 |---|---|
 | MCP server will not start | `npm run mcp:doctor -- --no-config` |
-| Assistant cannot see tools | Confirm it connects to `http://localhost:3100/mcp` and uses underscore tool names |
+| Assistant cannot see tools | Confirm its client-owned stdio command starts this server and it uses underscore tool names |
 | Bundle path errors | Check `BUNDLES_ROOT` and `PH_BUNDLES_ROOTS` point to the same separate scenario-bundles checkout |
 | Source file rejected | Add the source parent folder to `PH_WORKFLOW_SOURCE_ROOTS` |
 | Live deploy fails with existing swarm | Use a unique swarm id or remove the old test swarm |

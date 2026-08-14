@@ -29,11 +29,11 @@ public final class ControlPlaneMessageCapture implements AutoCloseable {
       this.connection = connectionFactory.createConnection();
       this.channel = connection.createChannel(false);
       this.queueName = channel.queueDeclare("", false, true, true, Collections.emptyMap()).getQueue();
-      channel.queueBind(queueName, exchange, "signal.#");
-      channel.queueBind(queueName, exchange, "event.outcome.#");
-      channel.queueBind(queueName, exchange, "event.alert.#");
-      channel.queueBind(queueName, exchange, "event.metric.status-full.#");
-      channel.queueBind(queueName, exchange, "event.metric.status-delta.#");
+      for (ControlPlaneMessageFamily family : ControlPlaneMessageFamily.values()) {
+        for (String bindingKey : family.bindingKeys()) {
+          channel.queueBind(queueName, exchange, bindingKey);
+        }
+      }
       DeliverCallback callback = this::handleDelivery;
       this.consumerTag = channel.basicConsume(queueName, true, callback, consumerTag -> { });
       LOGGER.info("Started control-plane capture queue={} exchange={}", queueName, exchange);

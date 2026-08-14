@@ -17,6 +17,7 @@ config:
       group: Redis output
   - name: outputs.redis.port
     type: integer
+    default: 6379
     liveMutable: false
     required: true
     min: 1
@@ -38,6 +39,7 @@ config:
       group: Redis output
   - name: outputs.redis.ssl
     type: boolean
+    default: false
     liveMutable: false
     required: true
     ui:
@@ -45,6 +47,7 @@ config:
       group: Redis output
   - name: outputs.redis.sourceStep
     type: string
+    default: "LAST"
     liveMutable: false
     required: true
     options:
@@ -55,6 +58,7 @@ config:
       group: Redis output
   - name: outputs.redis.pushDirection
     type: string
+    default: "RPUSH"
     liveMutable: false
     required: true
     options:
@@ -65,6 +69,7 @@ config:
       group: Redis output
   - name: outputs.redis.routes
     type: json
+    default: []
     liveMutable: false
     required: true
     multiline: true
@@ -74,6 +79,7 @@ config:
       help: "Route by payload match and/or header+headerMatch. First match wins."
   - name: outputs.redis.targetListTemplate
     type: string
+    default: ""
     liveMutable: false
     required: true
     allowBlank: true
@@ -82,6 +88,7 @@ config:
       group: Redis output
   - name: outputs.redis.defaultList
     type: string
+    default: ""
     liveMutable: false
     required: true
     allowBlank: true
@@ -90,6 +97,7 @@ config:
       group: Redis output
   - name: outputs.redis.maxLen
     type: integer
+    default: -1
     liveMutable: false
     required: true
     min: -1

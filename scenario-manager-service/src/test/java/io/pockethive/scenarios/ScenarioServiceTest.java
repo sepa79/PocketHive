@@ -126,6 +126,7 @@ class ScenarioServiceTest {
                 false,
                 "",
                 "test",
+                tempDir.resolve("runtime-no-tests").toString(),
                 capabilities);
         withoutTestScenarios.reload();
         assertThat(withoutTestScenarios.listAllSummaries())
@@ -707,6 +708,7 @@ class ScenarioServiceTest {
         Files.writeString(wrongIdSut.resolve("sut.yaml"), """
                 id: different-id
                 name: Wrong ID SUT
+                endpoints: {}
                 """);
         service.reload();
 
@@ -735,6 +737,7 @@ class ScenarioServiceTest {
         Files.writeString(sutDir.resolve("sut.yaml"), """
                 id: different-id
                 name: Wrong ID
+                endpoints: {}
                 """);
 
         assertThatThrownBy(() -> service.prepareRuntimeDirectory("scenario-1", "sw1"))
@@ -855,6 +858,7 @@ class ScenarioServiceTest {
         Files.writeString(sutDir.resolve("sut.yaml"), """
                 id: %s
                 name: %s
+                endpoints: {}
                 """.formatted(sutId, sutId));
     }
 

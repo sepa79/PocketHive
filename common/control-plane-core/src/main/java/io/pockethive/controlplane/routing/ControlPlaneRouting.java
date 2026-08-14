@@ -15,7 +15,12 @@ public final class ControlPlaneRouting {
     }
 
     public static String signal(String signal, String swarmId, String role, String instanceId) {
-        return join("signal", signal, segmentOrAll(swarmId), segmentOrAll(role), segmentOrAll(instanceId));
+        return join(
+            "signal",
+            ControlScope.requireSegment("signal type", signal),
+            ControlScope.requireSegment("signal swarmId", swarmId),
+            ControlScope.requireSegment("signal role", role),
+            ControlScope.requireSegment("signal instance", instanceId));
     }
 
     public static String event(String category, String signal, ConfirmationScope scope) {
@@ -25,42 +30,23 @@ public final class ControlPlaneRouting {
     public static String event(String type, ConfirmationScope scope) {
         Objects.requireNonNull(scope, "scope");
         return join("event",
-            normaliseType(type),
-            segmentOrAll(scope.swarmId()),
-            segmentOrAll(scope.role()),
-            segmentOrAll(scope.instance()));
-    }
-
-    private static String segmentOrAll(String value) {
-        if (value == null || value.isBlank()) {
-            return ControlScope.ALL;
-        }
-        return value.trim();
+            ControlScope.requireSegment("event type", type),
+            ControlScope.requireSegment("event swarmId", scope.swarmId()),
+            ControlScope.requireSegment("event role", scope.role()),
+            ControlScope.requireSegment("event instance", scope.instance()));
     }
 
     private static String join(String... segments) {
         StringJoiner joiner = new StringJoiner(".");
         for (String segment : segments) {
-            if (segment == null || segment.isBlank()) {
-                continue;
-            }
-            joiner.add(segment);
+            joiner.add(ControlScope.requireSegment("routing key segment", segment));
         }
         return joiner.toString();
     }
 
-    private static String normaliseType(String type) {
-        String trimmed = trimmedOrNull(type);
-        return trimmed != null ? trimmed : ControlScope.ALL;
-    }
-
     private static String combineType(String category, String signal) {
-        String primary = trimmedOrNull(category);
-        String secondary = trimmedOrNull(signal);
-        if (primary != null && secondary != null) {
-            return primary + "." + secondary;
-        }
-        return primary != null ? primary : secondary;
+        return ControlScope.requireSegment("event category", category)
+            + "." + ControlScope.requireSegment("event type", signal);
     }
 
     private static String trimmedOrNull(String value) {
@@ -104,8 +90,8 @@ public final class ControlPlaneRouting {
         String role = parts[len - 2];
         String swarm = parts[len - 3];
         String type = String.join(".", Arrays.copyOf(parts, len - 3));
-        if (type.isBlank()) {
-            type = null;
+        if (type.isBlank() || swarm.isBlank() || role.isBlank() || instance.isBlank()) {
+            return null;
         }
         return new RoutingKey(prefix, type, swarm, role, instance);
     }
@@ -125,15 +111,15 @@ public final class ControlPlaneRouting {
         }
 
         public boolean matchesRole(String expectedRole) {
-            return matches(segmentOrAll(expectedRole), segmentOrAll(role));
+            return matches(ControlScope.requireSegment("expected role", expectedRole), role);
         }
 
         public boolean matchesSwarm(String expectedSwarm) {
-            return matches(segmentOrAll(expectedSwarm), segmentOrAll(swarmId));
+            return matches(ControlScope.requireSegment("expected swarmId", expectedSwarm), swarmId);
         }
 
         public boolean matchesInstance(String expectedInstance) {
-            return matches(segmentOrAll(expectedInstance), segmentOrAll(instance));
+            return matches(ControlScope.requireSegment("expected instance", expectedInstance), instance);
         }
 
         private boolean matches(String expected, String actual) {

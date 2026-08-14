@@ -40,6 +40,7 @@ ui:
 config:
   - name: inputs.type
     type: string
+    default: "RABBITMQ"
     liveMutable: false
     required: true
     options:
@@ -50,6 +51,7 @@ config:
       group: IO
   - name: outputs.type
     type: string
+    default: "RABBITMQ"
     liveMutable: false
     required: true
     options:

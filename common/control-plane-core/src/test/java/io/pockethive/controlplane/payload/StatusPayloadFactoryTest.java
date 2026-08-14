@@ -8,6 +8,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.control.StatusMetric;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.Map;
@@ -15,13 +16,13 @@ import org.junit.jupiter.api.Test;
 
 class StatusPayloadFactoryTest {
 
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final ObjectMapper MAPPER = io.pockethive.observability.ControlPlaneJson.mapper();
     private final RoleContext context = new RoleContext("swarm-1", "processor", "instance-7");
 
     @Test
     void buildsSnapshotPayload() throws IOException {
         StatusPayloadFactory factory = new StatusPayloadFactory(context);
-        String json = factory.snapshot(builder -> builder
+        StatusMetric envelope = factory.snapshot(builder -> builder
             .traffic("ph.traffic")
             .workIn("work.in")
             .workRoutes("rk.work")
@@ -42,19 +43,21 @@ class StatusPayloadFactoryTest {
             .totals(3, 2, 2, 3)
             .data("baseUrl", "https://example"));
 
-        assertEquals("instance-7", MAPPER.readTree(json).get("origin").asText());
+        String json = MAPPER.writeValueAsString(envelope);
+        assertEquals("instance-7", envelope.origin());
         assertMatchesFixture("/io/pockethive/controlplane/payload/status-snapshot.json", normalise(json));
     }
 
     @Test
     void buildsDeltaPayload() throws IOException {
         StatusPayloadFactory factory = new StatusPayloadFactory(context);
-        String json = factory.delta(builder -> builder
+        StatusMetric envelope = factory.delta(builder -> builder
             .controlOut("rk.status")
             .enabled(false)
             .tps(7)
             .runtime(Map.of("templateId", "template-1", "runId", "run-1")));
 
+        String json = MAPPER.writeValueAsString(envelope);
         JsonNode node = MAPPER.readTree(json);
         assertEquals("instance-7", node.get("origin").asText());
         JsonNode data = node.path("data");

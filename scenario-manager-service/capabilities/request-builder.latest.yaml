@@ -19,6 +19,7 @@ config:
     required: true
   - name: passThroughOnMissingTemplate
     type: boolean
+    default: false
     liveMutable: true
     required: true
 actions: []

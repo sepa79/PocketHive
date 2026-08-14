@@ -9,7 +9,7 @@ Track only work that remains after the delivered shared-per-SUT Network Proxy V1
 
 ## Runtime reliability
 
-- [ ] Replace cross-node NFS `inotify` reliance with an explicit HAProxy reload mechanism.
+- [x] Replace cross-node NFS `inotify` reliance with digest polling and an applied-digest handshake.
 - [ ] Add a swarm/NFS regression proving that a newly applied binding creates the expected HAProxy listener and route before generator traffic starts.
 
 ## Scenario Plan integration

@@ -16,8 +16,6 @@ import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.messaging.Alerts;
 
@@ -28,8 +26,7 @@ class ControlPlaneEventsTest {
 
   @BeforeEach
   void setUp() {
-    ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-    parser = new ControlPlaneEventParser(mapper);
+    parser = new ControlPlaneEventParser();
     events = new ControlPlaneEvents(parser);
   }
 
@@ -94,7 +91,7 @@ class ControlPlaneEventsTest {
   }
 
   @Test
-  void matchesErrorTopicsByCorrelationId() {
+  void matchesAlertsByCorrelationId() {
     String routingKey = "event.alert.alert.swarm-alpha.orchestrator.orchestrator-1";
     events.recordAlert(
         routingKey,
@@ -132,7 +129,7 @@ class ControlPlaneEventsTest {
   }
 
   private StatusEvent toDelta(StatusEvent source) {
-    return new StatusEvent(
+    return new StatusEvent(new io.pockethive.control.StatusMetric(
         source.timestamp(),
         source.version(),
         source.kind(),
@@ -142,7 +139,7 @@ class ControlPlaneEventsTest {
         source.correlationId(),
         source.idempotencyKey(),
         source.runtime(),
-        source.data()
-    );
+        source.envelope().data()
+    ));
   }
 }

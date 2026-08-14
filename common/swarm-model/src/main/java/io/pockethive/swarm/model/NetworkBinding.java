@@ -20,8 +20,8 @@ public record NetworkBinding(@NotBlank String swarmId,
     public NetworkBinding {
         swarmId = requireText(swarmId, "swarmId");
         sutId = requireText(sutId, "sutId");
-        networkMode = NetworkMode.directIfNull(networkMode);
-        effectiveMode = NetworkMode.directIfNull(effectiveMode);
+        networkMode = requireMode(networkMode, "networkMode");
+        effectiveMode = requireMode(effectiveMode, "effectiveMode");
         networkProfileId = trimToNull(networkProfileId);
         requestedBy = requireText(requestedBy, "requestedBy");
         if (appliedAt == null) {
@@ -47,6 +47,13 @@ public record NetworkBinding(@NotBlank String swarmId,
             throw new IllegalArgumentException(field + " must not be blank");
         }
         return value.trim();
+    }
+
+    private static NetworkMode requireMode(NetworkMode value, String field) {
+        if (value == null) {
+            throw new IllegalArgumentException(field + " must not be null");
+        }
+        return value;
     }
 
     private static String trimToNull(String value) {

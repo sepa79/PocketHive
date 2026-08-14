@@ -1,6 +1,6 @@
 {
   "timestamp": "<<ANY>>",
-  "version": "1",
+  "version": "2",
   "kind": "metric",
   "type": "status-full",
   "origin": "instance-7",

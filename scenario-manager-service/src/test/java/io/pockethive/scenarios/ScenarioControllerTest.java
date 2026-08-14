@@ -2493,6 +2493,7 @@ class ScenarioControllerTest {
                 "sut/default/sut.yaml", """
                     id: other
                     name: Other SUT
+                    endpoints: {}
                     """));
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -2521,6 +2522,7 @@ class ScenarioControllerTest {
         Files.writeString(sutDir.resolve("sut.yaml"), """
                 id: other
                 name: Other SUT
+                endpoints: {}
                 """);
 
         mvc.perform(post("/scenarios/reload"))

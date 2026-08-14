@@ -23,17 +23,20 @@ public record AlertMessage(
     @JsonInclude(JsonInclude.Include.NON_NULL)
     Map<String, Object> runtime,
     AlertData data
-) {
+) implements ControlPlaneEnvelope {
+
+    public static final String KIND = "event";
+    public static final String TYPE = "alert";
 
     public AlertMessage {
         Objects.requireNonNull(timestamp, "timestamp");
-        version = requireNonBlank("version", version);
+        version = CommandEnvelopeSupport.requireCurrentVersion(version);
         kind = requireNonBlank("kind", kind);
-        if (!"event".equals(kind)) {
+        if (!KIND.equals(kind)) {
             throw new IllegalArgumentException("kind must be 'event' for AlertMessage");
         }
         type = requireNonBlank("type", type);
-        if (!"alert".equals(type)) {
+        if (!TYPE.equals(type)) {
             throw new IllegalArgumentException("type must be 'alert' for AlertMessage");
         }
         origin = requireNonBlank("origin", origin);

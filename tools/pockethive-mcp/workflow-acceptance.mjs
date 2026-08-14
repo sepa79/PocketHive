@@ -14,6 +14,7 @@ const START = resolve(__dirname, "start.cjs");
 const BUNDLES_ROOT = process.env.PH_WORKFLOW_ACCEPTANCE_BUNDLES_ROOT || mkdtempSync(join(tmpdir(), "pockethive-workflow-acceptance-"));
 const BASE_URL = process.env.POCKETHIVE_BASE_URL || "http://127.0.0.1:9";
 const LIVE = process.env.PH_WORKFLOW_ACCEPTANCE_LIVE === "1";
+const ORCHESTRATOR_BASE_URL = process.env.ORCHESTRATOR_BASE_URL || `${BASE_URL}/orchestrator`;
 const SCENARIO_MANAGER_BASE_URL = process.env.SCENARIO_MANAGER_BASE_URL || `${BASE_URL}/scenario-manager`;
 const AUTH_SERVICE_BASE_URL = process.env.AUTH_SERVICE_BASE_URL || `${BASE_URL}/auth-service`;
 const POCKETHIVE_AUTH_TOKEN = process.env.POCKETHIVE_AUTH_TOKEN || "";
@@ -89,6 +90,20 @@ async function scenarioManagerRequest(path, opts = {}) {
   return text ? JSON.parse(text) : null;
 }
 
+async function orchestratorRequest(path, { allowNotFound = false } = {}) {
+  const auth = await authorizationHeader();
+  const response = await fetch(`${ORCHESTRATOR_BASE_URL}${path}`, {
+    headers: {
+      "accept": "application/json",
+      ...(auth ? { authorization: auth } : {}),
+    },
+  });
+  const text = await response.text();
+  if (allowNotFound && response.status === 404) return { status: 404, payload: null };
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${text || "<empty>"}`);
+  return { status: response.status, payload: text ? JSON.parse(text) : null };
+}
+
 function writeSource(name, content) {
   const path = resolve(BUNDLES_ROOT, "sources", name);
   mkdirSync(dirname(path), { recursive: true });
@@ -141,7 +156,7 @@ async function generateValidateReport(client, workflowId, bundleId) {
   const generated = await call(client, "workflow_generate", { workflowId });
   assert.equal(generated.ok, true, `${bundleId} generation failed`);
   const validated = await call(client, "workflow_validate", { workflowId });
-  assert.equal(validated.ok, true, `${bundleId} validation failed`);
+  assert.equal(validated.ok, true, `${bundleId} validation failed: ${JSON.stringify(validated.evidence ?? validated)}`);
   const report = await call(client, "workflow_report", { workflowId });
   assert.equal(report.ok, true, `${bundleId} report failed`);
   assert.ok(report.claimMatrix.some(claim => claim.id === "bundle.exists" && claim.status === "satisfied"));
@@ -150,22 +165,40 @@ async function generateValidateReport(client, workflowId, bundleId) {
 
 async function cleanupLiveSwarm(client, swarmId) {
   if (!swarmId) return;
-  try {
-    await call(client, "swarm_remove", { swarmId });
-    log("live swarm teardown", swarmId);
-  } catch (err) {
-    console.warn(`WARN live swarm teardown failed for ${swarmId}: ${err.message}`);
+  const remove = await call(client, "swarm_remove", { swarmId });
+  assert.equal(typeof remove.operationUrl, "string", "swarm_remove response must include operationUrl");
+  const deadline = Date.now() + Math.max(Number(remove.timeoutMs) || 0, 180_000) + 10_000;
+  let operation = null;
+  while (Date.now() < deadline) {
+    operation = (await orchestratorRequest(remove.operationUrl)).payload;
+    if (["SUCCEEDED", "FAILED", "REJECTED", "TIMED_OUT"].includes(operation?.state)) break;
+    await new Promise(resolveWait => setTimeout(resolveWait, 2_000));
   }
+  assert.equal(operation?.state, "SUCCEEDED", `swarm remove did not succeed: ${JSON.stringify(operation)}`);
+  const registry = await orchestratorRequest(`/api/swarms/${encodeURIComponent(swarmId)}`, { allowNotFound: true });
+  assert.equal(registry.status, 404, `removed swarm ${swarmId} remains in the registry`);
+  log("live swarm teardown", swarmId);
 }
 
 async function cleanupLiveBundle(bundleId) {
   if (!bundleId) return;
+  await scenarioManagerRequest(`/scenarios/${encodeURIComponent(bundleId)}`, { method: "DELETE" });
+  log("live bundle teardown", bundleId);
+}
+
+async function cleanupLiveResources(client, swarmId, bundleId) {
+  const errors = [];
   try {
-    await scenarioManagerRequest(`/scenarios/${encodeURIComponent(bundleId)}`, { method: "DELETE" });
-    log("live bundle teardown", bundleId);
+    await cleanupLiveSwarm(client, swarmId);
   } catch (err) {
-    console.warn(`WARN live bundle teardown failed for ${bundleId}: ${err.message}`);
+    errors.push(err);
   }
+  try {
+    await cleanupLiveBundle(bundleId);
+  } catch (err) {
+    errors.push(err);
+  }
+  if (errors.length > 0) throw new AggregateError(errors, "Live workflow cleanup did not satisfy all postconditions");
 }
 
 async function examplesCase(client) {
@@ -269,7 +302,7 @@ async function modifyWorkflowCase(client) {
     changes: [{ file: "README.md", content: "# accept-workflow-modify\n\nModified by workflow acceptance.\n" }],
   });
   const validated = await call(client, "workflow_validate", { workflowId: start.workflowId });
-  assert.equal(validated.ok, true);
+  assert.equal(validated.ok, true, `modify workflow validation failed: ${JSON.stringify(validated.evidence ?? validated)}`);
   log("modify workflow", start.workflowId);
 }
 
@@ -307,14 +340,25 @@ async function liveCase(client) {
     await call(client, "workflow_update", { workflowId: start.workflowId, plan: basePlan(liveBundleId), provenance: requiredProvenance() });
     await completeThreeAmigos(client, start.workflowId);
     await generateValidateReport(client, start.workflowId, liveBundleId);
-    const deploy = await call(client, "workflow_deploy", { workflowId: start.workflowId, swarmId: liveSwarmId });
-    assert.equal(deploy.ok, true, "live workflow deploy failed");
+    const deploy = await call(client, "workflow_deploy", {
+      workflowId: start.workflowId,
+      swarmId: liveSwarmId,
+      captureTapSample: true,
+    });
+    assert.equal(
+      deploy.ok,
+      true,
+      `live workflow deploy failed: ${JSON.stringify(deploy.evidence ?? deploy, null, 2)}`,
+    );
     const verify = await call(client, "workflow_verify", { workflowId: start.workflowId, includeTapSample: true, proofMode: "strict" });
-    assert.equal(verify.ok, true, "live workflow verify failed");
+    assert.equal(
+      verify.ok,
+      true,
+      `live workflow verify failed: ${JSON.stringify(verify.evidence ?? verify, null, 2)}`,
+    );
     log("live workflow proof", start.workflowId);
   } finally {
-    await cleanupLiveSwarm(client, liveSwarmId);
-    await cleanupLiveBundle(liveBundleId);
+    await cleanupLiveResources(client, liveSwarmId, liveBundleId);
   }
 }
 

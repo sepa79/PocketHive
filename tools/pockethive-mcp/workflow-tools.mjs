@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 
 export function registerWorkflowTools(deps) {
   const {
@@ -101,6 +101,13 @@ export function registerWorkflowTools(deps) {
     NONE: "none",
   });
   const WORKFLOW_PROOF_MODES = Object.freeze(["accept-partial", "strict"]);
+  const LIFECYCLE_OPERATION_STATES = Object.freeze({
+    SUCCEEDED: "SUCCEEDED",
+    FAILED: "FAILED",
+    REJECTED: "REJECTED",
+    TIMED_OUT: "TIMED_OUT",
+  });
+  const TERMINAL_LIFECYCLE_OPERATION_STATES = new Set(Object.values(LIFECYCLE_OPERATION_STATES));
 
   const WORKFLOW_REQUIRED_FIELDS = [
     {
@@ -1989,7 +1996,7 @@ export function registerWorkflowTools(deps) {
 
   function workflowPatchScope(session) {
     if (!session.generated?.bundleId) return [];
-    const path = workflowBundlePath(session);
+    const path = workflowBundlePath(session).split(sep).join("/");
     return [`${path}/**`, `${path}/mock-config/**`];
   }
 
@@ -2234,15 +2241,17 @@ export function registerWorkflowTools(deps) {
   }
 
   function workflowWorkerHealth(session) {
-    const ctx = session.evidence?.deployment?.evidence?.ready?.status?.envelope?.data?.context
-      || session.evidence?.runtime?.evidence?.lifecycle?.raw?.envelope?.data?.context
+    const swarm = session.evidence?.deployment?.evidence?.ready?.status
+      || session.evidence?.runtime?.evidence?.lifecycle?.raw
       || {};
-    const totals = ctx.totals || {};
+    const workers = Array.isArray(swarm?.observation?.workers) ? swarm.observation.workers : [];
+    const desired = Array.isArray(swarm?.bees) ? swarm.bees.length : null;
+    const healthy = workers.filter(worker => worker?.stale === false).length;
     return {
-      desired: typeof totals.desired === "number" ? totals.desired : null,
-      healthy: typeof totals.healthy === "number" ? totals.healthy : null,
-      state: ctx.state || ctx.swarmStatus || session.evidence?.runtime?.evidence?.report?.lifecycleState || null,
-      satisfied: typeof totals.desired === "number" && totals.desired > 0 && totals.healthy >= totals.desired,
+      desired,
+      healthy,
+      state: swarm.controllerState || swarm.workloadState || session.evidence?.runtime?.evidence?.report?.lifecycleState || null,
+      satisfied: swarm.controllerState === "READY" && swarm.observationStale === false,
     };
   }
 
@@ -3048,6 +3057,31 @@ export function registerWorkflowTools(deps) {
     return new Promise(resolveSleep => setTimeout(resolveSleep, ms));
   }
 
+  function lifecycleOperationUrl(response, operationName) {
+    const operationUrl = typeof response?.operationUrl === "string" ? response.operationUrl.trim() : "";
+    if (!operationUrl) throw new Error(`${operationName} response is missing operationUrl`);
+    return operationUrl;
+  }
+
+  function requireSuccessfulLifecycleOperation(operation, operationName) {
+    if (operation?.state !== LIFECYCLE_OPERATION_STATES.SUCCEEDED) {
+      throw new Error(`${operationName} operation ended in ${operation?.state ?? "UNKNOWN"}`);
+    }
+    return operation;
+  }
+
+  async function waitForLifecycleOperation(response, operationName, timeoutMs) {
+    const operationUrl = lifecycleOperationUrl(response, operationName);
+    const deadline = Date.now() + timeoutMs;
+    let last = null;
+    while (Date.now() < deadline) {
+      last = await httpJson(operationUrl);
+      if (TERMINAL_LIFECYCLE_OPERATION_STATES.has(last?.state)) return last;
+      await sleep(Math.min(2000, Math.max(250, deadline - Date.now())));
+    }
+    throw new Error(`${operationName} operation did not reach a terminal state before timeout (last state: ${last?.state ?? "UNKNOWN"})`);
+  }
+
   function evidenceClaim(evidence, id) {
     return evidence?.report?.checklist?.find(claim => claim.id === id) || null;
   }
@@ -3065,9 +3099,9 @@ export function registerWorkflowTools(deps) {
   }
 
   function runtimeLifecycleSettled(evidence) {
-    const context = evidence?.lifecycle?.raw?.envelope?.data?.context || {};
-    const state = context.state || context.swarmStatus || evidence?.report?.lifecycleState;
-    return ["READY", "STOPPED"].includes(String(state || "").toUpperCase());
+    const swarm = evidence?.lifecycle?.raw || {};
+    const state = swarm.workloadState || evidence?.report?.lifecycleState;
+    return String(state || "").toUpperCase() === "STOPPED";
   }
 
   function runtimeProofResult(evidence, proofMode = "accept-partial") {
@@ -3109,6 +3143,13 @@ export function registerWorkflowTools(deps) {
       method: "POST",
       body: { swarmId, role: "postprocessor", direction: "IN", ioName: "in", maxItems: 1, ttlSeconds },
     });
+  }
+
+  function deploymentPreArmedTap(session, swarmId) {
+    const deployment = session?.evidence?.deployment?.evidence;
+    if (deployment?.swarmId !== swarmId) return null;
+    const tap = deployment.preArmedTap;
+    return tap && !tap.error ? tap : null;
   }
 
   async function collectRuntimeEvidenceUntil({ swarmId, includeTapSample, scenarioId, timeoutSec, ready }) {
@@ -3169,11 +3210,15 @@ export function registerWorkflowTools(deps) {
         const createBody = {
           templateId: session.generated.bundleId,
           idempotencyKey: operation.idempotencyKeys.create || idempotencyKey(),
+          autoPullImages: false,
+          sutId: operation.input.sutId || target?.id || null,
+          variablesProfileId: operation.input.variablesProfileId || null,
+          networkMode: "DIRECT",
+          networkProfileId: null,
         };
         operation.idempotencyKeys.create = createBody.idempotencyKey;
-        if (operation.input.sutId || target?.id) createBody.sutId = operation.input.sutId || target.id;
-        if (operation.input.variablesProfileId) createBody.variablesProfileId = operation.input.variablesProfileId;
         operation.evidence.create = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/create`, { method: "POST", body: createBody });
+        lifecycleOperationUrl(operation.evidence.create, "swarm.create");
         const apiAction = recordOperationApiAction(operation, {
           action: "orchestrator.swarm-create",
           method: "POST",
@@ -3182,14 +3227,28 @@ export function registerWorkflowTools(deps) {
           evidenceKey: "create",
         });
         session.swarmId = effectiveSwarmId;
-        operation.nextPollAfterMs = 4000;
+        operation.nextPollAfterMs = 2000;
         recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_CREATE_REQUESTED", apiActions: [apiAction] });
-        operation.phase = "wait-ready";
+        operation.phase = "wait-create";
+      } else if (operation.phase === "wait-create") {
+        const createOperation = await httpJson(lifecycleOperationUrl(operation.evidence.create, "swarm.create"));
+        operation.evidence.createOperation = createOperation;
+        if (TERMINAL_LIFECYCLE_OPERATION_STATES.has(createOperation?.state)) {
+          requireSuccessfulLifecycleOperation(createOperation, "swarm.create");
+          operation.phase = "wait-ready";
+          operation.nextPollAfterMs = 0;
+          recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_CREATED" });
+        } else {
+          operation.nextPollAfterMs = 2000;
+          recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_WAITING_CREATE" });
+        }
       } else if (operation.phase === "wait-ready") {
         const status = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}`);
-        const ctx = status?.envelope?.data?.context;
-        const { desired, healthy } = ctx?.totals || {};
-        const ready = Boolean(desired > 0 && healthy >= desired && ctx?.swarmStatus === "READY");
+        const ready = Boolean(
+          status?.controllerState === "READY"
+          && status?.workloadState === "STOPPED"
+          && status?.observationStale === false
+        );
         operation.evidence.ready = { ready, status };
         const apiAction = recordOperationApiAction(operation, {
           action: "orchestrator.swarm-status",
@@ -3206,6 +3265,9 @@ export function registerWorkflowTools(deps) {
           operation.nextPollAfterMs = 0;
         }
       } else if (operation.phase === "start") {
+        if (operation.input.captureTapSample && !operation.evidence.preArmedTap) {
+          operation.evidence.preArmedTap = await workflowOpenTap(effectiveSwarmId, 120);
+        }
         const startBody = { idempotencyKey: operation.idempotencyKeys.start || idempotencyKey() };
         operation.idempotencyKeys.start = startBody.idempotencyKey;
         operation.evidence.start = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/start`, { method: "POST", body: startBody });
@@ -3216,7 +3278,23 @@ export function registerWorkflowTools(deps) {
           result: "requested",
           evidenceKey: "start",
         });
-        recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_STARTED", apiActions: [apiAction] });
+        recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_START_REQUESTED", apiActions: [apiAction] });
+        operation.phase = "wait-start";
+        operation.nextPollAfterMs = 2000;
+      } else if (operation.phase === "wait-start") {
+        const startOperation = await httpJson(lifecycleOperationUrl(operation.evidence.start, "swarm.start"));
+        operation.evidence.startOperation = startOperation;
+        if (TERMINAL_LIFECYCLE_OPERATION_STATES.has(startOperation?.state)
+            && startOperation.state !== LIFECYCLE_OPERATION_STATES.SUCCEEDED) {
+          requireSuccessfulLifecycleOperation(startOperation, "swarm.start");
+        }
+        if (startOperation?.state !== LIFECYCLE_OPERATION_STATES.SUCCEEDED) {
+          operation.nextPollAfterMs = 2000;
+          recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_WAITING_START" });
+          persistWorkflowSessions();
+          return operationPayload(session, operation);
+        }
+        recordOperationStep(operation, true, { code: "WORKFLOW_DEPLOY_STARTED" });
         operation.status = "succeeded";
         operation.phase = "complete";
         operation.nextPollAfterMs = 0;
@@ -3225,8 +3303,11 @@ export function registerWorkflowTools(deps) {
           deploy: operation.evidence.deploy,
           mockConfig: operation.evidence.mockConfig,
           create: operation.evidence.create,
+          createOperation: operation.evidence.createOperation,
           ready: operation.evidence.ready,
+          preArmedTap: operation.evidence.preArmedTap || null,
           start: operation.evidence.start,
+          startOperation: operation.evidence.startOperation,
           operationId: operation.operationId,
         };
         session.evidence.deployment = { ok: true, code: "WORKFLOW_DEPLOYED", evidence };
@@ -3301,23 +3382,37 @@ export function registerWorkflowTools(deps) {
       } else if (operation.phase === "stop") {
         const stopBody = { idempotencyKey: operation.idempotencyKeys.stop || idempotencyKey() };
         operation.idempotencyKeys.stop = stopBody.idempotencyKey;
-        try {
-          operation.evidence.stop = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/stop`, {
-            method: "POST",
-            body: stopBody,
-          });
-        } catch (err) {
-          operation.evidence.stop = { error: err.message };
+        operation.evidence.stop = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/stop`, {
+          method: "POST",
+          body: stopBody,
+        });
+        if (!operation.evidence.stop?.operationUrl) {
+          throw new Error("swarm.stop response is missing operationUrl");
         }
         const apiAction = recordOperationApiAction(operation, {
           action: "orchestrator.swarm-stop",
           method: "POST",
           target: `/api/swarms/${encodeURIComponent(effectiveSwarmId)}/stop`,
-          result: operation.evidence.stop?.error ? "failed" : "requested",
+          result: "requested",
           evidenceKey: "stop",
         });
         operation.nextPollAfterMs = 2000;
         recordOperationStep(operation, true, { code: "WORKFLOW_VERIFY_STOP_REQUESTED", apiActions: [apiAction] });
+        operation.phase = "wait-stop";
+      } else if (operation.phase === "wait-stop") {
+        const stopOperation = await httpJson(operation.evidence.stop.operationUrl);
+        operation.evidence.stopOperation = stopOperation;
+        if (["FAILED", "REJECTED", "TIMED_OUT"].includes(stopOperation?.state)) {
+          throw new Error(`swarm.stop operation ended in ${stopOperation.state}`);
+        }
+        if (stopOperation?.state !== "SUCCEEDED") {
+          operation.nextPollAfterMs = 2000;
+          recordOperationStep(operation, true, { code: "WORKFLOW_VERIFY_WAITING_STOP" });
+          persistWorkflowSessions();
+          return operationPayload(session, operation);
+        }
+        recordOperationStep(operation, true, { code: "WORKFLOW_VERIFY_STOPPED" });
+        operation.nextPollAfterMs = 0;
         operation.phase = "settle";
       } else if (operation.phase === "settle") {
         const evidence = await buildEvidenceSummary({
@@ -4153,7 +4248,8 @@ export function registerWorkflowTools(deps) {
     swarmId: SWARM_ID_ARG.optional(),
     sutId: z.string().optional(),
     variablesProfileId: z.string().optional().default("default"),
-  }, async ({ workflowId, swarmId, sutId, variablesProfileId = "default" }) => {
+    captureTapSample: z.boolean().optional().default(false),
+  }, async ({ workflowId, swarmId, sutId, variablesProfileId = "default", captureTapSample = false }) => {
     const session = workflowSession(workflowId);
     ensureWorkflowGenerated(session);
     ensureWorkflowValidatedBeforeRuntime(session);
@@ -4161,6 +4257,7 @@ export function registerWorkflowTools(deps) {
       swarmId: swarmId || `${session.generated.bundleId}-swarm`,
       sutId,
       variablesProfileId,
+      captureTapSample,
     }, "upload");
     return operationPayload(session, operation);
   }, workflowRuntime);
@@ -4187,8 +4284,9 @@ export function registerWorkflowTools(deps) {
     swarmId: SWARM_ID_ARG.optional(),
     sutId: z.string().optional(),
     variablesProfileId: z.string().optional(),
+    captureTapSample: z.boolean().optional().default(false),
     readyTimeoutSec: z.number().optional().default(90),
-  }, async ({ workflowId, swarmId, sutId, variablesProfileId = "default", readyTimeoutSec = 90 }) => {
+  }, async ({ workflowId, swarmId, sutId, variablesProfileId = "default", captureTapSample = false, readyTimeoutSec = 90 }) => {
     const session = workflowSession(workflowId);
     ensureWorkflowGenerated(session);
     ensureWorkflowValidatedBeforeRuntime(session);
@@ -4200,31 +4298,51 @@ export function registerWorkflowTools(deps) {
       const deploy = await scenarioManagerUploadBundle(session.generated.bundleId, { replaceExisting: true });
       const mockConfig = await loadBundleMockConfig(session.generated.bundleId);
       const target = session.generated.target;
-      const createBody = { templateId: session.generated.bundleId, idempotencyKey: idempotencyKey() };
-      if (sutId || target?.id) createBody.sutId = sutId || target.id;
-      if (variablesProfileId) createBody.variablesProfileId = variablesProfileId;
+      const createBody = {
+        templateId: session.generated.bundleId,
+        idempotencyKey: idempotencyKey(),
+        autoPullImages: false,
+        sutId: sutId || target?.id || null,
+        variablesProfileId: variablesProfileId || null,
+        networkMode: "DIRECT",
+        networkProfileId: null,
+      };
       const create = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/create`, { method: "POST", body: createBody });
+      const operationTimeoutMs = Math.min(readyTimeoutSec, 80) * 1000;
+      const createOperation = requireSuccessfulLifecycleOperation(
+        await waitForLifecycleOperation(create, "swarm.create", operationTimeoutMs),
+        "swarm.create",
+      );
       const ready = await (async () => {
-        const deadline = Date.now() + Math.min(readyTimeoutSec, 80) * 1000;
+        const deadline = Date.now() + operationTimeoutMs;
         let last = null;
         while (Date.now() < deadline) {
           try {
             const status = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}`);
             last = status;
-            const ctx = status?.envelope?.data?.context;
-            const { desired, healthy } = ctx?.totals || {};
-            if (desired > 0 && healthy >= desired && ctx?.swarmStatus === "READY") return { ready: true, status };
+            if (status?.controllerState === "READY"
+                && status?.workloadState === "STOPPED"
+                && status?.observationStale === false) {
+              return { ready: true, status };
+            }
           } catch { /* keep polling */ }
           await new Promise(resolve => setTimeout(resolve, 4000));
         }
         return { ready: false, status: last };
       })();
+      const preArmedTap = ready.ready && captureTapSample
+        ? await workflowOpenTap(effectiveSwarmId, Math.min(readyTimeoutSec, 80) + 60)
+        : null;
       const start = ready.ready
         ? await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/start`, { method: "POST", body: { idempotencyKey: idempotencyKey() } })
         : null;
-      ok = Boolean(deploy?.uploaded && ready.ready && start !== null);
+      const startOperation = start
+        ? await waitForLifecycleOperation(start, "swarm.start", operationTimeoutMs)
+        : null;
+      if (startOperation) requireSuccessfulLifecycleOperation(startOperation, "swarm.start");
+      ok = Boolean(deploy?.uploaded && ready.ready && startOperation?.state === LIFECYCLE_OPERATION_STATES.SUCCEEDED);
       code = ok ? "WORKFLOW_DEPLOYED" : "WORKFLOW_DEPLOY_NOT_READY";
-      evidence = { swarmId: effectiveSwarmId, deploy, mockConfig, create, ready, start };
+      evidence = { swarmId: effectiveSwarmId, deploy, mockConfig, create, createOperation, ready, preArmedTap, start, startOperation };
     } catch (e) {
       const authFailure = workflowEvidenceIsAuthFailure(e);
       code = authFailure ? "WORKFLOW_ENV_AUTH_FAILED" : "WORKFLOW_DEPLOY_FAILED";
@@ -4268,12 +4386,12 @@ export function registerWorkflowTools(deps) {
     let evidence;
     let ok = false;
     let code = "WORKFLOW_RUNTIME_NOT_STARTED";
-    let preArmedTap = null;
+    let preArmedTap = deploymentPreArmedTap(session, effectiveSwarmId);
     if (!effectiveSwarmId) {
       evidence = { error: "No swarmId is available. Call workflow.deploy or pass swarmId." };
     } else {
       try {
-        if (includeTapSample) {
+        if (includeTapSample && !preArmedTap) {
           try {
             preArmedTap = await workflowOpenTap(effectiveSwarmId, observationTimeoutSec + settleTimeoutSec + 60);
           } catch (tapError) {
@@ -4291,13 +4409,23 @@ export function registerWorkflowTools(deps) {
         let stop = null;
         let settle = null;
         if (stopAfterObservation && observation.ready) {
-          try {
-            stop = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/stop`, {
-              method: "POST",
-              body: { idempotencyKey: idempotencyKey() },
-            });
-          } catch (e) {
-            stop = { error: e.message };
+          stop = await httpJson(`/api/swarms/${encodeURIComponent(effectiveSwarmId)}/stop`, {
+            method: "POST",
+            body: { idempotencyKey: idempotencyKey() },
+          });
+          if (!stop?.operationUrl) {
+            throw new Error("swarm.stop response is missing operationUrl");
+          }
+          const stopDeadline = Date.now() + Math.min(settleTimeoutSec, 80) * 1000;
+          let stopOperation = null;
+          while (Date.now() < stopDeadline) {
+            stopOperation = await httpJson(stop.operationUrl);
+            if (["SUCCEEDED", "FAILED", "REJECTED", "TIMED_OUT"].includes(stopOperation?.state)) break;
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
+          stop = { ...stop, operation: stopOperation };
+          if (stopOperation?.state !== "SUCCEEDED") {
+            throw new Error(`swarm.stop operation ended in ${stopOperation?.state || "UNKNOWN"}`);
           }
           settle = await collectRuntimeEvidenceUntil({
             swarmId: effectiveSwarmId,
@@ -4383,10 +4511,15 @@ export function registerWorkflowTools(deps) {
       stopAfterObservation,
     }, "observe");
     if (includeTapSample) {
-      try {
-        operation.evidence.preArmedTap = await workflowOpenTap(effectiveSwarmId, 120);
-      } catch (err) {
-        operation.evidence.preArmedTap = { error: err.message };
+      const deployedTap = deploymentPreArmedTap(session, effectiveSwarmId);
+      if (deployedTap) {
+        operation.evidence.preArmedTap = deployedTap;
+      } else {
+        try {
+          operation.evidence.preArmedTap = await workflowOpenTap(effectiveSwarmId, 120);
+        } catch (err) {
+          operation.evidence.preArmedTap = { error: err.message };
+        }
       }
       persistWorkflowSessions();
     }

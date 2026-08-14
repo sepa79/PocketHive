@@ -118,6 +118,29 @@ import org.slf4j.LoggerFactory;
     return true;
   }
 
+  /** Returns every expected worker lacking post-dispatch evidence for the requested enablement. */
+  public List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
+      long cutoffMillis, boolean expectedEnabled) {
+    Map<String, List<String>> snapshot;
+    synchronized (this) {
+      snapshot = new HashMap<>();
+      instancesByRole.forEach((role, instances) -> snapshot.put(role, List.copyOf(instances)));
+    }
+    List<io.pockethive.swarm.model.lifecycle.Target> result = new ArrayList<>();
+    snapshot.forEach((role, instances) -> instances.forEach(instance -> {
+      String workerKey = key(role, instance);
+      Long observedAt = lastSnapshotSeen.get(workerKey);
+      Boolean observedEnabled = enabled.get(workerKey);
+      if (observedAt == null || observedAt < cutoffMillis
+          || observedEnabled == null || observedEnabled != expectedEnabled) {
+        result.add(new io.pockethive.swarm.model.lifecycle.Target(role, instance));
+      }
+    }));
+    result.sort(java.util.Comparator.comparing(io.pockethive.swarm.model.lifecycle.Target::role)
+        .thenComparing(io.pockethive.swarm.model.lifecycle.Target::instance));
+    return List.copyOf(result);
+  }
+
   public SwarmMetrics metrics() {
     int desired;
     Map<String, Integer> expectedSnapshot;

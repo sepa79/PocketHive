@@ -13,6 +13,7 @@
     "fixtures",
     "config-update.mjs",
     "doctor.mjs",
+    "generated",
     "runtime-tools.mjs",
     "server.mjs",
     "workflow-tools.mjs",
@@ -50,5 +51,8 @@
     "cross-env": "^7.0.3",
     "yaml": "^2.8.2",
     "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0"
   }
 }

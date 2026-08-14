@@ -20,9 +20,14 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Breaking changes are acceptable unless compatibility is explicitly required.
 - **No implicit Optional for core state/config flags.**
   - Use explicit required fields and explicit enums/states.
-- **SSOT for contracts.**
-  - One canonical schema/DTO per API/event/config contract.
-  - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, or mappers for the same contract format (API/event/config).
+- **SSOT for contracts, state, configuration, and behavior.**
+  - Every material fact or behavior has exactly one authoritative owner. SSOT is not limited to wire DTOs or schemas.
+  - Keep one canonical definition for each API/event/config/file-format contract and one canonical implementation of its validation, parsing, normalization, mapping, and response construction.
+  - Keep exactly one writer/state machine for each domain fact. Other models may only be explicitly named, read-only projections derived from that owner; they must not independently validate, mutate, or decide domain behavior.
+  - Resolve configuration, filesystem paths, defaults, and environment settings through one shared contract/resolver. Do not repeat constants or reconstruct the same effective setting in individual services.
+  - Define operation success once, through canonical postconditions. A caller, adapter, or projection must not infer success from attempted actions when the owning contract requires verified effects.
+  - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, mappers, factories, state machines, path resolvers, or outcome calculators for the same responsibility.
+  - Before approving a non-trivial change, search the whole repository for alternative owners of every affected responsibility. Two active authorities are a **CRITICAL** finding and block approval unless the architecture explicitly defines distinct, non-overlapping ownership.
 - **KISS.**
   - Prefer straightforward, maintainable implementations over clever abstractions.
 - **No magic strings for core behavior.**

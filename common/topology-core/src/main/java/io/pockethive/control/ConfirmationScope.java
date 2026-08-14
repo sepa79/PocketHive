@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
 
 /**
  * Identifies the swarm/role/instance addressed by a confirmation.
- * Use {@link #ALL} for fan-out; values are never {@code null}.
+ * Use the literal {@link #ALL} for fan-out; missing and blank values are invalid.
  */
 public record ConfirmationScope(String swarmId, String role, String instance) {
 
@@ -13,23 +13,9 @@ public record ConfirmationScope(String swarmId, String role, String instance) {
     public static final ConfirmationScope EMPTY = new ConfirmationScope(ALL, ALL, ALL);
 
     public ConfirmationScope {
-        swarmId = normalize(swarmId);
-        role = normalize(role);
-        instance = normalize(instance);
-    }
-
-    private static String normalize(String value) {
-        if (value == null) {
-            return ALL;
-        }
-        String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return ALL;
-        }
-        if (ControlScope.isAll(trimmed)) {
-            return ALL;
-        }
-        return trimmed;
+        swarmId = ControlScope.requireSegment("confirmationScope.swarmId", swarmId);
+        role = ControlScope.requireSegment("confirmationScope.role", role);
+        instance = ControlScope.requireSegment("confirmationScope.instance", instance);
     }
 
     public static ConfirmationScope forSwarm(String swarmId) {

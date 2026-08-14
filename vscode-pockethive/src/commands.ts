@@ -490,7 +490,12 @@ async function waitForSwarmLifecycle(
   swarmId: string,
   hiveProvider?: { refresh(): void }
 ): Promise<SwarmLifecycleState> {
-  let latest: SwarmLifecycleState = { status: 'UNKNOWN' };
+  let latest: SwarmLifecycleState = {
+    controllerState: 'UNKNOWN',
+    workloadState: 'UNKNOWN',
+    health: 'UNKNOWN',
+    observationStale: true,
+  };
   for (let attempt = 0; attempt < 10; attempt++) {
     await new Promise(resolve => setTimeout(resolve, attempt === 0 ? 750 : 1500));
     const detail = await McpTools.swarmGet(swarmId);

@@ -242,11 +242,9 @@
         "signal.status-request.swarm-alpha.ALL.ALL",
         "signal.status-request.swarm-alpha.swarm-controller.ALL",
         "signal.status-request.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-plan.swarm-alpha.swarm-controller.inst",
         "signal.swarm-remove.swarm-alpha.swarm-controller.inst",
         "signal.swarm-start.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-stop.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-template.swarm-alpha.swarm-controller.inst"
+        "signal.swarm-stop.swarm-alpha.swarm-controller.inst"
       ],
       "eventBindings": [
         "event.alert.*.swarm-alpha.#",
@@ -265,11 +263,9 @@
         "signal.status-request.swarm-alpha.ALL.ALL",
         "signal.status-request.swarm-alpha.swarm-controller.ALL",
         "signal.status-request.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-plan.swarm-alpha.swarm-controller.inst",
         "signal.swarm-remove.swarm-alpha.swarm-controller.inst",
         "signal.swarm-start.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-stop.swarm-alpha.swarm-controller.inst",
-        "signal.swarm-template.swarm-alpha.swarm-controller.inst"
+        "signal.swarm-stop.swarm-alpha.swarm-controller.inst"
       ]
     },
     "additionalQueues": [],
@@ -294,11 +290,9 @@
         "signal.status-request.swarm-alpha.swarm-controller.{instance}"
       ],
       "lifecycleSignals": [
-        "signal.swarm-plan.swarm-alpha.swarm-controller.{instance}",
         "signal.swarm-remove.swarm-alpha.swarm-controller.{instance}",
         "signal.swarm-start.swarm-alpha.swarm-controller.{instance}",
-        "signal.swarm-stop.swarm-alpha.swarm-controller.{instance}",
-        "signal.swarm-template.swarm-alpha.swarm-controller.{instance}"
+        "signal.swarm-stop.swarm-alpha.swarm-controller.{instance}"
       ],
       "lifecycleEvents": []
     }
@@ -309,10 +303,14 @@
       "name": "ph.control.orchestrator.inst",
       "signalBindings": [],
       "eventBindings": [
-        "event.outcome.#"
+        "event.alert.alert.#",
+        "event.journal.work-journal.#",
+        "event.result.#"
       ],
       "allBindings": [
-        "event.outcome.#"
+        "event.alert.alert.#",
+        "event.journal.work-journal.#",
+        "event.result.#"
       ]
     },
     "additionalQueues": [
@@ -326,7 +324,10 @@
     ],
     "routes": {
       "configSignals": [],
-      "otherEvents": [],
+      "otherEvents": [
+        "event.alert.alert.#",
+        "event.journal.work-journal.#"
+      ],
       "statusEvents": [
         "event.metric.status-delta.*.swarm-controller.*",
         "event.metric.status-full.*.swarm-controller.*"
@@ -334,7 +335,7 @@
       "statusSignals": [],
       "lifecycleSignals": [],
       "lifecycleEvents": [
-        "event.outcome.#"
+        "event.result.#"
       ]
     }
   },

@@ -315,8 +315,12 @@ async function runNoAuthCleanliness() {
   const serialized = JSON.stringify({ workerConfigs, snapshot }).toLowerCase();
   const authRuntimeMentioned = /authprofiles|authref|pockethive\.auth|tokenkey|redistokenstore|authruntime/.test(serialized);
   const redis = redisKeys(swarmId);
-  const snapshotStatus = snapshot?.status ?? snapshot?.envelope?.data?.context?.swarmStatus ?? null;
-  const snapshotWorkerRoles = (snapshot?.bees ?? snapshot?.envelope?.data?.context?.workers ?? [])
+  const snapshotState = {
+    controllerState: snapshot?.controllerState ?? null,
+    workloadState: snapshot?.workloadState ?? null,
+    health: snapshot?.health ?? null,
+  };
+  const snapshotWorkerRoles = (snapshot?.bees ?? [])
     .map((worker) => worker.role)
     .filter(Boolean)
     .sort();
@@ -328,7 +332,7 @@ async function runNoAuthCleanliness() {
     ]),
     workerConfigCount: Array.isArray(workerConfigs) ? workerConfigs.length : null,
     workerConfigSource: Array.isArray(workerConfigs) && workerConfigs.length > 0 ? "debug-cli" : "debug-cli-empty-or-unavailable",
-    snapshotStatus,
+    snapshotState,
     snapshotWorkerRoles,
     workerConfigsMentionAuthRuntime: authRuntimeMentioned,
     redisKeys: redis.redactedKeys,
@@ -430,9 +434,12 @@ async function resetWireMockRequests() {
 async function createAndStart(swarmId, templateId, sutId) {
   const createBody = {
     templateId,
-    sutId,
     idempotencyKey: `${runId}-${swarmId}-create`,
-    notes: `auth proving ${runId}`,
+    autoPullImages: false,
+    sutId,
+    variablesProfileId: null,
+    networkMode: "DIRECT",
+    networkProfileId: null,
   };
   await httpJson(`${ORCHESTRATOR}/api/swarms/${encodeURIComponent(swarmId)}/create`, {
     method: "POST",
@@ -440,7 +447,9 @@ async function createAndStart(swarmId, templateId, sutId) {
   });
   await waitFor(`${swarmId} ready after create`, async () => {
     const summary = await swarmSummary(swarmId);
-    return summary?.status === "READY" && summary?.health === "RUNNING";
+    return summary?.controllerState === "READY"
+      && summary?.workloadState === "STOPPED"
+      && summary?.observationStale === false;
   }, 120000);
   await startSwarm(swarmId);
 }
@@ -452,7 +461,7 @@ async function startSwarm(swarmId) {
   });
   await waitFor(`${swarmId} work enabled`, async () => {
     const summary = await swarmSummary(swarmId);
-    return summary?.workEnabled === true;
+    return summary?.workloadState === "RUNNING" && summary?.observationStale === false;
   }, 60000);
 }
 
@@ -463,7 +472,7 @@ async function stopSwarm(swarmId) {
   });
   await waitFor(`${swarmId} work disabled`, async () => {
     const summary = await swarmSummary(swarmId);
-    return summary?.workEnabled === false;
+    return summary?.workloadState === "STOPPED" && summary?.observationStale === false;
   }, 60000);
 }
 
@@ -480,12 +489,7 @@ async function removeSwarm(swarmId) {
 }
 
 async function swarmSnapshot(swarmId) {
-  try {
-    const snapshot = await httpJson(`${ORCHESTRATOR}/api/swarms/${encodeURIComponent(swarmId)}`);
-    return snapshot ?? await swarmSummary(swarmId);
-  } catch {
-    return await swarmSummary(swarmId);
-  }
+  return await httpJson(`${ORCHESTRATOR}/api/swarms/${encodeURIComponent(swarmId)}`);
 }
 
 async function swarmSummary(swarmId) {
