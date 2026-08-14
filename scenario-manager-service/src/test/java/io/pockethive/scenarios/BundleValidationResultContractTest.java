@@ -27,7 +27,7 @@ class BundleValidationResultContractTest {
                 "bundles/demo",
                 "bundles/demo",
                 "demo",
-                new BundleValidationEvidence("2.0.0", "2.0.0", "0.15.35", "sha256:test"),
+                new BundleValidationEvidence("2.0.0", "2.0.0", "0.15.36", "sha256:test"),
                 List.of(
                         new ValidationFinding(
                                 ValidationCategory.SCENARIO,
@@ -51,7 +51,7 @@ class BundleValidationResultContractTest {
         assertThat(json.get("scenarioId").asText()).isEqualTo("demo");
         assertThat(json.at("/validation/scenarioProtocolVersion").asText()).isEqualTo("2.0.0");
         assertThat(json.at("/validation/supportedScenarioProtocolVersion").asText()).isEqualTo("2.0.0");
-        assertThat(json.at("/validation/scenarioManagerVersion").asText()).isEqualTo("0.15.35");
+        assertThat(json.at("/validation/scenarioManagerVersion").asText()).isEqualTo("0.15.36");
         assertThat(json.at("/validation/artifactDigest").asText()).isEqualTo("sha256:test");
         assertThat(fieldNames(json.get("summary"))).containsExactlyInAnyOrder("errors", "warnings");
         assertThat(json.at("/summary/errors").asInt()).isEqualTo(1);
