@@ -142,6 +142,9 @@ class DefaultHttpSequenceTargetResolverTest {
       "http://example.test/root#fragment",
       "http://example.test/root/../admin",
       "http://example.test/root/%2e%2e/admin",
+      "http://example.test/root/%252e%252e/admin",
+      "http://example.test/root/%2e%2e%2fadmin",
+      "http://example.test/root/%25%32%65%25%32%65%25%32%66admin",
       "http://example.test:65536/root",
       "{{ sut.endpoints['accounts'].baseUrl }}"
   })
@@ -159,6 +162,10 @@ class DefaultHttpSequenceTargetResolverTest {
       "//other.example.test/path",
       "/safe/../admin",
       "/safe/%2e%2e/admin",
+      "/safe/%252E%252e/admin",
+      "/safe/%2e%2e%2fadmin",
+      "/safe/%2e%2e%5cadmin",
+      "/safe/%25%32%65%25%32%65%25%32%66admin",
       "/path#fragment"
   })
   void rejectsRenderedPathsThatCanChangeOrEscapeTheAuthorityOrBase(String renderedPath) {
@@ -170,6 +177,27 @@ class DefaultHttpSequenceTargetResolverTest {
     assertThatThrownBy(() -> resolver.resolve(base, renderedPath))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("Rendered HTTP path");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+      "/safe/report%2Etxt",
+      "/safe/folder%2Ffile",
+      "/safe/%252efile",
+      "/safe/%2e%2e%2e",
+      "/safe/%252",
+      "/safe/price%24value",
+      "/safe/backslash%5Cfile"
+  })
+  void preservesSafeEncodedPathContent(String renderedPath) {
+    HttpSequenceTargetResolver.BaseTarget base = new HttpSequenceTargetResolver.BaseTarget(
+        URI.create("http://worker:8080/root"),
+        HttpSequenceTargetResolver.TargetSource.WORKER_BASE_URL,
+        null);
+
+    HttpSequenceTargetResolver.ResolvedTarget target = resolver.resolve(base, renderedPath);
+
+    assertThat(target.uri()).isEqualTo(URI.create("http://worker:8080/root" + renderedPath));
   }
 
   private static HttpSequenceWorkerConfig config(

@@ -7,6 +7,8 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 final class DefaultHttpSequenceTargetResolver implements HttpSequenceTargetResolver {
 
@@ -15,6 +17,7 @@ final class DefaultHttpSequenceTargetResolver implements HttpSequenceTargetResol
   private static final String ENDPOINTS_FIELD = "endpoints";
   private static final String KIND_FIELD = "kind";
   private static final String BASE_URL_FIELD = "baseUrl";
+  private static final Pattern PERCENT_OCTET = Pattern.compile("%([0-9A-Fa-f]{2})");
 
   @Override
   public List<BaseTarget> resolveBases(HttpSequenceWorkerConfig config) {
@@ -158,13 +161,24 @@ final class DefaultHttpSequenceTargetResolver implements HttpSequenceTargetResol
     if (rawPath == null || rawPath.isEmpty()) {
       return false;
     }
-    for (String segment : rawPath.split("/", -1)) {
-      String dots = segment.toLowerCase(Locale.ROOT).replace("%2e", ".");
-      if (".".equals(dots) || "..".equals(dots)) {
+    String decodedPath = rawPath;
+    String previousPath;
+    do {
+      previousPath = decodedPath;
+      decodedPath = decodePercentOctets(previousPath);
+    } while (!decodedPath.equals(previousPath));
+
+    for (String segment : decodedPath.replace('\\', '/').split("/", -1)) {
+      if (".".equals(segment) || "..".equals(segment)) {
         return true;
       }
     }
     return false;
+  }
+
+  private static String decodePercentOctets(String value) {
+    return PERCENT_OCTET.matcher(value).replaceAll(result -> Matcher.quoteReplacement(
+        Character.toString((char) Integer.parseInt(result.group(1), 16))));
   }
 
   private static String stringValue(Object value) {

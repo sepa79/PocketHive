@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +31,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class HttpSequenceMultiEndpointAcceptanceTest {
 
@@ -59,17 +61,7 @@ class HttpSequenceMultiEndpointAcceptanceTest {
     writeTemplate("second", "/second");
     writeTemplate("third", "/third");
 
-    client = HttpClients.createDefault();
-    RedisSequenceProperties redis = new RedisSequenceProperties();
-    redis.setEnabled(false);
-    HttpSequenceRunner runner = new HttpSequenceRunner(
-        new ObjectMapper().findAndRegisterModules(),
-        Clock.systemUTC(),
-        new io.pockethive.templating.PebbleTemplateRenderer(),
-        new TemplateLoader(),
-        new ApacheHttpCallExecutor(client),
-        new DefaultHttpSequenceTargetResolver(),
-        redis);
+    HttpSequenceRunner runner = newRunner();
     HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
         workerBase,
         templates.toString(),
@@ -99,6 +91,53 @@ class HttpSequenceMultiEndpointAcceptanceTest {
         .containsEntry(HttpSequenceHeaders.TARGET_SOURCE,
             HttpSequenceTargetResolver.TargetSource.SUT_ENDPOINT.name())
         .containsEntry(HttpSequenceHeaders.SUT_ENDPOINT_ID, "accounts");
+  }
+
+  @Test
+  void rejectsEncodedTraversalBeforeAnyHttpIo() throws Exception {
+    AtomicInteger requestCount = new AtomicInteger();
+    HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    server.createContext("/", exchange -> {
+      try (exchange) {
+        requestCount.incrementAndGet();
+        exchange.sendResponseHeaders(204, -1);
+      }
+    });
+    server.start();
+    servers.add(server);
+    writeTemplate("escape", "/safe/%2e%2e%2fadmin");
+
+    HttpSequenceRunner runner = newRunner();
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://127.0.0.1:" + server.getAddress().getPort() + "/root",
+        templates.toString(),
+        "journey",
+        1,
+        List.of(step("escape", "escape", null, null)),
+        new HttpSequenceWorkerConfig.DebugCapture(
+            HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1024, 4096, false, false, 0, 60),
+        Map.of());
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-acceptance", "instance-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{\"journey\":true}").contentType("application/json").build();
+
+    assertThatThrownBy(() -> runner.run(seed, new AcceptanceWorkerContext(info), config))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessage("Rendered HTTP path must not contain traversal segments");
+    assertThat(requestCount.get()).isZero();
+  }
+
+  private HttpSequenceRunner newRunner() {
+    client = HttpClients.createDefault();
+    RedisSequenceProperties redis = new RedisSequenceProperties();
+    redis.setEnabled(false);
+    return new HttpSequenceRunner(
+        new ObjectMapper().findAndRegisterModules(),
+        Clock.systemUTC(),
+        new io.pockethive.templating.PebbleTemplateRenderer(),
+        new TemplateLoader(),
+        new ApacheHttpCallExecutor(client),
+        new DefaultHttpSequenceTargetResolver(),
+        redis);
   }
 
   private String server(String path, String marker, List<String> visits) throws Exception {

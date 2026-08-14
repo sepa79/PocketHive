@@ -229,6 +229,10 @@ config:
   `baseUrl` scheme.
 - Step `baseUrl` is a literal absolute HTTP(S) base URI. It is not templated.
 - A step must not declare both fields. Blank or invalid overrides are errors.
+- Rendered request paths must not select another authority or escape the
+  selected base path. Literal, percent-encoded, and nested percent-encoded dot
+  segments or path separators that normalise to `.` or `..` are errors before
+  HTTP I/O.
 - An invalid override fails before HTTP I/O and never falls back to worker
   `baseUrl`.
 - Retry uses the same resolved URI for every attempt.

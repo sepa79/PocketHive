@@ -250,6 +250,10 @@ traffic.
   query, or fragment components.
 - URI joining MUST preserve a configured base path. Do not concatenate strings
   in the executor.
+- Path-containment validation MUST treat percent-encoded and nested
+  percent-encoded octets as their decoded characters. If decoded dot or path
+  separator characters form a `.` or `..` segment, the request MUST fail
+  before HTTP I/O. Valid encoded content remains unchanged in the target URI.
 - Redirect policy is unchanged by this feature. A separate contract change is
   required before redirect handling may change.
 - Deployment policy MAY prohibit per-step hardcoded URLs. Denial MUST be
@@ -307,18 +311,19 @@ rule from becoming a fallback chain.
 
 ## Verification evidence
 
-All checks ran in this workspace on 2026-08-13.
+Initial delivery checks ran in this workspace on 2026-08-13. The
+path-containment hardening checks ran on 2026-08-14.
 
 | Gate | Result |
 | --- | --- |
-| HTTP Sequence full reactor tests | PASS — 45 tests, 0 failures/errors |
+| HTTP Sequence full reactor tests | PASS — 60 tests, 0 failures/errors |
 | Scenario Manager full tests | PASS — 166 tests, 0 failures/errors; supplied `-Dpockethive.release.version=0.15.35` required by the test context |
 | Capability catalogue contract | PASS — capability `1.2` and additive step description asserted |
-| Integration acceptance | PASS — real Apache client called three ephemeral HTTP servers on distinct ports/base paths |
-| Mutation testing | PASS — 81 mutations, 81 killed (100%); 95% line coverage, 100% test strength, and 0 uncovered mutants for target resolution/config boundaries |
+| Integration acceptance | PASS — real Apache client called three ephemeral HTTP servers on distinct ports/base paths; an encoded traversal attempt made zero receiver requests |
+| Mutation testing | PASS — 84 mutations, 84 killed (100%); 95% line coverage, 100% test strength, and 0 uncovered mutants for target resolution/config boundaries |
 | Bundle validation | PASS — public Scenario Manager ingress, protocol `2.0.0`, 0 errors/warnings |
 | Live acceptance | PASS — public Orchestrator ingress created and started the mixed-target swarm; official debug tap observed three HTTP `200` results with `WORKER_BASE_URL`, `SUT_ENDPOINT` (`auth`), and `STEP_BASE_URL` |
-| HiveMap review | PASS — targeted code-quality scan completed with no findings; the three earlier documentation findings were resolved with implementation evidence |
+| HiveMap review | PASS — the RST follow-up finding for multi-encoded traversal was fixed and resolved with unit, acceptance, and mutation evidence; the three earlier documentation findings remain resolved |
 
 Mutation commands:
 
@@ -334,7 +339,7 @@ Mutation commands:
 | Compatibility | Deserialize old JSON and use the old seven-argument `Step` constructor | PASS |
 | Target routing | Worker, named SUT, and literal targets across hosts, ports, base paths, and query paths | PASS |
 | Ambiguity / NFF | Both fields, blanks, missing SUT context, unknown endpoint, non-HTTP kind, and scheme mismatch fail explicitly | PASS |
-| URI abuse | Reject absolute/scheme-relative paths, user-info, fragments, base queries, traversal, templated literals, invalid schemes, hosts, and ports | PASS |
+| URI abuse | Reject absolute/scheme-relative paths, user-info, fragments, base queries, literal, encoded, nested-encoded or encoded-separator traversal, templated literals, invalid schemes, hosts, and ports; preserve safe encoded content | PASS |
 | Timing | Resolve once before retry; every attempt receives the identical URI | PASS |
 | No side effects on invalid config | Invalid later override prevents earlier steps from sending traffic | PASS |
 | Observability | Result metadata exposes controlled source/endpoint id, not full target URLs | PASS |
