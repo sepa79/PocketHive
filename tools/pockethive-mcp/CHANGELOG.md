@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## [0.15.36] - 2026-08-14
+
+### Changed
+- Version tracks the PocketHive 0.15.36 release.
+- PocketHive MCP runtime and workflow tools consume the Scenario Manager-owned
+  HTTP Sequence capability catalogue; no duplicate MCP target contract or
+  fallback behavior was added.
+
 ## [0.15.35] - 2026-07-10
 
 ### Changed
