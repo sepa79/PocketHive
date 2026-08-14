@@ -1,11 +1,64 @@
 # Upgrading PocketHive
 
+| Reader context | Details |
+| --- | --- |
+| Audience | PocketHive operators and scenario maintainers preparing a version change |
+| Prerequisites | The current and target release notes, a recoverable backup, and access to validate affected scenario bundles |
+| Expected outcome | Apply required contract migrations and validate the result before changing the running PocketHive version |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 This is the canonical index of required actions when upgrading PocketHive.
 Release summaries remain in `CHANGELOG.md`; detailed scenario rewrite rules
 and commands live in `docs/ai/SCENARIO_CONFIG_MIGRATION_GUIDE.md`.
 
 PocketHive does not implicitly accept legacy contract shapes. Complete the
 documented migration before deploying a release that removes an old shape.
+
+## Existing ClickHouse volumes: `tx_outcome` v1 to v2
+
+Fresh ClickHouse volumes create only `ph_tx_outcome_v2`. Existing volumes may
+still contain the legacy `ph_tx_outcome_v1` table.
+
+The local ClickHouse service runs the official ClickHouse entrypoint, waits for
+readiness, and then runs the v1-to-v2 migration inside the same container. On
+startup it:
+
+- exits successfully when `ph_tx_outcome_v1` does not exist;
+- migrates all `ph_tx_outcome_v1` rows when v1 exists and v2 is empty;
+- drops `ph_tx_outcome_v1` after a successful full migration;
+- fails startup instead of appending to a non-empty v2 table, avoiding duplicate
+  historical rows.
+
+For manual migration or recovery, run the repository wrapper from the checkout:
+
+```bash
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh
+```
+
+Optional bounded or destructive modes must be explicit:
+
+```bash
+# Migrate a date range.
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh \
+  --from 2026-02-01 --to 2026-02-22
+
+# Rebuild v2 from v1 after deliberately truncating the current v2 table.
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh --truncate-v2
+
+# Drop v1 only after a successful full-table migration.
+bash clickhouse/run-tx-outcome-v1-to-v2-migration.sh \
+  --drop-source-after-migration
+```
+
+The wrapper copies and runs `clickhouse/migrate-tx-outcome-v1-to-v2.sh` inside
+the running `clickhouse` Compose service. The migration script checks that v1
+exists, creates v2 from the repository schema when needed, migrates day by day,
+and compares source and target row counts after each day. It refuses to append
+to a non-empty v2 table unless `--truncate-v2` is supplied explicitly.
+
+Back up the ClickHouse volume before using a destructive option. Do not drop v1
+or change the running PocketHive version until the migration completes and the
+row-count checks pass.
 
 ## Unreleased (from 0.15.35 and earlier)
 
@@ -56,3 +109,18 @@ by choosing the intended map key and deleting the nested field.
 After migration, validate bundles through the official Scenario Manager
 validation ingress before deployment. Do not add a parser fallback or retain
 both endpoint identity shapes.
+
+## Troubleshooting
+
+If the migrator reports `SUT_ENDPOINT_ID_CONFLICT`, resolve the named map key
+and nested identifier explicitly; do not discard either value automatically.
+For validation failures, use the reported scenario contract field and the
+[scenario contract](scenarios/SCENARIO_CONTRACT.md). For runtime symptoms after
+an approved upgrade, follow
+[observability and troubleshooting](guides/operators/observability-troubleshooting.md).
+
+## Next step
+
+After every required migration and validation succeeds, return to the
+[deployment update and recovery procedure](guides/operators/deployment.md#update-and-recovery)
+for the selected delivery path.

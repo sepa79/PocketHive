@@ -8,16 +8,43 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MODULE="tools/scenario-templating-check"
-TMP_CP="$(mktemp)"
+TMP_CP_RELATIVE="target/.scenario-templating-classpath.$$"
+TMP_CP="${SCRIPT_DIR}/${TMP_CP_RELATIVE}"
+
+cleanup() {
+  rm -f "${TMP_CP}"
+}
+trap cleanup EXIT
+
+cd "${PROJECT_ROOT}"
 
 # Build and install the module (and its dependencies) quietly, skipping tests.
-mvn -q -f "${PROJECT_ROOT}/pom.xml" -pl "${MODULE}" -am -DskipTests install >/dev/null
+mvn -q -pl "${MODULE}" -am -DskipTests install
 
 # Capture the runtime classpath for the module only.
-mvn -q -f "${SCRIPT_DIR}/pom.xml" dependency:build-classpath \
-  -Dmdep.outputFile="${TMP_CP}" >/dev/null
+mvn -q -f "${MODULE}/pom.xml" dependency:build-classpath \
+  "-Dmdep.outputFile=${TMP_CP_RELATIVE}"
 
-CLASSPATH="${PROJECT_ROOT}/${MODULE}/target/classes:$(cat "${TMP_CP}")"
-rm -f "${TMP_CP}"
+if [[ ! -s "${TMP_CP}" ]]; then
+  echo "Maven did not produce the runtime classpath file: ${TMP_CP}" >&2
+  exit 1
+fi
+
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    CLASSPATH_SEPARATOR=";"
+    MODULE_CLASSES="$(cygpath -w "${PROJECT_ROOT}/${MODULE}/target/classes")"
+    ;;
+  Linux*|Darwin*)
+    CLASSPATH_SEPARATOR=":"
+    MODULE_CLASSES="${PROJECT_ROOT}/${MODULE}/target/classes"
+    ;;
+  *)
+    echo "Unsupported shell platform: $(uname -s)" >&2
+    exit 2
+    ;;
+esac
+
+CLASSPATH="${MODULE_CLASSES}${CLASSPATH_SEPARATOR}$(cat "${TMP_CP}")"
 
 java -cp "${CLASSPATH}" io.pockethive.tools.ScenarioTemplateValidator "$@"

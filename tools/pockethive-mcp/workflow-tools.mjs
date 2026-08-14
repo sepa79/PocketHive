@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, sep } from "node:path";
 
 export function registerWorkflowTools(deps) {
   const {
@@ -1989,7 +1989,7 @@ export function registerWorkflowTools(deps) {
 
   function workflowPatchScope(session) {
     if (!session.generated?.bundleId) return [];
-    const path = workflowBundlePath(session);
+    const path = workflowBundlePath(session).split(sep).join("/");
     return [`${path}/**`, `${path}/mock-config/**`];
   }
 

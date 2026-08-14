@@ -1,5 +1,12 @@
 # Workers Guide: Basics
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors configuring built-in PocketHive workers |
+| Prerequisites | Basic scenario YAML knowledge and the [scenario contract](../scenarios/SCENARIO_CONTRACT.md) |
+| Expected outcome | A small worker chain with explicit roles, queues, and configuration |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 This guide explains how to use built-in PocketHive workers in scenarios.
 
 ## 1. Worker model
@@ -99,3 +106,11 @@ References:
 - Keep worker responsibilities narrow (SRP by role).
 - Use Scenario Variables for environment/profile-level differences.
 - Prefer `request-builder` and `http-sequence` over duplicating per-call workers.
+
+## Troubleshooting
+
+Check the scenario against the [canonical scenario contract](../scenarios/SCENARIO_CONTRACT.md). For runtime and queue symptoms, use the [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Continue with [Workers Guide: Advanced](workers-advanced.md) for control-plane and multi-swarm patterns.

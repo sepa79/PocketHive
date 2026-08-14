@@ -1,5 +1,12 @@
 # Templating Guide: Basics
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors building dynamic payloads and request envelopes |
+| Prerequisites | Basic scenario YAML knowledge and the [scenario variables contract](../scenarios/SCENARIO_VARIABLES.md) |
+| Expected outcome | A small, validated template using the current Pebble and constrained SpEL surface |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 PocketHive uses **Pebble** templates with a constrained **SpEL**
 (`eval`) helper for dynamic payloads, headers and request envelopes.
 
@@ -168,3 +175,11 @@ Note: `#json_path` expects a JSON string as first argument, so use
 - Use `vars.*` for environment/profile differences instead of duplicating
   templates.
 - Validate templates before long e2e/perf runs.
+
+## Troubleshooting
+
+Check variable resolution against the [scenario variables contract](../scenarios/SCENARIO_VARIABLES.md). For runtime rendering evidence, use the canonical [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Continue with [Templating Guide: Advanced](templating-advanced.md) for current sequence helpers, request templates, and validation tooling.
