@@ -358,10 +358,16 @@ public final class AuthRuntime {
                 form.put("grant_type", "password");
                 form.put("username", required(profile, "username"));
                 form.put("password", required(profile, "password"));
+
                 String clientId = optional(profile, "clientId");
                 if (clientId != null) {
                     form.put("client_id", clientId);
+                    String clientSecret = optional(profile, "clientSecret");
+                    if (clientSecret != null) {
+                        form.put("client_secret", clientSecret);
+                    }
                 }
+
             } else {
                 throw new IllegalArgumentException("Auth type is not refreshable: " + profile.getType());
             }
@@ -490,6 +496,14 @@ public final class AuthRuntime {
         }
         if (profile.getStorage().getMode() == AuthStorageMode.REDIS) {
             RedisTokenStore.validateTokenKey(profile.getStorage().getTokenKey());
+        }
+        if (profile.getType() == AuthType.OAUTH2_PASSWORD_GRANT) {
+            String clientId = optional(profile, "clientId");
+            String clientSecret = optional(profile, "clientSecret");
+            if (clientSecret != null && clientId == null) {
+                throw new IllegalArgumentException(
+                    "Auth profile '" + profileId + "' (OAUTH2_PASSWORD_GRANT) declares clientSecret without clientId");
+            }
         }
     }
 
