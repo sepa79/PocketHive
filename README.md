@@ -255,10 +255,11 @@ The UI container fronted by Nginx proxies several internal services so browsers 
 When accessing PocketHive from another machine, keep using the UI origin and these prefixed paths; the reverse proxy handles service discovery inside the compose network.
 
 ### External Deployment (Production)
-1. Create deployment package: `./package-deployment.sh` (or `package-deployment.bat` on Windows)
+1. Create deployment package: `./package-deployment.sh`
 2. Copy `pockethive-deployment-<version>.tar.gz` to target environment
 3. Extract: `tar xzf pockethive-deployment-<version>.tar.gz`
-4. Deploy using the bundled `docker-compose.yml` (e.g., `docker compose up -d` on the target host or by importing that file into Portainer).
+4. Optionally create a local `.env` next to `docker-compose.yml` to override image registry/tag defaults.
+5. Deploy using the bundled `docker-compose.yml` (e.g., `docker compose up -d` on the target host or by importing that file into Portainer).
 
 ---
 

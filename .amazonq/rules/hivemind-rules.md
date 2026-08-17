@@ -64,7 +64,7 @@ Read the closeout report — it lists missing required rule checks and active le
 | `decision` | Durable design or implementation choice (e.g. "use stepId not id in http-sequence steps") |
 | `progress` | Meaningful milestone (e.g. "smarter-onboarding-sequence swarm running") |
 | `feedback` | Friction, lesson, or follow-up note (e.g. "validator jar stale — WSL ETIMEDOUT") |
-| `tooling_note` | Local workflow/tool behaviour worth remembering (e.g. "mcp.json needs Windows paths not WSL paths") |
+| `tooling_note` | Local workflow/tool behaviour worth remembering (e.g. "mcp.json needs absolute POSIX paths in Linux/WSL") |
 | `risk` | Unresolved concern (e.g. "http-sequence docker.volumes deserialization bug") |
 | `artifact_ref` | Output reference — file, commit, PR |
 | `plan_ref` | Link to a plan file or external plan |
@@ -91,7 +91,7 @@ learning_capture {
 
 Scope guide:
 - `tool` — PocketHive worker config, MCP tool behaviour, validator quirks
-- `env` — stack, network, proxy, WSL, Windows path issues
+- `env` — stack, network, proxy, Linux/WSL path issues
 - `workflow` — TDD cycle, deploy sequence, debugging approach
 - `test_strategy` — how to verify a scenario works
 
@@ -143,7 +143,7 @@ Key rules for this project:
 | `no-bee-id-without-topology` | When authoring scenarios — no `id:` on bees unless topology is declared |
 | `sut-yaml-map-not-list` | When creating/editing sut.yaml — must be a plain map, not a list |
 | `stepid-not-id-in-steps` | When authoring http-sequence steps — use `stepId` not `id` |
-| `windows-paths-in-mcp-json` | When editing mcp.json — paths must be Windows format for npx/node |
+| `posix-paths-in-mcp-json` | When editing mcp.json — paths must be absolute POSIX paths for Linux/WSL runtimes |
 | `plan-required` | When creating scenarios — always include a minimal `plan:` section |
 
 ## Context tokens vs session IDs
