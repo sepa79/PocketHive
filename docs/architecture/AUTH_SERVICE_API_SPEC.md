@@ -1,6 +1,6 @@
 # Auth Service API Spec
 
-> Status: implemented baseline / reference
+> Status: implemented baseline / MCP OAuth extension approved for implementation
 > Scope: shared `auth-service` HTTP contract for PocketHive and HiveWatch  
 > Related:
 > - `docs/archive/auth-service-foundation-plan.md`
@@ -62,6 +62,87 @@ Future:
 
 - signed JWT may be introduced later if there is a proven need,
 - but JWT is not required for MVP.
+
+### 3.1 PocketHive MCP OAuth extension
+
+The Java PocketHive MCP is a separate OAuth protected resource. Auth Service is
+the only authorization server and grant authority for it. The first release
+uses opaque, audience-bound MCP access tokens and the OAuth 2.1 authorization
+code flow for public clients.
+
+This extension does not reclassify a legacy `phauth_*` product session as an MCP
+access token. An MCP token has its own `phmcp_*` namespace, exact resource,
+client ID, scopes, principal, issue time, and expiry. PocketHive MCP accepts only
+tokens resolved by the OAuth introspection contract below and never forwards an
+inbound MCP token to Scenario Manager, Orchestrator, or another owner API.
+
+First-release choices are explicit:
+
+- authorization code only;
+- public pre-registered clients only; no Dynamic Client Registration or Client
+  ID Metadata Document fetching;
+- PKCE `S256` is mandatory; `plain` and missing challenges fail;
+- exact redirect URI matching; no wildcard, prefix, pattern, or alternate-port
+  matching;
+- the `resource` parameter is mandatory and identical in authorization and
+  token requests;
+- opaque access tokens expire after the configured short lifetime;
+- no refresh tokens; an expired session requires a new authorization flow;
+- one-time authorization codes expire after the configured short lifetime;
+- consent decline and browser cancellation do not issue a code or token; and
+- unsupported grants, response types, clients, resources, redirects, or scopes
+  fail explicitly without fallback.
+
+The required PocketHive VS Code public client ID is `pockethive-vscode`. Its
+first-release callback is exactly
+`http://127.0.0.1:57548/callback`. A deployment may register other clients only
+as an explicit list of client IDs, display names, and exact redirect URIs. Their
+support status is determined by the PocketHive MCP client conformance matrix;
+registration alone is not a support claim.
+
+Remote authorization and token endpoints require HTTPS. Loopback HTTP is
+permitted only for an explicitly configured local development issuer and
+resource whose resolved hosts remain loopback.
+
+### 3.2 MCP OAuth scopes and grants
+
+Auth Service validates requested scopes against both the registered client's
+allow-list and the authenticated user's PocketHive grants. The canonical scope
+IDs are shared constants, not raw strings in handlers:
+
+| Scope | Minimum PocketHive permission | Purpose |
+|---|---|---|
+| `pockethive:mcp:discover` | `VIEW` or `ALL` | Server information and authorised catalogue discovery |
+| `pockethive:mcp:read` | `VIEW` or `ALL` | Read-only Scenario Manager, Orchestrator, resource, and evidence calls |
+| `pockethive:mcp:operate` | `RUN` or `ALL` | Swarm lifecycle and supported live operations |
+| `pockethive:mcp:author` | `RUN` or `ALL` | QA workflow state, generation, and validation coordination |
+| `pockethive:mcp:publish` | `ALL` | Scenario Bundle create or replace preparation |
+| `pockethive:mcp:cleanup` | `ALL` | Governed runtime cleanup execution |
+
+Scopes constrain discovery and invocation but do not replace resource-level
+PocketHive grants or HiveGate policy. Auth Service returns the principal's full
+grants to the MCP introspection client so the MCP can apply the canonical folder
+and bundle selectors at invocation time. A scope never grants a broader
+resource selector than the underlying grant.
+
+### 3.3 OAuth records
+
+An authorization request record is short-lived and single-use. It binds the
+request ID, authenticated principal, client ID, exact redirect URI, exact MCP
+resource, ordered scope set, PKCE challenge and method, creation time, expiry,
+and consent outcome. Browser form submission is bound to a cryptographically
+random same-site request cookie; query parameters alone cannot approve it.
+
+An authorization code is cryptographically random, short-lived, single-use,
+and bound to the same principal, client, redirect, resource, scope set, and PKCE
+challenge. Code consumption is atomic. Reuse, expiry, redirect mismatch,
+resource mismatch, client mismatch, or verifier mismatch invalidates the
+exchange and issues no token.
+
+An opaque MCP access-token record binds token digest, principal, client,
+resource, scopes, issue time, and expiry. Raw tokens, authorization codes, PKCE
+verifiers, request cookies, and OAuth `state` values must not enter logs,
+telemetry, error bodies, or persisted evidence.
 
 ---
 
@@ -279,6 +360,132 @@ Rules:
 - grant replacement is explicit and full-state,
 - no hidden merge/fallback behavior,
 - unknown enum-like values fail validation explicitly.
+
+### 6.8 OAuth authorization-server metadata
+
+`GET /.well-known/oauth-authorization-server` → `application/json`
+
+The response follows RFC 8414 and is generated only from configured canonical
+values. It contains:
+
+```json
+{
+  "issuer": "https://environment.example/auth-service",
+  "authorization_endpoint": "https://environment.example/auth-service/oauth/authorize",
+  "token_endpoint": "https://environment.example/auth-service/oauth/token",
+  "introspection_endpoint": "https://environment.example/auth-service/oauth/introspect",
+  "response_types_supported": ["code"],
+  "grant_types_supported": ["authorization_code"],
+  "token_endpoint_auth_methods_supported": ["none"],
+  "code_challenge_methods_supported": ["S256"],
+  "scopes_supported": [
+    "pockethive:mcp:discover",
+    "pockethive:mcp:read",
+    "pockethive:mcp:operate",
+    "pockethive:mcp:author",
+    "pockethive:mcp:publish",
+    "pockethive:mcp:cleanup"
+  ]
+}
+```
+
+The service must not derive the issuer or endpoints from `Host`, `Forwarded`, or
+`X-Forwarded-*` request headers. Missing or inconsistent canonical issuer
+configuration fails startup.
+
+### 6.9 OAuth authorization endpoint
+
+`GET /oauth/authorize`
+
+Required query parameters:
+
+- `response_type=code`;
+- registered `client_id`;
+- exact registered `redirect_uri`;
+- non-empty `state`;
+- `code_challenge` and `code_challenge_method=S256`;
+- exact configured MCP `resource`; and
+- space-separated registered `scope` values.
+
+The endpoint validates all parameters before presenting the DEV authentication
+and consent page. The page shows client display name, redirect host, resource,
+and requested scopes. It posts only to Auth Service using the one-time bound
+authorization-request handle. User approval issues one authorization code and
+redirects with the unchanged client `state`. Decline redirects with
+`error=access_denied` and the unchanged `state`. Invalid requests return the
+OAuth error directly and do not redirect to an untrusted URI.
+
+The DEV provider asks for one configured active username. A future LDAP or OIDC
+provider changes only the principal-authentication adapter; it does not change
+the OAuth request, consent, code, token, or client contracts.
+
+### 6.10 OAuth token endpoint
+
+`POST /oauth/token` → request
+`application/x-www-form-urlencoded`, response `application/json`
+
+Required fields:
+
+- `grant_type=authorization_code`;
+- single-use `code`;
+- registered public `client_id`;
+- exact original `redirect_uri`;
+- exact original `resource`; and
+- `code_verifier` whose SHA-256 challenge matches the original request.
+
+Success returns:
+
+```json
+{
+  "access_token": "phmcp_opaque_value",
+  "token_type": "Bearer",
+  "expires_in": 900,
+  "scope": "pockethive:mcp:discover pockethive:mcp:read"
+}
+```
+
+No refresh token is returned. OAuth errors use the standard `error` field and a
+bounded non-sensitive `error_description`. A failed exchange consumes no valid
+code except where OAuth replay protection requires invalidating the attempted
+code family.
+
+### 6.11 OAuth token introspection
+
+`POST /oauth/introspect` → request
+`application/x-www-form-urlencoded`, response `application/json`
+
+This endpoint is available only to the explicitly configured confidential
+`pockethive-mcp` resource-server client using HTTP Basic authentication. The
+request contains one `token` field. Invalid client authentication returns
+`401`; a syntactically valid request for an unknown, expired, or revoked token
+returns `{ "active": false }`.
+
+An active response contains:
+
+```json
+{
+  "active": true,
+  "client_id": "pockethive-vscode",
+  "username": "local-admin",
+  "sub": "11111111-1111-1111-1111-111111111111",
+  "aud": "https://environment.example/mcp",
+  "scope": "pockethive:mcp:discover pockethive:mcp:read",
+  "iat": 1787068800,
+  "exp": 1787069700,
+  "principal": {
+    "id": "11111111-1111-1111-1111-111111111111",
+    "username": "local-admin",
+    "displayName": "Local Admin",
+    "active": true,
+    "authProvider": "DEV",
+    "grants": []
+  }
+}
+```
+
+The MCP validates `active`, exact configured audience/resource, expiry, client,
+and required scopes for every protected request. Introspection is token
+validation, not token passthrough to a PocketHive owner.
 
 ---
 

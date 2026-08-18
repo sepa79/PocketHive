@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: pockethive-mcp
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+pockethive:
+  mcp:
+    pocket-hive-ingress: ${PH_MCP_POCKETHIVE_INGRESS}
+    owner-api-base: ${PH_MCP_OWNER_API_BASE}
+    protocol-revision: ${PH_MCP_PROTOCOL_REVISION}
+    state-mode: ${PH_MCP_STATE_MODE}
+    state-path: ${PH_MCP_STATE_PATH}
+    upload-spool-path: ${PH_MCP_UPLOAD_SPOOL_PATH}
+    open-session-ttl: ${PH_MCP_OPEN_SESSION_TTL}
+    closed-session-retention: ${PH_MCP_CLOSED_SESSION_RETENTION}
+    attempt-retention: ${PH_MCP_ATTEMPT_RETENTION}
+    receipt-retention: ${PH_MCP_RECEIPT_RETENTION}
+    upload-ticket-ttl: ${PH_MCP_UPLOAD_TICKET_TTL}
+    max-open-sessions: ${PH_MCP_MAX_OPEN_SESSIONS}
+    max-open-sessions-per-principal: ${PH_MCP_MAX_OPEN_SESSIONS_PER_PRINCIPAL}
+    max-workflows-per-session: ${PH_MCP_MAX_WORKFLOWS_PER_SESSION}
+    max-state-bytes: ${PH_MCP_MAX_STATE_BYTES}
+    max-concurrent-uploads-per-principal: ${PH_MCP_MAX_CONCURRENT_UPLOADS_PER_PRINCIPAL}
+    max-concurrent-uploads: ${PH_MCP_MAX_CONCURRENT_UPLOADS}
+    max-upload-bytes: ${PH_MCP_MAX_UPLOAD_BYTES}
+    max-upload-spool-bytes: ${PH_MCP_MAX_UPLOAD_SPOOL_BYTES}
+    max-archive-files: ${PH_MCP_MAX_ARCHIVE_FILES}
+    max-archive-expanded-bytes: ${PH_MCP_MAX_ARCHIVE_EXPANDED_BYTES}
+    max-archive-nesting: ${PH_MCP_MAX_ARCHIVE_NESTING}
+    max-archive-compression-ratio: ${PH_MCP_MAX_ARCHIVE_COMPRESSION_RATIO}
+    allowed-origins: ${PH_MCP_ALLOWED_ORIGINS}
+    allowed-hosts: ${PH_MCP_ALLOWED_HOSTS}
+    oauth-issuer: ${PH_MCP_OAUTH_ISSUER}
+    oauth-resource: ${PH_MCP_OAUTH_RESOURCE}
+    oauth-introspection-uri: ${PH_MCP_OAUTH_INTROSPECTION_URI}
+    oauth-introspection-client-id: ${PH_MCP_OAUTH_INTROSPECTION_CLIENT_ID}
+    oauth-introspection-client-secret: ${PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET}
+    downstream-service-name: ${PH_MCP_DOWNSTREAM_SERVICE_NAME}
+    downstream-service-secret: ${PH_MCP_DOWNSTREAM_SERVICE_SECRET}

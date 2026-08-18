@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- PocketHive MCP: replace the Node/stdio server with one Java 21 Streamable HTTP
+  service on the public ingress, with 49 scope-declared tools, nine connected
+  skills, portable PocketHive knowledge, and no HiveMind runtime dependency.
+- QA-led authoring: add principal-bound multi-workflow sessions, mandatory MCP
+  form elicitation with no inferred answers, explicit invalidation/recovery, and
+  independently callable operational tools.
+- Scenario publication: package exact committed Git directories in the VS Code
+  client, validate bounded ticketed ZIP uploads, retain byte-identical archives,
+  and require explicit `CREATE` or `REPLACE` with no fallback or ambiguous retry.
+- Authentication: extend the existing Auth Service as the single OAuth authority
+  for authorization code + PKCE S256, exact redirect/resource/audience/scope
+  validation, opaque-token introspection, replay rejection, and no refresh token.
+- VS Code: replace the legacy product Tree Views with one narrow environment-first
+  HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
+  Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
+- Deployment: install the same hardened non-root, read-only Java MCP image through
+  `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
+  upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
+- Verification: pass 125 Java tests, 57 extension tests, 100% PIT and Stryker
+  mutation gates, clean OSV/npm scans, packaged-VSIX checks, public-ingress OAuth/
+  MCP conformance, and exact mixed-file bundle validation/publication locally.
+- Documentation: add the canonical Java MCP guide, update active deployment and
+  extension guidance, supersede the retired Node plugin documents, and record the
+  local RST debrief and outstanding governed/human production-release checks.
+
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 

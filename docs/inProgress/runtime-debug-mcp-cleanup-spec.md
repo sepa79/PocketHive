@@ -21,9 +21,9 @@ HiveForge stays deployment-scope only. It must not clean individual bees.
 | Docker/Swarm read-only diagnostics | Orchestrator | Owns Docker socket and runtime log/inspect access |
 | RabbitMQ exact topology diagnostics | Orchestrator | Owns manifest/descriptor-based Rabbit reads |
 | Journal persistence and read-model APIs | Orchestrator | Owns journal storage/query contracts |
-| Agent-facing runtime summaries | `tools/pockethive-mcp` | Composes Orchestrator APIs for agents |
+| Agent-facing runtime summaries | `pockethive-mcp-service` | Composes Orchestrator APIs for agents |
 | Cleanup plan/execute | Orchestrator | Single runtime cleanup authority |
-| MCP tool surface | `tools/pockethive-mcp` | Agent facade, not runtime authority |
+| MCP tool surface | `pockethive-mcp-service` | Agent facade, not runtime authority |
 | Cleanup approval/policy | HiveGate | Governs destructive execute in production |
 | Cleanup evidence | Orchestrator | MCP must not keep a second evidence authority |
 

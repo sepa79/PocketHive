@@ -11,6 +11,24 @@
 
 When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
 
+## PocketHive MCP and VS Code
+
+The local Java MCP is available only through the supported UI ingress at
+`http://localhost:8088/mcp`. Remote environments use their exact HTTPS
+`/mcp` URL. Configure that URL in each agent or IDE client; do not configure a
+Java service port, the removed Node server, stdio, or a fallback endpoint.
+
+The PocketHive VS Code Activity Bar opens on Environments. Add the MCP URL,
+choose **Connect** to validate/authenticate/test it, then **Save & open**. The
+extension persists environment profiles locally and stores OAuth material in
+VS Code Secret Storage. Its Hive, Buzz, Journal, Scenarios, and Debug tabs all
+use the selected MCP connection.
+
+Scenario Bundle source remains in Git. From the Scenarios tab select a committed
+bundle directory; the extension uploads the exact committed regular files for
+Scenario Manager validation, then requires an explicit `CREATE` or `REPLACE`.
+See `docs/mcp/README.md` for the agent contract and publication flow.
+
 ## Docker Swarm mode (manager-only)
 - Swarm mode requires a **Docker Swarm manager**. Workers cannot create services, so the Orchestrator must connect to a manager node.
 - If you deploy the Orchestrator inside Swarm, schedule it on a manager node and mount the manager’s Docker socket.

@@ -14,6 +14,9 @@
     <postgresql.version>42.7.11</postgresql.version>
     <oracle.jdbc.version>23.8.0.25.04</oracle.jdbc.version>
     <commons-lang3.version>3.20.0</commons-lang3.version>
+    <jackson-databind.version>2.21.5</jackson-databind.version>
+    <log4j-api.version>2.25.5</log4j-api.version>
+    <nimbus-jose-jwt.version>9.37.4</nimbus-jose-jwt.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <maven.compiler.encoding>${project.build.sourceEncoding}</maven.compiler.encoding>
@@ -44,6 +47,7 @@
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
+    <module>pockethive-mcp-service</module>
     <module>network-proxy-manager-service</module>
     <module>tcp-mock-server</module>
     <module>request-builder-service</module>
@@ -54,6 +58,21 @@
   </modules>
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson-databind.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j-api.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.nimbusds</groupId>
+        <artifactId>nimbus-jose-jwt</artifactId>
+        <version>${nimbus-jose-jwt.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.tomcat.embed</groupId>
         <artifactId>tomcat-embed-core</artifactId>

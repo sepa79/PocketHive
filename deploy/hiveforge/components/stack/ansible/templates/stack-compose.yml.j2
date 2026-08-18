@@ -296,6 +296,10 @@ services:
       POCKETHIVE_AUTH_SERVICE_SESSION_TTL: PT8H
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: orchestrator-local-secret
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_NETWORK_PROXY_MANAGER_SECRET: network-proxy-manager-local-secret
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_mcp_service_secret }}
+      POCKETHIVE_AUTH_OAUTH_ISSUER: {{ pockethive_public_ingress }}/auth-service
+      POCKETHIVE_AUTH_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
+      POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_mcp_introspection_secret }}
     ports:
       - target: 8080
         published: 1083
@@ -310,6 +314,67 @@ services:
       timeout: 10s
       retries: 10
       start_period: 20s
+
+  pockethive-mcp:
+    image: {{ pockethive_docker_registry }}pockethive-mcp:{{ pockethive_version }}
+    environment:
+      PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}
+      PH_MCP_OWNER_API_BASE: http://ui:8088
+      PH_MCP_PROTOCOL_REVISION: "2025-11-25"
+      PH_MCP_STATE_MODE: FILE
+      PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
+      PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool
+      PH_MCP_OPEN_SESSION_TTL: PT2H
+      PH_MCP_CLOSED_SESSION_RETENTION: PT24H
+      PH_MCP_ATTEMPT_RETENTION: PT24H
+      PH_MCP_RECEIPT_RETENTION: P7D
+      PH_MCP_UPLOAD_TICKET_TTL: PT5M
+      PH_MCP_MAX_OPEN_SESSIONS: "100"
+      PH_MCP_MAX_OPEN_SESSIONS_PER_PRINCIPAL: "10"
+      PH_MCP_MAX_WORKFLOWS_PER_SESSION: "20"
+      PH_MCP_MAX_STATE_BYTES: "67108864"
+      PH_MCP_MAX_CONCURRENT_UPLOADS_PER_PRINCIPAL: "2"
+      PH_MCP_MAX_CONCURRENT_UPLOADS: "8"
+      PH_MCP_MAX_UPLOAD_BYTES: "16777216"
+      PH_MCP_MAX_UPLOAD_SPOOL_BYTES: "67108864"
+      PH_MCP_MAX_ARCHIVE_FILES: "1000"
+      PH_MCP_MAX_ARCHIVE_EXPANDED_BYTES: "134217728"
+      PH_MCP_MAX_ARCHIVE_NESTING: "16"
+      PH_MCP_MAX_ARCHIVE_COMPRESSION_RATIO: "100"
+      PH_MCP_ALLOWED_ORIGINS: {{ pockethive_public_ingress }}
+      PH_MCP_ALLOWED_HOSTS: {{ pockethive_public_host }}
+      PH_MCP_OAUTH_ISSUER: {{ pockethive_public_ingress }}/auth-service
+      PH_MCP_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
+      PH_MCP_OAUTH_INTROSPECTION_URI: http://auth-service:8080/oauth/introspect
+      PH_MCP_OAUTH_INTROSPECTION_CLIENT_ID: pockethive-mcp
+      PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_mcp_introspection_secret }}
+      PH_MCP_DOWNSTREAM_SERVICE_NAME: pockethive-mcp
+      PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_mcp_service_secret }}
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/pockethive-mcp:/var/lib/pockethive-mcp/state
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+      - /var/lib/pockethive-mcp/spool:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    pids_limit: 128
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
   orchestrator:
     image: {{ pockethive_docker_registry }}orchestrator:{{ pockethive_version }}

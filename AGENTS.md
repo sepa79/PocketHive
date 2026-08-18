@@ -132,13 +132,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - PocketHive agent work should use the globally configured HiveMind project memory when available. Use the workflow in `docs/ai/HIVEMIND_WORKFLOW.md` with `project_id=pockethive`; do not create repo-local HiveMind storage or start a local HiveMind API as an implicit fallback.
 - `build-hive.sh` in the repo root is the **canonical entrypoint** for local PocketHive rebuild/redeploy cycles: it rebuilds worker/service artifacts as needed and restarts the local `docker-compose` stack. Prefer using it over ad‑hoc `docker`/`mvn` commands when you want a full local refresh.
 - For production-like HiveForge swarm deploys, use the `docs/HIVEFORGE.md` Agent MCP Deploy Checklist. Deploy through HiveForge MCP only; do not inspect Proxmox/hosts or run direct Docker/SSH commands as a deployment workaround.
-- `tools/pockethive-mcp/` is the **canonical PocketHive MCP server** for agents and IDEs:
-  - Use it for scenario authoring, swarm lifecycle, workflow evidence, environment status, runtime debug, worker logs/version, topology drift, manifest validation, and governed runtime cleanup.
-  - Start stdio with `npm run mcp:start`.
-  - Start Streamable HTTP with `npm run mcp:start:http`; clients connect to `http://localhost:3100/mcp`.
-  - Runtime cleanup tools are exposed here as `runtime_cleanup_plan` and `runtime_cleanup_execute` by default. Register `runtime_cleanup_execute` behind HiveGate for governed approval and execution.
-  - Worker/runtime diagnostics are exposed here as `runtime_tail_worker_logs`, `runtime_get_worker_version`, `runtime_list_workers`, `runtime_inspect_worker`, `runtime_diff_swarm_runtime`, `runtime_control_plane_status`, `runtime_rabbit_topology_snapshot`, `runtime_swarm_timeline`, and `runtime_manifest_validate` by default.
-  - Dotted conceptual names like `runtime.cleanup.plan` require `PH_MCP_TOOL_NAME_MODE=legacy` or `both`; default agent configs should use underscore tool names.
+- `pockethive-mcp-service/` is the **canonical PocketHive MCP server** for agents and IDEs:
+  - Connect only through the selected environment's public ingress, for example `http://localhost:8088/mcp` locally or `https://<environment>/mcp` remotely.
+  - Use its generated knowledge, capabilities, complete tool catalogue, and connected skills for scenario authoring, swarm lifecycle, environment status, runtime diagnostics, evidence, and governed cleanup. See `docs/mcp/README.md`.
+  - It is Java 21 Streamable HTTP only. The removed Node server, stdio transport, local process spawning, dotted aliases, and bundle-root configuration are not compatibility paths.
+  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires the governed HiveGate path; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
 - `tools/mcp-orchestrator-debug/` is lower-level debug tooling for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is legacy/additive debug MCP tooling. Do not configure it as the product PocketHive MCP surface for normal agent work.

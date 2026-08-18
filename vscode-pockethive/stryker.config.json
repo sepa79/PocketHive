@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "node --test out/test/*.test.js"
+  },
+  "buildCommand": "npm run build:mutation",
+  "mutate": [
+    "src/connection/connectionAttempt.ts",
+    "src/connection/profile.ts",
+    "src/debug/actions.ts",
+    "src/scenarios/gitBundlePackager.ts",
+    "src/scenarios/scenarioBundleCoordinator.ts",
+    "src/webview/messages.ts"
+  ],
+  "reporters": ["clear-text", "progress", "json"],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
+  "coverageAnalysis": "off",
+  "concurrency": 1,
+  "cleanTempDir": true
+}

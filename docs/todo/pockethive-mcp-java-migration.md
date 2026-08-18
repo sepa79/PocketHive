@@ -2,15 +2,16 @@
 
 ## Status
 
-`PROPOSED / TODO`
+`IMPLEMENTED / LOCAL CUTOVER VERIFIED`
 
-This is the implementation specification for replacing the Node.js PocketHive
-MCP server with one Java 21 service. It is not evidence that the migration has
-been delivered.
+This is the implementation specification and local acceptance record for
+replacing the Node.js PocketHive MCP server with one Java 21 service. HiveForge
+artifacts are delivered and contract-validated; a remote deployment remains a
+separate governed operation through HiveGate/HiveForge.
 
-## Decision required
+## Approved design
 
-Approve a minimal Java migration of the existing PocketHive MCP with these
+Implement a minimal Java migration of the existing PocketHive MCP with these
 deliberate boundary changes:
 
 1. Git remains the single source of truth for editable Scenario Bundle source
@@ -29,12 +30,17 @@ deliberate boundary changes:
 5. HiveMind is not a dependency of the MCP. The service must install, start,
    and provide its full contract when HiveMind is absent.
 6. One Java MCP image is deployed locally by `build-hive.sh` or remotely by
-   HiveForge. Clients connect to `https://<environment>/mcp` through the
-   existing PocketHive public ingress, which transparently proxies the pinned
-   MCP transport to the Java service.
+   HiveForge. Remote clients connect to `https://<environment>/mcp`; an explicit
+   local-loopback profile may use HTTP. Both use the existing PocketHive public
+   ingress, which transparently proxies the pinned MCP transport to the Java
+   service. There is no scheme or endpoint fallback.
 7. The first release pins MCP `2025-11-25` and the official Java SDK version
    proved by Phase 0. MCP `2026-07-28` is a future, explicit protocol migration,
    not a negotiated fallback.
+8. The VS Code extension replaces its five product Tree Views with one modern,
+   narrow HTML `WebviewView`. It opens on locally persisted MCP environments,
+   uses one explicit `Connect` flow, then presents Hive, Buzz, Journal,
+   Scenarios, and Debug as top tabs for the opened environment.
 
 The main accepted trade-off is that Scenario Manager replace remains
 last-write-wins because it has no atomic expected-version precondition. Git
@@ -46,14 +52,13 @@ provenance, restart recovery, cross-client resume, optimistic concurrency, and
 single-use upload controls without adding a database or changing a PocketHive
 service.
 
-Remote authentication has one blocking prerequisite. The implemented
-`docs/architecture/AUTH_SERVICE_API_SPEC.md` owns opaque PocketHive user and
-service-principal tokens; it is not an MCP OAuth 2.1 authorization-server
-contract. Phase 0 must approve a separate, contract-first Auth Service extension
-that keeps Auth Service as the identity/grant single source of truth and adds the
-MCP-required authorization flow, resource indicators, scopes, metadata, and
-pre-registered client contract. This specification does not treat the current
-opaque-token API as standards-compliant OAuth or silently introduce another
+The former remote-authentication prerequisite is delivered contract-first in
+`docs/architecture/AUTH_SERVICE_API_SPEC.md`. Auth Service remains the single
+identity and grant authority and now owns authorization-code + PKCE S256,
+resource indicators, exact redirect matching, scopes, metadata, opaque tokens,
+introspection, and the pre-registered VS Code client. The MCP accepts only that
+audience-bound contract and obtains separate downstream service-principal
+tokens; it does not reclassify legacy unscoped tokens or introduce another
 identity authority.
 
 ## Outcome
@@ -64,6 +69,8 @@ Bundle format. The connected agent can then:
 
 - learn PocketHive terminology, architecture, capabilities, constraints, and
   tool usage from the MCP;
+- connect from the VS Code Side Bar through an environment-first HTML interface
+  that remains usable between 280 and 420 CSS pixels wide;
 - discover and call retained deployment, swarm lifecycle, configuration,
   diagnostics, evidence, and cleanup tools independently of the wizard;
 - keep multiple independent Scenario Bundle workflows in one agent session;
@@ -141,6 +148,17 @@ Bundle format. The connected agent can then:
 24. The MCP must completely receive and validate an upload before invoking a
     Scenario Manager mutation. Digest mismatch, archive rejection, quota failure,
     or interrupted upload must invoke neither `CREATE` nor `REPLACE`.
+25. The VS Code webview is a presentation adapter. It receives typed view models
+    from the extension host and never holds bearer tokens, calls PocketHive
+    owners directly, or becomes an authority for environment, workflow, runtime,
+    or approval state.
+26. The VS Code `Connect` action is one user action with ordered, separately
+    observable endpoint validation, authentication, and MCP connection testing.
+    It must not merge their outcomes, test after decline or cancellation, or
+    fall back to another endpoint or authentication mode.
+27. `ui-v2/public/logo.svg` is the canonical PocketHive brand asset. VS Code
+    package assets are deterministic platform-specific derivatives, never a
+    separately hand-maintained logo design.
 
 ## Scope
 
@@ -151,9 +169,9 @@ Bundle format. The connected agent can then:
 - authenticated MCP `2025-11-25` Streamable HTTP transport;
 - transparent MCP and binary-upload routes through the existing PocketHive
   public ingress;
-- an MCP OAuth protected-resource adapter, principal-scoped discovery, and
-  explicit downstream credential isolation, conditional on the approved Auth
-  Service prerequisite;
+- an MCP OAuth protected-resource adapter, principal-scoped catalogue
+  resources, and explicit downstream credential isolation backed by Auth
+  Service;
 - explicit deployment binding to one PocketHive public ingress;
 - migration of existing justified tool and workflow behaviour;
 - independently callable deployment, swarm lifecycle, live configuration,
@@ -172,6 +190,8 @@ Bundle format. The connected agent can then:
 - prompt-injection and untrusted-content controls;
 - correlated OpenTelemetry telemetry and explicit operation oversight;
 - a thin VS Code MCP HTTP client with locally persisted connection profiles;
+- one responsive VS Code HTML `WebviewView` with environment-first navigation,
+  compact top tabs, and a single-column debug drill-down;
 - local and HiveForge deployment of the same image; and
 - unit, property, integration, acceptance, security, mutation, agentic, and
   Rapid Software Testing evaluation.
@@ -179,8 +199,6 @@ Bundle format. The connected agent can then:
 ### Excluded
 
 - changes to Scenario Manager, Orchestrator, or their persistence models;
-- implementation of the separately approved Auth Service OAuth extension; it is
-  a blocking prerequisite work package, not hidden MCP scope;
 - an MCP-owned Scenario Bundle repository or version store;
 - server-side Git access, repository checkout, directory scanning, file editing,
   or bundle-root configuration;
@@ -198,7 +216,10 @@ Bundle format. The connected agent can then:
 - dynamic remote skill download, executable skill hooks, or skill scripts;
 - hidden backward-compatibility aliases or config fallbacks;
 - retaining unsupported tools solely to reach tool-count parity; and
-- changing the VS Code extension away from its supported TypeScript host.
+- changing the VS Code extension away from its supported TypeScript host;
+- retaining the current five product Tree Views or spawning a local MCP server
+  after atomic cutover; and
+- a second PocketHive logo source or hand-maintained VS Code logo geometry.
 
 ## Current and target boundaries
 
@@ -214,6 +235,7 @@ Bundle format. The connected agent can then:
 | Owner-query and runtime-lifecycle tools | Mixed tool-specific behaviour | Application-stateless calls to the owning API; no authoring-session prerequisite |
 | Agent context | Assumes repository knowledge | Generated MCP resources and connected skills |
 | Environment selection | Server/IDE PocketHive endpoint settings | One immutable endpoint per MCP instance; VS Code stores MCP connection profiles |
+| VS Code product surface | Five Tree Views plus settings and a locally spawned MCP | One narrow HTML `WebviewView`; extension host connects to the selected MCP HTTP endpoint |
 | Public transport | Direct stdio or service-specific connection | One authenticated `/mcp` route through PocketHive public ingress |
 | Protocol ownership | Runtime-specific | Java MCP validates and implements pinned `2025-11-25`; ingress is transparent |
 | Project memory | Optional external tooling | Optional external tooling; never an MCP dependency |
@@ -318,11 +340,16 @@ One MCP instance binds to exactly one PocketHive environment.
 Required production configuration:
 
 - `PH_MCP_POCKETHIVE_INGRESS`: one validated public PocketHive ingress URI;
+- `PH_MCP_OWNER_API_BASE`: one fixed deployment-internal base URI for the same
+  PocketHive ingress adapter; this separates client-visible identity from
+  container routing and cannot be selected or overridden by a tool caller;
 - `PH_MCP_PROTOCOL_REVISION=2025-11-25`: the only accepted first-release MCP
   revision;
 - `PH_MCP_STATE_MODE=FILE`: explicit persistence mode;
 - `PH_MCP_STATE_PATH`: dedicated persistent-volume path;
 - `PH_MCP_UPLOAD_SPOOL_PATH`: dedicated quarantined temporary-upload path;
+- `PH_MCP_UPLOAD_TICKET_TTL`: explicit ISO-8601 lifetime for a single-use
+  validation or publication upload ticket;
 - `PH_MCP_OPEN_SESSION_TTL`: explicit ISO-8601 duration;
 - `PH_MCP_CLOSED_SESSION_RETENTION`: explicit ISO-8601 duration;
 - `PH_MCP_ATTEMPT_RETENTION`: explicit ISO-8601 duration;
@@ -400,9 +427,41 @@ and [Java SDK release](https://github.com/modelcontextprotocol/java-sdk/releases
 PocketHive records their pinned versions and digests; it does not copy or fork
 their schemas into a second authority.
 
+### Pinned Phase 0 protocol baseline
+
+The first-release implementation baseline is:
+
+| Item | Pin |
+|---|---|
+| MCP specification | `2025-11-25`, tag object `38c84e9f93ad191d9eb26d92b945d17bd0efcaf3` |
+| Official protocol schema | `schema/2025-11-25/schema.json`, SHA-256 `1ffe4c5577974012f5fa02af14ea88df4b7146679df1abaaad497c8d9230ca8a` |
+| Official Java SDK | `2.0.0`, annotated tag `7fcb504ce1d7d0898fbfc341d0b5389a7a9623ff`, commit `f56d038409473210c59d6eddef09c4b5cd36042b` |
+| JSON binding | `mcp-json-jackson2:2.0.0`; no second MCP JSON mapper |
+| Server transport | SDK Servlet Streamable HTTP provider, stateful session mode |
+| Client session termination | Supported through authenticated HTTP `DELETE` and tested explicitly |
+
+The build records resolved artifact digests in the immutable image manifest and
+fails its dependency-verification gate if they change. A Maven version pin is
+not, by itself, supply-chain verification.
+
+The first-release client conformance matrix is capability-based and explicit:
+
+| Client class | Direct read/operation tools | QA interview | Ticket upload/publication |
+|---|---|---|---|
+| PocketHive VS Code extension shipped by this repository | Required | Required through form elicitation | Required through the extension-host binary upload adapter |
+| Other MCP `2025-11-25` client | Supported only after the published conformance suite passes for the exact client/version | Supported only when form elicitation, accept/decline/cancel, and server identity presentation pass | Supported only when a registered trusted host adapter can stream the ticket upload without exposing credentials or bytes to model context |
+| Client without a required capability | Only the conforming subset advertised for that principal/client | Fails `ELICITATION_CAPABILITY_REQUIRED` | Fails `CLIENT_CAPABILITY_REQUIRED` |
+
+Registration is not a support claim. The server publishes the exact capability
+requirements and does not simulate a missing client feature. The release
+evidence names every tested client/version; an untested version remains outside
+the supported matrix until the suite is rerun.
+
 ## Domain model
 
-The terms below are proposed until this specification is approved.
+The following terms are normative for implementation. Their wire schemas live
+in the descriptor-owned contract catalogue; prose here defines their semantics
+and must not be copied into competing DTOs or validators.
 
 ### Agent Session — PROPOSED
 
@@ -622,13 +681,46 @@ approval.
 
 ### MCP Connection Profile — PROPOSED
 
-A VS Code `McpConnectionProfile` contains an ID, display name, MCP URL,
-authentication mode, and secret reference. Non-secret profiles use VS Code
-`globalState` without settings sync, active selection uses `workspaceState`,
-and credentials use `SecretStorage`.
+A VS Code `McpConnectionProfile` is a locally persisted connection definition.
+It contains an ID, display name, canonical MCP URL, explicit endpoint-security
+mode (`REMOTE_HTTPS` or `LOCAL_LOOPBACK_HTTP`), explicit authentication mode,
+and a key for any associated secret material. Non-secret profiles use VS Code
+`globalState` without settings sync, active selection uses `workspaceState`, and
+credentials or OAuth session material use `SecretStorage`. Remote profiles must
+use HTTPS. Plain HTTP is valid only for an explicitly selected loopback profile
+whose resolved host remains loopback; it never falls back from HTTPS.
+
+Live connection status, principal, server identity, PocketHive version,
+capability fingerprint, and observation time are transient owner observations.
+They are never persisted as facts in the profile. Opening a saved profile
+therefore reconnects and revalidates it; it does not display a cached
+`Connected` claim.
 
 This is distinct from a PocketHive SUT environment and from Scenario Bundle
 environment configuration.
+
+### MCP Connection Attempt — PROPOSED
+
+An `McpConnectionAttempt` is extension-host coordination for the one visible
+`Connect` action. It belongs to one unsaved or saved `McpConnectionProfile`,
+holds no bearer token, and has one explicit state:
+
+| Current state | Allowed next state |
+|---|---|
+| `EDITING` | `AUTHENTICATING` after local URL and form validation succeeds |
+| `AUTHENTICATING` | `TESTING`, `AUTHENTICATION_FAILED`, or `CANCELLED` |
+| `TESTING` | `READY_TO_SAVE`, `CONNECTION_TEST_FAILED`, `AUTHENTICATION_FAILED`, or `CANCELLED` |
+| `AUTHENTICATION_FAILED` | `AUTHENTICATING` only through `Sign in again` |
+| `CONNECTION_TEST_FAILED` | `TESTING` only through `Retry test`; an expired session moves to `AUTHENTICATION_FAILED` |
+| `READY_TO_SAVE` | `SAVED` through `Save & open` or `CANCELLED` |
+| `SAVED`, `CANCELLED` | Terminal |
+
+`Connect` always performs endpoint validation, the one configured OAuth flow,
+then an authenticated MCP test. It is one user action, not one merged result.
+The UI reports authentication and connection-test outcomes separately. Decline
+or cancellation invokes no connection test. Failure preserves no inferred
+success and never tries another URL, transport, protocol, or authentication
+mode.
 
 ## QA-led Scenario Bundle workflow
 
@@ -991,8 +1083,10 @@ failure handling, and links to canonical resources. Their frontmatter, name,
 description, compatibility, references, digest, and bounded size are validated
 at build time. They do not contain secrets, hidden defaults, copied authority
 data, approval decisions, executable remote hooks, or scripts. Skills and
-static resources are build-time projections of canonical documents and include
-the source and build digests; the runtime never downloads new instructions.
+static resources are build-time projections of canonical documents. Each
+knowledge document carries its canonical source path and content digest; the
+server publishes its build version and catalogue digest separately. The
+runtime never downloads new instructions.
 
 The following MCP resources let an agent work correctly in a repository with
 no PocketHive files:
@@ -1006,10 +1100,13 @@ no PocketHive files:
 Static content is generated at build time from canonical PocketHive documents,
 including `docs/ARCHITECTURE.md`,
 `docs/architecture/workerCapabilities.md`,
-`docs/ORCHESTRATOR-REST.md`, and relevant contract schemas. Live capabilities
-come from Scenario Manager and Orchestrator owner APIs. The resources explain
-authority boundaries, supported capability names, required tools, failure
-semantics, and source provenance.
+`docs/ORCHESTRATOR-REST.md`, and relevant contract schemas. Current MCP identity,
+binding, grant, state mode, protocol revision, and catalogue digest come from
+`pockethive://capabilities/current`. Owner state and availability remain live
+owner-tool reads; the capability resource does not cache or mirror Scenario
+Manager or Orchestrator state. The resources explain authority boundaries,
+supported capability names, required tools, failure semantics, and source
+provenance.
 
 Do not add a knowledge database, crawler, RAG pipeline, embedding model, or six
 new discovery tools for the first release. Server instructions, typed tools,
@@ -1025,40 +1122,210 @@ empty sets for:
 - `duplicateSkillIds`; and
 - `unresolvableSkillResources`.
 
-Tool, resource, and skill catalogue ordering is deterministic. `tools/list`
-supports the pinned protocol's cursor pagination and is filtered by the
-authenticated principal's scopes and deployment-approved descriptor manifest.
-It never advertises an unauthorised tool. A visible tool is not removed merely
-because an owner is transiently unhealthy; current owner availability and its
-observation time are data in `pockethive://capabilities/current`, and invocation
-fails with the exact typed owner-unavailable result.
+Tool, resource, and skill catalogue ordering is deterministic. The first
+release uses the official Java SDK's immutable complete `tools/list`; every
+descriptor declares its required scope and every invocation reauthorises that
+scope. Principal-filtered progressive discovery is the canonical
+`pockethive://tools/catalogue` and `pockethive://skills/catalogue` resource
+pair. The static MCP list is not an authorisation decision.
 
-If deployment or reauthorisation changes the visible tool list during an MCP
-transport session, the server declares `listChanged` support and sends
-`notifications/tools/list_changed`. Transient owner health does not churn the
-catalogue. No availability change triggers adapter or environment fallback. The
-supported-client matrix proves cursor pagination, resource reads, resource
-links, skill-resource retrieval, and list-change handling where used; it never
-assumes a non-standard automatic skill loader.
+The first release does not advertise `listChanged` and does not implement a
+custom `tools/list` dispatcher merely to add server-side pagination or
+principal filtering that the pinned SDK does not provide. The catalogue is
+immutable for the process lifetime, so a deployment or grant change requires a
+new authenticated connection. Owner health never changes either catalogue;
+owner reads and calls fail with exact typed owner errors. No availability
+change triggers adapter or environment fallback. The supported-client matrix
+proves complete deterministic tool listing, resource reads, skill-resource
+retrieval, and scope enforcement; it never assumes a non-standard automatic
+skill loader.
 
 ## VS Code extension
 
 The VS Code extension remains TypeScript because it runs in the VS Code
-extension host. It becomes a thin authenticated MCP HTTP client:
+extension host. It becomes a thin authenticated MCP HTTP client with one HTML
+`WebviewView` registered as `pockethive.companion` beneath the PocketHive
+Activity Bar container. This replaces the current Hive, Buzz, Journal,
+Scenarios, and Settings Tree Views as product navigation. Command Palette
+commands may remain when they are independently useful, but they call the same
+application services as the webview and cannot become a second behaviour path.
 
-- it does not spawn the Node or Java MCP server;
-- it does not use stdio;
-- it stores MCP connection profiles locally as defined above;
-- it may cache active session/workflow IDs and revisions for navigation, but it
-  does not persist or reconstruct authoritative workflow state;
-- it removes direct PocketHive, RabbitMQ, WireMock, TCP Mock, and other backend
-  URLs;
-- it removes MCP executable path, transport selector, and bundle-root lists;
-- deployed scenarios and capabilities come through MCP resources/tools;
-- authoring files remain in the active Git workspace; and
-- “Upload committed bundle” packages the selected committed path and performs
-  the ticketed upload flow using one owner-only bounded temporary ZIP outside
-  the workspace, then deletes it at the terminal outcome.
+The target follows the proven HiveGate Companion pattern without creating a
+runtime dependency on HiveGate: local TypeScript, HTML, and CSS; a strict
+Content Security Policy; typed host/webview messages; and domain/application
+logic outside presentation. Do not add React, another UI framework, remote
+scripts, remote styles, remote fonts, or a second package manager for the first
+release.
+
+Use narrow ports:
+
+| Concern | Owner |
+|---|---|
+| Profile persistence and active selection | `McpConnectionProfileRepository` adapter over VS Code storage |
+| OAuth session | `AuthenticationPort` adapter over the approved MCP OAuth contract and `SecretStorage` |
+| MCP initialisation, resources, and tools | `McpClientPort` Streamable HTTP adapter |
+| Page and tab state | Presentation controller; transient except active profile/tab navigation hints |
+| HTML rendering | Pure view-model-to-markup functions and a local webview client |
+| Host/webview messages | One discriminated-union contract validated on both boundaries |
+
+The webview receives only bounded, redacted, serialisable view models. The
+extension host owns authentication, MCP sessions, tool calls, profile storage,
+temporary ZIP handling, and cancellation. The webview never receives a bearer
+token, secret reference value, upload bytes, unbounded log body, owner URL, or
+raw unvalidated owner response.
+
+### Narrow layout contract
+
+The primary surface is the VS Code Side Bar, not an editor-width dashboard.
+Design and acceptance tests use 280, 320, and 420 CSS-pixel widths plus VS Code
+zoom and font scaling. The layout has:
+
+- one content column and no page-level horizontal scrolling;
+- a compact sticky header and sticky top tab strip;
+- 14-pixel default body text, visible keyboard focus, and controls at least 32
+  CSS pixels high;
+- wrapped descriptions and ellipsised URLs, IDs, and hashes with an accessible
+  full-value title or detail action;
+- vertical scrolling with the primary action kept in normal reading order;
+- reduced-motion support and no meaning conveyed by colour alone; and
+- a horizontally keyboard-scrollable tab strip only below 280 CSS pixels;
+  tabs are never silently removed or moved into an inferred navigation mode.
+
+Wider editor panels may add whitespace but must not switch to a separate
+multi-column product design. Debug results, forms, and lists remain one column
+so the Side Bar contract is the single responsive source of truth.
+
+### Environments page and connection flow
+
+The first page is always `Environments`. It lists locally persisted
+`McpConnectionProfile` records and provides `Add environment`. Each row shows
+the display name, safely truncated MCP URL, last live connection outcome when
+observed in the current extension process, verified principal label when
+connected, `Open`, and an overflow menu for explicit edit/remove actions.
+
+The add/edit flow has three visible stages: `Endpoint`, `Connect`, and `Ready`.
+The user supplies the name and exact MCP URL. One primary `Connect` button then
+drives the `McpConnectionAttempt` state machine:
+
+1. validate and canonicalise the entered MCP URL against the profile's explicit
+   endpoint-security mode without endpoint discovery or scheme fallback;
+2. run the one configured OAuth flow;
+3. after successful authentication, initialise MCP `2025-11-25`, validate the
+   expected PocketHive server identity, and read the minimum authorised
+   capability resource; and
+4. report authentication and connection-test results as separate status rows.
+
+`Save & open` is enabled only in `READY_TO_SAVE`. It persists the non-secret
+profile, selects it for the workspace, and opens its environment workspace.
+Authentication cancellation or failure exposes `Sign in again` and performs no
+test. A test failure exposes `Retry test` and reuses the still-valid OAuth
+session; an expired session moves explicitly to `AUTHENTICATION_FAILED`. Neither
+action changes the URL, protocol, transport, or authentication mode.
+
+The status labels have exact meanings:
+
+| Label | Meaning |
+|---|---|
+| `Connected` | This extension process has an authenticated, initialised MCP connection with a current successful capability observation |
+| `Needs sign-in` | No valid OAuth session exists for the profile |
+| `Unavailable` | The explicit MCP test failed; show the typed failure and observation time |
+| `Not connected` | The saved profile has not been tested in this extension process |
+
+A cached profile never renders `Connected` before revalidation. Selecting a
+different profile closes the prior transport session, cancels only cancellable
+client work, clears transient page results, and establishes the selected
+connection explicitly. It never carries a principal, capability observation,
+swarm selection, or Debug result across environments.
+
+### Open environment workspace
+
+`Open` and `Save & open` replace the first page with one environment workspace.
+Its header shows Back to Environments, profile name, live connection status,
+verified principal label, refresh, and explicit overflow actions. A sticky top
+strip contains exactly these tabs:
+
+| Tab | Purpose and MCP source |
+|---|---|
+| `Hive` | Swarm list, lifecycle, health, and configuration tools |
+| `Buzz` | Bounded hive-wide event timeline |
+| `Journal` | Bounded per-swarm journal and evidence views |
+| `Scenarios` | Scenario Manager catalogue, validation, publication, and Git-workspace handoff |
+| `Debug` | Orchestrator-backed runtime diagnostics and governed cleanup |
+
+The active tab is presentation state, not MCP or owner state. Refresh re-reads
+the current owner-backed data and always shows its observation time. Background
+refresh is bounded, pauses while hidden, and cannot mutate or silently retry.
+An unavailable owner produces the exact typed state within the selected tab;
+the client never switches environment, endpoint, owner, or adapter.
+
+### Debug tab
+
+Debug uses a single-column drill-down. The user first selects an exact swarm
+and, where required, run/runtime. The page then shows authorised actions from
+the discovered `ToolDescriptor` catalogue. Selecting one action renders its
+bounded result below the action list; large output uses the authorised expiring
+resource link defined by the tool contract.
+
+| UI action | Canonical MCP tool |
+|---|---|
+| `Workers` | `runtime_list_workers` |
+| `Logs` | `runtime_tail_worker_logs` |
+| `Versions` | `runtime_get_worker_version` |
+| `Inspect` | `runtime_inspect_worker` |
+| `Runtime drift` | `runtime_diff_swarm_runtime` |
+| `Control plane` | `runtime_control_plane_status` |
+| `Rabbit topology` | `runtime_rabbit_topology_snapshot` |
+| `Timeline` | `runtime_swarm_timeline` |
+| `Manifest` | `runtime_manifest_validate` |
+| `Cleanup plan` | `runtime_cleanup_plan` |
+
+Logs require an explicit bounded tail and show target plus observation time.
+Worker-specific actions remain disabled until an exact discovered worker is
+selected. The webview never guesses a worker, queue, run, or manifest.
+
+`Cleanup plan` is visually separated as a guarded action. The plan renders the
+exact target, candidate set, running-resource state, and hash before any execute
+action is offered. `runtime_cleanup_execute` is not a top-level Debug action; it
+is available only from that reviewed plan, remains governed by HiveGate, and
+uses the plan-bound inputs defined by the canonical tool contract. Decline,
+expiry, stale hash, or cancellation returns to the plan without executing or
+automatically requesting approval again.
+
+### Webview security, accessibility, and assets
+
+The webview must:
+
+- set `default-src 'none'`, load only extension-local images/styles and one
+  nonce-bound local module script, and use no inline event handlers;
+- validate every inbound and outbound message against the canonical
+  discriminated-union contract and reject unknown types or fields;
+- render untrusted values through text nodes, never `innerHTML`, and apply the
+  same output bounds and redaction as the tool contract;
+- support keyboard-only operation, logical focus restoration, screen-reader
+  labels, `aria-live` status, VS Code high-contrast themes, and 200% zoom; and
+- dispose listeners, MCP subscriptions, timers, resource links, and temporary
+  results when the view or selected environment closes.
+
+`ui-v2/public/logo.svg` remains the single source for PocketHive brand geometry
+and colour. The packaging build deterministically produces:
+
+- a mark-only, `currentColor` derivative at
+  `vscode-pockethive/resources/hive.svg` for the Activity Bar; and
+- a bounded full-colour mark derivative for the webview header.
+
+Generated derivatives carry source path and digest metadata, are not edited by
+hand, and are checked during packaging. The Activity Bar icon uses the exact
+PocketHive hexagon/network/lens geometry and allows VS Code to apply active,
+inactive, hover, and high-contrast colour.
+
+The extension does not spawn the Node or Java MCP server, use stdio, or retain
+MCP executable paths, transport selectors, bundle-root lists, direct
+PocketHive/RabbitMQ/WireMock/TCP Mock URLs, or legacy product Tree Views after
+cutover. Deployed scenarios and capabilities come through MCP resources/tools.
+Authoring files remain in the active Git workspace. `Upload committed bundle`
+packages the selected committed path and performs the ticketed upload flow
+using one owner-only bounded temporary ZIP outside the workspace, then deletes
+it at the terminal outcome.
 
 This removes Node/npm from the privileged MCP server, not from VS Code itself.
 Extension dependencies must remain minimal, pinned, locked, audited, and
@@ -1167,9 +1434,10 @@ These rules remain owned by the Auth Service contract and official MCP/OAuth
 specifications; the MCP specification records the release gate rather than
 copying their wire schemas.
 
-Required scopes are generated from `ToolDescriptor`. Tool, resource, and skill
-discovery is filtered to the principal's scopes, and invocation rechecks the
-same contract. The inbound MCP bearer token is never forwarded to Scenario
+Required scopes are generated from `ToolDescriptor`. Principal-oriented tool
+and skill resources are filtered to the caller's scopes; the immutable protocol
+tool list exposes each descriptor's required scope, and invocation always
+rechecks it. The inbound MCP bearer token is never forwarded to Scenario
 Manager or Orchestrator. The Java MCP uses the existing Auth Service
 `POST /api/auth/service/login` contract to obtain its separately issued,
 least-privilege service-principal token. Phase 0 must define the exact grants and
@@ -1268,12 +1536,22 @@ Cover:
   workflow, upload ticket, receipt, or mirrored operation state;
 - proof that direct publication uses only its defined ticket and receipt state
   and does not require an authoring workflow;
+- `McpConnectionAttempt` transitions, one ordered `Connect` action, separate
+  authentication/test outcomes, cancellation before test, and save gating;
+- connection-profile storage boundaries, environment switching, transient live
+  status, and rejection of cross-environment principal, capability, selection,
+  and result leakage;
+- exhaustive typed host/webview message decoding, view-model redaction, unknown
+  message rejection, focus restoration, and disposal behaviour;
+- exact Debug label-to-tool mapping, explicit target selection, bounded log
+  inputs, and proof that cleanup execute cannot be reached without a current
+  reviewed plan;
 - every requirement disposition and forbidden inference;
 - deterministic next-question selection;
 - untrusted-content classification, prompt-injection rejection, output-schema
   validation, escaping, and bounded result envelopes;
-- scope-filtered discovery, descriptor digest checks, and downstream credential
-  isolation;
+- scope-filtered catalogue resources, invocation checks, descriptor digest
+  checks, and downstream credential isolation;
 - capability reconciliation and stale fingerprints;
 - deterministic `BundleFileManifest` ordering and rejection of missing,
   additional, renamed, or byte-changed files;
@@ -1305,7 +1583,7 @@ Use the official interfaces and production-shaped adapters to prove:
   authentication on every protected request, missing-session `400`, terminated
   session `404`, selected `DELETE` behaviour, and invalid-origin `403`;
 - OAuth Protected Resource Metadata, issuer/audience/resource validation,
-  principal-scoped discovery, pre-registered VS Code authentication, and proof
+  principal-scoped catalogue resources, pre-registered VS Code authentication, and proof
   that inbound bearer tokens are not forwarded downstream;
 - PKCE `S256`, exact redirect URI, single-use short-lived `state`, authorization
   code replay rejection, and the approved refresh-token policy;
@@ -1329,9 +1607,17 @@ Use the official interfaces and production-shaped adapters to prove:
 - direct-tool execution before and after restart without authoring state, and
   owner-operation status lookup without mirrored MCP state;
 - HiveGate-bound mutation intent;
-- generated resources, progressive skill retrieval, deterministic cursor
-  pagination, list-change notification, catalogue digest pinning, and
-  large-result resource links;
+- generated resources, progressive scope-filtered skill retrieval,
+  deterministic complete tool listing, catalogue digest pinning, and bounded
+  results;
+- the VS Code `Connect` sequence through public ingress, including OAuth cancel,
+  auth failure, test failure, retry-test, expired-session reauthentication,
+  server-identity rejection, and successful save/open;
+- one `pockethive.companion` webview contribution, strict CSP, local-only
+  resources, typed messages, SecretStorage isolation, and absence of legacy
+  product Tree Views or local MCP process spawning in the packaged VSIX;
+- deterministic Activity Bar and webview logo derivatives from
+  `ui-v2/public/logo.svg`, including package-content and source-digest checks;
 - OpenTelemetry propagation, redaction, and oversight events; and
 - the same container configuration path locally and in HiveForge.
 
@@ -1362,8 +1648,8 @@ At minimum prove:
 11. The MCP starts and all non-memory tools work when HiveMind is absent.
 12. A client without elicitation or binary upload support receives the explicit
     capability error.
-13. VS Code uses MCP HTTP only, isolates profiles correctly, and never contacts
-    backend services directly.
+13. VS Code uses MCP HTTP only, isolates profiles correctly, exposes one HTML
+    `pockethive.companion` view, and never contacts backend services directly.
 14. Local and HiveForge deployments run the same built image and do not use a
     stale JAR, cached layer, or prior Node server.
 15. Unsupported infrastructure operations are absent or explicitly blocked,
@@ -1378,9 +1664,10 @@ At minimum prove:
 18. A long-running direct operation exposes target, impact, status, progress,
     timeout, and an idempotent cancel/stop path; cancellation never claims
     rollback of completed owner work.
-19. Tool and skill discovery is deterministic and principal-scoped; a direct
-    tool remains usable without unnecessary skill reads, while a matched complex
-    task loads the correct skill and only its required references.
+19. Tool and skill discovery is deterministic: the protocol tool list carries
+    explicit required-scope metadata, principal-filtered catalogue resources
+    provide progressive disclosure, every call reauthorises, and a direct tool
+    remains usable without unnecessary skill reads.
 20. Open, closed, and expired session retention behaves exactly as configured,
     and expiry never mutates Git or owning PocketHive services.
 21. The Java service rejects unsupported MCP revisions and works only through
@@ -1400,24 +1687,48 @@ At minimum prove:
     `NOT_APPLICABLE`, inferred intent, or proof of human authorship.
 27. Killing or disconnecting the MCP at each publication boundary never causes
     an automatic duplicate owner mutation or a false success receipt.
-28. Transient owner unavailability does not churn the authorised tool list;
-    pagination and genuine list-change notification remain deterministic.
+28. Transient owner unavailability does not churn the immutable tool list or
+    the principal-filtered catalogue resources.
 29. State and upload quotas, disk exhaustion, and cleanup failure produce typed
     bounded failures without state corruption or unrestricted resource growth.
 30. Validation and publication reuse the exact retained client ZIP. Lost,
     changed, or cleaned client bytes require a new validation and cannot reuse an
     earlier validation receipt.
+31. The VS Code extension always opens on Environments, and `Open` enters a
+    single selected environment with sticky Hive, Buzz, Journal, Scenarios, and
+    Debug tabs.
+32. One `Connect` action validates the entered endpoint, authenticates, then
+    tests the expected PocketHive MCP. Authentication and test results remain
+    distinct; cancellation performs no test; `Save & open` remains disabled
+    until both succeed.
+33. The complete environment and Debug flows remain keyboard- and screen-reader
+    usable at 280, 320, and 420 CSS pixels, 200% zoom, dark/light/high-contrast
+    themes, and reduced motion without page-level horizontal scrolling.
+34. Debug is one column, never guesses a target, maps every visible action to
+    its canonical authorised tool, bounds logs/results, and exposes cleanup
+    execute only from a reviewed current plan through HiveGate governance.
+35. The webview rejects forged/unknown messages and injected markup, receives no
+    tokens or secrets, loads no remote code/content, restores focus after state
+    changes, and releases listeners, timers, links, and results on disposal.
+36. The Activity Bar displays the exact PocketHive mark as a theme-tinted icon,
+    and the header displays its full-colour derivative; both are generated from
+    `ui-v2/public/logo.svg` and pass package provenance checks.
 
 ### Mutation testing
 
-Run PIT on all included domain and application decision logic and reach 100%
-mutation score. Only generated code, framework bootstrap, and mechanically
-delegating adapters may be excluded, with each exclusion reviewed and recorded.
+Run PIT on included Java domain/application decision logic and Stryker on
+included VS Code TypeScript domain/application/presentation decision logic.
+Each reaches a 100% mutation score. Only generated code, framework bootstrap,
+static markup, CSS, and mechanically delegating adapters may be excluded, with
+each exclusion reviewed and recorded.
+
 A surviving mutation in state transition, inference prevention, capability
 mapping, create/replace routing, ticket binding, digest verification, session
 expiry, answer-action mapping, workflow invalidation, publication-attempt state,
 pre-owner upload gating, quota enforcement, scope filtering, descriptor pinning,
-untrusted-content handling, operation cancellation, output validation, or
+untrusted-content handling, operation cancellation, output validation,
+connection-attempt sequencing, save gating, environment isolation, webview
+message validation, Debug tool mapping, guarded cleanup presentation, or
 security validation blocks cutover.
 
 ### Agentic evaluation
@@ -1515,9 +1826,9 @@ coverage. Run and record sessions for:
 - Scenario Manager temporary storage and current-only retention;
 - complete operation without HiveMind;
 - owner-boundary attempts through direct infrastructure;
-- skill discovery, wrong-tool temptation, cursor pagination, genuine tool-list
-  changes, transient owner-health changes, unsupported resource/skill clients,
-  and agent efficiency;
+- skill discovery, wrong-tool temptation, immutable complete tool listing,
+  transient owner-health changes, unsupported resource/skill clients, and agent
+  efficiency;
 - recursive next-action loops, retry storms, repeated approval requests, and
   timeout, token, or call-budget exhaustion;
 - over-reading skills/resources, stale cached skills, catalogue reordering, and
@@ -1538,7 +1849,19 @@ coverage. Run and record sessions for:
   retention cleanup, and attempts to reuse expired state;
 - trace correlation, telemetry redaction, metric-cardinality attacks, sampled
   telemetry versus HiveGate evidence, and human intervention visibility;
-- VS Code profile isolation, secret handling, and workspace switching; and
+- VS Code profile isolation, secret handling, and workspace switching;
+- narrow webview widths, zoom, long translated/content values, keyboard-only and
+  screen-reader operation, sticky tabs, focus restoration, theme changes, and
+  extension reload while connecting or viewing a Debug result;
+- combined Connect sequencing, browser-auth cancellation, successful auth with
+  failed MCP initialisation, retry after token expiry, false cached Connected
+  state, and server-identity mismatch;
+- hostile host/webview messages, untrusted log/owner markup, remote-resource
+  injection, oversized result rendering, listener/timer leaks, and disposal
+  during an in-flight call;
+- Debug target ambiguity, narrow log output, tool-scope changes, missing owner
+  capability, stale cleanup plans, and attempts to reveal cleanup execute as a
+  direct action; and
 - stale JARs, cached images, mixed Node/Java processes, and deployment drift.
 
 The QA lead debriefs every session. Findings are classified by product risk,
@@ -1546,11 +1869,97 @@ added to automated tests where stable, and resolved or explicitly accepted by
 the authorised human owner before cutover. An agent, HiveMind, HiveMap, telemetry
 system, or test harness cannot accept a release risk.
 
+### Delivery evidence and RST debrief — 2026-08-18
+
+This is local-development evidence for the worktree based on commit
+`08ee6d67d654b06d709a0f51763b96057906c3cb`. It is not a HiveGate approval,
+execution ticket, remote HiveForge deployment receipt, or production release
+decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| Java verification | Maven `verify`: Auth Service 12 tests and MCP 113 tests | Pass, 125/125 |
+| Java mutation | PIT: 1,374/1,374 mutated lines covered; 569/569 mutants killed; no survivor or timeout | Pass, 100% |
+| VS Code verification | `npm run package`: 57 tests passed twice, cutover/assets/package checks passed, 24-file VSIX produced | Pass |
+| VS Code mutation | Stryker: 749/749 actionable mutants killed; three platform/composition mutations explicitly reviewed and ignored | Pass, 100% |
+| Supply chain | OSV: 65-component MCP SBOM, 58-component Auth SBOM, and extension lockfile reported no known issue; `npm audit` reported zero vulnerabilities | Pass |
+| Local deployment | Canonical targeted `build-hive.sh` rebuild produced and restarted only the final MCP image; service became healthy with the declared read-only, non-root, bounded-volume/tmpfs controls | Pass |
+| Public-ingress conformance | OAuth code + PKCE S256, exact metadata/resource, six scopes, no refresh token, code replay rejection, MCP `2025-11-25`, server `0.15.35`, 49 tools, nine connected skills, and session close all passed through `http://localhost:8088` | Pass |
+| Mixed bundle | The extension packaged the committed `scenarios/bundles/db-query-postgres-smoke` tree as 11 exact files/6,122 bytes; validation and explicit `REPLACE` consumed the same retained ZIP, and Scenario Manager recorded the same byte count with zero findings | Pass |
+| Architecture review | HiveMap documentation-conflict and code-quality scans completed; stale Node/stdio guidance and duplicate OAuth-scope ownership were fixed and recorded as resolved findings | Pass |
+
+#### RST session `RST-MCP-CUTOVER-20260818`
+
+- **Mission:** challenge the final Java MCP, OAuth, publication, extension, and
+  deployment cutover at their highest-risk boundaries and follow every anomaly
+  until it is explained, fixed, or identified as uncovered risk.
+- **Time box / actual:** 90 minutes / 80 minutes, 20:30–21:50 Europe/London.
+- **Target:** branch `feat/pockethive-mcp-improvements`, local image
+  `pockethive-mcp:latest`, MCP `2025-11-25`, server `0.15.35`, VSIX `1.0.0`.
+- **Tester and oracles:** Codex acting as QA lead; owning contracts, PocketHive
+  rules, exact owner API responses, immutable catalogue counts, state-machine
+  invariants, mutation thresholds, public-ingress logs, and Scenario Manager
+  byte-count/findings evidence.
+- **Variations sampled:** unauthenticated and authenticated MCP; exact OAuth
+  metadata; first/reused consent behavior; authorization-code replay; no-refresh
+  policy; session create/use/close; all-scope discovery; mixed shell/SQL/YAML/YML/
+  Markdown bundle preservation; explicit replace; archive/digest equality;
+  non-root/read-only runtime; stale build inputs; documentation/implementation
+  authority drift; and dependency advisories.
+
+The fix loop found and resolved:
+
+1. OAuth scope literals had two owners. The MCP now consumes
+   `PocketHiveMcpScopes` from `auth-contracts`, and a catalogue invariant rejects
+   any non-canonical required scope.
+2. The final PIT run killed every mutant but exposed two compiler-mapped record
+   lines without value-semantics coverage. Focused record equality, hash,
+   accessor, and string tests raised line coverage from 1,372/1,374 to
+   1,374/1,374 without weakening the threshold.
+3. Active documentation still described Node/stdio startup and the old plugin
+   document set as current, while an OmniMCP concept still presented that
+   removed integration as implementable direction. Current Java HTTP guidance
+   now has one entry point; both historical areas are explicitly superseded.
+4. The exploratory OAuth probe initially revoked its own access token by testing
+   code replay before MCP use. Reordering the scenario proved successful MCP use
+   first and replay rejection afterward; the observation confirms replay is not
+   a harmless retry.
+5. Existing authorization consent legitimately skipped the consent screen. The
+   final probe covered that branch explicitly instead of assuming every login
+   displays consent.
+6. Provisional review notes said eight connected skills. The canonical registry,
+   catalogue resource, and live discovery all proved nine; the evidence was
+   corrected without changing the product.
+
+**QA-lead debrief:** no unresolved local correctness, mutation, packaging,
+public-ingress, bundle-integrity, or known-dependency defect was found. The
+session produced stable regression tests for the code issues and durable HiveMap
+resolution evidence for the architecture issues. It did not accept the following
+release risks:
+
+- remote HiveForge deployment and HTTPS/identity-provider operation still need
+  a governed HiveGate/HiveForge execution and receipt;
+- native VS Code manual checks at 280/320/420 CSS pixels, 200% zoom, keyboard,
+  screen reader, light/dark/high-contrast themes, and reduced motion still need
+  a human accessibility session;
+- nondeterministic held-out/adversarial agent trials across approved model and
+  MCP client versions still need the versioned corpus, recorded sampling
+  settings, calibrated evaluator, repeated trials, and authorised QA review
+  defined above; deterministic server and client safety contracts passed but do
+  not substitute for model-behavior qualification; and
+- physical disk-full/inode exhaustion, abrupt host/process termination at every
+  publication boundary, and remote network-loss timing remain production-shaped
+  resilience charters even though their deterministic failure/state transitions
+  are covered in automated tests.
+
+These items block a claim of production release acceptance. They do not block
+the recorded `IMPLEMENTED / LOCAL CUTOVER VERIFIED` status.
+
 ## Delivery plan
 
 ### Phase 0 — contracts and proof
 
-- approve this specification;
+- record this approved specification as the implementation baseline;
 - inventory every Node tool and create the migration ledger;
 - update the owning `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` contract to
   canonically document the already-implemented validation, create, and replace
@@ -1560,8 +1969,7 @@ system, or test harness cannot accept a release risk.
   digest, and the supported-client conformance matrix;
 - prove every target client supports `2025-11-25` elicitation, authenticated
   binary ticket upload, SSE/resumption where used, explicit transport-session
-  handling, cursor pagination, resource links, resource/skill reads, and
-  list-change notification where used;
+  handling, complete deterministic tool listing, and resource/skill reads;
 - approve the separate Auth Service MCP OAuth extension, then define the Java
   resource-server adapter, other-client registration, scopes, selected token
   validation, exact redirect matching, PKCE, `state`, code replay protection,
@@ -1572,6 +1980,19 @@ system, or test harness cannot accept a release risk.
 - define `ToolDescriptor`, result envelope, session/workflow, operation, ticket,
   publication-attempt, receipt, invalidation, retention, quota, telemetry, and
   profile contracts;
+- define and approve the VS Code `McpConnectionProfile`,
+  `McpConnectionAttempt`, environment-workspace view model, host/webview message,
+  navigation, and Debug-action contracts before changing the extension;
+- define the exact expected MCP server identity, minimum capability observation,
+  endpoint-security modes, OAuth-session validity rule, and typed connection
+  failures used by `Connect`;
+- capture the current VS Code contribution/configuration migration ledger and
+  approve the atomic removal of product Tree Views, local MCP spawning, stdio,
+  bundle roots, transport selectors, and direct backend URLs;
+- approve the 280/320/420-pixel, 200%-zoom, keyboard, screen-reader, reduced-
+  motion, and VS Code theme acceptance baselines;
+- define the deterministic logo-derivation and VSIX package-provenance contract
+  rooted at `ui-v2/public/logo.svg`;
 - capture the versioned agentic evaluation corpus, Node baseline where
   applicable, absolute safety gates, and approved efficiency thresholds;
 - produce and approve the digest-pinned descriptor/build-manifest contract
@@ -1606,12 +2027,24 @@ system, or test harness cannot accept a release risk.
   ticketed uploads, validation, explicit publication, crash-safe attempt state,
   and receipts without claiming verified Git provenance;
 - publish generated knowledge, capability, tool, and skill resources;
-- apply progressive skill disclosure and principal-scoped discovery; and
+- apply progressive skill disclosure and principal-scoped catalogue resources; and
 - remove or block tools that violate owner boundaries.
 
 ### Phase 3 — clients and deployment
 
-- update the VS Code extension to connection profiles and MCP-only data access;
+- replace the VS Code product Tree Views atomically with one
+  `pockethive.companion` HTML `WebviewView` and MCP-only data access;
+- implement profile/attempt/navigation/Debug domain types, application
+  coordinators, and narrow storage/authentication/MCP client ports before the
+  VS Code and webview adapters;
+- implement the environments-first flow, ordered `Connect` state machine,
+  environment workspace, sticky top tabs, and single-column Debug drill-down;
+- generate and package the Activity Bar and header assets deterministically from
+  `ui-v2/public/logo.svg`;
+- remove local process spawning, stdio, direct backend access, bundle-root and
+  transport settings, legacy Tree View contributions, and their dead commands;
+- add unit, integration, VSIX-package, accessibility, responsive, security, and
+  Stryker mutation gates for the extension;
 - add local `build-hive.sh` installation/deployment;
 - add HiveForge deployment of the same immutable image;
 - verify persistent volume, auth, public ingress, health, and upgrade handling;
@@ -1652,9 +2085,10 @@ The migration is complete only when all of the following are true:
 - the Auth Service MCP OAuth prerequisite is approved and delivered without a
   second user/grant authority or acceptance of legacy unscoped tokens;
 - no published tool or skill is disconnected;
-- tool discovery is principal-scoped, cursor-paginated, stable across transient
-  owner failure, list-change conformant, and descriptor/build-digest pinned by
-  HiveGate;
+- protocol tool discovery is complete and immutable with explicit required
+  scopes; progressive catalogue resources are principal-filtered; invocation
+  reauthorises; owner failure does not churn discovery; and the descriptor and
+  build digests are available for HiveGate pinning;
 - retained operational tools remain independently callable without wizard
   state;
 - direct operational tools create no authoring state and use owner-issued
@@ -1687,7 +2121,21 @@ The migration is complete only when all of the following are true:
 - metrics remain low-cardinality and sampled telemetry is not represented as
   HiveGate evidence;
 - all absolute held-out/adversarial agentic thresholds equal zero failures;
-- the VS Code extension uses only the configured MCP HTTP endpoint;
+- the VS Code extension contributes exactly one product HTML WebviewView, opens
+  on Environments, and uses only the selected profile's MCP HTTP endpoint;
+- saved profiles never imply a live connection; every open/reload revalidates
+  authentication, server identity, and the minimum capability observation;
+- one `Connect` action preserves distinct endpoint, authentication, and MCP-test
+  outcomes, performs no test after cancellation, and enables `Save & open` only
+  after complete success;
+- Hive, Buzz, Journal, Scenarios, and Debug use the same authorised MCP catalogue;
+  Debug is single-column, requires exact targets, and exposes cleanup execute
+  only from a reviewed current plan through HiveGate;
+- the webview passes its responsive, accessibility, CSP, message-validation,
+  redaction, disposal, theme, and 200%-zoom gates at 280, 320, and 420 CSS pixels;
+- the packaged VSIX contains deterministic derivatives of
+  `ui-v2/public/logo.svg` and contains no legacy product Tree View, local MCP
+  spawning, stdio, bundle-root, transport-selector, or direct-backend path;
 - local and HiveForge installations use the same non-stale image;
 - every RST charter has a reviewable session record, QA-lead debrief, stated
   coverage limits, and authorised-human disposition for unresolved risk;
@@ -1719,9 +2167,11 @@ The migration is complete only when all of the following are true:
   PocketHive authority.
 - Clients must support elicitation and binary upload tickets. There is no
   degraded fallback mode.
-- Remote cutover is blocked until the Auth Service owner supplies the separately
-  approved MCP OAuth contract. Existing opaque PocketHive login tokens are not
-  silently reclassified as MCP OAuth access tokens.
+- Remote use requires the explicit HTTPS ingress/host and Auth Service MCP
+  secrets declared by the HiveForge contract. Existing opaque PocketHive login
+  tokens are not silently reclassified as MCP OAuth access tokens. Live remote
+  deployment and approval remain governed HiveGate/HiveForge operations rather
+  than implementation evidence created by this branch.
 - The first release supports only MCP `2025-11-25`. MCP `2026-07-28`, Multi
   Round-Trip Requests, header-routed stateless semantics, and protocol cache
   hints require a separately approved Java-SDK/client migration; Nginx will not
@@ -1731,6 +2181,15 @@ The migration is complete only when all of the following are true:
   adopted with conformance evidence.
 - Unsupported runtime or mock operations remain unavailable until their owning
   PocketHive API exists.
+- The VS Code Side Bar is the only first-release layout contract. Below 280 CSS
+  pixels only the tab strip may scroll horizontally; there is no separate wide
+  dashboard or alternate navigation mode.
+- Replacing the five product Tree Views and legacy local-MCP configuration is an
+  intentional atomic cutover, not a backward-compatible presentation mode.
+- Node/npm remains part of the VS Code extension toolchain because VS Code runs
+  TypeScript extensions. It is removed from the privileged MCP server, while
+  extension dependencies remain minimal, pinned, locked, audited, and package-
+  verified.
 - HiveMind may independently help an agent remember project context, but it is
   never required, called, configured, or trusted by PocketHive MCP.
 

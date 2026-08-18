@@ -15,6 +15,7 @@ Related docs:
 - Scenario YAML contract: `docs/scenarios/SCENARIO_CONTRACT.md`
 - Scenario Variables contract: `docs/scenarios/SCENARIO_VARIABLES.md`
 - Bundle diagnostics contract: `docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md`
+- PocketHive MCP migration: `docs/todo/pockethive-mcp-java-migration.md`
 
 ---
 
@@ -156,6 +157,70 @@ file bytes). ZIP container metadata therefore does not change the digest.
   addressed by `scenarioId`.
 - Uses the same `BundleValidationResult` response shape as uploaded-bundle
   dry-run validation.
+
+---
+
+## Bundle publication endpoints
+
+These are the canonical mutation endpoints for publishing a complete validated
+Scenario Bundle. Callers choose one operation explicitly. Scenario Manager does
+not try the other operation when the selected operation fails.
+
+### Create a bundle
+
+`POST /scenarios/bundles` → request `application/zip`, response
+`application/json`
+
+- Validates the complete uploaded ZIP with the same canonical validation
+  pipeline as `POST /validation/scenario-bundles`.
+- Requires the descriptor's scenario ID not to exist in the discovered
+  catalogue.
+- Stores the validated bundle under the current `bundles/` catalogue folder.
+- Returns `201 Created` with the loaded `Scenario` on success.
+- Returns `400 Bad Request` with `BundleValidationResult` when bundle validation
+  fails, including a duplicate-ID failure.
+- Never changes an existing bundle and never falls back to replace.
+
+### Replace a bundle
+
+`PUT /scenarios/{id}/bundle` → request `application/zip`, response
+`application/json`
+
+- Validates the complete uploaded ZIP with expected scenario ID `{id}`.
+- Requires the validated descriptor ID to equal `{id}`.
+- Replaces the current deployed contents for that scenario ID and reloads the
+  catalogue.
+- Returns `200 OK` with the reloaded `Scenario` on success.
+- Returns `400 Bad Request` with `BundleValidationResult` when validation or ID
+  matching fails.
+- Never creates under a different ID and never falls back to create.
+
+Replace is currently last-write-wins. There is no expected-version, ETag, or
+canonical-digest precondition. A caller must not present a preflight read as an
+atomic concurrency guarantee or automatically retry an ambiguous replace.
+
+### Regular-file preservation
+
+For validation, create, and replace, the validated bundle root is the directory
+containing the accepted `scenario.yaml`. A single wrapper directory in the ZIP
+is therefore removed from the deployed path. Under that validated root,
+Scenario Manager:
+
+- preserves every accepted regular file regardless of extension;
+- preserves each regular file's relative path and exact bytes;
+- creates required directories;
+- does not execute scripts, SQL, Compose files, or other uploaded content; and
+- does not promise to preserve ZIP timestamps, ownership, directory entries, or
+  POSIX mode bits.
+
+Clients that need source traceability must compare the canonical
+`validation.artifactDigest`, which is calculated from sorted relative paths and
+file bytes. ZIP container metadata and POSIX mode are outside that digest.
+
+The input ZIP remains subject to Scenario Manager's archive safety and bundle
+validation rules. A gateway or MCP may enforce stricter transport limits before
+calling Scenario Manager, but it must not create a second semantic bundle
+validator.
 
 ---
 
