@@ -20,6 +20,7 @@ pockethive:
       resource: ${POCKETHIVE_AUTH_OAUTH_RESOURCE:http://localhost:8080/mcp}
       authorization-code-ttl: ${POCKETHIVE_AUTH_OAUTH_CODE_TTL:PT2M}
       access-token-ttl: ${POCKETHIVE_AUTH_OAUTH_ACCESS_TOKEN_TTL:PT15M}
+      refresh-token-ttl: ${POCKETHIVE_AUTH_OAUTH_REFRESH_TOKEN_TTL:PT8H}
       vscode-client-id: pockethive-vscode
       vscode-redirect-uri: ${POCKETHIVE_AUTH_OAUTH_VSCODE_REDIRECT_URI:http://127.0.0.1:57548/callback}
       introspection-client-id: pockethive-mcp

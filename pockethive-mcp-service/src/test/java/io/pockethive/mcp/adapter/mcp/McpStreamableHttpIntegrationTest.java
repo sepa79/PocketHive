@@ -213,7 +213,10 @@ class McpStreamableHttpIntegrationTest {
         OpaqueTokenIntrospector testTokens(
             @Value("${pockethive.mcp.oauth-resource}") String audience) {
             return token -> {
-                String subject = "other-token".equals(token) ? "other" : "qa-lead";
+                String subject = "other-token".equals(token)
+                    ? "22222222-2222-2222-2222-222222222222"
+                    : "11111111-1111-1111-1111-111111111111";
+                String username = "other-token".equals(token) ? "other" : "qa-lead";
                 List<GrantedAuthority> authorities = List.of(
                     new SimpleGrantedAuthority("SCOPE_pockethive:mcp:discover"),
                     new SimpleGrantedAuthority("SCOPE_pockethive:mcp:read"),
@@ -221,6 +224,7 @@ class McpStreamableHttpIntegrationTest {
                 return new DefaultOAuth2AuthenticatedPrincipal(subject, Map.of(
                     "iss", "https://issuer.example",
                     "sub", subject,
+                    "username", username,
                     "client_id", "integration-test",
                     "scope", "pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:author",
                     "aud", List.of(audience),

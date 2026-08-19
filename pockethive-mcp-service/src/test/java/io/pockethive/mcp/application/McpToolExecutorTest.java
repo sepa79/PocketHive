@@ -65,6 +65,7 @@ class McpToolExecutorTest {
         when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
             "pockethive.issuer", PRINCIPAL.issuer().toString(),
             "pockethive.subject", PRINCIPAL.subject(),
+            "pockethive.principalLabel", "qa-lead",
             "pockethive.clientId", "test-client",
             "pockethive.scopes", String.join(" ", Set.of(
                 PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ, PocketHiveMcpScopes.OPERATE,
@@ -110,7 +111,9 @@ class McpToolExecutorTest {
         assertLifecycle("swarm_remove", "remove", input, marker);
 
         assertOwnerGet("debug_journal", input,
-            "/orchestrator/api/swarms/swarm%2Fa/journal/page?limit=25&severity=WARN");
+            "/orchestrator/api/swarms/swarm%2Fa/journal/page?limit=25&runId=run%2Fa&severity=WARN");
+        assertOwnerGet("debug_journal_runs", input,
+            "/orchestrator/api/swarms/swarm%2Fa/journal/runs");
         assertOwnerGet("debug_hive_journal", input, "/orchestrator/api/journal/hive/page?limit=25");
         assertOwnerPost("debug_tap", input, "/orchestrator/api/debug/taps", input);
         assertOwnerGet("debug_tap_read", input, "/orchestrator/api/debug/taps/tap%2Fa?drain=true");
@@ -395,6 +398,7 @@ class McpToolExecutorTest {
 
         when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
             "pockethive.issuer", PRINCIPAL.issuer().toString(), "pockethive.subject", PRINCIPAL.subject(),
+            "pockethive.principalLabel", "qa-lead",
             "pockethive.clientId", "test-client", "pockethive.scopes", PocketHiveMcpScopes.READ)));
         assertCode("MCP_SCOPE_REQUIRED", () -> execute("swarm_start", ownerInput()));
 
@@ -437,8 +441,11 @@ class McpToolExecutorTest {
         for (Object files : List.of(
             List.of(),
             List.of("not-an-object"),
+            List.of(Map.of("path", "scenario.yaml", "content", 42)),
             List.of(Map.of("path", "/absolute", "content", "x")),
             List.of(Map.of("path", "../escape", "content", "x")),
+            List.of(Map.of("path", " scenario.yaml", "content", "x")),
+            List.of(Map.of("path", "scenario.yaml ", "content", "x")),
             List.of(Map.of("path", "bad\\path", "content", "x")))) {
             assertThatThrownBy(() -> execute("scenario_workflow_generate", Map.of(
                 "workflowId", workflow.id(), "expectedRevision", workflow.revision(), "files", files)))
@@ -463,6 +470,47 @@ class McpToolExecutorTest {
         when(exchange.createElicitation(any())).thenReturn(accepted("INFERRED", "not allowed"));
         assertCode("REQUIREMENT_DISPOSITION_INVALID", () -> execute("scenario_workflow_answer", Map.of(
             "workflowId", answer.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+    }
+
+    @Test
+    void preservesGeneratedTextExactlyIncludingWhitespaceAndEmptyFiles() {
+        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-exact-files", "as-exact-files");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-exact-files",
+            AgentSession.open("as-exact-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+        when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
+            .thenReturn(Map.of("fingerprint", "cap-a"));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> generated = (Map<String, Object>) execute("scenario_workflow_generate", Map.of(
+            "workflowId", workflow.id(),
+            "expectedRevision", workflow.revision(),
+            "files", List.of(
+                Map.of("path", "empty.txt", "content", ""),
+                Map.of("path", "templates/request.txt", "content", "  leading\ntrailing  \n"))));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
+        assertThat(files).containsExactly(
+            Map.of("path", "empty.txt", "content", "", "sha256",
+                "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
+            Map.of("path", "templates/request.txt", "content", "  leading\ntrailing  \n", "sha256",
+                "sha256:dad8d8c12ed46c6ddc48b31f103d94d1a12af1df89492ffc9c94e27214771ec3"));
+    }
+
+    @Test
+    void rejectsDuplicateGeneratedFilePaths() {
+        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-duplicate-files", "as-duplicate-files");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-duplicate-files",
+            AgentSession.open("as-duplicate-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+
+        assertCode("BUNDLE_FILE_PATH_DUPLICATE", () -> execute("scenario_workflow_generate", Map.of(
+            "workflowId", workflow.id(),
+            "expectedRevision", workflow.revision(),
+            "files", List.of(
+                Map.of("path", "scenario.yaml", "content", "first"),
+                Map.of("path", "scenario.yaml", "content", "second")))));
     }
 
     @Test
@@ -606,6 +654,7 @@ class McpToolExecutorTest {
         input.put("variablesProfileId", "vars-a");
         input.put("idempotencyKey", "idem-a");
         input.put("limit", 25);
+        input.put("runId", "run/a");
         input.put("severity", "WARN");
         input.put("tapId", "tap/a");
         input.put("drain", true);

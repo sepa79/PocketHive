@@ -25,11 +25,13 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.web.util.UriUtils;
@@ -119,7 +121,10 @@ public class McpToolExecutor {
             case "swarm_stop" -> lifecycle(input, "stop");
             case "swarm_remove" -> lifecycle(input, "remove");
             case "debug_journal" -> owners.get(ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId")
-                + "/journal/page?limit=" + queryOr(input, "limit", "50") + optionalQuery(input, "severity"));
+                + "/journal/page?limit=" + queryOr(input, "limit", "50")
+                + optionalSegmentQuery(input, "runId") + optionalQuery(input, "severity"));
+            case "debug_journal_runs" -> owners.get(ORCHESTRATOR_PREFIX + "/api/swarms/"
+                + segment(input, "swarmId") + "/journal/runs");
             case "debug_hive_journal" -> owners.get(ORCHESTRATOR_PREFIX + "/api/journal/hive/page?limit="
                 + queryOr(input, "limit", "50"));
             case "debug_tap" -> owners.post(ORCHESTRATOR_PREFIX + "/api/debug/taps", input);
@@ -369,17 +374,26 @@ public class McpToolExecutor {
             throw new ToolExecutionException("BUNDLE_FILES_REQUIRED", "files must be a non-empty array");
         }
         List<Map<String, Object>> files = new ArrayList<>();
+        Set<String> paths = new HashSet<>();
         for (Object item : values) {
             if (!(item instanceof Map<?, ?> raw)) {
                 throw new ToolExecutionException("BUNDLE_FILE_INVALID", "each file must be an object");
             }
             Map<String, Object> file = (Map<String, Object>) raw;
-            String path = text(file, "path");
-            String content = text(file, "content");
-            if (path.startsWith("/") || path.contains("..") || path.contains("\\")) {
+            String path = rawText(file, "path");
+            String content = rawText(file, "content");
+            if (path.isBlank() || !path.equals(path.strip()) || path.startsWith("/")
+                || path.contains("..") || path.contains("\\")) {
                 throw new ToolExecutionException("BUNDLE_FILE_PATH_INVALID", path);
             }
-            files.add(Map.of("path", path, "content", content, "sha256", sha256(content)));
+            if (!paths.add(path)) {
+                throw new ToolExecutionException("BUNDLE_FILE_PATH_DUPLICATE", path);
+            }
+            Map<String, Object> generatedFile = new LinkedHashMap<>();
+            generatedFile.put("path", path);
+            generatedFile.put("content", content);
+            generatedFile.put("sha256", sha256(content));
+            files.add(generatedFile);
         }
         return files.stream().sorted((left, right) -> String.valueOf(left.get("path"))
             .compareTo(String.valueOf(right.get("path")))).toList();
@@ -510,6 +524,14 @@ public class McpToolExecutor {
         return value;
     }
 
+    private static String rawText(Map<String, Object> input, String field) {
+        Object value = require(input, field);
+        if (!(value instanceof String text)) {
+            throw new ToolExecutionException("TOOL_INPUT_INVALID", field);
+        }
+        return text;
+    }
+
     private static long number(Map<String, Object> input, String field) {
         Object value = require(input, field);
         if (value instanceof Number number) {
@@ -536,6 +558,10 @@ public class McpToolExecutor {
 
     private static String optionalQuery(Map<String, Object> input, String field) {
         return input.containsKey(field) ? "&" + field + "=" + query(input, field) : "";
+    }
+
+    private static String optionalSegmentQuery(Map<String, Object> input, String field) {
+        return input.containsKey(field) ? "&" + field + "=" + segment(input, field) : "";
     }
 
     private String json(Object value) {

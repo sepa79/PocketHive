@@ -62,7 +62,8 @@ public final class ToolCatalogue {
         tools.add(write("swarm_stop", "Stop one swarm without removing it.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
         tools.add(write("swarm_remove", "Remove one exact swarm through Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, true, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
 
-        tools.add(read("debug_journal", "Read a bounded journal page for one exact swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "limit", "severity"));
+        tools.add(read("debug_journal", "Read a bounded journal page for one exact swarm and optional exact run.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId", "limit", "severity"));
+        tools.add(read("debug_journal_runs", "List authoritative journal run summaries for one exact swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
         tools.add(read("debug_hive_journal", "Read a bounded hive-wide journal page.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "limit"));
         tools.add(write("debug_tap", "Create a bounded temporary debug tap for one exact swarm and binding.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, false, "runtime-diagnostics", "swarmId", "role", "direction", "ioName", "maxItems"));
         tools.add(read("debug_tap_read", "Read bounded samples from one exact Orchestrator debug tap.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "tapId", "drain"));
@@ -138,7 +139,7 @@ public final class ToolCatalogue {
                 "scenarioId", "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint");
             case "scenario_capabilities_get" -> Set.of("imageName", "tag", "all");
             case "swarm_create" -> Set.of("sutId", "variablesProfileId");
-            case "debug_journal" -> Set.of("limit", "severity");
+            case "debug_journal" -> Set.of("runId", "limit", "severity");
             case "debug_hive_journal" -> Set.of("limit");
             case "debug_tap_read" -> Set.of("drain");
             case "runtime_swarm_timeline" -> Set.of("limit");
@@ -165,7 +166,7 @@ public final class ToolCatalogue {
                     "type", "object",
                     "properties", Map.of(
                         "path", boundedString(1, 4096),
-                        "content", boundedString(1, 2_000_000)),
+                        "content", boundedString(0, 2_000_000)),
                     "required", List.of("path", "content"),
                     "additionalProperties", false));
             case "source" -> sourceSchema();

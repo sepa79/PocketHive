@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 
 import { ActiveMcpConnection } from '../mcp/activeConnection';
+import { McpHttpClient } from '../mcp/httpClient';
 import { ConnectionAttempt } from '../connection/connectionAttempt';
 import {
   ConnectionAttemptView,
@@ -13,8 +14,16 @@ import {
 import { PocketHiveEndpointValidator } from '../connection/endpointValidator';
 import { LoopbackBrowserAuthorization } from '../connection/loopbackBrowser';
 import { PocketHiveOAuthAuthentication } from '../connection/oauthAuthentication';
+import { AuthorizedMcpSession } from '../connection/authorizedMcpSession';
 import { createConnectionProfile } from '../connection/profile';
 import { debugToolCall, DEBUG_ACTIONS } from '../debug/actions';
+import { ScopedMcpToolRunner } from '../operations/scopedMcpToolRunner';
+import {
+  lifecycleToolCall,
+  primaryActionsForSwarms,
+  SwarmOperation,
+  SWARM_OPERATIONS,
+} from '../operations/swarmOperations';
 import { McpConnectionProfileRepository } from '../storage/profileRepository';
 import { GitBundlePackager } from '../scenarios/gitBundlePackager';
 import {
@@ -23,8 +32,17 @@ import {
   ScenarioBundleCoordinator,
 } from '../scenarios/scenarioBundleCoordinator';
 import { CompanionTab, decodeWebviewCommand } from './messages';
+import { CurrentView } from './currentView';
+import { boundCompanionViewModel } from './viewModelBoundary';
+import { SIDEBAR_EVENT_LIMIT, workspaceToolCall } from './workspaceTool';
+import {
+  SESSION_ACTIVITIES,
+  SessionActivity,
+  SessionPresentation,
+  sessionPresentation,
+} from './sessionPresentation';
 
-type LiveStatus = 'Connected' | 'Needs sign-in' | 'Unavailable' | 'Not connected';
+type LiveStatus = 'Connected' | 'Connecting' | 'Needs sign-in' | 'Unavailable' | 'Not connected';
 
 interface ProfileRow extends McpConnectionProfile {
   readonly status: LiveStatus;
@@ -39,12 +57,21 @@ interface CompanionViewModel {
   readonly activeProfile?: ProfileRow;
   readonly activeTab: CompanionTab;
   readonly workspaceData?: unknown;
+  readonly swarmOperations: typeof SWARM_OPERATIONS;
+  readonly swarmPrimaryActions: Readonly<Record<string, SwarmOperation>>;
+  readonly journalSwarmId?: string;
+  readonly journalRunId?: string;
+  readonly journalResult?: unknown;
+  readonly swarmHistorySwarmId?: string;
+  readonly swarmHistoryResult?: unknown;
+  readonly swarmOperationResult?: unknown;
   readonly debugSwarmId?: string;
   readonly debugRuntimeId?: string;
   readonly debugResult?: unknown;
   readonly pendingBundle?: unknown;
   readonly bundleResult?: unknown;
   readonly debugActions: typeof DEBUG_ACTIONS;
+  readonly session: SessionPresentation;
   readonly busy: boolean;
 }
 
@@ -53,26 +80,38 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
 
   private readonly repository: McpConnectionProfileRepository;
   private readonly endpoints = new PocketHiveEndpointValidator();
-  private readonly activeConnection = new ActiveMcpConnection();
+  private readonly activeConnection: ActiveMcpConnection;
   private readonly authentication: PocketHiveOAuthAuthentication;
+  private readonly authorizedSession: AuthorizedMcpSession;
   private readonly bundles: ScenarioBundleCoordinator;
+  private readonly scopedTools: ScopedMcpToolRunner;
   private readonly live = new Map<string, { status: LiveStatus; evidence?: ConnectionEvidence }>();
-  private view?: vscode.WebviewView;
+  private readonly currentView = new CurrentView<vscode.WebviewView>();
   private page: CompanionViewModel['page'] = 'environments';
   private activeTab: CompanionTab = 'Hive';
   private draft?: McpConnectionProfile;
   private attempt?: ConnectionAttempt;
   private attemptView?: ConnectionAttemptView;
   private workspaceData?: unknown;
+  private journalSwarmId?: string;
+  private journalRunId?: string;
+  private journalResult?: unknown;
+  private swarmHistorySwarmId?: string;
+  private swarmHistoryResult?: unknown;
+  private swarmOperationResult?: unknown;
   private debugSwarmId?: string;
   private debugRuntimeId?: string;
   private debugResult?: unknown;
   private pendingBundle?: PendingBundlePublication;
   private bundleResult?: unknown;
+  private sessionActivity: SessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
   private busy = false;
   private disposed = false;
 
   constructor(private readonly context: vscode.ExtensionContext) {
+    const version = extensionVersion(context.extension.packageJSON);
+    const clients = () => new McpHttpClient(version);
+    this.activeConnection = new ActiveMcpConnection(clients);
     const secrets: OAuthSessionStore = {
       get: key => context.secrets.get(key),
       store: (key, value) => context.secrets.store(key, value),
@@ -84,13 +123,17 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     const browser = new LoopbackBrowserAuthorization(url =>
       vscode.env.openExternal(vscode.Uri.parse(url)));
     this.authentication = new PocketHiveOAuthAuthentication(fetch, browser, secrets);
-    this.bundles = new ScenarioBundleCoordinator(
-      new GitBundlePackager(), this.endpoints, this.authentication,
+    this.authorizedSession = new AuthorizedMcpSession(
+      this.endpoints, this.authentication, this.activeConnection,
     );
+    this.bundles = new ScenarioBundleCoordinator(
+      new GitBundlePackager(), this.endpoints, this.authentication, clients,
+    );
+    this.scopedTools = new ScopedMcpToolRunner(this.endpoints, this.authentication, clients);
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
-    this.view = view;
+    this.currentView.attach(view);
     view.webview.options = {
       enableScripts: true,
       localResourceRoots: [
@@ -102,13 +145,14 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     view.webview.html = html(view.webview, this.context.extensionUri);
     this.context.subscriptions.push(
       view.webview.onDidReceiveMessage(value => this.receive(value)),
-      view.onDidDispose(() => { this.view = undefined; }),
+      view.onDidDispose(() => this.currentView.detach(view)),
     );
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
-    this.view = undefined;
+    const view = this.currentView.value();
+    if (view) this.currentView.detach(view);
     await this.discardPendingBundle();
     await this.activeConnection.close().catch(() => undefined);
   }
@@ -157,12 +201,44 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         case 'backToEnvironments':
           await this.closeWorkspace();
           break;
+        case 'reauthorizeEnvironment':
+          await this.reauthorizeEnvironment();
+          break;
+        case 'signOut':
+          await this.signOut();
+          break;
         case 'selectTab':
           this.activeTab = command.tab;
           this.debugResult = undefined;
           await this.loadTab();
           break;
         case 'refresh':
+          await this.loadTab();
+          break;
+        case 'selectJournalSwarm':
+          this.journalSwarmId = command.swarmId;
+          this.journalRunId = undefined;
+          this.journalResult = undefined;
+          await this.loadJournal();
+          break;
+        case 'loadSwarmHistory':
+          await this.loadSwarmHistory(command.swarmId);
+          break;
+        case 'openJournalRun':
+          this.activeTab = 'Journal';
+          this.journalSwarmId = command.swarmId;
+          this.journalRunId = command.runId;
+          this.journalResult = undefined;
+          await this.loadTab();
+          break;
+        case 'runSwarmOperation':
+          await this.runSwarmOperation(command.action, command.swarmId);
+          break;
+        case 'openDebugForSwarm':
+          this.activeTab = 'Debug';
+          this.debugSwarmId = command.swarmId;
+          this.debugRuntimeId = undefined;
+          this.debugResult = undefined;
           await this.loadTab();
           break;
         case 'selectDebugSwarm':
@@ -218,16 +294,26 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.activeConnection.close();
     await this.clearEnvironmentState();
     this.draft = profile;
-    this.attempt = this.newAttempt(profile);
-    this.page = 'add';
-    await this.runAttempt(() => this.requireAttempt().reconnect());
-    if (this.attemptView?.state === 'READY_TO_SAVE') {
+    this.page = 'workspace';
+    this.sessionActivity = SESSION_ACTIVITIES.RESTORING;
+    this.live.set(profile.id, { status: 'Connecting' });
+    this.busy = true;
+    await this.postView();
+    try {
+      const evidence = await this.authorizedSession.ensure(profile);
+      if (!evidence) {
+        throw new ConnectionContractError('MCP_CONNECTION_EVIDENCE_MISSING', 'MCP_CONNECTION_EVIDENCE_MISSING');
+      }
       await this.repository.select(profile.id);
-      this.attempt.save();
-      this.page = 'workspace';
-      this.live.set(profile.id, { status: 'Connected', evidence: this.attemptView.evidence });
-      await this.loadTab();
+      this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
+      this.live.set(profile.id, { status: 'Connected', evidence });
+    } catch (error) {
+      this.markSessionFailure(profile, error);
+    } finally {
+      this.busy = false;
+      await this.postView();
     }
+    if (this.sessionActivity === SESSION_ACTIVITIES.ACTIVE) await this.loadTab();
   }
 
   private async saveAndOpen(): Promise<void> {
@@ -240,6 +326,10 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.repository.select(profile.id);
     this.attemptView = attempt.save();
     this.live.set(profile.id, { status: 'Connected', evidence: this.attemptView.evidence });
+    const session = await this.authentication.session(profile);
+    if (!session) throw new ConnectionContractError('OAUTH_SESSION_MISSING', 'OAUTH_SESSION_MISSING');
+    this.authorizedSession.bind(profile, session);
+    this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
     this.page = 'workspace';
     await this.loadTab();
   }
@@ -284,10 +374,84 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.busy = true;
     await this.postView();
     try {
-      this.workspaceData = await this.activeConnection.callTool(tabTool(this.activeTab).name,
-        tabTool(this.activeTab).arguments);
+      await this.ensureAuthorizedSession();
+      const call = workspaceToolCall(this.activeTab);
+      this.workspaceData = await this.activeConnection.callTool(call.name, call.arguments);
+      if (this.activeTab === 'Journal' && this.journalSwarmId) {
+        try {
+          this.journalResult = await this.activeConnection.callTool('debug_journal', {
+            swarmId: this.journalSwarmId,
+            limit: SIDEBAR_EVENT_LIMIT,
+            ...(this.journalRunId ? { runId: this.journalRunId } : {}),
+          });
+        } catch (error) {
+          this.journalResult = { error: safeError(error), observedAt: new Date().toISOString() };
+        }
+      }
     } catch (error) {
       this.workspaceData = { error: safeError(error), observedAt: new Date().toISOString() };
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async loadJournal(): Promise<void> {
+    if (!this.journalSwarmId) {
+      throw new ConnectionContractError('JOURNAL_SWARM_REQUIRED', 'Select an exact swarm');
+    }
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      this.journalResult = await this.activeConnection.callTool('debug_journal', {
+        swarmId: this.journalSwarmId,
+        limit: SIDEBAR_EVENT_LIMIT,
+        ...(this.journalRunId ? { runId: this.journalRunId } : {}),
+      });
+    } catch (error) {
+      this.journalResult = { error: safeError(error), observedAt: new Date().toISOString() };
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async loadSwarmHistory(swarmId: string): Promise<void> {
+    this.swarmHistorySwarmId = swarmId;
+    this.swarmHistoryResult = undefined;
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      this.swarmHistoryResult = await this.activeConnection.callTool('debug_journal_runs', { swarmId });
+    } catch (error) {
+      this.swarmHistoryResult = { error: safeError(error), observedAt: new Date().toISOString() };
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async runSwarmOperation(action: SwarmOperation, swarmId: string): Promise<void> {
+    const call = lifecycleToolCall(action, swarmId, randomUUID());
+    this.busy = true;
+    this.swarmOperationResult = undefined;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      if (action === SWARM_OPERATIONS.REMOVE) {
+        const approved = await vscode.window.showWarningMessage(
+          `Remove swarm “${swarmId}”? This targets the exact selected swarm.`,
+          { modal: true },
+          'Remove swarm',
+        );
+        if (approved !== 'Remove swarm') return;
+      }
+      this.swarmOperationResult = await this.scopedTools.call(
+        this.requireDraft(), call.name, call.arguments,
+      );
+      this.workspaceData = await this.activeConnection.callTool('swarm_list');
     } finally {
       this.busy = false;
       await this.postView();
@@ -299,7 +463,8 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.busy = true;
     await this.postView();
     try {
-      this.debugResult = bounded(await this.activeConnection.callTool(call.name, call.arguments));
+      await this.ensureAuthorizedSession();
+      this.debugResult = await this.activeConnection.callTool(call.name, call.arguments);
     } finally {
       this.busy = false;
       await this.postView();
@@ -326,6 +491,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.bundleResult = undefined;
     await this.postView();
     try {
+      await this.ensureAuthorizedSession();
       this.pendingBundle = await this.bundles.validate(profile, selected[0].fsPath);
       this.bundleResult = { validationReceipt: this.pendingBundle.receipt };
     } finally {
@@ -340,6 +506,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.busy = true;
     await this.postView();
     try {
+      await this.ensureAuthorizedSession();
       this.bundleResult = { publicationAttempt: await this.bundles.publish(
         this.requireDraft(), pending, mode, scenarioId,
       ) };
@@ -358,8 +525,11 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   }
 
   private async closeWorkspace(): Promise<void> {
+    const profile = this.draft;
+    this.authorizedSession.unbind();
     await this.activeConnection.close();
     await this.clearEnvironmentState();
+    if (profile) this.live.set(profile.id, { status: 'Not connected' });
     this.page = 'environments';
     await this.postView();
   }
@@ -368,12 +538,88 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.discardPendingBundle();
     this.activeTab = 'Hive';
     this.workspaceData = undefined;
+    this.journalSwarmId = undefined;
+    this.journalRunId = undefined;
+    this.journalResult = undefined;
+    this.swarmHistorySwarmId = undefined;
+    this.swarmHistoryResult = undefined;
+    this.swarmOperationResult = undefined;
     this.debugSwarmId = undefined;
     this.debugRuntimeId = undefined;
     this.debugResult = undefined;
     this.draft = undefined;
     this.attempt = undefined;
     this.attemptView = undefined;
+    this.sessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
+  }
+
+  private async ensureAuthorizedSession(): Promise<void> {
+    const profile = this.requireDraft();
+    try {
+      const evidence = await this.authorizedSession.ensure(profile);
+      if (evidence) this.live.set(profile.id, { status: 'Connected', evidence });
+      this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
+    } catch (error) {
+      this.markSessionFailure(profile, error);
+      throw error;
+    }
+  }
+
+  private async reauthorizeEnvironment(): Promise<void> {
+    const profile = this.requireDraft();
+    this.sessionActivity = SESSION_ACTIVITIES.SIGNING_IN;
+    this.live.set(profile.id, { status: 'Connecting', evidence: this.live.get(profile.id)?.evidence });
+    this.busy = true;
+    await this.postView();
+    try {
+      const evidence = await this.authorizedSession.signIn(profile);
+      this.live.set(profile.id, { status: 'Connected', evidence });
+      this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
+    } catch (error) {
+      this.markSessionFailure(profile, error);
+      throw error;
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async signOut(): Promise<void> {
+    const profile = this.requireDraft();
+    this.sessionActivity = SESSION_ACTIVITIES.SIGNING_OUT;
+    this.live.set(profile.id, { status: 'Connecting', evidence: this.live.get(profile.id)?.evidence });
+    this.busy = true;
+    await this.postView();
+    let result;
+    try {
+      result = await this.authorizedSession.signOut(profile);
+      await this.clearEnvironmentState();
+      this.live.set(profile.id, { status: 'Not connected' });
+      this.page = 'environments';
+    } catch (error) {
+      this.sessionActivity = SESSION_ACTIVITIES.UNAVAILABLE;
+      this.live.set(profile.id, { status: 'Unavailable', evidence: this.live.get(profile.id)?.evidence });
+      throw error;
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+    if (result.remoteRevocation === 'UNCONFIRMED' || result.transportClosure === 'UNCONFIRMED') {
+      await vscode.window.showWarningMessage(
+        'Signed out locally. PocketHive could not confirm every remote session cleanup step.',
+      );
+    }
+  }
+
+  private markSessionFailure(profile: McpConnectionProfile, error: unknown): void {
+    const authenticationFailure = error instanceof Error
+      && (error.name === 'AuthenticationExpiredError'
+        || (error instanceof ConnectionContractError && error.code.startsWith('OAUTH_')));
+    this.sessionActivity = authenticationFailure ? SESSION_ACTIVITIES.NEEDS_SIGN_IN : SESSION_ACTIVITIES.UNAVAILABLE;
+    this.live.set(profile.id, {
+      status: authenticationFailure ? 'Needs sign-in' : 'Unavailable',
+      evidence: this.live.get(profile.id)?.evidence,
+    });
   }
 
   private requireAttempt(): ConnectionAttempt {
@@ -391,31 +637,41 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     const active = this.draft ? row(this.draft, this.live.get(this.draft.id)) : undefined;
     await this.post({
       type: 'viewModel',
-      model: bounded({
+      model: boundCompanionViewModel({
         page: this.page,
         profiles,
         draft: this.draft,
         attempt: this.attemptView,
         activeProfile: active,
         activeTab: this.activeTab,
-        workspaceData: bounded(this.workspaceData),
+        workspaceData: this.workspaceData,
+        swarmOperations: SWARM_OPERATIONS,
+        swarmPrimaryActions: primaryActionsForSwarms(this.workspaceData),
+        journalSwarmId: this.journalSwarmId,
+        journalRunId: this.journalRunId,
+        journalResult: this.journalResult,
+        swarmHistorySwarmId: this.swarmHistorySwarmId,
+        swarmHistoryResult: this.swarmHistoryResult,
+        swarmOperationResult: this.swarmOperationResult,
         debugSwarmId: this.debugSwarmId,
         debugRuntimeId: this.debugRuntimeId,
-        debugResult: bounded(this.debugResult),
-        pendingBundle: this.pendingBundle ? bounded({
+        debugResult: this.debugResult,
+        pendingBundle: this.pendingBundle ? {
           source: this.pendingBundle.bundle.source,
           fileCount: this.pendingBundle.bundle.fileManifest.length,
           validationReceipt: this.pendingBundle.receipt,
-        }) : undefined,
-        bundleResult: bounded(this.bundleResult),
+        } : undefined,
+        bundleResult: this.bundleResult,
         debugActions: DEBUG_ACTIONS,
+        session: sessionPresentation(this.sessionActivity),
         busy: this.busy,
       } satisfies CompanionViewModel),
     });
   }
 
   private async post(message: unknown): Promise<void> {
-    if (!this.disposed && this.view) await this.view.webview.postMessage(message);
+    const view = this.currentView.value();
+    if (!this.disposed && view) await view.webview.postMessage(message);
   }
 }
 
@@ -430,33 +686,15 @@ function row(
   };
 }
 
-function tabTool(tab: CompanionTab): { name: string; arguments: Record<string, unknown> } {
-  switch (tab) {
-    case 'Hive': return { name: 'swarm_list', arguments: {} };
-    case 'Buzz': return { name: 'debug_hive_journal', arguments: { limit: 50 } };
-    case 'Journal': return { name: 'swarm_list', arguments: {} };
-    case 'Scenarios': return { name: 'scenario_list', arguments: {} };
-    case 'Debug': return { name: 'swarm_list', arguments: {} };
+function extensionVersion(packageJson: unknown): string {
+  if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
+    throw new ConnectionContractError('EXTENSION_VERSION_INVALID', 'PocketHive extension manifest is unavailable');
   }
-}
-
-function bounded(value: unknown): unknown {
-  if (value === undefined) return undefined;
-  const redacted = redact(value);
-  const text = JSON.stringify(redacted);
-  return text.length <= 100_000
-    ? redacted
-    : { truncated: true, content: text.slice(0, 100_000) };
-}
-
-function redact(value: unknown): unknown {
-  if (Array.isArray(value)) return value.slice(0, 1000).map(redact);
-  if (!value || typeof value !== 'object') return value;
-  const result: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>).slice(0, 1000)) {
-    result[key] = /authorization|token|secret|password/i.test(key) ? '[REDACTED]' : redact(item);
+  const version = (packageJson as Record<string, unknown>).version;
+  if (typeof version !== 'string' || !version.trim()) {
+    throw new ConnectionContractError('EXTENSION_VERSION_INVALID', 'PocketHive extension version is unavailable');
   }
-  return result;
+  return version.trim();
 }
 
 function safeError(error: unknown): { code: string; message: string } {
@@ -466,13 +704,15 @@ function safeError(error: unknown): { code: string; message: string } {
 
 function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const nonce = randomUUID().replaceAll('-', '');
+  const brandTokens = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'brand-tokens.css'));
   const style = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'companion.css'));
   const script = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'main.js'));
+  const eventFilters = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'eventFilters.js'));
   const logo = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'logo-mark.svg'));
   return `<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${style}"><title>PocketHive</title></head>
+<link rel="stylesheet" href="${brandTokens}"><link rel="stylesheet" href="${style}"><title>PocketHive</title></head>
 <body><main id="app" data-logo="${logo}"></main><div id="announcer" class="sr-only" aria-live="polite"></div>
-<script type="module" nonce="${nonce}" src="${script}"></script></body></html>`;
+<script nonce="${nonce}" src="${eventFilters}"></script><script nonce="${nonce}" src="${script}"></script></body></html>`;
 }

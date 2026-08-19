@@ -22,7 +22,7 @@ class ToolCatalogueTest {
     void everyPublishedToolHasOneCanonicalIdContractAndConnectedSkill() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
-        assertThat(catalogue.tools()).hasSize(49);
+        assertThat(catalogue.tools()).hasSize(50);
         assertThat(catalogue.tools()).allSatisfy(tool -> {
             assertThat(tool.id()).matches("[a-z][a-z0-9_]*");
             assertThat(tool.description()).isNotBlank();
@@ -66,6 +66,16 @@ class ToolCatalogueTest {
         Map<String, Object> readinessProperties = properties(readiness);
         assertThat(readinessProperties).doesNotContainKey("timeoutSec");
 
+        Map<String, Object> journal = catalogue.requireTool("debug_journal").inputSchema();
+        assertThat(journal.get("required")).isEqualTo(List.of("swarmId"));
+        assertThat(properties(journal)).containsKeys("swarmId", "runId", "limit", "severity");
+
+        ToolDescriptor runs = catalogue.requireTool("debug_journal_runs");
+        assertThat(runs.owner()).isEqualTo(ToolOwner.ORCHESTRATOR);
+        assertThat(runs.requiredScope()).isEqualTo(PocketHiveMcpScopes.READ);
+        assertThat(runs.skillIds()).containsExactly("runtime-diagnostics");
+        assertThat(runs.inputSchema().get("required")).isEqualTo(List.of("swarmId"));
+
         Map<String, Object> publication = catalogue.requireTool("scenario_bundle_publication_prepare").inputSchema();
         assertThat(property(publication, "mode").get("enum")).isEqualTo(List.of("CREATE", "REPLACE"));
         assertThat(property(publication, "archiveDigest").get("pattern"))
@@ -74,6 +84,11 @@ class ToolCatalogueTest {
         Map<String, Object> validation = catalogue.requireTool("scenario_bundle_validation_prepare").inputSchema();
         assertThat(property(validation, "source")).containsEntry("type", "object");
         assertThat(property(validation, "fileManifest")).containsEntry("type", "array");
+
+        Map<String, Object> generation = catalogue.requireTool("scenario_workflow_generate").inputSchema();
+        @SuppressWarnings("unchecked")
+        Map<String, Object> generatedFile = (Map<String, Object>) property(generation, "files").get("items");
+        assertThat(property(generatedFile, "content")).containsEntry("minLength", 0);
     }
 
     @SuppressWarnings("unchecked")

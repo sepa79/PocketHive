@@ -125,7 +125,7 @@ public final class McpKnowledgeResources {
         result.put("pocketHiveIngress", properties.pocketHiveIngress().toString());
         result.put("oauthResource", properties.oauthResource().toString());
         result.put("stateMode", properties.stateMode().name());
-        result.put("principalLabel", caller.principal().subject());
+        result.put("principalLabel", caller.principalLabel());
         result.put("clientId", caller.clientId());
         result.put("grantedScopes", caller.scopes().stream().sorted().toList());
         result.put("catalogueDigest", catalogueDigest);

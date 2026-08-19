@@ -8,7 +8,6 @@ import {
   POCKETHIVE_MCP_SCOPES,
   ScopedAuthenticationPort,
 } from '../connection/contracts';
-import { McpHttpClient } from '../mcp/httpClient';
 import {
   BundleFileManifestEntry,
   BundleSourceMetadata,
@@ -50,8 +49,7 @@ export class ScenarioBundleCoordinator {
     private readonly packager: BundlePackagerPort = new GitBundlePackager(),
     private readonly endpoints: EndpointValidationPort,
     private readonly authentication: ScopedAuthenticationPort,
-    // Stryker disable next-line ArrowFunction: composition-root wiring is exercised by live MCP acceptance.
-    private readonly clients: BundleMcpClientFactory = () => new McpHttpClient(),
+    private readonly clients: BundleMcpClientFactory,
     private readonly archives: ArchiveReader = readFile,
   ) {}
 

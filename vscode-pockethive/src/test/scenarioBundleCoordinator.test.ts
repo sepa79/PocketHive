@@ -55,7 +55,10 @@ test('validates then explicitly publishes the exact retained committed archive w
     { validate: async () => endpoint },
     { authenticateForScopes: async (_profile, _endpoint, requested) => {
       scopes.push([...requested]);
-      return { accessToken: `token-${scopes.length}`, expiresAt: '2026-08-18T13:00:00.000Z' };
+      return {
+        accessToken: `token-${scopes.length}`, expiresAt: '2026-08-18T13:00:00.000Z',
+        renewal: { kind: 'NONE' },
+      };
     } },
     () => clients.shift()!,
     async () => new Uint8Array([1, 2, 3]),
@@ -257,7 +260,7 @@ function coordinatorWith(bundleClient: BundleMcpClient, dispose: () => void = ()
     { package: async () => pendingBundle(dispose).bundle },
     { validate: async () => endpoint },
     { authenticateForScopes: async () => ({
-      accessToken: 'action-token', expiresAt: '2026-08-18T13:00:00.000Z',
+      accessToken: 'action-token', expiresAt: '2026-08-18T13:00:00.000Z', renewal: { kind: 'NONE' },
     }) },
     () => bundleClient,
     async () => new Uint8Array([1]),

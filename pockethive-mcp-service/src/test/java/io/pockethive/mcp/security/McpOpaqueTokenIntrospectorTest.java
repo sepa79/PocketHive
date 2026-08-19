@@ -39,6 +39,7 @@ class McpOpaqueTokenIntrospectorTest {
         assertRejected(with("exp", NOW));
         assertRejected(with("sub", " "));
         assertRejected(with("client_id", null));
+        assertRejected(with("username", null));
         assertRejected(with("scope", List.of()));
     }
 
@@ -69,6 +70,7 @@ class McpOpaqueTokenIntrospectorTest {
         claims.put("iss", ISSUER);
         claims.put("sub", "user-123");
         claims.put("client_id", "vscode-pockethive");
+        claims.put("username", "qa-lead");
         claims.put("aud", List.of("another-audience", RESOURCE));
         claims.put("exp", NOW.plusSeconds(60));
         claims.put("scope", List.of("pockethive:mcp:read", "pockethive:mcp:operate"));

@@ -18,6 +18,7 @@ public final class McpTransportContextFactory {
         Map<String, Object> context = new LinkedHashMap<>();
         context.put(McpCaller.ISSUER, String.valueOf(attributes.get("iss")));
         context.put(McpCaller.SUBJECT, String.valueOf(attributes.get("sub")));
+        context.put(McpCaller.PRINCIPAL_LABEL, String.valueOf(attributes.get("username")));
         context.put(McpCaller.CLIENT_ID, String.valueOf(attributes.get("client_id")));
         context.put(McpCaller.SCOPES, String.valueOf(attributes.get("scope")));
         return McpTransportContext.create(context);

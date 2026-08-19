@@ -22,6 +22,8 @@ interface ResourceResult {
   readonly contents?: Array<{ readonly uri?: string; readonly text?: string }>;
 }
 
+const MCP_CLIENT_NAME = 'pockethive-vscode';
+
 export class McpHttpClient {
   private endpoint?: string;
   private accessToken?: string;
@@ -29,6 +31,7 @@ export class McpHttpClient {
   private nextId = 1;
 
   constructor(
+    private readonly clientVersion: string,
     private readonly fetcher: typeof fetch = fetch,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -39,7 +42,7 @@ export class McpHttpClient {
     const initialize = await this.request<InitializeResult>('initialize', {
       protocolVersion: MCP_PROTOCOL_REVISION,
       capabilities: {},
-      clientInfo: { name: 'pockethive-vscode', version: '1.0.0' },
+      clientInfo: { name: MCP_CLIENT_NAME, version: this.clientVersion },
     }, false, signal);
     if (initialize.protocolVersion !== MCP_PROTOCOL_REVISION) {
       throw new ConnectionContractError(
@@ -47,10 +50,11 @@ export class McpHttpClient {
         `MCP_PROTOCOL_REVISION_MISMATCH: ${initialize.protocolVersion}`,
       );
     }
-    if (initialize.serverInfo?.name !== EXPECTED_MCP_SERVER_NAME) {
+    const serverInfo = initialize.serverInfo;
+    if (serverInfo?.name !== EXPECTED_MCP_SERVER_NAME) {
       throw new ConnectionContractError(
         'MCP_SERVER_IDENTITY_MISMATCH',
-        `MCP_SERVER_IDENTITY_MISMATCH: ${String(initialize.serverInfo?.name)}`,
+        `MCP_SERVER_IDENTITY_MISMATCH: ${String(serverInfo?.name)}`,
       );
     }
     if (!initialize.capabilities?.tools || !initialize.capabilities.resources) {
@@ -75,7 +79,7 @@ export class McpHttpClient {
     const principalLabel = requiredString(capabilities, 'principalLabel', 'MCP_CAPABILITY_RESOURCE_INVALID');
     return {
       serverName: EXPECTED_MCP_SERVER_NAME,
-      serverVersion: requiredString(initialize.serverInfo, 'version', 'MCP_SERVER_IDENTITY_MISMATCH'),
+      serverVersion: requiredString(serverInfo, 'version', 'MCP_SERVER_IDENTITY_MISMATCH'),
       principalLabel,
       capabilityFingerprint: catalogueDigest,
       observedAt: this.now().toISOString(),
@@ -132,8 +136,8 @@ export class McpHttpClient {
   }
 
   async close(): Promise<void> {
-    if (!this.endpoint || !this.accessToken || !this.sessionId) return;
-    const response = await this.fetcher(this.endpoint, {
+    if (!this.sessionId) return;
+    const response = await this.fetcher(this.endpoint!, {
       method: 'DELETE',
       headers: this.headers(true),
     });
@@ -151,7 +155,6 @@ export class McpHttpClient {
     requireSession = true,
     signal?: AbortSignal,
   ): Promise<T> {
-    this.requireConnection(requireSession);
     const id = this.nextId++;
     const response = await this.fetcher(this.endpoint!, {
       method: 'POST',
@@ -183,7 +186,6 @@ export class McpHttpClient {
   }
 
   private async notification(method: string, signal?: AbortSignal): Promise<void> {
-    this.requireConnection(true);
     const response = await this.fetcher(this.endpoint!, {
       method: 'POST',
       headers: this.headers(true),
@@ -196,6 +198,7 @@ export class McpHttpClient {
   }
 
   private headers(requireSession: boolean): Record<string, string> {
+    this.requireConnection(requireSession);
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.accessToken}`,
       'Content-Type': 'application/json',
@@ -204,18 +207,19 @@ export class McpHttpClient {
       'MCP-Protocol-Version': MCP_PROTOCOL_REVISION,
     };
     if (requireSession) {
-      if (!this.sessionId) {
-        throw new ConnectionContractError('MCP_SESSION_ID_MISSING', 'MCP session has not been initialized');
-      }
-      headers['Mcp-Session-Id'] = this.sessionId;
+      headers['Mcp-Session-Id'] = this.sessionId!;
     }
     return headers;
   }
 
   private requireConnection(requireSession: boolean): void {
-    if (!this.endpoint || !this.accessToken || (requireSession && !this.sessionId)) {
-      throw new ConnectionContractError('MCP_NOT_CONNECTED', 'MCP client is not connected');
-    }
+    if (!this.endpoint) this.notConnected();
+    if (!this.accessToken) this.notConnected();
+    if (requireSession && !this.sessionId) this.notConnected();
+  }
+
+  private notConnected(): never {
+    throw new ConnectionContractError('MCP_NOT_CONNECTED', 'MCP client is not connected');
   }
 
   private requireUploadTarget(candidate: string): string {
@@ -226,7 +230,7 @@ export class McpHttpClient {
           || target.origin !== endpoint.origin || target.username || target.password
           || target.search || target.hash
           || !/^\/mcp\/uploads\/(?:uv|up)-[0-9a-f-]{36}$/.test(target.pathname)) {
-        throw new Error('contract mismatch');
+        throw new Error();
       }
       return target.toString();
     } catch {
@@ -237,9 +241,9 @@ export class McpHttpClient {
 
 async function responsePayload(response: Response): Promise<JsonRpcResponse> {
   const body = await response.text();
-  const contentType = response.headers.get('Content-Type') ?? '';
-  const value = contentType.startsWith('text/event-stream')
-    ? body.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trim()).at(-1)
+  const contentType = response.headers.get('Content-Type');
+  const value = contentType?.startsWith('text/event-stream') === true
+    ? body.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5)).at(-1)
     : body;
   if (!value) {
     throw new ConnectionContractError('MCP_JSON_RPC_INVALID', 'MCP response body was empty');
@@ -250,17 +254,16 @@ async function responsePayload(response: Response): Promise<JsonRpcResponse> {
 function parseObject(value: string, code: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(value);
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) throw new Error('not an object');
+    if (parsed === null) throw new Error('not an object');
+    if (Array.isArray(parsed)) throw new Error('not an object');
+    if (typeof parsed !== 'object') throw new Error('not an object');
     return parsed as Record<string, unknown>;
   } catch (error) {
     throw new ConnectionContractError(code, `${code}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
 
-function requiredString(value: unknown, key: string, code: string): string {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new ConnectionContractError(code, `${code}: ${key} missing`);
-  }
+function requiredString(value: object, key: string, code: string): string {
   const field = (value as Record<string, unknown>)[key];
   if (typeof field !== 'string' || !field.trim()) {
     throw new ConnectionContractError(code, `${code}: ${key} missing`);

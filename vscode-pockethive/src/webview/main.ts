@@ -1,5 +1,18 @@
 declare function acquireVsCodeApi(): { postMessage(message: unknown): void };
 
+interface WebviewEventFilterCriteria {
+  readonly timeWindow: string;
+  readonly kind: string;
+  readonly severity: string;
+  readonly search: string;
+}
+declare const PocketHiveEventFilters: {
+  readonly TIME_WINDOWS: Readonly<Record<'ALL' | 'FIFTEEN_MINUTES' | 'ONE_HOUR', string>>;
+  filterEvents<T extends Record<string, unknown>>(events: readonly T[], criteria: WebviewEventFilterCriteria): T[];
+};
+const applyEventFilters = PocketHiveEventFilters.filterEvents;
+const EVENT_TIME_WINDOWS = PocketHiveEventFilters.TIME_WINDOWS;
+
 const vscode = acquireVsCodeApi();
 const appElement = document.querySelector<HTMLElement>('#app');
 const announcerElement = document.querySelector<HTMLElement>('#announcer');
@@ -8,7 +21,15 @@ const app: HTMLElement = appElement;
 const announcer: HTMLElement = announcerElement;
 
 type Model = Record<string, any>;
+const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'] as const;
 let model: Model = { page: 'environments', profiles: [], activeTab: 'Hive', debugActions: [], busy: false };
+let expandedHistorySwarmId: string | undefined;
+let scenarioSearch = '';
+let scenarioFolder = 'ALL';
+const eventCriteria: Record<'Buzz' | 'Journal', WebviewEventFilterCriteria> = {
+  Buzz: { timeWindow: EVENT_TIME_WINDOWS.ALL, kind: 'ALL', severity: 'ALL', search: '' },
+  Journal: { timeWindow: EVENT_TIME_WINDOWS.ALL, kind: 'ALL', severity: 'ALL', search: '' },
+};
 
 window.addEventListener('message', event => {
   const message: unknown = event.data;
@@ -34,6 +55,8 @@ function render(): void {
   if (model.page === 'workspace') app.append(workspace());
   else app.append(environments());
   announcer.textContent = statusAnnouncement();
+  requestAnimationFrame(() => document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    ?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
 }
 
 function header(): HTMLElement {
@@ -42,8 +65,12 @@ function header(): HTMLElement {
   logo.src = app.dataset.logo ?? '';
   logo.alt = '';
   logo.className = 'brand__logo';
+  const name = el('h1', 'brand__name', [
+    text('span', 'Pocket'),
+    text('span', 'Hive', 'brand__hive'),
+  ]);
   result.append(logo, el('div', 'brand__copy', [
-    text('h1', 'PocketHive'),
+    name,
     text('p', model.page === 'workspace' ? 'MCP environment' : 'MCP environments'),
   ]));
   return result;
@@ -149,6 +176,11 @@ function connectionForm(): HTMLElement {
 
 function workspace(): HTMLElement {
   const profile = model.activeProfile ?? {};
+  const session = model.session ?? {
+    status: 'Needs sign-in', message: 'Sign in again to reconnect this environment',
+    canUseWorkspace: false, canSignIn: true, canSignOut: false,
+  };
+  const activeTab = String(model.activeTab);
   const section = el('section', 'workspace');
   section.append(button('‹ Environments', () => send({ type: 'backToEnvironments' }), 'back-link'));
   section.append(el('div', 'workspace-heading', [
@@ -156,22 +188,78 @@ function workspace(): HTMLElement {
       text('h2', String(profile.displayName ?? 'Environment')),
       profile.principalLabel ? text('p', `Signed in as ${String(profile.principalLabel)}`, 'muted') : undefined,
     ]),
-    statusPill(String(profile.status ?? 'Not connected')),
+    el('div', 'workspace-heading__account', [
+      statusPill(String(session.status ?? profile.status ?? 'Not connected')),
+      accountMenu(profile, session),
+    ]),
   ].filter(Boolean) as Node[]));
+  if (!session.canUseWorkspace) section.append(sessionNotice(session));
   section.append(tabStrip());
   const content = el('section', 'tab-content');
+  content.id = panelId(activeTab);
+  content.setAttribute('role', 'tabpanel');
+  content.setAttribute('aria-labelledby', tabId(activeTab));
+  content.tabIndex = 0;
   content.append(el('div', 'section-heading', [
-    el('div', '', [text('h3', String(model.activeTab)), text('p', tabDescription(String(model.activeTab)))]),
-    button(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'),
+    el('div', '', [text('h3', activeTab), text('p', tabDescription(activeTab))]),
+    workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'),
   ]));
-  if (model.activeTab === 'Debug') content.append(debugView());
-  else if (model.activeTab === 'Scenarios') content.append(scenarioBundleView(), resultCard(model.workspaceData));
-  else content.append(resultCard(model.workspaceData));
+  if (activeTab === 'Debug') content.append(debugView());
+  else if (activeTab === 'Journal') content.append(journalView());
+  else if (activeTab === 'Scenarios') content.append(scenarioBundleView(), scenarioListView(model.workspaceData));
+  else if (activeTab === 'Hive') content.append(swarmListView(model.workspaceData));
+  else content.append(eventListView(model.workspaceData, 'No hive events were observed.', 'Buzz'));
   section.append(content, el('footer', 'connection-footer', [
-    statusPill(String(profile.status ?? 'Not connected')),
-    text('span', model.busy ? 'Refreshing' : 'Live MCP observation', 'muted'),
+    statusPill(String(session.status ?? profile.status ?? 'Not connected')),
+    text('span', model.busy ? 'Refreshing' : String(session.message ?? 'Secure session unavailable'), 'muted'),
   ]));
   return section;
+}
+
+function accountMenu(profile: Model, session: Model): HTMLElement {
+  const details = document.createElement('details');
+  details.className = 'account-menu';
+  const summary = document.createElement('summary');
+  summary.textContent = 'Account';
+  details.append(summary);
+  const panel = el('div', 'account-menu__panel', [
+    text('strong', profile.principalLabel ? String(profile.principalLabel) : 'PocketHive user'),
+    text('span', String(session.message ?? 'Secure session unavailable'), 'muted'),
+  ]);
+  const actions = el('div', 'account-menu__actions');
+  if (session.canSignIn) {
+    actions.append(button('Sign in', () => send({ type: 'reauthorizeEnvironment' }), 'primary compact'));
+  }
+  if (!session.canUseWorkspace && !session.canSignIn && session.status !== 'Connecting') {
+    actions.append(button('Retry connection', () => send({ type: 'refresh' }), 'secondary compact'));
+  }
+  if (session.canSignOut) {
+    actions.append(button('Sign out', () => send({ type: 'signOut' }), 'quiet compact'));
+  }
+  panel.append(actions);
+  details.append(panel);
+  return details;
+}
+
+function sessionNotice(session: Model): HTMLElement {
+  const result = el('section', 'session-notice');
+  result.setAttribute('role', session.canSignIn ? 'alert' : 'status');
+  result.append(
+    text('strong', String(session.status ?? 'Session unavailable')),
+    text('span', String(session.message ?? 'The secure session is unavailable'), 'muted'),
+  );
+  if (session.canSignIn) {
+    result.append(button('Sign in', () => send({ type: 'reauthorizeEnvironment' }), 'primary compact'));
+  } else if (session.status !== 'Connecting') {
+    result.append(button('Retry', () => send({ type: 'refresh' }), 'secondary compact'));
+  }
+  return result;
+}
+
+function workspaceActionButton(label: string, action: () => void, className: string): HTMLButtonElement {
+  const control = button(label, action, className);
+  control.disabled = Boolean(model.busy) || model.session?.canUseWorkspace === false;
+  return control;
 }
 
 function scenarioBundleView(): HTMLElement {
@@ -209,18 +297,412 @@ function tabStrip(): HTMLElement {
   const nav = el('nav', 'tabs');
   nav.setAttribute('aria-label', 'Environment sections');
   nav.setAttribute('role', 'tablist');
-  for (const tab of ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug']) {
+  for (const tab of TABS) {
     const control = button(tab, () => send({ type: 'selectTab', tab }), `tab${model.activeTab === tab ? ' active' : ''}`);
+    control.id = tabId(tab);
     control.setAttribute('role', 'tab');
+    control.setAttribute('aria-controls', panelId(tab));
+    control.disabled = Boolean(model.busy) || model.session?.canUseWorkspace === false;
     control.setAttribute('aria-selected', String(model.activeTab === tab));
+    control.tabIndex = model.activeTab === tab ? 0 : -1;
     nav.append(control);
   }
+  nav.addEventListener('keydown', event => {
+    if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab') return;
+    const current = TABS.indexOf(event.target.textContent as typeof TABS[number]);
+    if (current < 0) return;
+    let next: number | undefined;
+    if (event.key === 'ArrowRight') next = (current + 1) % TABS.length;
+    else if (event.key === 'ArrowLeft') next = (current - 1 + TABS.length) % TABS.length;
+    else if (event.key === 'Home') next = 0;
+    else if (event.key === 'End') next = TABS.length - 1;
+    if (next === undefined) return;
+    event.preventDefault();
+    const target = nav.querySelector<HTMLElement>(`#${tabId(TABS[next])}`);
+    target?.focus();
+    target?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    target?.click();
+  });
   return nav;
+}
+
+function journalView(): HTMLElement {
+  const result = el('div', 'journal');
+  const swarms = topLevelRecords(model.workspaceData);
+  if (swarms === undefined) return ownerDataError(model.workspaceData, 'swarm list');
+  const swarmIds = swarms.map(item => stringField(item, 'id')).filter((id): id is string => Boolean(id));
+  if (swarmIds.length === 0) {
+    result.append(emptyState('No swarms are available for journal evidence.'));
+    return result;
+  }
+  const swarm = select('Exact swarm', 'journalSwarm', [
+    ['', 'Select a swarm'],
+    ...swarmIds.map(id => [id, id]),
+  ], String(model.journalSwarmId ?? ''));
+  swarm.control.addEventListener('change', () => {
+    if (swarm.control.value) send({ type: 'selectJournalSwarm', swarmId: swarm.control.value });
+  });
+  result.append(swarm.wrapper);
+  if (!model.journalSwarmId) result.append(emptyState('Select one exact swarm to load its bounded journal.'));
+  else {
+    if (model.journalRunId) {
+      result.append(el('div', 'selection-banner', [
+        el('div', '', [text('span', 'Exact run', 'eyebrow'), titled('strong', String(model.journalRunId), 'mono truncate')]),
+        button('All runs', () => send({ type: 'selectJournalSwarm', swarmId: String(model.journalSwarmId) }), 'quiet compact'),
+      ]));
+    }
+    result.append(eventListView(model.journalResult, 'No journal events were observed for this swarm.', 'Journal'));
+  }
+  return result;
+}
+
+function swarmListView(value: unknown): HTMLElement {
+  const swarms = topLevelRecords(value);
+  if (swarms === undefined) return ownerDataError(value, 'swarm list');
+  if (swarms.length === 0) return emptyState('No live swarms are currently visible.');
+  const list = el('div', 'swarm-list');
+  if (model.swarmOperationResult !== undefined) {
+    list.append(el('div', 'operation-result callout', [
+      text('strong', 'Lifecycle request accepted'),
+      text('span', 'The list below was refreshed from Orchestrator.', 'muted'),
+      technicalDetails(model.swarmOperationResult),
+    ]));
+  }
+  for (const swarm of swarms) {
+    const id = stringField(swarm, 'id');
+    if (!id) {
+      list.append(ownerDataError(swarm, 'swarm record'));
+      continue;
+    }
+    const status = stringField(swarm, 'status') ?? 'UNKNOWN';
+    const bees = swarmBeeCount(swarm);
+    const operation = model.swarmPrimaryActions?.[id];
+    const card = el('article', 'swarm-row');
+    const identity = el('div', 'swarm-row__identity', [
+      brandMark('swarm-mark'),
+      el('div', 'swarm-row__copy', [
+        titled('h4', id, 'truncate'),
+        text('p', [displayValue(swarm.templateId), `${bees} ${bees === 1 ? 'bee' : 'bees'}`].join(' · '), 'muted truncate'),
+      ]),
+    ]);
+    const actions = el('div', 'swarm-row__actions');
+    actions.append(statusPill(status));
+    if (operation) {
+      const label = operation === model.swarmOperations?.START ? 'Start' : 'Stop';
+      actions.append(button(label, () => send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact'));
+    }
+    actions.append(button('Debug', () => send({ type: 'openDebugForSwarm', swarmId: id }), 'secondary compact'));
+    const more = el('details', 'row-menu');
+    more.append(text('summary', 'More'), el('div', 'row-menu__panel', [
+      button('Remove swarm', () => send({ type: 'runSwarmOperation', action: model.swarmOperations?.REMOVE, swarmId: id }), 'guarded compact'),
+      technicalDetails(swarm),
+    ]));
+    actions.append(more);
+    card.append(el('div', 'swarm-row__main', [identity, actions]));
+
+    const expanded = expandedHistorySwarmId === id;
+    const history = button(expanded ? 'Hide run history' : 'Run history', () => {
+      if (expanded) {
+        expandedHistorySwarmId = undefined;
+        render();
+      } else {
+        expandedHistorySwarmId = id;
+        send({ type: 'loadSwarmHistory', swarmId: id });
+      }
+    }, 'history-toggle quiet compact');
+    history.setAttribute('aria-expanded', String(expanded));
+    card.append(history);
+    if (expanded) card.append(swarmRunHistory(id));
+    list.append(card);
+  }
+  return list;
+}
+
+function swarmRunHistory(swarmId: string): HTMLElement {
+  const panel = el('section', 'run-history');
+  panel.setAttribute('aria-label', `Run history for ${swarmId}`);
+  if (model.swarmHistorySwarmId !== swarmId || model.swarmHistoryResult === undefined) {
+    panel.append(emptyState(model.busy ? 'Loading authoritative run history…' : 'Run history has not been loaded.'));
+    return panel;
+  }
+  const error = errorFrom(model.swarmHistoryResult);
+  if (error) {
+    panel.append(errorState(error));
+    return panel;
+  }
+  const runs = topLevelRecords(model.swarmHistoryResult);
+  if (!runs) {
+    panel.append(ownerDataError(model.swarmHistoryResult, 'journal run list'));
+    return panel;
+  }
+  if (runs.length === 0) {
+    panel.append(emptyState('No authoritative journal runs were reported.'));
+    return panel;
+  }
+  for (const run of runs) {
+    const runId = stringField(run, 'runId');
+    if (!runId) {
+      panel.append(ownerDataError(run, 'journal run'));
+      continue;
+    }
+    panel.append(el('article', 'run-row', [
+      el('div', 'run-row__copy', [
+        titled('strong', runId, 'mono truncate'),
+        text('span', runSummary(run), 'muted'),
+      ]),
+      button('Open journal', () => send({ type: 'openJournalRun', swarmId, runId }), 'secondary compact'),
+    ]));
+  }
+  return panel;
+}
+
+function runSummary(run: Model): string {
+  const first = stringField(run, 'firstTs');
+  const last = stringField(run, 'lastTs');
+  const entries = typeof run.entries === 'number' ? run.entries : undefined;
+  const parts = [
+    first && last ? formatDuration(first, last) : undefined,
+    entries === undefined ? undefined : `${entries} ${entries === 1 ? 'entry' : 'entries'}`,
+    run.pinned === true ? 'Pinned' : undefined,
+  ].filter(Boolean);
+  return parts.length ? parts.join(' · ') : 'No run metadata reported';
+}
+
+function formatDuration(first: string, last: string): string | undefined {
+  const start = Date.parse(first);
+  const end = Date.parse(last);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return undefined;
+  const seconds = Math.round((end - start) / 1000);
+  if (seconds < 60) return `${seconds}s`;
+  return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
+}
+
+function swarmBeeCount(swarm: Model): number {
+  if (Array.isArray(swarm.bees)) return swarm.bees.length;
+  if (typeof swarm.beeCount === 'number' && swarm.beeCount >= 0) return swarm.beeCount;
+  return 0;
+}
+
+function scenarioListView(value: unknown): HTMLElement {
+  const scenarios = topLevelRecords(value);
+  if (scenarios === undefined) return ownerDataError(value, 'scenario list');
+  if (scenarios.length === 0) return emptyState('No deployed Scenario Bundles are visible.');
+  const result = el('section', 'scenario-catalogue');
+  const folders = [...new Set(scenarios.map(item => stringField(item, 'folderPath')).filter((item): item is string => Boolean(item)))].sort();
+  const search = input('Search bundles', 'scenarioSearch', scenarioSearch, 'Name or scenario ID');
+  search.control.required = false;
+  const folder = select('Folder', 'scenarioFolder', [['ALL', 'All folders'], ...folders.map(item => [item, item])], scenarioFolder);
+  const filters = el('div', 'filter-bar scenario-filters', [search.wrapper, folder.wrapper]);
+  const list = el('div', 'scenario-list');
+  const apply = () => {
+    scenarioSearch = search.control.value;
+    scenarioFolder = folder.control.value;
+    const query = scenarioSearch.trim().toLocaleLowerCase();
+    const filtered = scenarios.filter(item => {
+      const exactFolder = stringField(item, 'folderPath') ?? '';
+      const searchable = [stringField(item, 'id'), stringField(item, 'name'), exactFolder]
+        .filter(Boolean).join(' ').toLocaleLowerCase();
+      return (scenarioFolder === 'ALL' || exactFolder === scenarioFolder) && (!query || searchable.includes(query));
+    });
+    list.replaceChildren(...filtered.map(scenarioRow));
+    if (filtered.length === 0) list.append(emptyState('No Scenario Bundles match these filters.'));
+  };
+  search.control.addEventListener('input', apply);
+  folder.control.addEventListener('change', apply);
+  result.append(filters, list);
+  apply();
+  return result;
+}
+
+function scenarioRow(scenario: Model): HTMLElement {
+    const id = stringField(scenario, 'id');
+    const name = stringField(scenario, 'name');
+    if (!id || !name) {
+      return ownerDataError(scenario, 'scenario record');
+    }
+    const details = el('details', 'scenario-row');
+    details.append(el('summary', '', [
+      el('div', 'scenario-row__copy', [titled('strong', name, 'truncate'), titled('span', id, 'mono muted truncate')]),
+      statusPill('Deployed'),
+    ]), el('div', 'scenario-row__body', [
+      dataRows([
+        ['Scenario ID', id],
+        ['Folder', displayValue(scenario.folderPath)],
+      ]),
+      technicalDetails(scenario),
+    ]));
+    return details;
+}
+
+function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | 'Journal'): HTMLElement {
+  if (value === undefined) return emptyState(model.busy ? 'Loading current events…' : 'No event data observed yet.');
+  const ownerError = errorFrom(value);
+  if (ownerError) return errorState(ownerError);
+  const root = objectValue(value);
+  const rawItems = root?.items;
+  if (!Array.isArray(rawItems)) return ownerDataError(value, 'event page');
+  if (rawItems.some(item => !objectValue(item))) return ownerDataError(value, 'event record');
+  const events = rawItems as Model[];
+  if (events.length === 0) return emptyState(emptyMessage);
+  const result = el('section', 'event-stream');
+  const criteria = eventCriteria[context];
+  const search = input('Search events', `${context.toLowerCase()}Search`, criteria.search, 'Swarm, type, origin…');
+  search.control.required = false;
+  const time = select('Time', `${context.toLowerCase()}Time`, [
+    [EVENT_TIME_WINDOWS.ALL, 'All captured'],
+    [EVENT_TIME_WINDOWS.FIFTEEN_MINUTES, 'Last 15 minutes'],
+    [EVENT_TIME_WINDOWS.ONE_HOUR, 'Last hour'],
+  ], criteria.timeWindow);
+  const kinds = distinctEventField(events, 'kind');
+  const severities = distinctEventField(events, 'severity');
+  const kind = select('Kind', `${context.toLowerCase()}Kind`, [['ALL', 'All kinds'], ...kinds.map(item => [item, item])], criteria.kind);
+  const severity = select('Severity', `${context.toLowerCase()}Severity`, [['ALL', 'All severities'], ...severities.map(item => [item, item])], criteria.severity);
+  const filters = el('div', 'filter-bar event-filters', [search.wrapper, time.wrapper, kind.wrapper, severity.wrapper]);
+  const count = text('p', '', 'result-count muted');
+  const list = el('div', 'event-list');
+  const apply = () => {
+    const next: WebviewEventFilterCriteria = {
+      search: search.control.value,
+      timeWindow: time.control.value,
+      kind: kind.control.value,
+      severity: severity.control.value,
+    };
+    eventCriteria[context] = next;
+    const filtered = applyEventFilters(events, next);
+    count.textContent = `${filtered.length} of ${events.length} captured events`;
+    list.replaceChildren(...filtered.map(eventRow));
+    if (filtered.length === 0) list.append(emptyState('No captured events match these filters.'));
+  };
+  for (const control of [time.control, kind.control, severity.control]) control.addEventListener('change', apply);
+  search.control.addEventListener('input', apply);
+  result.append(filters, count, list);
+  apply();
+  return result;
+}
+
+function eventRow(event: Model): HTMLElement {
+    const kind = stringField(event, 'kind');
+    const timestamp = stringField(event, 'timestamp');
+    if (!kind || !timestamp) {
+      return ownerDataError(event, 'event record');
+    }
+    const severity = stringField(event, 'severity') ?? 'UNKNOWN';
+    const type = stringField(event, 'type') ?? 'untyped';
+    const swarmId = stringField(event, 'swarmId');
+    const details = el('details', 'event-row');
+    details.append(el('summary', '', [
+      titled('time', compactTime(timestamp), 'event-row__time mono'),
+      statusPill(severity),
+      titled('strong', `${kind}/${type}`, 'event-row__type truncate'),
+      titled('span', swarmId ?? displayValue(event.origin), 'event-row__scope muted truncate'),
+    ]));
+    const actions = el('div', 'event-row__actions');
+    if (swarmId) actions.append(button('Open Debug', () => send({ type: 'openDebugForSwarm', swarmId }), 'secondary compact'));
+    details.append(el('div', 'event-row__body', [
+      dataRows([
+        ['Observed', timestamp],
+        ['Swarm', swarmId ?? 'Not reported'],
+        ['Origin', displayValue(event.origin)],
+        ['Direction', displayValue(event.direction)],
+        ['Routing', displayValue(event.routingKey)],
+      ]),
+      actions,
+      technicalDetails(event),
+    ]));
+    return details;
+}
+
+function distinctEventField(events: Model[], field: string): string[] {
+  return [...new Set(events.map(item => stringField(item, field)).filter((item): item is string => Boolean(item)))].sort();
+}
+
+function compactTime(timestamp: string): string {
+  const value = new Date(timestamp);
+  if (Number.isNaN(value.getTime())) return timestamp;
+  return value.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+}
+
+function brandMark(className: string): HTMLImageElement {
+  const logo = document.createElement('img');
+  logo.src = app.dataset.logo ?? '';
+  logo.alt = '';
+  logo.className = className;
+  return logo;
+}
+
+function topLevelRecords(value: unknown): Model[] | undefined {
+  const ownerError = errorFrom(value);
+  if (ownerError) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  if (value.some(item => !objectValue(item))) return undefined;
+  return value as Model[];
+}
+
+function ownerDataError(value: unknown, expected: string): HTMLElement {
+  return errorState(errorFrom(value) ?? `PocketHive returned an invalid ${expected}.`);
+}
+
+function errorFrom(value: unknown): string | undefined {
+  const root = objectValue(value);
+  const error = objectValue(root?.error);
+  if (!error) return undefined;
+  const code = stringField(error, 'code');
+  const message = stringField(error, 'message');
+  return [code, message].filter(Boolean).join(': ') || 'PocketHive request failed.';
+}
+
+function objectValue(value: unknown): Model | undefined {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Model : undefined;
+}
+
+function stringField(value: Model, field: string): string | undefined {
+  const item = value[field];
+  return typeof item === 'string' && item.trim() ? item.trim() : undefined;
+}
+
+function displayValue(value: unknown): string {
+  if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (value && typeof value === 'object') return JSON.stringify(value);
+  return 'Not reported';
+}
+
+function dataRows(rows: string[][]): HTMLElement {
+  const result = el('dl', 'data-grid');
+  for (const [label, value] of rows) result.append(text('dt', label), titled('dd', value));
+  return result;
+}
+
+function technicalDetails(value: unknown): HTMLElement {
+  const details = el('details', 'technical-details');
+  details.append(text('summary', 'Technical details'));
+  const pre = document.createElement('pre');
+  pre.tabIndex = 0;
+  pre.textContent = JSON.stringify(value, null, 2);
+  details.append(pre);
+  return details;
+}
+
+function emptyState(message: string): HTMLElement {
+  return text('p', message, 'muted callout empty-state');
+}
+
+function errorState(message: string): HTMLElement {
+  return text('p', message, 'error-message callout', 'alert');
+}
+
+function tabId(tab: string): string {
+  return `pockethive-tab-${tab.toLowerCase()}`;
+}
+
+function panelId(tab: string): string {
+  return `pockethive-panel-${tab.toLowerCase()}`;
 }
 
 function debugView(): HTMLElement {
   const result = el('div', 'debug');
-  const swarms = identifiers(model.workspaceData, ['swarmId', 'id']);
+  const swarms = (topLevelRecords(model.workspaceData) ?? [])
+    .map(item => stringField(item, 'id')).filter((id): id is string => Boolean(id));
   const swarm = select('Exact swarm', 'debugSwarm', [['', 'Select a swarm'], ...swarms.map(id => [id, id])], model.debugSwarmId ?? '');
   swarm.control.addEventListener('change', () => {
     if (swarm.control.value) send({ type: 'selectDebugSwarm', swarmId: swarm.control.value });
@@ -234,19 +716,39 @@ function debugView(): HTMLElement {
     });
     result.append(worker.wrapper);
   }
-  const actions = el('div', 'debug-actions');
-  for (const action of model.debugActions ?? []) {
-    const needsWorker = Boolean(action.needsWorker);
-    const control = button(String(action.label), () => {
-      const message: Model = { type: 'runDebug', action: String(action.label) };
-      if (action.label === 'Logs') message.tailLines = 200;
-      send(message);
-    }, action.label === 'Cleanup plan' ? 'guarded' : 'secondary');
-    control.disabled = model.busy || !model.debugSwarmId || (needsWorker && !model.debugRuntimeId);
-    actions.append(control);
+  const groups = [
+    { name: 'Runtime', labels: ['Workers', 'Logs', 'Versions', 'Inspect', 'Runtime drift'] },
+    { name: 'Messaging', labels: ['Control plane', 'Rabbit topology', 'Timeline'] },
+    { name: 'Definition', labels: ['Manifest'] },
+    { name: 'Maintenance', labels: ['Cleanup plan'] },
+  ];
+  const actions = el('div', 'debug-groups');
+  for (const group of groups) {
+    const details = el('details', 'debug-group');
+    if (group.name === 'Runtime') details.setAttribute('open', '');
+    const configured = (model.debugActions ?? []).filter((action: Model) => group.labels.includes(String(action.label)));
+    details.append(el('summary', '', [text('strong', group.name), text('span', `${configured.length} actions`, 'muted')]));
+    const controls = el('div', 'debug-actions');
+    for (const action of configured) {
+      const needsWorker = Boolean(action.needsWorker);
+      const control = button(String(action.label), () => {
+        const message: Model = { type: 'runDebug', action: String(action.label) };
+        if (action.label === 'Logs') message.tailLines = 200;
+        send(message);
+      }, action.label === 'Cleanup plan' ? 'guarded' : 'secondary');
+      control.disabled = model.busy || !model.debugSwarmId || (needsWorker && !model.debugRuntimeId);
+      controls.append(control);
+    }
+    details.append(controls);
+    actions.append(details);
   }
-  result.append(text('h4', 'Actions'), actions);
-  if (model.debugResult !== undefined) result.append(resultCard(model.debugResult));
+  result.append(text('h4', 'Diagnostic actions'), actions);
+  if (model.debugResult !== undefined) {
+    result.append(el('section', 'debug-output', [
+      el('div', 'debug-output__heading', [text('h4', 'Result'), text('span', 'Bounded MCP evidence', 'muted')]),
+      resultCard(model.debugResult),
+    ]));
+  }
   else result.append(text('p', 'Choose an exact target and action. PocketHive will not guess a worker or resource.', 'muted callout'));
   return result;
 }

@@ -2,7 +2,7 @@
   "name": "pockethive-vscode",
   "displayName": "PocketHive",
   "description": "Connect to PocketHive MCP environments and operate swarms, scenarios, journals, and diagnostics.",
-  "version": "1.0.0",
+  "version": "1.0.5",
   "publisher": "pockethive",
   "license": "GPL-3.0-only",
   "repository": {
@@ -25,7 +25,7 @@
         {
           "id": "pockethive",
           "title": "PocketHive",
-          "icon": "resources/hive.svg"
+          "icon": "resources/activity-mark.svg"
         }
       ]
     },
@@ -49,14 +49,17 @@
     "watch": "tsc -watch -p ./",
     "package:check": "node scripts/check-package-files.mjs",
     "package": "npm test && npm run package:check && vsce package",
+    "ui:check": "npm run build && node scripts/playwright-ui-check.mjs",
     "mutation": "stryker run",
     "vscode:prepublish": "npm test"
   },
   "devDependencies": {
+    "@axe-core/playwright": "4.12.1",
+    "@stryker-mutator/core": "10.0.0",
     "@types/node": "20.19.17",
     "@types/vscode": "1.85.0",
-    "@stryker-mutator/core": "10.0.0",
     "@vscode/vsce": "3.9.2",
+    "playwright": "1.60.0",
     "typescript": "5.9.2"
   },
   "overrides": {
@@ -65,6 +68,7 @@
     "js-yaml": "4.3.1",
     "linkify-it": "5.0.2",
     "markdown-it": "14.2.0",
+    "playwright-core": "1.60.0",
     "qs": "6.15.3",
     "tmp": "0.2.7"
   }

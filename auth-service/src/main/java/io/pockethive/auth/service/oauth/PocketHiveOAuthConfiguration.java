@@ -45,6 +45,7 @@ public class PocketHiveOAuthConfiguration {
         TokenSettings tokens = TokenSettings.builder()
             .authorizationCodeTimeToLive(oauth.getAuthorizationCodeTtl())
             .accessTokenTimeToLive(oauth.getAccessTokenTtl())
+            .refreshTokenTimeToLive(oauth.getRefreshTokenTtl())
             .accessTokenFormat(OAuth2TokenFormat.REFERENCE)
             .reuseRefreshTokens(false)
             .build();
@@ -53,6 +54,7 @@ public class PocketHiveOAuthConfiguration {
             .clientName("PocketHive VS Code")
             .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
+            .authorizationGrantType(AuthorizationGrantType.REFRESH_TOKEN)
             .redirectUri(oauth.getVscodeRedirectUri().toString())
             .scopes(scopes -> scopes.addAll(PocketHiveMcpScopes.ALL))
             .clientSettings(ClientSettings.builder()
@@ -93,6 +95,7 @@ public class PocketHiveOAuthConfiguration {
             .issuer(properties.getOauth().getIssuer().toString())
             .authorizationEndpoint("/oauth/authorize")
             .tokenEndpoint("/oauth/token")
+            .tokenRevocationEndpoint("/oauth/revoke")
             .tokenIntrospectionEndpoint("/oauth/introspect")
             .build();
     }
@@ -102,13 +105,15 @@ public class PocketHiveOAuthConfiguration {
                                                                     InMemoryUserStore users) {
         return new DelegatingOAuth2TokenGenerator(
             new PocketHiveAuthorizationCodeGenerator(),
-            new PocketHiveAccessTokenGenerator(properties, users));
+            new PocketHiveAccessTokenGenerator(properties, users),
+            new PocketHiveRefreshTokenGenerator());
     }
 
     @Bean
     @Order(1)
     SecurityFilterChain oauthEndpoints(HttpSecurity http, AuthServiceProperties properties,
-                                       InMemoryUserStore users) throws Exception {
+                                       InMemoryUserStore users, RegisteredClientRepository clients,
+                                       AuthorizationServerSettings settings) throws Exception {
         OAuth2AuthorizationServerConfigurer authorizationServer =
             OAuth2AuthorizationServerConfigurer.authorizationServer();
         http.securityMatcher(authorizationServer.getEndpointsMatcher())
@@ -129,7 +134,13 @@ public class PocketHiveOAuthConfiguration {
                         claims.put(OAuth2AuthorizationServerMetadataClaimNames.RESPONSE_TYPES_SUPPORTED,
                             List.of(OAuth2AuthorizationResponseType.CODE.getValue()));
                         claims.put(OAuth2AuthorizationServerMetadataClaimNames.GRANT_TYPES_SUPPORTED,
-                            List.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue()));
+                            List.of(AuthorizationGrantType.AUTHORIZATION_CODE.getValue(),
+                                AuthorizationGrantType.REFRESH_TOKEN.getValue()));
+                        claims.put(OAuth2AuthorizationServerMetadataClaimNames.REVOCATION_ENDPOINT,
+                            issuer + "/oauth/revoke");
+                        claims.put(
+                            OAuth2AuthorizationServerMetadataClaimNames.REVOCATION_ENDPOINT_AUTH_METHODS_SUPPORTED,
+                            List.of(ClientAuthenticationMethod.NONE.getValue()));
                         claims.put(OAuth2AuthorizationServerMetadataClaimNames.INTROSPECTION_ENDPOINT,
                             issuer + "/oauth/introspect");
                         claims.put(
@@ -138,6 +149,11 @@ public class PocketHiveOAuthConfiguration {
                         claims.put(OAuth2AuthorizationServerMetadataClaimNames.CODE_CHALLENGE_METHODS_SUPPORTED,
                             List.of(PKCE_S256));
                     })))
+                .clientAuthentication(client -> client
+                    .authenticationConverters(converters -> converters.add(0,
+                        new PocketHivePublicSessionClientAuthenticationConverter(settings)))
+                    .authenticationProviders(providers -> providers.add(0,
+                        new PocketHivePublicSessionClientAuthenticationProvider(clients))))
                 .authorizationEndpoint(endpoint -> endpoint
                     .consentPage("/oauth/consent")
                     .authenticationProviders(providers -> providers.forEach(provider -> {
@@ -185,6 +201,8 @@ public class PocketHiveOAuthConfiguration {
             || oauth.getAuthorizationCodeTtl() == null || oauth.getAuthorizationCodeTtl().isNegative()
             || oauth.getAuthorizationCodeTtl().isZero() || oauth.getAccessTokenTtl() == null
             || oauth.getAccessTokenTtl().isNegative() || oauth.getAccessTokenTtl().isZero()
+            || oauth.getRefreshTokenTtl() == null || oauth.getRefreshTokenTtl().isNegative()
+            || oauth.getRefreshTokenTtl().isZero()
             || !secureOrLoopback(oauth.getIssuer()) || !secureOrLoopback(oauth.getResource())
             || !loopbackRedirect(oauth.getVscodeRedirectUri())) {
             throw new IllegalStateException("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");

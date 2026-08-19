@@ -78,7 +78,8 @@ inbound MCP token to Scenario Manager, Orchestrator, or another owner API.
 
 First-release choices are explicit:
 
-- authorization code only;
+- authorization code plus refresh-token rotation for the base VS Code
+  companion session only;
 - public pre-registered clients only; no Dynamic Client Registration or Client
   ID Metadata Document fetching;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
@@ -87,7 +88,19 @@ First-release choices are explicit:
 - the `resource` parameter is mandatory and identical in authorization and
   token requests;
 - opaque access tokens expire after the configured short lifetime;
-- no refresh tokens; an expired session requires a new authorization flow;
+- the exact base scope set (`pockethive:mcp:discover` and
+  `pockethive:mcp:read`) receives an opaque refresh token; privileged
+  operation, authoring, publication, and cleanup scope sets remain ephemeral
+  and receive no refresh token;
+- every successful refresh rotates the refresh token; a retired, expired,
+  revoked, wrong-client, or wrong-resource refresh token fails explicitly and
+  issues no token;
+- the VS Code companion renews only on demand within the configured expiry
+  skew, coalesces concurrent renewal into one request, and keeps the last good
+  workspace visible while renewal completes;
+- explicit sign-out revokes the current access and refresh tokens, deletes the
+  local secret even if remote revocation cannot be confirmed, closes the MCP
+  transport session, and never claims a remote logout that was not confirmed;
 - one-time authorization codes expire after the configured short lifetime;
 - consent decline and browser cancellation do not issue a code or token; and
 - unsupported grants, response types, clients, resources, redirects, or scopes
@@ -140,9 +153,12 @@ resource mismatch, client mismatch, or verifier mismatch invalidates the
 exchange and issues no token.
 
 An opaque MCP access-token record binds token digest, principal, client,
-resource, scopes, issue time, and expiry. Raw tokens, authorization codes, PKCE
-verifiers, request cookies, and OAuth `state` values must not enter logs,
-telemetry, error bodies, or persisted evidence.
+resource, scopes, issue time, and expiry. A base-session refresh-token record
+also binds its authorization family, principal, public client, exact resource,
+exact base scope set, issue time, and expiry. Rotation retires the presented
+refresh token before returning its replacement. Raw access or refresh tokens,
+authorization codes, PKCE verifiers, request cookies, and OAuth `state` values
+must not enter logs, telemetry, error bodies, or persisted evidence.
 
 ---
 
@@ -375,8 +391,10 @@ values. It contains:
   "token_endpoint": "https://environment.example/auth-service/oauth/token",
   "introspection_endpoint": "https://environment.example/auth-service/oauth/introspect",
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code"],
+  "grant_types_supported": ["authorization_code", "refresh_token"],
   "token_endpoint_auth_methods_supported": ["none"],
+  "revocation_endpoint": "https://environment.example/auth-service/oauth/revoke",
+  "revocation_endpoint_auth_methods_supported": ["none"],
   "code_challenge_methods_supported": ["S256"],
   "scopes_supported": [
     "pockethive:mcp:discover",
@@ -424,7 +442,7 @@ the OAuth request, consent, code, token, or client contracts.
 `POST /oauth/token` → request
 `application/x-www-form-urlencoded`, response `application/json`
 
-Required fields:
+Authorization-code fields:
 
 - `grant_type=authorization_code`;
 - single-use `code`;
@@ -438,18 +456,41 @@ Success returns:
 ```json
 {
   "access_token": "phmcp_opaque_value",
+  "refresh_token": "phrfr_opaque_value",
   "token_type": "Bearer",
   "expires_in": 900,
   "scope": "pockethive:mcp:discover pockethive:mcp:read"
 }
 ```
 
-No refresh token is returned. OAuth errors use the standard `error` field and a
-bounded non-sensitive `error_description`. A failed exchange consumes no valid
-code except where OAuth replay protection requires invalidating the attempted
-code family.
+The `refresh_token` field is returned only when the authorized scope set is
+exactly `pockethive:mcp:discover pockethive:mcp:read`. A privileged scope set
+receives the same response without `refresh_token`.
 
-### 6.11 OAuth token introspection
+Refresh fields are exact and explicit:
+
+- `grant_type=refresh_token`;
+- the registered public `client_id`;
+- the current single-use `refresh_token`; and
+- the exact configured MCP `resource`.
+
+A successful refresh returns a new access token and a different refresh token.
+The previous refresh token is retired and cannot be replayed. OAuth errors use
+the standard `error` field and a bounded non-sensitive `error_description`. A
+failed authorization-code exchange consumes no valid code except where OAuth
+replay protection requires invalidating the attempted code family.
+
+### 6.11 OAuth token revocation
+
+`POST /oauth/revoke` uses `application/x-www-form-urlencoded` with the exact
+registered public `client_id`, one `token`, and one `token_type_hint` of either
+`access_token` or `refresh_token`. The endpoint follows RFC 7009 response
+semantics and never reveals whether an opaque token existed. The companion
+revokes both current token types on explicit sign-out. Unknown clients,
+credentials, duplicate fields, and unsupported authentication methods fail
+explicitly.
+
+### 6.12 OAuth token introspection
 
 `POST /oauth/introspect` → request
 `application/x-www-form-urlencoded`, response `application/json`

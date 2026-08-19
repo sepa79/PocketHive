@@ -23,7 +23,10 @@ const profile = createConnectionProfile({
   endpointSecurityMode: 'REMOTE_HTTPS',
   secretKey: 'pockethive.profile.nft-lab.oauth',
 });
-const session: OAuthSession = { accessToken: 'secret-token', expiresAt: '2026-08-18T12:15:00Z' };
+const session: OAuthSession = {
+  accessToken: 'secret-token', expiresAt: '2026-08-18T12:15:00Z',
+  renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh-token' },
+};
 const evidence: ConnectionEvidence = {
   serverName: 'pockethive-mcp',
   serverVersion: '0.15.35',
@@ -287,7 +290,10 @@ test('sign-in retry handles failure and releases a successful completed operatio
 
 test('expired retry becomes authentication failure without calling MCP', async () => {
   const calls: string[] = [];
-  const expired = { accessToken: 'expired', expiresAt: '2026-08-18T11:59:59Z' };
+  const expired: OAuthSession = {
+    accessToken: 'expired', expiresAt: '2026-08-18T11:59:59Z',
+    renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
+  };
   const attempt = createAttempt(
     calls,
     async () => session,
@@ -306,7 +312,10 @@ test('expired retry becomes authentication failure without calling MCP', async (
 
 test('a session expiring exactly now is rejected on retry', async () => {
   const calls: string[] = [];
-  const expiresNow = { accessToken: 'expired', expiresAt: NOW.toISOString() };
+  const expiresNow: OAuthSession = {
+    accessToken: 'expired', expiresAt: NOW.toISOString(),
+    renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
+  };
   const attempt = createAttempt(
     calls,
     async () => session,
@@ -364,7 +373,10 @@ test('saved-profile reconnect rejects an expired session before MCP testing', as
     async () => { throw new Error('interactive authentication must not run'); },
     async () => { throw new Error('MCP must not run'); },
     undefined,
-    { accessToken: 'expired', expiresAt: NOW.toISOString() },
+    {
+      accessToken: 'expired', expiresAt: NOW.toISOString(),
+      renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
+    },
   );
 
   const result = await attempt.reconnect();

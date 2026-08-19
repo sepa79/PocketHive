@@ -151,7 +151,9 @@ Bundle format. The connected agent can then:
 25. The VS Code webview is a presentation adapter. It receives typed view models
     from the extension host and never holds bearer tokens, calls PocketHive
     owners directly, or becomes an authority for environment, workflow, runtime,
-    or approval state.
+    or approval state. Webview reconstruction must bind presentation to the
+    newest resolved view; disposal of an obsolete view must not detach its
+    replacement or reset the host-owned page, profile, tab, or connection state.
 26. The VS Code `Connect` action is one user action with ordered, separately
     observable endpoint validation, authentication, and MCP connection testing.
     It must not merge their outcomes, test after decline or cancellation, or
@@ -692,9 +694,12 @@ whose resolved host remains loopback; it never falls back from HTTPS.
 
 Live connection status, principal, server identity, PocketHive version,
 capability fingerprint, and observation time are transient owner observations.
-They are never persisted as facts in the profile. Opening a saved profile
-therefore reconnects and revalidates it; it does not display a cached
-`Connected` claim.
+The human-facing principal label is the verified Auth Service `username`
+claim; the canonical authorization key remains the verified `(issuer,
+subject)` pair. The extension never substitutes or exposes the opaque subject
+as the display label. These observations are never persisted as facts in the
+profile. Opening a saved profile therefore reconnects and revalidates it; it
+does not display a cached `Connected` claim.
 
 This is distinct from a PocketHive SUT environment and from Scenario Bundle
 environment configuration.
@@ -798,7 +803,11 @@ threats, not model-behaviour assumptions.
 
 1. The agent obtains the target repository and bundle path from the user or
    active IDE workspace.
-2. The workflow generates a deterministic proposed file set.
+2. The workflow generates a deterministic proposed file set. Generated text is
+   byte-stable UTF-8: leading and trailing whitespace, final newlines, and empty
+   files are preserved exactly. Relative paths must already be canonical;
+   leading or trailing path whitespace and duplicate paths are rejected rather
+   than normalized, overwritten, or ordered implicitly.
 3. The client writes those files into the active Git repository.
 4. The user reviews the diff and commits through their normal Git process.
 5. The client packages the exact committed bundle path.
@@ -1164,7 +1173,7 @@ Use narrow ports:
 | Profile persistence and active selection | `McpConnectionProfileRepository` adapter over VS Code storage |
 | OAuth session | `AuthenticationPort` adapter over the approved MCP OAuth contract and `SecretStorage` |
 | MCP initialisation, resources, and tools | `McpClientPort` Streamable HTTP adapter |
-| Page and tab state | Presentation controller; transient except active profile/tab navigation hints |
+| Page and tab state | Presentation controller in the extension host; transient except active profile/tab navigation hints and preserved across webview reconstruction |
 | HTML rendering | Pure view-model-to-markup functions and a local webview client |
 | Host/webview messages | One discriminated-union contract validated on both boundaries |
 
@@ -1190,6 +1199,12 @@ zoom and font scaling. The layout has:
 - reduced-motion support and no meaning conveyed by colour alone; and
 - a horizontally keyboard-scrollable tab strip only below 280 CSS pixels;
   tabs are never silently removed or moved into an inferred navigation mode.
+
+The tab strip implements the WAI-ARIA tabs pattern: one roving tab stop,
+`Left`/`Right` and `Home`/`End` navigation, exact `tab`/`tabpanel` bindings, and
+the selected tab scrolled into view. Only the tab strip may overflow
+horizontally; focus outlines, sticky positioning, and long owner values must
+not create page-level horizontal scrolling.
 
 Wider editor panels may add whitespace but must not switch to a separate
 multi-column product design. Debug results, forms, and lists remain one column
@@ -1221,6 +1236,19 @@ Authentication cancellation or failure exposes `Sign in again` and performs no
 test. A test failure exposes `Retry test` and reuses the still-valid OAuth
 session; an expired session moves explicitly to `AUTHENTICATION_FAILED`. Neither
 action changes the URL, protocol, transport, or authentication mode.
+
+Auth Service owns the browser sign-in and consent presentation as well as the
+OAuth behavior. Both pages use semantic server-rendered HTML, one local static
+stylesheet, and the canonical `ui-v2/public/logo.svg` copied into the Auth
+Service artifact during Maven resource processing. They show the selected
+environment purpose, verified client display name, exact resource, and every
+requested scope with a plain-language description. They remain responsive,
+keyboard accessible, reduced-motion safe, and readable at narrow mobile widths.
+No script, remote font, remote style, inferred permission, hidden scope,
+alternate authorization endpoint, or OAuth field transformation is allowed.
+Presentation tests assert the canonical issuer form actions and static assets;
+the existing authorization-code, PKCE, state, redirect, resource, consent, and
+token tests remain the behavioral authority.
 
 The status labels have exact meanings:
 
@@ -1257,6 +1285,48 @@ the current owner-backed data and always shows its observation time. Background
 refresh is bounded, pauses while hidden, and cannot mutate or silently retry.
 An unavailable owner produces the exact typed state within the selected tab;
 the client never switches environment, endpoint, owner, or adapter.
+
+Owner responses use bounded, tab-specific list, card, empty, and error states.
+Hive shows swarm identity, lifecycle state, health, and bee count; Buzz and
+Journal show bounded event summaries; Scenarios shows Scenario Manager IDs,
+names, and folder paths. Raw JSON is available only in an explicit technical
+details disclosure or a bounded Debug result; it is not the primary product
+view. Journal first requires an exact discovered swarm and then calls
+`debug_journal` for that selected swarm without guessing.
+
+The workspace restores the independently useful controls from the removed Tree
+Views without restoring a second behaviour path:
+
+- each Hive row exposes only the lifecycle action valid for its reported state;
+  `Start`, `Stop`, and guarded `Remove` call `swarm_start`, `swarm_stop`, and
+  `swarm_remove` through a short-lived least-privilege MCP connection and then
+  refresh the authoritative swarm list;
+- each Hive row has a collapsed run-history disclosure. Opening one row closes
+  the previous disclosure and calls the read-only `debug_journal_runs` tool for
+  that exact swarm. The tool delegates to Orchestrator's existing
+  `/api/swarms/{swarmId}/journal/runs` endpoint and returns its exact run IDs,
+  first/last timestamps, entry count, and pinned state; the client does not
+  infer pass/fail from recent events;
+- selecting one run opens Journal with the exact swarm and run IDs. The
+  existing `debug_journal` input therefore accepts optional `runId` as an exact
+  owner-side filter. A malformed or blank selected ID fails at the MCP
+  boundary; an owner-unknown exact ID preserves Orchestrator's explicit empty
+  or not-found response and never falls back to the active or latest run;
+- Buzz is a compact one-row event stream with explicit search, time, kind, and
+  severity filters. Journal uses the same filter model after the required exact
+  swarm selection. Filtering is presentation state over the bounded owner page
+  and never changes endpoint, owner, adapter, or target;
+- Scenario rows are compact, searchable disclosures around the existing
+  Scenario Manager catalogue and committed-bundle publication workflow; and
+- Debug retains every canonical action, grouped as Runtime, Messaging,
+  Definition, and guarded Maintenance disclosures. Selecting an action still
+  invokes the one existing `debugToolCall` mapping and renders one bounded
+  result below the action list.
+
+`debug_journal_runs` is additive and read-only. Existing MCP clients and
+`debug_journal` calls without `runId` keep their current behaviour. The MCP
+catalogue remains the single tool/skill source of truth, and the new tool is
+connected to `runtime-diagnostics` like the related journal reads.
 
 ### Debug tab
 
@@ -1295,8 +1365,8 @@ automatically requesting approval again.
 
 The webview must:
 
-- set `default-src 'none'`, load only extension-local images/styles and one
-  nonce-bound local module script, and use no inline event handlers;
+- set `default-src 'none'`, load only extension-local images/styles and
+  nonce-bound local scripts, and use no inline event handlers;
 - validate every inbound and outbound message against the canonical
   discriminated-union contract and reject unknown types or fields;
 - render untrusted values through text nodes, never `innerHTML`, and apply the
@@ -1309,14 +1379,21 @@ The webview must:
 `ui-v2/public/logo.svg` remains the single source for PocketHive brand geometry
 and colour. The packaging build deterministically produces:
 
-- a mark-only, `currentColor` derivative at
-  `vscode-pockethive/resources/hive.svg` for the Activity Bar; and
-- a bounded full-colour mark derivative for the webview header.
+- a mark-only `currentColor` silhouette at
+  `vscode-pockethive/resources/activity-mark.svg`, optically simplified for the
+  24 px Activity Bar mask with visible rounded connectors, nodes, body, lens
+  ring, and centre button; and
+- a bounded full-colour mark at
+  `vscode-pockethive/resources/logo-mark.svg` for the webview header; and
+- a bounded CSS brand token at
+  `vscode-pockethive/resources/brand-tokens.css` that colours the `Hive` suffix
+  in the shared header on both companion pages, with accessible light and
+  high-contrast theme treatment and compact wordmark/subtitle line height.
 
-Generated derivatives carry source path and digest metadata, are not edited by
-hand, and are checked during packaging. The Activity Bar icon uses the exact
-PocketHive hexagon/network/lens geometry and allows VS Code to apply active,
-inactive, hover, and high-contrast colour.
+All three generated derivatives carry source path and digest metadata, are not
+edited by hand, and are checked during packaging. The Activity Bar silhouette
+preserves the canonical hexagon/network/lens identity while remaining legible
+under VS Code active, inactive, hover, and high-contrast treatment.
 
 The extension does not spawn the Node or Java MCP server, use stdio, or retain
 MCP executable paths, transport selectors, bundle-root lists, direct
@@ -1380,11 +1457,18 @@ client-provided replacement workflow snapshot; it never trusts the client to
 assert prior elicitation or manufacture a state transition.
 
 Session creation returns `expiresAt`, and every session response reports state
-and remaining lifetime. The first release has no implicit renewal and no state
-transfer between sessions. Cleanup follows only the explicit configured
-durations; missing retention configuration fails startup. Expiry or deletion of
-MCP state never claims rollback or deletion of source Git history, Scenario
-Manager state, Orchestrator state, or HiveGate evidence.
+and remaining lifetime. Agent workflow sessions have no implicit renewal or
+state transfer between sessions. The VS Code companion's separate OAuth base
+session renews on demand through the canonical Auth Service refresh grant.
+Renewal is single-flight, rotates an opaque refresh token, and reconnects a
+candidate MCP transport before replacing the current transport. The
+authenticated workspace and its last good owner data remain visible during
+renewal, so a transient session state never sends the user back to
+`Environments` or blanks the active tab. Privileged scoped sessions remain
+ephemeral and receive no refresh token. Cleanup follows only the explicitly
+configured durations; missing retention configuration fails startup. Expiry or
+deletion of MCP state never claims rollback or deletion of source Git history,
+Scenario Manager state, Orchestrator state, or HiveGate evidence.
 
 A write whose outcome is uncertain returns an explicit ambiguous-result error.
 The client must reconcile before deciding whether to retry.
@@ -1710,6 +1794,8 @@ At minimum prove:
 35. The webview rejects forged/unknown messages and injected markup, receives no
     tokens or secrets, loads no remote code/content, restores focus after state
     changes, and releases listeners, timers, links, and results on disposal.
+    Resolving a replacement view before an older view disposes keeps the
+    replacement attached and immediately restores its host-owned view model.
 36. The Activity Bar displays the exact PocketHive mark as a theme-tinted icon,
     and the header displays its full-colour derivative; both are generated from
     `ui-v2/public/logo.svg` and pass package provenance checks.
@@ -1954,6 +2040,197 @@ release risks:
 
 These items block a claim of production release acceptance. They do not block
 the recorded `IMPLEMENTED / LOCAL CUTOVER VERIFIED` status.
+
+### VS Code live-UI follow-up and RST debrief — 2026-08-19
+
+This is additional local-development evidence for the uncommitted worktree on
+`feat/pockethive-mcp-improvements`. It is not a HiveGate approval, remote
+HiveForge receipt, commit, push, or production release decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| MCP verification | Full MCP reactor test run: 115 tests | Pass, 115/115 |
+| MCP mutation | PIT: 1,313/1,313 mutated lines covered; 521/521 mutants killed, zero survivors or uncovered mutants; four non-terminating/slow mutants were killed by the configured timeout | Pass, 100% |
+| VS Code verification | `npm run package`: 65 tests passed twice, cutover/assets/package allow-list passed, extension 1.0.5 VSIX produced | Pass |
+| VS Code mutation | Stryker: all 803 actionable mutants killed by assertion; zero survivor, timeout, error, or uncovered mutant, including every payload-boundary, collection-cap, exact-byte-limit, tab-mapping, and view-lifecycle mutant | Pass, 100% |
+| Live UI acceptance | Playwright completed browser OAuth and MCP reads through the public local ingress, captured nine screenshots, and found zero Axe, page-overflow, clipping, target-size, raw-primary-JSON, tab-binding, roving-focus, keyboard, or active-tab visibility issue | Pass |
+| Responsive variation | Dark Side Bar sampled at 140, 240, 280, 320, and 480 CSS pixels, including the 140-pixel 200%-zoom equivalent and deliberately long environment/principal labels | Pass |
+| Supply chain | Playwright and Axe are exact dev-only pins; `playwright-core` is locked to the same exact version; `npm audit --audit-level=high` reported zero vulnerabilities | Pass |
+| Local deployment | `build-hive.sh --quick --module pockethive-mcp-service` reused caches, rebuilt the exact JAR/image, preserved unrelated containers/volumes, and restarted only the MCP service | Pass |
+| Installed extension | VS Code CLI replaced `pockethive.pockethive-vscode@1.0.4` with packaged version `1.0.5`; the real window was explicitly reloaded and the saved local profile was reauthenticated through browser OAuth | Pass |
+| Native Buzz regression | Against live local MCP data, the installed extension opened Buzz three times, refreshed Buzz, and completed Hive -> Buzz navigation without losing the profile, connection, selected tab, cards, or control responsiveness | Pass |
+
+#### RST session `RST-VSCODE-COMPANION-20260819`
+
+- **Mission:** add the explicit local MCP environment through the real browser
+  flow, challenge the narrow companion against live owner data, and follow every
+  layout, identity, interaction, and test-harness anomaly through a fix loop.
+- **Oracles:** this specification, canonical logo assets, verified OAuth/MCP
+  identity, owner response contracts, WAI-ARIA tabs, no-page-overflow and
+  no-fallback rules, Playwright geometry, Axe, and before/after screenshots.
+- **Variations:** empty and populated owner results, historical journal events,
+  long labels, keyboard tab traversal, 140–480 CSS-pixel widths, current/local
+  OAuth consent, selected-tab visibility, and cached JAR/image risk.
+
+The session found and resolved:
+
+1. `principalLabel` exposed the opaque UUID subject. Authenticated transport now
+   keeps `(issuer, subject)` as the authorization key but exposes the verified
+   Auth Service `username` as the separate display label.
+2. The sub-320 media rule changed page padding without changing the tab strip's
+   negative margin, producing exactly three pixels of page overflow. Both now
+   consume one CSS variable.
+3. Tabs lacked panel bindings, roving focus, arrow/Home/End behavior, and active
+   visibility. The WAI-ARIA pattern and deterministic scroll-into-view behavior
+   are now acceptance-tested; all tabs fit at 280 pixels and only the strip may
+   scroll below that width.
+4. Hive, Buzz, and Scenarios presented owner JSON as the primary product view,
+   while Journal could not request one exact swarm. Tab-specific bounded cards,
+   explicit empty/error states, collapsed technical details, and exact-swarm
+   `debug_journal` selection replace that behavior.
+5. The first exploratory Journal probe reused a swarm ID found only in
+   historical hive events and correctly received owner HTTP 404. The harness
+   now permits Journal reads only for IDs in the current `swarm_list`; it does
+   not infer that historical evidence is a live target.
+6. Re-rendered screenshot states retained the prior long page's scroll offset,
+   making the next header appear clipped. Resetting only the harness viewport
+   scroll removed the false product finding.
+7. A 140-pixel variation representing a 280-pixel Side Bar at 200% zoom found a
+   30-pixel header/footer overflow. A compact sub-200 layout fixed it without a
+   second navigation mode or hidden controls.
+
+No current swarm existed during the final local run, so the live selected-swarm
+Journal success state remains a native/manual or future seeded-acceptance
+charter. The exact command boundary, no-inference target validation, empty
+state, owner 404 behavior, and `debug_journal` MCP mapping are automated; this
+residual does not justify inventing or silently creating a swarm.
+
+#### RST session `RST-VSCODE-WEBVIEW-LIFECYCLE-20260819`
+
+The installed 1.0.3 companion was observed in the real VS Code window after a
+Buzz interaction showing its empty startup Environments model with every
+control inert. Read-only VS Code storage inspection proved that the exact saved
+local profile still existed, the extension-host log showed no MCP or profile
+failure, and the standalone live MCP/Buzz flow remained healthy. This isolated
+the failure to the webview reconstruction boundary rather than owner data,
+OAuth, storage, or the local MCP.
+
+The first hypothesis was a stale disposal callback detaching a replacement
+view. Version 1.0.4 added a correct `CurrentView` ownership guard and its tests,
+but native retesting reproduced the same symptom. Live extension-host debugging
+then proved the visible view was current, its command reached Java, and
+`postMessage` returned success. The lifecycle hypothesis therefore did not
+explain this failure and is retained only as a separate defensive hardening.
+
+The decisive probe measured the 50-event Buzz owner result at 128,239
+characters. `postView` bounded that field and then bounded the complete model a
+second time. The second bound replaced the required root fields (`page`,
+`profiles`, `activeTab`, and `busy`) with a generic truncated-content object.
+The renderer correctly treated the now-invalid model as its empty Environments
+state; every subsequent response repeated the same root replacement, which
+made the view appear frozen. A ten-event owner probe measured 37,525 characters.
+
+The corrected smallest design applies the size/redaction boundary only to the
+five untrusted owner-data fields and never replaces the view-model root. An
+oversized field becomes an explicit `COMPANION_VIEW_DATA_TOO_LARGE` error with
+no copied content, while required navigation and profile state remain intact.
+Buzz and Journal use one named ten-event Side Bar limit. TDD records the former
+compile failure, root-contract preservation, every independently bounded field,
+redaction, exact UTF-8 byte-limit behaviour, collection caps, and exact
+tab-to-tool mapping. Version 1.0.5 carries this correction. All 65 extension
+tests passed, all 803 actionable Stryker mutants were killed by assertion, the
+VSIX package and public-ingress Playwright run passed, and the installed
+extension completed three native Buzz loads, a Buzz refresh, and Hive -> Buzz
+navigation against live local MCP data without returning to Environments or
+freezing.
+
+One exploratory native replay appeared to return to Environments after a Hive
+click. Capture-before-click reproduction showed that focusing the real window
+had changed the scrolled webview position while the external test driver reused
+the old absolute coordinate. Repeating the product path without the stale
+coordinate completed Hive -> Buzz successfully. This is retained as an RST
+test-harness learning, not classified as a product defect or silently omitted.
+
+### Authorised-session and enterprise-UI follow-up — 2026-08-19
+
+This is local-development evidence for the uncommitted worktree on
+`feat/pockethive-mcp-improvements`. It supersedes the earlier no-refresh policy
+as the current companion-session design. It does not change the historical
+evidence recorded above and is not a HiveGate approval, remote HiveForge
+receipt, commit, push, or production release decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| Auth verification | Auth Service unit and integration suites | Pass, 22/22 |
+| MCP verification | Full MCP reactor test run | Pass, 115/115 |
+| VS Code verification | Extension compile, test, cutover, asset, and package checks | Pass, 102/102 tests |
+| Auth mutation | PIT covered 56/56 mutated lines and killed 26/26 mutants | Pass, 100% |
+| MCP mutation | PIT covered 1,391/1,391 mutated lines and killed 576/576 mutants | Pass, 100% |
+| VS Code mutation | Stryker killed 1,825/1,825 actionable mutants; zero survivor, timeout, error, or uncovered mutant | Pass, 100% |
+| Public-ingress session proof | Base refresh rotated its token; retired-token replay failed; explicit sign-out revoked both current tokens | Pass |
+| Live UI acceptance | Playwright exercised 20 environment, workspace, account, tab, narrow-width, sign-in, and consent screenshots with zero recorded finding | Pass |
+| Supply chain | `npm audit --audit-level=low` | Pass, zero vulnerability |
+| Local deployment | Canonical targeted `build-hive.sh` rebuild deployed the current Auth Service; the dependent MCP restarted after its cached service token was invalidated | Pass |
+
+#### RST session `RST-VSCODE-AUTHORISED-SESSION-20260819`
+
+- **Mission:** preserve an authorised workspace across base-session expiry,
+  make sign-in and sign-out understandable, and challenge the implementation at
+  OAuth, ingress, transport-switch, reconstruction, and narrow-layout
+  boundaries.
+- **Oracles:** the canonical Auth Service contract, exact public MCP resource,
+  PocketHive no-fallback rules, rotating-token invariants, verified principal,
+  current-transport ownership, last-good-data continuity, WAI-ARIA and Axe,
+  geometry checks, and same-input design comparisons.
+- **Variations:** expiry outside and inside the 60-second renewal boundary;
+  concurrent callers; successful and failed refresh; successful and failed
+  candidate MCP initialisation; rotated-token replay; revocation; privileged
+  scopes; malformed discovery and stored session data; webview reconstruction;
+  long labels; 140–480 CSS-pixel widths; 200%-zoom equivalent; sign-in,
+  consent, account-menu, retry, and sign-out states.
+
+The fix loop found and resolved:
+
+1. Refresh requests through the public ingress were redirected to sign-in and
+   returned HTTP 406. The public-client converter compared the raw request URI
+   with `/oauth/token`; Nginx's forwarded prefix made that URI
+   `/auth-service/oauth/token`. It now derives one canonical application path
+   from the validated context path and fails closed when the path is
+   inconsistent. Unit tests cover direct, prefixed, and inconsistent paths,
+   and the live public-ingress refresh proves rotation.
+2. The Account disclosure panel remained laid out while closed because author
+   CSS overrode the browser's native closed-state rule. At the 140-pixel
+   200%-zoom equivalent it caused page overflow, and a long principal caused
+   overflow at 280 pixels. The closed panel is now explicitly removed from
+   layout, controls wrap within their container, and the sub-320 workspace
+   header stacks without hiding an action.
+3. Replacing the active transport immediately after a token refresh could have
+   discarded a working session when MCP initialisation failed. Renewal now
+   creates and validates one candidate connection, swaps only on success, and
+   then closes the old connection. Concurrent calls share one in-flight
+   renewal.
+4. Treating every OAuth grant as renewable would have retained privileged
+   authority. Only the exact base scope set receives a refresh token;
+   privileged scoped tool sessions remain short-lived and non-renewable.
+5. Rebuilding Auth Service invalidated the MCP process's cached downstream
+   service token. Restarting only that dependent local service restored the
+   declared token lifecycle without rebuilding unrelated images or clearing
+   caches, containers, or volumes. This remains local deployment learning, not
+   an automatic runtime fallback.
+
+**QA-lead debrief:** no unresolved local correctness, mutation, public-ingress
+session, package, account-flow, responsive-layout, or known npm dependency
+defect was found. During restore and renewal, the extension keeps the workspace,
+active tab, and last good owner data rendered; it exposes one calm session
+notice instead of navigating to Environments or blanking the page. Explicit
+sign-out revokes current access and refresh tokens, clears VS Code Secret
+Storage, closes the MCP transport, and then returns to Environments.
+
+The local evidence does not qualify remote identity-provider behaviour,
+production network loss, cross-device logout, screen-reader announcements in a
+native VS Code window, or governed HiveForge deployment. Those remain explicit
+release charters; they do not justify a fallback or weaken the current local
+acceptance result.
 
 ## Delivery plan
 

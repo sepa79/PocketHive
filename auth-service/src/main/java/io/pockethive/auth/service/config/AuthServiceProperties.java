@@ -62,6 +62,7 @@ public class AuthServiceProperties {
         private URI resource;
         private Duration authorizationCodeTtl = Duration.ofMinutes(2);
         private Duration accessTokenTtl = Duration.ofMinutes(15);
+        private Duration refreshTokenTtl = Duration.ofHours(8);
         private String vscodeClientId;
         private URI vscodeRedirectUri;
         private String introspectionClientId;
@@ -75,6 +76,8 @@ public class AuthServiceProperties {
         public void setAuthorizationCodeTtl(Duration value) { this.authorizationCodeTtl = value; }
         public Duration getAccessTokenTtl() { return accessTokenTtl; }
         public void setAccessTokenTtl(Duration value) { this.accessTokenTtl = value; }
+        public Duration getRefreshTokenTtl() { return refreshTokenTtl; }
+        public void setRefreshTokenTtl(Duration value) { this.refreshTokenTtl = value; }
         public String getVscodeClientId() { return vscodeClientId; }
         public void setVscodeClientId(String value) { this.vscodeClientId = value; }
         public URI getVscodeRedirectUri() { return vscodeRedirectUri; }

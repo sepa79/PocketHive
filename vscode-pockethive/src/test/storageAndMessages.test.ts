@@ -69,6 +69,8 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   assert.deepEqual(decodeWebviewCommand({ type: 'ready' }), { type: 'ready' });
   assert.deepEqual(decodeWebviewCommand({ type: 'addEnvironment' }), { type: 'addEnvironment' });
   assert.deepEqual(decodeWebviewCommand({ type: 'backToEnvironments' }), { type: 'backToEnvironments' });
+  assert.deepEqual(decodeWebviewCommand({ type: 'reauthorizeEnvironment' }), { type: 'reauthorizeEnvironment' });
+  assert.deepEqual(decodeWebviewCommand({ type: 'signOut' }), { type: 'signOut' });
   assert.deepEqual(decodeWebviewCommand({ type: 'saveOpen' }), { type: 'saveOpen' });
   assert.deepEqual(decodeWebviewCommand({ type: 'signInAgain' }), { type: 'signInAgain' });
   assert.deepEqual(decodeWebviewCommand({ type: 'retryTest' }), { type: 'retryTest' });
@@ -108,6 +110,24 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   assert.deepEqual(decodeWebviewCommand({ type: 'selectTab', tab: 'Scenarios' }), {
     type: 'selectTab', tab: 'Scenarios',
   });
+  assert.deepEqual(decodeWebviewCommand({ type: 'selectJournalSwarm', swarmId: 'checkout-load' }), {
+    type: 'selectJournalSwarm', swarmId: 'checkout-load',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'loadSwarmHistory', swarmId: ' checkout-load ' }), {
+    type: 'loadSwarmHistory', swarmId: 'checkout-load',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openJournalRun', swarmId: ' checkout-load ', runId: ' run-42 ',
+  }), { type: 'openJournalRun', swarmId: 'checkout-load', runId: 'run-42' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'runSwarmOperation', action: 'START', swarmId: ' checkout-load ',
+  }), { type: 'runSwarmOperation', action: 'START', swarmId: 'checkout-load' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'runSwarmOperation', action: 'REMOVE', swarmId: ' checkout-load ',
+  }), { type: 'runSwarmOperation', action: 'REMOVE', swarmId: 'checkout-load' });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openDebugForSwarm', swarmId: ' checkout-load ' }), {
+    type: 'openDebugForSwarm', swarmId: 'checkout-load',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'selectDebugSwarm', swarmId: ' swarm-1 ' }), {
     type: 'selectDebugSwarm', swarmId: 'swarm-1',
   });
@@ -133,10 +153,18 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectDebugWorker', runtimeId: '' },
     { type: 'selectDebugWorker', runtimeId: 'worker', extra: true },
     { type: 'selectTab', tab: 'Settings' },
+    { type: 'selectJournalSwarm', swarmId: '   ' },
+    { type: 'loadSwarmHistory', swarmId: '   ' },
+    { type: 'openJournalRun', swarmId: 'swarm-a', runId: '   ' },
+    { type: 'runSwarmOperation', action: 'RESTART', swarmId: 'swarm-a' },
+    { type: 'runSwarmOperation', action: 'START', swarmId: 'swarm-a', injected: true },
+    { type: 'openDebugForSwarm', swarmId: '   ' },
     { type: 'runDebug', action: 'Logs', tailLines: '100' },
     { type: 'runDebug', action: 'Logs', tailLines: 1001 },
     { type: 'runDebug', action: 'Logs', tailLines: 100, injected: true },
     { type: 'openEnvironment', profileId: '   ' },
+    { type: 'signOut', profileId: 'injected' },
+    { type: 'reauthorizeEnvironment', endpoint: 'https://attacker.example/mcp' },
     { type: 'publishCommittedBundle', mode: 'UPSERT' },
     { type: 'publishCommittedBundle', mode: 'UPSERT', scenarioId: 'scenario' },
   ];

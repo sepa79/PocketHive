@@ -61,9 +61,14 @@ export interface ValidatedEndpoint {
   readonly authorizationServer: string;
 }
 
+export type OAuthSessionRenewal =
+  | { readonly kind: 'ROTATING_REFRESH_TOKEN'; readonly refreshToken: string }
+  | { readonly kind: 'NONE' };
+
 export interface OAuthSession {
   readonly accessToken: string;
   readonly expiresAt: string;
+  readonly renewal: OAuthSessionRenewal;
 }
 
 export interface EndpointValidationPort {
@@ -82,6 +87,22 @@ export interface ScopedAuthenticationPort {
     scopes: readonly PocketHiveMcpScope[],
     signal: AbortSignal,
   ): Promise<OAuthSession>;
+}
+
+export interface RenewableAuthenticationPort extends AuthenticationPort {
+  refresh(
+    profile: McpConnectionProfile,
+    endpoint: ValidatedEndpoint,
+    session: OAuthSession,
+    signal: AbortSignal,
+  ): Promise<OAuthSession>;
+  revoke(
+    profile: McpConnectionProfile,
+    endpoint: ValidatedEndpoint,
+    session: OAuthSession,
+    signal: AbortSignal,
+  ): Promise<void>;
+  clear(profile: McpConnectionProfile): Promise<void>;
 }
 
 export interface BrowserAuthorizationPort {

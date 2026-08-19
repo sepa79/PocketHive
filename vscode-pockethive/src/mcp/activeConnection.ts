@@ -9,12 +9,14 @@ import { McpHttpClient } from './httpClient';
 export class ActiveMcpConnection implements McpConnectionTestPort {
   private client?: McpHttpClient;
 
+  constructor(private readonly clients: () => McpHttpClient) {}
+
   async test(
     profile: McpConnectionProfile,
     session: OAuthSession,
     signal: AbortSignal,
   ): Promise<ConnectionEvidence> {
-    const candidate = new McpHttpClient();
+    const candidate = this.clients();
     try {
       const evidence = await candidate.connect(profile.mcpUrl, session.accessToken, signal);
       await this.close();

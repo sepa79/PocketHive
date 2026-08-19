@@ -1,4 +1,5 @@
 import { ConnectionContractError, EndpointSecurityMode } from '../connection/contracts';
+import { SWARM_OPERATIONS, SwarmOperation } from '../operations/swarmOperations';
 
 export type CompanionTab = 'Hive' | 'Buzz' | 'Journal' | 'Scenarios' | 'Debug';
 
@@ -13,8 +14,15 @@ export type WebviewCommand =
   | { readonly type: 'openEnvironment'; readonly profileId: string }
   | { readonly type: 'removeEnvironment'; readonly profileId: string }
   | { readonly type: 'backToEnvironments' }
+  | { readonly type: 'reauthorizeEnvironment' }
+  | { readonly type: 'signOut' }
   | { readonly type: 'selectTab'; readonly tab: CompanionTab }
   | { readonly type: 'refresh' }
+  | { readonly type: 'selectJournalSwarm'; readonly swarmId: string }
+  | { readonly type: 'loadSwarmHistory'; readonly swarmId: string }
+  | { readonly type: 'openJournalRun'; readonly swarmId: string; readonly runId: string }
+  | { readonly type: 'runSwarmOperation'; readonly swarmId: string; readonly action: SwarmOperation }
+  | { readonly type: 'openDebugForSwarm'; readonly swarmId: string }
   | { readonly type: 'selectDebugSwarm'; readonly swarmId: string }
   | { readonly type: 'selectDebugWorker'; readonly runtimeId: string }
   | { readonly type: 'runDebug'; readonly action: string; readonly tailLines?: number }
@@ -33,6 +41,8 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     case 'cancelConnection':
     case 'saveOpen':
     case 'backToEnvironments':
+    case 'reauthorizeEnvironment':
+    case 'signOut':
     case 'refresh':
     case 'validateCommittedBundle':
     case 'discardPendingBundle':
@@ -59,9 +69,21 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
       if (!['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'].includes(tab)) invalid();
       return { type, tab: tab as CompanionTab };
     }
+    case 'selectJournalSwarm':
+    case 'loadSwarmHistory':
+    case 'openDebugForSwarm':
     case 'selectDebugSwarm':
       exact(object, ['type', 'swarmId']);
       return { type, swarmId: string(object, 'swarmId') };
+    case 'openJournalRun':
+      exact(object, ['type', 'swarmId', 'runId']);
+      return { type, swarmId: string(object, 'swarmId'), runId: string(object, 'runId') };
+    case 'runSwarmOperation': {
+      exact(object, ['type', 'swarmId', 'action']);
+      const action = string(object, 'action');
+      if (!Object.values(SWARM_OPERATIONS).includes(action as SwarmOperation)) invalid();
+      return { type, swarmId: string(object, 'swarmId'), action: action as SwarmOperation };
+    }
     case 'selectDebugWorker':
       exact(object, ['type', 'runtimeId']);
       return { type, runtimeId: string(object, 'runtimeId') };

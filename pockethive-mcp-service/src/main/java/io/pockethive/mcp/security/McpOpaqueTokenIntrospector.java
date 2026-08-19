@@ -45,6 +45,7 @@ public final class McpOpaqueTokenIntrospector implements OpaqueTokenIntrospector
         requireClaim(principal, "iss", expectedIssuer);
         String subject = requireTextClaim(principal, "sub");
         requireTextClaim(principal, "client_id");
+        requireTextClaim(principal, "username");
         requireAudience(principal.getAttribute("aud"));
         Instant expiresAt = principal.getAttribute("exp");
         if (expiresAt == null || !expiresAt.isAfter(clock.instant())) {
