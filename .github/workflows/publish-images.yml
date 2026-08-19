@@ -109,6 +109,9 @@ jobs:
           - name: auth-service
             dockerfile: auth-service/Dockerfile.runtime
             target: ""
+          - name: pockethive-mcp
+            dockerfile: pockethive-mcp-service/Dockerfile.runtime
+            target: ""
           - name: scenario-manager
             dockerfile: scenario-manager-service/Dockerfile.runtime
             target: ""
