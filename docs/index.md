@@ -74,5 +74,6 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/docs.html` – simple HTML viewer for the AsyncAPI spec.
 - `tools/scenario-templating-check` – CLI for validating generator and
   request templates used in scenarios.
-- `tools/pockethive-mcp` – canonical PocketHive MCP server for agents and IDEs.
+- `pockethive-mcp-service` – canonical Java 21 PocketHive MCP server; see
+  `docs/mcp/README.md`.
 - `tools/mcp-orchestrator-debug` – lower-level emergency/local diagnostic CLI.

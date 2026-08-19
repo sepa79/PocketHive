@@ -113,6 +113,25 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
+    void bundledHttpSequenceCapabilityPublishesStepTargetOverrides() throws Exception {
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        catalogue.reload();
+
+        CapabilityManifest manifest = catalogue.findByImageName("http-sequence").orElseThrow();
+        CapabilityManifest.ConfigEntry steps = manifest.config().stream()
+                .filter(entry -> "steps".equals(entry.name()))
+                .findFirst()
+                .orElseThrow();
+
+        assertThat(manifest.capabilitiesVersion()).isEqualTo("1.2");
+        assertThat(steps.type()).isEqualTo("json");
+        assertThat(steps.required()).isTrue();
+        assertThat(steps.ui().path("description").asText())
+                .contains("sutEndpointId")
+                .contains("baseUrl");
+    }
+
+    @Test
     void bundledCapabilitiesDeclareLiveMutabilityForEveryConfigEntry() throws Exception {
         CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
         catalogue.reload();

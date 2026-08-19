@@ -11,6 +11,11 @@
       "application": true
     },
     {
+      "name": "pockethive-mcp",
+      "image": "{{ imageRepository.project }}/pockethive-mcp:{{ release.imageTag }}",
+      "application": true
+    },
+    {
       "name": "scenario-manager",
       "image": "{{ imageRepository.project }}/scenario-manager:{{ release.imageTag }}",
       "application": true

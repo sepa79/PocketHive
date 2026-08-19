@@ -2,6 +2,70 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- PocketHive MCP: replace the Node/stdio server with one Java 21 Streamable HTTP
+  service on the public ingress, with 50 scope-declared tools, nine connected
+  skills, portable PocketHive knowledge, and no HiveMind runtime dependency.
+- QA-led authoring: add principal-bound multi-workflow sessions, mandatory MCP
+  form elicitation with no inferred answers, explicit invalidation/recovery, and
+  independently callable operational tools.
+- Scenario generation: preserve exact UTF-8 text, including whitespace, final
+  newlines, and empty files, and reject non-canonical or duplicate generated
+  paths explicitly.
+- VS Code branding: use a canonical PocketHive hexagon silhouette optimized to
+  keep its button, lens, connectors, and nodes visible in the 24 px Activity
+  Bar, while retaining the full-colour mark in the webview header; render the
+  shared `PocketHive` heading with its `Hive` suffix in the canonical logo
+  yellow, tighten the heading/subtitle rhythm to match the canonical wordmark,
+  and release the extension as 1.0.2 so VS Code loads the refined branding from
+  a new versioned asset location.
+- Scenario publication: package exact committed Git directories in the VS Code
+  client, validate bounded ticketed ZIP uploads, retain byte-identical archives,
+  and require explicit `CREATE` or `REPLACE` with no fallback or ambiguous retry.
+- Authentication: extend the existing Auth Service as the single OAuth authority
+  for authorization code + PKCE S256, exact redirect/resource/audience/scope
+  validation, opaque-token introspection, replay rejection, and a rotating
+  refresh token limited to the base VS Code companion session; privileged
+  scoped sessions remain short-lived and non-renewable.
+- VS Code: replace the legacy product Tree Views with one narrow environment-first
+  HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
+  Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
+- VS Code validation: add a live Playwright flow through the local public MCP
+  ingress and fix narrow-width overflow, keyboard/ARIA tab navigation, verified
+  principal labels, exact-swarm Journal loading, and readable bounded owner-data
+  cards; release the extension as 1.0.3.
+- VS Code lifecycle: keep the newest resolved companion webview attached when an
+  obsolete view disposes; add lifecycle regression coverage and release the
+  extension as 1.0.4.
+- VS Code payload boundary: preserve the required navigation and profile fields
+  when owner data exceeds one presentation-field limit, return an explicit
+  field error instead of replacing the whole view-model contract, and request
+  ten events for the narrow Buzz and Journal views; add regression and mutation
+  coverage and release the extension as 1.0.5.
+- VS Code enterprise companion: restore context-valid swarm Start/Stop and
+  guarded Remove, authoritative collapsible run history, exact run-to-Journal
+  navigation, compact Buzz/Journal filters, searchable Scenario Bundles, and
+  grouped Debug actions in the responsive HTML Side Bar without restoring a
+  second owner or transport path.
+- VS Code authorised sessions: renew the base companion session once and on
+  demand before expiry, validate a candidate MCP connection before switching,
+  keep the authenticated workspace visible during renewal, and provide one
+  clear Account menu for sign-in, retry, and revoking sign-out.
+- OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
+  logo, explicit client/resource/permission context, accessible form semantics,
+  responsive styling, and no change to the authorization-code contract.
+- Deployment: install the same hardened non-root, read-only Java MCP image through
+  `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
+  upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
+- Verification: pass 22 Auth Service tests, 115 MCP tests, and 102 extension
+  tests; kill 26/26 Auth, 576/576 MCP, and 1,825/1,825 extension mutants; pass
+  clean npm audit, packaged-VSIX, public-ingress OAuth/MCP, responsive UI,
+  refresh rotation/replay/revocation, and exact mixed-file bundle checks locally.
+- Documentation: add the canonical Java MCP guide, update active deployment and
+  extension guidance, supersede the retired Node plugin documents, and record the
+  local RST debrief and outstanding governed/human production-release checks.
+
 ## [0.15.36]
 Timestamp: 2026-08-19T00:00:00Z
 
@@ -178,7 +242,6 @@ Timestamp: 2026-07-22T22:53:54Z
   runtime report confirm healthy stateful services with the four dedicated
   `/opt/pockethive-data/*/data` bindings and the HAProxy/Network Proxy Manager
   shared NFS runtime mount.
-
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 

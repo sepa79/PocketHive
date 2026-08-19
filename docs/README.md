@@ -60,5 +60,5 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## MCP and IDE integrations
 
-- [PocketHive plugin reference](plugins/pockethive/README.md)
-- [Canonical MCP server](../tools/pockethive-mcp/README.md)
+- [PocketHive MCP](mcp/README.md)
+- [PocketHive VS Code extension](../vscode-pockethive/README.md)

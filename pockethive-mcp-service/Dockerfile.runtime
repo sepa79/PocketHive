@@ -1,0 +1,13 @@
+ARG RUNTIME_IMAGE=pockethive-jvm-base:latest
+
+FROM ${RUNTIME_IMAGE}
+
+RUN addgroup -S -g 10001 pockethive \
+    && adduser -S -D -H -u 10001 -G pockethive pockethive \
+    && mkdir -p /var/lib/pockethive-mcp/state /var/lib/pockethive-mcp/spool \
+    && chown -R 10001:10001 /var/lib/pockethive-mcp
+
+COPY --chown=10001:10001 .local-jars/pockethive-mcp-service.jar /app/app.jar
+COPY --chown=10001:10001 .local-jars/pockethive-mcp-service.sbom.json /app/pockethive-mcp-sbom.cdx.json
+
+USER 10001:10001

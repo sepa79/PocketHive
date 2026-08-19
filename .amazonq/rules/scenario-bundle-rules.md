@@ -82,8 +82,7 @@ POCKETHIVE_BASE_URL=http://your-nft-server:8088
 ## First-time setup check
 
 If `.env` does not exist in the repo root, the developer has not run initialization.
-Before doing any scenario work, run `scripts/init-dev.sh` (or `scripts\init-dev.bat`
-on Windows) to:
+Before doing any scenario work, run `scripts/init-dev.sh` to:
 - Locate and confirm the PocketHive repo checkout
 - Generate `.env` with `POCKETHIVE_ROOT` and `POCKETHIVE_BASE_URL`
 - Install MCP server dependencies
@@ -129,7 +128,7 @@ Mandatory tool usage:
    contains the raw Java error explaining exactly which template field failed.
 
 **Never invoke `run.sh` or `validate.sh` directly** — `bundle.validate` handles the
-WSL/JVM invocation correctly for this Windows+WSL2 environment.
+Linux/WSL JVM invocation correctly for this environment.
 
 When creating or modifying bundles, follow the TDD workflow in
 `.amazonq/rules/tdd-workflow.md`. The workflow defines the exact sequence of tool
@@ -1068,7 +1067,7 @@ bundle.validate.result { jobId: "<jobId>" }
 ```
 
 Never invoke `run.sh` or `validate.sh` directly — `bundle.validate` handles the
-WSL/JVM invocation correctly for this Windows+WSL2 environment.
+Linux/WSL JVM invocation correctly for this environment.
 
 ## Data and state management
 

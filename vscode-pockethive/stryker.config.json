@@ -1,0 +1,36 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "testRunner": "command",
+  "commandRunner": {
+    "command": "if [ ! -f out/extension.js ]; then ../../node_modules/.bin/tsc -p ./; fi; node --test out/test/*.test.js"
+  },
+  "ignorePatterns": ["/out"],
+  "mutate": [
+    "src/connection/authorizedMcpSession.ts",
+    "src/connection/connectionAttempt.ts",
+    "src/connection/oauthAuthentication.ts",
+    "src/connection/profile.ts",
+    "src/debug/actions.ts",
+    "src/mcp/activeConnection.ts",
+    "src/mcp/httpClient.ts",
+    "src/operations/scopedMcpToolRunner.ts",
+    "src/operations/swarmOperations.ts",
+    "src/scenarios/gitBundlePackager.ts",
+    "src/scenarios/scenarioBundleCoordinator.ts",
+    "src/webview/messages.ts",
+    "src/webview/currentView.ts",
+    "src/webview/eventFilters.ts",
+    "src/webview/sessionPresentation.ts",
+    "src/webview/viewModelBoundary.ts",
+    "src/webview/workspaceTool.ts"
+  ],
+  "reporters": ["clear-text", "progress", "json"],
+  "thresholds": {
+    "high": 100,
+    "low": 100,
+    "break": 100
+  },
+  "coverageAnalysis": "off",
+  "concurrency": 1,
+  "cleanTempDir": true
+}

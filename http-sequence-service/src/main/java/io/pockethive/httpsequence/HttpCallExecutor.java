@@ -1,8 +1,10 @@
 package io.pockethive.httpsequence;
 
+import java.net.URI;
+
 interface HttpCallExecutor {
 
-  HttpCallResult execute(String baseUrl, RenderedCall call) throws Exception;
+  HttpCallResult execute(URI target, RenderedCall call) throws Exception;
 
   record RenderedCall(String method, String path, String body, java.util.Map<String, String> headers) {
   }
@@ -13,4 +15,3 @@ interface HttpCallExecutor {
                         String error) {
   }
 }
-

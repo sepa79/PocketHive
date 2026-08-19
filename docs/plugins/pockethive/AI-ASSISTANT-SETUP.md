@@ -38,8 +38,8 @@ Required local values:
 | `HIVEMIND_MCP_URL` | Optional HiveMind enrichment MCP endpoint | `https://hivemind.example.com/mcp` |
 
 Use absolute paths for the server process environment. The assistant configs in
-this repo use `http://localhost:3100/mcp`, so Windows, WSL, Linux, and JetBrains
-clients all connect through the same local HTTP boundary.
+this repo use `http://localhost:3100/mcp`, so Linux, WSL, and JetBrains clients
+all connect through the same local HTTP boundary.
 
 ## PocketHive MCP Server
 

@@ -315,6 +315,16 @@ stage_artifacts() {
     mkdir -p "$(dirname "${staged_path}")"
     cp "${jar_path}" "${staged_path}"
     echo " - Staged ${module} → ${staged_path}"
+    if [[ "${module}" == "pockethive-mcp-service" ]]; then
+      local sbom_path="${module}/target/pockethive-mcp-sbom.json"
+      local staged_sbom="${LOCAL_ARTIFACTS_DIR}/pockethive-mcp-service.sbom.json"
+      if [[ ! -f "${sbom_path}" ]]; then
+        echo "Unable to locate CycloneDX SBOM for ${module} at ${sbom_path}" >&2
+        exit 1
+      fi
+      cp "${sbom_path}" "${staged_sbom}"
+      echo " - Staged ${module} SBOM → ${staged_sbom}"
+    fi
   done
 }
 
@@ -600,8 +610,13 @@ main() {
     DURATIONS["docker_build"]=-1
   fi
 
-  echo "Starting PocketHive stack via docker compose up -d"
-  measure "compose_up" compose_up_full_stack
+  if (( ${#MODULE_FILTER[@]} == 0 && ${#SERVICE_FILTER[@]} == 0 )); then
+    echo "Starting PocketHive stack via docker compose up -d"
+    measure "compose_up" compose_up_full_stack
+  else
+    echo "Starting selected PocketHive services: ${SERVICES_TO_BUILD[*]}"
+    measure "compose_up" compose_up_services "${SERVICES_TO_BUILD[@]}"
+  fi
 
   if (( ${#RESTART_TARGETS[@]} )); then
     echo "Restarting requested services: ${RESTART_TARGETS[*]}"

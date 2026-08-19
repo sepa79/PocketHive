@@ -18,11 +18,13 @@ import io.pockethive.capabilities.CapabilityCatalogueService;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 import java.util.zip.ZipOutputStream;
@@ -607,9 +609,13 @@ class ScenarioControllerTest {
 
     @Test
     void bundleValidationRejectsLegacyV01528IdsThroughCanonicalValidator() throws Exception {
-        Path fixture = Path.of("..").resolve("tools/pockethive-mcp/fixtures/scenario-regression/"
-            + "v0.15.28-local-rest-topology/scenario.yaml").normalize();
-        byte[] zip = bundleZip("scenario.yaml", Files.readString(fixture));
+        String fixture;
+        try (var input = ScenarioControllerTest.class.getResourceAsStream(
+            "/scenario-regression/v0.15.28-local-rest-topology/scenario.yaml")) {
+            fixture = new String(Objects.requireNonNull(input, "legacy scenario fixture").readAllBytes(),
+                StandardCharsets.UTF_8);
+        }
+        byte[] zip = bundleZip("scenario.yaml", fixture);
 
         mvc.perform(post("/validation/scenario-bundles")
                 .contentType("application/zip")

@@ -58,7 +58,7 @@ the ground truth.
   what exists.
 
 - **Do not add shell-backed MCP tools.** The MCP server must not run Docker,
-  Compose, Maven, npm, Git, WSL, bash, PowerShell, or local scripts. Build,
+  Compose, Maven, npm, Git, shell commands, or local scripts. Build,
   stack lifecycle, Git, and package-management workflows stay outside MCP.
 
 - **Do not add general GitHub tools to PocketHive MCP.** GitHub issue access

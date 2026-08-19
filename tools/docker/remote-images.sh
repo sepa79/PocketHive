@@ -173,6 +173,13 @@ stage_artifacts() {
     mkdir -p "$(dirname "${staged_path}")"
     cp "${jar_path}" "${staged_path}"
     echo "Staged ${module} -> ${staged_path}"
+    if [[ "${module}" == "pockethive-mcp-service" ]]; then
+      local sbom_path="${module}/target/pockethive-mcp-sbom.json"
+      local staged_sbom="${LOCAL_ARTIFACTS_DIR}/pockethive-mcp-service.sbom.json"
+      [[ -f "${sbom_path}" ]] || fail "unable to locate CycloneDX SBOM for ${module}"
+      cp "${sbom_path}" "${staged_sbom}"
+      echo "Staged ${module} SBOM -> ${staged_sbom}"
+    fi
   done
 }
 
@@ -186,6 +193,10 @@ require_staged_artifacts() {
   for module in "${jar_modules[@]}"; do
     staged_path="${LOCAL_ARTIFACTS_DIR}/${module}.jar"
     [[ -f "${staged_path}" ]] || fail "missing staged jar ${staged_path}; run without --skip-package"
+    if [[ "${module}" == "pockethive-mcp-service" ]]; then
+      local staged_sbom="${LOCAL_ARTIFACTS_DIR}/pockethive-mcp-service.sbom.json"
+      [[ -f "${staged_sbom}" ]] || fail "missing staged SBOM ${staged_sbom}; run without --skip-package"
+    fi
   done
 }
 
