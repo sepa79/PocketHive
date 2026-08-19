@@ -2,6 +2,22 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+Timestamp: 2026-08-19T00:00:00Z
+
+- Release metadata and info endpoints: add a shared `observability` auto-configuration
+  that contributes `pockethive.service` and `pockethive.version` to Actuator info,
+  filter service application resources so `@project.version@` resolves at build time,
+  expose `health` and `info` from Scenario Manager, and cover the filtered config and
+  contributor registration with tests.
+- Pipeline observability dashboards: switch swarm filtering to the canonical Grafana
+  regex variable in the ClickHouse queries and clamp several queue and buffer-guard
+  panels to a minimum aggregation interval so multi-swarm views stay accurate.
+- Node security maintenance: refresh the root, UI v2, PocketHive MCP, VS Code, and
+  docs-site lockfiles through `npm update`, clear `npm audit` findings in all active
+  Node projects except the remaining upstream `docs-site` `image-size` advisory, and
+  pin `uuid` in the docs-site overrides to remove the fixable transitive issue.
+
 ## [0.15.36]
 Timestamp: 2026-07-22T22:53:54Z
 

@@ -4,6 +4,12 @@ spring:
   application:
     name: scenario-manager
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
 logging:
   config: classpath:logback-spring.xml
 

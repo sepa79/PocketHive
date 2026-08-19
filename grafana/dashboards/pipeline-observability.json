@@ -128,7 +128,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_calls_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series\n)\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_calls_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND swarmId ~ '${swarm:regex}'\n  GROUP BY time, series\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -188,7 +188,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_errors_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series\n)\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(seconds > 0, greatest(last_value - first_value, 0) / seconds, 0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    dateDiff('second', min(eventTime), max(eventTime)) AS seconds,\n    argMin(value, eventTime) AS first_value,\n    argMax(value, eventTime) AS last_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_errors_total'\n    AND statistic = 'COUNT'\n    AND role = 'postprocessor'\n    AND swarmId ~ '${swarm:regex}'\n  GROUP BY time, series\n)\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -248,7 +248,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  time,\n  series,\n  if(sumIf(delta_value, statistic = 'COUNT') > 0,\n     sumIf(delta_value, statistic = 'SUM') / sumIf(delta_value, statistic = 'COUNT'),\n     0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    statistic,\n    greatest(argMax(value, eventTime) - argMin(value, eventTime), 0) AS delta_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_latency_ms'\n    AND statistic IN ('SUM', 'COUNT')\n    AND role = 'postprocessor'\n    AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\n  GROUP BY time, series, statistic\n)\nGROUP BY time, series\nORDER BY time, series",
+          "rawSql": "SELECT\n  time,\n  series,\n  if(sumIf(delta_value, statistic = 'COUNT') > 0,\n     sumIf(delta_value, statistic = 'SUM') / sumIf(delta_value, statistic = 'COUNT'),\n     0) AS value\nFROM (\n  SELECT\n    toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 300))) AS time,\n    concat(instance, ' (', swarmId, ')') AS series,\n    statistic,\n    greatest(argMax(value, eventTime) - argMin(value, eventTime), 0) AS delta_value\n  FROM ph_metrics_samples\n  WHERE $__timeFilter(eventTime)\n    AND metricName = 'ph_processor_latency_ms'\n    AND statistic IN ('SUM', 'COUNT')\n    AND role = 'postprocessor'\n    AND swarmId ~ '${swarm:regex}'\n  GROUP BY time, series, statistic\n)\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -308,7 +308,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(instance, ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_processor_latency_avg_ms'\n  AND statistic = 'VALUE'\n  AND role = 'postprocessor'\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\nGROUP BY time, series\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(instance, ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_processor_latency_avg_ms'\n  AND statistic = 'VALUE'\n  AND role = 'postprocessor'\n  AND swarmId ~ '${swarm:regex}'\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],
@@ -368,7 +368,7 @@
           "editorType": "sql",
           "format": 2,
           "queryType": "sql",
-          "rawSql": "SELECT\n  toStartOfInterval(eventTime, INTERVAL $__interval_s SECOND) AS time,\n  concat(if(labels['queue'] = '', instance, labels['queue']), ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_swarm_queue_depth'\n  AND statistic = 'VALUE'\n  AND ('${swarm:csv}' IN ('$__all', '.*') OR has(splitByChar(',', '${swarm:csv}'), swarmId))\nGROUP BY time, series\nORDER BY time, series",
+          "rawSql": "SELECT\n  toStartOfInterval(eventTime, toIntervalSecond(greatest($__interval_s, 10))) AS time,\n  concat(if(labels['queue'] = '', instance, labels['queue']), ' (', swarmId, ')') AS series,\n  argMax(value, eventTime) AS value\nFROM ph_metrics_samples\nWHERE $__timeFilter(eventTime)\n  AND metricName = 'ph_swarm_queue_depth'\n  AND statistic = 'VALUE'\n  AND swarmId ~ '${swarm:regex}'\nGROUP BY time, series\nORDER BY time, series",
           "refId": "A"
         }
       ],
