@@ -30,10 +30,9 @@ class ScenarioManagerApplicationConfigTest {
 
       Map<String, Object> pockethive = nestedMap(root, "pockethive");
       Map<String, Object> release = nestedMap(pockethive, "release");
-      assertThat(release.get("version"))
-          .isInstanceOf(String.class)
-          .isNotEqualTo("@project.version@")
-          .isNotBlank();
+      assertThat(release.get("version")).isInstanceOf(String.class);
+      String version = (String) release.get("version");
+      assertThat(version).isNotEqualTo("@project.version@").isNotBlank();
     }
   }
 
