@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.15.36]
 Timestamp: 2026-08-19T00:00:00Z
 
 - Release metadata and info endpoints: add a shared `observability` auto-configuration
@@ -18,7 +18,6 @@ Timestamp: 2026-08-19T00:00:00Z
   Node projects except the remaining upstream `docs-site` `image-size` advisory, and
   pin `uuid` in the docs-site overrides to remove the fixable transitive issue.
 
-## [0.15.36]
 Timestamp: 2026-07-22T22:53:54Z
 
 - Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
