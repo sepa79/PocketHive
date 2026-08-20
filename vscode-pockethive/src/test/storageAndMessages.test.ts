@@ -116,8 +116,17 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   assert.deepEqual(decodeWebviewCommand({ type: 'selectJournalSwarm', swarmId: 'checkout-load' }), {
     type: 'selectJournalSwarm', swarmId: 'checkout-load',
   });
+  assert.deepEqual(decodeWebviewCommand({ type: 'runSwarmBatchOperation', action: 'START' }), {
+    type: 'runSwarmBatchOperation', action: 'START',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'runSwarmBatchOperation', action: 'STOP' }), {
+    type: 'runSwarmBatchOperation', action: 'STOP',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'loadSwarmHistory', swarmId: ' checkout-load ' }), {
     type: 'loadSwarmHistory', swarmId: 'checkout-load',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openSwarmDetails', swarmId: ' checkout-load ' }), {
+    type: 'openSwarmDetails', swarmId: 'checkout-load',
   });
   assert.deepEqual(decodeWebviewCommand({
     type: 'openJournalRun', swarmId: ' checkout-load ', runId: ' run-42 ',
@@ -133,6 +142,18 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   });
   assert.deepEqual(decodeWebviewCommand({ type: 'selectDebugSwarm', swarmId: ' swarm-1 ' }), {
     type: 'selectDebugSwarm', swarmId: 'swarm-1',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openScenarioDetails', scenarioId: ' mixed-smoke ' }), {
+    type: 'openScenarioDetails', scenarioId: 'mixed-smoke',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openScenarioRaw', scenarioId: ' mixed-smoke ' }), {
+    type: 'openScenarioRaw', scenarioId: 'mixed-smoke',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openScenarioSchema', scenarioId: ' mixed-smoke ' }), {
+    type: 'openScenarioSchema', scenarioId: 'mixed-smoke',
+  });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openScenarioTemplate', scenarioId: ' mixed-smoke ' }), {
+    type: 'openScenarioTemplate', scenarioId: 'mixed-smoke',
   });
   assert.deepEqual(decodeWebviewCommand({ type: 'runDebug', action: ' Workers ' }), {
     type: 'runDebug', action: 'Workers',
@@ -157,11 +178,18 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectDebugWorker', runtimeId: 'worker', extra: true },
     { type: 'selectTab', tab: 'Settings' },
     { type: 'selectJournalSwarm', swarmId: '   ' },
+    { type: 'runSwarmBatchOperation', action: 'REMOVE' },
+    { type: 'runSwarmBatchOperation', action: 'START', swarmId: 'injected' },
     { type: 'loadSwarmHistory', swarmId: '   ' },
+    { type: 'openSwarmDetails', swarmId: '   ' },
     { type: 'openJournalRun', swarmId: 'swarm-a', runId: '   ' },
     { type: 'runSwarmOperation', action: 'RESTART', swarmId: 'swarm-a' },
     { type: 'runSwarmOperation', action: 'START', swarmId: 'swarm-a', injected: true },
     { type: 'openDebugForSwarm', swarmId: '   ' },
+    { type: 'openScenarioDetails', scenarioId: '   ' },
+    { type: 'openScenarioRaw', scenarioId: '   ' },
+    { type: 'openScenarioSchema', scenarioId: '   ' },
+    { type: 'openScenarioTemplate', scenarioId: '   ' },
     { type: 'reconcilePublicationAttempt' },
     { type: 'reconcilePublicationAttempt', attemptId: '   ' },
     { type: 'runDebug', action: 'Logs', tailLines: '100' },

@@ -41,6 +41,12 @@ export function primaryActionsForSwarms(value: unknown): Readonly<Record<string,
   return Object.freeze(actions);
 }
 
+export function swarmIdsForOperation(value: unknown, operation: SwarmOperation): string[] {
+  return Object.entries(primaryActionsForSwarms(value))
+    .filter(([, action]) => action === operation)
+    .map(([id]) => id);
+}
+
 export function lifecycleToolCall(
   operation: SwarmOperation,
   swarmId: string,

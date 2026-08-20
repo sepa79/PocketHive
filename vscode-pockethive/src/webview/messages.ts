@@ -20,12 +20,18 @@ export type WebviewCommand =
   | { readonly type: 'refresh' }
   | { readonly type: 'selectJournalSwarm'; readonly swarmId: string }
   | { readonly type: 'loadSwarmHistory'; readonly swarmId: string }
+  | { readonly type: 'openSwarmDetails'; readonly swarmId: string }
   | { readonly type: 'openJournalRun'; readonly swarmId: string; readonly runId: string }
   | { readonly type: 'runSwarmOperation'; readonly swarmId: string; readonly action: SwarmOperation }
+  | { readonly type: 'runSwarmBatchOperation'; readonly action: Exclude<SwarmOperation, 'REMOVE'> }
   | { readonly type: 'openDebugForSwarm'; readonly swarmId: string }
   | { readonly type: 'selectDebugSwarm'; readonly swarmId: string }
   | { readonly type: 'selectDebugWorker'; readonly runtimeId: string }
   | { readonly type: 'runDebug'; readonly action: string; readonly tailLines?: number }
+  | { readonly type: 'openScenarioDetails'; readonly scenarioId: string }
+  | { readonly type: 'openScenarioRaw'; readonly scenarioId: string }
+  | { readonly type: 'openScenarioSchema'; readonly scenarioId: string }
+  | { readonly type: 'openScenarioTemplate'; readonly scenarioId: string }
   | { readonly type: 'validateCommittedBundle' }
   | { readonly type: 'discardPendingBundle' }
   | { readonly type: 'publishCommittedBundle'; readonly mode: 'CREATE' | 'REPLACE'; readonly scenarioId?: string }
@@ -75,6 +81,7 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     }
     case 'selectJournalSwarm':
     case 'loadSwarmHistory':
+    case 'openSwarmDetails':
     case 'openDebugForSwarm':
     case 'selectDebugSwarm':
       exact(object, ['type', 'swarmId']);
@@ -87,6 +94,12 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
       const action = string(object, 'action');
       if (!Object.values(SWARM_OPERATIONS).includes(action as SwarmOperation)) invalid();
       return { type, swarmId: string(object, 'swarmId'), action: action as SwarmOperation };
+    }
+    case 'runSwarmBatchOperation': {
+      exact(object, ['type', 'action']);
+      const action = string(object, 'action');
+      if (action !== SWARM_OPERATIONS.START && action !== SWARM_OPERATIONS.STOP) invalid();
+      return { type, action: action as Exclude<SwarmOperation, 'REMOVE'> };
     }
     case 'selectDebugWorker':
       exact(object, ['type', 'runtimeId']);
@@ -118,6 +131,12 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
       }
       invalid();
     }
+    case 'openScenarioDetails':
+    case 'openScenarioRaw':
+    case 'openScenarioSchema':
+    case 'openScenarioTemplate':
+      exact(object, ['type', 'scenarioId']);
+      return { type, scenarioId: string(object, 'scenarioId') };
     default:
       throw new ConnectionContractError('WEBVIEW_MESSAGE_UNKNOWN', `WEBVIEW_MESSAGE_UNKNOWN: ${type}`);
   }

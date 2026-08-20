@@ -21,9 +21,11 @@ import { ScopedMcpToolRunner } from '../operations/scopedMcpToolRunner';
 import {
   lifecycleToolCall,
   primaryActionsForSwarms,
+  swarmIdsForOperation,
   SwarmOperation,
   SWARM_OPERATIONS,
 } from '../operations/swarmOperations';
+import { openJsonPreview, openPreviewDocument } from '../preview';
 import { McpConnectionProfileRepository } from '../storage/profileRepository';
 import { GitBundlePackager } from '../scenarios/gitBundlePackager';
 import {
@@ -31,6 +33,13 @@ import {
   PublicationMode,
   ScenarioBundleCoordinator,
 } from '../scenarios/scenarioBundleCoordinator';
+import {
+  previewLanguageForPath,
+  scenarioReadText,
+  scenarioReadToolCall,
+  SCENARIO_ASSETS,
+  ScenarioAsset,
+} from '../scenarios/scenarioReads';
 import { CompanionTab, decodeWebviewCommand } from './messages';
 import { CurrentView } from './currentView';
 import { boundCompanionViewModel } from './viewModelBoundary';
@@ -224,6 +233,9 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         case 'loadSwarmHistory':
           await this.loadSwarmHistory(command.swarmId);
           break;
+        case 'openSwarmDetails':
+          await this.openSwarmDetails(command.swarmId);
+          break;
         case 'openJournalRun':
           this.activeTab = 'Journal';
           this.journalSwarmId = command.swarmId;
@@ -233,6 +245,9 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'runSwarmOperation':
           await this.runSwarmOperation(command.action, command.swarmId);
+          break;
+        case 'runSwarmBatchOperation':
+          await this.runSwarmBatchOperation(command.action);
           break;
         case 'openDebugForSwarm':
           this.activeTab = 'Debug';
@@ -254,6 +269,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'runDebug':
           await this.runDebug(command.action, command.tailLines);
+          break;
+        case 'openScenarioDetails':
+          await this.openScenarioDetails(command.scenarioId);
+          break;
+        case 'openScenarioRaw':
+          await this.openScenarioAsset(command.scenarioId, SCENARIO_ASSETS.RAW);
+          break;
+        case 'openScenarioSchema':
+          await this.openScenarioAsset(command.scenarioId, SCENARIO_ASSETS.SCHEMA);
+          break;
+        case 'openScenarioTemplate':
+          await this.openScenarioAsset(command.scenarioId, SCENARIO_ASSETS.TEMPLATE);
           break;
         case 'validateCommittedBundle':
           await this.validateCommittedBundle();
@@ -436,6 +463,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     }
   }
 
+  private async openSwarmDetails(swarmId: string): Promise<void> {
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      await openJsonPreview(`Swarm ${swarmId}`, await this.activeConnection.callTool('swarm_get', { swarmId }));
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
   private async runSwarmOperation(action: SwarmOperation, swarmId: string): Promise<void> {
     const call = lifecycleToolCall(action, swarmId, randomUUID());
     this.busy = true;
@@ -461,6 +500,36 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     }
   }
 
+  private async runSwarmBatchOperation(action: Exclude<SwarmOperation, 'REMOVE'>): Promise<void> {
+    const targets = swarmIdsForOperation(this.workspaceData, action);
+    if (targets.length === 0) {
+      throw new ConnectionContractError('SWARM_BATCH_TARGETS_MISSING', `No swarms are eligible for ${action.toLowerCase()}`);
+    }
+    this.busy = true;
+    this.swarmOperationResult = undefined;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      const profile = this.requireDraft();
+      const succeeded: string[] = [];
+      const failed: Array<{ swarmId: string; error: { code: string; message: string } }> = [];
+      for (const swarmId of targets) {
+        try {
+          const call = lifecycleToolCall(action, swarmId, randomUUID());
+          await this.scopedTools.call(profile, call.name, call.arguments);
+          succeeded.push(swarmId);
+        } catch (error) {
+          failed.push({ swarmId, error: safeError(error) });
+        }
+      }
+      this.swarmOperationResult = { batchOperation: action, requested: targets.length, succeeded, failed };
+      this.workspaceData = await this.activeConnection.callTool('swarm_list');
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
   private async runDebug(action: string, tailLines?: number): Promise<void> {
     const call = debugToolCall(action, this.debugSwarmId, this.debugRuntimeId, tailLines);
     this.busy = true;
@@ -468,6 +537,38 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     try {
       await this.ensureAuthorizedSession();
       this.debugResult = await this.activeConnection.callTool(call.name, call.arguments);
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async openScenarioDetails(scenarioId: string): Promise<void> {
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      await openJsonPreview(`Scenario ${scenarioId}`, await this.activeConnection.callTool('scenario_get', { scenarioId }));
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async openScenarioAsset(scenarioId: string, asset: ScenarioAsset): Promise<void> {
+    const path = asset === SCENARIO_ASSETS.RAW ? undefined : await this.promptScenarioAssetPath(asset, scenarioId);
+    if (asset !== SCENARIO_ASSETS.RAW && !path) return;
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      const call = scenarioReadToolCall(asset, scenarioId, path);
+      const value = await this.activeConnection.callTool(call.name, call.arguments);
+      await openPreviewDocument(
+        path ? `${scenarioId}/${path}` : `${scenarioId}/scenario.yaml`,
+        scenarioReadText(value),
+        previewLanguageForPath(path),
+      );
     } finally {
       this.busy = false;
       await this.postView();
@@ -692,6 +793,22 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private async post(message: unknown): Promise<void> {
     const view = this.currentView.value();
     if (!this.disposed && view) await view.webview.postMessage(message);
+  }
+
+  private async promptScenarioAssetPath(
+    asset: Exclude<ScenarioAsset, 'RAW'>,
+    scenarioId: string,
+  ): Promise<string | undefined> {
+    const label = asset === SCENARIO_ASSETS.SCHEMA ? 'schema' : 'template';
+    const placeHolder = asset === SCENARIO_ASSETS.SCHEMA
+      ? 'schemas/body.schema.json'
+      : 'templates/http/request.yaml';
+    return vscode.window.showInputBox({
+      prompt: `Exact deployed ${label} path for ${scenarioId}`,
+      placeHolder,
+      ignoreFocusOut: true,
+      validateInput: value => value.trim() ? null : `An exact ${label} path is required.`,
+    });
   }
 }
 

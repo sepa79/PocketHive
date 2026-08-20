@@ -1,10 +1,13 @@
 import * as vscode from 'vscode';
 
+import { initPreviewProvider, PREVIEW_SCHEME } from './preview';
 import { PocketHiveCompanionProvider } from './webview/companionProvider';
 
 export function activate(context: vscode.ExtensionContext): void {
+  const previews = initPreviewProvider();
   const provider = new PocketHiveCompanionProvider(context);
   context.subscriptions.push(
+    vscode.workspace.registerTextDocumentContentProvider(PREVIEW_SCHEME, previews),
     provider,
     vscode.window.registerWebviewViewProvider(
       PocketHiveCompanionProvider.viewType,

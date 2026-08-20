@@ -202,7 +202,7 @@ function workspace(): HTMLElement {
   content.tabIndex = 0;
   content.append(el('div', 'section-heading', [
     el('div', '', [text('h3', activeTab), text('p', tabDescription(activeTab))]),
-    workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'),
+    sectionActions(activeTab),
   ]));
   if (activeTab === 'Debug') content.append(debugView());
   else if (activeTab === 'Journal') content.append(journalView());
@@ -260,6 +260,22 @@ function workspaceActionButton(label: string, action: () => void, className: str
   const control = button(label, action, className);
   control.disabled = Boolean(model.busy) || model.session?.canUseWorkspace === false;
   return control;
+}
+
+function sectionActions(activeTab: string): HTMLElement {
+  const actions = el('div', 'actions');
+  if (activeTab === 'Hive') {
+    const primaryActions = objectValue(model.swarmPrimaryActions) ?? {};
+    const available = Object.values(primaryActions);
+    if (available.includes(model.swarmOperations?.START)) {
+      actions.append(button('Start all', () => send({ type: 'runSwarmBatchOperation', action: 'START' }), 'secondary compact'));
+    }
+    if (available.includes(model.swarmOperations?.STOP)) {
+      actions.append(button('Stop all', () => send({ type: 'runSwarmBatchOperation', action: 'STOP' }), 'secondary compact'));
+    }
+  }
+  actions.append(workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'));
+  return actions;
 }
 
 function scenarioBundleView(): HTMLElement {
@@ -398,6 +414,7 @@ function swarmListView(value: unknown): HTMLElement {
       const label = operation === model.swarmOperations?.START ? 'Start' : 'Stop';
       actions.append(button(label, () => send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact'));
     }
+    actions.append(button('Details', () => send({ type: 'openSwarmDetails', swarmId: id }), 'secondary compact'));
     actions.append(button('Debug', () => send({ type: 'openDebugForSwarm', swarmId: id }), 'secondary compact'));
     const more = el('details', 'row-menu');
     more.append(text('summary', 'More'), el('div', 'row-menu__panel', [
@@ -543,6 +560,12 @@ function scenarioRow(scenario: Model): HTMLElement {
       dataRows([
         ['Scenario ID', id],
         ['Folder', displayValue(scenario.folderPath)],
+      ]),
+      el('div', 'actions', [
+        button('Open details', () => send({ type: 'openScenarioDetails', scenarioId: id }), 'secondary compact'),
+        button('Open scenario.yaml', () => send({ type: 'openScenarioRaw', scenarioId: id }), 'secondary compact'),
+        button('Open schema…', () => send({ type: 'openScenarioSchema', scenarioId: id }), 'secondary compact'),
+        button('Open template…', () => send({ type: 'openScenarioTemplate', scenarioId: id }), 'secondary compact'),
       ]),
       technicalDetails(scenario),
     ]));
@@ -833,6 +856,7 @@ function select(label: string, id: string, options: string[][], value: string): 
     option.selected = optionValue === value;
     control.append(option);
   }
+  control.value = value;
   return { wrapper: el('label', 'field', [text('span', label), control]), control };
 }
 

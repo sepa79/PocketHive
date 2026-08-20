@@ -7,6 +7,7 @@ import {
   MAX_SWARM_ID_LENGTH,
   primaryActionsForSwarms,
   primaryOperationForStatus,
+  swarmIdsForOperation,
   SWARM_OPERATIONS,
 } from '../operations/swarmOperations';
 
@@ -48,6 +49,23 @@ test('derived actions accept only bounded exact owner records', () => {
   assert.equal(Object.keys(bounded).length, MAX_SWARM_ACTIONS);
   assert.equal(bounded[`swarm-${MAX_SWARM_ACTIONS - 1}`], SWARM_OPERATIONS.START);
   assert.equal(bounded[`swarm-${MAX_SWARM_ACTIONS}`], undefined);
+});
+
+test('batch lifecycle targets use only exact eligible swarms for the requested action', () => {
+  assert.deepEqual(swarmIdsForOperation([
+    { id: ' swarm-a ', status: 'RUNNING' },
+    { id: 'swarm-b', status: 'READY' },
+    { id: 'swarm-c', status: 'STOPPED' },
+    { id: 'swarm-d', status: 'FAILED' },
+  ], SWARM_OPERATIONS.START), ['swarm-b', 'swarm-c']);
+  assert.deepEqual(swarmIdsForOperation([
+    { id: ' swarm-a ', status: 'RUNNING' },
+    { id: 'swarm-b', status: 'READY' },
+    { id: 'swarm-c', status: 'STOPPED' },
+    { id: 'swarm-d', status: 'FAILED' },
+  ], SWARM_OPERATIONS.STOP), ['swarm-a']);
+  assert.deepEqual(swarmIdsForOperation({ items: [] }, SWARM_OPERATIONS.START), []);
+  assert.deepEqual(swarmIdsForOperation([], SWARM_OPERATIONS.REMOVE), []);
 });
 
 test('lifecycle operations map to one exact MCP tool and caller-stable idempotency key', () => {

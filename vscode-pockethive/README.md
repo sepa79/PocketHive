@@ -17,12 +17,15 @@ Scenario Bundle roots.
 
 The workspace presents compact bounded rows and empty states rather than raw
 owner responses. Hive restores context-valid Start/Stop and guarded Remove,
-opens Debug with the exact swarm, and shows one authoritative collapsible run
-history at a time. Selecting a run opens Journal with its exact swarm and run
-IDs. Buzz and Journal request ten recent events for the narrow Side Bar and
-offer local search, time, kind, and severity filters. Scenarios are searchable
-compact disclosures, while Debug keeps the canonical actions grouped as
-Runtime, Messaging, Definition, and Maintenance.
+opens authoritative swarm details and Debug with the exact swarm, supports
+exact Start all and Stop all batch actions when eligible swarms are visible,
+and shows one authoritative collapsible run history at a time. Selecting a run
+opens Journal with its exact swarm and run IDs. Buzz and Journal request ten
+recent events for the narrow Side Bar and offer local search, time, kind, and
+severity filters. Scenarios are searchable compact disclosures that can open
+the deployed summary, deployed `scenario.yaml`, and an exact deployed schema or
+template path in read-only previews. Debug keeps the canonical actions grouped
+as Runtime, Messaging, Definition, and Maintenance.
 
 Each owner-data field is bounded independently, so an oversized response becomes
 an explicit field error without replacing navigation, profiles, or connection
@@ -58,6 +61,10 @@ Browser sign-in and consent are rendered by Auth Service with a responsive
 PocketHive theme, the canonical logo, explicit client/resource/scope context,
 and accessible form controls. Styling does not change OAuth request fields,
 PKCE, exact redirect/resource validation, or consent behavior.
+
+Read-only scenario inspection follows the MCP contract exactly. The extension
+does not infer schema or template paths from bundle content and does not edit
+the deployed copy. Git remains the source of truth for authoring.
 
 The Scenarios tab accepts a directory from an accessible Git worktree. It
 packages only the exact committed tree, including safe mixed files such as

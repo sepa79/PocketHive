@@ -169,3 +169,206 @@ test('scenarios view emits reconcile command for ambiguous publication attempt',
     (globalThis as Record<string, unknown>).PocketHiveEventFilters = previousFilters;
   }
 });
+
+test('hive view emits exact bulk lifecycle and swarm detail commands', async () => {
+  const postedMessages: unknown[] = [];
+  let windowMessageHandler: ((event: FakeMessageEvent) => void) | undefined;
+  const app = new FakeElement('main');
+  app.dataset.logo = 'logo.svg';
+  const announcer = new FakeElement('div');
+
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const previousAcquire = (globalThis as Record<string, unknown>).acquireVsCodeApi;
+  const previousFilters = (globalThis as Record<string, unknown>).PocketHiveEventFilters;
+  const previousAnimationFrame = globalThis.requestAnimationFrame;
+  const modulePath = require.resolve('../webview/main');
+
+  (globalThis as Record<string, unknown>).window = {
+    addEventListener: (type: string, listener: (event: FakeMessageEvent) => void) => {
+      if (type === 'message') windowMessageHandler = listener;
+    },
+  };
+  (globalThis as Record<string, unknown>).document = {
+    querySelector: (selector: string) => {
+      if (selector === '#app') return app;
+      if (selector === '#announcer') return announcer;
+      return null;
+    },
+    createElement: (tag: string) => new FakeElement(tag),
+  };
+  (globalThis as Record<string, unknown>).acquireVsCodeApi = () => ({
+    postMessage: (message: unknown) => { postedMessages.push(message); },
+  });
+  (globalThis as Record<string, unknown>).PocketHiveEventFilters = {
+    TIME_WINDOWS: { ALL: 'ALL', FIFTEEN_MINUTES: 'FIFTEEN_MINUTES', ONE_HOUR: 'ONE_HOUR' },
+    filterEvents: <T,>(events: readonly T[]) => [...events],
+  };
+  globalThis.requestAnimationFrame = callback => {
+    callback(0);
+    return 1;
+  };
+
+  delete require.cache[modulePath];
+  try {
+    require('../webview/main');
+    assert.ok(windowMessageHandler);
+
+    windowMessageHandler!({
+      data: {
+        type: 'viewModel',
+        model: {
+          page: 'workspace',
+          profiles: [],
+          activeProfile: { displayName: 'NFT Lab', status: 'Connected' },
+          activeTab: 'Hive',
+          workspaceData: [
+            { id: 'checkout-load', status: 'RUNNING', beeCount: 8 },
+            { id: 'nightly-smoke', status: 'READY', beeCount: 4 },
+          ],
+          swarmOperations: { START: 'START', STOP: 'STOP', REMOVE: 'REMOVE' },
+          swarmPrimaryActions: { 'checkout-load': 'STOP', 'nightly-smoke': 'START' },
+          debugActions: [],
+          session: {
+            status: 'Connected',
+            message: 'Connected',
+            canUseWorkspace: true,
+            canSignIn: false,
+            canSignOut: true,
+          },
+          busy: false,
+        },
+      },
+    });
+
+    const startAll = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Start all');
+    const stopAll = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Stop all');
+    const details = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Details');
+
+    assert.ok(startAll);
+    assert.ok(stopAll);
+    assert.ok(details);
+
+    startAll.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'runSwarmBatchOperation', action: 'START' });
+
+    stopAll.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'runSwarmBatchOperation', action: 'STOP' });
+
+    details.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'openSwarmDetails', swarmId: 'checkout-load' });
+  } finally {
+    delete require.cache[modulePath];
+    globalThis.requestAnimationFrame = previousAnimationFrame;
+    (globalThis as Record<string, unknown>).window = previousWindow;
+    (globalThis as Record<string, unknown>).document = previousDocument;
+    (globalThis as Record<string, unknown>).acquireVsCodeApi = previousAcquire;
+    (globalThis as Record<string, unknown>).PocketHiveEventFilters = previousFilters;
+  }
+});
+
+test('scenarios view emits exact read-only scenario inspection commands', async () => {
+  const postedMessages: unknown[] = [];
+  let windowMessageHandler: ((event: FakeMessageEvent) => void) | undefined;
+  const app = new FakeElement('main');
+  app.dataset.logo = 'logo.svg';
+  const announcer = new FakeElement('div');
+
+  const previousWindow = globalThis.window;
+  const previousDocument = globalThis.document;
+  const previousAcquire = (globalThis as Record<string, unknown>).acquireVsCodeApi;
+  const previousFilters = (globalThis as Record<string, unknown>).PocketHiveEventFilters;
+  const previousAnimationFrame = globalThis.requestAnimationFrame;
+  const modulePath = require.resolve('../webview/main');
+
+  (globalThis as Record<string, unknown>).window = {
+    addEventListener: (type: string, listener: (event: FakeMessageEvent) => void) => {
+      if (type === 'message') windowMessageHandler = listener;
+    },
+  };
+  (globalThis as Record<string, unknown>).document = {
+    querySelector: (selector: string) => {
+      if (selector === '#app') return app;
+      if (selector === '#announcer') return announcer;
+      return null;
+    },
+    createElement: (tag: string) => new FakeElement(tag),
+  };
+  (globalThis as Record<string, unknown>).acquireVsCodeApi = () => ({
+    postMessage: (message: unknown) => { postedMessages.push(message); },
+  });
+  (globalThis as Record<string, unknown>).PocketHiveEventFilters = {
+    TIME_WINDOWS: { ALL: 'ALL', FIFTEEN_MINUTES: 'FIFTEEN_MINUTES', ONE_HOUR: 'ONE_HOUR' },
+    filterEvents: <T,>(events: readonly T[]) => [...events],
+  };
+  globalThis.requestAnimationFrame = callback => {
+    callback(0);
+    return 1;
+  };
+
+  delete require.cache[modulePath];
+  try {
+    require('../webview/main');
+    assert.ok(windowMessageHandler);
+
+    windowMessageHandler!({
+      data: {
+        type: 'viewModel',
+        model: {
+          page: 'workspace',
+          profiles: [],
+          activeProfile: { displayName: 'NFT Lab', status: 'Connected' },
+          activeTab: 'Scenarios',
+          workspaceData: [{ id: 'mixed-smoke', name: 'Mixed Smoke', folderPath: 'bundles' }],
+          swarmOperations: { START: 'START', STOP: 'STOP', REMOVE: 'REMOVE' },
+          swarmPrimaryActions: {},
+          debugActions: [],
+          session: {
+            status: 'Connected',
+            message: 'Connected',
+            canUseWorkspace: true,
+            canSignIn: false,
+            canSignOut: true,
+          },
+          busy: false,
+        },
+      },
+    });
+
+    const details = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Open details');
+    const raw = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Open scenario.yaml');
+    const schema = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Open schema…');
+    const template = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Open template…');
+
+    assert.ok(details);
+    assert.ok(raw);
+    assert.ok(schema);
+    assert.ok(template);
+
+    details.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'openScenarioDetails', scenarioId: 'mixed-smoke' });
+
+    raw.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'openScenarioRaw', scenarioId: 'mixed-smoke' });
+
+    schema.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'openScenarioSchema', scenarioId: 'mixed-smoke' });
+
+    template.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'openScenarioTemplate', scenarioId: 'mixed-smoke' });
+  } finally {
+    delete require.cache[modulePath];
+    globalThis.requestAnimationFrame = previousAnimationFrame;
+    (globalThis as Record<string, unknown>).window = previousWindow;
+    (globalThis as Record<string, unknown>).document = previousDocument;
+    (globalThis as Record<string, unknown>).acquireVsCodeApi = previousAcquire;
+    (globalThis as Record<string, unknown>).PocketHiveEventFilters = previousFilters;
+  }
+});
