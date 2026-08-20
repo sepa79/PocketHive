@@ -43,7 +43,7 @@
     "assets:generate": "node scripts/generate-logo-assets.mjs",
     "assets:check": "node scripts/generate-logo-assets.mjs --check",
     "build": "node scripts/clean-output.mjs && npm run assets:generate && tsc -p ./",
-    "build:mutation": "node scripts/clean-output.mjs && ../../node_modules/.bin/tsc -p ./",
+    "build:mutation": "node scripts/clean-output.mjs && node node_modules/typescript/bin/tsc -p ./",
     "test:unit": "npm run build && node --test out/test/*.test.js",
     "test": "npm run test:unit && npm run assets:check && node scripts/check-cutover.mjs",
     "watch": "tsc -watch -p ./",

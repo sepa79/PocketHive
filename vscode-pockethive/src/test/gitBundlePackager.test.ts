@@ -234,10 +234,12 @@ test('dispose tolerates independently removed owned files and directories and re
 test('archive persistence cleans partial state when secure creation fails', async () => {
   const calls: string[] = [];
   const failure = new Error('simulated archive write failure');
+  const ownedDirectory = join('owned-temp', 'owned-test-directory');
+  const archivePath = join(ownedDirectory, 'bundle.zip');
   const files: ArchiveFileOperations = {
     createTemporaryDirectory: async prefix => {
       calls.push(`create:${prefix}`);
-      return '/tmp/owned-test-directory';
+      return ownedDirectory;
     },
     write: async (path, _bytes, mode) => {
       calls.push(`write:${path}:${mode.toString(8)}`);
@@ -249,9 +251,9 @@ test('archive persistence cleans partial state when secure creation fails', asyn
 
   await assert.rejects(persistArchive(Buffer.from('archive'), files), error => error === failure);
   assert.deepEqual(calls.slice(1), [
-    'write:/tmp/owned-test-directory/bundle.zip:600',
-    'unlink:/tmp/owned-test-directory/bundle.zip',
-    'rmdir:/tmp/owned-test-directory',
+    `write:${archivePath}:600`,
+    `unlink:${archivePath}`,
+    `rmdir:${ownedDirectory}`,
   ]);
   assert.match(calls[0], /^create:.*pockethive-bundle-$/);
 });

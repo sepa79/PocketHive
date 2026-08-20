@@ -30,24 +30,35 @@ assert.match(providerSource, /resources', 'brand-tokens\.css'/,
   'Webview must load the generated canonical brand token');
 assert.match(webviewSource, /app\.append\(header\(\)\);\s*if \(model\.page === 'workspace'\)/,
   'Both companion pages must use the same branded header');
-const product = (await Promise.all(sources
-  .filter(path => !path.includes('/test/'))
-  .map(path => readFile(path, 'utf8')))).join('\n');
+const sourceEntries = sources.map(path => ({ nativePath: path, portablePath: toPortablePath(path) }));
+const product = (await Promise.all(sourceEntries
+  .filter(({ portablePath }) => !isTestSource(portablePath))
+  .map(({ nativePath }) => readFile(nativePath, 'utf8')))).join('\n');
 for (const forbidden of [
   'StdioClientTransport', 'registerTreeDataProvider', 'mcpServerPath',
   'bundlesFolders', 'activeBundlesFolder', 'wiremockUrl', 'tcpMockUrl', 'scenario_raw_write',
 ]) {
   assert.equal(product.includes(forbidden), false, `Legacy product boundary remains: ${forbidden}`);
 }
-const processSourceContents = (await Promise.all(sources.filter(path => !path.includes('/test/')).map(async path => ({
-  path,
-  content: await readFile(path, 'utf8'),
-})))).filter(item => item.content.includes('node:child_process'));
+const processSourceContents = (await Promise.all(sourceEntries
+  .filter(({ portablePath }) => !isTestSource(portablePath))
+  .map(async ({ nativePath, portablePath }) => ({
+    path: portablePath,
+    content: await readFile(nativePath, 'utf8'),
+  })))).filter(item => item.content.includes('node:child_process'));
 assert.deepEqual(processSourceContents.map(item => item.path), ['src/scenarios/gitBundlePackager.ts']);
 assert.match(processSourceContents[0].content, /execFile\('git'/);
 assert.doesNotMatch(processSourceContents[0].content, /execFile\(['"](?:node|java)['"]/);
 assert.equal((product.match(/registerWebviewViewProvider/g) ?? []).length, 1);
 console.log('PocketHive VS Code atomic cutover checks passed.');
+
+function isTestSource(path) {
+  return path.includes('/test/');
+}
+
+function toPortablePath(path) {
+  return path.replaceAll('\\', '/');
+}
 
 async function files(root) {
   const result = [];

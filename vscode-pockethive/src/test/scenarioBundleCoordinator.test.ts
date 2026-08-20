@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -23,6 +24,7 @@ const endpoint: ValidatedEndpoint = {
   resourceMetadataUrl: 'https://nft.example/.well-known/oauth-protected-resource',
   authorizationServer: 'https://nft.example/auth-service',
 };
+const retainedArchivePath = join('owned-temp', 'pockethive-test-bundle.zip');
 
 test('validates then explicitly publishes the exact retained committed archive with least-privilege scopes', async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
@@ -49,7 +51,7 @@ test('validates then explicitly publishes the exact retained committed archive w
         bundlePath: 'scenarios/bundles/mixed-smoke', verification: 'CLIENT_ASSERTED',
       },
       fileManifest: [{ path: 'scenario.yaml', byteCount: 18, sha256: `sha256:${'c'.repeat(64)}` }],
-      archivePath: '/tmp/pockethive-test-bundle.zip',
+      archivePath: retainedArchivePath,
       dispose: async () => { disposed += 1; },
     }) },
     { validate: async () => endpoint },
@@ -102,7 +104,7 @@ test('fails closed, cleans owned bytes, and never infers publication intent', as
         repository: 'https://example.invalid/tests.git', commit: '1'.repeat(40),
         bundlePath: 'bundle', verification: 'CLIENT_ASSERTED',
       },
-      fileManifest: [], archivePath: '/tmp/pockethive-test-bundle.zip',
+      fileManifest: [], archivePath: retainedArchivePath,
       dispose: async () => { disposed += 1; },
     }) },
     { validate: async () => endpoint },
@@ -316,7 +318,7 @@ function pendingBundle(dispose: () => void): PendingBundlePublication {
         repository: 'https://example.invalid/tests.git', commit: '1'.repeat(40),
         bundlePath: 'bundle', verification: 'CLIENT_ASSERTED',
       },
-      fileManifest: [], archivePath: '/tmp/pockethive-test-bundle.zip',
+      fileManifest: [], archivePath: retainedArchivePath,
       dispose: async () => { dispose(); },
     },
     receipt: {

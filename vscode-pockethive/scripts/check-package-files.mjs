@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 
 const run = promisify(execFile);
@@ -19,8 +20,9 @@ for (const requiredClass of ['hex', 'panel', 'lensOuter', 'lensInner', 'node']) 
   assert.match(activitySvg, new RegExp(`class="${requiredClass}"`),
     `PocketHive Activity Bar icon must retain ${requiredClass}`);
 }
-const { stdout } = await run('node_modules/.bin/vsce', ['ls'], { encoding: 'utf8' });
-const files = stdout.split(/\r?\n/).filter(Boolean);
+const vsceCommand = join('node_modules', '.bin', process.platform === 'win32' ? 'vsce.cmd' : 'vsce');
+const { stdout } = await run(vsceCommand, ['ls'], { encoding: 'utf8' });
+const files = stdout.split(/\r?\n/).filter(Boolean).map(path => path.replaceAll('\\', '/'));
 for (const required of [
   'package.json', 'README.md', 'LICENSE', 'media/companion.css',
   'resources/activity-mark.svg', 'resources/brand-tokens.css', 'resources/logo-mark.svg',
