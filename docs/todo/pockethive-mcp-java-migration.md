@@ -1190,7 +1190,8 @@ Design and acceptance tests use 280, 320, and 420 CSS-pixel widths plus VS Code
 zoom and font scaling. The layout has:
 
 - one content column and no page-level horizontal scrolling;
-- a compact sticky header and sticky top tab strip;
+- a compact environment header followed by a sticky top tab strip, with no
+  global logo header consuming Side Bar height;
 - 14-pixel default body text, visible keyboard focus, and controls at least 32
   CSS pixels high;
 - wrapped descriptions and ellipsised URLs, IDs, and hashes with an accessible
@@ -1272,9 +1273,11 @@ swarm selection, or Debug result across environments.
 ### Open environment workspace
 
 `Open` and `Save & open` replace the first page with one environment workspace.
-Its header shows Back to Environments, profile name, live connection status,
-verified principal label, refresh, and explicit overflow actions. A sticky top
-strip contains exactly these tabs:
+Its header shows `← Environments`, profile name, live connection status,
+verified principal label, and one accessible account menu whose authenticated
+action is `Sign out`. Refresh remains a current-tab action. The header contains
+no logo, region, endpoint selector, environment options, or duplicate navigation.
+A sticky top strip contains exactly these tabs:
 
 | Tab | Purpose and MCP source |
 |---|---|
@@ -1304,7 +1307,8 @@ Views without restoring a second behaviour path:
 - each Hive row exposes only the lifecycle action valid for its reported state;
   `Start`, `Stop`, and guarded `Remove` call `swarm_start`, `swarm_stop`, and
   `swarm_remove` through a short-lived least-privilege MCP connection and then
-  refresh the authoritative swarm list;
+  refresh the authoritative swarm list. A historical run never exposes Start,
+  Stop, restart, replay, or any other lifecycle action;
 - each Hive row has a collapsed run-history disclosure. Opening one row closes
   the previous disclosure and calls the read-only `debug_journal_runs` tool for
   that exact swarm. The tool delegates to Orchestrator's existing
@@ -1316,9 +1320,13 @@ Views without restoring a second behaviour path:
   owner-side filter. A malformed or blank selected ID fails at the MCP
   boundary; an owner-unknown exact ID preserves Orchestrator's explicit empty
   or not-found response and never falls back to the active or latest run;
-- Buzz is a compact one-row event stream with explicit search, time, kind, and
-  severity filters. Journal uses the same filter model after the required exact
-  swarm selection. Filtering is presentation state over the bounded owner page
+- Buzz is a compact one-row event stream with an always-visible search field.
+  Time, kind, and severity remain explicit but sit behind one collapsed
+  `Filters` disclosure that reports the active-filter count. Journal uses the
+  same filter model after a searchable/autocomplete exact-swarm choice. Debug
+  uses the same exact-swarm choice pattern. An entered value not present in the
+  current bounded MCP result fails explicitly and is never inferred or sent as
+  another target. Filtering is presentation state over the bounded owner page
   and never changes endpoint, owner, adapter, or target;
 - Scenario rows are compact, searchable disclosures around the existing
   Scenario Manager catalogue and committed-bundle publication workflow. The
@@ -1404,11 +1412,10 @@ and colour. The packaging build deterministically produces:
   24 px Activity Bar mask with visible rounded connectors, nodes, body, lens
   ring, and centre button; and
 - a bounded full-colour mark at
-  `vscode-pockethive/resources/logo-mark.svg` for the webview header; and
+  `vscode-pockethive/resources/logo-mark.svg` for compact swarm identity; and
 - a bounded CSS brand token at
-  `vscode-pockethive/resources/brand-tokens.css` that colours the `Hive` suffix
-  in the shared header on both companion pages, with accessible light and
-  high-contrast theme treatment and compact wordmark/subtitle line height.
+  `vscode-pockethive/resources/brand-tokens.css` that colours the selected
+  workspace tab, with accessible light and high-contrast theme treatment.
 
 All three generated derivatives carry source path and digest metadata, are not
 edited by hand, and are checked during packaging. The Activity Bar silhouette
@@ -1817,8 +1824,10 @@ At minimum prove:
     Resolving a replacement view before an older view disposes keeps the
     replacement attached and immediately restores its host-owned view model.
 36. The Activity Bar displays the exact PocketHive mark as a theme-tinted icon,
-    and the header displays its full-colour derivative; both are generated from
-    `ui-v2/public/logo.svg` and pass package provenance checks.
+    compact swarm identity may use its full-colour derivative, and the selected
+    tab uses the canonical Hive colour. All are generated from
+    `ui-v2/public/logo.svg` and pass package provenance checks; the workspace has
+    no separate global logo header.
 
 ### Mutation testing
 
@@ -2336,7 +2345,7 @@ acceptance result.
   VS Code and webview adapters;
 - implement the environments-first flow, ordered `Connect` state machine,
   environment workspace, sticky top tabs, and single-column Debug drill-down;
-- generate and package the Activity Bar and header assets deterministically from
+- generate and package the Activity Bar and compact identity assets deterministically from
   `ui-v2/public/logo.svg`;
 - remove local process spawning, stdio, direct backend access, bundle-root and
   transport settings, legacy Tree View contributions, and their dead commands;

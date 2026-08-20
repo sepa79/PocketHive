@@ -104,12 +104,19 @@ logo provenance, checks the VSIX allow-list, and creates
 `pockethive-vscode-<version>.vsix`. The package must not contain source, tests,
 Node modules, mutation reports, legacy Tree Views, or local MCP launch code.
 
+The workspace uses one compact mobile-width shell: `← Environments`, the exact
+environment name, verified principal, live session status, an account menu, and
+the five top tabs. It deliberately has no global logo header or duplicated
+environment controls. Hive rows retain their context-valid Start or Stop action;
+historical runs only open their exact Journal evidence. Buzz and Journal keep
+event summaries to one line, place time/kind/severity behind a collapsed Filters
+control, and use searchable exact-swarm choices where a target is required.
+
 The Activity Bar uses a 24 px-optimized PocketHive hexagon silhouette. The
-shared header on both companion pages uses the full-colour mark and colours the
-`Hive` suffix with a generated canonical brand token. Its compact heading and
-subtitle rhythm follows the source logo. All three derivatives come
-deterministically from `ui-v2/public/logo.svg`; run
-`npm run assets:check` to detect drift.
+full-colour mark remains available for compact swarm identity and the generated
+canonical Hive colour marks the active workspace tab. All three derivatives
+come deterministically from `ui-v2/public/logo.svg`; run `npm run assets:check`
+to detect drift.
 
 For the server and agent contract, see `docs/mcp/README.md` and
 `docs/todo/pockethive-mcp-java-migration.md`.

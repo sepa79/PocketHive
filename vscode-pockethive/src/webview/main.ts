@@ -26,6 +26,7 @@ type ScenarioSection = 'OVERVIEW' | 'FILES' | 'INPUTS';
 let model: Model = { page: 'environments', profiles: [], activeTab: 'Hive', debugActions: [], busy: false };
 let expandedHistorySwarmId: string | undefined;
 let expandedScenarioId: string | undefined;
+let swarmSearch = '';
 let scenarioSearch = '';
 let scenarioFolder = 'ALL';
 let createSwarmDraft: {
@@ -61,7 +62,6 @@ vscode.postMessage({ type: 'ready' });
 
 function render(): void {
   app.replaceChildren();
-  app.append(header());
   if (model.page === 'workspace') app.append(workspace());
   else app.append(environments());
   announcer.textContent = statusAnnouncement();
@@ -69,34 +69,17 @@ function render(): void {
     ?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
 }
 
-function header(): HTMLElement {
-  const result = el('header', 'brand');
-  const logo = document.createElement('img');
-  logo.src = app.dataset.logo ?? '';
-  logo.alt = '';
-  logo.className = 'brand__logo';
-  const name = el('h1', 'brand__name', [
-    text('span', 'Pocket'),
-    text('span', 'Hive', 'brand__hive'),
-  ]);
-  result.append(logo, el('div', 'brand__copy', [
-    name,
-    text('p', model.page === 'workspace' ? 'MCP environment' : 'MCP environments'),
-  ]));
-  return result;
-}
-
 function environments(): HTMLElement {
   const section = el('section', 'page');
   const titleRow = el('div', 'title-row', [
-    el('div', '', [text('h2', 'Environments'), text('p', 'Connect to a PocketHive MCP environment.')]),
+    el('div', '', [text('h1', 'Environments'), text('p', 'Connect to a PocketHive MCP environment.')]),
     button('Add', () => send({ type: 'addEnvironment' }), 'secondary compact'),
   ]);
   section.append(titleRow);
   const profiles = Array.isArray(model.profiles) ? model.profiles : [];
   if (profiles.length === 0 && model.page !== 'add') {
     section.append(el('div', 'empty card', [
-      text('h3', 'No environments yet'),
+      text('h2', 'No environments yet'),
       text('p', 'Add the MCP URL supplied by your PocketHive administrator.'),
       button('Add environment', () => send({ type: 'addEnvironment' }), 'primary'),
     ]));
@@ -114,7 +97,7 @@ function environmentCard(profile: Model): HTMLElement {
   const card = el('article', 'card environment-card');
   card.append(
     el('div', 'environment-card__head', [
-      text('h3', String(profile.displayName ?? 'Environment')),
+      text('h2', String(profile.displayName ?? 'Environment')),
       statusPill(status),
     ]),
     titled('p', String(profile.mcpUrl ?? ''), 'mono truncate'),
@@ -144,7 +127,7 @@ function connectionForm(): HTMLElement {
     ['REMOTE_HTTPS', 'Remote HTTPS'],
     ['LOCAL_LOOPBACK_HTTP', 'Local loopback HTTP'],
   ], String(draft.endpointSecurityMode ?? 'REMOTE_HTTPS'));
-  form.append(text('h3', draft.id ? 'Connection' : 'Add environment'), stages, name.wrapper, url.wrapper, mode.wrapper);
+  form.append(text('h2', draft.id ? 'Connection' : 'Add environment'), stages, name.wrapper, url.wrapper, mode.wrapper);
   form.append(el('div', 'status-list', [
     statusRow('Endpoint', endpointStatus(attempt)),
     statusRow('Authentication', authenticationStatus(attempt)),
@@ -192,10 +175,10 @@ function workspace(): HTMLElement {
   };
   const activeTab = String(model.activeTab);
   const section = el('section', 'workspace');
-  section.append(button('‹ Environments', () => send({ type: 'backToEnvironments' }), 'back-link'));
+  section.append(button('← Environments', () => send({ type: 'backToEnvironments' }), 'back-link'));
   section.append(el('div', 'workspace-heading', [
     el('div', '', [
-      text('h2', String(profile.displayName ?? 'Environment')),
+      text('h1', String(profile.displayName ?? 'Environment')),
       profile.principalLabel ? text('p', `Signed in as ${String(profile.principalLabel)}`, 'muted') : undefined,
     ]),
     el('div', 'workspace-heading__account', [
@@ -211,7 +194,7 @@ function workspace(): HTMLElement {
   content.setAttribute('aria-labelledby', tabId(activeTab));
   content.tabIndex = 0;
   content.append(el('div', 'section-heading', [
-    el('div', '', [text('h3', activeTab), text('p', tabDescription(activeTab))]),
+    text('h2', tabTitle(activeTab)),
     sectionActions(activeTab),
   ]));
   if (activeTab === 'Debug') content.append(debugView());
@@ -222,10 +205,7 @@ function workspace(): HTMLElement {
     content.append(swarmListView(model.workspaceData));
   }
   else content.append(eventListView(model.workspaceData, 'No hive events were observed.', 'Buzz'));
-  section.append(content, el('footer', 'connection-footer', [
-    statusPill(String(session.status ?? profile.status ?? 'Not connected')),
-    text('span', model.busy ? 'Refreshing' : String(session.message ?? 'Secure session unavailable'), 'muted'),
-  ]));
+  section.append(content);
   return section;
 }
 
@@ -233,7 +213,11 @@ function accountMenu(profile: Model, session: Model): HTMLElement {
   const details = document.createElement('details');
   details.className = 'account-menu';
   const summary = document.createElement('summary');
-  summary.textContent = 'Account';
+  summary.setAttribute('aria-label', 'Account');
+  summary.title = 'Account';
+  const avatar = text('span', accountInitial(profile), 'account-menu__avatar');
+  avatar.setAttribute('aria-hidden', 'true');
+  summary.append(avatar);
   details.append(summary);
   const panel = el('div', 'account-menu__panel', [
     text('strong', profile.principalLabel ? String(profile.principalLabel) : 'PocketHive user'),
@@ -279,17 +263,10 @@ function sectionActions(activeTab: string): HTMLElement {
   const actions = el('div', 'actions');
   if (activeTab === 'Hive') {
     const createOpen = objectValue(model.createSwarmForm) !== undefined;
-    const primaryActions = objectValue(model.swarmPrimaryActions) ?? {};
-    const available = Object.values(primaryActions);
     actions.append(button(createOpen ? 'Cancel create' : 'Create swarm', () => send({
       type: createOpen ? 'cancelCreateSwarm' : 'openCreateSwarm',
     }), createOpen ? 'quiet compact' : 'primary compact'));
-    if (available.includes(model.swarmOperations?.START)) {
-      actions.append(button('Start all', () => send({ type: 'runSwarmBatchOperation', action: 'START' }), 'secondary compact'));
-    }
-    if (available.includes(model.swarmOperations?.STOP)) {
-      actions.append(button('Stop all', () => send({ type: 'runSwarmBatchOperation', action: 'STOP' }), 'secondary compact'));
-    }
+    return actions;
   }
   actions.append(workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'));
   return actions;
@@ -300,7 +277,7 @@ function scenarioBundleView(): HTMLElement {
   const attemptId = publicationAttemptId(model.bundleResult);
   const result = el('section', 'card scenario-upload');
   result.append(
-    text('h4', 'Committed bundle'),
+    text('h3', 'Committed bundle'),
     text('p', 'Select an exact committed Git directory. PocketHive validates the retained ZIP before any explicit publication.', 'muted'),
   );
   if (!pending) {
@@ -375,12 +352,16 @@ function journalView(): HTMLElement {
     result.append(emptyState('No swarms are available for journal evidence.'));
     return result;
   }
-  const swarm = select('Exact swarm', 'journalSwarm', [
-    ['', 'Select a swarm'],
-    ...swarmIds.map(id => [id, id]),
-  ], String(model.journalSwarmId ?? ''));
+  const swarm = searchableChoice(
+    'Exact swarm',
+    'journalSwarm',
+    swarmIds,
+    String(model.journalSwarmId ?? ''),
+    'Search exact swarm…',
+  );
   swarm.control.addEventListener('change', () => {
-    if (swarm.control.value) send({ type: 'selectJournalSwarm', swarmId: swarm.control.value });
+    sendExactChoice(swarm.control, swarmIds, 'swarm', swarmId =>
+      send({ type: 'selectJournalSwarm', swarmId }));
   });
   result.append(swarm.wrapper);
   if (!model.journalSwarmId) result.append(emptyState('Select one exact swarm to load its bounded journal.'));
@@ -400,63 +381,97 @@ function swarmListView(value: unknown): HTMLElement {
   const swarms = topLevelRecords(value);
   if (swarms === undefined) return ownerDataError(value, 'swarm list');
   if (swarms.length === 0) return emptyState('No live swarms are currently visible.');
+  const result = el('section', 'swarm-catalogue');
+  const search = input('Search swarms', 'swarmSearch', swarmSearch, 'Swarm or template ID', true);
+  search.control.required = false;
   const list = el('div', 'swarm-list');
   if (model.swarmOperationResult !== undefined) {
-    list.append(el('div', 'operation-result callout', [
+    result.append(el('div', 'operation-result callout', [
       text('strong', 'Lifecycle request accepted'),
       text('span', 'The list below was refreshed from Orchestrator.', 'muted'),
       technicalDetails(model.swarmOperationResult),
     ]));
   }
-  for (const swarm of swarms) {
-    const id = stringField(swarm, 'id');
-    if (!id) {
-      list.append(ownerDataError(swarm, 'swarm record'));
-      continue;
-    }
-    const status = swarmStatus(swarm);
-    const bees = swarmBeeCount(swarm);
-    const operation = model.swarmPrimaryActions?.[id];
-    const card = el('article', 'swarm-row');
-    const identity = el('div', 'swarm-row__identity', [
-      brandMark('swarm-mark'),
-      el('div', 'swarm-row__copy', [
-        titled('h4', id, 'truncate'),
-        text('p', [displayValue(swarm.templateId), `${bees} ${bees === 1 ? 'bee' : 'bees'}`].join(' · '), 'muted truncate'),
-      ]),
-    ]);
-    const actions = el('div', 'swarm-row__actions');
-    actions.append(statusPill(status));
-    if (operation) {
-      const label = operation === model.swarmOperations?.START ? 'Start' : 'Stop';
-      actions.append(button(label, () => send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact'));
-    }
-    actions.append(button('Details', () => send({ type: 'openSwarmDetails', swarmId: id }), 'secondary compact'));
-    actions.append(button('Debug', () => send({ type: 'openDebugForSwarm', swarmId: id }), 'secondary compact'));
-    const more = el('details', 'row-menu');
-    more.append(text('summary', 'More'), el('div', 'row-menu__panel', [
-      button('Remove swarm', () => send({ type: 'runSwarmOperation', action: model.swarmOperations?.REMOVE, swarmId: id }), 'guarded compact'),
-      technicalDetails(swarm),
-    ]));
-    actions.append(more);
-    card.append(el('div', 'swarm-row__main', [identity, actions]));
+  const renderMatches = () => {
+    swarmSearch = search.control.value;
+    const query = swarmSearch.trim().toLocaleLowerCase();
+    const matches = swarms.filter(swarm => !query || [
+      stringField(swarm, 'id'),
+      stringField(swarm, 'templateId'),
+    ].filter(Boolean).some(value => value?.toLocaleLowerCase().includes(query)));
+    list.replaceChildren(...matches.map(swarmRowView));
+    if (matches.length === 0) list.append(emptyState('No swarms match this search.'));
+  };
+  search.control.addEventListener('input', renderMatches);
+  result.append(
+    el('div', 'swarm-search', [search.wrapper]),
+    swarmBatchActions(),
+    list,
+  );
+  renderMatches();
+  return result;
+}
 
-    const expanded = expandedHistorySwarmId === id;
-    const history = button(expanded ? 'Hide run history' : 'Run history', () => {
-      if (expanded) {
-        expandedHistorySwarmId = undefined;
-        render();
-      } else {
-        expandedHistorySwarmId = id;
-        send({ type: 'loadSwarmHistory', swarmId: id });
-      }
-    }, 'history-toggle quiet compact');
-    history.setAttribute('aria-expanded', String(expanded));
-    card.append(history);
-    if (expanded) card.append(swarmRunHistory(id));
-    list.append(card);
+function swarmBatchActions(): HTMLElement {
+  const actions = el('div', 'swarm-batch-actions');
+  const available = Object.values(objectValue(model.swarmPrimaryActions) ?? {});
+  if (available.includes(model.swarmOperations?.START)) {
+    actions.append(workspaceActionButton('Start all', () =>
+      send({ type: 'runSwarmBatchOperation', action: 'START' }), 'secondary compact'));
   }
-  return list;
+  if (available.includes(model.swarmOperations?.STOP)) {
+    actions.append(workspaceActionButton('Stop all', () =>
+      send({ type: 'runSwarmBatchOperation', action: 'STOP' }), 'secondary compact'));
+  }
+  actions.append(workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () =>
+    send({ type: 'refresh' }), 'secondary compact'));
+  return actions;
+}
+
+function swarmRowView(swarm: Model): HTMLElement {
+  const id = stringField(swarm, 'id');
+  if (!id) return ownerDataError(swarm, 'swarm record');
+  const status = swarmStatus(swarm);
+  const bees = swarmBeeCount(swarm);
+  const operation = model.swarmPrimaryActions?.[id];
+  const card = el('article', 'swarm-row');
+  const identity = el('div', 'swarm-row__identity', [
+    brandMark('swarm-mark'),
+    el('div', 'swarm-row__copy', [
+      titled('h3', id, 'truncate'),
+      text('p', [displayValue(swarm.templateId), `${bees} ${bees === 1 ? 'bee' : 'bees'}`].join(' · '), 'muted truncate'),
+    ]),
+  ]);
+  const actions = el('div', 'swarm-row__actions');
+  actions.append(statusPill(status));
+  if (operation) {
+    const label = operation === model.swarmOperations?.START ? 'Start' : 'Stop';
+    actions.append(button(label, () => send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact'));
+  }
+  actions.append(button('Details', () => send({ type: 'openSwarmDetails', swarmId: id }), 'secondary compact'));
+  actions.append(button('Debug', () => send({ type: 'openDebugForSwarm', swarmId: id }), 'secondary compact'));
+  const more = el('details', 'row-menu');
+  more.append(text('summary', 'More'), el('div', 'row-menu__panel', [
+    button('Remove swarm', () => send({ type: 'runSwarmOperation', action: model.swarmOperations?.REMOVE, swarmId: id }), 'guarded compact'),
+    technicalDetails(swarm),
+  ]));
+  actions.append(more);
+  card.append(el('div', 'swarm-row__main', [identity, actions]));
+
+  const expanded = expandedHistorySwarmId === id;
+  const history = button(expanded ? 'Hide run history' : 'Run history', () => {
+    if (expanded) {
+      expandedHistorySwarmId = undefined;
+      render();
+    } else {
+      expandedHistorySwarmId = id;
+      send({ type: 'loadSwarmHistory', swarmId: id });
+    }
+  }, 'history-toggle quiet compact');
+  history.setAttribute('aria-expanded', String(expanded));
+  card.append(history);
+  if (expanded) card.append(swarmRunHistory(id));
+  return card;
 }
 
 function createSwarmView(value: unknown): HTMLElement {
@@ -464,7 +479,7 @@ function createSwarmView(value: unknown): HTMLElement {
   if (!formValue) return ownerDataError(value, 'create swarm form');
   const result = el('section', 'card scenario-upload');
   result.append(
-    text('h4', 'Create swarm'),
+    text('h3', 'Create swarm'),
     text('p', 'Choose one exact deployed template and optional overrides. PocketHive sends one explicit swarm-create request through MCP.', 'muted'),
   );
   const templates = createSwarmOptions(formValue.templates);
@@ -820,7 +835,7 @@ function scenarioSutCard(value: Model): HTMLElement {
   const error = errorFrom(value.error);
   const card = el('article', 'card data-card');
   card.append(el('div', 'data-heading', [
-    el('div', '', [text('span', 'Bundle-local SUT', 'eyebrow'), titled('h4', sutId, 'truncate')]),
+    el('div', '', [text('span', 'Bundle-local SUT', 'eyebrow'), titled('h3', sutId, 'truncate')]),
   ]));
   if (error) {
     card.append(errorState(error));
@@ -878,7 +893,16 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
   const severities = distinctEventField(events, 'severity');
   const kind = select('Kind', `${context.toLowerCase()}Kind`, [['ALL', 'All kinds'], ...kinds.map(item => [item, item])], criteria.kind);
   const severity = select('Severity', `${context.toLowerCase()}Severity`, [['ALL', 'All severities'], ...severities.map(item => [item, item])], criteria.severity);
-  const filters = el('div', 'filter-bar event-filters', [search.wrapper, time.wrapper, kind.wrapper, severity.wrapper]);
+  const advanced = document.createElement('details');
+  advanced.className = 'advanced-filters';
+  const advancedSummary = text('summary', 'Filters');
+  advancedSummary.setAttribute('aria-label', 'Advanced filters');
+  advanced.append(advancedSummary, el('div', 'advanced-filters__panel', [
+    time.wrapper,
+    kind.wrapper,
+    severity.wrapper,
+  ]));
+  const filters = el('div', 'event-search', [search.wrapper, advanced]);
   const count = text('p', '', 'result-count muted');
   const list = el('div', 'event-list');
   const apply = () => {
@@ -890,6 +914,12 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
     };
     eventCriteria[context] = next;
     const filtered = applyEventFilters(events, next);
+    const activeFilterCount = [
+      next.timeWindow !== EVENT_TIME_WINDOWS.ALL,
+      next.kind !== 'ALL',
+      next.severity !== 'ALL',
+    ].filter(Boolean).length;
+    advancedSummary.textContent = activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters';
     count.textContent = `${filtered.length} of ${events.length} captured events`;
     list.replaceChildren(...filtered.map(eventRow));
     if (filtered.length === 0) list.append(emptyState('No captured events match these filters.'));
@@ -912,10 +942,12 @@ function eventRow(event: Model): HTMLElement {
     const swarmId = stringField(event, 'swarmId');
     const details = el('details', 'event-row');
     details.append(el('summary', '', [
-      titled('time', compactTime(timestamp), 'event-row__time mono'),
+      el('span', 'event-row__identity', [
+        titled('strong', `${kind}/${type}`, 'event-row__type truncate'),
+        titled('span', swarmId ?? displayValue(event.origin), 'event-row__scope muted truncate'),
+      ]),
       statusPill(severity),
-      titled('strong', `${kind}/${type}`, 'event-row__type truncate'),
-      titled('span', swarmId ?? displayValue(event.origin), 'event-row__scope muted truncate'),
+      titled('time', compactTime(timestamp), 'event-row__time mono'),
     ]));
     const actions = el('div', 'event-row__actions');
     if (swarmId) actions.append(button('Open Debug', () => send({ type: 'openDebugForSwarm', swarmId }), 'secondary compact'));
@@ -1030,9 +1062,16 @@ function debugView(): HTMLElement {
   const result = el('div', 'debug');
   const swarms = (topLevelRecords(model.workspaceData) ?? [])
     .map(item => stringField(item, 'id')).filter((id): id is string => Boolean(id));
-  const swarm = select('Exact swarm', 'debugSwarm', [['', 'Select a swarm'], ...swarms.map(id => [id, id])], model.debugSwarmId ?? '');
+  const swarm = searchableChoice(
+    'Exact swarm',
+    'debugSwarm',
+    swarms,
+    model.debugSwarmId ?? '',
+    'Search exact swarm…',
+  );
   swarm.control.addEventListener('change', () => {
-    if (swarm.control.value) send({ type: 'selectDebugSwarm', swarmId: swarm.control.value });
+    sendExactChoice(swarm.control, swarms, 'swarm', swarmId =>
+      send({ type: 'selectDebugSwarm', swarmId }));
   });
   result.append(swarm.wrapper);
   const workers = identifiers(model.debugResult, ['runtimeId', 'id', 'name']);
@@ -1069,10 +1108,10 @@ function debugView(): HTMLElement {
     details.append(controls);
     actions.append(details);
   }
-  result.append(text('h4', 'Diagnostic actions'), actions);
+  result.append(text('h3', 'Diagnostic actions'), actions);
   if (model.debugResult !== undefined) {
     result.append(el('section', 'debug-output', [
-      el('div', 'debug-output__heading', [text('h4', 'Result'), text('span', 'Bounded MCP evidence', 'muted')]),
+      el('div', 'debug-output__heading', [text('h3', 'Result'), text('span', 'Bounded MCP evidence', 'muted')]),
       resultCard(model.debugResult),
     ]));
   }
@@ -1122,7 +1161,13 @@ function statusPill(status: string): HTMLElement {
   return text('span', status, `status status--${status.toLowerCase().replace(/\s+/g, '-')}`);
 }
 
-function input(label: string, id: string, value: string, placeholder: string): { wrapper: HTMLElement; control: HTMLInputElement } {
+function input(
+  label: string,
+  id: string,
+  value: string,
+  placeholder: string,
+  visuallyHiddenLabel = false,
+): { wrapper: HTMLElement; control: HTMLInputElement } {
   const control = document.createElement('input');
   control.id = id;
   control.name = id;
@@ -1130,7 +1175,7 @@ function input(label: string, id: string, value: string, placeholder: string): {
   control.placeholder = placeholder;
   control.required = true;
   control.autocomplete = 'off';
-  const wrapper = el('label', 'field', [text('span', label), control]);
+  const wrapper = el('label', 'field', [text('span', label, visuallyHiddenLabel ? 'sr-only' : ''), control]);
   return { wrapper, control };
 }
 
@@ -1147,6 +1192,48 @@ function select(label: string, id: string, options: string[][], value: string): 
   }
   control.value = value;
   return { wrapper: el('label', 'field', [text('span', label), control]), control };
+}
+
+function searchableChoice(
+  label: string,
+  id: string,
+  choices: readonly string[],
+  value: string,
+  placeholder: string,
+): { wrapper: HTMLElement; control: HTMLInputElement } {
+  const control = document.createElement('input');
+  const list = document.createElement('datalist');
+  const listId = `${id}Choices`;
+  control.id = id;
+  control.name = id;
+  control.value = value;
+  control.placeholder = placeholder;
+  control.autocomplete = 'off';
+  control.setAttribute('list', listId);
+  list.id = listId;
+  for (const choice of choices) {
+    const option = document.createElement('option');
+    option.value = choice;
+    list.append(option);
+  }
+  return { wrapper: el('label', 'field searchable-choice', [text('span', label), control, list]), control };
+}
+
+function sendExactChoice(
+  control: HTMLInputElement,
+  choices: readonly string[],
+  subject: string,
+  onChoice: (choice: string) => void,
+): void {
+  const choice = control.value.trim();
+  if (!choice) return;
+  if (!choices.includes(choice)) {
+    control.setAttribute('aria-invalid', 'true');
+    showError(`Choose an exact ${subject} from the current PocketHive results.`);
+    return;
+  }
+  control.setAttribute('aria-invalid', 'false');
+  onChoice(choice);
 }
 
 function identifiers(value: unknown, keys: string[]): string[] {
@@ -1168,15 +1255,13 @@ function identifiers(value: unknown, keys: string[]): string[] {
   }
 }
 
-function tabDescription(tab: string): string {
-  const descriptions: Record<string, string> = {
-    Hive: 'Live swarms from PocketHive MCP',
-    Buzz: 'Bounded hive-wide event timeline',
-    Journal: 'Choose an exact swarm for journal evidence',
-    Scenarios: 'Deployed bundle overview, files, and inputs',
-    Debug: 'Bounded Orchestrator diagnostics',
-  };
-  return descriptions[tab] ?? '';
+function tabTitle(tab: string): string {
+  return tab === 'Hive' ? 'Swarms' : tab;
+}
+
+function accountInitial(profile: Model): string {
+  const label = String(profile.principalLabel ?? profile.displayName ?? 'PocketHive').trim();
+  return label.charAt(0).toLocaleUpperCase() || 'P';
 }
 
 function statusAnnouncement(): string {

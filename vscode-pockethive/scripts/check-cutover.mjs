@@ -18,18 +18,16 @@ const canonicalHiveColour = canonicalLogo.match(/\.brandHive\s*\{[^}]*\bfill\s*:
 assert.ok(canonicalHiveColour, 'Canonical PocketHive logo must declare the Hive colour');
 assert.match(brandTokens, new RegExp(`--ph-brand-hive:\\s*${canonicalHiveColour}`, 'i'),
   'Generated webview token must use the canonical logo Hive colour');
-assert.match(webviewSource, /text\('span', 'Hive', 'brand__hive'\)/,
-  'Shared webview header must expose the Hive suffix for brand colouring');
-assert.match(webviewStyles, /\.brand__hive\s*\{[^}]*color:\s*var\(--ph-brand-hive\)/s,
-  'Shared webview header must consume the generated Hive colour');
-assert.match(webviewStyles, /\.brand__name\s*\{[^}]*line-height:\s*1\.05/s,
-  'Shared webview heading must retain the compact canonical logo rhythm');
-assert.match(webviewStyles, /\.brand__copy p\s*\{[^}]*line-height:\s*1\.15/s,
-  'Shared webview subtitle must sit tightly beneath the PocketHive heading');
+assert.match(webviewStyles, /\.button\.tab\.active\s*\{[^}]*color:\s*var\(--ph-brand-hive\)/s,
+  'Selected workspace tabs must consume the generated Hive colour');
 assert.match(providerSource, /resources', 'brand-tokens\.css'/,
   'Webview must load the generated canonical brand token');
-assert.match(webviewSource, /app\.append\(header\(\)\);\s*if \(model\.page === 'workspace'\)/,
-  'Both companion pages must use the same branded header');
+assert.doesNotMatch(webviewSource, /app\.append\(header\(\)\)/,
+  'The narrow companion must not reserve vertical space for a global brand header');
+assert.match(webviewSource, /button\('← Environments'/,
+  'The workspace must expose the compact return action');
+assert.match(webviewSource, /summary\.setAttribute\('aria-label', 'Account'\)/,
+  'The workspace must expose the accessible account menu');
 const sourceEntries = sources.map(path => ({ nativePath: path, portablePath: toPortablePath(path) }));
 const product = (await Promise.all(sourceEntries
   .filter(({ portablePath }) => !isTestSource(portablePath))

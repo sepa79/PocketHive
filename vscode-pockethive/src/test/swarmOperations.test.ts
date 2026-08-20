@@ -53,6 +53,59 @@ test('swarm contract fields derive display status and one valid primary operatio
   }), undefined);
 });
 
+test('display status covers every owner enum and rejects malformed boundary values', () => {
+  const cases: ReadonlyArray<readonly [unknown, string]> = [
+    [null, 'UNKNOWN'],
+    [[], 'UNKNOWN'],
+    [42, 'UNKNOWN'],
+    [{ controllerState: 'PROVISIONING' }, 'PROVISIONING'],
+    [{ controllerState: 'PROVISIONING', workloadState: 'RUNNING' }, 'PROVISIONING'],
+    [{ controllerState: 'READY' }, 'READY'],
+    [{ controllerState: 'FAILED' }, 'FAILED'],
+    [{ controllerState: 'FAILED', workloadState: 'RUNNING' }, 'FAILED'],
+    [{ controllerState: 'UNKNOWN' }, 'UNKNOWN'],
+    [{ workloadState: 'UNAVAILABLE' }, 'UNAVAILABLE'],
+    [{ controllerState: 'READY', workloadState: 'UNAVAILABLE' }, 'UNAVAILABLE'],
+    [{ workloadState: 'STARTING' }, 'STARTING'],
+    [{ controllerState: 'READY', workloadState: 'STARTING' }, 'STARTING'],
+    [{ workloadState: 'RUNNING' }, 'RUNNING'],
+    [{ workloadState: 'STOPPING' }, 'STOPPING'],
+    [{ controllerState: 'READY', workloadState: 'STOPPING' }, 'STOPPING'],
+    [{ workloadState: 'STOPPED' }, 'STOPPED'],
+    [{ workloadState: 'UNKNOWN' }, 'UNKNOWN'],
+    [{ controllerState: 'READY', workloadState: 'STOPPED' }, 'READY'],
+    [{ controllerState: 'UNKNOWN', workloadState: 'STOPPED' }, 'STOPPED'],
+    [{ controllerState: 'READY', workloadState: 'UNKNOWN' }, 'READY'],
+    [{ controllerState: 42, workloadState: 42 }, 'UNKNOWN'],
+    [{ controllerState: 'INVALID', workloadState: 'INVALID' }, 'UNKNOWN'],
+  ];
+
+  for (const [value, expected] of cases) assert.equal(swarmDisplayStatus(value), expected);
+});
+
+test('primary lifecycle action is available only for a fresh ready live swarm', () => {
+  const ready = {
+    controllerState: 'READY', observationStale: false, runtimeResourceState: 'PRESENT',
+  };
+  assert.equal(primaryOperationForSwarm(null), undefined);
+  assert.equal(primaryOperationForSwarm([]), undefined);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', runtimeResourceState: 'REMOVING' }), undefined);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', activeOperation: { state: 'ACCEPTED' } }), undefined);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', activeOperation: { state: 'DISPATCHED' } }), undefined);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', activeOperation: { state: 'DONE' } }), SWARM_OPERATIONS.START);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', activeOperation: [] }), SWARM_OPERATIONS.START);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED', observationStale: undefined }), undefined);
+
+  for (const controllerState of ['PROVISIONING', 'FAILED', 'UNKNOWN', 42]) {
+    assert.equal(primaryOperationForSwarm({ ...ready, controllerState, workloadState: 'STOPPED' }), undefined);
+  }
+  for (const workloadState of ['UNAVAILABLE', 'STARTING', 'STOPPING', 'UNKNOWN', 42]) {
+    assert.equal(primaryOperationForSwarm({ ...ready, workloadState }), undefined);
+  }
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'RUNNING' }), SWARM_OPERATIONS.STOP);
+  assert.equal(primaryOperationForSwarm({ ...ready, workloadState: 'STOPPED' }), SWARM_OPERATIONS.START);
+});
+
 test('derived actions accept only bounded exact owner records', () => {
   const callableRecord = Object.assign(() => undefined, {
     id: 'callable-swarm',

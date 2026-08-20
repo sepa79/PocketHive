@@ -165,7 +165,7 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
         exact(object, ['type', 'mode', 'scenarioId']);
         return { type, mode, scenarioId: string(object, 'scenarioId') };
       }
-      invalid();
+      return invalid();
     }
     case 'openScenarioDetails':
     case 'openScenarioRaw':

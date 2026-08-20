@@ -111,7 +111,9 @@ try {
     },
   };
   await show(page, { ...workspaceBase, activeTab: 'Hive', workspaceData: local.swarms }, '04-workspace-hive');
-  await page.getByText('Account', { exact: true }).click();
+  assert.equal(await page.locator('#app > .brand').count(), 0,
+    'the narrow workspace must not reserve vertical space for a global brand header');
+  await page.getByLabel('Account', { exact: true }).click();
   const accountPanel = page.locator('.account-menu__panel');
   await accountPanel.getByText('local-admin', { exact: true }).waitFor({ state: 'visible' });
   await accountPanel.getByText('Secure session active', { exact: true }).waitFor({ state: 'visible' });
@@ -159,7 +161,7 @@ try {
       activeTab: 'Journal',
       workspaceData: [{ id: local.journal.swarmId }],
     });
-    await page.getByLabel('Exact swarm').selectOption(local.journal.swarmId);
+    await chooseExactAutocomplete(page, 'Exact swarm', local.journal.swarmId);
     await page.waitForFunction(value => globalThis.__pockethiveMessages?.some(message => (
       message.type === 'selectJournalSwarm' && message.swarmId === value
     )), local.journal.swarmId);
@@ -262,6 +264,7 @@ try {
   await dispatch(page, { ...workspaceBase, activeTab: 'Buzz', workspaceData: eventFixture });
   await captureSelected(page, '14-selected-buzz');
   assert.equal(await page.locator('.event-row').count(), 2, 'Buzz must render one compact row per event');
+  await page.getByLabel('Advanced filters').click();
   await page.getByLabel('Severity').selectOption('ERROR');
   assert.equal(await page.locator('.event-row').count(), 1, 'severity filter must narrow the rendered page');
   await page.getByLabel('Search events').fill('auth-regression');
@@ -298,7 +301,7 @@ try {
   await captureSelected(page, '16-selected-debug');
   assert.deepEqual(await page.locator('.debug-group > summary strong').allTextContents(),
     ['Runtime', 'Messaging', 'Definition', 'Maintenance']);
-  await page.getByLabel('Exact swarm').selectOption('checkout-load');
+  await chooseExactAutocomplete(page, 'Exact swarm', 'checkout-load');
   await page.waitForFunction(() => globalThis.__pockethiveMessages?.some(message => (
     message.type === 'selectDebugSwarm' && message.swarmId === 'checkout-load'
   )));
@@ -422,8 +425,14 @@ async function dispatch(page, model) {
   await page.evaluate(value => window.dispatchEvent(new MessageEvent('message', {
     data: { type: 'viewModel', model: value },
   })), model);
-  await page.locator('.brand').waitFor({ state: 'visible' });
+  await page.locator('#app > .workspace, #app > .page').waitFor({ state: 'visible' });
   await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+}
+
+async function chooseExactAutocomplete(page, label, value) {
+  const control = page.getByLabel(label, { exact: true });
+  await control.fill(value);
+  await control.press('Tab');
 }
 
 async function clickAndExpectMessage(page, label, expected, role = 'button') {

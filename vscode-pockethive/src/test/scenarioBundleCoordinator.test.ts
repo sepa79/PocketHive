@@ -280,6 +280,43 @@ test('reconcile uses the exact attempt id with publish scope and does not requir
   assert.equal(closes, 1);
 });
 
+test('reconcile rejects a malformed owner response and always closes a created client', async () => {
+  let closes = 0;
+  const coordinator = new ScenarioBundleCoordinator(
+    { package: async () => { throw new Error('must not package'); } },
+    { validate: async () => endpoint },
+    { authenticateForScopes: async () => ({
+      accessToken: 'reconcile-token', expiresAt: '2026-08-18T13:00:00.000Z', renewal: { kind: 'NONE' },
+    }) },
+    () => ({
+      connect: async () => ({
+        serverName: 'pockethive-mcp', serverVersion: '1', principalLabel: 'QA',
+        capabilityFingerprint: 'sha256:x', observedAt: '2026-08-18T12:00:00Z',
+      }),
+      callTool: async () => null,
+      uploadArchive: async () => { throw new Error('must not upload'); },
+      close: async () => { closes += 1; },
+    }),
+    async () => { throw new Error('must not read archive'); },
+  );
+
+  await assertContractCode(coordinator.reconcile(profile, 'pa-malformed'), 'BUNDLE_PUBLICATION_ATTEMPT_INVALID');
+  assert.equal(closes, 1);
+});
+
+test('reconcile preserves authentication failure before a client exists', async () => {
+  const accessDenied = new Error('reconcile access denied');
+  const coordinator = new ScenarioBundleCoordinator(
+    { package: async () => { throw new Error('must not package'); } },
+    { validate: async () => endpoint },
+    { authenticateForScopes: async () => { throw accessDenied; } },
+    () => { throw new Error('must not create client'); },
+    async () => { throw new Error('must not read archive'); },
+  );
+
+  await assert.rejects(coordinator.reconcile(profile, 'pa-auth-failure'), error => error === accessDenied);
+});
+
 function client(
   calls: Array<{ name: string; args: Record<string, unknown> }>,
   uploads: Uint8Array[],

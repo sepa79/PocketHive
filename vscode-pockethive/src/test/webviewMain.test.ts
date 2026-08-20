@@ -123,10 +123,7 @@ test('scenarios view emits reconcile command for ambiguous publication attempt',
     assert.deepEqual(postedMessages, [{ type: 'ready' }]);
     assert.ok(windowMessageHandler);
 
-    windowMessageHandler!({
-      data: {
-        type: 'viewModel',
-        model: {
+    const workspaceModel = {
           page: 'workspace',
           profiles: [],
           activeProfile: { displayName: 'NFT Lab', status: 'Connected' },
@@ -150,9 +147,15 @@ test('scenarios view emits reconcile command for ambiguous publication attempt',
             },
           },
           busy: false,
-        },
-      },
-    });
+    };
+    windowMessageHandler!({ data: { type: 'viewModel', model: workspaceModel } });
+
+    assert.equal(findFirst(app, element => element.tagName === 'header'), null,
+      'the narrow workspace must not reserve space for a global brand header');
+    assert.ok(findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === '← Environments'));
+    assert.ok(findFirst(app, element =>
+      element.tagName === 'summary' && element.getAttribute('aria-label') === 'Account'));
 
     const button = findFirst(app, element =>
       element.tagName === 'button' && element.textContent === 'Reconcile attempt');
@@ -218,10 +221,7 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
     require('../webview/main');
     assert.ok(windowMessageHandler);
 
-    windowMessageHandler!({
-      data: {
-        type: 'viewModel',
-        model: {
+    const workspaceModel = {
           page: 'workspace',
           profiles: [],
           activeProfile: { displayName: 'NFT Lab', status: 'Connected' },
@@ -255,9 +255,17 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
             canSignOut: true,
           },
           busy: false,
-        },
-      },
-    });
+    };
+    windowMessageHandler!({ data: { type: 'viewModel', model: workspaceModel } });
+
+    const swarmSearch = findFirst(app, element => element.name === 'swarmSearch');
+    assert.equal(swarmSearch?.tagName, 'input');
+    swarmSearch.value = 'nightly';
+    swarmSearch.dispatch('input');
+    assert.equal(findFirst(app, element => element.tagName === 'h3' && element.textContent === 'checkout-load'), null);
+    assert.ok(findFirst(app, element => element.tagName === 'h3' && element.textContent === 'nightly-smoke'));
+    swarmSearch.value = '';
+    swarmSearch.dispatch('input');
 
     const startAll = findFirst(app, element =>
       element.tagName === 'button' && element.textContent === 'Start all');
@@ -267,11 +275,17 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
       element.tagName === 'button' && element.textContent === 'Create swarm');
     const details = findFirst(app, element =>
       element.tagName === 'button' && element.textContent === 'Details');
+    const stop = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Stop');
+    const start = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Start');
 
     assert.ok(startAll);
     assert.ok(stopAll);
     assert.ok(create);
     assert.ok(details);
+    assert.ok(stop);
+    assert.ok(start);
 
     create.click();
     assert.deepEqual(postedMessages.at(-1), { type: 'openCreateSwarm' });
@@ -284,6 +298,71 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
 
     details.click();
     assert.deepEqual(postedMessages.at(-1), { type: 'openSwarmDetails', swarmId: 'checkout-load' });
+
+    stop.click();
+    assert.deepEqual(postedMessages.at(-1), {
+      type: 'runSwarmOperation', action: 'STOP', swarmId: 'checkout-load',
+    });
+
+    start.click();
+    assert.deepEqual(postedMessages.at(-1), {
+      type: 'runSwarmOperation', action: 'START', swarmId: 'nightly-smoke',
+    });
+
+    const runHistory = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Run history');
+    assert.ok(runHistory);
+    runHistory.click();
+    assert.deepEqual(postedMessages.at(-1), { type: 'loadSwarmHistory', swarmId: 'checkout-load' });
+
+    windowMessageHandler!({
+      data: {
+        type: 'viewModel',
+        model: {
+          ...workspaceModel,
+          swarmHistorySwarmId: 'checkout-load',
+          swarmHistoryResult: [{ runId: 'run-42', entries: 9 }],
+        },
+      },
+    });
+    const openJournal = findFirst(app, element =>
+      element.tagName === 'button' && element.textContent === 'Open journal');
+    assert.ok(openJournal, 'historical runs must offer evidence navigation, not lifecycle restart');
+    openJournal.click();
+    assert.deepEqual(postedMessages.at(-1), {
+      type: 'openJournalRun', swarmId: 'checkout-load', runId: 'run-42',
+    });
+
+    windowMessageHandler!({
+      data: {
+        type: 'viewModel',
+        model: {
+          ...workspaceModel,
+          activeTab: 'Buzz',
+          workspaceData: {
+            items: [{
+              timestamp: '2026-08-19T10:42:18Z', severity: 'INFO', kind: 'signal',
+              type: 'swarm-start', swarmId: 'nightly-smoke', origin: 'orchestrator', direction: 'OUT',
+            }],
+          },
+        },
+      },
+    });
+    assert.ok(findFirst(app, element =>
+      element.tagName === 'details' && element.className.includes('advanced-filters')),
+    'secondary event filters must stay collapsed behind one advanced-filter control');
+    assert.ok(findFirst(app, element => element.className.includes('event-row__identity')),
+      'event summary must use one condensed identity line');
+
+    windowMessageHandler!({
+      data: {
+        type: 'viewModel',
+        model: { ...workspaceModel, activeTab: 'Journal' },
+      },
+    });
+    const exactSwarm = findFirst(app, element => element.name === 'journalSwarm');
+    assert.equal(exactSwarm?.tagName, 'input');
+    assert.ok(exactSwarm?.getAttribute('list'), 'exact swarm must expose native search/autocomplete choices');
   } finally {
     delete require.cache[modulePath];
     globalThis.requestAnimationFrame = previousAnimationFrame;

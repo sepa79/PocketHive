@@ -10,9 +10,9 @@ export type SwarmOperation = typeof SWARM_OPERATIONS[keyof typeof SWARM_OPERATIO
 export const MAX_SWARM_ACTIONS = 1000;
 export const MAX_SWARM_ID_LENGTH = 512;
 
-const CONTROLLER_STATES = new Set(['PROVISIONING', 'READY', 'FAILED', 'UNKNOWN']);
-const WORKLOAD_STATES = new Set(['UNAVAILABLE', 'STARTING', 'RUNNING', 'STOPPING', 'STOPPED', 'UNKNOWN']);
-const RUNTIME_RESOURCE_STATES = new Set(['PRESENT', 'REMOVING', 'ABSENT', 'UNKNOWN']);
+const CONTROLLER_STATES = new Set(['PROVISIONING', 'READY', 'FAILED']);
+const WORKLOAD_STATES = new Set(['UNAVAILABLE', 'STARTING', 'RUNNING', 'STOPPING', 'STOPPED']);
+const RUNTIME_RESOURCE_STATE_REMOVING = 'REMOVING';
 const ACTIVE_OPERATION_STATES = new Set(['ACCEPTED', 'DISPATCHED']);
 
 const LIFECYCLE_TOOLS: Readonly<Record<SwarmOperation, string>> = Object.freeze({
@@ -34,8 +34,7 @@ export function primaryOperationForStatus(status: string): SwarmOperation | unde
 export function swarmDisplayStatus(value: unknown): string {
   const record = objectValue(value);
   if (!record) return 'UNKNOWN';
-  const runtimeResourceState = enumField(record.runtimeResourceState, RUNTIME_RESOURCE_STATES);
-  if (runtimeResourceState === 'REMOVING') return 'REMOVING';
+  if (record.runtimeResourceState === RUNTIME_RESOURCE_STATE_REMOVING) return RUNTIME_RESOURCE_STATE_REMOVING;
   const controllerState = enumField(record.controllerState, CONTROLLER_STATES);
   const workloadState = enumField(record.workloadState, WORKLOAD_STATES);
   if (controllerState === 'PROVISIONING' || controllerState === 'FAILED') return controllerState;
@@ -45,14 +44,13 @@ export function swarmDisplayStatus(value: unknown): string {
       || workloadState === 'UNAVAILABLE') {
     return workloadState;
   }
-  if (workloadState === 'STOPPED') return controllerState === 'READY' ? 'READY' : 'STOPPED';
   return controllerState ?? workloadState ?? 'UNKNOWN';
 }
 
 export function primaryOperationForSwarm(value: unknown): SwarmOperation | undefined {
   const record = objectValue(value);
   if (!record) return undefined;
-  if (enumField(record.runtimeResourceState, RUNTIME_RESOURCE_STATES) === 'REMOVING') return undefined;
+  if (record.runtimeResourceState === RUNTIME_RESOURCE_STATE_REMOVING) return undefined;
   if (hasActiveLifecycleOperation(record.activeOperation)) return undefined;
   if (record.observationStale !== false) return undefined;
   if (enumField(record.controllerState, CONTROLLER_STATES) !== 'READY') return undefined;
@@ -106,7 +104,7 @@ function objectValue(value: unknown): Record<string, unknown> | undefined {
 }
 
 function enumField(value: unknown, allowed: ReadonlySet<string>): string | undefined {
-  return typeof value === 'string' && allowed.has(value) ? value : undefined;
+  return allowed.has(value as string) ? value as string : undefined;
 }
 
 function hasActiveLifecycleOperation(value: unknown): boolean {

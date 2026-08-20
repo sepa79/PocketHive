@@ -149,6 +149,19 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     templateId: 'smoke',
     scenarioId: 'smoke',
   });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'submitCreateSwarm',
+    swarmId: 'checkout-load',
+    templateId: 'smoke',
+    scenarioId: 'smoke',
+    sutId: undefined,
+    variablesProfileId: null,
+  }), {
+    type: 'submitCreateSwarm',
+    swarmId: 'checkout-load',
+    templateId: 'smoke',
+    scenarioId: 'smoke',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'runSwarmBatchOperation', action: 'START' }), {
     type: 'runSwarmBatchOperation', action: 'START',
   });
@@ -193,6 +206,13 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   }), {
     type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section: 'FILES',
   });
+  for (const section of ['OVERVIEW', 'INPUTS'] as const) {
+    assert.deepEqual(decodeWebviewCommand({
+      type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section,
+    }), {
+      type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section,
+    });
+  }
   assert.deepEqual(decodeWebviewCommand({
     type: 'openScenarioBundleFile', bundleKey: ' bundles/mixed-smoke ', path: ' templates/http/request.yaml ',
   }), {
@@ -224,6 +244,8 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectCreateSwarmTemplate', templateId: 'smoke', scenarioId: '   ' },
     { type: 'selectCreateSwarmTemplate', templateId: '   ', scenarioId: 'smoke' },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke' },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: 42, variablesProfileId: '' },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: 'valid', variablesProfileId: '   ' },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', variablesProfileId: '   ' },
     { type: 'submitCreateSwarm', swarmId: '   ', templateId: 'smoke', scenarioId: 'smoke', sutId: '', variablesProfileId: '' },
     { type: 'runSwarmBatchOperation', action: 'REMOVE' },
