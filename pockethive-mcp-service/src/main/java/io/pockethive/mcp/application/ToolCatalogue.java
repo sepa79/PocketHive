@@ -47,9 +47,13 @@ public final class ToolCatalogue {
 
         tools.add(read("scenario_list", "List deployed Scenario Bundles from Scenario Manager.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue"));
         tools.add(read("scenario_get", "Read one deployed Scenario Bundle summary by exact scenario ID.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
-        tools.add(read("scenario_raw_read", "Read the deployed scenario YAML; this is not a Git authoring path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
-        tools.add(read("scenario_schema_read", "Read one schema owned by a deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
-        tools.add(read("scenario_template_read", "Read one template owned by a deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
+        tools.add(read("scenario_raw_read", "Read the deployed scenario YAML preview text; this is not a Git authoring path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
+        tools.add(read("scenario_schema_read", "Read one deployed Scenario Bundle schema as preview text.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
+        tools.add(read("scenario_template_read", "Read one deployed Scenario Bundle template as preview text.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
+        tools.add(read("scenario_bundle_tree_read", "Read one deployed Scenario Bundle file tree by exact bundle key.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "bundleKey"));
+        tools.add(read("scenario_bundle_file_read", "Read one deployed Scenario Bundle workspace file by exact bundle key and exact bundle-relative path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "bundleKey", "path"));
+        tools.add(read("scenario_suts_list", "List exact bundle-local SUT ids for one deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
+        tools.add(read("scenario_sut_get", "Read one exact bundle-local SUT descriptor for a deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "sutId"));
         tools.add(read("scenario_contracts_get", "Read the canonical Scenario Manager authoring contract.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "scenarioId", "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint"));
         tools.add(read("scenario_capabilities_get", "Read live Scenario Manager authoring capabilities and fingerprint.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "imageName", "tag", "all"));
         tools.add(read("scenario_templates_catalog", "List canonical Scenario Manager template capabilities.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue"));

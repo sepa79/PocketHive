@@ -2,6 +2,7 @@ import { ConnectionContractError, EndpointSecurityMode } from '../connection/con
 import { SWARM_OPERATIONS, SwarmOperation } from '../operations/swarmOperations';
 
 export type CompanionTab = 'Hive' | 'Buzz' | 'Journal' | 'Scenarios' | 'Debug';
+export type ScenarioSection = 'OVERVIEW' | 'FILES' | 'INPUTS';
 
 export type WebviewCommand =
   | { readonly type: 'ready' }
@@ -18,6 +19,17 @@ export type WebviewCommand =
   | { readonly type: 'signOut' }
   | { readonly type: 'selectTab'; readonly tab: CompanionTab }
   | { readonly type: 'refresh' }
+  | { readonly type: 'openCreateSwarm' }
+  | { readonly type: 'cancelCreateSwarm' }
+  | { readonly type: 'selectCreateSwarmTemplate'; readonly templateId: string; readonly scenarioId: string }
+  | {
+      readonly type: 'submitCreateSwarm';
+      readonly swarmId: string;
+      readonly templateId: string;
+      readonly scenarioId: string;
+      readonly sutId?: string;
+      readonly variablesProfileId?: string;
+    }
   | { readonly type: 'selectJournalSwarm'; readonly swarmId: string }
   | { readonly type: 'loadSwarmHistory'; readonly swarmId: string }
   | { readonly type: 'openSwarmDetails'; readonly swarmId: string }
@@ -32,6 +44,8 @@ export type WebviewCommand =
   | { readonly type: 'openScenarioRaw'; readonly scenarioId: string }
   | { readonly type: 'openScenarioSchema'; readonly scenarioId: string }
   | { readonly type: 'openScenarioTemplate'; readonly scenarioId: string }
+  | { readonly type: 'selectScenarioSection'; readonly scenarioId: string; readonly bundleKey: string; readonly section: ScenarioSection }
+  | { readonly type: 'openScenarioBundleFile'; readonly bundleKey: string; readonly path: string }
   | { readonly type: 'validateCommittedBundle' }
   | { readonly type: 'discardPendingBundle' }
   | { readonly type: 'publishCommittedBundle'; readonly mode: 'CREATE' | 'REPLACE'; readonly scenarioId?: string }
@@ -51,6 +65,8 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     case 'reauthorizeEnvironment':
     case 'signOut':
     case 'refresh':
+    case 'openCreateSwarm':
+    case 'cancelCreateSwarm':
     case 'validateCommittedBundle':
     case 'discardPendingBundle':
       exact(object, ['type']);
@@ -86,6 +102,26 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     case 'selectDebugSwarm':
       exact(object, ['type', 'swarmId']);
       return { type, swarmId: string(object, 'swarmId') };
+    case 'selectCreateSwarmTemplate':
+      exact(object, ['type', 'templateId', 'scenarioId']);
+      return {
+        type,
+        templateId: string(object, 'templateId'),
+        scenarioId: string(object, 'scenarioId'),
+      };
+    case 'submitCreateSwarm': {
+      exact(object, ['type', 'swarmId', 'templateId', 'scenarioId', 'sutId', 'variablesProfileId']);
+      const sutId = optionalString(object, 'sutId');
+      const variablesProfileId = optionalString(object, 'variablesProfileId');
+      return {
+        type,
+        swarmId: string(object, 'swarmId'),
+        templateId: string(object, 'templateId'),
+        scenarioId: string(object, 'scenarioId'),
+        ...(sutId ? { sutId } : {}),
+        ...(variablesProfileId ? { variablesProfileId } : {}),
+      };
+    }
     case 'openJournalRun':
       exact(object, ['type', 'swarmId', 'runId']);
       return { type, swarmId: string(object, 'swarmId'), runId: string(object, 'runId') };
@@ -137,6 +173,20 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
     case 'openScenarioTemplate':
       exact(object, ['type', 'scenarioId']);
       return { type, scenarioId: string(object, 'scenarioId') };
+    case 'selectScenarioSection': {
+      exact(object, ['type', 'scenarioId', 'bundleKey', 'section']);
+      const section = string(object, 'section');
+      if (!['OVERVIEW', 'FILES', 'INPUTS'].includes(section)) invalid();
+      return {
+        type,
+        scenarioId: string(object, 'scenarioId'),
+        bundleKey: string(object, 'bundleKey'),
+        section: section as ScenarioSection,
+      };
+    }
+    case 'openScenarioBundleFile':
+      exact(object, ['type', 'bundleKey', 'path']);
+      return { type, bundleKey: string(object, 'bundleKey'), path: string(object, 'path') };
     default:
       throw new ConnectionContractError('WEBVIEW_MESSAGE_UNKNOWN', `WEBVIEW_MESSAGE_UNKNOWN: ${type}`);
   }
@@ -149,6 +199,13 @@ function record(value: unknown): Record<string, unknown> {
 
 function string(value: Record<string, unknown>, field: string): string {
   const result = value[field];
+  if (typeof result !== 'string' || !result.trim()) invalid();
+  return result.trim();
+}
+
+function optionalString(value: Record<string, unknown>, field: string): string | undefined {
+  const result = value[field];
+  if (result === undefined || result === null || result === '') return undefined;
   if (typeof result !== 'string' || !result.trim()) invalid();
   return result.trim();
 }

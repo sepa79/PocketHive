@@ -36,8 +36,8 @@ test('companion view-model bounding preserves its root contract when owner data 
 
 test('each untrusted companion field is bounded independently without replacing navigation state', () => {
   const fields = [
-    'workspaceData', 'swarmPrimaryActions', 'journalResult', 'swarmHistoryResult', 'swarmOperationResult',
-    'debugResult', 'pendingBundle', 'bundleResult',
+    'workspaceData', 'swarmPrimaryActions', 'createSwarmForm', 'journalResult', 'swarmHistoryResult', 'swarmOperationResult',
+    'debugResult', 'scenarioFocusTree', 'scenarioFocusInputs', 'pendingBundle', 'bundleResult',
   ] as const;
   for (const field of fields) {
     const model = boundCompanionViewModel({
@@ -106,6 +106,6 @@ test('workspace tool calls keep narrow event views bounded and every tab explici
     name: 'debug_hive_journal', arguments: { limit: SIDEBAR_EVENT_LIMIT },
   });
   assert.deepEqual(workspaceToolCall('Journal'), { name: 'swarm_list', arguments: {} });
-  assert.deepEqual(workspaceToolCall('Scenarios'), { name: 'scenario_list', arguments: {} });
+  assert.deepEqual(workspaceToolCall('Scenarios'), { name: 'scenario_templates_catalog', arguments: {} });
   assert.deepEqual(workspaceToolCall('Debug'), { name: 'swarm_list', arguments: {} });
 });

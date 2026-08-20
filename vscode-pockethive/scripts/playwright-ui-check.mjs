@@ -174,8 +174,24 @@ try {
   await selectTab(page, workspaceBase, 'Debug', local.swarms, '09-workspace-debug');
 
   const interactionSwarms = [
-    { id: 'checkout-load', status: 'RUNNING', templateId: 'checkout-load', bees: [{}, {}] },
-    { id: 'nightly-smoke', status: 'READY', templateId: 'nightly-smoke', bees: [{}] },
+    {
+      id: 'checkout-load',
+      templateId: 'checkout-load',
+      controllerState: 'READY',
+      workloadState: 'RUNNING',
+      runtimeResourceState: 'PRESENT',
+      observationStale: false,
+      bees: [{}, {}],
+    },
+    {
+      id: 'nightly-smoke',
+      templateId: 'nightly-smoke',
+      controllerState: 'READY',
+      workloadState: 'STOPPED',
+      runtimeResourceState: 'PRESENT',
+      observationStale: false,
+      bees: [{}],
+    },
   ];
   const interactionModel = {
     ...workspaceBase,
@@ -204,6 +220,7 @@ try {
   await clickWithinAndExpectMessage(page, runningRow, 'Run history', {
     type: 'loadSwarmHistory', swarmId: 'checkout-load',
   });
+  await clickAndExpectMessage(page, 'Create swarm', { type: 'openCreateSwarm' });
   const checkoutRuns = [
     { runId: 'run-checkout-42', firstTs: '2026-08-19T10:40:00Z', lastTs: '2026-08-19T10:42:00Z', entries: 18, pinned: true },
   ];
@@ -255,8 +272,20 @@ try {
   });
 
   const scenarioFixture = [
-    { id: 'checkout-smoke', name: 'Checkout smoke', folderPath: 'bundles' },
-    { id: 'postgres-smoke', name: 'DB query Postgres smoke', folderPath: 'database' },
+    {
+      id: 'checkout-smoke',
+      name: 'Checkout smoke',
+      folderPath: 'bundles',
+      bundleKey: 'bundles/checkout-smoke',
+      bundlePath: 'bundles/checkout-smoke',
+    },
+    {
+      id: 'postgres-smoke',
+      name: 'DB query Postgres smoke',
+      folderPath: 'database',
+      bundleKey: 'database/postgres-smoke',
+      bundlePath: 'database/postgres-smoke',
+    },
   ];
   await dispatch(page, { ...workspaceBase, activeTab: 'Scenarios', workspaceData: scenarioFixture });
   await captureSelected(page, '15-selected-scenarios');
@@ -639,9 +668,22 @@ async function connectLocalMcp(browser) {
   const evidence = await client.connect(endpoint, refreshed.access_token);
   const toolList = await client.listTools();
   const tools = Array.isArray(toolList?.tools) ? toolList.tools : [];
-  assert.equal(tools.length, 50, 'live MCP must expose the exact 50-tool catalogue');
-  assert.equal(tools.some(tool => tool?.name === 'debug_journal_runs'), true,
-    'live MCP catalogue must expose debug_journal_runs');
+  const toolNames = new Set(tools.map(tool => tool?.name).filter(name => typeof name === 'string'));
+  assert.equal(tools.length >= 50, true, 'live MCP must expose the expected full tool catalogue');
+  for (const requiredTool of [
+    'scenario_list',
+    'scenario_templates_catalog',
+    'scenario_suts_list',
+    'swarm_list',
+    'swarm_get',
+    'swarm_create',
+    'swarm_start',
+    'swarm_stop',
+    'swarm_remove',
+    'debug_journal_runs',
+  ]) {
+    assert.equal(toolNames.has(requiredTool), true, `live MCP catalogue must expose ${requiredTool}`);
+  }
   const [swarms, scenarios, buzz] = await Promise.all([
     client.callTool('swarm_list'),
     client.callTool('scenario_list'),
@@ -789,9 +831,12 @@ async function readFileNames() {
 
 function primaryActions(swarms) {
   return Object.fromEntries((Array.isArray(swarms) ? swarms : []).flatMap(swarm => {
-    const status = String(swarm?.status ?? '').toUpperCase();
-    if (status === 'RUNNING') return [[swarm.id, 'STOP']];
-    if (status === 'READY' || status === 'STOPPED') return [[swarm.id, 'START']];
+    if (!swarm || typeof swarm !== 'object') return [];
+    if (swarm.runtimeResourceState === 'REMOVING' || swarm.observationStale !== false) return [];
+    if (swarm.activeOperation && ['ACCEPTED', 'DISPATCHED'].includes(String(swarm.activeOperation.state ?? ''))) return [];
+    if (swarm.controllerState !== 'READY') return [];
+    if (swarm.workloadState === 'RUNNING') return [[swarm.id, 'STOP']];
+    if (swarm.workloadState === 'STOPPED') return [[swarm.id, 'START']];
     return [];
   }));
 }

@@ -7,7 +7,7 @@ export function workspaceToolCall(tab: CompanionTab): { name: string; arguments:
     case 'Hive': return { name: 'swarm_list', arguments: {} };
     case 'Buzz': return { name: 'debug_hive_journal', arguments: { limit: SIDEBAR_EVENT_LIMIT } };
     case 'Journal': return { name: 'swarm_list', arguments: {} };
-    case 'Scenarios': return { name: 'scenario_list', arguments: {} };
+    case 'Scenarios': return { name: 'scenario_templates_catalog', arguments: {} };
     case 'Debug': return { name: 'swarm_list', arguments: {} };
   }
 }

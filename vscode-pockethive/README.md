@@ -59,8 +59,11 @@ confirmed.
 
 Browser sign-in and consent are rendered by Auth Service with a responsive
 PocketHive theme, the canonical logo, explicit client/resource/scope context,
-and accessible form controls. Styling does not change OAuth request fields,
-PKCE, exact redirect/resource validation, or consent behavior.
+and accessible form controls. The loopback callback landing page shown after
+browser approval or cancellation uses the same PocketHive visual language so
+the OAuth hand-off still feels like one coherent product flow. Styling does not
+change OAuth request fields, PKCE, exact redirect/resource validation, or
+consent behavior.
 
 Read-only scenario inspection follows the MCP contract exactly. The extension
 does not infer schema or template paths from bundle content and does not edit

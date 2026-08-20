@@ -47,6 +47,14 @@ missing answers. One agent session may hold multiple isolated workflows, while
 deployment, swarm, diagnostics, and other direct tools remain independently
 callable without wizard state.
 
+Read-only scenario inspection also stays on the MCP surface. IDE clients may
+inspect deployed bundle catalogue metadata, bundle trees, individual deployed
+files, and bundle-local SUT descriptors through MCP tools backed by Scenario
+Manager. The deployed `scenario.yaml`, schema, and template preview tools
+return preview text, while bundle-workspace file inspection returns the
+structured workspace file payload. IDE clients must not call Scenario Manager
+workspace endpoints directly from the client.
+
 ## Scenario Bundles
 
 Git is the source of truth for editable bundles and their history. The client

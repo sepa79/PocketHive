@@ -36,6 +36,12 @@ public class OwnerApiClient implements OwnerApiPort {
     }
 
     @Override
+    public String getText(String path) {
+        String response = responseText(HttpMethod.GET, path, null);
+        return response == null ? "" : response;
+    }
+
+    @Override
     public Object post(String path, Object body) {
         return exchange(HttpMethod.POST, path, body);
     }
@@ -64,6 +70,20 @@ public class OwnerApiClient implements OwnerApiPort {
     }
 
     private Object exchange(HttpMethod method, String path, Object body) {
+        String response = responseText(method, path, body);
+        if (response == null || response.isBlank()) {
+            return Map.of();
+        }
+        try {
+            JsonNode json = mapper.readTree(response);
+            return json;
+        } catch (JsonProcessingException exception) {
+            throw new ToolExecutionException("OWNER_RESPONSE_INVALID",
+                "Owner response was not valid JSON");
+        }
+    }
+
+    private String responseText(HttpMethod method, String path, Object body) {
         RestClient.RequestBodySpec request = client.method(method)
             .uri(path)
             .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokens.bearerToken());
@@ -83,15 +103,6 @@ public class OwnerApiClient implements OwnerApiPort {
             String code = method == HttpMethod.GET ? "OWNER_UNAVAILABLE" : "OWNER_RESULT_AMBIGUOUS";
             throw new ToolExecutionException(code, "Owner response was unavailable");
         }
-        if (response == null || response.isBlank()) {
-            return Map.of();
-        }
-        try {
-            JsonNode json = mapper.readTree(response);
-            return json;
-        } catch (JsonProcessingException exception) {
-            throw new ToolExecutionException("OWNER_RESPONSE_INVALID",
-                "Owner response was not valid JSON");
-        }
+        return response;
     }
 }

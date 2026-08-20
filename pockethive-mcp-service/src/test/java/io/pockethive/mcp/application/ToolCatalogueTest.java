@@ -22,7 +22,7 @@ class ToolCatalogueTest {
     void everyPublishedToolHasOneCanonicalIdContractAndConnectedSkill() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
-        assertThat(catalogue.tools()).hasSize(50);
+        assertThat(catalogue.tools()).hasSize(54);
         assertThat(catalogue.tools()).allSatisfy(tool -> {
             assertThat(tool.id()).matches("[a-z][a-z0-9_]*");
             assertThat(tool.description()).isNotBlank();
@@ -42,6 +42,9 @@ class ToolCatalogueTest {
         });
         assertThat(new HashSet<>(catalogue.tools().stream().map(ToolDescriptor::id).toList()))
             .hasSize(catalogue.tools().size());
+        assertThat(catalogue.tools().stream().map(ToolDescriptor::id))
+            .contains("scenario_bundle_tree_read", "scenario_bundle_file_read",
+                "scenario_suts_list", "scenario_sut_get");
         assertThat(catalogue.skills().values()).allSatisfy(skill -> {
             assertThat(skill.version()).isEqualTo("1.0.0");
             assertThat(skill.resourceUri()).isEqualTo(

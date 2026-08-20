@@ -40,7 +40,7 @@ import {
   SCENARIO_ASSETS,
   ScenarioAsset,
 } from '../scenarios/scenarioReads';
-import { CompanionTab, decodeWebviewCommand } from './messages';
+import { CompanionTab, decodeWebviewCommand, ScenarioSection } from './messages';
 import { CurrentView } from './currentView';
 import { boundCompanionViewModel } from './viewModelBoundary';
 import { SIDEBAR_EVENT_LIMIT, workspaceToolCall } from './workspaceTool';
@@ -58,6 +58,13 @@ interface ProfileRow extends McpConnectionProfile {
   readonly principalLabel?: string;
 }
 
+interface CreateSwarmFormState {
+  readonly templates: unknown;
+  readonly selectedTemplateId?: string;
+  readonly selectedScenarioId?: string;
+  readonly sutIds?: readonly string[];
+}
+
 interface CompanionViewModel {
   readonly page: 'environments' | 'add' | 'workspace';
   readonly profiles: ProfileRow[];
@@ -68,6 +75,7 @@ interface CompanionViewModel {
   readonly workspaceData?: unknown;
   readonly swarmOperations: typeof SWARM_OPERATIONS;
   readonly swarmPrimaryActions: Readonly<Record<string, SwarmOperation>>;
+  readonly createSwarmForm?: CreateSwarmFormState;
   readonly journalSwarmId?: string;
   readonly journalRunId?: string;
   readonly journalResult?: unknown;
@@ -77,6 +85,11 @@ interface CompanionViewModel {
   readonly debugSwarmId?: string;
   readonly debugRuntimeId?: string;
   readonly debugResult?: unknown;
+  readonly scenarioFocusScenarioId?: string;
+  readonly scenarioFocusBundleKey?: string;
+  readonly scenarioFocusSection?: ScenarioSection;
+  readonly scenarioFocusTree?: unknown;
+  readonly scenarioFocusInputs?: unknown;
   readonly pendingBundle?: unknown;
   readonly bundleResult?: unknown;
   readonly debugActions: typeof DEBUG_ACTIONS;
@@ -102,6 +115,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private attempt?: ConnectionAttempt;
   private attemptView?: ConnectionAttemptView;
   private workspaceData?: unknown;
+  private createSwarmForm?: CreateSwarmFormState;
   private journalSwarmId?: string;
   private journalRunId?: string;
   private journalResult?: unknown;
@@ -111,6 +125,11 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private debugSwarmId?: string;
   private debugRuntimeId?: string;
   private debugResult?: unknown;
+  private scenarioFocusScenarioId?: string;
+  private scenarioFocusBundleKey?: string;
+  private scenarioFocusSection: ScenarioSection = 'OVERVIEW';
+  private scenarioFocusTree?: unknown;
+  private scenarioFocusInputs?: unknown;
   private pendingBundle?: PendingBundlePublication;
   private bundleResult?: unknown;
   private sessionActivity: SessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
@@ -224,6 +243,20 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         case 'refresh':
           await this.loadTab();
           break;
+        case 'openCreateSwarm':
+          await this.openCreateSwarm();
+          break;
+        case 'cancelCreateSwarm':
+          this.createSwarmForm = undefined;
+          await this.postView();
+          break;
+        case 'selectCreateSwarmTemplate':
+          await this.selectCreateSwarmTemplate(command.templateId, command.scenarioId);
+          break;
+        case 'submitCreateSwarm':
+          await this.submitCreateSwarm(command.swarmId, command.templateId, command.scenarioId,
+            command.sutId, command.variablesProfileId);
+          break;
         case 'selectJournalSwarm':
           this.journalSwarmId = command.swarmId;
           this.journalRunId = undefined;
@@ -281,6 +314,12 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'openScenarioTemplate':
           await this.openScenarioAsset(command.scenarioId, SCENARIO_ASSETS.TEMPLATE);
+          break;
+        case 'selectScenarioSection':
+          await this.selectScenarioSection(command.scenarioId, command.bundleKey, command.section);
+          break;
+        case 'openScenarioBundleFile':
+          await this.openScenarioBundleFile(command.bundleKey, command.path);
           break;
         case 'validateCommittedBundle':
           await this.validateCommittedBundle();
@@ -407,6 +446,9 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
       await this.ensureAuthorizedSession();
       const call = workspaceToolCall(this.activeTab);
       this.workspaceData = await this.activeConnection.callTool(call.name, call.arguments);
+      if (this.activeTab === 'Scenarios') {
+        await this.refreshScenarioFocusData();
+      }
       if (this.activeTab === 'Journal' && this.journalSwarmId) {
         try {
           this.journalResult = await this.activeConnection.callTool('debug_journal', {
@@ -530,6 +572,80 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     }
   }
 
+  private async openCreateSwarm(): Promise<void> {
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      const templates = await this.activeConnection.callTool('scenario_templates_catalog');
+      const selected = firstCreatableTemplate(templates);
+      const sutIds = selected ? await this.readScenarioSutIds(selected.scenarioId) : [];
+      this.createSwarmForm = {
+        templates,
+        selectedTemplateId: selected?.templateId,
+        selectedScenarioId: selected?.scenarioId,
+        sutIds,
+      };
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async selectCreateSwarmTemplate(templateId: string, scenarioId: string): Promise<void> {
+    const current = this.createSwarmForm;
+    if (!current) {
+      throw new ConnectionContractError('CREATE_SWARM_FORM_MISSING', 'Open Create swarm first');
+    }
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      this.createSwarmForm = {
+        ...current,
+        selectedTemplateId: templateId,
+        selectedScenarioId: scenarioId,
+        sutIds: await this.readScenarioSutIds(scenarioId),
+      };
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async submitCreateSwarm(
+    swarmId: string,
+    templateId: string,
+    scenarioId: string,
+    sutId?: string,
+    variablesProfileId?: string,
+  ): Promise<void> {
+    const form = this.createSwarmForm;
+    if (!form) {
+      throw new ConnectionContractError('CREATE_SWARM_FORM_MISSING', 'Open Create swarm first');
+    }
+    requireCreateSwarmSelection(form.templates, templateId, scenarioId);
+    const arguments_: Record<string, unknown> = {
+      swarmId,
+      templateId,
+      idempotencyKey: randomUUID(),
+    };
+    if (sutId) arguments_.sutId = sutId;
+    if (variablesProfileId) arguments_.variablesProfileId = variablesProfileId;
+    this.busy = true;
+    this.swarmOperationResult = undefined;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      this.swarmOperationResult = await this.scopedTools.call(this.requireDraft(), 'swarm_create', arguments_);
+      this.createSwarmForm = undefined;
+      this.workspaceData = await this.activeConnection.callTool('swarm_list');
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
   private async runDebug(action: string, tailLines?: number): Promise<void> {
     const call = debugToolCall(action, this.debugSwarmId, this.debugRuntimeId, tailLines);
     this.busy = true;
@@ -573,6 +689,118 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
       this.busy = false;
       await this.postView();
     }
+  }
+
+  private async selectScenarioSection(
+    scenarioId: string,
+    bundleKey: string,
+    section: ScenarioSection,
+  ): Promise<void> {
+    const sameScenario = this.scenarioFocusScenarioId === scenarioId
+      && this.scenarioFocusBundleKey === bundleKey;
+    if (!sameScenario) {
+      this.scenarioFocusTree = undefined;
+      this.scenarioFocusInputs = undefined;
+    }
+    this.scenarioFocusScenarioId = scenarioId;
+    this.scenarioFocusBundleKey = bundleKey;
+    this.scenarioFocusSection = section;
+    if (section === 'OVERVIEW'
+        || (section === 'FILES' && this.scenarioFocusTree !== undefined)
+        || (section === 'INPUTS' && this.scenarioFocusInputs !== undefined)) {
+      await this.postView();
+      return;
+    }
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      await this.refreshScenarioFocusData();
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async openScenarioBundleFile(bundleKey: string, path: string): Promise<void> {
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      const value = await this.activeConnection.callTool('scenario_bundle_file_read', { bundleKey, path });
+      const record = value && typeof value === 'object' && !Array.isArray(value)
+        ? value as Record<string, unknown>
+        : undefined;
+      const content = typeof record?.content === 'string' ? record.content : undefined;
+      if (content !== undefined) {
+        await openPreviewDocument(`${bundleKey}/${path}`, content, previewLanguageForPath(path));
+      } else {
+        await openJsonPreview(`${bundleKey}/${path}`, value);
+      }
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async refreshScenarioFocusData(): Promise<void> {
+    if (this.activeTab !== 'Scenarios'
+        || !this.scenarioFocusScenarioId
+        || !this.scenarioFocusBundleKey) {
+      return;
+    }
+    if (this.scenarioFocusSection === 'FILES' || this.scenarioFocusSection === 'INPUTS') {
+      try {
+        this.scenarioFocusTree = await this.activeConnection.callTool('scenario_bundle_tree_read', {
+          bundleKey: this.scenarioFocusBundleKey,
+        });
+      } catch (error) {
+        this.scenarioFocusTree = { error: safeError(error), observedAt: new Date().toISOString() };
+      }
+    }
+    if (this.scenarioFocusSection === 'INPUTS') {
+      try {
+        this.scenarioFocusInputs = await this.readScenarioInputs(
+          this.scenarioFocusScenarioId,
+          this.scenarioFocusBundleKey,
+          this.scenarioFocusTree,
+        );
+      } catch (error) {
+        this.scenarioFocusInputs = { error: safeError(error), observedAt: new Date().toISOString() };
+      }
+    }
+  }
+
+  private async readScenarioInputs(
+    scenarioId: string,
+    bundleKey: string,
+    tree: unknown,
+  ): Promise<unknown> {
+    const sutIds = await this.readScenarioSutIds(scenarioId);
+    const suts: Array<Record<string, unknown>> = [];
+    for (const sutId of sutIds) {
+      try {
+        suts.push({
+          sutId,
+          descriptor: await this.activeConnection.callTool('scenario_sut_get', { scenarioId, sutId }),
+        });
+      } catch (error) {
+        suts.push({ sutId, error: safeError(error) });
+      }
+    }
+    return {
+      bundleKey,
+      variablesPath: findScenarioFilePath(tree, ['variables.yaml', 'variables.yml']),
+      authProfilesPath: findScenarioFilePath(tree, ['authProfiles.yaml', 'authProfiles.yml']),
+      suts,
+    };
+  }
+
+  private async readScenarioSutIds(scenarioId: string): Promise<string[]> {
+    const sutIdsValue = await this.activeConnection.callTool('scenario_suts_list', { scenarioId });
+    return Array.isArray(sutIdsValue)
+      ? sutIdsValue.filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+      : [];
   }
 
   private async validateCommittedBundle(): Promise<void> {
@@ -659,6 +887,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.discardPendingBundle();
     this.activeTab = 'Hive';
     this.workspaceData = undefined;
+    this.createSwarmForm = undefined;
     this.journalSwarmId = undefined;
     this.journalRunId = undefined;
     this.journalResult = undefined;
@@ -668,6 +897,11 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.debugSwarmId = undefined;
     this.debugRuntimeId = undefined;
     this.debugResult = undefined;
+    this.scenarioFocusScenarioId = undefined;
+    this.scenarioFocusBundleKey = undefined;
+    this.scenarioFocusSection = 'OVERVIEW';
+    this.scenarioFocusTree = undefined;
+    this.scenarioFocusInputs = undefined;
     this.draft = undefined;
     this.attempt = undefined;
     this.attemptView = undefined;
@@ -768,6 +1002,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         workspaceData: this.workspaceData,
         swarmOperations: SWARM_OPERATIONS,
         swarmPrimaryActions: primaryActionsForSwarms(this.workspaceData),
+        createSwarmForm: this.createSwarmForm,
         journalSwarmId: this.journalSwarmId,
         journalRunId: this.journalRunId,
         journalResult: this.journalResult,
@@ -777,6 +1012,11 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         debugSwarmId: this.debugSwarmId,
         debugRuntimeId: this.debugRuntimeId,
         debugResult: this.debugResult,
+        scenarioFocusScenarioId: this.scenarioFocusScenarioId,
+        scenarioFocusBundleKey: this.scenarioFocusBundleKey,
+        scenarioFocusSection: this.scenarioFocusSection,
+        scenarioFocusTree: this.scenarioFocusTree,
+        scenarioFocusInputs: this.scenarioFocusInputs,
         pendingBundle: this.pendingBundle ? {
           source: this.pendingBundle.bundle.source,
           fileCount: this.pendingBundle.bundle.fileManifest.length,
@@ -823,6 +1063,32 @@ function row(
   };
 }
 
+function firstCreatableTemplate(value: unknown): { templateId: string; scenarioId: string } | undefined {
+  return creatableTemplates(value)[0];
+}
+
+function requireCreateSwarmSelection(value: unknown, templateId: string, scenarioId: string): void {
+  const match = creatableTemplates(value).some(template =>
+    template.templateId === templateId && template.scenarioId === scenarioId);
+  if (!match) {
+    throw new ConnectionContractError('CREATE_SWARM_TEMPLATE_INVALID',
+      'Select one exact non-defunct Scenario Manager template');
+  }
+}
+
+function creatableTemplates(value: unknown): Array<{ templateId: string; scenarioId: string }> {
+  if (!Array.isArray(value)) return [];
+  const result: Array<{ templateId: string; scenarioId: string }> = [];
+  for (const item of value) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const templateId = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : undefined;
+    if (!templateId || record.defunct === true) continue;
+    result.push({ templateId, scenarioId: templateId });
+  }
+  return result;
+}
+
 function extensionVersion(packageJson: unknown): string {
   if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
     throw new ConnectionContractError('EXTENSION_VERSION_INVALID', 'PocketHive extension manifest is unavailable');
@@ -854,6 +1120,24 @@ function publicationAttemptId(error: unknown): string | undefined {
   if (!(error instanceof ConnectionContractError)) return undefined;
   const attemptId = error.details?.attemptId;
   return typeof attemptId === 'string' && attemptId.trim() ? attemptId.trim() : undefined;
+}
+
+function findScenarioFilePath(tree: unknown, fileNames: string[]): string | undefined {
+  const targets = new Set(fileNames.map(item => item.toLocaleLowerCase()));
+  const root = tree && typeof tree === 'object' && !Array.isArray(tree)
+    ? tree as Record<string, unknown>
+    : undefined;
+  const nodes = Array.isArray(root?.nodes) ? root.nodes : [];
+  for (const item of nodes) {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
+    const record = item as Record<string, unknown>;
+    const path = typeof record.path === 'string' ? record.path.trim() : '';
+    if (!path) continue;
+    const normalized = path.toLocaleLowerCase();
+    const fileName = normalized.split('/').at(-1);
+    if (fileName && targets.has(fileName)) return path;
+  }
+  return undefined;
 }
 
 function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {

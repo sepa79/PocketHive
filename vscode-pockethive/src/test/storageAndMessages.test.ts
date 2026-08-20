@@ -116,6 +116,39 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   assert.deepEqual(decodeWebviewCommand({ type: 'selectJournalSwarm', swarmId: 'checkout-load' }), {
     type: 'selectJournalSwarm', swarmId: 'checkout-load',
   });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openCreateSwarm' }), { type: 'openCreateSwarm' });
+  assert.deepEqual(decodeWebviewCommand({ type: 'cancelCreateSwarm' }), { type: 'cancelCreateSwarm' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'selectCreateSwarmTemplate', templateId: ' smoke ', scenarioId: ' smoke ',
+  }), { type: 'selectCreateSwarmTemplate', templateId: 'smoke', scenarioId: 'smoke' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'submitCreateSwarm',
+    swarmId: ' checkout-load ',
+    templateId: ' smoke ',
+    scenarioId: ' smoke ',
+    sutId: ' wiremock-local ',
+    variablesProfileId: ' vars-smoke ',
+  }), {
+    type: 'submitCreateSwarm',
+    swarmId: 'checkout-load',
+    templateId: 'smoke',
+    scenarioId: 'smoke',
+    sutId: 'wiremock-local',
+    variablesProfileId: 'vars-smoke',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'submitCreateSwarm',
+    swarmId: ' checkout-load ',
+    templateId: ' smoke ',
+    scenarioId: ' smoke ',
+    sutId: '',
+    variablesProfileId: '',
+  }), {
+    type: 'submitCreateSwarm',
+    swarmId: 'checkout-load',
+    templateId: 'smoke',
+    scenarioId: 'smoke',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'runSwarmBatchOperation', action: 'START' }), {
     type: 'runSwarmBatchOperation', action: 'START',
   });
@@ -155,6 +188,16 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   assert.deepEqual(decodeWebviewCommand({ type: 'openScenarioTemplate', scenarioId: ' mixed-smoke ' }), {
     type: 'openScenarioTemplate', scenarioId: 'mixed-smoke',
   });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'selectScenarioSection', scenarioId: ' mixed-smoke ', bundleKey: ' bundles/mixed-smoke ', section: 'FILES',
+  }), {
+    type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section: 'FILES',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openScenarioBundleFile', bundleKey: ' bundles/mixed-smoke ', path: ' templates/http/request.yaml ',
+  }), {
+    type: 'openScenarioBundleFile', bundleKey: 'bundles/mixed-smoke', path: 'templates/http/request.yaml',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'runDebug', action: ' Workers ' }), {
     type: 'runDebug', action: 'Workers',
   });
@@ -178,6 +221,11 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectDebugWorker', runtimeId: 'worker', extra: true },
     { type: 'selectTab', tab: 'Settings' },
     { type: 'selectJournalSwarm', swarmId: '   ' },
+    { type: 'selectCreateSwarmTemplate', templateId: 'smoke', scenarioId: '   ' },
+    { type: 'selectCreateSwarmTemplate', templateId: '   ', scenarioId: 'smoke' },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke' },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', variablesProfileId: '   ' },
+    { type: 'submitCreateSwarm', swarmId: '   ', templateId: 'smoke', scenarioId: 'smoke', sutId: '', variablesProfileId: '' },
     { type: 'runSwarmBatchOperation', action: 'REMOVE' },
     { type: 'runSwarmBatchOperation', action: 'START', swarmId: 'injected' },
     { type: 'loadSwarmHistory', swarmId: '   ' },
@@ -190,6 +238,10 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'openScenarioRaw', scenarioId: '   ' },
     { type: 'openScenarioSchema', scenarioId: '   ' },
     { type: 'openScenarioTemplate', scenarioId: '   ' },
+    { type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section: 'DETAILS' },
+    { type: 'selectScenarioSection', scenarioId: '   ', bundleKey: 'bundles/mixed-smoke', section: 'FILES' },
+    { type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: '   ', section: 'FILES' },
+    { type: 'openScenarioBundleFile', bundleKey: 'bundles/mixed-smoke', path: '   ' },
     { type: 'reconcilePublicationAttempt' },
     { type: 'reconcilePublicationAttempt', attemptId: '   ' },
     { type: 'runDebug', action: 'Logs', tailLines: '100' },

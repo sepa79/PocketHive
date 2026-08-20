@@ -271,6 +271,41 @@ pre { margin: 0; padding: 12px; max-height: 55vh; overflow: auto; font-family: v
 .scenario-row__copy { display: grid; gap: 2px; min-width: 0; }
 .scenario-row__copy span { font-size: .73rem; }
 .scenario-row__body { display: grid; gap: 8px; padding: 10px; border-top: 1px solid var(--ph-border); }
+.scenario-section-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+.button.active-chip {
+  color: var(--ph-accent-fg);
+  border-color: color-mix(in srgb, var(--ph-accent) 60%, transparent);
+  background: color-mix(in srgb, var(--ph-accent) 78%, transparent);
+}
+.scenario-detail-grid { display: grid; gap: 8px; }
+.scenario-info-card { gap: 6px; }
+.scenario-bees { display: flex; flex-wrap: wrap; gap: 6px; }
+.scenario-chip {
+  display: inline-flex; align-items: center; border: 1px solid var(--ph-border); border-radius: 999px;
+  padding: 2px 8px; font-size: .72rem; color: var(--ph-muted);
+  background: color-mix(in srgb, var(--vscode-sideBar-background) 90%, var(--vscode-textLink-foreground) 10%);
+}
+.scenario-chip--dir {
+  color: color-mix(in srgb, var(--ph-brand-hive) 72%, var(--vscode-sideBar-foreground));
+  border-color: color-mix(in srgb, var(--ph-brand-hive) 36%, var(--ph-border));
+}
+.scenario-tree { display: grid; gap: 6px; }
+.scenario-tree__row {
+  display: grid; gap: 8px; padding: 9px 10px; border: 1px solid var(--ph-border); border-radius: 8px;
+  background: color-mix(in srgb, var(--vscode-sideBar-background) 95%, var(--vscode-foreground) 5%);
+}
+.scenario-tree__meta { display: grid; gap: 3px; min-width: 0; }
+.scenario-tree__actions {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
+}
+.scenario-tree__row.depth-1 { margin-left: 10px; }
+.scenario-tree__row.depth-2 { margin-left: 20px; }
+.scenario-tree__row.depth-3 { margin-left: 30px; }
+.scenario-tree__row.depth-4 { margin-left: 40px; }
+.scenario-tree__row.depth-5 { margin-left: 50px; }
+.scenario-tree__row.depth-6 { margin-left: 60px; }
+.scenario-inputs { display: grid; gap: 8px; }
+.scenario-endpoints { display: grid; gap: 6px; }
 
 .debug-groups { display: grid; gap: 6px; }
 .debug-group { border: 1px solid var(--ph-border); border-radius: 8px; }
@@ -287,6 +322,8 @@ pre { margin: 0; padding: 12px; max-height: 55vh; overflow: auto; font-family: v
   .swarm-row__actions .status { margin-right: 3px; }
   .run-row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
   .scenario-filters { grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr); }
+  .scenario-detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .scenario-tree__row { grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
 }
 
 @media (max-width: 199px) {

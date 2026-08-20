@@ -102,11 +102,18 @@ public class McpToolExecutor {
         return switch (toolId) {
             case "scenario_list" -> owners.get(SCENARIO_PREFIX + "/scenarios");
             case "scenario_get" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId"));
-            case "scenario_raw_read" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId") + "/raw");
-            case "scenario_schema_read" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
+            case "scenario_raw_read" -> owners.getText(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId") + "/raw");
+            case "scenario_schema_read" -> owners.getText(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
                 + "/schema?path=" + query(input, "path"));
-            case "scenario_template_read" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
+            case "scenario_template_read" -> owners.getText(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
                 + "/template?path=" + query(input, "path"));
+            case "scenario_bundle_tree_read" -> owners.get(SCENARIO_PREFIX + "/scenarios/bundles/tree?bundleKey="
+                + query(input, "bundleKey"));
+            case "scenario_bundle_file_read" -> owners.get(SCENARIO_PREFIX + "/scenarios/bundles/file?bundleKey="
+                + query(input, "bundleKey") + "&path=" + query(input, "path"));
+            case "scenario_suts_list" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId") + "/suts");
+            case "scenario_sut_get" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
+                + "/suts/" + segment(input, "sutId"));
             case "scenario_contracts_get" -> scenarioContracts();
             case "scenario_capabilities_get" -> owners.get(SCENARIO_PREFIX + "/api/capabilities?all=true");
             case "scenario_templates_catalog" -> owners.get(SCENARIO_PREFIX + "/api/templates");
@@ -116,7 +123,7 @@ public class McpToolExecutor {
                 ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId"),
                 text(input, "swarmId"));
             case "swarm_create" -> owners.post(ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId") + "/create",
-                body(input, "templateId", "sutId", "variablesProfileId", "idempotencyKey"));
+                swarmCreateBody(input));
             case "swarm_start" -> lifecycle(input, "start");
             case "swarm_stop" -> lifecycle(input, "stop");
             case "swarm_remove" -> lifecycle(input, "remove");
@@ -499,6 +506,18 @@ public class McpToolExecutor {
                 body.put(field, source.get(field));
             }
         }
+        return body;
+    }
+
+    private static Map<String, Object> swarmCreateBody(Map<String, Object> input) {
+        Map<String, Object> body = new LinkedHashMap<>();
+        body.put("templateId", text(input, "templateId"));
+        body.put("idempotencyKey", text(input, "idempotencyKey"));
+        body.put("autoPullImages", false);
+        body.put("sutId", input.containsKey("sutId") ? text(input, "sutId") : null);
+        body.put("variablesProfileId", input.containsKey("variablesProfileId") ? text(input, "variablesProfileId") : null);
+        body.put("networkMode", "DIRECT");
+        body.put("networkProfileId", null);
         return body;
     }
 

@@ -22,10 +22,19 @@ const announcer: HTMLElement = announcerElement;
 
 type Model = Record<string, any>;
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'] as const;
+type ScenarioSection = 'OVERVIEW' | 'FILES' | 'INPUTS';
 let model: Model = { page: 'environments', profiles: [], activeTab: 'Hive', debugActions: [], busy: false };
 let expandedHistorySwarmId: string | undefined;
+let expandedScenarioId: string | undefined;
 let scenarioSearch = '';
 let scenarioFolder = 'ALL';
+let createSwarmDraft: {
+  swarmId: string;
+  templateId: string;
+  scenarioId: string;
+  sutId: string;
+  variablesProfileId: string;
+} | undefined;
 const eventCriteria: Record<'Buzz' | 'Journal', WebviewEventFilterCriteria> = {
   Buzz: { timeWindow: EVENT_TIME_WINDOWS.ALL, kind: 'ALL', severity: 'ALL', search: '' },
   Journal: { timeWindow: EVENT_TIME_WINDOWS.ALL, kind: 'ALL', severity: 'ALL', search: '' },
@@ -36,6 +45,7 @@ window.addEventListener('message', event => {
   if (!message || typeof message !== 'object' || Array.isArray(message)) return;
   const value = message as Record<string, unknown>;
   if (value.type === 'viewModel' && value.model && typeof value.model === 'object') {
+    reconcileCreateSwarmDraft(value.model as Model);
     model = value.model as Model;
     render();
     return;
@@ -207,7 +217,10 @@ function workspace(): HTMLElement {
   if (activeTab === 'Debug') content.append(debugView());
   else if (activeTab === 'Journal') content.append(journalView());
   else if (activeTab === 'Scenarios') content.append(scenarioBundleView(), scenarioListView(model.workspaceData));
-  else if (activeTab === 'Hive') content.append(swarmListView(model.workspaceData));
+  else if (activeTab === 'Hive') {
+    if (model.createSwarmForm !== undefined) content.append(createSwarmView(model.createSwarmForm));
+    content.append(swarmListView(model.workspaceData));
+  }
   else content.append(eventListView(model.workspaceData, 'No hive events were observed.', 'Buzz'));
   section.append(content, el('footer', 'connection-footer', [
     statusPill(String(session.status ?? profile.status ?? 'Not connected')),
@@ -265,8 +278,12 @@ function workspaceActionButton(label: string, action: () => void, className: str
 function sectionActions(activeTab: string): HTMLElement {
   const actions = el('div', 'actions');
   if (activeTab === 'Hive') {
+    const createOpen = objectValue(model.createSwarmForm) !== undefined;
     const primaryActions = objectValue(model.swarmPrimaryActions) ?? {};
     const available = Object.values(primaryActions);
+    actions.append(button(createOpen ? 'Cancel create' : 'Create swarm', () => send({
+      type: createOpen ? 'cancelCreateSwarm' : 'openCreateSwarm',
+    }), createOpen ? 'quiet compact' : 'primary compact'));
     if (available.includes(model.swarmOperations?.START)) {
       actions.append(button('Start all', () => send({ type: 'runSwarmBatchOperation', action: 'START' }), 'secondary compact'));
     }
@@ -397,7 +414,7 @@ function swarmListView(value: unknown): HTMLElement {
       list.append(ownerDataError(swarm, 'swarm record'));
       continue;
     }
-    const status = stringField(swarm, 'status') ?? 'UNKNOWN';
+    const status = swarmStatus(swarm);
     const bees = swarmBeeCount(swarm);
     const operation = model.swarmPrimaryActions?.[id];
     const card = el('article', 'swarm-row');
@@ -440,6 +457,82 @@ function swarmListView(value: unknown): HTMLElement {
     list.append(card);
   }
   return list;
+}
+
+function createSwarmView(value: unknown): HTMLElement {
+  const formValue = objectValue(value);
+  if (!formValue) return ownerDataError(value, 'create swarm form');
+  const result = el('section', 'card scenario-upload');
+  result.append(
+    text('h4', 'Create swarm'),
+    text('p', 'Choose one exact deployed template and optional overrides. PocketHive sends one explicit swarm-create request through MCP.', 'muted'),
+  );
+  const templates = createSwarmOptions(formValue.templates);
+  if (templates === undefined) {
+    result.append(ownerDataError(formValue.templates, 'Scenario Manager template catalogue'));
+    return result;
+  }
+  if (templates.length === 0) {
+    result.append(emptyState('No non-defunct templates are currently available for swarm creation.'));
+    return result;
+  }
+  const selectedTemplateId = createSwarmDraft?.templateId
+    && templates.some(option => option.templateId === createSwarmDraft?.templateId)
+    ? createSwarmDraft.templateId
+    : stringField(formValue, 'selectedTemplateId') ?? templates[0].templateId;
+  const selectedScenarioId = createSwarmDraft?.scenarioId
+    && templates.some(option => option.scenarioId === createSwarmDraft?.scenarioId)
+    ? createSwarmDraft.scenarioId
+    : stringField(formValue, 'selectedScenarioId')
+      ?? templates.find(option => option.templateId === selectedTemplateId)?.scenarioId
+      ?? templates[0].scenarioId;
+  const template = select('Template', 'createSwarmTemplate', templates
+    .map(option => [option.templateId, `${option.name} (${option.templateId})`]), selectedTemplateId);
+  template.control.addEventListener('change', () => {
+    const draft = ensureCreateSwarmDraft();
+    const nextTemplate = templates.find(option => option.templateId === template.control.value);
+    draft.templateId = template.control.value;
+    draft.scenarioId = nextTemplate?.scenarioId ?? template.control.value;
+    draft.sutId = '';
+    send({
+      type: 'selectCreateSwarmTemplate',
+      templateId: draft.templateId,
+      scenarioId: draft.scenarioId,
+    });
+  });
+  const swarmId = input('Swarm ID', 'createSwarmId', createSwarmDraft?.swarmId ?? '', 'checkout-load');
+  swarmId.control.addEventListener('input', () => { ensureCreateSwarmDraft().swarmId = swarmId.control.value; });
+  const sutIds = stringList(formValue.sutIds);
+  const sut = select('SUT override', 'createSwarmSut', [
+    ['', 'Use bundle default'],
+    ...sutIds.map(id => [id, id]),
+  ], sutIds.includes(createSwarmDraft?.sutId ?? '') ? createSwarmDraft?.sutId ?? '' : '');
+  sut.control.addEventListener('change', () => { ensureCreateSwarmDraft().sutId = sut.control.value; });
+  const variables = input('Variables profile ID', 'createSwarmVariablesProfile',
+    createSwarmDraft?.variablesProfileId ?? '', 'Leave blank to use bundle default');
+  variables.control.required = false;
+  variables.control.addEventListener('input', () => { ensureCreateSwarmDraft().variablesProfileId = variables.control.value; });
+  result.append(template.wrapper, swarmId.wrapper, sut.wrapper, variables.wrapper);
+  if (sutIds.length === 0) result.append(text('p', 'No bundle-local SUT overrides were published for this template.', 'muted'));
+  result.append(el('div', 'form-actions', [
+    button('Create swarm', () => {
+      const draft = ensureCreateSwarmDraft();
+      if (!draft.swarmId.trim()) {
+        showError('Exact swarm ID required.');
+        return;
+      }
+      send({
+        type: 'submitCreateSwarm',
+        swarmId: draft.swarmId,
+        templateId: draft.templateId || selectedTemplateId,
+        scenarioId: draft.scenarioId || selectedScenarioId,
+        sutId: draft.sutId,
+        variablesProfileId: draft.variablesProfileId,
+      });
+    }, 'primary'),
+    button('Cancel', () => send({ type: 'cancelCreateSwarm' }), 'quiet'),
+  ]));
+  return result;
 }
 
 function swarmRunHistory(swarmId: string): HTMLElement {
@@ -532,7 +625,13 @@ function scenarioListView(value: unknown): HTMLElement {
     const query = scenarioSearch.trim().toLocaleLowerCase();
     const filtered = scenarios.filter(item => {
       const exactFolder = stringField(item, 'folderPath') ?? '';
-      const searchable = [stringField(item, 'id'), stringField(item, 'name'), exactFolder]
+      const searchable = [
+        stringField(item, 'id'),
+        stringField(item, 'name'),
+        stringField(item, 'bundleKey'),
+        stringField(item, 'description'),
+        exactFolder,
+      ]
         .filter(Boolean).join(' ').toLocaleLowerCase();
       return (scenarioFolder === 'ALL' || exactFolder === scenarioFolder) && (!query || searchable.includes(query));
     });
@@ -547,29 +646,213 @@ function scenarioListView(value: unknown): HTMLElement {
 }
 
 function scenarioRow(scenario: Model): HTMLElement {
-    const id = stringField(scenario, 'id');
-    const name = stringField(scenario, 'name');
-    if (!id || !name) {
-      return ownerDataError(scenario, 'scenario record');
-    }
-    const details = el('details', 'scenario-row');
-    details.append(el('summary', '', [
-      el('div', 'scenario-row__copy', [titled('strong', name, 'truncate'), titled('span', id, 'mono muted truncate')]),
-      statusPill('Deployed'),
-    ]), el('div', 'scenario-row__body', [
-      dataRows([
-        ['Scenario ID', id],
-        ['Folder', displayValue(scenario.folderPath)],
-      ]),
-      el('div', 'actions', [
-        button('Open details', () => send({ type: 'openScenarioDetails', scenarioId: id }), 'secondary compact'),
-        button('Open scenario.yaml', () => send({ type: 'openScenarioRaw', scenarioId: id }), 'secondary compact'),
-        button('Open schema…', () => send({ type: 'openScenarioSchema', scenarioId: id }), 'secondary compact'),
-        button('Open template…', () => send({ type: 'openScenarioTemplate', scenarioId: id }), 'secondary compact'),
-      ]),
-      technicalDetails(scenario),
+  const bundleKey = stringField(scenario, 'bundleKey');
+  const scenarioId = stringField(scenario, 'id');
+  const name = stringField(scenario, 'name') ?? bundleKey ?? scenarioId;
+  if (!bundleKey || !name) return ownerDataError(scenario, 'scenario record');
+  const rowId = scenarioRowId(scenarioId, bundleKey);
+  const focused = model.scenarioFocusScenarioId === scenarioId && model.scenarioFocusBundleKey === bundleKey;
+  const section = focused ? model.scenarioFocusSection as ScenarioSection ?? 'OVERVIEW' : undefined;
+  const defunct = scenario.defunct === true;
+  const details = el('details', 'scenario-row');
+  if (expandedScenarioId === rowId || focused) details.setAttribute('open', '');
+  const summaryMeta = scenarioId ? scenarioId : bundleKey;
+  details.append(el('summary', '', [
+    el('div', 'scenario-row__copy', [
+      titled('strong', name, 'truncate'),
+      titled('span', summaryMeta, 'mono muted truncate'),
+    ]),
+    statusPill(defunct ? 'Defunct' : 'Deployed'),
+  ]));
+  const body = el('div', 'scenario-row__body');
+  body.append(dataRows([
+    ['Scenario ID', scenarioId ?? 'Unavailable'],
+    ['Bundle key', bundleKey],
+    ['Folder', displayValue(scenario.folderPath)],
+    ['Bundle path', displayValue(scenario.bundlePath)],
+  ]));
+  if (scenarioId) {
+    body.append(el('div', 'actions', [
+      button('Open details', () => send({ type: 'openScenarioDetails', scenarioId }), 'secondary compact'),
+      button('Open scenario.yaml', () => send({ type: 'openScenarioRaw', scenarioId }), 'secondary compact'),
+      button('Open schema…', () => send({ type: 'openScenarioSchema', scenarioId }), 'secondary compact'),
+      button('Open template…', () => send({ type: 'openScenarioTemplate', scenarioId }), 'secondary compact'),
     ]));
-    return details;
+    const sectionTabs = el('div', 'scenario-section-tabs', [
+      scenarioSectionButton('Overview', 'OVERVIEW', scenarioId, bundleKey, section, rowId),
+      scenarioSectionButton('Files', 'FILES', scenarioId, bundleKey, section, rowId),
+      scenarioSectionButton('Inputs', 'INPUTS', scenarioId, bundleKey, section, rowId),
+    ]);
+    body.append(sectionTabs);
+    if (section === 'OVERVIEW') body.append(scenarioOverviewSection(scenario));
+    if (section === 'FILES') body.append(scenarioFilesSection(bundleKey));
+    if (section === 'INPUTS') body.append(scenarioInputsSection(bundleKey));
+  } else {
+    body.append(text('p', 'This bundle is defunct or missing a canonical scenario ID, so bundle drill-down actions are unavailable.', 'muted callout'));
+  }
+  body.append(technicalDetails(scenario));
+  details.append(body);
+  return details;
+}
+
+function scenarioSectionButton(
+  label: string,
+  section: ScenarioSection,
+  scenarioId: string,
+  bundleKey: string,
+  activeSection: ScenarioSection | undefined,
+  rowId: string,
+): HTMLButtonElement {
+  const control = button(label, () => {
+    expandedScenarioId = rowId;
+    send({ type: 'selectScenarioSection', scenarioId, bundleKey, section });
+  }, `secondary compact${activeSection === section ? ' active-chip' : ''}`);
+  control.setAttribute('aria-pressed', String(activeSection === section));
+  return control;
+}
+
+function scenarioOverviewSection(scenario: Model): HTMLElement {
+  const cards = el('div', 'scenario-detail-grid');
+  if (stringField(scenario, 'description')) {
+    cards.append(scenarioInfoCard('Description', String(scenario.description)));
+  }
+  if (stringField(scenario, 'controllerImage')) {
+    cards.append(scenarioInfoCard('Controller', String(scenario.controllerImage), 'mono'));
+  }
+  const bees = Array.isArray(scenario.bees) ? scenario.bees as Model[] : [];
+  if (bees.length > 0) {
+    cards.append(el('article', 'card scenario-info-card', [
+      text('span', 'Bees', 'eyebrow'),
+      el('div', 'scenario-bees', bees.map(bee => text(
+        'span',
+        [stringField(bee, 'role') ?? 'worker', stringField(bee, 'image')].filter(Boolean).join(' · '),
+        'scenario-chip',
+      ))),
+    ]));
+  }
+  return cards.children.length > 0 ? cards : emptyState('No additional overview metadata was reported for this bundle.');
+}
+
+function scenarioInfoCard(label: string, value: string, extraClass = ''): HTMLElement {
+  return el('article', `card scenario-info-card${extraClass ? ` ${extraClass}` : ''}`, [
+    text('span', label, 'eyebrow'),
+    titled('p', value, `${extraClass} truncate`),
+  ]);
+}
+
+function scenarioFilesSection(bundleKey: string): HTMLElement {
+  if (model.scenarioFocusBundleKey !== bundleKey || model.scenarioFocusTree === undefined) {
+    return emptyState(model.busy ? 'Loading deployed bundle tree…' : 'Choose Files to inspect the deployed bundle tree.');
+  }
+  const tree = objectValue(model.scenarioFocusTree);
+  if (errorFrom(model.scenarioFocusTree)) return errorState(String(errorFrom(model.scenarioFocusTree)));
+  const nodes = Array.isArray(tree?.nodes) ? tree.nodes.filter(item => objectValue(item)) as Model[] : undefined;
+  if (!nodes) return ownerDataError(model.scenarioFocusTree, 'scenario bundle tree');
+  if (nodes.length === 0) return emptyState('No deployed files were reported for this bundle.');
+  const list = el('div', 'scenario-tree');
+  for (const node of nodes) list.append(scenarioFileNode(bundleKey, node));
+  return list;
+}
+
+function scenarioFileNode(bundleKey: string, node: Model): HTMLElement {
+  const path = stringField(node, 'path');
+  const name = stringField(node, 'name');
+  const nodeType = stringField(node, 'nodeType');
+  if (!path || !name || !nodeType) return ownerDataError(node, 'bundle tree node');
+  const depth = Math.min(path.split('/').length - 1, 6);
+  const row = el('article', `scenario-tree__row depth-${depth}`);
+  const meta = el('div', 'scenario-tree__meta', [
+    text('span', nodeType === 'directory' ? 'Dir' : 'File', `scenario-chip ${nodeType === 'directory' ? 'scenario-chip--dir' : ''}`),
+    titled('strong', name, 'truncate'),
+    titled('span', path, 'mono muted truncate'),
+  ]);
+  row.append(meta);
+  if (nodeType === 'file') {
+    const editorKind = stringField(node, 'editorKind');
+    const label = editorKind === 'unsupported' ? 'Metadata' : 'Preview';
+    row.append(el('div', 'scenario-tree__actions', [
+      text('span', displayValue(node.size), 'muted mono'),
+      button(label, () => send({ type: 'openScenarioBundleFile', bundleKey, path }), 'secondary compact'),
+    ]));
+  }
+  return row;
+}
+
+function scenarioInputsSection(bundleKey: string): HTMLElement {
+  if (model.scenarioFocusBundleKey !== bundleKey || model.scenarioFocusInputs === undefined) {
+    return emptyState(model.busy ? 'Loading scenario inputs…' : 'Choose Inputs to inspect SUTs and supporting files.');
+  }
+  const inputs = objectValue(model.scenarioFocusInputs);
+  if (errorFrom(model.scenarioFocusInputs)) return errorState(String(errorFrom(model.scenarioFocusInputs)));
+  if (!inputs) return ownerDataError(model.scenarioFocusInputs, 'scenario inputs');
+  const result = el('div', 'scenario-inputs');
+  result.append(el('div', 'scenario-detail-grid', [
+    scenarioFilePresenceCard('Variables', inputs.variablesPath, bundleKey),
+    scenarioFilePresenceCard('Auth profiles', inputs.authProfilesPath, bundleKey),
+  ]));
+  const suts = Array.isArray(inputs.suts) ? inputs.suts.filter(item => objectValue(item)) as Model[] : [];
+  if (suts.length === 0) {
+    result.append(emptyState('No bundle-local SUT descriptors were reported for this bundle.'));
+    return result;
+  }
+  const list = el('div', 'data-list');
+  for (const sut of suts) list.append(scenarioSutCard(sut));
+  result.append(list);
+  return result;
+}
+
+function scenarioFilePresenceCard(label: string, path: unknown, bundleKey: string): HTMLElement {
+  const exactPath = typeof path === 'string' && path.trim() ? path.trim() : undefined;
+  const card = el('article', 'card scenario-info-card', [
+    text('span', label, 'eyebrow'),
+    titled('p', exactPath ?? 'Not present in deployed bundle', `${exactPath ? 'mono truncate' : 'muted'}`),
+  ]);
+  if (exactPath) {
+    card.append(el('div', 'actions', [
+      button('Preview', () => send({ type: 'openScenarioBundleFile', bundleKey, path: exactPath }), 'secondary compact'),
+    ]));
+  }
+  return card;
+}
+
+function scenarioSutCard(value: Model): HTMLElement {
+  const sutId = stringField(value, 'sutId') ?? 'SUT';
+  const error = errorFrom(value.error);
+  const card = el('article', 'card data-card');
+  card.append(el('div', 'data-heading', [
+    el('div', '', [text('span', 'Bundle-local SUT', 'eyebrow'), titled('h4', sutId, 'truncate')]),
+  ]));
+  if (error) {
+    card.append(errorState(error));
+    return card;
+  }
+  const descriptor = objectValue(value.descriptor);
+  if (!descriptor) return ownerDataError(value, 'bundle-local SUT');
+  const endpoints = objectValue(descriptor.endpoints) ?? {};
+  const endpointRows = Object.entries(endpoints).map(([endpointId, endpointValue]) => {
+    const endpoint = objectValue(endpointValue) ?? {};
+    return [
+      endpointId,
+      typeof endpoint.baseUrl === 'string' && endpoint.baseUrl.trim()
+        ? endpoint.baseUrl.trim()
+        : JSON.stringify(endpoint),
+    ] as string[];
+  });
+  card.append(dataRows([
+    ['Name', displayValue(descriptor.name)],
+    ['Endpoint count', String(endpointRows.length)],
+  ]));
+  if (endpointRows.length > 0) {
+    card.append(el('div', 'scenario-endpoints', [
+      text('span', 'Endpoints', 'eyebrow'),
+      dataRows(endpointRows),
+    ]));
+  }
+  return card;
+}
+
+function scenarioRowId(scenarioId: string | undefined, bundleKey: string): string {
+  return `${scenarioId ?? 'bundle'}::${bundleKey}`;
 }
 
 function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | 'Journal'): HTMLElement {
@@ -696,6 +979,12 @@ function objectValue(value: unknown): Model | undefined {
 function stringField(value: Model, field: string): string | undefined {
   const item = value[field];
   return typeof item === 'string' && item.trim() ? item.trim() : undefined;
+}
+
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0).map(item => item.trim())
+    : [];
 }
 
 function displayValue(value: unknown): string {
@@ -884,7 +1173,7 @@ function tabDescription(tab: string): string {
     Hive: 'Live swarms from PocketHive MCP',
     Buzz: 'Bounded hive-wide event timeline',
     Journal: 'Choose an exact swarm for journal evidence',
-    Scenarios: 'Bundles sourced from Scenario Manager',
+    Scenarios: 'Deployed bundle overview, files, and inputs',
     Debug: 'Bounded Orchestrator diagnostics',
   };
   return descriptions[tab] ?? '';
@@ -892,6 +1181,81 @@ function tabDescription(tab: string): string {
 
 function statusAnnouncement(): string {
   return model.busy ? 'PocketHive operation in progress' : String(model.attempt?.state ?? model.activeProfile?.status ?? 'Ready');
+}
+
+function reconcileCreateSwarmDraft(nextModel: Model): void {
+  const formValue = objectValue(nextModel.createSwarmForm);
+  if (!formValue) {
+    createSwarmDraft = undefined;
+    return;
+  }
+  const templates = createSwarmOptions(formValue.templates) ?? [];
+  const fallback = templates[0];
+  const templateId = createSwarmDraft?.templateId
+    && templates.some(option => option.templateId === createSwarmDraft?.templateId)
+    ? createSwarmDraft.templateId
+    : stringField(formValue, 'selectedTemplateId') ?? fallback?.templateId ?? '';
+  const scenarioId = createSwarmDraft?.scenarioId
+    && templates.some(option => option.scenarioId === createSwarmDraft?.scenarioId)
+    ? createSwarmDraft.scenarioId
+    : stringField(formValue, 'selectedScenarioId')
+      ?? templates.find(option => option.templateId === templateId)?.scenarioId
+      ?? fallback?.scenarioId ?? '';
+  const sutIds = stringList(formValue.sutIds);
+  const sutId = createSwarmDraft?.sutId && sutIds.includes(createSwarmDraft.sutId) ? createSwarmDraft.sutId : '';
+  createSwarmDraft = {
+    swarmId: createSwarmDraft?.swarmId ?? '',
+    templateId,
+    scenarioId,
+    sutId,
+    variablesProfileId: createSwarmDraft?.variablesProfileId ?? '',
+  };
+}
+
+function ensureCreateSwarmDraft(): NonNullable<typeof createSwarmDraft> {
+  if (!createSwarmDraft) {
+    createSwarmDraft = {
+      swarmId: '',
+      templateId: '',
+      scenarioId: '',
+      sutId: '',
+      variablesProfileId: '',
+    };
+  }
+  return createSwarmDraft;
+}
+
+function createSwarmOptions(value: unknown): Array<{ templateId: string; scenarioId: string; name: string }> | undefined {
+  if (errorFrom(value)) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  const result: Array<{ templateId: string; scenarioId: string; name: string }> = [];
+  for (const item of value) {
+    const record = objectValue(item);
+    const templateId = record ? stringField(record, 'id') : undefined;
+    if (!record || !templateId || record.defunct === true) continue;
+    result.push({
+      templateId,
+      scenarioId: templateId,
+      name: stringField(record, 'name') ?? templateId,
+    });
+  }
+  return result;
+}
+
+function swarmStatus(value: unknown): string {
+  const swarm = objectValue(value);
+  if (!swarm) return 'UNKNOWN';
+  const runtimeResourceState = stringField(swarm, 'runtimeResourceState');
+  if (runtimeResourceState === 'REMOVING') return 'REMOVING';
+  const controllerState = stringField(swarm, 'controllerState');
+  const workloadState = stringField(swarm, 'workloadState');
+  if (controllerState === 'PROVISIONING' || controllerState === 'FAILED') return controllerState;
+  if (workloadState === 'RUNNING'
+      || workloadState === 'STARTING'
+      || workloadState === 'STOPPING'
+      || workloadState === 'UNAVAILABLE') return workloadState;
+  if (workloadState === 'STOPPED') return controllerState === 'READY' ? 'READY' : 'STOPPED';
+  return controllerState ?? workloadState ?? 'UNKNOWN';
 }
 
 function shortHash(value: string): string {

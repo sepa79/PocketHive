@@ -81,17 +81,30 @@ class McpToolExecutorTest {
         Map<String, Object> input = ownerInput();
         Object marker = Map.of("marker", true);
         when(owners.get(any())).thenReturn(marker);
+        when(owners.getText(any())).thenReturn("preview-text");
         when(owners.post(any(), any())).thenReturn(marker);
         when(owners.delete(any())).thenReturn(marker);
         when(readiness.observe(any(), any())).thenReturn(new SwarmReadinessResult(true, "swarm/a", Map.of(), "READY", 1));
 
         assertOwnerGet("scenario_list", Map.of(), "/scenario-manager/scenarios");
         assertOwnerGet("scenario_get", input, "/scenario-manager/scenarios/scenario%2Fa");
-        assertOwnerGet("scenario_raw_read", input, "/scenario-manager/scenarios/scenario%2Fa/raw");
-        assertOwnerGet("scenario_schema_read", input,
+        assertOwnerGetText("scenario_raw_read", input, "/scenario-manager/scenarios/scenario%2Fa/raw");
+        assertOwnerGetText("scenario_schema_read", input,
             "/scenario-manager/scenarios/scenario%2Fa/schema?path=schema%20a.json");
-        assertOwnerGet("scenario_template_read", input,
+        assertOwnerGetText("scenario_template_read", input,
             "/scenario-manager/scenarios/scenario%2Fa/template?path=schema%20a.json");
+        assertOwnerGet("scenario_bundle_tree_read", input,
+            "/scenario-manager/scenarios/bundles/tree?bundleKey=bundle/a");
+        assertOwnerGet("scenario_bundle_file_read", input,
+            "/scenario-manager/scenarios/bundles/file?bundleKey=bundle/a&path=schema%20a.json");
+        Map<String, Object> nestedBundleInput = new LinkedHashMap<>(input);
+        nestedBundleInput.put("path", "templates/http/request.yaml");
+        assertOwnerGet("scenario_bundle_file_read", nestedBundleInput,
+            "/scenario-manager/scenarios/bundles/file?bundleKey=bundle/a&path=templates/http/request.yaml");
+        assertOwnerGet("scenario_suts_list", input,
+            "/scenario-manager/scenarios/scenario%2Fa/suts");
+        assertOwnerGet("scenario_sut_get", input,
+            "/scenario-manager/scenarios/scenario%2Fa/suts/sut-a");
         assertOwnerGet("scenario_capabilities_get", input, "/scenario-manager/api/capabilities?all=true");
         assertOwnerGet("scenario_templates_catalog", input, "/scenario-manager/api/templates");
         assertOwnerGet("swarm_list", input, "/orchestrator/api/swarms");
@@ -102,9 +115,15 @@ class McpToolExecutorTest {
         clearInvocations(readiness);
 
         execute("swarm_create", input);
-        verify(owners).post("/orchestrator/api/swarms/swarm%2Fa/create", Map.of(
-            "templateId", "template-a", "sutId", "sut-a", "variablesProfileId", "vars-a",
-            "idempotencyKey", "idem-a"));
+        Map<String, Object> expectedCreate = new LinkedHashMap<>();
+        expectedCreate.put("templateId", "template-a");
+        expectedCreate.put("idempotencyKey", "idem-a");
+        expectedCreate.put("autoPullImages", false);
+        expectedCreate.put("sutId", "sut-a");
+        expectedCreate.put("variablesProfileId", "vars-a");
+        expectedCreate.put("networkMode", "DIRECT");
+        expectedCreate.put("networkProfileId", null);
+        verify(owners).post("/orchestrator/api/swarms/swarm%2Fa/create", expectedCreate);
         clearInvocations(owners);
         assertLifecycle("swarm_start", "start", input, marker);
         assertLifecycle("swarm_stop", "stop", input, marker);
@@ -616,6 +635,12 @@ class McpToolExecutorTest {
         clearInvocations(owners);
     }
 
+    private void assertOwnerGetText(String toolId, Map<String, Object> input, String path) {
+        assertThat(execute(toolId, input)).isEqualTo("preview-text");
+        verify(owners).getText(path);
+        clearInvocations(owners);
+    }
+
     private void assertOwnerPost(String toolId, Map<String, Object> input, String path, Object body) {
         execute(toolId, input);
         verify(owners).post(path, body);
@@ -647,6 +672,7 @@ class McpToolExecutorTest {
     private static Map<String, Object> ownerInput() {
         Map<String, Object> input = new LinkedHashMap<>();
         input.put("scenarioId", "scenario/a");
+        input.put("bundleKey", "bundle/a");
         input.put("path", "schema a.json");
         input.put("swarmId", "swarm/a");
         input.put("templateId", "template-a");

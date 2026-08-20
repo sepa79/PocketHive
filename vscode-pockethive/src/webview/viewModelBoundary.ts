@@ -3,10 +3,13 @@ export const VIEW_FIELD_BYTE_LIMIT = 64 * 1024;
 const BOUNDED_FIELDS = [
   'workspaceData',
   'swarmPrimaryActions',
+  'createSwarmForm',
   'journalResult',
   'swarmHistoryResult',
   'swarmOperationResult',
   'debugResult',
+  'scenarioFocusTree',
+  'scenarioFocusInputs',
   'pendingBundle',
   'bundleResult',
 ] as const;

@@ -45,6 +45,28 @@ class OwnerApiClientTest {
     }
 
     @Test
+    void preservesExplicitOwnerTextForPreviewReadTools() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        DownstreamTokenProvider tokens = mock(DownstreamTokenProvider.class);
+        when(tokens.bearerToken()).thenReturn("service-token");
+        OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
+
+        server.expect(requestTo("http://owner.internal:8088/scenarios/scenario-a/raw"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer service-token"))
+            .andRespond(withSuccess("id: scenario-a\n", MediaType.TEXT_PLAIN));
+        server.expect(requestTo("http://owner.internal:8088/scenarios/scenario-a/schema?path=body.json"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer service-token"))
+            .andRespond(withSuccess("{\"type\":\"object\"}", MediaType.APPLICATION_JSON));
+
+        assertThat(client.getText("/scenarios/scenario-a/raw")).isEqualTo("id: scenario-a\n");
+        assertThat(client.getText("/scenarios/scenario-a/schema?path=body.json")).isEqualTo("{\"type\":\"object\"}");
+        server.verify();
+    }
+
+    @Test
     void mapsAnExplicitEmptyOwnerResponseButNeverFallsBackForMalformedJson() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

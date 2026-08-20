@@ -1246,6 +1246,10 @@ requested scope with a plain-language description. They remain responsive,
 keyboard accessible, reduced-motion safe, and readable at narrow mobile widths.
 No script, remote font, remote style, inferred permission, hidden scope,
 alternate authorization endpoint, or OAuth field transformation is allowed.
+The VS Code loopback callback landing page is also branded and locally rendered
+with inline PocketHive theme tokens so approval, decline, and error hand-off
+states remain professional even though the page is served from the local
+extension callback listener rather than Auth Service.
 Presentation tests assert the canonical issuer form actions and static assets;
 the existing authorization-code, PKCE, state, redirect, resource, consent, and
 token tests remain the behavioral authority.
@@ -1317,7 +1321,18 @@ Views without restoring a second behaviour path:
   swarm selection. Filtering is presentation state over the bounded owner page
   and never changes endpoint, owner, adapter, or target;
 - Scenario rows are compact, searchable disclosures around the existing
-  Scenario Manager catalogue and committed-bundle publication workflow; and
+  Scenario Manager catalogue and committed-bundle publication workflow. The
+  narrow Side Bar keeps one focused scenario at a time and uses an internal
+  `Overview | Files | Inputs` drill-down rather than a second page. `Overview`
+  shows bundle metadata and the existing deployed-summary actions. `Files` uses
+  read-only MCP inspection tools backed by Scenario Manager's bundle workspace
+  API to render the deployed tree and open exact file previews without direct
+  owner calls from the extension. The deployed `scenario.yaml`, schema, and
+  template preview tools return preview text through MCP; bundle-workspace file
+  inspection remains the structured file payload contract. `Inputs` shows exact
+  bundle-local SUT
+  descriptors through MCP plus explicit presence and preview actions for
+  `variables.yaml` and `authProfiles.yaml` when they exist; and
 - Debug retains every canonical action, grouped as Runtime, Messaging,
   Definition, and guarded Maintenance disclosures. Selecting an action still
   invokes the one existing `debugToolCall` mapping and renders one bounded
@@ -1327,6 +1342,11 @@ Views without restoring a second behaviour path:
 `debug_journal` calls without `runId` keep their current behaviour. The MCP
 catalogue remains the single tool/skill source of truth, and the new tool is
 connected to `runtime-diagnostics` like the related journal reads.
+
+The additive read-only scenario inspection surface follows the same rule:
+existing `scenario_list`, `scenario_get`, and deployed-file reads keep their
+current behaviour, while new exact bundle-tree, bundle-file, and bundle-local
+SUT reads remain MCP-first projections of existing Scenario Manager APIs.
 
 ### Debug tab
 
