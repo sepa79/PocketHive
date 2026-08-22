@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.local/schemas/completed-work-evidence-receipt-v1.schema.json",
+  "title": "PocketHive completed-work evidence receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "receiptId",
+    "evidenceId",
+    "kind",
+    "subject",
+    "subjectIdentityRef",
+    "profileDigest",
+    "producer",
+    "execution",
+    "status",
+    "summary",
+    "claims",
+    "artifacts",
+    "observations",
+    "createdAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "receiptId": { "$ref": "#/$defs/sha256" },
+    "evidenceId": { "$ref": "#/$defs/id" },
+    "kind": { "enum": ["MEASURED", "REVIEWER_JUDGMENT"] },
+    "subject": { "enum": ["BASELINE", "CANDIDATE", "DEPLOYMENT", "REVIEW"] },
+    "subjectIdentityRef": { "$ref": "#/$defs/sha256" },
+    "profileDigest": { "$ref": "#/$defs/sha256" },
+    "producer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "version", "digest"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "version": { "type": "string", "minLength": 1, "maxLength": 96 },
+        "digest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "adapter", "entrypoint", "arguments", "officialIngress"],
+      "properties": {
+        "kind": { "enum": ["AUTOMATED_CHECK", "INDEPENDENT_REVIEW"] },
+        "adapter": {
+          "enum": [
+            "GIT_IDENTITY",
+            "NODE_TEST",
+            "DOCS_VALIDATION",
+            "DOCS_IMPACT",
+            "INDEPENDENT_REVIEW",
+            "MANUAL_INSPECTION"
+          ]
+        },
+        "entrypoint": {
+          "type": ["string", "null"],
+          "minLength": 1,
+          "maxLength": 4096,
+          "pattern": "^[^\\u0000-\\u001f\\u007f]+$"
+        },
+        "arguments": {
+          "type": "array",
+          "maxItems": 256,
+          "items": {
+            "type": "string",
+            "maxLength": 8192,
+            "pattern": "^[^\\u0000-\\u001f\\u007f]*$"
+          }
+        },
+        "officialIngress": { "type": "boolean" }
+      }
+    },
+    "status": { "enum": ["PASS", "FAIL", "SKIP", "ERROR", "TIMEOUT"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 8192 },
+    "claims": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateOutcomes",
+        "scoreAttestations",
+        "searchDiscovery",
+        "independentReview",
+        "findingApprovals"
+      ],
+      "properties": {
+        "gateOutcomes": {
+          "type": "array",
+          "maxItems": 32,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["gateId", "status", "checkId", "checkContractDigest", "configurationDigest"],
+            "properties": {
+              "gateId": {
+                "enum": [
+                  "candidate-identity",
+                  "baseline-identity",
+                  "required-score-evidence",
+                  "documentation-validation",
+                  "docs-impact-disposition",
+                  "search-ai-discovery",
+                  "independent-review",
+                  "focused-tests",
+                  "schema-projection-tests"
+                ]
+              },
+              "status": { "enum": ["PASS", "FAIL"] },
+              "checkId": { "$ref": "#/$defs/id" },
+              "checkContractDigest": { "$ref": "#/$defs/sha256" },
+              "configurationDigest": { "$ref": "#/$defs/sha256" }
+            }
+          }
+        },
+        "scoreAttestations": {
+          "type": "array",
+          "maxItems": 24,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["dimensionId", "side", "score"],
+            "properties": {
+              "dimensionId": { "$ref": "#/$defs/id" },
+              "side": { "enum": ["BASELINE", "CURRENT"] },
+              "score": { "$ref": "#/$defs/score" }
+            }
+          }
+        },
+        "searchDiscovery": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["status"],
+          "properties": {
+            "status": {
+              "enum": [
+                "CHANGED_SYNCHRONIZED",
+                "CHANGED_ACTION_REQUIRED",
+                "NO_MATERIAL_CHANGE",
+                "NOT_APPLICABLE",
+                "UNVERIFIED"
+              ]
+            }
+          }
+        },
+        "independentReview": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["reviewerId", "passKind"],
+          "properties": {
+            "reviewerId": { "$ref": "#/$defs/id" },
+            "passKind": { "enum": ["NOVICE", "EXPERT", "UX", "SECURITY"] }
+          }
+        },
+        "findingApprovals": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["findingId", "findingDigest", "kind"],
+            "properties": {
+              "findingId": { "$ref": "#/$defs/id" },
+              "findingDigest": { "$ref": "#/$defs/sha256" },
+              "kind": {
+                "enum": ["ACCEPTED_TRADE_OFF", "RESOLVED_BLOCKER", "RESOLVED_REGRESSION"]
+              }
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "repositoryPath", "sha256", "sizeBytes"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "kind": { "enum": ["JSON", "MARKDOWN", "HTML", "LOG", "SCREENSHOT", "MANIFEST", "OTHER"] },
+          "repositoryPath": { "$ref": "#/$defs/repositoryPath" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "sizeBytes": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "maxItems": 256,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "label", "value", "unit"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "label": { "type": "string", "minLength": 1, "maxLength": 8192 },
+          "value": { "type": ["string", "number", "boolean", "null"] },
+          "unit": { "type": ["string", "null"], "maxLength": 96 }
+        }
+      }
+    },
+    "createdAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "score": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 10,
+      "multipleOf": 0.1
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    }
+  }
+}

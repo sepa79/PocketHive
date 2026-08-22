@@ -1,0 +1,14 @@
+{
+  "rubric": "POCKETHIVE_DOCUMENTATION_V1",
+  "method": "Migrated from the earlier Compare Completed Work documentation review; scores are reviewer judgments supported by the retained legacy validation summary.",
+  "dimensions": [
+    { "id": "orientation", "baseline": 6.2, "current": 8.8 },
+    { "id": "actionability", "baseline": 4.8, "current": 8.6 },
+    { "id": "correctness", "baseline": 6.0, "current": 8.7 },
+    { "id": "safety", "baseline": 4.3, "current": 9.2 },
+    { "id": "navigation-visual-usability", "baseline": 5.8, "current": 8.0 }
+  ],
+  "overall": { "baseline": 5.4, "current": 8.7, "delta": 3.3 },
+  "knownTradeoff": "The quickstart expanded from 51 to 473 lines.",
+  "independentReview": "No identity-bound independent NOVICE, EXPERT, and UX receipt was retained."
+}

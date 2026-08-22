@@ -1,0 +1,519 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.local/schemas/completed-work-review-result-v1.schema.json",
+  "title": "PocketHive completed-work review result v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reviewId",
+    "profileId",
+    "profileDigest",
+    "scoringMethod",
+    "evidenceManifestDigest",
+    "trustControl",
+    "verdictScope",
+    "identityRefs",
+    "docsImpact",
+    "searchDiscovery",
+    "comparisonStatus",
+    "readinessVerdict",
+    "publicationBoundary",
+    "confidence",
+    "submittedConfidence",
+    "freshness",
+    "independentReview",
+    "dimensions",
+    "overall",
+    "submittedOverall",
+    "gates",
+    "blockers",
+    "regressions",
+    "remainingGaps",
+    "evidenceRefs",
+    "generatedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "reviewId": { "$ref": "#/$defs/sha256" },
+    "profileId": {
+      "enum": ["POCKETHIVE_DOCUMENTATION_V1", "POCKETHIVE_DOCS_AUTOMATION_V1"]
+    },
+    "profileDigest": { "$ref": "#/$defs/sha256" },
+    "scoringMethod": { "enum": ["ANCHORED_RUBRIC_V1"] },
+    "evidenceManifestDigest": { "$ref": "#/$defs/sha256" },
+    "trustControl": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "producerRegistryAuthority",
+        "producerRegistryDigest",
+        "toolSourceDigest",
+        "toolDigest",
+        "evaluatorExecutionProvenance"
+      ],
+      "properties": {
+        "producerRegistryAuthority": {
+          "enum": ["CANDIDATE_UNVERIFIED", "OPERATOR_SUPPLIED"]
+        },
+        "producerRegistryDigest": { "$ref": "#/$defs/sha256" },
+        "toolSourceDigest": { "$ref": "#/$defs/sha256" },
+        "toolDigest": { "$ref": "#/$defs/sha256" },
+        "evaluatorExecutionProvenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "status",
+            "method",
+            "executedSourceDigest",
+            "controllerAttestationRef",
+            "statement"
+          ],
+          "properties": {
+            "status": { "enum": ["NOT_VERIFIED"] },
+            "method": { "enum": ["POST_LOAD_FILESYSTEM_SNAPSHOT"] },
+            "executedSourceDigest": { "type": "null" },
+            "controllerAttestationRef": { "type": "null" },
+            "statement": {
+              "const": "The digest covers a stable filesystem snapshot captured after Node loaded evaluator modules; it does not prove the bytes that executed."
+            }
+          }
+        }
+      }
+    },
+    "verdictScope": {
+      "enum": ["LOCAL_CANDIDATE", "MERGE", "PUBLICATION", "DEPLOYMENT"]
+    },
+    "identityRefs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "baselineIdentityId",
+        "candidateIdentityId",
+        "candidateVerificationTarget",
+        "approvedReferenceEvidenceRefs",
+        "deploymentIdentityId"
+      ],
+      "properties": {
+        "baselineIdentityId": { "$ref": "#/$defs/nullableSha256" },
+        "candidateIdentityId": { "$ref": "#/$defs/sha256" },
+        "candidateVerificationTarget": { "enum": ["LIVE_WORKTREE", "GIT_OBJECT"] },
+        "approvedReferenceEvidenceRefs": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "deploymentIdentityId": { "$ref": "#/$defs/nullableSha256" }
+      }
+    },
+    "docsImpact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["authority", "analysisEvidenceRef", "statement"],
+      "properties": {
+        "authority": {
+          "enum": [
+            "NOT_SUPPLIED",
+            "INFORMATIONAL_UNVERIFIED",
+            "PROTECTED_CONTROLLER_VERIFIED"
+          ]
+        },
+        "analysisEvidenceRef": { "$ref": "#/$defs/nullableId" },
+        "statement": { "$ref": "#/$defs/text" }
+      }
+    },
+    "searchDiscovery": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "statement", "evidenceRefs", "actions"],
+      "properties": {
+        "status": {
+          "enum": [
+            "CHANGED_SYNCHRONIZED",
+            "CHANGED_ACTION_REQUIRED",
+            "NO_MATERIAL_CHANGE",
+            "NOT_APPLICABLE",
+            "UNVERIFIED"
+          ]
+        },
+        "statement": { "$ref": "#/$defs/text" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "actions": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        }
+      }
+    },
+    "comparisonStatus": { "$ref": "#/$defs/comparisonStatus" },
+    "readinessVerdict": { "enum": ["READY", "NOT_READY"] },
+    "publicationBoundary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "maximumVerifiedScope",
+        "mergeAuthority",
+        "publicationAuthority",
+        "deploymentAuthority",
+        "authorityEvidenceRefs",
+        "statement"
+      ],
+      "properties": {
+        "maximumVerifiedScope": {
+          "enum": ["LOCAL_CANDIDATE", "MERGE", "PUBLICATION", "DEPLOYMENT"]
+        },
+        "mergeAuthority": { "$ref": "#/$defs/externalAuthorityStatus" },
+        "publicationAuthority": { "$ref": "#/$defs/externalAuthorityStatus" },
+        "deploymentAuthority": { "$ref": "#/$defs/externalAuthorityStatus" },
+        "authorityEvidenceRefs": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "statement": { "$ref": "#/$defs/text" }
+      }
+    },
+    "confidence": { "$ref": "#/$defs/confidence" },
+    "submittedConfidence": { "$ref": "#/$defs/confidence" },
+    "freshness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "evaluatedAt",
+        "oldestEvidenceAt",
+        "maxAgeSeconds",
+        "candidateIdentityMatch",
+        "producerAuthorizationMatch",
+        "toolSourceSnapshotMatch",
+        "profileIdentityMatch"
+      ],
+      "properties": {
+        "status": { "enum": ["FRESH", "STALE", "NOT_VERIFIED"] },
+        "evaluatedAt": { "$ref": "#/$defs/timestamp" },
+        "oldestEvidenceAt": { "$ref": "#/$defs/nullableTimestamp" },
+        "maxAgeSeconds": { "type": "integer", "minimum": 1, "maximum": 604800 },
+        "candidateIdentityMatch": { "$ref": "#/$defs/identityMatchStatus" },
+        "producerAuthorizationMatch": { "$ref": "#/$defs/identityMatchStatus" },
+        "toolSourceSnapshotMatch": { "$ref": "#/$defs/identityMatchStatus" },
+        "profileIdentityMatch": { "$ref": "#/$defs/identityMatchStatus" }
+      }
+    },
+    "independentReview": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "reviewerIds", "passKinds", "evidenceRefs"],
+      "properties": {
+        "status": { "enum": ["VERIFIED", "NOT_VERIFIED"] },
+        "reviewerIds": {
+          "type": "array",
+          "maxItems": 64,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "passKinds": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "enum": ["NOVICE", "EXPERT", "UX", "SECURITY"] }
+        },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" }
+      }
+    },
+    "dimensions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 12,
+      "items": { "$ref": "#/$defs/dimensionResult" }
+    },
+    "overall": { "$ref": "#/$defs/scoreResult" },
+    "submittedOverall": { "$ref": "#/$defs/scoreResult" },
+    "gates": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/gate" }
+    },
+    "blockers": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/blocker" }
+    },
+    "regressions": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/regression" }
+    },
+    "remainingGaps": {
+      "type": "array",
+      "maxItems": 512,
+      "items": { "$ref": "#/$defs/gap" }
+    },
+    "evidenceRefs": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": { "$ref": "#/$defs/evidenceRef" }
+    },
+    "generatedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "$defs": {
+    "confidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["label", "value", "basisEvidenceRefs", "limitations"],
+      "properties": {
+        "label": { "enum": ["HIGH", "MEDIUM", "LOW"] },
+        "value": { "type": "number", "minimum": 0, "maximum": 1 },
+        "basisEvidenceRefs": {
+          "type": "array",
+          "maxItems": 4096,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/id" }
+        },
+        "limitations": {
+          "type": "array",
+          "maxItems": 512,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/text" }
+        }
+      }
+    },
+    "blocker": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "severity", "status", "summary", "evidenceRefs", "unlock"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "status": { "enum": ["OPEN", "RESOLVED"] },
+        "summary": { "$ref": "#/$defs/text" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "unlock": { "$ref": "#/$defs/unlock" }
+      }
+    },
+    "comparisonStatus": {
+      "enum": ["IMPROVED", "DECREASED", "UNCHANGED", "UNVERIFIED"]
+    },
+    "dimensionResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "kind",
+        "direction",
+        "required",
+        "weight",
+        "criterion",
+        "scoreAnchors",
+        "scoreStatus",
+        "submittedBaseline",
+        "submittedCurrent",
+        "submittedDelta",
+        "submittedComparisonStatus",
+        "baseline",
+        "current",
+        "delta",
+        "comparisonStatus",
+        "evidenceRefs",
+        "notes"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "$ref": "#/$defs/text" },
+        "kind": { "enum": ["SCORE"] },
+        "direction": { "enum": ["HIGHER_IS_BETTER"] },
+        "required": { "type": "boolean" },
+        "weight": { "type": "integer", "minimum": 1, "maximum": 100 },
+        "criterion": { "$ref": "#/$defs/text" },
+        "scoreAnchors": {
+          "type": "array",
+          "minItems": 3,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/scoreAnchor" }
+        },
+        "scoreStatus": { "enum": ["VERIFIED", "NOT_VERIFIED"] },
+        "submittedBaseline": { "$ref": "#/$defs/nullableScore" },
+        "submittedCurrent": { "$ref": "#/$defs/nullableScore" },
+        "submittedDelta": { "$ref": "#/$defs/nullableDelta" },
+        "submittedComparisonStatus": { "$ref": "#/$defs/comparisonStatus" },
+        "baseline": { "$ref": "#/$defs/nullableScore" },
+        "current": { "$ref": "#/$defs/nullableScore" },
+        "delta": { "$ref": "#/$defs/nullableDelta" },
+        "comparisonStatus": { "$ref": "#/$defs/comparisonStatus" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "notes": { "$ref": "#/$defs/text" }
+      }
+    },
+    "evidenceRef": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["evidenceId", "receiptDigest", "repositoryPath"],
+      "properties": {
+        "evidenceId": { "$ref": "#/$defs/id" },
+        "receiptDigest": { "$ref": "#/$defs/sha256" },
+        "repositoryPath": { "$ref": "#/$defs/repositoryPath" }
+      }
+    },
+    "scoreAnchor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["score", "description"],
+      "properties": {
+        "score": { "enum": [0, 5, 10] },
+        "description": { "$ref": "#/$defs/text" }
+      }
+    },
+    "evidenceRefIds": {
+      "type": "array",
+      "maxItems": 4096,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "externalAuthorityStatus": {
+      "enum": ["NOT_GRANTED", "EXTERNALLY_VERIFIED"]
+    },
+    "gap": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "dimensionId", "severity", "summary", "evidenceRefs", "unlock"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "dimensionId": { "$ref": "#/$defs/nullableId" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "summary": { "$ref": "#/$defs/text" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "unlock": { "$ref": "#/$defs/unlock" }
+      }
+    },
+    "gate": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "required", "status", "summary", "evidenceRefs", "blockerRefs"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "required": { "type": "boolean" },
+        "status": { "enum": ["VERIFIED", "FAILED", "NOT_VERIFIED"] },
+        "summary": { "$ref": "#/$defs/text" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "blockerRefs": { "$ref": "#/$defs/evidenceRefIds" }
+      }
+    },
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "identityMatchStatus": {
+      "enum": ["MATCH", "MISMATCH", "NOT_VERIFIED"]
+    },
+    "nullableDelta": {
+      "type": ["number", "null"],
+      "minimum": -10,
+      "maximum": 10,
+      "multipleOf": 0.1
+    },
+    "nullableId": {
+      "type": ["string", "null"],
+      "minLength": 2,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "nullableScore": {
+      "type": ["number", "null"],
+      "minimum": 0,
+      "maximum": 10,
+      "multipleOf": 0.1
+    },
+    "nullableSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "nullableTimestamp": {
+      "type": ["string", "null"],
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "dimensionId",
+        "severity",
+        "summary",
+        "evidenceRefs",
+        "disposition"
+      ],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "dimensionId": { "$ref": "#/$defs/nullableId" },
+        "severity": { "$ref": "#/$defs/severity" },
+        "summary": { "$ref": "#/$defs/text" },
+        "evidenceRefs": { "$ref": "#/$defs/evidenceRefIds" },
+        "disposition": { "enum": ["FIXED", "ACCEPTED_TRADE_OFF", "BLOCKER"] }
+      }
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+    },
+    "scoreResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["baseline", "current", "delta", "comparisonStatus"],
+      "properties": {
+        "baseline": { "$ref": "#/$defs/nullableScore" },
+        "current": { "$ref": "#/$defs/nullableScore" },
+        "delta": { "$ref": "#/$defs/nullableDelta" },
+        "comparisonStatus": { "$ref": "#/$defs/comparisonStatus" }
+      }
+    },
+    "severity": {
+      "enum": ["MATERIAL", "NON_MATERIAL"]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 8192
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    },
+    "unlock": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "description", "requiredEvidenceKinds"],
+      "properties": {
+        "kind": {
+          "enum": [
+            "COMMAND",
+            "IMPLEMENTATION",
+            "CONFIGURATION",
+            "HUMAN_APPROVAL",
+            "EXTERNAL_EVIDENCE"
+          ]
+        },
+        "description": { "$ref": "#/$defs/text" },
+        "requiredEvidenceKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2,
+          "uniqueItems": true,
+          "items": { "enum": ["MEASURED", "REVIEWER_JUDGMENT"] }
+        }
+      }
+    }
+  }
+}

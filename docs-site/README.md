@@ -53,49 +53,122 @@ npm run build
 
 ## Verify the rendered documentation
 
-Run the release gate from the repository root:
+Run the release gate through the documentation-validation controller from the
+repository root. Every controller invocation requires an explicit adapter
+manifest; it selects each declared top-level executable from that manifest and
+never switches to another browser or command adapter. This guarantee applies to the controller's declared
+top-level adapters. Child processes still inherit an environment in which npm
+lifecycle scripts and platform packaging may resolve transitive tools from
+`PATH`; lockfiles and declared runtime identities bind that risk, but v2 does
+not claim a closed transitive-tool environment.
+
+The manifest must follow
+[`adapter-manifest.schema.json`](../tools/docs-validation/contracts/adapter-manifest.schema.json).
+Each adapter is either `CONFIGURED` with its canonical absolute path and exact
+file identity, or `NOT_APPLICABLE` with the required `null` fields. The `node`,
+`git`, and `commandShell` controller adapters must be configured; Windows also
+requires `taskkill`. The
+[`adapter-manifest.example.windows-static.json`](../tools/docs-validation/contracts/adapter-manifest.example.windows-static.json)
+file illustrates a Windows static-profile declaration. Its paths, hashes, and
+sizes are machine-specific example values and must be measured again for the
+machine that will run the check.
+
+Use the generator instead of hand-writing hashes and sizes. Every adapter option
+is mandatory exactly once: pass one absolute executable/directory selection or
+the literal `NOT_APPLICABLE`. The generator resolves the selected path to its
+canonical target, captures its exact SHA-256 and size, validates the complete
+manifest, and refuses to overwrite an existing output. This is the Linux static
+profile form used by Pages CI:
 
 ```bash
-npm run test:docs:rendered --prefix docs-site
+node_executable="$(node --print 'process.execPath')"
+"$node_executable" tools/docs-validation/generate-adapter-manifest.mjs \
+  --output "$PWD/.test-results/docs-validation/adapter-manifest.json" \
+  --platform linux \
+  --node "$node_executable" \
+  --git /usr/bin/git \
+  --npm "$(dirname "$node_executable")/npm" \
+  --command-shell /usr/bin/bash \
+  --taskkill NOT_APPLICABLE \
+  --bash /usr/bin/bash \
+  --power-shell /usr/bin/pwsh \
+  --java NOT_APPLICABLE \
+  --maven NOT_APPLICABLE \
+  --local-repository NOT_APPLICABLE \
+  --docker NOT_APPLICABLE \
+  --chromium /usr/bin/google-chrome
 ```
 
-The command builds a fresh site, discovers every generated documentation route,
-and checks each route at desktop and narrow widths. It fails on browser-console
-or page errors, Mermaid render failures, missing workflow pagination,
-horizontal overflow, and broken internal links or fragments.
-
-The check uses an installed Chrome or Edge browser. Set
-`DOCS_TEST_BROWSER_EXECUTABLE` when automatic browser discovery is not suitable.
-To verify an already deployed artifact without rebuilding, set
-`DOCS_TEST_BASE_URL`, for example:
+The paths above are explicit selections for GitHub's Ubuntu runner, not a
+portable search list. Supply the exact paths for a different host. After
+generation, resolve the manifest to an absolute path and pass it on the command
+line. For a POSIX shell:
 
 ```bash
-DOCS_TEST_BASE_URL=http://127.0.0.1:8094/ npm run test:docs:rendered --prefix docs-site
+adapter_manifest="$(realpath .test-results/docs-validation/adapter-manifest.json)"
+npm run test:docs:static -- --adapter-manifest "$adapter_manifest"
+```
+
+For PowerShell:
+
+```powershell
+$adapterManifest = (Resolve-Path '.test-results\docs-validation\adapter-manifest.json').Path
+npm run test:docs:static -- --adapter-manifest $adapterManifest
+```
+
+The static profile builds a fresh site, discovers every generated documentation
+route, and checks each route at desktop and narrow widths. It fails on
+browser-console or page errors, Mermaid render failures, missing workflow
+pagination, horizontal overflow, and broken internal links or fragments.
+
+`npm run test:docs:rendered --prefix docs-site` is an internal stage invoked by
+the controller after it validates the declared Node and Chromium adapters. It is
+not a supported standalone entrypoint.
+
+To verify an already deployed artifact, pass its URL and the same explicit
+manifest to the `deployed` profile. For a POSIX shell:
+
+```bash
+npm run test:docs:deployed -- \
+  --adapter-manifest "$adapter_manifest" \
+  --docs-url https://sepa79.github.io/PocketHive/
 ```
 
 The deployed-artifact form still builds the local source first. The generated
-route set is the explicit expectation checked against `DOCS_TEST_BASE_URL`, so
-a deployed site cannot pass merely because an omitted route was never visited.
+route set is the explicit expectation checked against the supplied `--docs-url`,
+so a deployed site cannot pass merely because an omitted route was never
+visited.
 
 ## Reusable documentation command suite
 
 From the repository root, use the unified profiles:
 
 ```bash
-npm run test:docs:setup   # first run or after a lockfile change
-npm run test:docs:static  # published docs and rendering
-npm run test:docs         # safe local tool checks as well
-npm run test:docs:deployed -- --docs-url https://sepa79.github.io/PocketHive/
+npm run test:docs:setup -- --adapter-manifest "$adapter_manifest"  # first run or after a lockfile change
+npm run test:docs:static -- --adapter-manifest "$adapter_manifest" # published docs and rendering
+npm run test:docs -- --adapter-manifest "$adapter_manifest"        # safe local tool checks as well
+npm run test:docs:deployed -- \
+  --adapter-manifest "$adapter_manifest" \
+  --docs-url https://sepa79.github.io/PocketHive/
 ```
 
-`test:docs` does not start Docker or perform remote writes. It reports missing
-optional prerequisites as `SKIP` and writes no persistent report unless
-`--report <path>` is supplied. Runtime and packaging checks are explicit:
+The npm scripts forward arguments after `--`; omitting `--adapter-manifest` or
+passing a relative path fails before validation begins. `test:docs` does not
+start Docker or perform remote writes. An adapter declared `NOT_APPLICABLE`
+causes a dependent optional stage to report `SKIP`; the controller does not
+search for a replacement. Every profile writes its evidence receipt to the
+fixed `.test-results/docs-validation/*.json` path declared by the corresponding
+npm script. Runtime and packaging checks are explicit:
 
 ```bash
-npm run test:docs:runtime -- --base-url http://localhost:8088
-npm run test:docs:packaging
-npm run test:docs:all -- --base-url http://localhost:8088 --docs-url https://sepa79.github.io/PocketHive/
+npm run test:docs:runtime -- \
+  --adapter-manifest "$adapter_manifest" \
+  --base-url http://localhost:8088
+npm run test:docs:packaging -- --adapter-manifest "$adapter_manifest"
+npm run test:docs:all -- \
+  --adapter-manifest "$adapter_manifest" \
+  --base-url http://localhost:8088 \
+  --docs-url https://sepa79.github.io/PocketHive/
 ```
 
 The `deployed` profile rebuilds the expected route inventory and audits every

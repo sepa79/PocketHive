@@ -1,0 +1,442 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/schemas/docs-impact-map.schema.json",
+  "title": "PocketHive documentation impact policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "repositoryId",
+    "platformProfile",
+    "mode",
+    "trustedToolPaths",
+    "owners",
+    "checks",
+    "publications",
+    "inventoryRules",
+    "components",
+    "impactNodes",
+    "impactEdges",
+    "documents",
+    "documentationRules",
+    "protectionRules"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "repositoryId": {
+      "type": "string",
+      "maxLength": 255,
+      "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$"
+    },
+    "platformProfile": { "enum": ["GITHUB_STRICT_HEAD"] },
+    "mode": { "enum": ["SHADOW"] },
+    "trustedToolPaths": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 128,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/pathPattern" }
+    },
+    "owners": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "githubPrincipals"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "githubPrincipals": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 512,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "maxLength": 255,
+              "pattern": "^@[A-Za-z0-9-]+(?:/[A-Za-z0-9_.-]+)?$"
+            }
+          }
+        }
+      }
+    },
+    "checks": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "stageId", "availability"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "stageId": { "$ref": "#/$defs/id" },
+          "availability": { "enum": ["PLANNED"] }
+        }
+      }
+    },
+    "publications": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "kind",
+          "locatorKind",
+          "contentRoot",
+          "artifactSelector",
+          "producerPaths",
+          "contentInputPaths",
+          "checkIds",
+          "ownerIds"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "kind": {
+            "enum": ["REPOSITORY", "DOCS_SITE", "PACKAGE", "CLIENT_CONFIG"]
+          },
+          "locatorKind": {
+            "enum": [
+              "REPOSITORY_PATH",
+              "DOCUSAURUS_ROUTE",
+              "ARCHIVE_ENTRY",
+              "NPM_PACKAGE_PATH",
+              "VSIX_EXTENSION_PATH",
+              "CLASSPATH_RESOURCE",
+              "IMAGE_FS_PATH",
+              "CLIENT_CONFIG_PATH"
+            ]
+          },
+          "contentRoot": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "artifactSelector": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "producerPaths": {
+            "type": "array",
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/pathPattern" }
+          },
+          "contentInputPaths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/pathPattern" }
+          },
+          "checkIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "inventoryRules": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "classification", "paths"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "classification": {
+            "enum": ["DOCUMENTATION", "MATERIAL", "NO_DOC_IMPACT"]
+          },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/pathPattern" }
+          }
+        }
+      }
+    },
+    "components": {
+      "type": "array",
+      "maxItems": 512,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "ownerIds"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "kind": {
+            "enum": [
+              "APPLICATION",
+              "PLATFORM_SERVICE",
+              "WORKER",
+              "SHARED_CONTRACT",
+              "INFRASTRUCTURE",
+              "TOOL",
+              "DELIVERY",
+              "DOCUMENTATION_SYSTEM"
+            ]
+          },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "impactNodes": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "componentId",
+          "sourcePaths",
+          "evaluateChangeKinds",
+          "noDocumentationChangeKinds"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "componentId": { "$ref": "#/$defs/id" },
+          "sourcePaths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/pathPattern" }
+          },
+          "evaluateChangeKinds": { "$ref": "#/$defs/changeKinds" },
+          "noDocumentationChangeKinds": { "$ref": "#/$defs/changeKindsOrEmpty" }
+        }
+      }
+    },
+    "impactEdges": {
+      "type": "array",
+      "maxItems": 4096,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "fromNodeId", "toNodeId", "relation", "decisions"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "fromNodeId": { "$ref": "#/$defs/id" },
+          "toNodeId": { "$ref": "#/$defs/id" },
+          "relation": {
+            "enum": [
+              "CONTRACT_PROJECTION",
+              "CONTRACT_CONSUMER",
+              "API_CLIENT",
+              "RUNTIME_DEPENDENCY",
+              "DELIVERY_CONSUMER",
+              "OBSERVABILITY_CONSUMER",
+              "PUBLICATION_CONSUMER",
+              "TOOL_ADAPTER"
+            ]
+          },
+          "decisions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 4,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["changeKinds", "propagation"],
+              "properties": {
+                "changeKinds": {
+                  "$ref": "#/$defs/changeKinds"
+                },
+                "propagation": {
+                  "enum": ["STOP", "CONTINUE"]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "documents": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "path",
+          "role",
+          "publicationBindings",
+          "basePresence",
+          "ownerIds"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "path": { "$ref": "#/$defs/repositoryPath" },
+          "role": { "enum": ["CANONICAL", "PROJECTION"] },
+          "publicationBindings": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["publicationId", "artifactPath"],
+              "properties": {
+                "publicationId": { "$ref": "#/$defs/id" },
+                "artifactPath": { "$ref": "#/$defs/artifactPath" }
+              }
+            }
+          },
+          "basePresence": { "const": "MUST_EXIST" },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "documentationRules": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "impactNodeIds",
+          "impactDepths",
+          "sourceChangeKinds",
+          "targets",
+          "checkIds",
+          "ownerIds"
+        ],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "impactNodeIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          },
+          "impactDepths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": { "enum": ["SELF", "DIRECT", "TRANSITIVE"] }
+          },
+          "sourceChangeKinds": { "$ref": "#/$defs/changeKinds" },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["documentId", "acceptedChangeKinds"],
+              "properties": {
+                "documentId": { "$ref": "#/$defs/id" },
+                "acceptedChangeKinds": {
+                  "type": "array",
+                  "const": ["MODIFY"]
+                }
+              }
+            }
+          },
+          "checkIds": {
+            "type": "array",
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    },
+    "protectionRules": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "paths", "ownerIds"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "kind": { "enum": ["CONTROL", "PROTECTED"] },
+          "paths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/pathPattern" }
+          },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "changeKinds": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "enum": ["ADD", "MODIFY", "DELETE", "TYPE_CHANGE"] }
+    },
+    "changeKindsOrEmpty": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "enum": ["ADD", "MODIFY", "DELETE", "TYPE_CHANGE"] }
+    },
+    "id": {
+      "type": "string",
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^*]+$"
+    },
+    "artifactPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:/(?:[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)*)?|(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^*]+)$"
+    },
+    "pathPattern": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^*]+(?:/\\*\\*)?$"
+    }
+  }
+}

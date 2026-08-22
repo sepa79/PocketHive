@@ -6,6 +6,11 @@ on:
     paths:
       - "docs/**"
       - "docs-site/**"
+      - "tools/docs-validation/**"
+      - "tools/docs-impact/**"
+      - "tools/pockethive-mcp/**"
+      - "package.json"
+      - "package-lock.json"
       - ".github/workflows/docs-pages.yml"
   workflow_dispatch:
 
@@ -32,30 +37,54 @@ jobs:
         with:
           node-version: "20"
           cache: npm
-          cache-dependency-path: docs-site/package-lock.json
+          cache-dependency-path: |
+            package-lock.json
+            docs-site/package-lock.json
+            tools/pockethive-mcp/package-lock.json
 
-      - name: Compute Pages URL and base URL
-        run: |
-          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
-          REPO="${GITHUB_REPOSITORY#*/}"
-          URL="https://${OWNER}.github.io"
-          BASE="/"
-          if [[ "${REPO,,}" != "${OWNER}.github.io" ]]; then
-            BASE="/${REPO}/"
-          fi
-          echo "DOCS_URL=${URL}" >> "$GITHUB_ENV"
-          echo "DOCS_BASE_URL=${BASE}" >> "$GITHUB_ENV"
-
-      - name: Install docs dependencies
-        working-directory: docs-site
-        run: npm ci
-
-      - name: Build and verify rendered docs
-        working-directory: docs-site
+      - name: Generate explicit validation adapter manifest
+        id: validation_adapters
+        shell: bash
         env:
-          DOCS_URL: ${{ env.DOCS_URL }}
-          DOCS_BASE_URL: ${{ env.DOCS_BASE_URL }}
-        run: npm run test:docs:rendered
+          ADAPTER_MANIFEST_PATH: ${{ runner.temp }}/pockethive-docs-validation-adapters.json
+        run: |
+          set -euo pipefail
+          NODE_EXECUTABLE="$(node --print 'process.execPath')"
+          NPM_EXECUTABLE="$(dirname "$NODE_EXECUTABLE")/npm"
+          "$NODE_EXECUTABLE" tools/docs-validation/generate-adapter-manifest.mjs \
+            --output "$ADAPTER_MANIFEST_PATH" \
+            --platform linux \
+            --node "$NODE_EXECUTABLE" \
+            --git /usr/bin/git \
+            --npm "$NPM_EXECUTABLE" \
+            --command-shell /usr/bin/bash \
+            --taskkill NOT_APPLICABLE \
+            --bash /usr/bin/bash \
+            --power-shell /usr/bin/pwsh \
+            --java NOT_APPLICABLE \
+            --maven NOT_APPLICABLE \
+            --local-repository NOT_APPLICABLE \
+            --docker NOT_APPLICABLE \
+            --chromium /usr/bin/google-chrome
+          ADAPTER_MANIFEST_CANONICAL="$(realpath "$ADAPTER_MANIFEST_PATH")"
+          echo "manifest=$ADAPTER_MANIFEST_CANONICAL" >> "$GITHUB_OUTPUT"
+          echo "node=$NODE_EXECUTABLE" >> "$GITHUB_OUTPUT"
+
+      - name: Install validation dependencies
+        run: |
+          npm ci
+          npm ci --prefix docs-site
+          npm ci --prefix tools/pockethive-mcp
+
+      - name: Build and verify documentation through the static controller
+        shell: bash
+        run: |
+          "${{ steps.validation_adapters.outputs.node }}" tools/docs-validation/run.mjs \
+            --profile static \
+            --repo "$GITHUB_WORKSPACE" \
+            --report "$RUNNER_TEMP/pockethive-docs-validation-static.json" \
+            --candidate-mode COMMITTED_GIT \
+            --adapter-manifest "${{ steps.validation_adapters.outputs.manifest }}"
 
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5

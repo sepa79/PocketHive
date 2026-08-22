@@ -1,0 +1,319 @@
+{
+  "schemaVersion": 1,
+  "candidateIdentitySchemaVersion": 2,
+  "schemaIds": {
+    "reviewRequest": "https://pockethive.local/schemas/completed-work-review-request-v1.schema.json",
+    "reviewResult": "https://pockethive.local/schemas/completed-work-review-result-v1.schema.json",
+    "evidenceReceipt": "https://pockethive.local/schemas/completed-work-evidence-receipt-v1.schema.json",
+    "candidateIdentity": "https://pockethive.local/schemas/completed-work-candidate-identity-v2.schema.json",
+    "producerRegistry": "https://pockethive.local/schemas/completed-work-producer-registry-v1.schema.json",
+    "decisionReceipt": "https://pockethive.local/schemas/completed-work-advisory-decision-receipt-v1.schema.json"
+  },
+  "profileId": [
+    "POCKETHIVE_DOCUMENTATION_V1",
+    "POCKETHIVE_DOCS_AUTOMATION_V1"
+  ],
+  "profileKind": [
+    "DOCUMENTATION",
+    "DOCS_AUTOMATION"
+  ],
+  "profileKindById": {
+    "POCKETHIVE_DOCUMENTATION_V1": "DOCUMENTATION",
+    "POCKETHIVE_DOCS_AUTOMATION_V1": "DOCS_AUTOMATION"
+  },
+  "profileScopeById": {
+    "POCKETHIVE_DOCUMENTATION_V1": "LOCAL_CANDIDATE",
+    "POCKETHIVE_DOCS_AUTOMATION_V1": "LOCAL_CANDIDATE"
+  },
+  "verdictScope": [
+    "LOCAL_CANDIDATE",
+    "MERGE",
+    "PUBLICATION",
+    "DEPLOYMENT"
+  ],
+  "dimensionKind": [
+    "SCORE"
+  ],
+  "scoreDirection": [
+    "HIGHER_IS_BETTER"
+  ],
+  "scoringMethod": [
+    "ANCHORED_RUBRIC_V1"
+  ],
+  "scoreAnchorValues": [
+    0,
+    5,
+    10
+  ],
+  "evidenceKind": [
+    "MEASURED",
+    "REVIEWER_JUDGMENT"
+  ],
+  "evidenceStatus": [
+    "PASS",
+    "FAIL",
+    "SKIP",
+    "ERROR",
+    "TIMEOUT"
+  ],
+  "gateOutcomeStatus": [
+    "PASS",
+    "FAIL"
+  ],
+  "evidenceSubject": [
+    "BASELINE",
+    "CANDIDATE",
+    "DEPLOYMENT",
+    "REVIEW"
+  ],
+  "executionKind": [
+    "AUTOMATED_CHECK",
+    "INDEPENDENT_REVIEW"
+  ],
+  "evidenceAdapter": [
+    "GIT_IDENTITY",
+    "NODE_TEST",
+    "DOCS_VALIDATION",
+    "DOCS_IMPACT",
+    "INDEPENDENT_REVIEW",
+    "MANUAL_INSPECTION"
+  ],
+  "gateId": [
+    "candidate-identity",
+    "baseline-identity",
+    "required-score-evidence",
+    "documentation-validation",
+    "docs-impact-disposition",
+    "search-ai-discovery",
+    "independent-review",
+    "focused-tests",
+    "schema-projection-tests"
+  ],
+  "requiredGateIdsByProfile": {
+    "POCKETHIVE_DOCUMENTATION_V1": [
+      "candidate-identity",
+      "baseline-identity",
+      "required-score-evidence",
+      "documentation-validation",
+      "docs-impact-disposition",
+      "search-ai-discovery",
+      "independent-review"
+    ],
+    "POCKETHIVE_DOCS_AUTOMATION_V1": [
+      "candidate-identity",
+      "baseline-identity",
+      "required-score-evidence",
+      "focused-tests",
+      "schema-projection-tests",
+      "docs-impact-disposition",
+      "independent-review"
+    ]
+  },
+  "gateEvaluator": [
+    "CANDIDATE_IDENTITY",
+    "BASELINE_IDENTITY",
+    "SCORE_ATTESTATIONS",
+    "EVIDENCE_SET",
+    "DOCS_IMPACT",
+    "SEARCH_DISCOVERY",
+    "INDEPENDENT_REVIEW"
+  ],
+  "gateEvaluatorById": {
+    "candidate-identity": "CANDIDATE_IDENTITY",
+    "baseline-identity": "BASELINE_IDENTITY",
+    "required-score-evidence": "SCORE_ATTESTATIONS",
+    "documentation-validation": "EVIDENCE_SET",
+    "docs-impact-disposition": "DOCS_IMPACT",
+    "search-ai-discovery": "SEARCH_DISCOVERY",
+    "independent-review": "INDEPENDENT_REVIEW",
+    "focused-tests": "EVIDENCE_SET",
+    "schema-projection-tests": "EVIDENCE_SET"
+  },
+  "officialIngressPolicy": [
+    "REQUIRED",
+    "FORBIDDEN",
+    "EITHER_EXPLICIT",
+    "NO_EVIDENCE"
+  ],
+  "scoreSide": [
+    "BASELINE",
+    "CURRENT"
+  ],
+  "findingApprovalKind": [
+    "ACCEPTED_TRADE_OFF",
+    "RESOLVED_BLOCKER",
+    "RESOLVED_REGRESSION"
+  ],
+  "artifactKind": [
+    "JSON",
+    "MARKDOWN",
+    "HTML",
+    "LOG",
+    "SCREENSHOT",
+    "MANIFEST",
+    "OTHER"
+  ],
+  "independentReviewPass": [
+    "NOVICE",
+    "EXPERT",
+    "UX",
+    "SECURITY"
+  ],
+  "independentReviewStatus": [
+    "VERIFIED",
+    "NOT_VERIFIED"
+  ],
+  "scoreVerificationStatus": [
+    "VERIFIED",
+    "NOT_VERIFIED"
+  ],
+  "candidateIdentityMode": [
+    "COMMITTED_GIT",
+    "DIRTY_WORKTREE"
+  ],
+  "candidateVerificationTarget": [
+    "LIVE_WORKTREE",
+    "GIT_OBJECT"
+  ],
+  "gitObjectFormat": [
+    "sha1",
+    "sha256"
+  ],
+  "comparisonStatus": [
+    "IMPROVED",
+    "DECREASED",
+    "UNCHANGED",
+    "UNVERIFIED"
+  ],
+  "readinessVerdict": [
+    "READY",
+    "NOT_READY"
+  ],
+  "gateStatus": [
+    "VERIFIED",
+    "FAILED",
+    "NOT_VERIFIED"
+  ],
+  "blockerSeverity": [
+    "MATERIAL",
+    "NON_MATERIAL"
+  ],
+  "blockerStatus": [
+    "OPEN",
+    "RESOLVED"
+  ],
+  "findingDisposition": [
+    "FIXED",
+    "ACCEPTED_TRADE_OFF",
+    "BLOCKER"
+  ],
+  "unlockKind": [
+    "COMMAND",
+    "IMPLEMENTATION",
+    "CONFIGURATION",
+    "HUMAN_APPROVAL",
+    "EXTERNAL_EVIDENCE"
+  ],
+  "confidenceLabel": [
+    "HIGH",
+    "MEDIUM",
+    "LOW"
+  ],
+  "confidencePolicy": {
+    "submittedBandMinimumByLabel": {
+      "HIGH": 0.85,
+      "MEDIUM": 0.6,
+      "LOW": 0
+    },
+    "canonicalValueByLabel": {
+      "HIGH": 0.9,
+      "MEDIUM": 0.7,
+      "LOW": 0.4
+    }
+  },
+  "freshnessStatus": [
+    "FRESH",
+    "STALE",
+    "NOT_VERIFIED"
+  ],
+  "identityMatchStatus": [
+    "MATCH",
+    "MISMATCH",
+    "NOT_VERIFIED"
+  ],
+  "docsImpactAuthority": [
+    "NOT_SUPPLIED",
+    "INFORMATIONAL_UNVERIFIED",
+    "PROTECTED_CONTROLLER_VERIFIED"
+  ],
+  "discoveryStatus": [
+    "CHANGED_SYNCHRONIZED",
+    "CHANGED_ACTION_REQUIRED",
+    "NO_MATERIAL_CHANGE",
+    "NOT_APPLICABLE",
+    "UNVERIFIED"
+  ],
+  "externalAuthorityStatus": [
+    "NOT_GRANTED",
+    "EXTERNALLY_VERIFIED"
+  ],
+  "producerRegistryAuthority": [
+    "CANDIDATE_UNVERIFIED",
+    "OPERATOR_SUPPLIED"
+  ],
+  "evaluatorExecutionProvenanceStatus": [
+    "NOT_VERIFIED"
+  ],
+  "evaluatorExecutionProvenanceMethod": [
+    "POST_LOAD_FILESYSTEM_SNAPSHOT"
+  ],
+  "evaluatorExecutionProvenanceStatement": "The digest covers a stable filesystem snapshot captured after Node loaded evaluator modules; it does not prove the bytes that executed.",
+  "provenanceBlockerId": "evaluator-execution-provenance-unverified",
+  "canonicalRepositoryPaths": {
+    "toolManifest": "tools/completed-work-review/contracts/tool-files.json",
+    "profiles": "docs/ci/completed-work-review-profiles.json",
+    "profileSchema": "docs/ci/completed-work-review-profiles.schema.json",
+    "candidateIdentitySchema": "tools/completed-work-review/contracts/candidate-identity.schema.json",
+    "evidenceReceiptSchema": "tools/completed-work-review/contracts/evidence-receipt.schema.json",
+    "reviewRequestSchema": "tools/completed-work-review/contracts/review-request.schema.json",
+    "reviewResultSchema": "tools/completed-work-review/contracts/review-result.schema.json",
+    "producerRegistrySchema": "tools/completed-work-review/contracts/producer-registry.schema.json",
+    "decisionReceiptSchema": "tools/completed-work-review/contracts/decision-receipt.schema.json"
+  },
+  "limits": {
+    "maxProfiles": 16,
+    "maxProfileBytes": 1048576,
+    "maxCandidateIdentityBytes": 67108864,
+    "maxGitExecutableBytes": 536870912,
+    "maxGitIntegrityBytes": 67108864,
+    "maxGitReachableObjects": 1000000,
+    "maxNodeExecutableBytes": 536870912,
+    "maxTrackedPatchBytes": 536870912,
+    "maxTrackedFiles": 20000,
+    "maxTrackedFileBytes": 134217728,
+    "maxAggregateTrackedBytes": 536870912,
+    "maxToolFileBytes": 134217728,
+    "maxAggregateToolBytes": 536870912,
+    "maxUntrackedFiles": 20000,
+    "maxUntrackedFileBytes": 134217728,
+    "maxAggregateUntrackedBytes": 536870912,
+    "maxDimensionsPerProfile": 12,
+    "maxGateIdsPerProfile": 32,
+    "maxAllowedAdaptersPerPolicy": 8,
+    "maxScoreAttestationsPerReceipt": 24,
+    "maxGateOutcomesPerReceipt": 32,
+    "maxFindingApprovalsPerReceipt": 64,
+    "maxGateChecksPerProducer": 64,
+    "maxReceiptAuthorizations": 256,
+    "maxIndependentReviewPasses": 8,
+    "maxEvidenceKindsPerDimension": 2,
+    "maxIdentifierCharacters": 96,
+    "maxTextCharacters": 8192,
+    "maxEvidenceReferences": 4096,
+    "maxBlockers": 512,
+    "maxGates": 512,
+    "maxArtifactsPerReceipt": 64,
+    "maxObservationsPerReceipt": 256,
+    "maxCommandArguments": 256
+  }
+}

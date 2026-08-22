@@ -1,0 +1,215 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.local/schemas/completed-work-review-profiles-v1.schema.json",
+  "title": "PocketHive completed-work review profiles v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "profiles"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "profiles": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 16,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "scope",
+          "kind",
+          "description",
+          "scoringMethod",
+          "baselineRequired",
+          "dimensions",
+          "requiredGates",
+          "independentReviewPasses",
+          "freshness"
+        ],
+        "properties": {
+          "id": {
+            "enum": [
+              "POCKETHIVE_DOCUMENTATION_V1",
+              "POCKETHIVE_DOCS_AUTOMATION_V1"
+            ]
+          },
+          "scope": {
+            "enum": ["LOCAL_CANDIDATE", "MERGE", "PUBLICATION", "DEPLOYMENT"]
+          },
+          "kind": {
+            "enum": ["DOCUMENTATION", "DOCS_AUTOMATION"]
+          },
+          "description": { "type": "string", "minLength": 1, "maxLength": 8192 },
+          "scoringMethod": { "enum": ["ANCHORED_RUBRIC_V1"] },
+          "baselineRequired": { "type": "boolean" },
+          "dimensions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 12,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "label",
+                "kind",
+                "direction",
+                "required",
+                "weight",
+                "criterion",
+                "scoreAnchors",
+                "evidenceKinds",
+                "allowedAdapters"
+              ],
+              "properties": {
+                "id": { "$ref": "#/$defs/id" },
+                "label": { "type": "string", "minLength": 1, "maxLength": 8192 },
+                "kind": { "enum": ["SCORE"] },
+                "direction": { "enum": ["HIGHER_IS_BETTER"] },
+                "required": { "type": "boolean" },
+                "weight": { "type": "integer", "minimum": 1, "maximum": 100 },
+                "criterion": { "type": "string", "minLength": 1, "maxLength": 8192 },
+                "scoreAnchors": {
+                  "type": "array",
+                  "minItems": 3,
+                  "maxItems": 3,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["score", "description"],
+                    "properties": {
+                      "score": { "enum": [0, 5, 10] },
+                      "description": { "type": "string", "minLength": 1, "maxLength": 8192 }
+                    }
+                  }
+                },
+                "evidenceKinds": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 2,
+                  "uniqueItems": true,
+                  "items": { "enum": ["MEASURED", "REVIEWER_JUDGMENT"] }
+                },
+                "allowedAdapters": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/evidenceAdapter" }
+                }
+              }
+            }
+          },
+          "requiredGates": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "id",
+                "evaluator",
+                "allowedAdapters",
+                "allowedExecutionKinds",
+                "allowedEvidenceKinds",
+                "officialIngressPolicy"
+              ],
+              "properties": {
+                "id": { "$ref": "#/$defs/gateId" },
+                "evaluator": {
+                  "enum": [
+                    "CANDIDATE_IDENTITY",
+                    "BASELINE_IDENTITY",
+                    "SCORE_ATTESTATIONS",
+                    "EVIDENCE_SET",
+                    "DOCS_IMPACT",
+                    "SEARCH_DISCOVERY",
+                    "INDEPENDENT_REVIEW"
+                  ]
+                },
+                "allowedAdapters": {
+                  "type": "array",
+                  "maxItems": 8,
+                  "uniqueItems": true,
+                  "items": { "$ref": "#/$defs/evidenceAdapter" }
+                },
+                "allowedExecutionKinds": {
+                  "type": "array",
+                  "maxItems": 2,
+                  "uniqueItems": true,
+                  "items": { "enum": ["AUTOMATED_CHECK", "INDEPENDENT_REVIEW"] }
+                },
+                "allowedEvidenceKinds": {
+                  "type": "array",
+                  "maxItems": 2,
+                  "uniqueItems": true,
+                  "items": { "enum": ["MEASURED", "REVIEWER_JUDGMENT"] }
+                },
+                "officialIngressPolicy": {
+                  "enum": ["REQUIRED", "FORBIDDEN", "EITHER_EXPLICIT", "NO_EVIDENCE"]
+                }
+              }
+            }
+          },
+          "independentReviewPasses": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 8,
+            "uniqueItems": true,
+            "items": { "enum": ["NOVICE", "EXPERT", "UX", "SECURITY"] }
+          },
+          "freshness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "maxAgeSeconds",
+              "requireCandidateIdentityMatch",
+              "requireToolDigestMatch",
+              "requireProfileDigestMatch"
+            ],
+            "properties": {
+              "maxAgeSeconds": { "type": "integer", "minimum": 1, "maximum": 604800 },
+              "requireCandidateIdentityMatch": { "const": true },
+              "requireToolDigestMatch": { "const": true },
+              "requireProfileDigestMatch": { "const": true }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "evidenceAdapter": {
+      "enum": [
+        "GIT_IDENTITY",
+        "NODE_TEST",
+        "DOCS_VALIDATION",
+        "DOCS_IMPACT",
+        "INDEPENDENT_REVIEW",
+        "MANUAL_INSPECTION"
+      ]
+    },
+    "gateId": {
+      "enum": [
+        "candidate-identity",
+        "baseline-identity",
+        "required-score-evidence",
+        "documentation-validation",
+        "docs-impact-disposition",
+        "search-ai-discovery",
+        "independent-review",
+        "focused-tests",
+        "schema-projection-tests"
+      ]
+    },
+    "id": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 96,
+      "pattern": "^[a-z][a-z0-9-]*$"
+    }
+  }
+}

@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.local/schemas/completed-work-candidate-identity-v2.schema.json",
+  "title": "PocketHive completed-work candidate identity v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "identityId",
+    "mode",
+    "repositoryId",
+    "repositoryRemote",
+    "gitExecutable",
+    "gitObjectFormat",
+    "baseCommit",
+    "mergeBaseCommit",
+    "candidateCommit",
+    "candidateGitTree",
+    "candidateSnapshotDigest",
+    "trackedPatchDigest",
+    "untrackedFilesManifestDigest",
+    "untrackedFiles",
+    "dirty",
+    "capturedAt"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "identityId": { "$ref": "#/$defs/sha256" },
+    "mode": { "enum": ["COMMITTED_GIT", "DIRTY_WORKTREE"] },
+    "repositoryId": { "type": "string", "minLength": 1, "maxLength": 255 },
+    "repositoryRemote": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "url"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1, "maxLength": 255, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" },
+        "url": { "type": "string", "minLength": 1, "maxLength": 4096, "pattern": "^[^\\u0000-\\u001f\\u007f]+$" }
+      }
+    },
+    "gitExecutable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "sizeBytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1, "maxLength": 32768 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "gitObjectFormat": { "enum": ["sha1", "sha256"] },
+    "baseCommit": { "$ref": "#/$defs/gitObjectId" },
+    "mergeBaseCommit": { "$ref": "#/$defs/gitObjectId" },
+    "candidateCommit": { "$ref": "#/$defs/nullableGitObjectId" },
+    "candidateGitTree": { "$ref": "#/$defs/nullableGitObjectId" },
+    "candidateSnapshotDigest": { "$ref": "#/$defs/sha256" },
+    "trackedPatchDigest": { "$ref": "#/$defs/nullableSha256" },
+    "untrackedFilesManifestDigest": { "$ref": "#/$defs/nullableSha256" },
+    "untrackedFiles": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "sha256", "sizeBytes"],
+        "properties": {
+          "path": { "$ref": "#/$defs/repositoryPath" },
+          "sha256": { "$ref": "#/$defs/sha256" },
+          "sizeBytes": { "type": "integer", "minimum": 0, "maximum": 134217728 }
+        }
+      }
+    },
+    "dirty": { "type": "boolean" },
+    "capturedAt": { "$ref": "#/$defs/timestamp" }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "mode": { "const": "COMMITTED_GIT" },
+        "candidateCommit": { "$ref": "#/$defs/gitObjectId" },
+        "candidateGitTree": { "$ref": "#/$defs/gitObjectId" },
+        "trackedPatchDigest": { "type": "null" },
+        "untrackedFilesManifestDigest": { "type": "null" },
+        "untrackedFiles": { "maxItems": 0 },
+        "dirty": { "const": false }
+      }
+    },
+    {
+      "properties": {
+        "mode": { "const": "DIRTY_WORKTREE" },
+        "candidateCommit": { "type": "null" },
+        "candidateGitTree": { "type": "null" },
+        "trackedPatchDigest": { "$ref": "#/$defs/sha256" },
+        "untrackedFilesManifestDigest": { "$ref": "#/$defs/sha256" },
+        "dirty": { "const": true }
+      }
+    }
+  ],
+  "$defs": {
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "nullableGitObjectId": {
+      "type": ["string", "null"],
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "nullableSha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "repositoryPath": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4096,
+      "pattern": "^(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$)).+$"
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(?:\\.\\d{3})?Z$"
+    }
+  }
+}

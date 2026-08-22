@@ -1,0 +1,45 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "2c9190e7ec025e68ec9fcf6c638ff792984e91629a6065f459d532c7d4cdd48f",
+  "evidenceId": "pr511-legacy-scorecard",
+  "kind": "REVIEWER_JUDGMENT",
+  "subject": "REVIEW",
+  "subjectIdentityRef": "a60995f60562f57eca660b0cba328c7f783eb0b9b2f1390aab3e3531f0a6f29c",
+  "profileDigest": "d50f18ebc7a6866dcdf8fcc268608cb4c89c0873b2343ba87d1e07a80b4497d6",
+  "producer": {
+    "id": "legacy-scorecard-migration",
+    "version": "legacy-unverified",
+    "digest": "2b99b7cc18e4f12589aa7f7e44c027ffedde2383f4e27ff8346a521b42b8ec92"
+  },
+  "execution": {
+    "kind": "AUTOMATED_CHECK",
+    "adapter": "MANUAL_INSPECTION",
+    "entrypoint": null,
+    "arguments": [],
+    "officialIngress": false
+  },
+  "status": "PASS",
+  "summary": "Migrated five-dimension documentation scorecard; it is reviewer judgment and is not an identity-bound independent NOVICE, EXPERT, and UX review receipt.",
+  "claims": {
+    "gateOutcomes": [],
+    "scoreAttestations": [],
+    "searchDiscovery": null,
+    "independentReview": null,
+    "findingApprovals": []
+  },
+  "artifacts": [
+    {
+      "id": "legacy-scorecard",
+      "kind": "JSON",
+      "repositoryPath": "tools/completed-work-review/fixtures/pr-511/legacy-scorecard.json",
+      "sha256": "2b99b7cc18e4f12589aa7f7e44c027ffedde2383f4e27ff8346a521b42b8ec92",
+      "sizeBytes": 793
+    }
+  ],
+  "observations": [
+    { "id": "baseline-overall", "label": "Displayed baseline Overall", "value": 5.4, "unit": "score" },
+    { "id": "candidate-overall", "label": "Displayed candidate Overall", "value": 8.7, "unit": "score" },
+    { "id": "displayed-delta", "label": "Displayed Overall delta", "value": 3.3, "unit": "score" }
+  ],
+  "createdAt": "2026-08-17T12:00:00.000Z"
+}

@@ -1,0 +1,162 @@
+{
+  "actionType": [
+    "DOCUMENTATION",
+    "PUBLICATION_VALIDATION",
+    "GOVERNANCE_REVIEW"
+  ],
+  "actionTypeByCollection": {
+    "documentationObligations": "DOCUMENTATION",
+    "publicationValidations": "PUBLICATION_VALIDATION",
+    "governanceReviews": "GOVERNANCE_REVIEW"
+  },
+  "candidateState": [
+    "CANDIDATE_CHANGE_PRESENT",
+    "ACTION_REQUIRED"
+  ],
+  "changeKind": [
+    "ADD",
+    "MODIFY",
+    "DELETE",
+    "TYPE_CHANGE"
+  ],
+  "changeKindByStatus": {
+    "A": "ADD",
+    "D": "DELETE",
+    "M": "MODIFY",
+    "T": "TYPE_CHANGE"
+  },
+  "changeStatus": [
+    "A",
+    "D",
+    "M",
+    "T",
+    "U",
+    "X",
+    "B"
+  ],
+  "classification": [
+    "NO_ACTION_REQUIRED",
+    "ACTION_REQUIRED",
+    "POLICY_ERROR"
+  ],
+  "componentKind": [
+    "APPLICATION",
+    "PLATFORM_SERVICE",
+    "WORKER",
+    "SHARED_CONTRACT",
+    "INFRASTRUCTURE",
+    "TOOL",
+    "DELIVERY",
+    "DOCUMENTATION_SYSTEM"
+  ],
+  "documentBasePresence": [
+    "MUST_EXIST"
+  ],
+  "documentRole": [
+    "CANONICAL",
+    "PROJECTION"
+  ],
+  "inventoryClassification": [
+    "DOCUMENTATION",
+    "MATERIAL",
+    "NO_DOC_IMPACT"
+  ],
+  "impactRelation": [
+    "CONTRACT_PROJECTION",
+    "CONTRACT_CONSUMER",
+    "API_CLIENT",
+    "RUNTIME_DEPENDENCY",
+    "DELIVERY_CONSUMER",
+    "OBSERVABILITY_CONSUMER",
+    "PUBLICATION_CONSUMER",
+    "TOOL_ADAPTER"
+  ],
+  "impactDepth": [
+    "SELF",
+    "DIRECT",
+    "TRANSITIVE"
+  ],
+  "limits": {
+    "gitCommandTimeoutMs": 30000,
+    "gitMaxBufferBytes": 134217728,
+    "maxAnalysisBytes": 16777216,
+    "maxChanges": 20000,
+    "maxChecks": 512,
+    "maxComponents": 512,
+    "maxDocumentationRules": 2048,
+    "maxDocuments": 2048,
+    "maxImpactEdgeDecisions": 4,
+    "maxImpactEdges": 4096,
+    "maxImpactNodes": 2048,
+    "maxGithubPrincipalCharacters": 255,
+    "maxGitErrorDetailBytes": 8192,
+    "maxIdentifierCharacters": 96,
+    "maxInventoryRules": 4096,
+    "maxOwners": 512,
+    "maxPathPatternsPerRule": 2048,
+    "maxPathSegmentUtf8Bytes": 255,
+    "maxPathUtf8Bytes": 4096,
+    "maxPublicationValidations": 2048,
+    "maxPolicyBytes": 1048576,
+    "maxPolicyErrorBytes": 1048576,
+    "maxPolicyErrorDetailBytes": 262144,
+    "maxPolicyErrorDetailBytesPerError": 8192,
+    "maxPolicyErrors": 256,
+    "maxProtectionRules": 2048,
+    "maxReferencesPerRule": 2048,
+    "maxRepositoryIdCharacters": 255,
+    "maxTraversalDepth": 64,
+    "maxTreeEntries": 100000,
+    "maxTotalImpactRoutes": 10000,
+    "maxTotalGovernanceMatches": 10000,
+    "maxTotalTriggers": 10000,
+    "maxTotalPublicationTriggers": 10000,
+    "maxTotalObligationTargets": 2000,
+    "maxTrustedToolPaths": 128,
+    "maxYamlAliases": 25
+  },
+  "mode": [
+    "SHADOW"
+  ],
+  "platformProfile": [
+    "GITHUB_STRICT_HEAD"
+  ],
+  "publication": [
+    "REPOSITORY",
+    "DOCS_SITE",
+    "PACKAGE",
+    "CLIENT_CONFIG"
+  ],
+  "publicationLocator": [
+    "REPOSITORY_PATH",
+    "DOCUSAURUS_ROUTE",
+    "ARCHIVE_ENTRY",
+    "NPM_PACKAGE_PATH",
+    "VSIX_EXTENSION_PATH",
+    "CLASSPATH_RESOURCE",
+    "IMAGE_FS_PATH",
+    "CLIENT_CONFIG_PATH"
+  ],
+  "publicationTriggerKind": [
+    "CONTENT_INPUT",
+    "PRODUCER_INPUT",
+    "DOCUMENT_BINDING"
+  ],
+  "propagationDecision": [
+    "STOP",
+    "CONTINUE"
+  ],
+  "protectionKind": [
+    "CONTROL",
+    "PROTECTED"
+  ],
+  "checkAvailability": [
+    "PLANNED"
+  ],
+  "supportedChangeStatus": [
+    "A",
+    "D",
+    "M",
+    "T"
+  ]
+}

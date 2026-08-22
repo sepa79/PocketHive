@@ -1,0 +1,44 @@
+{
+  "sourceEvidenceCreatedAt": "2026-08-06T09:30:46.7430092Z",
+  "sourceCandidateTree": "fb10512d4657fbb21e8fed58de67a73e7a8c2e10",
+  "legacyIntegrityManifestSha256": "f1b866d6cb6aa8e9d299bea5c5af100b47c9e8dc1c22c2bb1d740be92d7f171f",
+  "legacyIntegrityManifestFiles": 545,
+  "profile": "all",
+  "startedAt": "2026-08-06T09:21:10.724Z",
+  "completedAt": "2026-08-06T09:27:50.715Z",
+  "platform": "linux/x64",
+  "node": "v22.23.2",
+  "officialIngress": "http://localhost:8088",
+  "renderedDocsUrl": "http://127.0.0.1:8094/PocketHive/",
+  "summary": {
+    "passed": 16,
+    "failed": 0,
+    "skipped": 0
+  },
+  "sourceSemanticChecks": 68,
+  "runtime": "16 services running; all declared health checks healthy; ingress ok",
+  "legacyLimitations": [
+    "The retained validation predates the v1 evidence-receipt producer.",
+    "The source evidence binds the candidate Git tree, not the later PR commit identity.",
+    "The legacy tool, policy, profile, and per-report candidate bindings are unavailable.",
+    "The retained integrity digest is present, but its 545-file manifest is not duplicated in this migration fixture."
+  ],
+  "checks": [
+    "published content examples and shell syntax",
+    "documentation TypeScript",
+    "all rendered routes at desktop and mobile widths",
+    "GitHub Pages target routes and assets",
+    "documented MCP tool contracts",
+    "Compose service and bind-mount documentation",
+    "PocketHive MCP unit suite",
+    "PocketHive MCP doctor",
+    "scenario migrator unit suite",
+    "documented scenario migration check",
+    "scenario templating Maven build",
+    "documented scenario templating shell command",
+    "Docker Compose configuration",
+    "deployed documentation routes and links",
+    "official ingress health and home",
+    "platform deployment packaging command"
+  ]
+}

@@ -55,6 +55,7 @@ safety boundaries; this table is only the entry-point status summary.
 | Shared terminology | [Glossary](GLOSSARY.md) |
 | System ownership and traceability | [Architecture](ARCHITECTURE.md) |
 | Repository and implementation entry points | [Project map](PROJECT_MAP.md) |
+| Completed-work comparison and readiness | [Completed-work review](architecture/completed-work-review.md) |
 | Lifecycle, signals, and configuration propagation | [System workflows](guides/concepts/system-workflows.md) |
 | Scenario topology | [Scenario contract](scenarios/SCENARIO_CONTRACT.md) |
 | Orchestrator HTTP API | [Orchestrator REST](ORCHESTRATOR-REST.md) |

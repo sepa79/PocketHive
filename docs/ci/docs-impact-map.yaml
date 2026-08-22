@@ -1,0 +1,3818 @@
+schemaVersion: 2
+repositoryId: sepa79/PocketHive
+platformProfile: GITHUB_STRICT_HEAD
+mode: SHADOW
+
+# The classifier, schemas, canonical values, and dependency manifests are read
+# only from the protected base. Candidate copies are data, never authority.
+trustedToolPaths:
+  - docs/ci/docs-impact-map.schema.json
+  - package-lock.json
+  - package.json
+  - tools/docs-impact/**
+
+# Stable roles are separate from their current GitHub identity resolution.
+# They all resolve to the sole current CODEOWNER, so this registry does not
+# prove reviewer independence and cannot support required enforcement.
+owners:
+  - id: repository-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: architecture-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: documentation-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: platform-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: worker-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: ui-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: integration-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: deployment-maintainers
+    githubPrincipals: ["@sepa79"]
+  - id: security-maintainers
+    githubPrincipals: ["@sepa79"]
+
+# PLANNED checks are labels for later isolated validation. They cannot satisfy
+# an obligation or contribute to readiness in AD-01.
+checks:
+  - id: auth-contract
+    stageId: auth-contract
+    availability: PLANNED
+  - id: control-plane-contract
+    stageId: control-plane-contract
+    availability: PLANNED
+  - id: deployment-contract
+    stageId: deployment-contract
+    availability: PLANNED
+  - id: docs-site-contract
+    stageId: docs-site-contract
+    availability: PLANNED
+  - id: lifecycle-contract
+    stageId: lifecycle-contract
+    availability: PLANNED
+  - id: mcp-contract
+    stageId: mcp-contract
+    availability: PLANNED
+  - id: observability-contract
+    stageId: observability-contract
+    availability: PLANNED
+  - id: scenario-contract
+    stageId: scenario-contract
+    availability: PLANNED
+  - id: worker-contract
+    stageId: worker-contract
+    availability: PLANNED
+  - id: repository-document-contract
+    stageId: repository-document-contract
+    availability: PLANNED
+  - id: deployment-posix-package-contract
+    stageId: deployment-posix-package-contract
+    availability: PLANNED
+  - id: deployment-windows-package-contract
+    stageId: deployment-windows-package-contract
+    availability: PLANNED
+  - id: mcp-package-contract
+    stageId: mcp-package-contract
+    availability: PLANNED
+  - id: vscode-package-contract
+    stageId: vscode-package-contract
+    availability: PLANNED
+  - id: tcp-mock-jar-docs-contract
+    stageId: tcp-mock-jar-docs-contract
+    availability: PLANNED
+  - id: tcp-mock-image-docs-contract
+    stageId: tcp-mock-image-docs-contract
+    availability: PLANNED
+  - id: ui-image-docs-contract
+    stageId: ui-image-docs-contract
+    availability: PLANNED
+
+# Publication identities distinguish independently verifiable destinations.
+# Bindings below name the exact route or artifact-relative path per document.
+publications:
+  - id: repository
+    kind: REPOSITORY
+    locatorKind: REPOSITORY_PATH
+    contentRoot: /
+    artifactSelector: "git-tree:{headSha}"
+    producerPaths: []
+    contentInputPaths:
+      - .amazonq/ai/**
+      - .amazonq/rules/**
+      - .github/pull_request_template.md
+      - AGENTS.md
+      - CHANGELOG.md
+      - CONTRIBUTING.md
+      - DEPLOYMENT_PACKAGE.md
+      - docs/**
+      - docs-site/README.md
+      - README.md
+      - scenarios/bundles/db-query-postgres-smoke/test-postgres/README.md
+      - scenarios/bundles/http-sequence-six-auth-flow/CHANGELOG.md
+      - scenarios/bundles/http-sequence-six-auth-flow/FLOW_DOCUMENT.md
+      - scenarios/bundles/http-sequence-six-auth-flow/README.md
+      - scenarios/bundles/http-sequence-six-auth-wizard-proof/CHANGELOG.md
+      - scenarios/bundles/http-sequence-six-auth-wizard-proof/FLOW_DOCUMENT.md
+      - scenarios/bundles/http-sequence-six-auth-wizard-proof/README.md
+      - scenarios/bundles/webauth-balance-redis/README.md
+      - scenarios/bundles/webauth-loop-redis-minimal/README.md
+      - scenarios/bundles/webauth-redemption-redis/README.md
+      - scenarios/bundles/webauth-topup-redis/README.md
+      - scenarios/e2e/webauth-loop-redis-5-customers/README.md
+      - tcp-mock-server/README.md
+      - tcp-mock-server/docs/**
+      - tools/pockethive-mcp/CHANGELOG.md
+      - tools/pockethive-mcp/fixtures/scenario-regression/README.md
+      - tools/pockethive-mcp/README.md
+      - vscode-pockethive/README.md
+      - wiremock/README.md
+    checkIds: [repository-document-contract]
+    ownerIds: [repository-maintainers]
+  - id: docs-site
+    kind: DOCS_SITE
+    locatorKind: DOCUSAURUS_ROUTE
+    contentRoot: /
+    artifactSelector: docs-site/build
+    producerPaths:
+      - .github/workflows/docs-pages.yml
+      - docs-site/docusaurus.config.ts
+      - docs-site/package-lock.json
+      - docs-site/package.json
+      - docs-site/scripts/**
+      - docs-site/sidebars.ts
+      - docs-site/tsconfig.json
+    contentInputPaths:
+      - docs-site/src/**
+      - docs-site/static/**
+      - docs/guides/**
+      - docs/architecture/**
+      - docs/scenarios/**
+      - docs/sdk/**
+      - docs/control-plane/worker-guide.md
+      - docs/ARCHITECTURE.md
+      - docs/USAGE.md
+      - docs/ORCHESTRATOR-REST.md
+      - docs/HIVEFORGE.md
+      - docs/PROJECT_MAP.md
+      - docs/GLOSSARY.md
+      - docs/UPGRADING.md
+      - docs/observability.md
+      - docs/correlation-vs-idempotency.md
+    checkIds: [docs-site-contract]
+    ownerIds: [documentation-maintainers]
+  - id: deployment-archive-posix
+    kind: PACKAGE
+    locatorKind: ARCHIVE_ENTRY
+    contentRoot: pockethive
+    artifactSelector: pockethive-deployment-*.tar.gz
+    producerPaths: [package-deployment.sh, pom.xml]
+    contentInputPaths:
+      - .env.example
+      - LICENSE
+      - README.md
+      - docker-compose.yml
+      - docs/GHCR_SETUP.md
+      - docs/USAGE.md
+      - grafana/**
+      - rabbitmq/**
+      - scenario-manager-service/capabilities/**
+      - scenario-manager-service/network/network-profiles.yaml
+      - scenario-manager-service/sut/sut-environments.yaml
+      - scenarios/**
+      - wiremock/README.md
+      - wiremock/__files/**
+      - wiremock/mappings/**
+    checkIds: [deployment-posix-package-contract]
+    ownerIds: [deployment-maintainers]
+  - id: deployment-archive-windows
+    kind: PACKAGE
+    locatorKind: ARCHIVE_ENTRY
+    contentRoot: pockethive
+    artifactSelector: pockethive-deployment-*.zip
+    producerPaths: [package-deployment.bat, pom.xml]
+    contentInputPaths:
+      - .env.example
+      - LICENSE
+      - README.md
+      - docker-compose.yml
+      - docs/GHCR_SETUP.md
+      - docs/HIVEFORGE.md
+      - docs/USAGE.md
+      - grafana/dashboards/**
+      - grafana/provisioning/dashboards/**
+      - grafana/provisioning/datasources/**
+      - scenario-manager-service/capabilities/**
+      - scenario-manager-service/scenarios/**
+      - wiremock/README.md
+      - wiremock/__files/**
+      - wiremock/mappings/**
+    checkIds: [deployment-windows-package-contract]
+    ownerIds: [deployment-maintainers]
+  - id: pockethive-mcp-npm
+    kind: PACKAGE
+    locatorKind: NPM_PACKAGE_PATH
+    contentRoot: package
+    artifactSelector: tools/pockethive-mcp/pockethive-mcp-server-*.tgz
+    producerPaths:
+      - scenario-manager-service/capabilities/**
+      - scripts/generate-scenario-config-defaults.mjs
+      - tools/pockethive-mcp/package.json
+    contentInputPaths:
+      - tools/pockethive-mcp/CHANGELOG.md
+      - tools/pockethive-mcp/README.md
+      - tools/pockethive-mcp/config-update.mjs
+      - tools/pockethive-mcp/doctor.mjs
+      - tools/pockethive-mcp/fixtures/**
+      - tools/pockethive-mcp/generated/**
+      - tools/pockethive-mcp/poc-runner.mjs
+      - tools/pockethive-mcp/runtime-tools.mjs
+      - tools/pockethive-mcp/scenario-regression-acceptance.mjs
+      - tools/pockethive-mcp/server.mjs
+      - tools/pockethive-mcp/setup.cjs
+      - tools/pockethive-mcp/smoke-test.mjs
+      - tools/pockethive-mcp/start.cjs
+      - tools/pockethive-mcp/wizard-acceptance.mjs
+      - tools/pockethive-mcp/workflow-acceptance.mjs
+      - tools/pockethive-mcp/workflow-agentic-evals.mjs
+      - tools/pockethive-mcp/workflow-tools.mjs
+    checkIds: [mcp-package-contract]
+    ownerIds: [integration-maintainers]
+  - id: pockethive-vscode-vsix
+    kind: PACKAGE
+    locatorKind: VSIX_EXTENSION_PATH
+    contentRoot: extension
+    artifactSelector: vscode-pockethive/pockethive-vscode-*.vsix
+    producerPaths:
+      - docs/spec/swarm-lifecycle.schema.json
+      - scripts/generate-swarm-lifecycle-contract.mjs
+      - vscode-pockethive/.vscodeignore
+      - vscode-pockethive/package.json
+    contentInputPaths:
+      - vscode-pockethive/LICENSE
+      - vscode-pockethive/README.md
+      - vscode-pockethive/init.sh
+      - packages/swarm-lifecycle-contract/**
+      - vscode-pockethive/package-lock.json
+      - vscode-pockethive/package.json
+      - vscode-pockethive/resources/**
+      - vscode-pockethive/scripts/**
+      - vscode-pockethive/src/**
+      - vscode-pockethive/tsconfig.json
+    checkIds: [vscode-package-contract]
+    ownerIds: [integration-maintainers]
+  - id: tcp-mock-jar-docs
+    kind: PACKAGE
+    locatorKind: CLASSPATH_RESOURCE
+    contentRoot: BOOT-INF/classes
+    artifactSelector: tcp-mock-server/target/tcp-mock-server-*.jar
+    producerPaths: [pom.xml, tcp-mock-server/pom.xml]
+    contentInputPaths: [tcp-mock-server/docs/**, tcp-mock-server/src/**]
+    checkIds: [tcp-mock-jar-docs-contract]
+    ownerIds: [integration-maintainers]
+  - id: tcp-mock-image-docs
+    kind: PACKAGE
+    locatorKind: IMAGE_FS_PATH
+    contentRoot: /
+    artifactSelector: "ghcr.io/{repositoryOwner}/pockethive/tcp-mock-server:{version}"
+    producerPaths: [pom.xml, tcp-mock-server/Dockerfile.runtime, .github/workflows/publish-images.yml]
+    contentInputPaths:
+      - tcp-mock-server/docs/**
+      - tcp-mock-server/pom.xml
+      - tcp-mock-server/src/**
+    checkIds: [tcp-mock-image-docs-contract]
+    ownerIds: [integration-maintainers, deployment-maintainers]
+  - id: ui-image-docs
+    kind: PACKAGE
+    locatorKind: IMAGE_FS_PATH
+    contentRoot: /
+    artifactSelector: "ghcr.io/{repositoryOwner}/pockethive/ui:{version}"
+    producerPaths: [pom.xml, ui-v2/Dockerfile, .github/workflows/publish-images.yml]
+    contentInputPaths:
+      - archive/legacy-ui/assets/**
+      - CHANGELOG.md
+      - docs/**
+      - docs-site/**
+      - packages/swarm-lifecycle-contract/**
+      - README.md
+      - ui-v2/index.html
+      - ui-v2/nginx.conf
+      - ui-v2/package-lock.json
+      - ui-v2/package.json
+      - ui-v2/public/**
+      - ui-v2/scripts/**
+      - ui-v2/src/**
+      - ui-v2/tsconfig.app.json
+      - ui-v2/tsconfig.json
+      - ui-v2/tsconfig.node.json
+      - ui-v2/vite.config.ts
+    checkIds: [ui-image-docs-contract]
+    ownerIds: [ui-maintainers, deployment-maintainers, documentation-maintainers]
+
+# Inventory answers only what kind of repository artifact a path is. It does
+# not own component identity, documentation propagation, or governance.
+inventoryRules:
+  - id: no-doc-impact
+    classification: NO_DOC_IMPACT
+    paths:
+      - .editorconfig
+      - .github/CODEOWNERS
+      - .gitignore
+      - archive/**
+      - e2e-tests/**
+      - git-clean-branches.sh
+      - LICENSE
+      - tcp-mock-server/.gitignore
+      - vscode-pockethive/.gitignore
+      - vscode-pockethive/LICENSE
+
+  - id: documentation
+    classification: DOCUMENTATION
+    paths:
+      - .amazonq/ai/**
+      - .amazonq/rules/**
+      - .github/pull_request_template.md
+      - AGENTS.md
+      - CHANGELOG.md
+      - CONTRIBUTING.md
+      - DEPLOYMENT_PACKAGE.md
+      - docs/**
+      - README.md
+      - tcp-mock-server/README.md
+      - tcp-mock-server/docs/**
+      - tools/pockethive-mcp/CHANGELOG.md
+      - tools/pockethive-mcp/README.md
+      - vscode-pockethive/README.md
+      - wiremock/README.md
+
+  - id: material
+    classification: MATERIAL
+    paths:
+      - .amazonq/agents/default.json
+      - .amazonq/mcp.json
+      - .amazonq/mcp.json.dist
+      - .codex/config.toml
+      - .cursor/mcp.json
+      - .devcontainer/devcontainer.json
+      - .dockerignore
+      - .env.example
+      - .env.ghcr
+      - .github/workflows/**
+      - .mvn/**
+      - .vscode/mcp.json
+      - .windsurf/mcp.json
+      - auth-service/**
+      - build-hive.sh
+      - clearing-export-service/**
+      - clickhouse/**
+      - common/auth-client/**
+      - common/auth-contracts/**
+      - common/control-plane-core/**
+      - common/control-plane-filesystem/**
+      - common/control-plane-spring/**
+      - common/docker-client/**
+      - common/journal-postgres/**
+      - common/manager-sdk/**
+      - common/request-templates/**
+      - common/scenario-validation-contracts/**
+      - common/sink-clickhouse/**
+      - common/swarm-model/**
+      - common/templating/**
+      - common/topology-core/**
+      - common/worker-sdk/**
+      - commitlint.config.js
+      - db-query-service/**
+      - deploy/**
+      - docker/**
+      - docker-compose.yml
+      - Dockerfile.bees.local
+      - docs-site/**
+      - eslint.config.cjs
+      - generator-service/**
+      - grafana/**
+      - hiveforge.yaml
+      - http-sequence-service/**
+      - mcp.json
+      - moderator-service/**
+      - mvnw
+      - mvnw.cmd
+      - network-proxy-haproxy/**
+      - network-proxy-manager-service/**
+      - observability/**
+      - orchestrator-service/**
+      - package-deployment.bat
+      - package-deployment.sh
+      - package-lock.json
+      - package.json
+      - packages/swarm-lifecycle-contract/**
+      - pom.xml
+      - postprocessor-service/**
+      - processor-service/**
+      - rabbitmq/**
+      - request-builder-service/**
+      - scenario-manager-service/**
+      - scenarios/**
+      - scripts/bootstrap-ssot.test.mjs
+      - scripts/generate-scenario-config-defaults.mjs
+      - scripts/generate-swarm-lifecycle-contract.mjs
+      - scripts/scenario-config-defaults.test.mjs
+      - setup-wsl.sh
+      - start-e2e-tests.bat
+      - start-e2e-tests.sh
+      - start-mcp.bat
+      - start-mcp.sh
+      - swarm-controller-service/**
+      - tcp-mock-server/.dockerignore
+      - tcp-mock-server/Dockerfile
+      - tcp-mock-server/Dockerfile.runtime
+      - tcp-mock-server/__files/**
+      - tcp-mock-server/build-docker.sh
+      - tcp-mock-server/mappings/**
+      - tcp-mock-server/pom.xml
+      - tcp-mock-server/scenarios-state.json
+      - tcp-mock-server/src/**
+      - tcp-mock-server/sync-mappings.sh
+      - tools/auth-proving/**
+      - tools/control-traffic-viewer/**
+      - tools/diag/**
+      - tools/docker/**
+      - tools/completed-work-review/**
+      - tools/docs-impact/**
+      - tools/docs-validation/**
+      - tools/hiveforge-contract-check.sh
+      - tools/mcp-orchestrator-debug/**
+      - tools/pockethive-mcp/config-update.mjs
+      - tools/pockethive-mcp/config-update.test.mjs
+      - tools/pockethive-mcp/docker-compose.yml
+      - tools/pockethive-mcp/docs-contract-audit.mjs
+      - tools/pockethive-mcp/doctor.mjs
+      - tools/pockethive-mcp/doctor.test.mjs
+      - tools/pockethive-mcp/fixtures/**
+      - tools/pockethive-mcp/generated/**
+      - tools/pockethive-mcp/package-lock.json
+      - tools/pockethive-mcp/package.json
+      - tools/pockethive-mcp/poc-runner.mjs
+      - tools/pockethive-mcp/runtime-tools.mjs
+      - tools/pockethive-mcp/runtime-tools.test.mjs
+      - tools/pockethive-mcp/scenario-regression-acceptance.mjs
+      - tools/pockethive-mcp/schema.test.mjs
+      - tools/pockethive-mcp/server.mjs
+      - tools/pockethive-mcp/setup.cjs
+      - tools/pockethive-mcp/smoke-test.mjs
+      - tools/pockethive-mcp/start.cjs
+      - tools/pockethive-mcp/target-input.test.mjs
+      - tools/pockethive-mcp/tools-list-schema.test.mjs
+      - tools/pockethive-mcp/wizard-acceptance.mjs
+      - tools/pockethive-mcp/workflow-acceptance.mjs
+      - tools/pockethive-mcp/workflow-agentic-evals.mjs
+      - tools/pockethive-mcp/workflow-invariants.test.mjs
+      - tools/pockethive-mcp/workflow-tools.mjs
+      - tools/pockethive-mcp/workflow.test.mjs
+      - tools/scenario-config-migrate/**
+      - tools/scenario-templating-check/**
+      - tools/tx-outcome-storage/**
+      - trigger-service/**
+      - ui-v2/.gitignore
+      - ui-v2/Dockerfile
+      - ui-v2/eslint.config.js
+      - ui-v2/index.html
+      - ui-v2/nginx.conf
+      - ui-v2/package-lock.json
+      - ui-v2/package.json
+      - ui-v2/public/**
+      - ui-v2/scripts/**
+      - ui-v2/src/**
+      - ui-v2/tsconfig.app.json
+      - ui-v2/tsconfig.json
+      - ui-v2/tsconfig.node.json
+      - ui-v2/vite.config.ts
+      - vitest.config.mjs
+      - vscode-pockethive/.vscode/**
+      - vscode-pockethive/.vscodeignore
+      - vscode-pockethive/init.sh
+      - vscode-pockethive/package-lock.json
+      - vscode-pockethive/package.json
+      - vscode-pockethive/resources/**
+      - vscode-pockethive/scripts/**
+      - vscode-pockethive/src/**
+      - vscode-pockethive/tsconfig.json
+      - wiremock/__files/**
+      - wiremock/mappings/**
+
+components:
+  - id: system-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: control-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: workitem-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers, worker-maintainers]
+  - id: lifecycle-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: scenario-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: worker-capability-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers, worker-maintainers]
+  - id: auth-api-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [security-maintainers]
+  - id: orchestrator-api-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: observability-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: documentation-automation-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: completed-work-review-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: repository-build
+    kind: DELIVERY
+    ownerIds: [repository-maintainers]
+  - id: repository-ci-delivery
+    kind: DELIVERY
+    ownerIds: [repository-maintainers]
+  - id: client-integration-config
+    kind: TOOL
+    ownerIds: [integration-maintainers]
+  - id: local-development-environment
+    kind: DELIVERY
+    ownerIds: [repository-maintainers, deployment-maintainers]
+  - id: documentation-site
+    kind: DOCUMENTATION_SYSTEM
+    ownerIds: [documentation-maintainers]
+  - id: local-delivery
+    kind: DELIVERY
+    ownerIds: [deployment-maintainers]
+  - id: managed-delivery
+    kind: DELIVERY
+    ownerIds: [deployment-maintainers]
+  - id: shared-observability
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: shared-topology
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: shared-auth-contracts
+    kind: SHARED_CONTRACT
+    ownerIds: [security-maintainers]
+  - id: shared-scenario-validation
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: shared-templating
+    kind: SHARED_CONTRACT
+    ownerIds: [worker-maintainers]
+  - id: shared-auth-client
+    kind: SHARED_CONTRACT
+    ownerIds: [security-maintainers]
+  - id: shared-control-core
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: shared-control-filesystem
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: shared-control-spring
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: shared-manager-sdk
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: shared-worker-sdk
+    kind: SHARED_CONTRACT
+    ownerIds: [worker-maintainers]
+  - id: shared-request-templates
+    kind: SHARED_CONTRACT
+    ownerIds: [worker-maintainers]
+  - id: shared-clickhouse-sink
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: shared-docker-client
+    kind: SHARED_CONTRACT
+    ownerIds: [deployment-maintainers]
+  - id: shared-swarm-model
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: shared-journal-postgres
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: shared-lifecycle-typescript
+    kind: SHARED_CONTRACT
+    ownerIds: [architecture-maintainers]
+  - id: service-auth
+    kind: PLATFORM_SERVICE
+    ownerIds: [security-maintainers]
+  - id: service-scenario-manager
+    kind: PLATFORM_SERVICE
+    ownerIds: [platform-maintainers]
+  - id: service-orchestrator
+    kind: PLATFORM_SERVICE
+    ownerIds: [platform-maintainers]
+  - id: service-swarm-controller
+    kind: PLATFORM_SERVICE
+    ownerIds: [platform-maintainers]
+  - id: service-network-proxy-manager
+    kind: PLATFORM_SERVICE
+    ownerIds: [platform-maintainers]
+  - id: app-ui
+    kind: APPLICATION
+    ownerIds: [ui-maintainers]
+  - id: app-vscode
+    kind: APPLICATION
+    ownerIds: [integration-maintainers]
+  - id: app-pockethive-mcp
+    kind: APPLICATION
+    ownerIds: [integration-maintainers]
+  - id: app-tcp-mock
+    kind: APPLICATION
+    ownerIds: [integration-maintainers]
+  - id: worker-generator
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-moderator
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-request-builder
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-processor
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-http-sequence
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-db-query
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-postprocessor
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-clearing-export
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: worker-trigger
+    kind: WORKER
+    ownerIds: [worker-maintainers]
+  - id: infra-clickhouse
+    kind: INFRASTRUCTURE
+    ownerIds: [platform-maintainers]
+  - id: infra-grafana
+    kind: INFRASTRUCTURE
+    ownerIds: [platform-maintainers]
+  - id: infra-haproxy
+    kind: INFRASTRUCTURE
+    ownerIds: [deployment-maintainers]
+  - id: infra-rabbitmq
+    kind: INFRASTRUCTURE
+    ownerIds: [platform-maintainers]
+  - id: infra-wiremock
+    kind: INFRASTRUCTURE
+    ownerIds: [integration-maintainers]
+  - id: scenario-catalog
+    kind: SHARED_CONTRACT
+    ownerIds: [platform-maintainers]
+  - id: tool-auth-proving
+    kind: TOOL
+    ownerIds: [security-maintainers]
+  - id: tool-control-traffic-viewer
+    kind: TOOL
+    ownerIds: [platform-maintainers]
+  - id: tool-diagnostics
+    kind: TOOL
+    ownerIds: [platform-maintainers]
+  - id: tool-container
+    kind: TOOL
+    ownerIds: [deployment-maintainers]
+  - id: tool-documentation-automation
+    kind: TOOL
+    ownerIds: [architecture-maintainers]
+  - id: tool-completed-work-review
+    kind: TOOL
+    ownerIds: [architecture-maintainers]
+  - id: tool-documentation-validation
+    kind: TOOL
+    ownerIds: [documentation-maintainers]
+  - id: tool-orchestrator-debug
+    kind: TOOL
+    ownerIds: [integration-maintainers]
+  - id: tool-scenario-config-migrator
+    kind: TOOL
+    ownerIds: [integration-maintainers]
+  - id: tool-scenario-templating-check
+    kind: TOOL
+    ownerIds: [worker-maintainers]
+  - id: tool-outcome-storage
+    kind: TOOL
+    ownerIds: [platform-maintainers]
+
+# Every MATERIAL inventory pattern is owned by exactly one node. Canonical
+# contract documents may also be impact sources. There is no catch-all node.
+impactNodes:
+  - id: contract-system-architecture
+    componentId: system-contracts
+    sourcePaths: [docs/ARCHITECTURE.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-control-plane
+    componentId: control-contracts
+    sourcePaths: [docs/spec/asyncapi.yaml, docs/spec/control-events.schema.json]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-workitem
+    componentId: workitem-contracts
+    sourcePaths: [docs/spec/workitem-envelope.schema.json]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-lifecycle
+    componentId: lifecycle-contracts
+    sourcePaths: [docs/spec/swarm-lifecycle.schema.json]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-scenario
+    componentId: scenario-contracts
+    sourcePaths:
+      - docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md
+      - docs/scenarios/SCENARIO_CONTRACT.md
+      - docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md
+      - docs/spec/sut-environment.schema.json
+      - docs/spec/sut-environments.schema.json
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-worker-capabilities
+    componentId: worker-capability-contracts
+    sourcePaths: [docs/architecture/workerCapabilities.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-auth
+    componentId: auth-api-contracts
+    sourcePaths: [docs/architecture/AUTH_SERVICE_API_SPEC.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-orchestrator-rest
+    componentId: orchestrator-api-contracts
+    sourcePaths: [docs/ORCHESTRATOR-REST.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-observability
+    componentId: observability-contracts
+    sourcePaths: [docs/observability.md, docs/correlation-vs-idempotency.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-documentation-impact
+    componentId: documentation-automation-contracts
+    sourcePaths: [docs/architecture/documentation-impact-automation.md]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: contract-completed-work-review
+    componentId: completed-work-review-contracts
+    sourcePaths:
+      - docs/architecture/completed-work-review.md
+      - docs/ci/completed-work-review-profiles.schema.json
+      - docs/ci/completed-work-review-profiles.json
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: repository-build
+    componentId: repository-build
+    sourcePaths:
+      - .mvn/**
+      - commitlint.config.js
+      - eslint.config.cjs
+      - mvnw
+      - mvnw.cmd
+      - package-lock.json
+      - package.json
+      - pom.xml
+      - scripts/bootstrap-ssot.test.mjs
+      - vitest.config.mjs
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: tool-lifecycle-contract-generator
+    componentId: lifecycle-contracts
+    sourcePaths: [scripts/generate-swarm-lifecycle-contract.mjs]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: tool-scenario-defaults-generator
+    componentId: scenario-contracts
+    sourcePaths:
+      - scripts/generate-scenario-config-defaults.mjs
+      - scripts/scenario-config-defaults.test.mjs
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: repository-ci-delivery
+    componentId: repository-ci-delivery
+    sourcePaths: [.github/workflows/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: client-integration-config
+    componentId: client-integration-config
+    sourcePaths:
+      - .amazonq/agents/default.json
+      - .amazonq/mcp.json
+      - .amazonq/mcp.json.dist
+      - .codex/config.toml
+      - .cursor/mcp.json
+      - .vscode/mcp.json
+      - .windsurf/mcp.json
+      - mcp.json
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: local-development-environment
+    componentId: local-development-environment
+    sourcePaths: [.devcontainer/devcontainer.json]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: documentation-site
+    componentId: documentation-site
+    sourcePaths: [docs-site/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: local-delivery
+    componentId: local-delivery
+    sourcePaths:
+      - .dockerignore
+      - .env.example
+      - build-hive.sh
+      - docker/**
+      - docker-compose.yml
+      - Dockerfile.bees.local
+      - setup-wsl.sh
+      - start-e2e-tests.bat
+      - start-e2e-tests.sh
+      - start-mcp.bat
+      - start-mcp.sh
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: managed-delivery
+    componentId: managed-delivery
+    sourcePaths:
+      - .env.ghcr
+      - deploy/**
+      - hiveforge.yaml
+      - package-deployment.bat
+      - package-deployment.sh
+      - tools/hiveforge-contract-check.sh
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: shared-observability
+    componentId: shared-observability
+    sourcePaths: [observability/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-topology
+    componentId: shared-topology
+    sourcePaths: [common/topology-core/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-auth-contracts
+    componentId: shared-auth-contracts
+    sourcePaths: [common/auth-contracts/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-scenario-validation
+    componentId: shared-scenario-validation
+    sourcePaths: [common/scenario-validation-contracts/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-templating
+    componentId: shared-templating
+    sourcePaths: [common/templating/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-auth-client
+    componentId: shared-auth-client
+    sourcePaths: [common/auth-client/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-control-core
+    componentId: shared-control-core
+    sourcePaths: [common/control-plane-core/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-control-filesystem
+    componentId: shared-control-filesystem
+    sourcePaths: [common/control-plane-filesystem/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-control-spring
+    componentId: shared-control-spring
+    sourcePaths: [common/control-plane-spring/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-manager-sdk
+    componentId: shared-manager-sdk
+    sourcePaths: [common/manager-sdk/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-worker-sdk
+    componentId: shared-worker-sdk
+    sourcePaths: [common/worker-sdk/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-request-templates
+    componentId: shared-request-templates
+    sourcePaths: [common/request-templates/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-clickhouse-sink
+    componentId: shared-clickhouse-sink
+    sourcePaths: [common/sink-clickhouse/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-docker-client
+    componentId: shared-docker-client
+    sourcePaths: [common/docker-client/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-swarm-model
+    componentId: shared-swarm-model
+    sourcePaths: [common/swarm-model/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-journal-postgres
+    componentId: shared-journal-postgres
+    sourcePaths: [common/journal-postgres/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: shared-lifecycle-typescript
+    componentId: shared-lifecycle-typescript
+    sourcePaths: [packages/swarm-lifecycle-contract/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: service-auth
+    componentId: service-auth
+    sourcePaths: [auth-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: service-scenario-manager
+    componentId: service-scenario-manager
+    sourcePaths: [scenario-manager-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: service-orchestrator
+    componentId: service-orchestrator
+    sourcePaths: [orchestrator-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: service-swarm-controller
+    componentId: service-swarm-controller
+    sourcePaths: [swarm-controller-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: service-network-proxy-manager
+    componentId: service-network-proxy-manager
+    sourcePaths: [network-proxy-manager-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: app-ui
+    componentId: app-ui
+    sourcePaths:
+      - ui-v2/.gitignore
+      - ui-v2/eslint.config.js
+      - ui-v2/index.html
+      - ui-v2/package-lock.json
+      - ui-v2/package.json
+      - ui-v2/public/**
+      - ui-v2/scripts/**
+      - ui-v2/src/**
+      - ui-v2/tsconfig.app.json
+      - ui-v2/tsconfig.json
+      - ui-v2/tsconfig.node.json
+      - ui-v2/vite.config.ts
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: app-ui-delivery
+    componentId: app-ui
+    sourcePaths: [ui-v2/Dockerfile, ui-v2/nginx.conf]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: app-vscode
+    componentId: app-vscode
+    sourcePaths:
+      - vscode-pockethive/.vscode/**
+      - vscode-pockethive/.vscodeignore
+      - vscode-pockethive/init.sh
+      - vscode-pockethive/package-lock.json
+      - vscode-pockethive/package.json
+      - vscode-pockethive/resources/**
+      - vscode-pockethive/scripts/**
+      - vscode-pockethive/src/**
+      - vscode-pockethive/tsconfig.json
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: app-pockethive-mcp
+    componentId: app-pockethive-mcp
+    sourcePaths:
+      - tools/pockethive-mcp/config-update.mjs
+      - tools/pockethive-mcp/config-update.test.mjs
+      - tools/pockethive-mcp/docker-compose.yml
+      - tools/pockethive-mcp/docs-contract-audit.mjs
+      - tools/pockethive-mcp/doctor.mjs
+      - tools/pockethive-mcp/doctor.test.mjs
+      - tools/pockethive-mcp/fixtures/**
+      - tools/pockethive-mcp/generated/**
+      - tools/pockethive-mcp/package-lock.json
+      - tools/pockethive-mcp/package.json
+      - tools/pockethive-mcp/poc-runner.mjs
+      - tools/pockethive-mcp/runtime-tools.mjs
+      - tools/pockethive-mcp/runtime-tools.test.mjs
+      - tools/pockethive-mcp/scenario-regression-acceptance.mjs
+      - tools/pockethive-mcp/schema.test.mjs
+      - tools/pockethive-mcp/server.mjs
+      - tools/pockethive-mcp/setup.cjs
+      - tools/pockethive-mcp/smoke-test.mjs
+      - tools/pockethive-mcp/start.cjs
+      - tools/pockethive-mcp/target-input.test.mjs
+      - tools/pockethive-mcp/tools-list-schema.test.mjs
+      - tools/pockethive-mcp/wizard-acceptance.mjs
+      - tools/pockethive-mcp/workflow-acceptance.mjs
+      - tools/pockethive-mcp/workflow-agentic-evals.mjs
+      - tools/pockethive-mcp/workflow-invariants.test.mjs
+      - tools/pockethive-mcp/workflow-tools.mjs
+      - tools/pockethive-mcp/workflow.test.mjs
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: app-tcp-mock
+    componentId: app-tcp-mock
+    sourcePaths:
+      - tcp-mock-server/.dockerignore
+      - tcp-mock-server/Dockerfile
+      - tcp-mock-server/Dockerfile.runtime
+      - tcp-mock-server/__files/**
+      - tcp-mock-server/build-docker.sh
+      - tcp-mock-server/mappings/**
+      - tcp-mock-server/pom.xml
+      - tcp-mock-server/scenarios-state.json
+      - tcp-mock-server/src/**
+      - tcp-mock-server/sync-mappings.sh
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: worker-generator
+    componentId: worker-generator
+    sourcePaths: [generator-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-moderator
+    componentId: worker-moderator
+    sourcePaths: [moderator-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-request-builder
+    componentId: worker-request-builder
+    sourcePaths: [request-builder-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-processor
+    componentId: worker-processor
+    sourcePaths: [processor-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-http-sequence
+    componentId: worker-http-sequence
+    sourcePaths: [http-sequence-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-db-query
+    componentId: worker-db-query
+    sourcePaths: [db-query-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-postprocessor
+    componentId: worker-postprocessor
+    sourcePaths: [postprocessor-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-clearing-export
+    componentId: worker-clearing-export
+    sourcePaths: [clearing-export-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: worker-trigger
+    componentId: worker-trigger
+    sourcePaths: [trigger-service/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+  - id: infra-clickhouse
+    componentId: infra-clickhouse
+    sourcePaths: [clickhouse/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: infra-grafana
+    componentId: infra-grafana
+    sourcePaths: [grafana/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: infra-haproxy
+    componentId: infra-haproxy
+    sourcePaths: [network-proxy-haproxy/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: infra-rabbitmq
+    componentId: infra-rabbitmq
+    sourcePaths: [rabbitmq/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: infra-wiremock
+    componentId: infra-wiremock
+    sourcePaths: [wiremock/__files/**, wiremock/mappings/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: scenario-catalog
+    componentId: scenario-catalog
+    sourcePaths: [scenarios/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-auth-proving
+    componentId: tool-auth-proving
+    sourcePaths: [tools/auth-proving/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-control-traffic-viewer
+    componentId: tool-control-traffic-viewer
+    sourcePaths: [tools/control-traffic-viewer/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-diagnostics
+    componentId: tool-diagnostics
+    sourcePaths: [tools/diag/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-container
+    componentId: tool-container
+    sourcePaths: [tools/docker/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-documentation-automation
+    componentId: tool-documentation-automation
+    sourcePaths:
+      - docs/ci/docs-impact-map.schema.json
+      - docs/ci/docs-impact-map.yaml
+      - tools/docs-impact/**
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-completed-work-review
+    componentId: tool-completed-work-review
+    sourcePaths: [tools/completed-work-review/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-documentation-validation
+    componentId: tool-documentation-validation
+    sourcePaths: [tools/docs-validation/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-orchestrator-debug
+    componentId: tool-orchestrator-debug
+    sourcePaths: [tools/mcp-orchestrator-debug/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-scenario-config-migrator
+    componentId: tool-scenario-config-migrator
+    sourcePaths: [tools/scenario-config-migrate/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-scenario-templating-check
+    componentId: tool-scenario-templating-check
+    sourcePaths: [tools/scenario-templating-check/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+  - id: tool-outcome-storage
+    componentId: tool-outcome-storage
+    sourcePaths: [tools/tx-outcome-storage/**]
+    evaluateChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    noDocumentationChangeKinds: []
+
+# Edges are documentation-impact direction, not a reconstruction of runtime
+# calls. Every edge explicitly decides all four source change kinds. STOP adds
+# the destination impact and ends that route; CONTINUE permits another declared
+# hop. One ordered node pair has exactly one edge.
+impactEdges:
+  - id: system-architecture-to-control-contract
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-control-plane
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: system-architecture-to-lifecycle-contract
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-lifecycle
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: system-architecture-to-scenario-contract
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-scenario
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: system-architecture-to-auth-contract
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-auth
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: system-architecture-to-orchestrator-rest
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-orchestrator-rest
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: system-architecture-to-observability-contract
+    fromNodeId: contract-system-architecture
+    toNodeId: contract-observability
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: documentation-impact-contract-to-tool
+    fromNodeId: contract-documentation-impact
+    toNodeId: tool-documentation-automation
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: completed-work-review-contract-to-tool
+    fromNodeId: contract-completed-work-review
+    toNodeId: tool-completed-work-review
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+  - id: control-contract-to-core
+    fromNodeId: contract-control-plane
+    toNodeId: shared-control-core
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-contract-to-filesystem
+    fromNodeId: contract-control-plane
+    toNodeId: shared-control-filesystem
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: topology-to-control-core
+    fromNodeId: shared-topology
+    toNodeId: shared-control-core
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-core-to-spring
+    fromNodeId: shared-control-core
+    toNodeId: shared-control-spring
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-core-to-manager-sdk
+    fromNodeId: shared-control-core
+    toNodeId: shared-manager-sdk
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-core-to-worker-sdk
+    fromNodeId: shared-control-core
+    toNodeId: shared-worker-sdk
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-core-to-ui
+    fromNodeId: shared-control-core
+    toNodeId: app-ui
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: control-core-to-mcp
+    fromNodeId: shared-control-core
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-filesystem-to-scenario-manager
+    fromNodeId: shared-control-filesystem
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-filesystem-to-orchestrator
+    fromNodeId: shared-control-filesystem
+    toNodeId: service-orchestrator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-filesystem-to-controller
+    fromNodeId: shared-control-filesystem
+    toNodeId: service-swarm-controller
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-spring-to-worker-sdk
+    fromNodeId: shared-control-spring
+    toNodeId: shared-worker-sdk
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-spring-to-orchestrator
+    fromNodeId: shared-control-spring
+    toNodeId: service-orchestrator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: control-spring-to-controller
+    fromNodeId: shared-control-spring
+    toNodeId: service-swarm-controller
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: manager-sdk-to-docker-client
+    fromNodeId: shared-manager-sdk
+    toNodeId: shared-docker-client
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: manager-sdk-to-orchestrator
+    fromNodeId: shared-manager-sdk
+    toNodeId: service-orchestrator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: manager-sdk-to-controller
+    fromNodeId: shared-manager-sdk
+    toNodeId: service-swarm-controller
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: docker-client-to-orchestrator
+    fromNodeId: shared-docker-client
+    toNodeId: service-orchestrator
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: docker-client-to-controller
+    fromNodeId: shared-docker-client
+    toNodeId: service-swarm-controller
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+
+  - id: workitem-contract-to-worker-sdk
+    fromNodeId: contract-workitem
+    toNodeId: shared-worker-sdk
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: templating-to-request-templates
+    fromNodeId: shared-templating
+    toNodeId: shared-request-templates
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: templating-to-worker-sdk
+    fromNodeId: shared-templating
+    toNodeId: shared-worker-sdk
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: request-templates-to-request-builder
+    fromNodeId: shared-request-templates
+    toNodeId: worker-request-builder
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: request-templates-to-http-sequence
+    fromNodeId: shared-request-templates
+    toNodeId: worker-http-sequence
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+  - id: worker-sdk-to-generator
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-generator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-moderator
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-moderator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-request-builder
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-request-builder
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-processor
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-processor
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-http-sequence
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-http-sequence
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-db-query
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-db-query
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-postprocessor
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-postprocessor
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-clearing-export
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-clearing-export
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: worker-sdk-to-trigger
+    fromNodeId: shared-worker-sdk
+    toNodeId: worker-trigger
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+  - id: lifecycle-contract-to-swarm-model
+    fromNodeId: contract-lifecycle
+    toNodeId: shared-swarm-model
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: lifecycle-contract-to-typescript
+    fromNodeId: contract-lifecycle
+    toNodeId: shared-lifecycle-typescript
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: lifecycle-typescript-to-ui
+    fromNodeId: shared-lifecycle-typescript
+    toNodeId: app-ui
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: lifecycle-typescript-to-mcp
+    fromNodeId: shared-lifecycle-typescript
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: lifecycle-typescript-to-vscode
+    fromNodeId: shared-lifecycle-typescript
+    toNodeId: app-vscode
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: swarm-model-to-scenario-manager
+    fromNodeId: shared-swarm-model
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: swarm-model-to-network-proxy
+    fromNodeId: shared-swarm-model
+    toNodeId: service-network-proxy-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: swarm-model-to-orchestrator
+    fromNodeId: shared-swarm-model
+    toNodeId: service-orchestrator
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: swarm-model-to-controller
+    fromNodeId: shared-swarm-model
+    toNodeId: service-swarm-controller
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+
+  - id: scenario-contract-to-validation
+    fromNodeId: contract-scenario
+    toNodeId: shared-scenario-validation
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-contract-to-swarm-model
+    fromNodeId: contract-scenario
+    toNodeId: shared-swarm-model
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-contract-to-manager
+    fromNodeId: contract-scenario
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: capability-contract-to-scenario-manager
+    fromNodeId: contract-worker-capabilities
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-validation-to-manager
+    fromNodeId: shared-scenario-validation
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-catalog-to-manager
+    fromNodeId: scenario-catalog
+    toNodeId: service-scenario-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+
+  - id: auth-contract-to-shared-contracts
+    fromNodeId: contract-auth
+    toNodeId: shared-auth-contracts
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-contracts-to-service
+    fromNodeId: shared-auth-contracts
+    toNodeId: service-auth
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-contracts-to-client
+    fromNodeId: shared-auth-contracts
+    toNodeId: shared-auth-client
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-contracts-to-worker-sdk
+    fromNodeId: shared-auth-contracts
+    toNodeId: shared-worker-sdk
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-client-to-scenario-manager
+    fromNodeId: shared-auth-client
+    toNodeId: service-scenario-manager
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-client-to-network-proxy
+    fromNodeId: shared-auth-client
+    toNodeId: service-network-proxy-manager
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-client-to-orchestrator
+    fromNodeId: shared-auth-client
+    toNodeId: service-orchestrator
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: auth-service-to-ui
+    fromNodeId: service-auth
+    toNodeId: app-ui
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: auth-service-to-mcp
+    fromNodeId: service-auth
+    toNodeId: app-pockethive-mcp
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+
+  - id: orchestrator-rest-to-service
+    fromNodeId: contract-orchestrator-rest
+    toNodeId: service-orchestrator
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-manager-to-network-proxy
+    fromNodeId: service-scenario-manager
+    toNodeId: service-network-proxy-manager
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-manager-to-orchestrator
+    fromNodeId: service-scenario-manager
+    toNodeId: service-orchestrator
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-manager-to-ui
+    fromNodeId: service-scenario-manager
+    toNodeId: app-ui
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: scenario-manager-to-mcp
+    fromNodeId: service-scenario-manager
+    toNodeId: app-pockethive-mcp
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: scenario-manager-to-debug-tool
+    fromNodeId: service-scenario-manager
+    toNodeId: tool-orchestrator-debug
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: network-proxy-to-haproxy
+    fromNodeId: service-network-proxy-manager
+    toNodeId: infra-haproxy
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: network-proxy-to-ui
+    fromNodeId: service-network-proxy-manager
+    toNodeId: app-ui
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: network-proxy-to-orchestrator
+    fromNodeId: service-network-proxy-manager
+    toNodeId: service-orchestrator
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: orchestrator-to-controller
+    fromNodeId: service-orchestrator
+    toNodeId: service-swarm-controller
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: orchestrator-to-ui
+    fromNodeId: service-orchestrator
+    toNodeId: app-ui
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: orchestrator-to-mcp
+    fromNodeId: service-orchestrator
+    toNodeId: app-pockethive-mcp
+    relation: API_CLIENT
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: orchestrator-to-debug-tool
+    fromNodeId: service-orchestrator
+    toNodeId: tool-orchestrator-debug
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+  - id: controller-to-generator
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-generator
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-moderator
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-moderator
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-request-builder
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-request-builder
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-processor
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-processor
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-http-sequence
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-http-sequence
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-db-query
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-db-query
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-postprocessor
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-postprocessor
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-clearing-export
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-clearing-export
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: controller-to-trigger
+    fromNodeId: service-swarm-controller
+    toNodeId: worker-trigger
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: mcp-to-vscode
+    fromNodeId: app-pockethive-mcp
+    toNodeId: app-vscode
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+  - id: observability-contract-to-shared
+    fromNodeId: contract-observability
+    toNodeId: shared-observability
+    relation: CONTRACT_PROJECTION
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: observability-to-journal
+    fromNodeId: shared-observability
+    toNodeId: shared-journal-postgres
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: observability-to-clickhouse-sink
+    fromNodeId: shared-observability
+    toNodeId: shared-clickhouse-sink
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: observability-to-orchestrator
+    fromNodeId: shared-observability
+    toNodeId: service-orchestrator
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: observability-to-controller
+    fromNodeId: shared-observability
+    toNodeId: service-swarm-controller
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: journal-to-orchestrator
+    fromNodeId: shared-journal-postgres
+    toNodeId: service-orchestrator
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: clickhouse-infra-to-sink
+    fromNodeId: infra-clickhouse
+    toNodeId: shared-clickhouse-sink
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: clickhouse-sink-to-grafana
+    fromNodeId: shared-clickhouse-sink
+    toNodeId: infra-grafana
+    relation: OBSERVABILITY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: clickhouse-sink-to-postprocessor
+    fromNodeId: shared-clickhouse-sink
+    toNodeId: worker-postprocessor
+    relation: CONTRACT_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: grafana-to-mcp
+    fromNodeId: infra-grafana
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+
+  - id: docs-site-to-ui
+    fromNodeId: documentation-site
+    toNodeId: app-ui
+    relation: PUBLICATION_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: repository-build-to-docs-site
+    fromNodeId: repository-build
+    toNodeId: documentation-site
+    relation: DELIVERY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: repository-ci-to-docs-site
+    fromNodeId: repository-ci-delivery
+    toNodeId: documentation-site
+    relation: DELIVERY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: local-delivery-to-docs-site
+    fromNodeId: local-delivery
+    toNodeId: documentation-site
+    relation: DELIVERY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: managed-delivery-to-docs-site
+    fromNodeId: managed-delivery
+    toNodeId: documentation-site
+    relation: DELIVERY_CONSUMER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: client-config-to-mcp
+    fromNodeId: client-integration-config
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: CONTINUE
+  - id: docs-validation-to-docs-site
+    fromNodeId: tool-documentation-validation
+    toNodeId: documentation-site
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: rabbitmq-to-control-core
+    fromNodeId: infra-rabbitmq
+    toNodeId: shared-control-core
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: rabbitmq-to-ui
+    fromNodeId: infra-rabbitmq
+    toNodeId: app-ui
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: rabbitmq-to-mcp
+    fromNodeId: infra-rabbitmq
+    toNodeId: app-pockethive-mcp
+    relation: RUNTIME_DEPENDENCY
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: wiremock-to-mcp
+    fromNodeId: infra-wiremock
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: tcp-mock-to-mcp
+    fromNodeId: app-tcp-mock
+    toNodeId: app-pockethive-mcp
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+  - id: control-viewer-to-observability
+    fromNodeId: tool-control-traffic-viewer
+    toNodeId: shared-observability
+    relation: TOOL_ADAPTER
+    decisions:
+      - changeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+        propagation: STOP
+
+# Documents are concrete, existing review targets. Canonical documents define a
+# contract; projections explain that contract to an operator, developer, app, or
+# integration consumer. Candidate files never define new targets at runtime.
+documents:
+  - id: contributor-guide
+    path: CONTRIBUTING.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: CONTRIBUTING.md
+    basePresence: MUST_EXIST
+    ownerIds: [repository-maintainers, deployment-maintainers]
+  - id: automation-architecture
+    path: docs/architecture/documentation-impact-automation.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/documentation-impact-automation.md
+      - publicationId: docs-site
+        artifactPath: /architecture/documentation-impact-automation
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: completed-work-review-architecture
+    path: docs/architecture/completed-work-review.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/completed-work-review.md
+      - publicationId: docs-site
+        artifactPath: /architecture/completed-work-review
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: project-map
+    path: docs/PROJECT_MAP.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/PROJECT_MAP.md
+      - publicationId: docs-site
+        artifactPath: /PROJECT_MAP
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, documentation-maintainers]
+  - id: system-architecture
+    path: docs/ARCHITECTURE.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/ARCHITECTURE.md
+      - publicationId: docs-site
+        artifactPath: /system-architecture
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: system-workflows
+    path: docs/guides/concepts/system-workflows.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/concepts/system-workflows.md
+      - publicationId: docs-site
+        artifactPath: /guides/concepts/system-workflows
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers]
+  - id: control-asyncapi
+    path: docs/spec/asyncapi.yaml
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/asyncapi.yaml
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: control-events-schema
+    path: docs/spec/control-events.schema.json
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/control-events.schema.json
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: correlation-contract
+    path: docs/correlation-vs-idempotency.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/correlation-vs-idempotency.md
+      - publicationId: docs-site
+        artifactPath: /correlation-vs-idempotency
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers]
+  - id: workitem-envelope
+    path: docs/spec/workitem-envelope.schema.json
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/workitem-envelope.schema.json
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, worker-maintainers]
+  - id: lifecycle-schema
+    path: docs/spec/swarm-lifecycle.schema.json
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/swarm-lifecycle.schema.json
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers]
+  - id: lifecycle-guide
+    path: docs/guides/operators/swarm-lifecycle.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/operators/swarm-lifecycle.md
+      - publicationId: docs-site
+        artifactPath: /guides/operators/swarm-lifecycle
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers]
+  - id: scenario-contract
+    path: docs/scenarios/SCENARIO_CONTRACT.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_CONTRACT.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_CONTRACT
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers]
+  - id: scenario-workspace-api
+    path: docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_BUNDLE_WORKSPACE_API_SPEC
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers]
+  - id: scenario-manager-bundle-rest
+    path: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_MANAGER_BUNDLE_REST
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers]
+  - id: sut-environment-schema
+    path: docs/spec/sut-environment.schema.json
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/sut-environment.schema.json
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers]
+  - id: sut-environments-schema
+    path: docs/spec/sut-environments.schema.json
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/spec/sut-environments.schema.json
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers]
+  - id: scenario-plan-guide
+    path: docs/scenarios/SCENARIO_PLAN_GUIDE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_PLAN_GUIDE.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_PLAN_GUIDE
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: first-scenario-guide
+    path: docs/guides/onboarding/first-scenario.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/onboarding/first-scenario.md
+      - publicationId: docs-site
+        artifactPath: /guides/onboarding/first-scenario
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: worker-capabilities
+    path: docs/architecture/workerCapabilities.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/workerCapabilities.md
+      - publicationId: docs-site
+        artifactPath: /architecture/workerCapabilities
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, worker-maintainers]
+  - id: worker-sdk-quickstart
+    path: docs/sdk/worker-sdk-quickstart.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/sdk/worker-sdk-quickstart.md
+      - publicationId: docs-site
+        artifactPath: /sdk/worker-sdk-quickstart
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: worker-control-guide
+    path: docs/control-plane/worker-guide.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/control-plane/worker-guide.md
+      - publicationId: docs-site
+        artifactPath: /control-plane/worker-guide
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, worker-maintainers]
+  - id: workers-basics
+    path: docs/guides/workers-basics.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/workers-basics.md
+      - publicationId: docs-site
+        artifactPath: /guides/workers-basics
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: workers-advanced
+    path: docs/guides/workers-advanced.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/workers-advanced.md
+      - publicationId: docs-site
+        artifactPath: /guides/workers-advanced
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: traffic-shaping
+    path: docs/architecture/traffic-shaping.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/traffic-shaping.md
+      - publicationId: docs-site
+        artifactPath: /architecture/traffic-shaping
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, worker-maintainers]
+  - id: templating-basics
+    path: docs/guides/templating-basics.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/templating-basics.md
+      - publicationId: docs-site
+        artifactPath: /guides/templating-basics
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: templating-advanced
+    path: docs/guides/templating-advanced.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/templating-advanced.md
+      - publicationId: docs-site
+        artifactPath: /guides/templating-advanced
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: auth-api
+    path: docs/architecture/AUTH_SERVICE_API_SPEC.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/AUTH_SERVICE_API_SPEC.md
+      - publicationId: docs-site
+        artifactPath: /architecture/AUTH_SERVICE_API_SPEC
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers]
+  - id: auth-behavior
+    path: docs/AUTH-BEHAVIOR.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/AUTH-BEHAVIOR.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, worker-maintainers]
+  - id: auth-user-guide
+    path: docs/AUTH-USER-GUIDE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/AUTH-USER-GUIDE.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, documentation-maintainers]
+  - id: orchestrator-rest
+    path: docs/ORCHESTRATOR-REST.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/ORCHESTRATOR-REST.md
+      - publicationId: docs-site
+        artifactPath: /ORCHESTRATOR-REST
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers]
+  - id: ui-application-guide
+    path: docs/guides/ui/application-guide.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/ui/application-guide.md
+      - publicationId: docs-site
+        artifactPath: /guides/ui/application-guide
+    basePresence: MUST_EXIST
+    ownerIds: [ui-maintainers, documentation-maintainers]
+  - id: ui-v2-flow
+    path: docs/ui-v2/UI_V2_FLOW.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/ui-v2/UI_V2_FLOW.md
+    basePresence: MUST_EXIST
+    ownerIds: [ui-maintainers]
+  - id: ui-screenshot-evidence
+    path: docs/guides/ui/screenshot-evidence.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/ui/screenshot-evidence.md
+      - publicationId: docs-site
+        artifactPath: /guides/ui/screenshot-evidence
+    basePresence: MUST_EXIST
+    ownerIds: [ui-maintainers, documentation-maintainers]
+  - id: mcp-integration-guide
+    path: docs/guides/integrations/pockethive-mcp-and-bundles.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/integrations/pockethive-mcp-and-bundles.md
+      - publicationId: docs-site
+        artifactPath: /guides/integrations/pockethive-mcp-and-bundles
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers, documentation-maintainers]
+  - id: authoring-tools-guide
+    path: docs/guides/integrations/authoring-and-test-tools.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/integrations/authoring-and-test-tools.md
+      - publicationId: docs-site
+        artifactPath: /guides/integrations/authoring-and-test-tools
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers, documentation-maintainers]
+  - id: mcp-package-readme
+    path: tools/pockethive-mcp/README.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tools/pockethive-mcp/README.md
+      - publicationId: pockethive-mcp-npm
+        artifactPath: README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: vscode-package-readme
+    path: vscode-pockethive/README.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: vscode-pockethive/README.md
+      - publicationId: pockethive-vscode-vsix
+        artifactPath: README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-mock-package-readme
+    path: tcp-mock-server/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-mock-runtime-start
+    path: tcp-mock-server/docs/START-HERE.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/START-HERE.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/START-HERE.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/START-HERE.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: observability-contract
+    path: docs/observability.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/observability.md
+      - publicationId: docs-site
+        artifactPath: /observability
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers]
+  - id: observability-troubleshooting
+    path: docs/guides/operators/observability-troubleshooting.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/operators/observability-troubleshooting.md
+      - publicationId: docs-site
+        artifactPath: /guides/operators/observability-troubleshooting
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: deployment-guide
+    path: docs/guides/operators/deployment.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/operators/deployment.md
+      - publicationId: docs-site
+        artifactPath: /guides/operators/deployment
+    basePresence: MUST_EXIST
+    ownerIds: [deployment-maintainers, documentation-maintainers]
+  - id: hiveforge-guide
+    path: docs/HIVEFORGE.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/HIVEFORGE.md
+      - publicationId: docs-site
+        artifactPath: /HIVEFORGE
+      - publicationId: deployment-archive-windows
+        artifactPath: docs/HIVEFORGE.md
+    basePresence: MUST_EXIST
+    ownerIds: [deployment-maintainers]
+  - id: deployment-package
+    path: DEPLOYMENT_PACKAGE.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: DEPLOYMENT_PACKAGE.md
+    basePresence: MUST_EXIST
+    ownerIds: [deployment-maintainers]
+  - id: upgrading-guide
+    path: docs/UPGRADING.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/UPGRADING.md
+      - publicationId: docs-site
+        artifactPath: /UPGRADING
+    basePresence: MUST_EXIST
+    ownerIds: [deployment-maintainers, documentation-maintainers]
+  - id: repository-readme
+    path: README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: README.md
+      - publicationId: deployment-archive-windows
+        artifactPath: README.md
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, documentation-maintainers]
+  - id: usage-guide
+    path: docs/USAGE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/USAGE.md
+      - publicationId: docs-site
+        artifactPath: /USAGE
+      - publicationId: deployment-archive-posix
+        artifactPath: docs/USAGE.md
+      - publicationId: deployment-archive-windows
+        artifactPath: docs/USAGE.md
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, deployment-maintainers, documentation-maintainers]
+  - id: docs-index
+    path: docs/README.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: docs-home
+    path: docs/guides/presentation/interactive-pockethive-overview.mdx
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/presentation/interactive-pockethive-overview.mdx
+      - publicationId: docs-site
+        artifactPath: /
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: docs-site-readme
+    path: docs-site/README.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs-site/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: clearing-schema-contract
+    path: docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/clearing/CLEARING_STRUCTURED_SCHEMA_CONTRACT.md
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers]
+
+  # Remaining active Docusaurus pages. Registration makes direct edits and
+  # deletions publication-aware even when no material-impact rule targets them.
+  - id: glossary
+    path: docs/GLOSSARY.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/GLOSSARY.md
+      - publicationId: docs-site
+        artifactPath: /GLOSSARY
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: moderator-pattern-architecture
+    path: docs/architecture/moderator-pattern-shaper.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/moderator-pattern-shaper.md
+      - publicationId: docs-site
+        artifactPath: /architecture/moderator-pattern-shaper
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, worker-maintainers, documentation-maintainers]
+  - id: sut-simulation-model
+    path: docs/architecture/sut-dataset-simulation-model.md
+    role: CANONICAL
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/architecture/sut-dataset-simulation-model.md
+      - publicationId: docs-site
+        artifactPath: /architecture/sut-dataset-simulation-model
+    basePresence: MUST_EXIST
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers]
+  - id: guides-index
+    path: docs/guides/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/README.md
+      - publicationId: docs-site
+        artifactPath: /guides
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: redis-dataset-example
+    path: docs/guides/examples/redis-dataset-patterns.mdx
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/examples/redis-dataset-patterns.mdx
+      - publicationId: docs-site
+        artifactPath: /guides/examples/redis-dataset-patterns
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+  - id: quickstart-guide
+    path: docs/guides/onboarding/quickstart-15min.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/onboarding/quickstart-15min.md
+      - publicationId: docs-site
+        artifactPath: /guides/onboarding/quickstart-15min
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: start-here-guide
+    path: docs/guides/onboarding/start-here.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/onboarding/start-here.md
+      - publicationId: docs-site
+        artifactPath: /guides/onboarding/start-here
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: presentation-index
+    path: docs/guides/presentation/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/guides/presentation/README.md
+      - publicationId: docs-site
+        artifactPath: /guides/presentation
+    basePresence: MUST_EXIST
+    ownerIds: [documentation-maintainers]
+  - id: scenarios-index
+    path: docs/scenarios/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/README.md
+      - publicationId: docs-site
+        artifactPath: /scenarios
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: scenario-bundle-diagnostics
+    path: docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_BUNDLE_DIAGNOSTICS
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: scenario-patterns
+    path: docs/scenarios/SCENARIO_PATTERNS.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_PATTERNS.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_PATTERNS
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: scenario-templating-guide
+    path: docs/scenarios/SCENARIO_TEMPLATING.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_TEMPLATING.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_TEMPLATING
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, worker-maintainers, documentation-maintainers]
+  - id: scenario-variables
+    path: docs/scenarios/SCENARIO_VARIABLES.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/scenarios/SCENARIO_VARIABLES.md
+      - publicationId: docs-site
+        artifactPath: /scenarios/SCENARIO_VARIABLES
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, documentation-maintainers]
+  - id: worker-interceptors
+    path: docs/sdk/worker-interceptors.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/sdk/worker-interceptors.md
+      - publicationId: docs-site
+        artifactPath: /sdk/worker-interceptors
+    basePresence: MUST_EXIST
+    ownerIds: [worker-maintainers, documentation-maintainers]
+
+  # All Markdown content selected by the MCP npm package manifest.
+  - id: mcp-package-changelog
+    path: tools/pockethive-mcp/CHANGELOG.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tools/pockethive-mcp/CHANGELOG.md
+      - publicationId: pockethive-mcp-npm
+        artifactPath: CHANGELOG.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: mcp-fixture-readme
+    path: tools/pockethive-mcp/fixtures/scenario-regression/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tools/pockethive-mcp/fixtures/scenario-regression/README.md
+      - publicationId: pockethive-mcp-npm
+        artifactPath: fixtures/scenario-regression/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+
+  # Documentation copied by both deployment archive producers.
+  - id: ghcr-setup-guide
+    path: docs/GHCR_SETUP.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: docs/GHCR_SETUP.md
+      - publicationId: deployment-archive-posix
+        artifactPath: docs/GHCR_SETUP.md
+      - publicationId: deployment-archive-windows
+        artifactPath: docs/GHCR_SETUP.md
+    basePresence: MUST_EXIST
+    ownerIds: [deployment-maintainers]
+  - id: wiremock-package-readme
+    path: wiremock/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: wiremock/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: wiremock/README.md
+      - publicationId: deployment-archive-windows
+        artifactPath: wiremock/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers, deployment-maintainers]
+
+  # Markdown carried recursively by the POSIX scenarios/ archive copy.
+  - id: packaged-scenario-db-query-readme
+    path: scenarios/bundles/db-query-postgres-smoke/test-postgres/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/db-query-postgres-smoke/test-postgres/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/db-query-postgres-smoke/test-postgres/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-flow-changelog
+    path: scenarios/bundles/http-sequence-six-auth-flow/CHANGELOG.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/CHANGELOG.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/CHANGELOG.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-flow-document
+    path: scenarios/bundles/http-sequence-six-auth-flow/FLOW_DOCUMENT.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/FLOW_DOCUMENT.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/FLOW_DOCUMENT.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-flow-readme
+    path: scenarios/bundles/http-sequence-six-auth-flow/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-flow/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-wizard-changelog
+    path: scenarios/bundles/http-sequence-six-auth-wizard-proof/CHANGELOG.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/CHANGELOG.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/CHANGELOG.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-wizard-document
+    path: scenarios/bundles/http-sequence-six-auth-wizard-proof/FLOW_DOCUMENT.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/FLOW_DOCUMENT.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/FLOW_DOCUMENT.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-auth-wizard-readme
+    path: scenarios/bundles/http-sequence-six-auth-wizard-proof/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/http-sequence-six-auth-wizard-proof/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-balance-readme
+    path: scenarios/bundles/webauth-balance-redis/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/webauth-balance-redis/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/webauth-balance-redis/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-loop-readme
+    path: scenarios/bundles/webauth-loop-redis-minimal/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/webauth-loop-redis-minimal/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/webauth-loop-redis-minimal/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-redemption-readme
+    path: scenarios/bundles/webauth-redemption-redis/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/webauth-redemption-redis/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/webauth-redemption-redis/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-topup-readme
+    path: scenarios/bundles/webauth-topup-redis/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/bundles/webauth-topup-redis/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/bundles/webauth-topup-redis/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+  - id: packaged-scenario-e2e-loop-readme
+    path: scenarios/e2e/webauth-loop-redis-5-customers/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: scenarios/e2e/webauth-loop-redis-5-customers/README.md
+      - publicationId: deployment-archive-posix
+        artifactPath: scenarios/e2e/webauth-loop-redis-5-customers/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [security-maintainers, platform-maintainers, deployment-maintainers]
+
+  # Every Markdown file copied into both TCP Mock runtime publications.
+  - id: tcp-doc-capabilities
+    path: tcp-mock-server/docs/CAPABILITIES.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/CAPABILITIES.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/CAPABILITIES.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/CAPABILITIES.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-deployment-checklist
+    path: tcp-mock-server/docs/DEPLOYMENT-CHECKLIST.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/DEPLOYMENT-CHECKLIST.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/DEPLOYMENT-CHECKLIST.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/DEPLOYMENT-CHECKLIST.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers, deployment-maintainers]
+  - id: tcp-doc-index-final
+    path: tcp-mock-server/docs/DOCUMENTATION-INDEX-FINAL.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/DOCUMENTATION-INDEX-FINAL.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/DOCUMENTATION-INDEX-FINAL.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/DOCUMENTATION-INDEX-FINAL.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-status
+    path: tcp-mock-server/docs/DOCUMENTATION-STATUS.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/DOCUMENTATION-STATUS.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/DOCUMENTATION-STATUS.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/DOCUMENTATION-STATUS.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-executive-summary
+    path: tcp-mock-server/docs/EXECUTIVE-SUMMARY.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/EXECUTIVE-SUMMARY.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/EXECUTIVE-SUMMARY.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/EXECUTIVE-SUMMARY.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-handover
+    path: tcp-mock-server/docs/HANDOVER.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/HANDOVER.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/HANDOVER.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/HANDOVER.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-migration-guide
+    path: tcp-mock-server/docs/MIGRATION-GUIDE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/MIGRATION-GUIDE.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/MIGRATION-GUIDE.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/MIGRATION-GUIDE.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-polish-features
+    path: tcp-mock-server/docs/POLISH-FEATURES.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/POLISH-FEATURES.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/POLISH-FEATURES.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/POLISH-FEATURES.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-quick-reference
+    path: tcp-mock-server/docs/QUICK-REFERENCE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/QUICK-REFERENCE.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/QUICK-REFERENCE.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/QUICK-REFERENCE.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-readme
+    path: tcp-mock-server/docs/README.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/README.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/README.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/README.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-production-readme
+    path: tcp-mock-server/docs/README-PRODUCTION.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/README-PRODUCTION.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/README-PRODUCTION.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/README-PRODUCTION.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-scenario-setup
+    path: tcp-mock-server/docs/SCENARIO-SETUP.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/SCENARIO-SETUP.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/SCENARIO-SETUP.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/SCENARIO-SETUP.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+  - id: tcp-doc-ui-user-guide
+    path: tcp-mock-server/docs/UI-USER-GUIDE.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/UI-USER-GUIDE.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/UI-USER-GUIDE.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/UI-USER-GUIDE.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers, ui-maintainers]
+  - id: tcp-doc-wiremock-parity
+    path: tcp-mock-server/docs/WIREMOCK-PARITY.md
+    role: PROJECTION
+    publicationBindings:
+      - publicationId: repository
+        artifactPath: tcp-mock-server/docs/WIREMOCK-PARITY.md
+      - publicationId: tcp-mock-jar-docs
+        artifactPath: docs/WIREMOCK-PARITY.md
+      - publicationId: tcp-mock-image-docs
+        artifactPath: /app/docs/WIREMOCK-PARITY.md
+    basePresence: MUST_EXIST
+    ownerIds: [integration-maintainers]
+
+# Rules are additive. SELF makes each material node independently explainable;
+# DIRECT and TRANSITIVE consume only explicit CONTINUE/STOP routes above. A
+# changed source file is intentionally excluded as satisfaction evidence.
+documentationRules:
+  - id: system-contract-projections
+    impactNodeIds: [contract-system-architecture]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+      - documentId: repository-readme
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract, deployment-posix-package-contract, deployment-windows-package-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers, deployment-maintainers]
+
+  - id: lifecycle-contract-projections
+    impactNodeIds: [contract-lifecycle]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: lifecycle-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [lifecycle-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: lifecycle-implementation-docs
+    impactNodeIds: [shared-swarm-model, shared-lifecycle-typescript, tool-lifecycle-contract-generator]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: system-architecture
+        acceptedChangeKinds: [MODIFY]
+      - documentId: lifecycle-schema
+        acceptedChangeKinds: [MODIFY]
+      - documentId: lifecycle-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [lifecycle-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: control-contract-projections
+    impactNodeIds: [contract-control-plane]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [control-plane-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: control-implementation-docs
+    impactNodeIds:
+      - shared-topology
+      - shared-control-core
+      - shared-control-filesystem
+      - shared-control-spring
+      - shared-manager-sdk
+      - service-swarm-controller
+      - infra-rabbitmq
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: control-asyncapi
+        acceptedChangeKinds: [MODIFY]
+      - documentId: control-events-schema
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [control-plane-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - worker-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: workitem-contract-projections
+    impactNodeIds: [contract-workitem]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: worker-sdk-quickstart
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: templating-basics
+        acceptedChangeKinds: [MODIFY]
+      - documentId: templating-advanced
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: templating-implementation-docs
+    impactNodeIds: [shared-templating, shared-request-templates, tool-scenario-templating-check]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: workitem-envelope
+        acceptedChangeKinds: [MODIFY]
+      - documentId: templating-basics
+        acceptedChangeKinds: [MODIFY]
+      - documentId: templating-advanced
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: scenario-contract-projections
+    impactNodeIds: [contract-scenario]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: scenario-plan-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: first-scenario-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [scenario-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: scenario-implementation-docs
+    impactNodeIds:
+      - shared-scenario-validation
+      - scenario-catalog
+      - service-scenario-manager
+      - service-network-proxy-manager
+      - infra-haproxy
+      - tool-scenario-config-migrator
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: scenario-contract
+        acceptedChangeKinds: [MODIFY]
+      - documentId: scenario-workspace-api
+        acceptedChangeKinds: [MODIFY]
+      - documentId: scenario-manager-bundle-rest
+        acceptedChangeKinds: [MODIFY]
+      - documentId: sut-environment-schema
+        acceptedChangeKinds: [MODIFY]
+      - documentId: sut-environments-schema
+        acceptedChangeKinds: [MODIFY]
+      - documentId: scenario-plan-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: first-scenario-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [scenario-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - integration-maintainers
+      - deployment-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: worker-contract-projections
+    impactNodeIds: [contract-worker-capabilities]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: worker-sdk-quickstart
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: workers-basics
+        acceptedChangeKinds: [MODIFY]
+      - documentId: workers-advanced
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - worker-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: worker-implementation-docs
+    impactNodeIds:
+      - shared-worker-sdk
+      - worker-generator
+      - worker-moderator
+      - worker-request-builder
+      - worker-processor
+      - worker-http-sequence
+      - worker-db-query
+      - worker-postprocessor
+      - worker-clearing-export
+      - worker-trigger
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: worker-capabilities
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-sdk-quickstart
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: workers-basics
+        acceptedChangeKinds: [MODIFY]
+      - documentId: workers-advanced
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: controller-consumer-projections
+    impactNodeIds: [service-swarm-controller]
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: worker-control-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [control-plane-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - worker-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: worker-consumer-projections
+    impactNodeIds:
+      - worker-generator
+      - worker-moderator
+      - worker-request-builder
+      - worker-processor
+      - worker-http-sequence
+      - worker-db-query
+      - worker-postprocessor
+      - worker-clearing-export
+      - worker-trigger
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: workers-basics
+        acceptedChangeKinds: [MODIFY]
+      - documentId: workers-advanced
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [platform-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: clearing-worker-docs
+    impactNodeIds: [worker-clearing-export]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: clearing-schema-contract
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, repository-document-contract]
+    ownerIds: [worker-maintainers, repository-maintainers]
+
+  - id: auth-contract-projections
+    impactNodeIds: [contract-auth]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [auth-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, security-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: auth-implementation-docs
+    impactNodeIds: [shared-auth-contracts, shared-auth-client, service-auth]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: auth-api
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [auth-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - security-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: auth-proving-tool-docs
+    impactNodeIds: [tool-auth-proving]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: auth-api
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [auth-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [security-maintainers, integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: worker-auth-integration-docs
+    impactNodeIds:
+      - shared-worker-sdk
+      - shared-request-templates
+      - worker-request-builder
+      - worker-processor
+      - worker-http-sequence
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: auth-behavior
+        acceptedChangeKinds: [MODIFY]
+      - documentId: auth-user-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [auth-contract, repository-document-contract]
+    ownerIds: [security-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: scenario-defaults-generator-docs
+    impactNodeIds: [tool-scenario-defaults-generator]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: scenario-contract
+        acceptedChangeKinds: [MODIFY]
+      - documentId: worker-capabilities
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-package-readme
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [scenario-contract, worker-contract, docs-site-contract, repository-document-contract, mcp-package-contract]
+    ownerIds:
+      - platform-maintainers
+      - worker-maintainers
+      - integration-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: orchestrator-contract-projections
+    impactNodeIds: [contract-orchestrator-rest]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: ui-application-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - integration-maintainers
+      - ui-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: orchestration-implementation-docs
+    impactNodeIds: [shared-docker-client, service-orchestrator, tool-orchestrator-debug]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: orchestrator-rest
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract]
+    ownerIds:
+      - architecture-maintainers
+      - platform-maintainers
+      - integration-maintainers
+      - deployment-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: ui-application-docs
+    impactNodeIds: [app-ui]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: ui-application-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: ui-v2-flow
+        acceptedChangeKinds: [MODIFY]
+      - documentId: ui-screenshot-evidence
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [ui-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: ui-consumer-projections
+    impactNodeIds: [app-ui]
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: ui-application-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [ui-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: ui-delivery-docs
+    impactNodeIds: [app-ui-delivery]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: deployment-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: usage-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds:
+      - deployment-contract
+      - docs-site-contract
+      - repository-document-contract
+      - deployment-posix-package-contract
+      - deployment-windows-package-contract
+    ownerIds:
+      - architecture-maintainers
+      - ui-maintainers
+      - deployment-maintainers
+      - documentation-maintainers
+      - repository-maintainers
+
+  - id: client-integration-config-docs
+    impactNodeIds: [client-integration-config]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-package-readme
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, mcp-package-contract]
+    ownerIds: [integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: local-development-environment-docs
+    impactNodeIds: [local-development-environment]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: contributor-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [repository-document-contract]
+    ownerIds: [repository-maintainers, deployment-maintainers]
+
+  - id: mcp-application-docs
+    impactNodeIds: [app-pockethive-mcp]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: mcp-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, mcp-package-contract]
+    ownerIds: [integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: vscode-application-docs
+    impactNodeIds: [app-vscode]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: vscode-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, vscode-package-contract]
+    ownerIds: [integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: tcp-mock-application-docs
+    impactNodeIds: [app-tcp-mock]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: tcp-mock-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: tcp-mock-runtime-start
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, tcp-mock-jar-docs-contract, tcp-mock-image-docs-contract]
+    ownerIds: [integration-maintainers, deployment-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: wiremock-adapter-docs
+    impactNodeIds: [infra-wiremock]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: wiremock-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: authoring-tools-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract, deployment-posix-package-contract, deployment-windows-package-contract]
+    ownerIds: [integration-maintainers, deployment-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: mcp-consumer-projections
+    impactNodeIds: [app-pockethive-mcp]
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: mcp-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, mcp-package-contract]
+    ownerIds: [integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: vscode-consumer-projections
+    impactNodeIds: [app-vscode]
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: vscode-package-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: mcp-integration-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [mcp-contract, docs-site-contract, repository-document-contract, vscode-package-contract]
+    ownerIds: [integration-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: observability-contract-projections
+    impactNodeIds: [contract-observability]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: observability-troubleshooting
+        acceptedChangeKinds: [MODIFY]
+      - documentId: system-workflows
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [observability-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: observability-implementation-docs
+    impactNodeIds:
+      - shared-observability
+      - shared-clickhouse-sink
+      - shared-journal-postgres
+      - infra-clickhouse
+      - infra-grafana
+      - tool-control-traffic-viewer
+      - tool-outcome-storage
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: observability-contract
+        acceptedChangeKinds: [MODIFY]
+      - documentId: correlation-contract
+        acceptedChangeKinds: [MODIFY]
+      - documentId: observability-troubleshooting
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [observability-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, platform-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: delivery-domain-docs
+    impactNodeIds:
+      - repository-build
+      - repository-ci-delivery
+      - local-delivery
+      - managed-delivery
+      - shared-docker-client
+      - infra-haproxy
+      - tool-diagnostics
+      - tool-container
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: deployment-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: hiveforge-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: deployment-package
+        acceptedChangeKinds: [MODIFY]
+      - documentId: upgrading-guide
+        acceptedChangeKinds: [MODIFY]
+      - documentId: repository-readme
+        acceptedChangeKinds: [MODIFY]
+      - documentId: usage-guide
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [deployment-contract, docs-site-contract, repository-document-contract, deployment-posix-package-contract, deployment-windows-package-contract]
+    ownerIds:
+      - repository-maintainers
+      - architecture-maintainers
+      - platform-maintainers
+      - deployment-maintainers
+      - documentation-maintainers
+
+  - id: traffic-shaping-implementation-docs
+    impactNodeIds: [service-swarm-controller, worker-moderator]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: traffic-shaping
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [worker-contract, docs-site-contract, repository-document-contract]
+    ownerIds: [platform-maintainers, worker-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: documentation-system-docs
+    impactNodeIds: [documentation-site, tool-documentation-validation]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: docs-index
+        acceptedChangeKinds: [MODIFY]
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: documentation-site-consumer-projections
+    impactNodeIds: [documentation-site]
+    impactDepths: [DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: docs-site-readme
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [documentation-maintainers, repository-maintainers]
+
+  - id: documentation-automation-contract-projections
+    impactNodeIds: [contract-documentation-impact]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+      - documentId: docs-index
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: documentation-automation-implementation
+    impactNodeIds: [tool-documentation-automation]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: automation-architecture
+        acceptedChangeKinds: [MODIFY]
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: completed-work-review-contract-projections
+    impactNodeIds: [contract-completed-work-review]
+    impactDepths: [SELF, DIRECT, TRANSITIVE]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+      - documentId: docs-index
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, documentation-maintainers, repository-maintainers]
+
+  - id: completed-work-review-implementation
+    impactNodeIds: [tool-completed-work-review]
+    impactDepths: [SELF]
+    sourceChangeKinds: [ADD, MODIFY, DELETE, TYPE_CHANGE]
+    targets:
+      - documentId: completed-work-review-architecture
+        acceptedChangeKinds: [MODIFY]
+      - documentId: project-map
+        acceptedChangeKinds: [MODIFY]
+    checkIds: [docs-site-contract, repository-document-contract]
+    ownerIds: [architecture-maintainers, documentation-maintainers, repository-maintainers]
+
+# Governance overlays are independent of documentation obligations. CONTROL
+# protects the trusted classifier base; PROTECTED marks contracts and sensitive
+# integration/deployment surfaces for explicit owner review.
+protectionRules:
+  - id: documentation-automation-control
+    kind: CONTROL
+    paths:
+      - docs/ci/docs-impact-map.schema.json
+      - docs/ci/docs-impact-map.yaml
+      - package-lock.json
+      - package.json
+      - tools/docs-impact/**
+    ownerIds: [repository-maintainers, architecture-maintainers]
+
+  - id: repository-governance-control
+    kind: CONTROL
+    paths:
+      - .github/CODEOWNERS
+      - .github/pull_request_template.md
+      - .github/workflows/**
+      - AGENTS.md
+      - CONTRIBUTING.md
+    ownerIds: [repository-maintainers]
+
+  - id: architecture-contracts-protected
+    kind: PROTECTED
+    paths:
+      - docs/ARCHITECTURE.md
+      - docs/ORCHESTRATOR-REST.md
+      - docs/architecture/**
+      - docs/correlation-vs-idempotency.md
+      - docs/observability.md
+      - docs/scenarios/**
+      - docs/spec/**
+    ownerIds: [architecture-maintainers]
+
+  - id: control-plane-contracts-protected
+    kind: PROTECTED
+    paths:
+      - common/control-plane-core/**
+      - common/control-plane-filesystem/**
+      - common/control-plane-spring/**
+      - common/manager-sdk/**
+      - common/topology-core/**
+      - common/worker-sdk/**
+      - packages/swarm-lifecycle-contract/**
+    ownerIds: [architecture-maintainers, platform-maintainers, worker-maintainers]
+
+  - id: authentication-contracts-protected
+    kind: PROTECTED
+    paths:
+      - auth-service/**
+      - common/auth-client/**
+      - common/auth-contracts/**
+      - docs/architecture/AUTH_SERVICE_API_SPEC.md
+    ownerIds: [security-maintainers]
+
+  - id: client-integration-protected
+    kind: PROTECTED
+    paths:
+      - .amazonq/agents/default.json
+      - .amazonq/mcp.json
+      - .amazonq/mcp.json.dist
+      - .amazonq/rules/**
+      - .codex/config.toml
+      - .cursor/mcp.json
+      - .vscode/mcp.json
+      - .windsurf/mcp.json
+      - mcp.json
+      - tools/pockethive-mcp/README.md
+      - tools/pockethive-mcp/config-update.mjs
+      - tools/pockethive-mcp/config-update.test.mjs
+      - tools/pockethive-mcp/docker-compose.yml
+      - tools/pockethive-mcp/docs-contract-audit.mjs
+      - tools/pockethive-mcp/doctor.mjs
+      - tools/pockethive-mcp/doctor.test.mjs
+      - tools/pockethive-mcp/fixtures/**
+      - tools/pockethive-mcp/generated/**
+      - tools/pockethive-mcp/package-lock.json
+      - tools/pockethive-mcp/package.json
+      - tools/pockethive-mcp/poc-runner.mjs
+      - tools/pockethive-mcp/runtime-tools.mjs
+      - tools/pockethive-mcp/runtime-tools.test.mjs
+      - tools/pockethive-mcp/scenario-regression-acceptance.mjs
+      - tools/pockethive-mcp/schema.test.mjs
+      - tools/pockethive-mcp/server.mjs
+      - tools/pockethive-mcp/setup.cjs
+      - tools/pockethive-mcp/smoke-test.mjs
+      - tools/pockethive-mcp/start.cjs
+      - tools/pockethive-mcp/target-input.test.mjs
+      - tools/pockethive-mcp/tools-list-schema.test.mjs
+      - tools/pockethive-mcp/wizard-acceptance.mjs
+      - tools/pockethive-mcp/workflow-acceptance.mjs
+      - tools/pockethive-mcp/workflow-agentic-evals.mjs
+      - tools/pockethive-mcp/workflow-invariants.test.mjs
+      - tools/pockethive-mcp/workflow-tools.mjs
+      - tools/pockethive-mcp/workflow.test.mjs
+      - vscode-pockethive/.vscode/**
+      - vscode-pockethive/.vscodeignore
+      - vscode-pockethive/README.md
+      - vscode-pockethive/init.sh
+      - vscode-pockethive/package-lock.json
+      - vscode-pockethive/package.json
+      - vscode-pockethive/resources/**
+      - vscode-pockethive/scripts/**
+      - vscode-pockethive/src/**
+      - vscode-pockethive/tsconfig.json
+    ownerIds: [integration-maintainers]
+
+  - id: local-development-environment-protected
+    kind: PROTECTED
+    paths: [.devcontainer/devcontainer.json]
+    ownerIds: [repository-maintainers, deployment-maintainers, security-maintainers]
+
+  - id: messaging-security-protected
+    kind: PROTECTED
+    paths: [rabbitmq/**]
+    ownerIds: [architecture-maintainers, platform-maintainers, security-maintainers]
+
+  - id: managed-delivery-protected
+    kind: PROTECTED
+    paths:
+      - .env.ghcr
+      - deploy/**
+      - hiveforge.yaml
+      - package-deployment.bat
+      - package-deployment.sh
+      - tools/hiveforge-contract-check.sh
+    ownerIds: [deployment-maintainers]
+
+  - id: local-delivery-protected
+    kind: PROTECTED
+    paths:
+      - .dockerignore
+      - .env.example
+      - build-hive.sh
+      - docker/**
+      - docker-compose.yml
+      - Dockerfile.bees.local
+      - setup-wsl.sh
+      - start-e2e-tests.bat
+      - start-e2e-tests.sh
+      - start-mcp.bat
+      - start-mcp.sh
+    ownerIds: [deployment-maintainers]
+
+  - id: repository-build-protected
+    kind: PROTECTED
+    paths:
+      - .mvn/**
+      - commitlint.config.js
+      - eslint.config.cjs
+      - mvnw
+      - mvnw.cmd
+      - package-lock.json
+      - package.json
+      - pom.xml
+      - scripts/bootstrap-ssot.test.mjs
+      - scripts/generate-scenario-config-defaults.mjs
+      - scripts/generate-swarm-lifecycle-contract.mjs
+      - scripts/scenario-config-defaults.test.mjs
+      - vitest.config.mjs
+    ownerIds: [repository-maintainers]
+
+  - id: network-ingress-protected
+    kind: PROTECTED
+    paths: [network-proxy-haproxy/**, ui-v2/nginx.conf]
+    ownerIds: [deployment-maintainers, platform-maintainers]

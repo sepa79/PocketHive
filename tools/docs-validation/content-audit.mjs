@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { existsSync } from "node:fs";
+import { lstatSync } from "node:fs";
 import { readFile } from "node:fs/promises";
+import { isAbsolute } from "node:path";
 import { SaxesParser } from "saxes";
 import { parseDocument } from "yaml";
 
@@ -15,53 +16,16 @@ function log(message) {
   console.log(`[docs-content] ${message}`);
 }
 
-function commandWorks(command, args) {
-  const result = spawnSync(command, args, {
-    encoding: "utf8",
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
-  });
-  return !result.error && result.status === 0;
-}
-
-function findBash() {
-  const configured = process.env.DOCS_TEST_BASH_EXECUTABLE?.trim();
-  if (configured) {
-    if (!existsSync(configured)) {
-      throw new Error(`DOCS_TEST_BASH_EXECUTABLE does not exist: ${configured}`);
-    }
-    return configured;
+function requiredExecutable(environmentName, label) {
+  const executable = process.env[environmentName]?.trim();
+  if (!executable || !isAbsolute(executable)) {
+    throw new Error(`${environmentName} must declare the exact absolute ${label} executable`);
   }
-
-  const candidates =
-    process.platform === "win32"
-      ? [
-          "C:\\Program Files\\Git\\bin\\bash.exe",
-          "C:\\Program Files\\Git\\usr\\bin\\bash.exe",
-        ]
-      : ["bash"];
-  return candidates.find(
-    (candidate) =>
-      (candidate === "bash" || existsSync(candidate)) &&
-      commandWorks(candidate, ["--version"]),
-  );
-}
-
-function findPowerShell() {
-  const configured = process.env.DOCS_TEST_POWERSHELL_EXECUTABLE?.trim();
-  if (configured) {
-    if (!existsSync(configured)) {
-      throw new Error(
-        `DOCS_TEST_POWERSHELL_EXECUTABLE does not exist: ${configured}`,
-      );
-    }
-    return configured;
+  const metadata = lstatSync(executable);
+  if (metadata.isSymbolicLink() || !metadata.isFile()) {
+    throw new Error(`${environmentName} must identify a non-link regular file`);
   }
-
-  const candidates = process.platform === "win32" ? ["powershell.exe", "pwsh"] : ["pwsh"];
-  return candidates.find((candidate) =>
-    commandWorks(candidate, ["-NoProfile", "-NonInteractive", "-Command", "$PSVersionTable.PSVersion.ToString()"]),
-  );
+  return executable;
 }
 
 function validateJson(content) {
@@ -130,8 +94,11 @@ function recordFailure(failures, fence, error) {
 
 async function main() {
   const docs = await publishedDocs();
-  const bash = findBash();
-  const powerShell = findPowerShell();
+  const bash = requiredExecutable("DOCS_VALIDATION_BASH_EXECUTABLE", "Bash");
+  const powerShell = requiredExecutable(
+    "DOCS_VALIDATION_POWERSHELL_EXECUTABLE",
+    "PowerShell",
+  );
   const counts = new Map();
   const failures = [];
   let totalFences = 0;
@@ -157,19 +124,11 @@ async function main() {
           validateXml(fence.content);
           checkedData += 1;
         } else if (BASH_LANGUAGES.has(fence.language)) {
-          if (bash) {
-            validateBash(bash, fence.content);
-            checkedShell += 1;
-          } else {
-            skippedShell += 1;
-          }
+          validateBash(bash, fence.content);
+          checkedShell += 1;
         } else if (POWERSHELL_LANGUAGES.has(fence.language)) {
-          if (powerShell) {
-            validatePowerShell(powerShell, fence.content);
-            checkedShell += 1;
-          } else {
-            skippedShell += 1;
-          }
+          validatePowerShell(powerShell, fence.content);
+          checkedShell += 1;
         } else if (BATCH_LANGUAGES.has(fence.language)) {
           skippedShell += 1;
         }

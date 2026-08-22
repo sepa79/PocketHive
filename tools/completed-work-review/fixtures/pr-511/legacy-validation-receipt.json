@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "1b75eac799e4ba1c3fdfccafc804cf6d3e021293913d7ff47eed3868393fdb26",
+  "evidenceId": "pr511-legacy-validation",
+  "kind": "MEASURED",
+  "subject": "CANDIDATE",
+  "subjectIdentityRef": "a60995f60562f57eca660b0cba328c7f783eb0b9b2f1390aab3e3531f0a6f29c",
+  "profileDigest": "d50f18ebc7a6866dcdf8fcc268608cb4c89c0873b2343ba87d1e07a80b4497d6",
+  "producer": {
+    "id": "legacy-docs-validation",
+    "version": "legacy-unverified",
+    "digest": "f56b33188fb2d429ed5982d0ba0410c81874e9f320fd61cc5b72a667a9df2544"
+  },
+  "execution": {
+    "kind": "AUTOMATED_CHECK",
+    "adapter": "DOCS_VALIDATION",
+    "entrypoint": null,
+    "arguments": [],
+    "officialIngress": true
+  },
+  "status": "PASS",
+  "summary": "Legacy documentation validation recorded 16 passed, 0 failed, and 0 skipped checks against candidate tree fb10512d; it predates schema-v1 identity and tool receipts.",
+  "claims": {
+    "gateOutcomes": [],
+    "scoreAttestations": [],
+    "searchDiscovery": null,
+    "independentReview": null,
+    "findingApprovals": []
+  },
+  "artifacts": [
+    {
+      "id": "legacy-validation-summary",
+      "kind": "JSON",
+      "repositoryPath": "tools/completed-work-review/fixtures/pr-511/legacy-validation-summary.json",
+      "sha256": "f56b33188fb2d429ed5982d0ba0410c81874e9f320fd61cc5b72a667a9df2544",
+      "sizeBytes": 1819
+    },
+    {
+      "id": "legacy-integrity-digest",
+      "kind": "MANIFEST",
+      "repositoryPath": "tools/completed-work-review/fixtures/pr-511/legacy-integrity-manifest.sha256",
+      "sha256": "90ca481ea5c1ea5ad5839aebd9dfa4f2741787620157d932e54c47e5ebcac4c0",
+      "sizeBytes": 90
+    }
+  ],
+  "observations": [
+    { "id": "checks-passed", "label": "Legacy documentation checks passed", "value": 16, "unit": "checks" },
+    { "id": "checks-failed", "label": "Legacy documentation checks failed", "value": 0, "unit": "checks" },
+    { "id": "checks-skipped", "label": "Legacy documentation checks skipped", "value": 0, "unit": "checks" },
+    { "id": "semantic-checks", "label": "Source semantic checks", "value": 68, "unit": "checks" },
+    { "id": "integrity-manifest-files", "label": "Legacy integrity manifest entries", "value": 545, "unit": "files" }
+  ],
+  "createdAt": "2026-08-06T09:30:46.743Z"
+}

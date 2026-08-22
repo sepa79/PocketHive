@@ -1,0 +1,227 @@
+{
+  "schemaVersion": 1,
+  "profileId": "POCKETHIVE_DOCUMENTATION_V1",
+  "verdictScope": "LOCAL_CANDIDATE",
+  "candidateVerificationTarget": "GIT_OBJECT",
+  "paths": {
+    "profiles": "docs/ci/completed-work-review-profiles.json",
+    "profileSchema": "docs/ci/completed-work-review-profiles.schema.json",
+    "candidateIdentitySchema": "tools/completed-work-review/contracts/candidate-identity.schema.json",
+    "evidenceReceiptSchema": "tools/completed-work-review/contracts/evidence-receipt.schema.json",
+    "reviewResultSchema": "tools/completed-work-review/contracts/review-result.schema.json",
+    "candidateIdentity": ".test-results/completed-work-review/pr-511-input/candidate-identity.json",
+    "baselineIdentity": ".test-results/completed-work-review/pr-511-input/baseline-identity.json",
+    "deploymentIdentity": null,
+    "evidenceReceipts": [
+      "tools/completed-work-review/fixtures/pr-511/legacy-validation-receipt.json",
+      "tools/completed-work-review/fixtures/pr-511/legacy-baseline-scorecard-receipt.json",
+      "tools/completed-work-review/fixtures/pr-511/legacy-scorecard-receipt.json",
+      "tools/completed-work-review/fixtures/pr-511/legacy-docs-impact-receipt.json"
+    ],
+    "outputDirectory": ".test-results/completed-work-review/pr-511-migration-v2"
+  },
+  "approvedReferenceEvidenceRefs": [],
+  "dimensions": [
+    {
+      "id": "orientation",
+      "baseline": 6.2,
+      "current": 8.8,
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "notes": "Reviewer judgment: the new Start Here and guided onboarding materially improve initial orientation."
+    },
+    {
+      "id": "actionability",
+      "baseline": 4.8,
+      "current": 8.6,
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "notes": "Measured legacy command checks plus reviewer judgment on the end-to-end quickstart."
+    },
+    {
+      "id": "correctness",
+      "baseline": 6.0,
+      "current": 8.7,
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "notes": "Legacy validation recorded 16 passed checks and 68 source semantic checks; schema-v1 provenance is unavailable."
+    },
+    {
+      "id": "safety",
+      "baseline": 4.3,
+      "current": 9.2,
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "notes": "Reviewer judgment: safer platform, ingress, cleanup, and blocked-package guidance is explicit."
+    },
+    {
+      "id": "navigation-visual-usability",
+      "baseline": 5.8,
+      "current": 8.0,
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "notes": "Legacy desktop/mobile route checks passed; no current screenshot provenance is available to schema v1."
+    }
+  ],
+  "gateInputs": [
+    {
+      "id": "candidate-identity",
+      "summary": "Candidate commit and Git tree identity must be exact.",
+      "evidenceRefs": [],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Supply a valid schema-v1 candidate identity.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "baseline-identity",
+      "summary": "The scored baseline must have an exact Git identity.",
+      "evidenceRefs": [],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Supply a valid schema-v1 baseline identity.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "required-score-evidence",
+      "summary": "Every required dimension score must cite fresh identity-bound evidence.",
+      "evidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Re-score the exact candidate with fresh schema-v1 measured and reviewer-judgment receipts.",
+        "requiredEvidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"]
+      }
+    },
+    {
+      "id": "documentation-validation",
+      "summary": "Documentation validation must be fresh and bound to the exact candidate and tool identity.",
+      "evidenceRefs": ["pr511-legacy-validation"],
+      "unlock": {
+        "kind": "COMMAND",
+        "description": "Run the schema-v1 documentation validation profile against the exact candidate through official ingress where applicable.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "docs-impact-disposition",
+      "summary": "Documentation-impact obligations require protected-controller evidence before they can unlock readiness.",
+      "evidenceRefs": ["pr511-docs-impact-gap"],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Supply trusted protected-controller documentation-impact evidence after that adapter is separately approved.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "search-ai-discovery",
+      "summary": "Public documentation search and AI discovery impact must be evaluated explicitly.",
+      "evidenceRefs": ["pr511-legacy-validation"],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Run current route, canonical, metadata, rendering, indexing-control, and retrieval checks against the bound candidate.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "independent-review",
+      "summary": "A separate identity-bound NOVICE, EXPERT, and UX review is required.",
+      "evidenceRefs": [],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Complete independent NOVICE, EXPERT, and UX passes without sharing the author scores.",
+        "requiredEvidenceKinds": ["REVIEWER_JUDGMENT"]
+      }
+    }
+  ],
+  "docsImpact": {
+    "authority": "INFORMATIONAL_UNVERIFIED",
+    "analysisEvidenceRef": "pr511-docs-impact-gap",
+    "statement": "The historical evidence predates canonical documentation-impact analysis; the gap record is informational and cannot unlock readiness."
+  },
+  "searchDiscovery": {
+    "status": "UNVERIFIED",
+    "statement": "Legacy rendered-route checks do not establish current canonical URLs, crawler controls, metadata, structured claims, or retrieval parity for the bound PR commit.",
+    "evidenceRefs": ["pr511-legacy-validation"],
+    "actions": [
+      "Run equivalent current desktop and mobile rendered-route checks against the exact candidate.",
+      "Verify canonical routes, redirects, robots controls, sitemap membership, metadata, semantic headings, and server-rendered content."
+    ]
+  },
+  "publicationBoundary": {
+    "maximumVerifiedScope": "LOCAL_CANDIDATE",
+    "mergeAuthority": "NOT_GRANTED",
+    "publicationAuthority": "NOT_GRANTED",
+    "deploymentAuthority": "NOT_GRANTED",
+    "authorityEvidenceRefs": [],
+    "statement": "This migration demonstrates local comparison assembly only; it does not establish present merge, publication, or deployment readiness."
+  },
+  "confidence": {
+    "label": "LOW",
+    "value": 0.45,
+    "basisEvidenceRefs": ["pr511-legacy-validation", "pr511-legacy-baseline-scorecard", "pr511-legacy-scorecard"],
+    "limitations": [
+      "Legacy validation is tree-bound and predates the final PR commit receipt.",
+      "No trusted producer registry, protected documentation-impact evidence, current discovery review, or independent review receipt is available.",
+      "The original 545-file integrity manifest is retained externally; this fixture preserves only its recorded digest."
+    ]
+  },
+  "blockers": [
+    {
+      "id": "legacy-per-report-provenance",
+      "severity": "MATERIAL",
+      "status": "OPEN",
+      "summary": "Legacy per-report candidate, tool, profile, policy, and artifact provenance cannot be reconstructed from the retained summary.",
+      "evidenceRefs": ["pr511-legacy-validation"],
+      "unlock": {
+        "kind": "COMMAND",
+        "description": "Regenerate the required receipts with the schema-v1 validation and review producers.",
+        "requiredEvidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"]
+      }
+    }
+  ],
+  "regressions": [
+    {
+      "id": "quickstart-length-tradeoff",
+      "dimensionId": "orientation",
+      "severity": "NON_MATERIAL",
+      "summary": "The quickstart expanded from 51 to 473 lines to carry the end-to-end workflow and safety guidance.",
+      "evidenceRefs": ["pr511-legacy-scorecard"],
+      "disposition": "ACCEPTED_TRADE_OFF"
+    }
+  ],
+  "remainingGaps": [
+    {
+      "id": "fresh-schema-v1-validation",
+      "dimensionId": "correctness",
+      "severity": "MATERIAL",
+      "summary": "The 16/16 legacy result has not been regenerated as a schema-v1 receipt against the exact PR commit identity.",
+      "evidenceRefs": ["pr511-legacy-validation"],
+      "unlock": {
+        "kind": "COMMAND",
+        "description": "Run current schema-v1 documentation validation against the exact candidate.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    },
+    {
+      "id": "identity-bound-independent-review",
+      "dimensionId": null,
+      "severity": "MATERIAL",
+      "summary": "No independent NOVICE, EXPERT, and UX receipt is bound to the exact candidate and rubric.",
+      "evidenceRefs": [],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Complete the three independent review passes and bind their raw findings.",
+        "requiredEvidenceKinds": ["REVIEWER_JUDGMENT"]
+      }
+    },
+    {
+      "id": "protected-docs-impact-authority",
+      "dimensionId": null,
+      "severity": "MATERIAL",
+      "summary": "No approved trusted adapter can provide PROTECTED_CONTROLLER_VERIFIED documentation-impact authority in schema v1.",
+      "evidenceRefs": ["pr511-docs-impact-gap"],
+      "unlock": {
+        "kind": "EXTERNAL_EVIDENCE",
+        "description": "Approve and implement the protected-controller adapter in a later contract version.",
+        "requiredEvidenceKinds": ["MEASURED"]
+      }
+    }
+  ]
+}

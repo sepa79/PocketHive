@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "f92f4dd609c81f5ce87c4b43eab2a7ab6b69c1a3770cb2a507c7240d73e72099",
+  "evidenceId": "pr511-docs-impact-gap",
+  "kind": "MEASURED",
+  "subject": "CANDIDATE",
+  "subjectIdentityRef": "a60995f60562f57eca660b0cba328c7f783eb0b9b2f1390aab3e3531f0a6f29c",
+  "profileDigest": "d50f18ebc7a6866dcdf8fcc268608cb4c89c0873b2343ba87d1e07a80b4497d6",
+  "producer": {
+    "id": "legacy-docs-impact-record",
+    "version": "legacy-unverified",
+    "digest": "d1d18882bca0bdd9426f15a5940dfeade9f9e95c9cc29dcbd2a8bcf3cd743ba7"
+  },
+  "execution": {
+    "kind": "AUTOMATED_CHECK",
+    "adapter": "DOCS_IMPACT",
+    "entrypoint": null,
+    "arguments": [],
+    "officialIngress": false
+  },
+  "status": "SKIP",
+  "summary": "No canonical protected documentation-impact analysis existed for the historical PR 511 evidence run.",
+  "claims": {
+    "gateOutcomes": [],
+    "scoreAttestations": [],
+    "searchDiscovery": null,
+    "independentReview": null,
+    "findingApprovals": []
+  },
+  "artifacts": [],
+  "observations": [
+    { "id": "protected-controller", "label": "Protected documentation-impact controller evidence", "value": false, "unit": null }
+  ],
+  "createdAt": "2026-08-17T12:00:00.000Z"
+}

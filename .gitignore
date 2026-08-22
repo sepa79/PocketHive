@@ -49,6 +49,9 @@ tools/mcp-orchestrator-debug/control-recording.jsonl
 tools/mcp-orchestrator-debug/control-recording-run*.jsonl
 tools/mcp-orchestrator-debug/session-log.jsonl
 
+# --- Generated verification evidence ---
+.test-results/
+
 # --- PocketHive runtime ---
 scenarios-runtime/
 **/scenarios-runtime/

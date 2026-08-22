@@ -1,0 +1,275 @@
+{
+  "adapterStates": [
+    "CONFIGURED",
+    "NOT_APPLICABLE"
+  ],
+  "executableAdapterIds": [
+    "node",
+    "git",
+    "npm",
+    "commandShell",
+    "taskkill",
+    "bash",
+    "powerShell",
+    "java",
+    "maven",
+    "docker",
+    "chromium"
+  ],
+  "artifactKinds": [
+    "RENDERED_ROUTE_REPORT"
+  ],
+  "candidateModes": [
+    "COMMITTED_GIT",
+    "DIRTY_WORKTREE"
+  ],
+  "candidateStability": [
+    "PENDING",
+    "MATCHED",
+    "MISMATCHED"
+  ],
+  "candidateVerification": [
+    "VERIFIED"
+  ],
+  "lockfilePaths": [
+    "package-lock.json",
+    "docs-site/package-lock.json",
+    "tools/pockethive-mcp/package-lock.json",
+    "tools/scenario-config-migrate/package-lock.json"
+  ],
+  "limits": {
+    "maxUntrackedFiles": 20000,
+    "maxUntrackedFileBytes": 134217728,
+    "maxAggregateUntrackedBytes": 536870912
+  },
+  "profileStages": {
+    "all": [
+      "DOCS_CONTENT_AUDIT",
+      "DOCS_TYPESCRIPT",
+      "DOCS_RENDER_ROOT",
+      "DOCS_RENDER_GITHUB_PAGES",
+      "DOCS_MCP_CONTRACTS",
+      "DOCS_COMPOSE_AUDIT",
+      "MCP_UNIT_SUITE",
+      "MCP_DOCTOR",
+      "SCENARIO_MIGRATOR_UNIT_SUITE",
+      "SCENARIO_MIGRATION_COMMANDS",
+      "SCENARIO_TEMPLATING_BUILD",
+      "SCENARIO_TEMPLATING_COMMAND",
+      "DOCKER_COMPOSE_CONFIG",
+      "DOCS_RENDER_DEPLOYED",
+      "OFFICIAL_INGRESS",
+      "PLATFORM_PACKAGING"
+    ],
+    "deployed": [
+      "DOCS_RENDER_DEPLOYED"
+    ],
+    "local": [
+      "DOCS_CONTENT_AUDIT",
+      "DOCS_TYPESCRIPT",
+      "DOCS_RENDER_ROOT",
+      "DOCS_RENDER_GITHUB_PAGES",
+      "DOCS_MCP_CONTRACTS",
+      "DOCS_COMPOSE_AUDIT",
+      "MCP_UNIT_SUITE",
+      "MCP_DOCTOR",
+      "SCENARIO_MIGRATOR_UNIT_SUITE",
+      "SCENARIO_MIGRATION_COMMANDS",
+      "SCENARIO_TEMPLATING_BUILD",
+      "SCENARIO_TEMPLATING_COMMAND",
+      "DOCKER_COMPOSE_CONFIG"
+    ],
+    "packaging": [
+      "PLATFORM_PACKAGING"
+    ],
+    "runtime": [
+      "DOCS_CONTENT_AUDIT",
+      "DOCS_TYPESCRIPT",
+      "DOCS_RENDER_ROOT",
+      "DOCS_RENDER_GITHUB_PAGES",
+      "DOCS_MCP_CONTRACTS",
+      "DOCS_COMPOSE_AUDIT",
+      "MCP_UNIT_SUITE",
+      "MCP_DOCTOR",
+      "SCENARIO_MIGRATOR_UNIT_SUITE",
+      "SCENARIO_MIGRATION_COMMANDS",
+      "SCENARIO_TEMPLATING_BUILD",
+      "SCENARIO_TEMPLATING_COMMAND",
+      "DOCKER_COMPOSE_CONFIG",
+      "OFFICIAL_INGRESS"
+    ],
+    "setup": [
+      "DOCS_DEPENDENCY_SETUP"
+    ],
+    "static": [
+      "DOCS_CONTENT_AUDIT",
+      "DOCS_TYPESCRIPT",
+      "DOCS_RENDER_ROOT",
+      "DOCS_RENDER_GITHUB_PAGES",
+      "DOCS_MCP_CONTRACTS",
+      "DOCS_COMPOSE_AUDIT"
+    ]
+  },
+  "profiles": [
+    "all",
+    "deployed",
+    "local",
+    "packaging",
+    "runtime",
+    "setup",
+    "static"
+  ],
+  "renderOutcomeStatuses": [
+    "PASS",
+    "FAIL",
+    "ERROR"
+  ],
+  "renderTargets": [
+    "LOCAL_STATIC",
+    "DEPLOYED"
+  ],
+  "receiptSchemaVersion": 2,
+  "runStatuses": [
+    "RUNNING",
+    "COMPLETED",
+    "ERROR"
+  ],
+  "stageStatuses": [
+    "PASS",
+    "FAIL",
+    "SKIP",
+    "ERROR",
+    "TIMEOUT"
+  ],
+  "stages": {
+    "DOCS_COMPOSE_AUDIT": {
+      "commandSpecId": "POCKETHIVE_DOCS_COMPOSE_AUDIT_V1",
+      "declaredTimeoutMs": 120000,
+      "name": "Compose service and bind-mount documentation",
+      "required": true
+    },
+    "DOCS_CONTENT_AUDIT": {
+      "commandSpecId": "POCKETHIVE_DOCS_CONTENT_AUDIT_V1",
+      "declaredTimeoutMs": 180000,
+      "name": "published content examples and shell syntax",
+      "required": true
+    },
+    "DOCS_DEPENDENCY_SETUP": {
+      "commandSpecId": "POCKETHIVE_DOCS_DEPENDENCY_SETUP_V1",
+      "declaredTimeoutMs": 2400000,
+      "name": "documentation test dependencies",
+      "required": true
+    },
+    "DOCS_MCP_CONTRACTS": {
+      "commandSpecId": "POCKETHIVE_DOCS_MCP_CONTRACTS_V1",
+      "declaredTimeoutMs": 180000,
+      "name": "documented MCP tool contracts",
+      "required": true
+    },
+    "DOCS_RENDER_DEPLOYED": {
+      "commandSpecId": "POCKETHIVE_DOCS_RENDER_DEPLOYED_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "deployed documentation routes and links",
+      "required": true
+    },
+    "DOCS_RENDER_GITHUB_PAGES": {
+      "commandSpecId": "POCKETHIVE_DOCS_RENDER_GITHUB_PAGES_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "GitHub Pages target routes and assets",
+      "required": true
+    },
+    "DOCS_RENDER_ROOT": {
+      "commandSpecId": "POCKETHIVE_DOCS_RENDER_ROOT_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "all rendered routes at desktop and mobile widths",
+      "required": true
+    },
+    "DOCS_TYPESCRIPT": {
+      "commandSpecId": "POCKETHIVE_DOCS_TYPESCRIPT_V1",
+      "declaredTimeoutMs": 300000,
+      "name": "documentation TypeScript",
+      "required": true
+    },
+    "DOCKER_COMPOSE_CONFIG": {
+      "commandSpecId": "POCKETHIVE_DOCKER_COMPOSE_CONFIG_V1",
+      "declaredTimeoutMs": 120000,
+      "name": "Docker Compose configuration",
+      "required": false
+    },
+    "MCP_DOCTOR": {
+      "commandSpecId": "POCKETHIVE_MCP_DOCTOR_V1",
+      "declaredTimeoutMs": 180000,
+      "name": "PocketHive MCP doctor",
+      "required": true
+    },
+    "MCP_UNIT_SUITE": {
+      "commandSpecId": "POCKETHIVE_MCP_UNIT_SUITE_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "PocketHive MCP unit suite",
+      "required": true
+    },
+    "OFFICIAL_INGRESS": {
+      "commandSpecId": "POCKETHIVE_OFFICIAL_INGRESS_V1",
+      "declaredTimeoutMs": 60000,
+      "name": "official ingress health and home",
+      "required": true
+    },
+    "PLATFORM_PACKAGING": {
+      "commandSpecId": "POCKETHIVE_PLATFORM_PACKAGING_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "platform deployment packaging command",
+      "required": true
+    },
+    "SCENARIO_MIGRATION_COMMANDS": {
+      "commandSpecId": "POCKETHIVE_SCENARIO_MIGRATION_COMMANDS_V1",
+      "declaredTimeoutMs": 300000,
+      "name": "documented scenario migration check",
+      "required": true
+    },
+    "SCENARIO_MIGRATOR_UNIT_SUITE": {
+      "commandSpecId": "POCKETHIVE_SCENARIO_MIGRATOR_UNIT_SUITE_V1",
+      "declaredTimeoutMs": 300000,
+      "name": "scenario migrator unit suite",
+      "required": true
+    },
+    "SCENARIO_TEMPLATING_BUILD": {
+      "commandSpecId": "POCKETHIVE_SCENARIO_TEMPLATING_BUILD_V1",
+      "declaredTimeoutMs": 900000,
+      "name": "scenario templating Maven build",
+      "required": false
+    },
+    "SCENARIO_TEMPLATING_COMMAND": {
+      "commandSpecId": "POCKETHIVE_SCENARIO_TEMPLATING_COMMAND_V1",
+      "declaredTimeoutMs": 300000,
+      "name": "documented scenario templating shell command",
+      "required": false
+    }
+  },
+  "toolFiles": [
+    "docs-site/scripts/check-rendered-docs.mjs",
+    "tools/docs-validation/adapters.mjs",
+    "tools/docs-validation/compose-audit.mjs",
+    "tools/docs-validation/content-audit.mjs",
+    "tools/docs-validation/contracts/adapter-manifest.schema.json",
+    "tools/docs-validation/contracts/rendered-route-result.schema.json",
+    "tools/docs-validation/contracts/validation-result.schema.json",
+    "tools/docs-validation/contracts/values.json",
+    "tools/docs-validation/docs-scope.mjs",
+    "tools/docs-validation/evidence.mjs",
+    "tools/docs-validation/generate-adapter-manifest.mjs",
+    "tools/docs-validation/run.mjs"
+  ],
+  "toolVersion": "2.0.0",
+  "viewports": [
+    {
+      "height": 1000,
+      "id": "DESKTOP",
+      "width": 1440
+    },
+    {
+      "height": 844,
+      "id": "NARROW",
+      "width": 390
+    }
+  ]
+}

@@ -1,0 +1,77 @@
+{
+  "schemaVersion": 1,
+  "schemaId": "https://pockethive.dev/schemas/docs-validation-adapter-manifest-v1.schema.json",
+  "platform": "win32",
+  "adapters": {
+    "node": {
+      "state": "CONFIGURED",
+      "path": "C:\\Program Files\\nodejs\\node.exe",
+      "sha256": "3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5",
+      "sizeBytes": 91694408
+    },
+    "git": {
+      "state": "CONFIGURED",
+      "path": "C:\\Program Files\\Git\\mingw64\\bin\\git.exe",
+      "sha256": "cab4c4eea1d869cf9f7be73868dc9a90ad2df1b1b673e5f8c8714a576c25ea96",
+      "sizeBytes": 4422544
+    },
+    "npm": {
+      "state": "CONFIGURED",
+      "path": "C:\\Program Files\\nodejs\\npm.cmd",
+      "sha256": "21b46c69ad6e2f231f02a9e120f4ba6c8e75fef5a45637103002eab99f888ab8",
+      "sizeBytes": 538
+    },
+    "commandShell": {
+      "state": "CONFIGURED",
+      "path": "C:\\Windows\\System32\\cmd.exe",
+      "sha256": "8dd1ebb0b969370c70a5ee7f7ee347949aa7046aa5e1a33fcd7b1e9415b21fc3",
+      "sizeBytes": 344064
+    },
+    "taskkill": {
+      "state": "CONFIGURED",
+      "path": "C:\\Windows\\System32\\taskkill.exe",
+      "sha256": "1249717315fc8f4d2df17d5db9da0444795fdb9fb83dfb1f763c3f39282244f7",
+      "sizeBytes": 118784
+    },
+    "bash": {
+      "state": "CONFIGURED",
+      "path": "C:\\Program Files\\Git\\bin\\bash.exe",
+      "sha256": "9aa00217a92def5fed1b15c6e2b34a7f89e3781af822ecc00960fe5340df093e",
+      "sizeBytes": 47008
+    },
+    "powerShell": {
+      "state": "CONFIGURED",
+      "path": "C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe",
+      "sha256": "7600ffe12da441fe89d035b13801e8e91d064bc544a27b19a5cf49f6ab8b18f5",
+      "sizeBytes": 454656
+    },
+    "java": {
+      "state": "NOT_APPLICABLE",
+      "path": null,
+      "sha256": null,
+      "sizeBytes": null
+    },
+    "maven": {
+      "state": "NOT_APPLICABLE",
+      "path": null,
+      "sha256": null,
+      "sizeBytes": null
+    },
+    "localRepository": {
+      "state": "NOT_APPLICABLE",
+      "path": null
+    },
+    "docker": {
+      "state": "NOT_APPLICABLE",
+      "path": null,
+      "sha256": null,
+      "sizeBytes": null
+    },
+    "chromium": {
+      "state": "CONFIGURED",
+      "path": "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+      "sha256": "b24f7c774a5485e65dae2c88eb0014c3482795bf8a8a37fc6a637b40d23cbc13",
+      "sizeBytes": 4074648
+    }
+  }
+}

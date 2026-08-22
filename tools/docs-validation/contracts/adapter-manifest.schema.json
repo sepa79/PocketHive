@@ -1,0 +1,83 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/schemas/docs-validation-adapter-manifest-v1.schema.json",
+  "title": "PocketHive documentation validation adapter manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "schemaId", "platform", "adapters"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "schemaId": { "const": "https://pockethive.dev/schemas/docs-validation-adapter-manifest-v1.schema.json" },
+    "platform": { "enum": ["aix", "darwin", "freebsd", "linux", "openbsd", "sunos", "win32"] },
+    "adapters": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "node",
+        "git",
+        "npm",
+        "commandShell",
+        "taskkill",
+        "bash",
+        "powerShell",
+        "java",
+        "maven",
+        "localRepository",
+        "docker",
+        "chromium"
+      ],
+      "properties": {
+        "node": { "$ref": "#/$defs/executableAdapter" },
+        "git": { "$ref": "#/$defs/executableAdapter" },
+        "npm": { "$ref": "#/$defs/executableAdapter" },
+        "commandShell": { "$ref": "#/$defs/executableAdapter" },
+        "taskkill": { "$ref": "#/$defs/executableAdapter" },
+        "bash": { "$ref": "#/$defs/executableAdapter" },
+        "powerShell": { "$ref": "#/$defs/executableAdapter" },
+        "java": { "$ref": "#/$defs/executableAdapter" },
+        "maven": { "$ref": "#/$defs/executableAdapter" },
+        "localRepository": { "$ref": "#/$defs/directoryAdapter" },
+        "docker": { "$ref": "#/$defs/executableAdapter" },
+        "chromium": { "$ref": "#/$defs/executableAdapter" }
+      }
+    }
+  },
+  "$defs": {
+    "state": {
+      "enum": ["CONFIGURED", "NOT_APPLICABLE"]
+    },
+    "sha256OrNull": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "pathOrNull": {
+      "type": ["string", "null"],
+      "minLength": 1,
+      "maxLength": 32768
+    },
+    "sizeOrNull": {
+      "type": ["integer", "null"],
+      "minimum": 1
+    },
+    "executableAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "path", "sha256", "sizeBytes"],
+      "properties": {
+        "state": { "$ref": "#/$defs/state" },
+        "path": { "$ref": "#/$defs/pathOrNull" },
+        "sha256": { "$ref": "#/$defs/sha256OrNull" },
+        "sizeBytes": { "$ref": "#/$defs/sizeOrNull" }
+      }
+    },
+    "directoryAdapter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "path"],
+      "properties": {
+        "state": { "$ref": "#/$defs/state" },
+        "path": { "$ref": "#/$defs/pathOrNull" }
+      }
+    }
+  }
+}

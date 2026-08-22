@@ -2,10 +2,17 @@ import { spawn } from "node:child_process";
 import { createServer } from "node:http";
 import { existsSync } from "node:fs";
 import { readFile, readdir, stat } from "node:fs/promises";
-import { dirname, extname, join, relative, resolve, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { chromium } from "playwright-core";
+import {
+  CONTRACT_VALUES,
+  RENDER_OUTCOME_STATUS,
+  RENDER_TARGET,
+  RENDERED_ROUTE_SCHEMA_ID,
+  assertRenderedRouteSemantics,
+  atomicWriteJson,
+} from "../../tools/docs-validation/evidence.mjs";
 
 const SITE_DIRECTORY = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BUILD_DIRECTORY = join(SITE_DIRECTORY, "build");
@@ -29,10 +36,7 @@ const ROUTE_REQUIREMENTS = new Map([
   ],
 ]);
 
-const VIEWPORTS = [
-  { name: "desktop", width: 1440, height: 1000 },
-  { name: "narrow", width: 390, height: 844 },
-];
+const VIEWPORTS = CONTRACT_VALUES.viewports;
 
 const MIME_TYPES = new Map([
   [".css", "text/css; charset=utf-8"],
@@ -182,12 +186,11 @@ async function resolveStaticFile(requestPath, basePath) {
   return undefined;
 }
 
-async function startStaticServer() {
+async function startStaticServer(basePath) {
   if (!existsSync(join(BUILD_DIRECTORY, "index.html"))) {
     throw new Error(`Build output is missing: ${BUILD_DIRECTORY}`);
   }
 
-  const basePath = normalizeBasePath(process.env.DOCS_BASE_URL || "/");
   const server = createServer(async (request, response) => {
     try {
       if (request.method !== "GET" && request.method !== "HEAD") {
@@ -235,46 +238,18 @@ async function startStaticServer() {
 }
 
 function findBrowserExecutable() {
-  const configured = process.env.DOCS_TEST_BROWSER_EXECUTABLE?.trim();
-  if (configured) {
-    if (!existsSync(configured)) {
-      throw new Error(
-        `DOCS_TEST_BROWSER_EXECUTABLE does not exist: ${configured}`,
-      );
-    }
-    return configured;
+  const configured = process.env.DOCS_VALIDATION_CHROMIUM_EXECUTABLE?.trim();
+  if (!configured) {
+    throw new Error(
+      "DOCS_VALIDATION_CHROMIUM_EXECUTABLE must declare the Chromium-based browser adapter",
+    );
   }
-
-  const localAppData = process.env.LOCALAPPDATA || "";
-  const candidates =
-    process.platform === "win32"
-      ? [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-          join(localAppData, "Google", "Chrome", "Application", "chrome.exe"),
-          "C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe",
-          "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe",
-        ]
-      : process.platform === "darwin"
-        ? [
-            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
-          ]
-        : [
-            "/usr/bin/google-chrome",
-            "/usr/bin/google-chrome-stable",
-            "/usr/bin/chromium",
-            "/usr/bin/chromium-browser",
-          ];
-
-  const executable = candidates.find((candidate) => candidate && existsSync(candidate));
-  if (executable) {
-    return executable;
+  if (!isAbsolute(configured) || !existsSync(configured)) {
+    throw new Error(
+      `DOCS_VALIDATION_CHROMIUM_EXECUTABLE must be an existing absolute file: ${configured}`,
+    );
   }
-
-  throw new Error(
-    "Chrome or Edge was not found. Set DOCS_TEST_BROWSER_EXECUTABLE to a Chromium-based browser executable.",
-  );
+  return configured;
 }
 
 function formatConsoleMessage(message) {
@@ -295,28 +270,59 @@ async function inspectPage(
 ) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
-  const errors = [];
-  const label = `${route.name} [${viewport.name} ${viewport.width}x${viewport.height}]`;
+  const url = routeUrl(baseUrl, route.path);
+  const label = `${route.name} [${viewport.id} ${viewport.width}x${viewport.height}]`;
+  const result = {
+    routePath: route.path,
+    routeName: route.name,
+    viewportId: viewport.id,
+    viewportWidth: viewport.width,
+    viewportHeight: viewport.height,
+    url,
+    status: "FAIL",
+    navigation: { statusCode: null, passed: false },
+    consoleErrors: [],
+    pageErrors: [],
+    imageLoad: { checked: 0, failed: 0, failures: [] },
+    mermaid: {
+      minimumRequired: route.minimumMermaidDiagrams || 0,
+      rendered: 0,
+      passed: false,
+      failures: [],
+    },
+    pagination: {
+      required: route.requirePagination === true,
+      previous: 0,
+      next: 0,
+      passed: route.requirePagination !== true,
+    },
+    overflow: {
+      tolerancePx: OVERFLOW_TOLERANCE_PX,
+      rootOverflowPx: 0,
+      passed: false,
+      offenders: [],
+    },
+    auditErrors: [],
+  };
 
   page.on("console", (message) => {
     if (message.type() === "error") {
-      errors.push(`console: ${formatConsoleMessage(message)}`);
+      result.consoleErrors.push(formatConsoleMessage(message));
     }
   });
   page.on("pageerror", (error) => {
-    errors.push(`page: ${error.stack || error.message}`);
+    result.pageErrors.push(error.stack || error.message);
   });
 
   try {
-    const url = routeUrl(baseUrl, route.path);
     const response = await page.goto(url, {
       waitUntil: "networkidle",
       timeout: RENDER_TIMEOUT_MS,
     });
-
-    if (!response || !response.ok()) {
-      errors.push(`navigation: ${response?.status() ?? "no response"} for ${url}`);
-    }
+    result.navigation = {
+      statusCode: response?.status() ?? null,
+      passed: response?.ok() === true,
+    };
 
     await page.locator("#__docusaurus").waitFor({
       state: "attached",
@@ -324,17 +330,17 @@ async function inspectPage(
     });
     await page.evaluate(() => document.fonts?.ready);
 
-    const brokenImages = await page.evaluate(() =>
-      [...document.images]
+    const imageState = await page.evaluate(() => ({
+      checked: document.images.length,
+      broken: [...document.images]
         .filter((image) => image.complete && image.naturalWidth === 0)
-        .map((image) => ({
-          alt: image.alt,
-          src: image.currentSrc || image.src,
-        })),
+        .map((image) => ({ alt: image.alt, src: image.currentSrc || image.src })),
+    }));
+    result.imageLoad.checked = imageState.checked;
+    result.imageLoad.failed = imageState.broken.length;
+    result.imageLoad.failures = imageState.broken.map(
+      (image) => `${image.src} did not load (alt=${JSON.stringify(image.alt)})`,
     );
-    for (const image of brokenImages) {
-      errors.push(`image: ${image.src} did not load (alt=${JSON.stringify(image.alt)})`);
-    }
 
     if (route.minimumMermaidDiagrams) {
       try {
@@ -345,11 +351,16 @@ async function inspectPage(
           { timeout: RENDER_TIMEOUT_MS },
         );
       } catch {
-        const rendered = await page.locator(".docusaurus-mermaid-container svg").count();
-        errors.push(
-          `Mermaid: expected at least ${route.minimumMermaidDiagrams} rendered diagrams, found ${rendered}`,
+        result.mermaid.failures.push(
+          `expected at least ${route.minimumMermaidDiagrams} rendered diagrams`,
         );
       }
+    }
+    result.mermaid.rendered = await page.locator(".docusaurus-mermaid-container svg").count();
+    if (result.mermaid.rendered < result.mermaid.minimumRequired) {
+      result.mermaid.failures.push(
+        `expected at least ${result.mermaid.minimumRequired} rendered diagrams, found ${result.mermaid.rendered}`,
+      );
     }
 
     const mermaidFailures = await page.evaluate(() => {
@@ -359,23 +370,21 @@ async function inspectPage(
         .filter((text) => errorTextPattern.test(text));
     });
     for (const failure of mermaidFailures) {
-      errors.push(`Mermaid: ${failure}`);
+      result.mermaid.failures.push(failure);
     }
+    result.mermaid.passed = result.mermaid.failures.length === 0;
 
-    if (route.requirePagination) {
-      const pagination = await page.evaluate(() => ({
-        next: document.querySelectorAll(".pagination-nav__link--next").length,
-        previous: document.querySelectorAll(".pagination-nav__link--prev").length,
-      }));
-      if (pagination.previous !== 1 || pagination.next !== 1) {
-        errors.push(
-          `pagination: expected one Previous and one Next link, found Previous=${pagination.previous}, Next=${pagination.next}`,
-        );
-      }
-    }
+    const pagination = await page.evaluate(() => ({
+      next: document.querySelectorAll(".pagination-nav__link--next").length,
+      previous: document.querySelectorAll(".pagination-nav__link--prev").length,
+    }));
+    result.pagination.previous = pagination.previous;
+    result.pagination.next = pagination.next;
+    result.pagination.passed =
+      !result.pagination.required || (pagination.previous === 1 && pagination.next === 1);
 
     const overflow = await page.evaluate((tolerance) => {
-      const rootOverflow = Math.max(
+      const rootOverflow = Math.max(0,
         document.documentElement.scrollWidth - document.documentElement.clientWidth,
         document.body.scrollWidth - document.body.clientWidth,
       );
@@ -416,17 +425,12 @@ async function inspectPage(
 
       return { offenders, rootOverflow };
     }, OVERFLOW_TOLERANCE_PX);
+    result.overflow.rootOverflowPx = overflow.rootOverflow;
+    result.overflow.offenders = overflow.offenders;
+    result.overflow.passed =
+      overflow.rootOverflow <= OVERFLOW_TOLERANCE_PX && overflow.offenders.length === 0;
 
-    if (overflow.rootOverflow > OVERFLOW_TOLERANCE_PX) {
-      errors.push(`overflow: document exceeds the viewport by ${overflow.rootOverflow}px`);
-    }
-    if (overflow.offenders.length > 0) {
-      errors.push(
-        `overflow: unclipped elements exceed their boxes: ${JSON.stringify(overflow.offenders)}`,
-      );
-    }
-
-    if (viewport.name === "desktop") {
+    if (viewport.id === "DESKTOP") {
       const links = await page.locator("a[href]").evaluateAll((anchors) =>
         anchors.map((anchor) => anchor.href),
       );
@@ -442,17 +446,23 @@ async function inspectPage(
       }
     }
   } catch (error) {
-    errors.push(`audit: ${error.stack || error.message}`);
+    result.auditErrors.push(error.stack || error.message);
   } finally {
     await context.close();
   }
-
-  if (errors.length > 0) {
-    return errors.map((error) => `${label}: ${error}`);
-  }
-
-  log(`PASS ${label}`);
-  return [];
+  result.status =
+    result.navigation.passed &&
+    result.consoleErrors.length === 0 &&
+    result.pageErrors.length === 0 &&
+    result.imageLoad.failed === 0 &&
+    result.mermaid.passed &&
+    result.pagination.passed &&
+    result.overflow.passed &&
+    result.auditErrors.length === 0
+      ? "PASS"
+      : "FAIL";
+  if (result.status === "PASS") log(`PASS ${label}`);
+  return result;
 }
 
 function escapeAttribute(value) {
@@ -464,7 +474,6 @@ function escapeAttribute(value) {
 }
 
 async function validateInternalLinks(baseUrl, links) {
-  const failures = [];
   const uniqueLinks = new Map();
 
   for (const href of links) {
@@ -475,10 +484,18 @@ async function validateInternalLinks(baseUrl, links) {
     uniqueLinks.set(url.href, url);
   }
 
+  const results = [];
   for (const url of uniqueLinks.values()) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response;
+    const result = {
+      url: url.href,
+      status: "PASS",
+      statusCode: null,
+      fragment: url.hash ? decodeURIComponent(url.hash.slice(1)) : null,
+      detail: null,
+    };
     try {
       const requestUrl = new URL(url);
       requestUrl.hash = "";
@@ -486,46 +503,48 @@ async function validateInternalLinks(baseUrl, links) {
         redirect: "follow",
         signal: controller.signal,
       });
+      result.statusCode = response.status;
       if (!response.ok) {
-        failures.push(`link: ${url.href} returned HTTP ${response.status}`);
-        continue;
-      }
-
-      if (url.hash) {
+        result.status = "FAIL";
+        result.detail = `returned HTTP ${response.status}`;
+      } else if (url.hash) {
         const contentType = response.headers.get("content-type") || "";
         if (!contentType.includes("text/html")) {
-          failures.push(`link: ${url.href} has a fragment but is not an HTML document`);
-          continue;
-        }
-
-        const body = await response.text();
-        const fragment = escapeAttribute(decodeURIComponent(url.hash.slice(1)));
-        if (
-          fragment &&
-          !body.includes(`id="${fragment}"`) &&
-          !body.includes(`name="${fragment}"`)
-        ) {
-          failures.push(`link: ${url.href} points to a missing fragment`);
+          result.status = "FAIL";
+          result.detail = "fragment target is not an HTML document";
+        } else {
+          const body = await response.text();
+          const fragment = escapeAttribute(result.fragment);
+          if (
+            fragment &&
+            !body.includes(`id="${fragment}"`) &&
+            !body.includes(`name="${fragment}"`)
+          ) {
+            result.status = "FAIL";
+            result.detail = "points to a missing fragment";
+          }
         }
       }
     } catch (error) {
-      failures.push(`link: ${url.href} could not be checked (${error.message})`);
+      result.status = "FAIL";
+      result.detail = `could not be checked (${error.message})`;
     } finally {
       clearTimeout(timeout);
       if (response && !response.bodyUsed) {
         await response.body?.cancel();
       }
     }
+    results.push(result);
   }
 
-  if (failures.length === 0) {
+  if (results.every((result) => result.status === "PASS")) {
     log(`PASS ${uniqueLinks.size} unique internal links`);
   }
-  return failures;
+  return results;
 }
 
 async function validateImageSources(baseUrl, sources) {
-  const failures = [];
+  const results = [];
   const uniqueSources = new Map();
 
   for (const source of sources) {
@@ -534,9 +553,13 @@ async function validateImageSources(baseUrl, sources) {
       continue;
     }
     if (!url.pathname.startsWith(baseUrl.pathname)) {
-      failures.push(
-        `image: ${url.href} escapes the configured base path ${baseUrl.pathname}`,
-      );
+      results.push({
+        url: url.href,
+        status: "FAIL",
+        statusCode: null,
+        contentType: null,
+        detail: `escapes the configured base path ${baseUrl.pathname}`,
+      });
       continue;
     }
     uniqueSources.set(url.href, url);
@@ -546,95 +569,232 @@ async function validateImageSources(baseUrl, sources) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
     let response;
+    const result = {
+      url: url.href,
+      status: "PASS",
+      statusCode: null,
+      contentType: null,
+      detail: null,
+    };
     try {
       response = await fetch(url, {
         redirect: "follow",
         signal: controller.signal,
       });
+      result.statusCode = response.status;
+      result.contentType = response.headers.get("content-type");
       if (!response.ok) {
-        failures.push(`image: ${url.href} returned HTTP ${response.status}`);
-        continue;
-      }
-      const contentType = response.headers.get("content-type") || "";
-      if (!contentType.startsWith("image/")) {
-        failures.push(`image: ${url.href} returned ${contentType || "no content type"}`);
+        result.status = "FAIL";
+        result.detail = `returned HTTP ${response.status}`;
+      } else if (!(result.contentType || "").startsWith("image/")) {
+        result.status = "FAIL";
+        result.detail = `returned ${result.contentType || "no content type"}`;
       }
     } catch (error) {
-      failures.push(`image: ${url.href} could not be checked (${error.message})`);
+      result.status = "FAIL";
+      result.detail = `could not be checked (${error.message})`;
     } finally {
       clearTimeout(timeout);
       if (response && !response.bodyUsed) {
         await response.body?.cancel();
       }
     }
+    results.push(result);
   }
 
-  if (failures.length === 0) {
+  if (results.every((result) => result.status === "PASS")) {
     log(`PASS ${uniqueSources.size} unique image sources`);
   }
-  return failures;
+  return results;
+}
+
+function requiredConfiguration() {
+  const reportPath = process.env.DOCS_RENDERED_REPORT_PATH?.trim();
+  const basePathValue = process.env.DOCS_BASE_URL?.trim();
+  const renderTarget = process.env.DOCS_RENDER_TARGET?.trim();
+  const nodeExecutable = process.env.DOCS_VALIDATION_NODE_EXECUTABLE?.trim();
+  if (
+    !nodeExecutable
+    || !isAbsolute(nodeExecutable)
+    || resolve(nodeExecutable).toLowerCase() !== resolve(process.execPath).toLowerCase()
+  ) {
+    throw new Error("DOCS_VALIDATION_NODE_EXECUTABLE must exactly identify process.execPath");
+  }
+  if (!reportPath || !isAbsolute(reportPath)) {
+    throw new Error("DOCS_RENDERED_REPORT_PATH must be an explicit absolute JSON output path");
+  }
+  if (!basePathValue) {
+    throw new Error("DOCS_BASE_URL is required");
+  }
+  if (!CONTRACT_VALUES.renderTargets.includes(renderTarget)) {
+    throw new Error(
+      `DOCS_RENDER_TARGET must be one of: ${CONTRACT_VALUES.renderTargets.join(", ")}`,
+    );
+  }
+  const suppliedBaseUrl = process.env.DOCS_TEST_BASE_URL?.trim() || "";
+  if (renderTarget === RENDER_TARGET.DEPLOYED && !suppliedBaseUrl) {
+    throw new Error("DEPLOYED render target requires DOCS_TEST_BASE_URL");
+  }
+  if (renderTarget === RENDER_TARGET.LOCAL_STATIC && suppliedBaseUrl) {
+    throw new Error("LOCAL_STATIC render target does not accept DOCS_TEST_BASE_URL");
+  }
+  return {
+    basePath: normalizeBasePath(basePathValue),
+    renderTarget,
+    reportPath,
+    suppliedBaseUrl,
+  };
+}
+
+function emptyReport(configuration) {
+  return {
+    schemaVersion: 1,
+    schemaId: RENDERED_ROUTE_SCHEMA_ID,
+    generatedAt: new Date().toISOString(),
+    status: RENDER_OUTCOME_STATUS.ERROR,
+    detail: "Rendered documentation validation did not complete",
+    renderTarget: configuration.renderTarget,
+    configuredBasePath: configuration.basePath,
+    testedBaseUrl: null,
+    platform: {
+      nodeVersion: process.version,
+      operatingSystem: process.platform,
+      architecture: process.arch,
+    },
+    browser: {
+      engine: "CHROMIUM",
+      executablePath: null,
+      version: null,
+    },
+    build: {
+      status: RENDER_OUTCOME_STATUS.ERROR,
+      detail: "Docusaurus build did not complete",
+    },
+    summary: {
+      routes: 0,
+      viewports: 0,
+      routeViewportChecks: 0,
+      routeViewportPassed: 0,
+      routeViewportFailed: 0,
+      linksChecked: 0,
+      linksFailed: 0,
+      imagesChecked: 0,
+      imagesFailed: 0,
+    },
+    routeViewportResults: [],
+    links: [],
+    images: [],
+  };
+}
+
+function updateSummary(report) {
+  report.summary = {
+    routes: new Set(report.routeViewportResults.map((result) => result.routePath)).size,
+    viewports: new Set(report.routeViewportResults.map((result) => result.viewportId)).size,
+    routeViewportChecks: report.routeViewportResults.length,
+    routeViewportPassed: report.routeViewportResults.filter((result) => result.status === "PASS").length,
+    routeViewportFailed: report.routeViewportResults.filter((result) => result.status === "FAIL").length,
+    linksChecked: report.links.length,
+    linksFailed: report.links.filter((result) => result.status === "FAIL").length,
+    imagesChecked: report.images.length,
+    imagesFailed: report.images.filter((result) => result.status === "FAIL").length,
+  };
 }
 
 async function main() {
-  const suppliedBaseUrl = process.env.DOCS_TEST_BASE_URL?.trim();
+  const configuration = requiredConfiguration();
+  const report = emptyReport(configuration);
   let localServer;
   let browser;
 
   try {
     await runBuild();
+    report.build = { status: RENDER_OUTCOME_STATUS.PASS, detail: null };
     const routes = await discoverRoutes();
     log(`Discovered ${routes.length} generated documentation routes`);
 
     let baseUrl;
-    if (suppliedBaseUrl) {
-      baseUrl = normalizeBaseUrl(suppliedBaseUrl);
+    if (configuration.renderTarget === RENDER_TARGET.DEPLOYED) {
+      baseUrl = normalizeBaseUrl(configuration.suppliedBaseUrl);
       log(`Testing supplied site ${baseUrl.href}`);
     } else {
-      localServer = await startStaticServer();
+      localServer = await startStaticServer(configuration.basePath);
       baseUrl = localServer.baseUrl;
       log(`Testing fresh build at ${baseUrl.href}`);
     }
+    report.testedBaseUrl = baseUrl.href;
 
+    const { chromium } = await import("playwright-core");
     const executablePath = findBrowserExecutable();
     log(`Using browser ${executablePath}`);
+    report.browser.executablePath = executablePath;
     browser = await chromium.launch({ executablePath, headless: true });
+    report.browser.version = browser.version();
 
-    const failures = [];
     const internalLinks = new Set();
     const imageSources = new Set();
     for (const viewport of VIEWPORTS) {
       for (const route of routes) {
-        failures.push(
-          ...(await inspectPage(
-            browser,
-            baseUrl,
-            route,
-            viewport,
-            internalLinks,
-            imageSources,
-          )),
+        report.routeViewportResults.push(
+          await inspectPage(
+              browser,
+              baseUrl,
+              route,
+              viewport,
+              internalLinks,
+              imageSources,
+            ),
         );
       }
     }
-    failures.push(...(await validateInternalLinks(baseUrl, internalLinks)));
-    failures.push(...(await validateImageSources(baseUrl, imageSources)));
-
-    if (failures.length > 0) {
-      console.error(`\nRendered documentation check failed (${failures.length}):`);
-      for (const failure of failures) {
-        console.error(`- ${failure}`);
-      }
+    report.links = await validateInternalLinks(baseUrl, internalLinks);
+    report.images = await validateImageSources(baseUrl, imageSources);
+    updateSummary(report);
+    const failureCount =
+      report.summary.routeViewportFailed +
+      report.summary.linksFailed +
+      report.summary.imagesFailed;
+    if (failureCount > 0) {
+      report.status = RENDER_OUTCOME_STATUS.FAIL;
+      report.detail = `${failureCount} rendered documentation check(s) failed`;
+      console.error(`\nRendered documentation check failed (${failureCount})`);
       process.exitCode = 1;
-      return;
+    } else {
+      report.status = RENDER_OUTCOME_STATUS.PASS;
+      report.detail = null;
+      log(
+        `PASS ${routes.length} routes at ${VIEWPORTS.length} viewports; rendered documentation is healthy`,
+      );
     }
-
-    log(
-      `PASS ${routes.length} routes at ${VIEWPORTS.length} viewports; rendered documentation is healthy`,
-    );
+  } catch (error) {
+    report.status = RENDER_OUTCOME_STATUS.ERROR;
+    report.detail = error.stack || error.message;
+    if (report.build.status !== RENDER_OUTCOME_STATUS.PASS) {
+      report.build = {
+        status: RENDER_OUTCOME_STATUS.ERROR,
+        detail: error.stack || error.message,
+      };
+    }
+    process.exitCode = 1;
+    console.error(error.stack || error.message);
   } finally {
-    await browser?.close();
-    await localServer?.close();
+    try {
+      await browser?.close();
+      await localServer?.close();
+    } catch (error) {
+      report.status = RENDER_OUTCOME_STATUS.ERROR;
+      report.detail = `Resource cleanup failed: ${error.stack || error.message}`;
+      process.exitCode = 1;
+    }
   }
+  report.generatedAt = new Date().toISOString();
+  updateSummary(report);
+  await atomicWriteJson(
+    configuration.reportPath,
+    report,
+    assertRenderedRouteSemantics,
+  );
+  log(`Structured report written to ${configuration.reportPath}`);
 }
 
 main().catch((error) => {

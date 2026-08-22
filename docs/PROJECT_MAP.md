@@ -88,6 +88,8 @@ behavior without becoming a second contract.
 | MCP and integrations | PocketHive MCP and integration maintainers | `tools/pockethive-mcp/README.md`, listed tool schemas, and checked-in client configuration | [PocketHive MCP and bundles](guides/integrations/pockethive-mcp-and-bundles.md) and [authoring/test tools](guides/integrations/authoring-and-test-tools.md) |
 | Screenshots and walkthrough evidence | Owner of the guide that embeds the image | Running release, image file, and [screenshot evidence manifest](guides/ui/screenshot-evidence.md) | Application, onboarding, and operator task guides |
 | Contributor and AI orientation | Cross-component architecture maintainers | Repository `AGENTS.md` plus the contracts named in this map | This project map |
+| Documentation-impact automation | Architecture and documentation maintainers | [Documentation impact automation architecture](architecture/documentation-impact-automation.md) | `docs/inProgress/automated-documentation-foundation-plan.md` tracks delivery only and is not authoritative |
+| Completed-work review | Architecture and documentation maintainers | [Completed-work review architecture](architecture/completed-work-review.md) and `docs/ci/completed-work-review-profiles.*` | `tools/completed-work-review/**` assembles identity-bound local comparisons; `docs/inProgress/completed-work-review-plan.md` tracks delivery only |
 
 Use the following source rules when two pages appear to overlap:
 
@@ -121,6 +123,8 @@ same fact.
 | Change scenario shape or validation guidance | [Scenario contract](scenarios/SCENARIO_CONTRACT.md) | Scenario plan/pattern guides, examples, UI and MCP guidance |
 | Change a deployment path or its status | [Operator deployment guide](guides/operators/deployment.md) | `USAGE.md`, repository README, `DEPLOYMENT_PACKAGE.md`, `HIVEFORGE.md` |
 | Change an MCP tool, name, setup step, or safety boundary | `tools/pockethive-mcp/README.md` and tool schema | [PocketHive MCP and bundles](guides/integrations/pockethive-mcp-and-bundles.md), checked-in MCP client configuration, authoring/test tools |
+| Change documentation-impact policy, schema, or behaviour | [Documentation impact automation architecture](architecture/documentation-impact-automation.md) | `docs/ci/docs-impact-map.*`, `tools/docs-impact/**`, the non-authoritative delivery tracker, and whole-repository seam fixtures |
+| Change completed-work scoring, evidence, readiness, or rendering | [Completed-work review architecture](architecture/completed-work-review.md) | `docs/ci/completed-work-review-profiles.*`, `tools/completed-work-review/**`, validation receipts, and the non-authoritative delivery tracker |
 | Add or replace a customer screenshot | [Screenshot evidence manifest](guides/ui/screenshot-evidence.md) | Embedding guide, route, role, visible state, release/source boundary, alt text and caption |
 | Change a component boundary | [Architecture](ARCHITECTURE.md) | This map, system workflows, public contracts, focused tests |
 | Add or move a module | Root `pom.xml` or the owning build manifest | This map, architecture diagrams, image manifest where applicable |
@@ -227,6 +231,8 @@ review the named public contract before code.
 | Deployment | Local/evaluation: `docker-compose.yml`, `.env.example`, `build-hive.sh`, package scripts. Managed/production-like: `hiveforge.yaml`, component manifest, Ansible, stack template, runtime nginx. Keep the release artifact aligned with `tools/docker/image-manifest.sh`. |
 | Observability | [Observability](observability.md) + [correlation and idempotency](correlation-vs-idempotency.md) → `observability/**` / Worker SDK interceptors → Postgres Journal or ClickHouse sink/schema → Grafana → focused tests |
 | MCP/tooling | `tools/pockethive-mcp/README.md` → `server.mjs`, `runtime-tools.mjs`, or `workflow-tools.mjs` → schema/tool-list/workflow/runtime tests. Update VS Code adapters only when their exposed integration changes. |
+
+| Completed-work review | [Completed-work review architecture](architecture/completed-work-review.md) → one explicit profile → identity and evidence receipts → `tools/completed-work-review/**` → contract, adversarial, renderer, and independent-review evidence |
 
 For targeted live config, controller-owned bootstrap, and swarm-wide fan-out,
 use the [canonical configuration workflows](guides/concepts/system-workflows.md#3-configuration-propagation)

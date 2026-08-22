@@ -1,0 +1,485 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/schemas/docs-impact-analysis.schema.json",
+  "title": "PocketHive documentation impact analysis",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "toolVersion",
+    "analysisId",
+    "identity",
+    "classification",
+    "reasonCodes",
+    "policyErrors",
+    "changes",
+    "documentationObligations",
+    "publicationValidations",
+    "governanceReviews"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "toolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "analysisId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repositoryId",
+        "requestedBase",
+        "requestedHead",
+        "baseSha",
+        "headSha",
+        "mergeBaseSha",
+        "policyPath",
+        "policyDigest",
+        "toolDigest"
+      ],
+      "properties": {
+        "repositoryId": { "type": "string" },
+        "requestedBase": { "$ref": "#/$defs/gitObjectId" },
+        "requestedHead": { "$ref": "#/$defs/gitObjectId" },
+        "baseSha": { "$ref": "#/$defs/gitObjectId" },
+        "headSha": { "$ref": "#/$defs/gitObjectId" },
+        "mergeBaseSha": { "$ref": "#/$defs/nullableGitObjectId" },
+        "policyPath": { "type": "string" },
+        "policyDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+        "toolDigest": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "classification": {
+      "enum": ["NO_ACTION_REQUIRED", "ACTION_REQUIRED", "POLICY_ERROR"]
+    },
+    "reasonCodes": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+    },
+    "policyErrors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code", "detail", "paths", "ruleIds"],
+        "properties": {
+          "code": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+          "detail": { "type": "string" },
+          "paths": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+          "ruleIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } }
+        }
+      }
+    },
+    "changes": {
+      "type": "array",
+      "maxItems": 20000,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "path",
+          "status",
+          "changeKind",
+          "oldMode",
+          "newMode",
+          "inventoryRuleId",
+          "inventoryClassification",
+          "impactNodeId",
+          "componentId",
+          "reachableImpactNodes"
+        ],
+        "properties": {
+          "path": { "type": "string" },
+          "status": { "enum": ["A", "D", "M", "T", "U", "X", "B"] },
+          "changeKind": {
+            "type": ["string", "null"],
+            "enum": ["ADD", "MODIFY", "DELETE", "TYPE_CHANGE", null]
+          },
+          "oldMode": { "type": "string", "pattern": "^[0-7]{6}$" },
+          "newMode": { "type": "string", "pattern": "^[0-7]{6}$" },
+          "inventoryRuleId": { "type": ["string", "null"] },
+          "inventoryClassification": {
+            "type": ["string", "null"],
+            "enum": ["DOCUMENTATION", "MATERIAL", "NO_DOC_IMPACT", null]
+          },
+          "impactNodeId": { "type": ["string", "null"] },
+          "componentId": { "type": ["string", "null"] },
+          "reachableImpactNodes": {
+            "type": "array",
+            "maxItems": 2048,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["impactNodeId", "componentId", "impactDepth", "viaEdgeIds"],
+              "properties": {
+                "impactNodeId": { "type": "string" },
+                "componentId": { "type": "string" },
+                "impactDepth": { "$ref": "#/$defs/impactDepth" },
+                "viaEdgeIds": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "documentationObligations": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "obligationId",
+          "actionType",
+          "ruleId",
+          "triggers",
+          "targets",
+          "acceptedTargetChanges",
+          "checkIds",
+          "ownerIds",
+          "candidateState"
+        ],
+        "properties": {
+          "obligationId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "actionType": { "const": "DOCUMENTATION" },
+          "ruleId": { "type": "string" },
+          "triggers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20000,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "sourcePath",
+                "sourceChangeKind",
+                "impactNodeId",
+                "impactDepth",
+                "viaEdgeIds"
+              ],
+              "properties": {
+                "sourcePath": { "type": "string" },
+                "sourceChangeKind": { "$ref": "#/$defs/changeKind" },
+                "impactNodeId": { "type": "string" },
+                "impactDepth": { "$ref": "#/$defs/impactDepth" },
+                "viaEdgeIds": {
+                  "type": "array",
+                  "maxItems": 64,
+                  "uniqueItems": true,
+                  "items": { "type": "string" }
+                }
+              }
+            }
+          },
+          "targets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/obligationTarget" }
+          },
+          "acceptedTargetChanges": {
+            "type": "array",
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["documentId", "path", "changeKind"],
+              "properties": {
+                "documentId": { "type": "string" },
+                "path": { "type": "string" },
+                "changeKind": { "$ref": "#/$defs/changeKind" }
+              }
+            }
+          },
+          "checkIds": { "type": "array", "uniqueItems": true, "items": { "type": "string" } },
+          "ownerIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+          "candidateState": { "$ref": "#/$defs/candidateState" }
+        }
+      }
+    },
+    "publicationValidations": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "validationId",
+          "actionType",
+          "publicationId",
+          "kind",
+          "locatorKind",
+          "contentRoot",
+          "artifactSelector",
+          "producerPaths",
+          "contentInputPaths",
+          "triggers",
+          "checkIds",
+          "ownerIds",
+          "candidateState"
+        ],
+        "properties": {
+          "validationId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "actionType": { "const": "PUBLICATION_VALIDATION" },
+          "publicationId": { "type": "string" },
+          "kind": {
+            "enum": ["REPOSITORY", "DOCS_SITE", "PACKAGE", "CLIENT_CONFIG"]
+          },
+          "locatorKind": {
+            "enum": [
+              "REPOSITORY_PATH",
+              "DOCUSAURUS_ROUTE",
+              "ARCHIVE_ENTRY",
+              "NPM_PACKAGE_PATH",
+              "VSIX_EXTENSION_PATH",
+              "CLASSPATH_RESOURCE",
+              "IMAGE_FS_PATH",
+              "CLIENT_CONFIG_PATH"
+            ]
+          },
+          "contentRoot": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "artifactSelector": { "type": "string", "minLength": 1, "maxLength": 4096 },
+          "producerPaths": {
+            "type": "array",
+            "maxItems": 128,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "contentInputPaths": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 2048,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "triggers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 10000,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "changeKind", "triggerKinds", "documentBindings"],
+              "properties": {
+                "path": { "type": "string" },
+                "changeKind": { "$ref": "#/$defs/changeKind" },
+                "triggerKinds": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 3,
+                  "uniqueItems": true,
+                  "items": {
+                    "enum": ["CONTENT_INPUT", "PRODUCER_INPUT", "DOCUMENT_BINDING"]
+                  }
+                },
+                "documentBindings": {
+                  "type": "array",
+                  "maxItems": 1,
+                  "uniqueItems": true,
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["documentId", "artifactPath"],
+                    "properties": {
+                      "documentId": { "type": "string" },
+                      "artifactPath": { "$ref": "#/$defs/artifactPath" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "checkIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "ownerIds": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string" }
+          },
+          "candidateState": { "const": "ACTION_REQUIRED" }
+        }
+      }
+    },
+    "governanceReviews": {
+      "type": "array",
+      "maxItems": 2048,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reviewId",
+          "actionType",
+          "protectionRuleId",
+          "kind",
+          "changes",
+          "ownerIds",
+          "candidateState"
+        ],
+        "properties": {
+          "reviewId": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "actionType": { "const": "GOVERNANCE_REVIEW" },
+          "protectionRuleId": { "type": "string" },
+          "kind": { "enum": ["CONTROL", "PROTECTED"] },
+          "changes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20000,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "changeKind"],
+              "properties": {
+                "path": { "type": "string" },
+                "changeKind": { "$ref": "#/$defs/changeKind" }
+              }
+            }
+          },
+          "ownerIds": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "type": "string" } },
+          "candidateState": { "$ref": "#/$defs/candidateState" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "candidateState": {
+      "enum": ["CANDIDATE_CHANGE_PRESENT", "ACTION_REQUIRED"]
+    },
+    "changeKind": {
+      "enum": ["ADD", "MODIFY", "DELETE", "TYPE_CHANGE"]
+    },
+    "impactDepth": {
+      "enum": ["SELF", "DIRECT", "TRANSITIVE"]
+    },
+    "artifactPath": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^(?:/(?:[A-Za-z0-9._~-]+(?:/[A-Za-z0-9._~-]+)*)?|(?!/)(?!.*\\\\)(?!.*(?:^|/)\\.{1,2}(?:/|$))[^*]+)$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "nullableGitObjectId": {
+      "type": ["string", "null"],
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "obligationPublication": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "publicationId",
+        "kind",
+        "locatorKind",
+        "contentRoot",
+        "artifactSelector",
+        "producerPaths",
+        "contentInputPaths",
+        "artifactPath",
+        "checkIds",
+        "ownerIds"
+      ],
+      "properties": {
+        "publicationId": { "type": "string" },
+        "kind": {
+          "enum": ["REPOSITORY", "DOCS_SITE", "PACKAGE", "CLIENT_CONFIG"]
+        },
+        "locatorKind": {
+          "enum": [
+            "REPOSITORY_PATH",
+            "DOCUSAURUS_ROUTE",
+            "ARCHIVE_ENTRY",
+            "NPM_PACKAGE_PATH",
+            "VSIX_EXTENSION_PATH",
+            "CLASSPATH_RESOURCE",
+            "IMAGE_FS_PATH",
+            "CLIENT_CONFIG_PATH"
+          ]
+        },
+        "contentRoot": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "artifactSelector": { "type": "string", "minLength": 1, "maxLength": 4096 },
+        "producerPaths": {
+          "type": "array",
+          "maxItems": 128,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "contentInputPaths": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2048,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "artifactPath": { "$ref": "#/$defs/artifactPath" },
+        "checkIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2048,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "ownerIds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2048,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        }
+      }
+    },
+    "obligationTarget": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "documentId",
+        "path",
+        "role",
+        "publicationBindings",
+        "basePresence",
+        "ownerIds",
+        "acceptedChangeKinds"
+      ],
+      "properties": {
+        "documentId": { "type": "string" },
+        "path": { "type": "string" },
+        "role": { "enum": ["CANONICAL", "PROJECTION"] },
+        "publicationBindings": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 2048,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/obligationPublication" }
+        },
+        "basePresence": { "const": "MUST_EXIST" },
+        "ownerIds": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "type": "string" }
+        },
+        "acceptedChangeKinds": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 4,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/changeKind" }
+        }
+      }
+    }
+  }
+}

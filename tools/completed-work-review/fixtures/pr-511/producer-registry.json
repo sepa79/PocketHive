@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "authority": "CANDIDATE_UNVERIFIED",
+  "profileId": "POCKETHIVE_DOCUMENTATION_V1",
+  "profileDigest": "d50f18ebc7a6866dcdf8fcc268608cb4c89c0873b2343ba87d1e07a80b4497d6",
+  "toolSourceDigest": "b71bbe5f51f0ca0a3b9a2adcbf0c16c0949ecd0748b9eb009b55af278ad632d8",
+  "producers": [],
+  "receiptAuthorizations": [],
+  "generatedAt": "2026-08-17T12:47:42.630Z",
+  "statement": "This in-repository migration registry is candidate-controlled and cannot authorize any evidence receipt."
+}

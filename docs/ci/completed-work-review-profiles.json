@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 1,
+  "profiles": [
+    {
+      "id": "POCKETHIVE_DOCUMENTATION_V1",
+      "scope": "LOCAL_CANDIDATE",
+      "kind": "DOCUMENTATION",
+      "description": "Evidence-backed comparison of PocketHive customer and contributor documentation.",
+      "scoringMethod": "ANCHORED_RUBRIC_V1",
+      "baselineRequired": true,
+      "dimensions": [
+        {
+          "id": "orientation",
+          "label": "Orientation",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "A reader can identify PocketHive's purpose, their role, the correct starting point, and the next safe step.",
+          "scoreAnchors": [
+            { "score": 0, "description": "No reliable starting point or mental model; the reader is likely to choose the wrong path." },
+            { "score": 5, "description": "A starting path exists, but role boundaries, prerequisites, or next steps require guesswork." },
+            { "score": 10, "description": "Purpose, roles, prerequisites, starting path, and next steps are explicit, consistent, and verified." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "actionability",
+          "label": "Actionability",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Documented tasks are reproducible end to end with explicit prerequisites, commands, expected outcomes, and recovery guidance.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Core instructions cannot be completed or omit essential commands and prerequisites." },
+            { "score": 5, "description": "The primary happy path works, but important outcomes, variants, or recovery steps are incomplete." },
+            { "score": 10, "description": "Representative tasks are end-to-end reproducible with verified commands, outcomes, diagnostics, and recovery." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "correctness",
+          "label": "Correctness",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Claims, contracts, examples, routes, and commands match the exact reviewed PocketHive implementation and supported interfaces.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Material claims or examples contradict the implementation or fail when exercised." },
+            { "score": 5, "description": "Core facts are mostly accurate, but some important claims or examples remain unverified or stale." },
+            { "score": 10, "description": "All material claims, contracts, examples, routes, and commands are current and supported by passing evidence." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "safety",
+          "label": "Safety",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Guidance preserves PocketHive's ingress, authority, configuration, cleanup, and destructive-action safety boundaries.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Guidance encourages unsupported ports, implicit authority, unsafe cleanup, or destructive behavior." },
+            { "score": 5, "description": "Major warnings exist, but some authority, failure, or cleanup boundaries remain ambiguous." },
+            { "score": 10, "description": "Official interfaces, explicit authority, failure behavior, cleanup scope, and destructive boundaries are consistently safe." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "navigation-visual-usability",
+          "label": "Navigation and visual usability",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Published information is discoverable, accessible, visually scannable, and usable across supported routes and viewports.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Key content is broken, inaccessible, undiscoverable, or unusable on a supported viewport." },
+            { "score": 5, "description": "Content is reachable, but navigation, hierarchy, accessibility, or responsive presentation causes friction." },
+            { "score": 10, "description": "Routes, links, hierarchy, accessibility, search cues, and desktop/mobile presentation are verified and clear." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        }
+      ],
+      "requiredGates": [
+        {
+          "id": "candidate-identity",
+          "evaluator": "CANDIDATE_IDENTITY",
+          "allowedAdapters": [],
+          "allowedExecutionKinds": [],
+          "allowedEvidenceKinds": [],
+          "officialIngressPolicy": "NO_EVIDENCE"
+        },
+        {
+          "id": "baseline-identity",
+          "evaluator": "BASELINE_IDENTITY",
+          "allowedAdapters": [],
+          "allowedExecutionKinds": [],
+          "allowedEvidenceKinds": [],
+          "officialIngressPolicy": "NO_EVIDENCE"
+        },
+        {
+          "id": "required-score-evidence",
+          "evaluator": "SCORE_ATTESTATIONS",
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK", "INDEPENDENT_REVIEW"],
+          "allowedEvidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "officialIngressPolicy": "EITHER_EXPLICIT"
+        },
+        {
+          "id": "documentation-validation",
+          "evaluator": "EVIDENCE_SET",
+          "allowedAdapters": ["DOCS_VALIDATION"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK"],
+          "allowedEvidenceKinds": ["MEASURED"],
+          "officialIngressPolicy": "REQUIRED"
+        },
+        {
+          "id": "docs-impact-disposition",
+          "evaluator": "DOCS_IMPACT",
+          "allowedAdapters": ["DOCS_IMPACT"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK"],
+          "allowedEvidenceKinds": ["MEASURED"],
+          "officialIngressPolicy": "FORBIDDEN"
+        },
+        {
+          "id": "search-ai-discovery",
+          "evaluator": "SEARCH_DISCOVERY",
+          "allowedAdapters": ["DOCS_VALIDATION", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK", "INDEPENDENT_REVIEW"],
+          "allowedEvidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "officialIngressPolicy": "EITHER_EXPLICIT"
+        },
+        {
+          "id": "independent-review",
+          "evaluator": "INDEPENDENT_REVIEW",
+          "allowedAdapters": ["INDEPENDENT_REVIEW"],
+          "allowedExecutionKinds": ["INDEPENDENT_REVIEW"],
+          "allowedEvidenceKinds": ["REVIEWER_JUDGMENT"],
+          "officialIngressPolicy": "FORBIDDEN"
+        }
+      ],
+      "independentReviewPasses": ["NOVICE", "EXPERT", "UX"],
+      "freshness": {
+        "maxAgeSeconds": 86400,
+        "requireCandidateIdentityMatch": true,
+        "requireToolDigestMatch": true,
+        "requireProfileDigestMatch": true
+      }
+    },
+    {
+      "id": "POCKETHIVE_DOCS_AUTOMATION_V1",
+      "scope": "LOCAL_CANDIDATE",
+      "kind": "DOCS_AUTOMATION",
+      "description": "Evidence-backed comparison of PocketHive documentation automation and its trust boundary.",
+      "scoringMethod": "ANCHORED_RUBRIC_V1",
+      "baselineRequired": true,
+      "dimensions": [
+        {
+          "id": "correctness",
+          "label": "Correctness",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "The automation validates, assembles, scores, and renders exactly the facts declared by its closed contracts.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Material contract facts are accepted, calculated, or rendered incorrectly." },
+            { "score": 5, "description": "The happy path is correct, but important negative paths or fact projections remain incomplete." },
+            { "score": 10, "description": "Closed-contract semantics, arithmetic, gates, quarantine, and both report projections pass positive and adversarial tests." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "determinism",
+          "label": "Determinism",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Identical explicit inputs yield byte-identical identities, receipts, decisions, and bundles without ambient selection or fallback.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Results depend materially on ambient state, ordering, fallback, or nondeterministic output." },
+            { "score": 5, "description": "Normal runs are stable, but some runtime, ordering, or reconstruction inputs are not fully bound." },
+            { "score": 10, "description": "Double capture, canonical ordering, explicit adapters, repeat runs, and mutation tests prove deterministic output." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "trust-boundary-safety",
+          "label": "Trust-boundary safety",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Candidate-controlled assertions cannot authorize evidence, inflate scores or confidence, unlock gates, or imply external authority.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Candidate-controlled input can self-authorize, unlock readiness, or claim authority without an exact external anchor." },
+            { "score": 5, "description": "Primary authorization is fail-closed, but material identity, chronology, reviewer, or reconstruction gaps remain." },
+            { "score": 10, "description": "Exact external anchors, chronology, identity, producer/check policy, quarantine, distinct review, and authority boundaries fail closed." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "maintainability",
+          "label": "Maintainability",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "The implementation is small, explicit, SSOT-driven, modular, and changeable without duplicate contracts or behavior strings.",
+          "scoreAnchors": [
+            { "score": 0, "description": "Core behavior is duplicated, fallback-heavy, magic-string-driven, or tightly entangled." },
+            { "score": 5, "description": "The design is understandable and tested, but application policy and reusable core remain materially coupled." },
+            { "score": 10, "description": "Closed SSOT contracts, shared constants, narrow modules, explicit policy packs, and conformance tests keep changes local." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        },
+        {
+          "id": "operational-readiness",
+          "label": "Operational readiness",
+          "kind": "SCORE",
+          "direction": "HIGHER_IS_BETTER",
+          "required": true,
+          "weight": 20,
+          "criterion": "Operators can run, diagnose, verify, retain, and govern the review workflow with explicit dependencies and bounded authority.",
+          "scoreAnchors": [
+            { "score": 0, "description": "The workflow is not reproducibly runnable or lacks usable diagnostics and retained evidence." },
+            { "score": 5, "description": "Local execution and evidence work, but protected automation, portability, or environment binding remains incomplete." },
+            { "score": 10, "description": "Explicit adapters, limits, timeouts, diagnostics, offline bundles, CI controllers, and protected governance are production-ready." }
+          ],
+          "evidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"]
+        }
+      ],
+      "requiredGates": [
+        {
+          "id": "candidate-identity",
+          "evaluator": "CANDIDATE_IDENTITY",
+          "allowedAdapters": [],
+          "allowedExecutionKinds": [],
+          "allowedEvidenceKinds": [],
+          "officialIngressPolicy": "NO_EVIDENCE"
+        },
+        {
+          "id": "baseline-identity",
+          "evaluator": "BASELINE_IDENTITY",
+          "allowedAdapters": [],
+          "allowedExecutionKinds": [],
+          "allowedEvidenceKinds": [],
+          "officialIngressPolicy": "NO_EVIDENCE"
+        },
+        {
+          "id": "required-score-evidence",
+          "evaluator": "SCORE_ATTESTATIONS",
+          "allowedAdapters": ["NODE_TEST", "DOCS_VALIDATION", "DOCS_IMPACT", "INDEPENDENT_REVIEW", "MANUAL_INSPECTION"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK", "INDEPENDENT_REVIEW"],
+          "allowedEvidenceKinds": ["MEASURED", "REVIEWER_JUDGMENT"],
+          "officialIngressPolicy": "EITHER_EXPLICIT"
+        },
+        {
+          "id": "focused-tests",
+          "evaluator": "EVIDENCE_SET",
+          "allowedAdapters": ["NODE_TEST"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK"],
+          "allowedEvidenceKinds": ["MEASURED"],
+          "officialIngressPolicy": "FORBIDDEN"
+        },
+        {
+          "id": "schema-projection-tests",
+          "evaluator": "EVIDENCE_SET",
+          "allowedAdapters": ["NODE_TEST"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK"],
+          "allowedEvidenceKinds": ["MEASURED"],
+          "officialIngressPolicy": "FORBIDDEN"
+        },
+        {
+          "id": "docs-impact-disposition",
+          "evaluator": "DOCS_IMPACT",
+          "allowedAdapters": ["DOCS_IMPACT"],
+          "allowedExecutionKinds": ["AUTOMATED_CHECK"],
+          "allowedEvidenceKinds": ["MEASURED"],
+          "officialIngressPolicy": "FORBIDDEN"
+        },
+        {
+          "id": "independent-review",
+          "evaluator": "INDEPENDENT_REVIEW",
+          "allowedAdapters": ["INDEPENDENT_REVIEW"],
+          "allowedExecutionKinds": ["INDEPENDENT_REVIEW"],
+          "allowedEvidenceKinds": ["REVIEWER_JUDGMENT"],
+          "officialIngressPolicy": "FORBIDDEN"
+        }
+      ],
+      "independentReviewPasses": ["EXPERT", "SECURITY"],
+      "freshness": {
+        "maxAgeSeconds": 86400,
+        "requireCandidateIdentityMatch": true,
+        "requireToolDigestMatch": true,
+        "requireProfileDigestMatch": true
+      }
+    }
+  ]
+}

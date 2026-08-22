@@ -1,0 +1,316 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/schemas/docs-validation-result-v2.schema.json",
+  "title": "PocketHive documentation validation result v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "schemaId",
+    "toolVersion",
+    "receiptId",
+    "checkpointSequence",
+    "runStatus",
+    "runDetail",
+    "startedAt",
+    "completedAt",
+    "currentStageId",
+    "configuration",
+    "identity",
+    "candidateStability",
+    "results",
+    "summary"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 2 },
+    "schemaId": { "const": "https://pockethive.dev/schemas/docs-validation-result-v2.schema.json" },
+    "toolVersion": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+    "receiptId": { "$ref": "#/$defs/sha256" },
+    "checkpointSequence": { "type": "integer", "minimum": 0 },
+    "runStatus": { "enum": ["RUNNING", "COMPLETED", "ERROR"] },
+    "runDetail": { "type": ["string", "null"] },
+    "startedAt": { "$ref": "#/$defs/timestamp" },
+    "completedAt": { "$ref": "#/$defs/nullableTimestamp" },
+    "currentStageId": { "type": ["string", "null"], "pattern": "^[A-Z][A-Z0-9_]*$" },
+    "configuration": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "profile",
+        "repositoryRoot",
+        "reportPath",
+        "artifactDirectory",
+        "adapterManifestPath",
+        "adapterManifestRawSha256",
+        "adapterManifestCanonicalSha256",
+        "candidateMode",
+        "baseUrl",
+        "docsUrl"
+      ],
+      "properties": {
+        "profile": { "enum": ["all", "deployed", "local", "packaging", "runtime", "setup", "static"] },
+        "repositoryRoot": { "type": "string", "minLength": 1 },
+        "reportPath": { "type": "string", "minLength": 1 },
+        "artifactDirectory": { "type": "string", "minLength": 1 },
+        "adapterManifestPath": { "type": "string", "minLength": 1 },
+        "adapterManifestRawSha256": { "$ref": "#/$defs/sha256" },
+        "adapterManifestCanonicalSha256": { "$ref": "#/$defs/sha256" },
+        "candidateMode": { "enum": ["COMMITTED_GIT", "DIRTY_WORKTREE"] },
+        "baseUrl": { "type": ["string", "null"] },
+        "docsUrl": { "type": ["string", "null"] }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["repository", "candidate", "runtime", "adapters", "tool", "lockfiles"],
+      "properties": {
+        "repository": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["root", "gitTopLevel"],
+          "properties": {
+            "root": { "type": "string", "minLength": 1 },
+            "gitTopLevel": { "type": "string", "minLength": 1 }
+          }
+        },
+        "candidate": { "$ref": "#/$defs/candidateIdentity" },
+        "runtime": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodeVersion", "platform", "architecture", "osRelease", "gitVersion"],
+          "properties": {
+            "nodeVersion": { "type": "string", "minLength": 1 },
+            "platform": { "type": "string", "minLength": 1 },
+            "architecture": { "type": "string", "minLength": 1 },
+            "osRelease": { "type": "string", "minLength": 1 },
+            "gitVersion": { "type": "string", "minLength": 1 }
+          }
+        },
+        "adapters": { "$ref": "#/$defs/adapterIdentity" },
+        "tool": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["version", "digest", "files"],
+          "properties": {
+            "version": { "type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$" },
+            "digest": { "$ref": "#/$defs/sha256" },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "uniqueItems": true,
+              "items": { "$ref": "#/$defs/fileIdentity" }
+            }
+          }
+        },
+        "lockfiles": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/fileIdentity" }
+        }
+      }
+    },
+    "candidateStability": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "initialCandidateDigest", "completedCandidateDigest"],
+      "properties": {
+        "status": { "enum": ["PENDING", "MATCHED", "MISMATCHED"] },
+        "initialCandidateDigest": { "$ref": "#/$defs/sha256" },
+        "completedCandidateDigest": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" }
+      }
+    },
+    "results": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/stageResult" }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["total", "passed", "failed", "skipped", "errors", "timedOut", "requiredNotPassed"],
+      "properties": {
+        "total": { "type": "integer", "minimum": 0 },
+        "passed": { "type": "integer", "minimum": 0 },
+        "failed": { "type": "integer", "minimum": 0 },
+        "skipped": { "type": "integer", "minimum": 0 },
+        "errors": { "type": "integer", "minimum": 0 },
+        "timedOut": { "type": "integer", "minimum": 0 },
+        "requiredNotPassed": { "type": "integer", "minimum": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "gitObjectId": {
+      "type": "string",
+      "pattern": "^(?:[a-f0-9]{40}|[a-f0-9]{64})$"
+    },
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "nullableTimestamp": {
+      "type": ["string", "null"],
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "fileIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256", "sizeBytes"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "executableAdapterBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "path", "sha256", "sizeBytes"],
+      "properties": {
+        "state": { "enum": ["CONFIGURED", "NOT_APPLICABLE"] },
+        "path": { "type": ["string", "null"], "minLength": 1 },
+        "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "sizeBytes": { "type": ["integer", "null"], "minimum": 1 }
+      }
+    },
+    "directoryAdapterBinding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state", "path"],
+      "properties": {
+        "state": { "enum": ["CONFIGURED", "NOT_APPLICABLE"] },
+        "path": { "type": ["string", "null"], "minLength": 1 }
+      }
+    },
+    "adapterManifestIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "rawSha256", "rawSizeBytes", "canonicalSha256", "canonicalJson"],
+      "properties": {
+        "path": { "type": "string", "minLength": 1 },
+        "rawSha256": { "$ref": "#/$defs/sha256" },
+        "rawSizeBytes": { "type": "integer", "minimum": 1 },
+        "canonicalSha256": { "$ref": "#/$defs/sha256" },
+        "canonicalJson": { "type": "string", "minLength": 1, "maxLength": 1048576 }
+      }
+    },
+    "adapterIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "manifest",
+        "node",
+        "git",
+        "npm",
+        "commandShell",
+        "taskkill",
+        "bash",
+        "powerShell",
+        "java",
+        "maven",
+        "localRepository",
+        "docker",
+        "chromium"
+      ],
+      "properties": {
+        "manifest": { "$ref": "#/$defs/adapterManifestIdentity" },
+        "node": { "$ref": "#/$defs/executableAdapterBinding" },
+        "git": { "$ref": "#/$defs/executableAdapterBinding" },
+        "npm": { "$ref": "#/$defs/executableAdapterBinding" },
+        "commandShell": { "$ref": "#/$defs/executableAdapterBinding" },
+        "taskkill": { "$ref": "#/$defs/executableAdapterBinding" },
+        "bash": { "$ref": "#/$defs/executableAdapterBinding" },
+        "powerShell": { "$ref": "#/$defs/executableAdapterBinding" },
+        "java": { "$ref": "#/$defs/executableAdapterBinding" },
+        "maven": { "$ref": "#/$defs/executableAdapterBinding" },
+        "localRepository": { "$ref": "#/$defs/directoryAdapterBinding" },
+        "docker": { "$ref": "#/$defs/executableAdapterBinding" },
+        "chromium": { "$ref": "#/$defs/executableAdapterBinding" }
+      }
+    },
+    "candidateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "verification",
+        "headSha",
+        "headTreeSha",
+        "isClean",
+        "trackedPatchSha256",
+        "untrackedManifestSha256",
+        "untrackedFileCount",
+        "candidateDigest"
+      ],
+      "properties": {
+        "mode": { "enum": ["COMMITTED_GIT", "DIRTY_WORKTREE"] },
+        "verification": { "const": "VERIFIED" },
+        "headSha": { "$ref": "#/$defs/gitObjectId" },
+        "headTreeSha": { "$ref": "#/$defs/gitObjectId" },
+        "isClean": { "type": "boolean" },
+        "trackedPatchSha256": { "$ref": "#/$defs/sha256" },
+        "untrackedManifestSha256": { "$ref": "#/$defs/sha256" },
+        "untrackedFileCount": { "type": "integer", "minimum": 0 },
+        "candidateDigest": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "artifact": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["artifactId", "kind", "schemaId", "path", "sha256", "sizeBytes"],
+      "properties": {
+        "artifactId": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "kind": { "const": "RENDERED_ROUTE_REPORT" },
+        "schemaId": { "const": "https://pockethive.dev/schemas/rendered-route-result-v1.schema.json" },
+        "path": { "type": "string", "minLength": 1 },
+        "sha256": { "$ref": "#/$defs/sha256" },
+        "sizeBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "stageResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stageId",
+        "commandSpecId",
+        "commandSpecDigest",
+        "name",
+        "required",
+        "declaredTimeoutMs",
+        "startedAt",
+        "completedAt",
+        "durationMs",
+        "status",
+        "detail",
+        "artifacts",
+        "artifactManifestDigest"
+      ],
+      "properties": {
+        "stageId": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" },
+        "commandSpecId": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*_V[0-9]+$" },
+        "commandSpecDigest": { "$ref": "#/$defs/sha256" },
+        "name": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "declaredTimeoutMs": { "type": "integer", "minimum": 1 },
+        "startedAt": { "$ref": "#/$defs/timestamp" },
+        "completedAt": { "$ref": "#/$defs/timestamp" },
+        "durationMs": { "type": "integer", "minimum": 0 },
+        "status": { "enum": ["PASS", "FAIL", "SKIP", "ERROR", "TIMEOUT"] },
+        "detail": { "type": ["string", "null"] },
+        "artifacts": {
+          "type": "array",
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": { "$ref": "#/$defs/artifact" }
+        },
+        "artifactManifestDigest": { "$ref": "#/$defs/sha256" }
+      }
+    }
+  }
+}

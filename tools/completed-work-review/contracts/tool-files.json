@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "runtimePackages": [],
+  "files": [
+    "docs/ci/completed-work-review-profiles.json",
+    "docs/ci/completed-work-review-profiles.schema.json",
+    "package-lock.json",
+    "package.json",
+    "tools/completed-work-review/assembler.mjs",
+    "tools/completed-work-review/cli.mjs",
+    "tools/completed-work-review/contracts/candidate-identity.schema.json",
+    "tools/completed-work-review/contracts/constants.mjs",
+    "tools/completed-work-review/contracts/decision-receipt.schema.json",
+    "tools/completed-work-review/contracts/evidence-receipt.schema.json",
+    "tools/completed-work-review/contracts/producer-registry.schema.json",
+    "tools/completed-work-review/contracts/projections.mjs",
+    "tools/completed-work-review/contracts/review-request.schema.json",
+    "tools/completed-work-review/contracts/review-result.schema.json",
+    "tools/completed-work-review/contracts/tool-files.json",
+    "tools/completed-work-review/contracts/values.json",
+    "tools/completed-work-review/file-safety.mjs",
+    "tools/completed-work-review/git-command.mjs",
+    "tools/completed-work-review/identity.mjs",
+    "tools/completed-work-review/manifest.mjs",
+    "tools/completed-work-review/profile.mjs",
+    "tools/completed-work-review/readiness.mjs",
+    "tools/completed-work-review/render-html.mjs",
+    "tools/completed-work-review/render-markdown.mjs",
+    "tools/completed-work-review/scorecard.mjs",
+    "tools/docs-impact/canonical.mjs"
+  ]
+}

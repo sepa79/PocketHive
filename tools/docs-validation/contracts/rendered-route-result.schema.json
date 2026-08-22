@@ -1,0 +1,238 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pockethive.dev/schemas/rendered-route-result-v1.schema.json",
+  "title": "PocketHive rendered documentation route result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "schemaId",
+    "generatedAt",
+    "status",
+    "detail",
+    "renderTarget",
+    "configuredBasePath",
+    "testedBaseUrl",
+    "platform",
+    "browser",
+    "build",
+    "summary",
+    "routeViewportResults",
+    "links",
+    "images"
+  ],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "schemaId": { "const": "https://pockethive.dev/schemas/rendered-route-result-v1.schema.json" },
+    "generatedAt": { "$ref": "#/$defs/timestamp" },
+    "status": { "enum": ["PASS", "FAIL", "ERROR"] },
+    "detail": { "type": ["string", "null"] },
+    "renderTarget": { "enum": ["LOCAL_STATIC", "DEPLOYED"] },
+    "configuredBasePath": { "type": "string", "pattern": "^/(?:[^\\r\\n]*/)?$" },
+    "testedBaseUrl": { "type": ["string", "null"] },
+    "platform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["nodeVersion", "operatingSystem", "architecture"],
+      "properties": {
+        "nodeVersion": { "type": "string", "minLength": 1 },
+        "operatingSystem": { "type": "string", "minLength": 1 },
+        "architecture": { "type": "string", "minLength": 1 }
+      }
+    },
+    "browser": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["engine", "executablePath", "version"],
+      "properties": {
+        "engine": { "const": "CHROMIUM" },
+        "executablePath": { "type": ["string", "null"] },
+        "version": { "type": ["string", "null"] }
+      }
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "detail"],
+      "properties": {
+        "status": { "enum": ["PASS", "FAIL", "ERROR"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "summary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routes",
+        "viewports",
+        "routeViewportChecks",
+        "routeViewportPassed",
+        "routeViewportFailed",
+        "linksChecked",
+        "linksFailed",
+        "imagesChecked",
+        "imagesFailed"
+      ],
+      "properties": {
+        "routes": { "type": "integer", "minimum": 0 },
+        "viewports": { "type": "integer", "minimum": 0 },
+        "routeViewportChecks": { "type": "integer", "minimum": 0 },
+        "routeViewportPassed": { "type": "integer", "minimum": 0 },
+        "routeViewportFailed": { "type": "integer", "minimum": 0 },
+        "linksChecked": { "type": "integer", "minimum": 0 },
+        "linksFailed": { "type": "integer", "minimum": 0 },
+        "imagesChecked": { "type": "integer", "minimum": 0 },
+        "imagesFailed": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "routeViewportResults": {
+      "type": "array",
+      "maxItems": 10000,
+      "items": { "$ref": "#/$defs/routeViewportResult" }
+    },
+    "links": {
+      "type": "array",
+      "maxItems": 50000,
+      "items": { "$ref": "#/$defs/linkResult" }
+    },
+    "images": {
+      "type": "array",
+      "maxItems": 50000,
+      "items": { "$ref": "#/$defs/imageResult" }
+    }
+  },
+  "$defs": {
+    "timestamp": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$"
+    },
+    "failureList": {
+      "type": "array",
+      "maxItems": 256,
+      "items": { "type": "string" }
+    },
+    "routeViewportResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "routePath",
+        "routeName",
+        "viewportId",
+        "viewportWidth",
+        "viewportHeight",
+        "url",
+        "status",
+        "navigation",
+        "consoleErrors",
+        "pageErrors",
+        "imageLoad",
+        "mermaid",
+        "pagination",
+        "overflow",
+        "auditErrors"
+      ],
+      "properties": {
+        "routePath": { "type": "string" },
+        "routeName": { "type": "string", "minLength": 1 },
+        "viewportId": { "enum": ["DESKTOP", "NARROW"] },
+        "viewportWidth": { "type": "integer", "minimum": 1 },
+        "viewportHeight": { "type": "integer", "minimum": 1 },
+        "url": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["PASS", "FAIL"] },
+        "navigation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["statusCode", "passed"],
+          "properties": {
+            "statusCode": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+            "passed": { "type": "boolean" }
+          }
+        },
+        "consoleErrors": { "$ref": "#/$defs/failureList" },
+        "pageErrors": { "$ref": "#/$defs/failureList" },
+        "imageLoad": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["checked", "failed", "failures"],
+          "properties": {
+            "checked": { "type": "integer", "minimum": 0 },
+            "failed": { "type": "integer", "minimum": 0 },
+            "failures": { "$ref": "#/$defs/failureList" }
+          }
+        },
+        "mermaid": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["minimumRequired", "rendered", "passed", "failures"],
+          "properties": {
+            "minimumRequired": { "type": "integer", "minimum": 0 },
+            "rendered": { "type": "integer", "minimum": 0 },
+            "passed": { "type": "boolean" },
+            "failures": { "$ref": "#/$defs/failureList" }
+          }
+        },
+        "pagination": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["required", "previous", "next", "passed"],
+          "properties": {
+            "required": { "type": "boolean" },
+            "previous": { "type": "integer", "minimum": 0 },
+            "next": { "type": "integer", "minimum": 0 },
+            "passed": { "type": "boolean" }
+          }
+        },
+        "overflow": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tolerancePx", "rootOverflowPx", "passed", "offenders"],
+          "properties": {
+            "tolerancePx": { "type": "integer", "minimum": 0 },
+            "rootOverflowPx": { "type": "integer", "minimum": 0 },
+            "passed": { "type": "boolean" },
+            "offenders": {
+              "type": "array",
+              "maxItems": 32,
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["tag", "className", "clientWidth", "scrollWidth"],
+                "properties": {
+                  "tag": { "type": "string", "minLength": 1 },
+                  "className": { "type": "string" },
+                  "clientWidth": { "type": "integer", "minimum": 0 },
+                  "scrollWidth": { "type": "integer", "minimum": 0 }
+                }
+              }
+            }
+          }
+        },
+        "auditErrors": { "$ref": "#/$defs/failureList" }
+      }
+    },
+    "linkResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "status", "statusCode", "fragment", "detail"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["PASS", "FAIL"] },
+        "statusCode": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+        "fragment": { "type": ["string", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    },
+    "imageResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["url", "status", "statusCode", "contentType", "detail"],
+      "properties": {
+        "url": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["PASS", "FAIL"] },
+        "statusCode": { "type": ["integer", "null"], "minimum": 100, "maximum": 599 },
+        "contentType": { "type": ["string", "null"] },
+        "detail": { "type": ["string", "null"] }
+      }
+    }
+  }
+}
