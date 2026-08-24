@@ -39,6 +39,29 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>swarm-model</artifactId>
+      <version>${project.version}</version>
+      <exclusions>
+        <exclusion>
+          <groupId>jakarta.validation</groupId>
+          <artifactId>jakarta.validation-api</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-annotations</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.fasterxml.jackson.core</groupId>
+          <artifactId>jackson-databind</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.networknt</groupId>
+          <artifactId>json-schema-validator</artifactId>
+        </exclusion>
+      </exclusions>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-web</artifactId>
     </dependency>
@@ -166,10 +189,12 @@
           <targetClasses>
             <param>io.pockethive.mcp.domain.*</param>
             <param>io.pockethive.mcp.application.*</param>
+            <param>io.pockethive.mcp.adapter.persistence.CoordinationStateSchema</param>
           </targetClasses>
           <targetTests>
             <param>io.pockethive.mcp.domain.*Test</param>
             <param>io.pockethive.mcp.application.*Test</param>
+            <param>io.pockethive.mcp.adapter.persistence.AtomicCoordinationStateRepositoryTest</param>
           </targetTests>
         </configuration>
       </plugin>

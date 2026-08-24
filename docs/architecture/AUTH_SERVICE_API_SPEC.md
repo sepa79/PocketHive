@@ -78,8 +78,8 @@ inbound MCP token to Scenario Manager, Orchestrator, or another owner API.
 
 First-release choices are explicit:
 
-- authorization code plus refresh-token rotation for the base VS Code
-  companion session only;
+- one authorization-code grant plus refresh-token rotation for each VS Code
+  companion environment session;
 - public pre-registered clients only; no Dynamic Client Registration or Client
   ID Metadata Document fetching;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
@@ -88,16 +88,28 @@ First-release choices are explicit:
 - the `resource` parameter is mandatory and identical in authorization and
   token requests;
 - opaque access tokens expire after the configured short lifetime;
-- the exact base scope set (`pockethive:mcp:discover` and
-  `pockethive:mcp:read`) receives an opaque refresh token; privileged
-  operation, authoring, publication, and cleanup scope sets remain ephemeral
-  and receive no refresh token;
+- the default access-token lifetime is 15 minutes and the default rotating
+  companion refresh-token lifetime is 30 days; deployments may shorten either
+  through the canonical Auth Service properties;
+- the VS Code client requests its exact companion intent once:
+  `pockethive:mcp:discover`, `pockethive:mcp:read`,
+  `pockethive:mcp:operate`, `pockethive:mcp:author`, and
+  `pockethive:mcp:publish`; Auth Service narrows that request to the
+  authenticated principal's current PocketHive grants before consent and
+  returns the exact granted scope set in the token response;
+- a consented companion scope set containing discover and read receives one
+  opaque rotating refresh token; the grant never includes
+  `pockethive:mcp:cleanup`; refresh preserves the originally consented scope
+  set, never widens it, and rejects a current-grant reduction;
 - every successful refresh rotates the refresh token; a retired, expired,
   revoked, wrong-client, or wrong-resource refresh token fails explicitly and
   issues no token;
-- the VS Code companion renews only on demand within the configured expiry
-  skew, coalesces concurrent renewal into one request, and keeps the last good
-  workspace visible while renewal completes;
+- the VS Code companion schedules renewal before access-token expiry and also
+  checks on demand before every MCP action. Renewal is single-flight, retries
+  no command by opening a browser, and keeps the last good workspace visible
+  while renewal completes. A transient refresh or transport failure retains
+  the refresh grant for an explicit bounded retry; a definitive token rejection
+  clears it and requires one visible sign-in action;
 - explicit sign-out revokes the current access and refresh tokens, deletes the
   local secret even if remote revocation cannot be confirmed, closes the MCP
   transport session, and never claims a remote logout that was not confirmed;
@@ -132,6 +144,13 @@ IDs are shared constants, not raw strings in handlers:
 | `pockethive:mcp:publish` | `ALL` | Scenario Bundle create or replace preparation |
 | `pockethive:mcp:cleanup` | `ALL` | Governed runtime cleanup execution |
 
+The companion request is an explicit OAuth policy case, not a fallback or a
+scope alias. A principal with `VIEW` receives discover/read; `RUN` additionally
+receives operate/author; `ALL` additionally receives publish. Cleanup is never
+part of the VS Code companion session. The OAuth response always reports the
+actual granted scope when Auth Service narrows the request, as required by the
+OAuth scope contract.
+
 Scopes constrain discovery and invocation but do not replace resource-level
 PocketHive grants or HiveGate policy. Auth Service returns the principal's full
 grants to the MCP introspection client so the MCP can apply the canonical folder
@@ -153,9 +172,9 @@ resource mismatch, client mismatch, or verifier mismatch invalidates the
 exchange and issues no token.
 
 An opaque MCP access-token record binds token digest, principal, client,
-resource, scopes, issue time, and expiry. A base-session refresh-token record
-also binds its authorization family, principal, public client, exact resource,
-exact base scope set, issue time, and expiry. Rotation retires the presented
+resource, scopes, issue time, and expiry. A companion-session refresh-token
+record also binds its authorization family, principal, public client, exact
+resource, exact consented scope set, issue time, and expiry. Rotation retires the presented
 refresh token before returning its replacement. Raw access or refresh tokens,
 authorization codes, PKCE verifiers, request cookies, and OAuth `state` values
 must not enter logs, telemetry, error bodies, or persisted evidence.
@@ -459,13 +478,15 @@ Success returns:
   "refresh_token": "phrfr_opaque_value",
   "token_type": "Bearer",
   "expires_in": 900,
-  "scope": "pockethive:mcp:discover pockethive:mcp:read"
+  "scope": "pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate pockethive:mcp:author"
 }
 ```
 
-The `refresh_token` field is returned only when the authorized scope set is
-exactly `pockethive:mcp:discover pockethive:mcp:read`. A privileged scope set
-receives the same response without `refresh_token`.
+The `refresh_token` field is returned only for a consented VS Code companion
+scope set that contains discover/read, is a subset of the declared companion
+intent, and excludes cleanup. The response `scope` is mandatory and is the
+exact granted set. A non-companion or cleanup scope set receives the same
+response without `refresh_token`.
 
 Refresh fields are exact and explicit:
 
@@ -474,7 +495,14 @@ Refresh fields are exact and explicit:
 - the current single-use `refresh_token`; and
 - the exact configured MCP `resource`.
 
-A successful refresh returns a new access token and a different refresh token.
+A successful refresh returns a new access token, the unchanged originally
+consented scope set, and a different refresh token. It must not add a scope.
+Auth Service rechecks the principal and current grants before issuing every
+access token. An inactive principal or any reduction that no longer permits
+the complete consented scope set fails with `invalid_grant`; the user must then
+authorize the newly permitted profile once. A grant reduction therefore takes
+effect at the next access-token refresh without waiting for the refresh-token
+lifetime to elapse.
 The previous refresh token is retired and cannot be replayed. OAuth errors use
 the standard `error` field and a bounded non-sensitive `error_description`. A
 failed authorization-code exchange consumes no valid code except where OAuth

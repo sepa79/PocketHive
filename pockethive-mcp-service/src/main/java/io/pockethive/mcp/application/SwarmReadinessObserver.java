@@ -1,8 +1,9 @@
 package io.pockethive.mcp.application;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
@@ -19,27 +20,75 @@ public final class SwarmReadinessObserver {
 
     public SwarmReadinessResult observe(String path, String swarmId) {
         Status status = status(owner.get(path));
-        return new SwarmReadinessResult(status.ready(), swarmId, status.totals(), status.swarmStatus(), 1);
+        return new SwarmReadinessResult(status.ready(), swarmId, status.totals(), status.controllerState().name(), 1);
     }
 
     private Status status(Object response) {
-        JsonNode context = mapper.valueToTree(response).path("envelope").path("data").path("context");
-        JsonNode totals = context.path("totals");
-        JsonNode swarmStatus = context.path("swarmStatus");
-        JsonNode desired = totals.path("desired");
-        JsonNode healthy = totals.path("healthy");
-        if (!context.isObject() || !totals.isObject() || !swarmStatus.isTextual()
-            || swarmStatus.textValue().isBlank() || !desired.isIntegralNumber() || !healthy.isIntegralNumber()) {
-            throw new ToolExecutionException("SWARM_STATUS_INVALID",
-                "Owner response must contain envelope.data.context.swarmStatus and integral totals.desired/healthy");
+        JsonNode projection = mapper.valueToTree(response);
+        JsonNode controllerState = projection.path("controllerState");
+        JsonNode workloadState = projection.path("workloadState");
+        JsonNode observationStale = projection.path("observationStale");
+        JsonNode observation = projection.path("observation");
+        JsonNode startupReady = observation.path("startupReady");
+        JsonNode expectedWorkers = observation.path("expectedWorkers");
+        JsonNode workers = observation.path("workers");
+        if (!projection.isObject()
+            || !nonBlankText(controllerState)
+            || !nonBlankText(workloadState)
+            || !observationStale.isBoolean()
+            || !observation.isObject()
+            || !startupReady.isBoolean()
+            || !expectedWorkers.isArray()
+            || !workers.isArray()) {
+            throw invalidStatus();
         }
-        Map<String, Object> allTotals = mapper.convertValue(totals, new TypeReference<>() { });
-        return new Status(swarmStatus.textValue(), desired.longValue(), healthy.longValue(), Map.copyOf(allTotals));
+        int healthy = 0;
+        for (JsonNode worker : workers) {
+            JsonNode stale = worker.path("stale");
+            if (!worker.isObject() || !stale.isBoolean()) {
+                throw invalidStatus();
+            }
+            if (!stale.booleanValue()) {
+                healthy++;
+            }
+        }
+        int desired = expectedWorkers.size();
+        Map<String, Object> totals = Map.of("desired", desired, "healthy", healthy);
+        return new Status(
+            requiredState(ControllerState.class, controllerState.textValue()),
+            requiredState(WorkloadState.class, workloadState.textValue()),
+            observationStale.booleanValue(),
+            startupReady.booleanValue(),
+            desired,
+            healthy,
+            totals);
     }
 
-    private record Status(String swarmStatus, long desired, long healthy, Map<String, Object> totals) {
+    private static boolean nonBlankText(JsonNode node) {
+        return node.isTextual() && !node.textValue().isBlank();
+    }
+
+    private static ToolExecutionException invalidStatus() {
+        return new ToolExecutionException("SWARM_STATUS_INVALID",
+            "Owner response must contain the canonical Orchestrator state and startup observation");
+    }
+
+    private static <T extends Enum<T>> T requiredState(Class<T> stateType, String value) {
+        try {
+            return Enum.valueOf(stateType, value);
+        } catch (IllegalArgumentException exception) {
+            throw invalidStatus();
+        }
+    }
+
+    private record Status(ControllerState controllerState, WorkloadState workloadState, boolean observationStale, boolean startupReady, int desired, int healthy, Map<String, Object> totals) {
         boolean ready() {
-            return desired > 0 && healthy >= desired && "READY".equals(swarmStatus);
+            return desired > 0
+                && healthy >= desired
+                && controllerState == ControllerState.READY
+                && workloadState == WorkloadState.STOPPED
+                && !observationStale
+                && startupReady;
         }
     }
 }

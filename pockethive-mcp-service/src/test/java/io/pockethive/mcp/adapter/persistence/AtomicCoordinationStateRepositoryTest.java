@@ -4,11 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.mcp.application.BundleValidationReceipt;
 import io.pockethive.mcp.application.ToolExecutionException;
+import io.pockethive.mcp.application.UploadCoordinationSnapshot;
+import io.pockethive.mcp.application.UploadWorkflowBinding;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import io.pockethive.mcp.domain.AgentSession;
+import io.pockethive.mcp.domain.BundleFileManifest;
+import io.pockethive.mcp.domain.BundleFileManifestEntry;
 import io.pockethive.mcp.domain.PrincipalKey;
 import io.pockethive.mcp.domain.ScenarioWorkflow;
+import io.pockethive.mcp.domain.SourceMetadata;
+import io.pockethive.mcp.domain.SourceVerification;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -21,6 +29,7 @@ import org.junit.jupiter.api.io.TempDir;
 
 class AtomicCoordinationStateRepositoryTest {
     private static final PrincipalKey PRINCIPAL = new PrincipalKey(URI.create("https://issuer.example"), "qa-lead");
+    private static final String SHA = "sha256:" + "a".repeat(64);
 
     @TempDir Path temporaryDirectory;
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
@@ -80,6 +89,94 @@ class AtomicCoordinationStateRepositoryTest {
     }
 
     @Test
+    void explicitlyMigratesLegacyReceiptsWithoutInferringMissingOwnerIdentity() throws Exception {
+        Path state = temporaryDirectory.resolve("legacy-v1");
+        Files.createDirectories(state);
+        Files.writeString(state.resolve("state.json"), """
+            {
+              "schemaVersion": 1,
+              "sessions": {},
+              "workflows": {},
+              "generatedFiles": {},
+              "uploadCoordination": {
+                "tickets": {
+                  "ut-legacy": {
+                    "validationReceiptId": "vr-legacy"
+                  },
+                  "ut-blank": {
+                    "validationReceiptId": "vr-blank"
+                  }
+                },
+                "receipts": {
+                  "vr-legacy": {
+                    "id": "vr-legacy",
+                    "scenarioId": "checkout-smoke"
+                  },
+                  "vr-blank": {
+                    "id": "vr-blank",
+                    "scenarioId": "checkout-smoke-copy",
+                    "scenarioName": " "
+                  }
+                },
+                "attempts": {}
+              }
+            }
+            """);
+
+        try (AtomicCoordinationStateRepository migrated = repository(state, 1_000_000, 10, 4)) {
+            assertThat(migrated.loadUploadCoordination().receipts()).isEmpty();
+            assertThat(migrated.loadUploadCoordination().tickets()).isEmpty();
+        }
+
+        assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
+            .isEqualTo(2);
+    }
+
+    @Test
+    void legacyMigrationPreservesReceiptsThatAlreadyContainExactOwnerIdentity() throws Exception {
+        Path state = temporaryDirectory.resolve("legacy-v1-complete");
+        BundleValidationReceipt receipt = new BundleValidationReceipt("vr-complete", PRINCIPAL,
+            UploadWorkflowBinding.direct(), new SourceMetadata("git@example/repo", "a".repeat(40),
+            "scenarios/bundles/checkout-smoke", SourceVerification.CLIENT_ASSERTED),
+            new BundleFileManifest(List.of(new BundleFileManifestEntry("scenario.yaml", 4, SHA))),
+            SHA, SHA, "checkout-smoke", "Checkout smoke", Instant.parse("2026-08-18T12:00:00Z"));
+        try (AtomicCoordinationStateRepository current = repository(state, 1_000_000, 10, 4)) {
+            current.saveUploadCoordination(new UploadCoordinationSnapshot(
+                Map.of(), Map.of(receipt.id(), receipt), Map.of()));
+        }
+        ObjectNode legacy = (ObjectNode) mapper.readTree(state.resolve("state.json").toFile());
+        legacy.put("schemaVersion", 1);
+        mapper.writeValue(state.resolve("state.json").toFile(), legacy);
+
+        try (AtomicCoordinationStateRepository migrated = repository(state, 1_000_000, 10, 4)) {
+            assertThat(migrated.loadUploadCoordination().receipts()).containsEntry(receipt.id(), receipt);
+        }
+        assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
+            .isEqualTo(2);
+    }
+
+    @Test
+    void legacyMigrationRejectsMalformedCoordinationCollectionsAndUnsupportedVersions() throws Exception {
+        for (String malformedField : List.of("receipts", "tickets")) {
+            Path state = temporaryDirectory.resolve("legacy-malformed-" + malformedField);
+            Files.createDirectories(state);
+            ObjectNode root = emptyState(1);
+            ((ObjectNode) root.path("uploadCoordination")).set(malformedField, mapper.createArrayNode());
+            mapper.writeValue(state.resolve("state.json").toFile(), root);
+            assertThatThrownBy(() -> repository(state, 1_000_000, 10, 4))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("MCP_STATE_CORRUPT");
+        }
+
+        Path unsupported = temporaryDirectory.resolve("unsupported-version");
+        Files.createDirectories(unsupported);
+        mapper.writeValue(unsupported.resolve("state.json").toFile(), emptyState(3));
+        assertThatThrownBy(() -> repository(unsupported, 1_000_000, 10, 4))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("MCP_STATE_CORRUPT");
+    }
+
+    @Test
     void quotaFailuresLeaveThePreviousAtomicStateUnchanged() {
         Path state = temporaryDirectory.resolve("quota");
         try (AtomicCoordinationStateRepository repository = repository(state, 700, 1, 1)) {
@@ -122,5 +219,19 @@ class AtomicCoordinationStateRepositoryTest {
                                                           int maxPerPrincipal) {
         return new AtomicCoordinationStateRepository(mapper, PocketHiveMcpProperties.StateMode.FILE,
             state, maxBytes, maxOpenSessions, maxPerPrincipal);
+    }
+
+    private ObjectNode emptyState(int schemaVersion) {
+        ObjectNode root = mapper.createObjectNode();
+        root.put("schemaVersion", schemaVersion);
+        root.set("sessions", mapper.createObjectNode());
+        root.set("workflows", mapper.createObjectNode());
+        root.set("generatedFiles", mapper.createObjectNode());
+        ObjectNode uploadCoordination = mapper.createObjectNode();
+        uploadCoordination.set("tickets", mapper.createObjectNode());
+        uploadCoordination.set("receipts", mapper.createObjectNode());
+        uploadCoordination.set("attempts", mapper.createObjectNode());
+        root.set("uploadCoordination", uploadCoordination);
+        return root;
     }
 }

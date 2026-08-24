@@ -10,14 +10,15 @@ import {
   ConnectionEvidence,
   McpConnectionProfile,
   OAuthSessionStore,
+  PocketHiveMcpScope,
+  POCKETHIVE_MCP_SCOPES,
 } from '../connection/contracts';
 import { PocketHiveEndpointValidator } from '../connection/endpointValidator';
 import { LoopbackBrowserAuthorization } from '../connection/loopbackBrowser';
 import { PocketHiveOAuthAuthentication } from '../connection/oauthAuthentication';
 import { AuthorizedMcpSession } from '../connection/authorizedMcpSession';
 import { createConnectionProfile } from '../connection/profile';
-import { debugToolCall, DEBUG_ACTIONS } from '../debug/actions';
-import { ScopedMcpToolRunner } from '../operations/scopedMcpToolRunner';
+import { debugToolCall, exactWorkerRuntimeId, DEBUG_ACTION_LABELS, DEBUG_ACTIONS } from '../debug/actions';
 import {
   lifecycleToolCall,
   primaryActionsForSwarms,
@@ -27,7 +28,9 @@ import {
 } from '../operations/swarmOperations';
 import { openJsonPreview, openPreviewDocument } from '../preview';
 import { McpConnectionProfileRepository } from '../storage/profileRepository';
-import { GitBundlePackager } from '../scenarios/gitBundlePackager';
+import { CommittedBundleReference, GitBundlePackager } from '../scenarios/gitBundlePackager';
+import { GitScenarioBundleDiscovery } from '../scenarios/gitScenarioBundleDiscovery';
+import { planRepositoryDeployment, RepositoryDeploymentPlan } from '../scenarios/repositoryDeployment';
 import {
   PendingBundlePublication,
   PublicationMode,
@@ -40,9 +43,19 @@ import {
   SCENARIO_ASSETS,
   ScenarioAsset,
 } from '../scenarios/scenarioReads';
-import { CompanionTab, decodeWebviewCommand, ScenarioSection } from './messages';
+import { CompanionTab, decodeWebviewCommand, ScenarioSection, WorkerDebugAction } from './messages';
 import { CurrentView } from './currentView';
-import { boundCompanionViewModel } from './viewModelBoundary';
+import { EventPagePresentation } from './eventPresentation';
+import {
+  RepositoryScenarioCandidateRegistry,
+  assertRepositoryScenarioFileWritable,
+  RepositoryScenarioView,
+  resolveRepositoryScenarioCandidate,
+  resolveRepositoryScenarioFile,
+  scanRepositoryScenarios,
+} from './repositoryScenarios';
+import { boundCompanionViewModel, redactSensitiveValues } from './viewModelBoundary';
+import { resolvePocketHiveWebUiUrl, WebUiDestination } from './webUiNavigation';
 import { SIDEBAR_EVENT_LIMIT, workspaceToolCall } from './workspaceTool';
 import {
   SESSION_ACTIVITIES,
@@ -52,6 +65,16 @@ import {
 } from './sessionPresentation';
 
 type LiveStatus = 'Connected' | 'Connecting' | 'Needs sign-in' | 'Unavailable' | 'Not connected';
+const ENVIRONMENT_HEALTH_RESOURCE = 'pockethive://environment/health';
+const REAUTHENTICATION_REQUIRED_CODES = new Set([
+  'OAUTH_REFRESH_REJECTED',
+  'OAUTH_REFRESH_TOKEN_NOT_ROTATED',
+  'OAUTH_REFRESH_SCOPE_WIDENED',
+  'OAUTH_SCOPE_NOT_GRANTED',
+  'OAUTH_SESSION_INVALID',
+  'OAUTH_SESSION_NOT_RENEWABLE',
+  'OAUTH_TOKEN_RESPONSE_INVALID',
+]);
 
 interface ProfileRow extends McpConnectionProfile {
   readonly status: LiveStatus;
@@ -73,6 +96,7 @@ interface CompanionViewModel {
   readonly activeProfile?: ProfileRow;
   readonly activeTab: CompanionTab;
   readonly workspaceData?: unknown;
+  readonly environmentHealth?: unknown;
   readonly swarmOperations: typeof SWARM_OPERATIONS;
   readonly swarmPrimaryActions: Readonly<Record<string, SwarmOperation>>;
   readonly createSwarmForm?: CreateSwarmFormState;
@@ -84,12 +108,18 @@ interface CompanionViewModel {
   readonly swarmOperationResult?: unknown;
   readonly debugSwarmId?: string;
   readonly debugRuntimeId?: string;
+  readonly debugWorkersResult?: unknown;
+  readonly debugAction?: string;
   readonly debugResult?: unknown;
   readonly scenarioFocusScenarioId?: string;
   readonly scenarioFocusBundleKey?: string;
   readonly scenarioFocusSection?: ScenarioSection;
   readonly scenarioFocusTree?: unknown;
   readonly scenarioFocusInputs?: unknown;
+  readonly repositoryScenarios?: RepositoryScenarioView;
+  readonly repositoryPendingCandidateId?: string;
+  readonly repositoryResultCandidateId?: string;
+  readonly repositoryDeploymentConflict?: RepositoryDeploymentPlan & { readonly candidateId: string };
   readonly pendingBundle?: unknown;
   readonly bundleResult?: unknown;
   readonly debugActions: typeof DEBUG_ACTIONS;
@@ -106,15 +136,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private readonly authentication: PocketHiveOAuthAuthentication;
   private readonly authorizedSession: AuthorizedMcpSession;
   private readonly bundles: ScenarioBundleCoordinator;
-  private readonly scopedTools: ScopedMcpToolRunner;
+  private readonly scenarioDiscovery = new GitScenarioBundleDiscovery();
+  private readonly scenarioCandidates = new RepositoryScenarioCandidateRegistry();
   private readonly live = new Map<string, { status: LiveStatus; evidence?: ConnectionEvidence }>();
   private readonly currentView = new CurrentView<vscode.WebviewView>();
+  private readonly eventDetails = new EventPagePresentation();
   private page: CompanionViewModel['page'] = 'environments';
   private activeTab: CompanionTab = 'Hive';
   private draft?: McpConnectionProfile;
   private attempt?: ConnectionAttempt;
   private attemptView?: ConnectionAttemptView;
   private workspaceData?: unknown;
+  private environmentHealth?: unknown;
   private createSwarmForm?: CreateSwarmFormState;
   private journalSwarmId?: string;
   private journalRunId?: string;
@@ -124,12 +157,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private swarmOperationResult?: unknown;
   private debugSwarmId?: string;
   private debugRuntimeId?: string;
+  private debugWorkersResult?: unknown;
+  private debugAction?: string;
   private debugResult?: unknown;
   private scenarioFocusScenarioId?: string;
   private scenarioFocusBundleKey?: string;
   private scenarioFocusSection: ScenarioSection = 'OVERVIEW';
   private scenarioFocusTree?: unknown;
   private scenarioFocusInputs?: unknown;
+  private repositoryScenarios?: RepositoryScenarioView;
+  private repositoryPendingCandidateId?: string;
+  private repositoryResultCandidateId?: string;
+  private repositoryDeploymentConflict?: RepositoryDeploymentPlan & { readonly candidateId: string };
   private pendingBundle?: PendingBundlePublication;
   private bundleResult?: unknown;
   private sessionActivity: SessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
@@ -152,12 +191,22 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
       vscode.env.openExternal(vscode.Uri.parse(url)));
     this.authentication = new PocketHiveOAuthAuthentication(fetch, browser, secrets);
     this.authorizedSession = new AuthorizedMcpSession(
-      this.endpoints, this.authentication, this.activeConnection,
+      this.endpoints, this.authentication, this.activeConnection, undefined, undefined,
+      {
+        renewed: (profile, evidence) => {
+          this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
+          this.live.set(profile.id, { status: 'Connected', evidence });
+          void this.postView();
+        },
+        unavailable: (profile, error) => {
+          this.markSessionFailure(profile, error);
+          void this.postView();
+        },
+      },
     );
     this.bundles = new ScenarioBundleCoordinator(
-      new GitBundlePackager(), this.endpoints, this.authentication, clients,
+      new GitBundlePackager(), this.activeConnection,
     );
-    this.scopedTools = new ScopedMcpToolRunner(this.endpoints, this.authentication, clients);
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
@@ -179,6 +228,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.eventDetails.clear();
     const view = this.currentView.value();
     if (view) this.currentView.detach(view);
     await this.discardPendingBundle();
@@ -237,6 +287,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'selectTab':
           this.activeTab = command.tab;
+          this.debugAction = undefined;
           this.debugResult = undefined;
           await this.loadTab();
           break;
@@ -269,12 +320,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         case 'openSwarmDetails':
           await this.openSwarmDetails(command.swarmId);
           break;
+        case 'openWebUi':
+          await this.openWebUi(command);
+          break;
         case 'openJournalRun':
           this.activeTab = 'Journal';
           this.journalSwarmId = command.swarmId;
           this.journalRunId = command.runId;
           this.journalResult = undefined;
           await this.loadTab();
+          break;
+        case 'openEventDetails':
+          await this.openEventDetails(command.detailId);
           break;
         case 'runSwarmOperation':
           await this.runSwarmOperation(command.action, command.swarmId);
@@ -286,17 +343,25 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           this.activeTab = 'Debug';
           this.debugSwarmId = command.swarmId;
           this.debugRuntimeId = undefined;
+          this.debugWorkersResult = undefined;
+          this.debugAction = undefined;
           this.debugResult = undefined;
           await this.loadTab();
+          break;
+        case 'openDebugForWorker':
+          await this.openDebugForWorker(command.swarmId, command.instance, command.action);
           break;
         case 'selectDebugSwarm':
           this.debugSwarmId = command.swarmId;
           this.debugRuntimeId = undefined;
+          this.debugWorkersResult = undefined;
+          this.debugAction = undefined;
           this.debugResult = undefined;
           await this.postView();
           break;
         case 'selectDebugWorker':
           this.debugRuntimeId = command.runtimeId;
+          this.debugAction = undefined;
           this.debugResult = undefined;
           await this.postView();
           break;
@@ -323,6 +388,23 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'validateCommittedBundle':
           await this.validateCommittedBundle();
+          break;
+        case 'validateRepositoryBundle':
+          await this.validateRepositoryBundle(command.candidateId);
+          break;
+        case 'openRepositoryBundleFile':
+          await this.openRepositoryBundleFile(command.candidateId, command.path);
+          break;
+        case 'deployRepositoryBundle':
+          await this.deployRepositoryBundle(command.candidateId);
+          break;
+        case 'replaceRepositoryBundle':
+          await this.replaceRepositoryBundle(command.candidateId);
+          break;
+        case 'openRepositoryRename':
+          await this.openRepositoryRename(
+            command.candidateId, command.scenarioId, command.scenarioName,
+          );
           break;
         case 'publishCommittedBundle':
           await this.publishCommittedBundle(command.mode, command.scenarioId);
@@ -440,22 +522,40 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   }
 
   private async loadTab(): Promise<void> {
+    this.eventDetails.clear();
     this.busy = true;
     await this.postView();
     try {
+      if (this.activeTab === 'Scenarios') {
+        if (this.repositoryPendingCandidateId) await this.discardPendingBundle();
+        this.repositoryScenarios = await scanRepositoryScenarios(
+          vscode.workspace.isTrusted,
+          (vscode.workspace.workspaceFolders ?? []).map(folder => ({
+            name: folder.name,
+            directory: folder.uri.fsPath,
+          })),
+          this.scenarioDiscovery,
+          this.scenarioCandidates,
+        );
+      }
       await this.ensureAuthorizedSession();
       const call = workspaceToolCall(this.activeTab);
-      this.workspaceData = await this.activeConnection.callTool(call.name, call.arguments);
+      const health = this.activeConnection.readResource(ENVIRONMENT_HEALTH_RESOURCE)
+        .catch(error => ({ error: safeError(error), observedAt: new Date().toISOString() }));
+      const ownerData = await this.activeConnection.callTool(call.name, call.arguments);
+      this.workspaceData = this.activeTab === 'Buzz' ? this.eventDetails.replace(ownerData) : ownerData;
+      this.environmentHealth = await health;
       if (this.activeTab === 'Scenarios') {
         await this.refreshScenarioFocusData();
       }
       if (this.activeTab === 'Journal' && this.journalSwarmId) {
         try {
-          this.journalResult = await this.activeConnection.callTool('debug_journal', {
+          const ownerJournal = await this.activeConnection.callTool('debug_journal', {
             swarmId: this.journalSwarmId,
             limit: SIDEBAR_EVENT_LIMIT,
             ...(this.journalRunId ? { runId: this.journalRunId } : {}),
           });
+          this.journalResult = this.eventDetails.replace(ownerJournal);
         } catch (error) {
           this.journalResult = { error: safeError(error), observedAt: new Date().toISOString() };
         }
@@ -472,15 +572,17 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     if (!this.journalSwarmId) {
       throw new ConnectionContractError('JOURNAL_SWARM_REQUIRED', 'Select an exact swarm');
     }
+    this.eventDetails.clear();
     this.busy = true;
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
-      this.journalResult = await this.activeConnection.callTool('debug_journal', {
+      const ownerJournal = await this.activeConnection.callTool('debug_journal', {
         swarmId: this.journalSwarmId,
         limit: SIDEBAR_EVENT_LIMIT,
         ...(this.journalRunId ? { runId: this.journalRunId } : {}),
       });
+      this.journalResult = this.eventDetails.replace(ownerJournal);
     } catch (error) {
       this.journalResult = { error: safeError(error), observedAt: new Date().toISOString() };
     } finally {
@@ -517,13 +619,25 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     }
   }
 
+  private async openEventDetails(detailId: string): Promise<void> {
+    await openJsonPreview('PocketHive event details', redactSensitiveValues(this.eventDetails.require(detailId)));
+  }
+
+  private async openWebUi(target: WebUiDestination): Promise<void> {
+    const targetUrl = resolvePocketHiveWebUiUrl(this.environmentHealth, target);
+    const opened = await vscode.env.openExternal(vscode.Uri.parse(targetUrl));
+    if (!opened) {
+      throw new ConnectionContractError('WEB_UI_OPEN_FAILED', targetUrl);
+    }
+  }
+
   private async runSwarmOperation(action: SwarmOperation, swarmId: string): Promise<void> {
     const call = lifecycleToolCall(action, swarmId, randomUUID());
     this.busy = true;
     this.swarmOperationResult = undefined;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.OPERATE);
       if (action === SWARM_OPERATIONS.REMOVE) {
         const approved = await vscode.window.showWarningMessage(
           `Remove swarm “${swarmId}”? This targets the exact selected swarm.`,
@@ -532,9 +646,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         );
         if (approved !== 'Remove swarm') return;
       }
-      this.swarmOperationResult = await this.scopedTools.call(
-        this.requireDraft(), call.name, call.arguments,
-      );
+      this.swarmOperationResult = await this.activeConnection.callTool(call.name, call.arguments);
       this.workspaceData = await this.activeConnection.callTool('swarm_list');
     } finally {
       this.busy = false;
@@ -551,14 +663,13 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.swarmOperationResult = undefined;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
-      const profile = this.requireDraft();
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.OPERATE);
       const succeeded: string[] = [];
       const failed: Array<{ swarmId: string; error: { code: string; message: string } }> = [];
       for (const swarmId of targets) {
         try {
           const call = lifecycleToolCall(action, swarmId, randomUUID());
-          await this.scopedTools.call(profile, call.name, call.arguments);
+          await this.activeConnection.callTool(call.name, call.arguments);
           succeeded.push(swarmId);
         } catch (error) {
           failed.push({ swarmId, error: safeError(error) });
@@ -636,8 +747,8 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.swarmOperationResult = undefined;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
-      this.swarmOperationResult = await this.scopedTools.call(this.requireDraft(), 'swarm_create', arguments_);
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.OPERATE);
+      this.swarmOperationResult = await this.activeConnection.callTool('swarm_create', arguments_);
       this.createSwarmForm = undefined;
       this.workspaceData = await this.activeConnection.callTool('swarm_list');
     } finally {
@@ -648,10 +759,44 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
 
   private async runDebug(action: string, tailLines?: number): Promise<void> {
     const call = debugToolCall(action, this.debugSwarmId, this.debugRuntimeId, tailLines);
+    if (action === DEBUG_ACTION_LABELS.WORKERS) {
+      this.debugRuntimeId = undefined;
+      this.debugWorkersResult = undefined;
+    }
+    this.debugAction = action;
+    this.debugResult = undefined;
     this.busy = true;
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
+      this.debugResult = await this.activeConnection.callTool(call.name, call.arguments);
+      if (action === DEBUG_ACTION_LABELS.WORKERS) this.debugWorkersResult = this.debugResult;
+    } finally {
+      this.busy = false;
+      await this.postView();
+    }
+  }
+
+  private async openDebugForWorker(
+    swarmId: string,
+    instance: string,
+    action: WorkerDebugAction,
+  ): Promise<void> {
+    this.activeTab = 'Debug';
+    this.debugSwarmId = swarmId;
+    this.debugRuntimeId = undefined;
+    this.debugWorkersResult = undefined;
+    this.debugAction = action;
+    this.debugResult = undefined;
+    this.busy = true;
+    await this.postView();
+    try {
+      await this.ensureAuthorizedSession();
+      const workers = await this.activeConnection.callTool('runtime_list_workers', { swarmId });
+      const runtimeId = exactWorkerRuntimeId(workers, instance);
+      this.debugWorkersResult = workers;
+      this.debugRuntimeId = runtimeId;
+      const call = debugToolCall(action, swarmId, runtimeId, action === DEBUG_ACTION_LABELS.LOGS ? 200 : undefined);
       this.debugResult = await this.activeConnection.callTool(call.name, call.arguments);
     } finally {
       this.busy = false;
@@ -818,13 +963,110 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     if (!vscode.workspace.getWorkspaceFolder(selected[0])) {
       throw new ConnectionContractError('BUNDLE_WORKSPACE_REQUIRED', 'Select a directory in the current Git workspace');
     }
+    this.clearRepositoryPublicationState();
+    await this.validateBundleDirectory(selected[0].fsPath);
+  }
+
+  private async validateRepositoryBundle(candidateId: string): Promise<void> {
+    if (this.pendingBundle) {
+      throw new ConnectionContractError('BUNDLE_PUBLICATION_PENDING', 'Publish or discard the validated bundle first');
+    }
+    const normalizedCandidateId = candidateId.trim();
+    this.repositoryPendingCandidateId = normalizedCandidateId;
+    this.repositoryResultCandidateId = normalizedCandidateId;
+    this.repositoryDeploymentConflict = undefined;
+    try {
+      await this.validateBundleDirectory(resolveRepositoryScenarioCandidate(
+        vscode.workspace.isTrusted, normalizedCandidateId, this.scenarioCandidates,
+      ));
+    } catch (error) {
+      this.clearRepositoryPublicationState();
+      throw error;
+    }
+  }
+
+  private async openRepositoryBundleFile(candidateId: string, path: string): Promise<void> {
+    const file = resolveRepositoryScenarioFile(
+      vscode.workspace.isTrusted, candidateId, path, this.scenarioCandidates,
+    );
+    await assertRepositoryScenarioFileWritable(file);
+    const document = await vscode.workspace.openTextDocument(vscode.Uri.file(file));
+    await vscode.window.showTextDocument(document, { preview: false });
+  }
+
+  private async deployRepositoryBundle(candidateId: string): Promise<void> {
+    const normalizedCandidateId = candidateId.trim();
+    if (!this.pendingBundle) {
+      await this.validateRepositoryBundle(normalizedCandidateId);
+    } else if (this.repositoryPendingCandidateId !== normalizedCandidateId) {
+      throw new ConnectionContractError(
+        'BUNDLE_PUBLICATION_PENDING',
+        'Publish or discard the validated Repository scenario first',
+      );
+    }
+    const pending = this.pendingBundle;
+    if (!pending) throw new ConnectionContractError('BUNDLE_PUBLICATION_MISSING', 'Validate a committed bundle first');
+    const plan = planRepositoryDeployment(this.workspaceData, pending.receipt);
+    if (plan.kind === 'CONFLICT') {
+      this.repositoryDeploymentConflict = Object.freeze({ candidateId: normalizedCandidateId, ...plan });
+      await this.postView();
+      return;
+    }
+    await this.publishCommittedBundle('CREATE');
+  }
+
+  private async replaceRepositoryBundle(candidateId: string): Promise<void> {
+    const conflict = this.repositoryDeploymentConflict;
+    if (!conflict || conflict.kind !== 'CONFLICT' || conflict.candidateId !== candidateId.trim()
+      || this.repositoryPendingCandidateId !== conflict.candidateId
+      || this.pendingBundle?.receipt.scenarioId !== conflict.scenarioId) {
+      throw new ConnectionContractError(
+        'REPOSITORY_DEPLOYMENT_CONFLICT_STALE',
+        'Validate and select the exact Repository scenario conflict again',
+      );
+    }
+    this.repositoryDeploymentConflict = undefined;
+    await this.publishCommittedBundle('REPLACE', conflict.scenarioId);
+  }
+
+  private async openRepositoryRename(
+    candidateId: string,
+    scenarioId: string,
+    scenarioName: string,
+  ): Promise<void> {
+    const conflict = this.repositoryDeploymentConflict;
+    const normalizedCandidateId = candidateId.trim();
+    const normalizedScenarioId = scenarioId.trim();
+    const normalizedScenarioName = scenarioName.trim();
+    if (!conflict || conflict.kind !== 'CONFLICT' || conflict.candidateId !== normalizedCandidateId
+      || this.repositoryPendingCandidateId !== normalizedCandidateId) {
+      throw new ConnectionContractError(
+        'REPOSITORY_DEPLOYMENT_CONFLICT_STALE',
+        'Validate and select the exact Repository scenario conflict again',
+      );
+    }
+    if (normalizedScenarioId === conflict.scenarioId) {
+      throw new ConnectionContractError(
+        'REPOSITORY_RENAME_ID_UNCHANGED',
+        'Choose a different scenario ID before editing the source',
+      );
+    }
+    await this.discardPendingBundle();
+    await this.openRepositoryBundleFile(normalizedCandidateId, 'scenario.yaml');
+    await vscode.window.showInformationMessage(
+      `Update scenario.yaml id to “${normalizedScenarioId}” and name to “${normalizedScenarioName}”, then commit, refresh, validate, and deploy again.`,
+    );
+    await this.postView();
+  }
+
+  private async validateBundleDirectory(source: string | CommittedBundleReference): Promise<void> {
     const profile = this.requireDraft();
     this.busy = true;
     this.bundleResult = undefined;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
-      this.pendingBundle = await this.bundles.validate(profile, selected[0].fsPath);
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.AUTHOR);
+      this.pendingBundle = await this.bundles.validate(profile, source);
       this.bundleResult = { validationReceipt: this.pendingBundle.receipt };
     } finally {
       this.busy = false;
@@ -838,7 +1080,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.busy = true;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.PUBLISH);
       this.bundleResult = { publicationAttempt: await this.bundles.publish(
         this.requireDraft(), pending, mode, scenarioId,
       ) };
@@ -847,6 +1089,8 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
       throw error;
     } finally {
       this.pendingBundle = undefined;
+      this.repositoryPendingCandidateId = undefined;
+      this.repositoryDeploymentConflict = undefined;
       this.busy = false;
       await this.postView();
     }
@@ -856,7 +1100,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.busy = true;
     await this.postView();
     try {
-      await this.ensureAuthorizedSession();
+      await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.PUBLISH);
       this.bundleResult = {
         publicationAttempt: await this.bundles.reconcile(this.requireDraft(), attemptId),
       };
@@ -870,7 +1114,14 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     const pending = this.pendingBundle;
     this.pendingBundle = undefined;
     this.bundleResult = undefined;
+    this.clearRepositoryPublicationState();
     if (pending) await pending.bundle.dispose();
+  }
+
+  private clearRepositoryPublicationState(): void {
+    this.repositoryPendingCandidateId = undefined;
+    this.repositoryResultCandidateId = undefined;
+    this.repositoryDeploymentConflict = undefined;
   }
 
   private async closeWorkspace(): Promise<void> {
@@ -885,8 +1136,10 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
 
   private async clearEnvironmentState(): Promise<void> {
     await this.discardPendingBundle();
+    this.eventDetails.clear();
     this.activeTab = 'Hive';
     this.workspaceData = undefined;
+    this.environmentHealth = undefined;
     this.createSwarmForm = undefined;
     this.journalSwarmId = undefined;
     this.journalRunId = undefined;
@@ -896,22 +1149,28 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.swarmOperationResult = undefined;
     this.debugSwarmId = undefined;
     this.debugRuntimeId = undefined;
+    this.debugWorkersResult = undefined;
+    this.debugAction = undefined;
     this.debugResult = undefined;
     this.scenarioFocusScenarioId = undefined;
     this.scenarioFocusBundleKey = undefined;
     this.scenarioFocusSection = 'OVERVIEW';
     this.scenarioFocusTree = undefined;
     this.scenarioFocusInputs = undefined;
+    this.repositoryScenarios = undefined;
+    this.scenarioCandidates.clear();
     this.draft = undefined;
     this.attempt = undefined;
     this.attemptView = undefined;
     this.sessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
   }
 
-  private async ensureAuthorizedSession(): Promise<void> {
+  private async ensureAuthorizedSession(
+    requiredScope: PocketHiveMcpScope = POCKETHIVE_MCP_SCOPES.READ,
+  ): Promise<void> {
     const profile = this.requireDraft();
     try {
-      const evidence = await this.authorizedSession.ensure(profile);
+      const evidence = await this.authorizedSession.ensure(profile, [requiredScope]);
       if (evidence) this.live.set(profile.id, { status: 'Connected', evidence });
       this.sessionActivity = SESSION_ACTIVITIES.ACTIVE;
     } catch (error) {
@@ -969,7 +1228,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private markSessionFailure(profile: McpConnectionProfile, error: unknown): void {
     const authenticationFailure = error instanceof Error
       && (error.name === 'AuthenticationExpiredError'
-        || (error instanceof ConnectionContractError && error.code.startsWith('OAUTH_')));
+        || (error instanceof ConnectionContractError && REAUTHENTICATION_REQUIRED_CODES.has(error.code)));
     this.sessionActivity = authenticationFailure ? SESSION_ACTIVITIES.NEEDS_SIGN_IN : SESSION_ACTIVITIES.UNAVAILABLE;
     this.live.set(profile.id, {
       status: authenticationFailure ? 'Needs sign-in' : 'Unavailable',
@@ -1000,6 +1259,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         activeProfile: active,
         activeTab: this.activeTab,
         workspaceData: this.workspaceData,
+        environmentHealth: this.environmentHealth,
         swarmOperations: SWARM_OPERATIONS,
         swarmPrimaryActions: primaryActionsForSwarms(this.workspaceData),
         createSwarmForm: this.createSwarmForm,
@@ -1011,12 +1271,18 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         swarmOperationResult: this.swarmOperationResult,
         debugSwarmId: this.debugSwarmId,
         debugRuntimeId: this.debugRuntimeId,
+        debugWorkersResult: this.debugWorkersResult,
+        debugAction: this.debugAction,
         debugResult: this.debugResult,
         scenarioFocusScenarioId: this.scenarioFocusScenarioId,
         scenarioFocusBundleKey: this.scenarioFocusBundleKey,
         scenarioFocusSection: this.scenarioFocusSection,
         scenarioFocusTree: this.scenarioFocusTree,
         scenarioFocusInputs: this.scenarioFocusInputs,
+        repositoryScenarios: this.repositoryScenarios,
+        repositoryPendingCandidateId: this.repositoryPendingCandidateId,
+        repositoryResultCandidateId: this.repositoryResultCandidateId,
+        repositoryDeploymentConflict: this.repositoryDeploymentConflict,
         pendingBundle: this.pendingBundle ? {
           source: this.pendingBundle.bundle.source,
           fileCount: this.pendingBundle.bundle.fileManifest.length,
@@ -1143,14 +1409,15 @@ function findScenarioFilePath(tree: unknown, fileNames: string[]): string | unde
 function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const nonce = randomUUID().replaceAll('-', '');
   const brandTokens = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'brand-tokens.css'));
+  const codicons = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'codicon.css'));
   const style = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'companion.css'));
   const script = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'main.js'));
   const eventFilters = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'eventFilters.js'));
   const logo = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'logo-mark.svg'));
   return `<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
-<link rel="stylesheet" href="${brandTokens}"><link rel="stylesheet" href="${style}"><title>PocketHive</title></head>
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; font-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
+<link rel="stylesheet" href="${brandTokens}"><link rel="stylesheet" href="${codicons}"><link rel="stylesheet" href="${style}"><title>PocketHive</title></head>
 <body><main id="app" data-logo="${logo}"></main><div id="announcer" class="sr-only" aria-live="polite"></div>
 <script nonce="${nonce}" src="${eventFilters}"></script><script nonce="${nonce}" src="${script}"></script></body></html>`;
 }

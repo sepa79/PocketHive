@@ -13,11 +13,12 @@ public record BundleValidationReceiptView(
     String archiveDigest,
     String bundleContentDigest,
     String scenarioId,
+    String scenarioName,
     Instant createdAt
 ) {
     public static BundleValidationReceiptView from(BundleValidationReceipt receipt) {
         return new BundleValidationReceiptView(receipt.id(), receipt.workflowBinding(), receipt.source(),
             receipt.manifest(), receipt.archiveDigest(), receipt.bundleContentDigest(), receipt.scenarioId(),
-            receipt.createdAt());
+            receipt.scenarioName(), receipt.createdAt());
     }
 }

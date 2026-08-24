@@ -1,16 +1,29 @@
 import { ConnectionContractError } from '../connection/contracts';
 
+export const DEBUG_ACTION_LABELS = Object.freeze({
+  WORKERS: 'Workers',
+  LOGS: 'Logs',
+  VERSION: 'Version',
+  INSPECT: 'Inspect',
+  RUNTIME_DRIFT: 'Runtime drift',
+  CONTROL_PLANE: 'Control plane',
+  RABBIT_TOPOLOGY: 'Rabbit topology',
+  TIMELINE: 'Timeline',
+  MANIFEST: 'Manifest',
+  CLEANUP_PLAN: 'Cleanup plan',
+} as const);
+
 export const DEBUG_ACTIONS = Object.freeze([
-  { label: 'Workers', tool: 'runtime_list_workers', needsWorker: false },
-  { label: 'Logs', tool: 'runtime_tail_worker_logs', needsWorker: true },
-  { label: 'Versions', tool: 'runtime_get_worker_version', needsWorker: true },
-  { label: 'Inspect', tool: 'runtime_inspect_worker', needsWorker: true },
-  { label: 'Runtime drift', tool: 'runtime_diff_swarm_runtime', needsWorker: false },
-  { label: 'Control plane', tool: 'runtime_control_plane_status', needsWorker: false },
-  { label: 'Rabbit topology', tool: 'runtime_rabbit_topology_snapshot', needsWorker: false },
-  { label: 'Timeline', tool: 'runtime_swarm_timeline', needsWorker: false },
-  { label: 'Manifest', tool: 'runtime_manifest_validate', needsWorker: false },
-  { label: 'Cleanup plan', tool: 'runtime_cleanup_plan', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.WORKERS, tool: 'runtime_list_workers', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.LOGS, tool: 'runtime_tail_worker_logs', needsWorker: true },
+  { label: DEBUG_ACTION_LABELS.VERSION, tool: 'runtime_get_worker_version', needsWorker: true },
+  { label: DEBUG_ACTION_LABELS.INSPECT, tool: 'runtime_inspect_worker', needsWorker: true },
+  { label: DEBUG_ACTION_LABELS.RUNTIME_DRIFT, tool: 'runtime_diff_swarm_runtime', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.CONTROL_PLANE, tool: 'runtime_control_plane_status', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.RABBIT_TOPOLOGY, tool: 'runtime_rabbit_topology_snapshot', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.TIMELINE, tool: 'runtime_swarm_timeline', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.MANIFEST, tool: 'runtime_manifest_validate', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.CLEANUP_PLAN, tool: 'runtime_cleanup_plan', needsWorker: false },
 ] as const);
 
 export function debugToolCall(
@@ -34,4 +47,41 @@ export function debugToolCall(
     args.tailLines = tailLines;
   }
   return { name: action.tool, arguments: args };
+}
+
+export function exactWorkerRuntimeId(value: unknown, instance: string): string {
+  const normalizedInstance = instance.trim();
+  if (!normalizedInstance) {
+    throw new ConnectionContractError('DEBUG_WORKER_INSTANCE_REQUIRED', 'Worker instance is required');
+  }
+  if (!value || typeof value !== 'object' || !Array.isArray((value as Record<string, unknown>).workers)) {
+    throw new ConnectionContractError(
+      'DEBUG_WORKER_LIST_INVALID',
+      'runtime_list_workers did not return its canonical workers collection',
+    );
+  }
+  const matches = ((value as Record<string, unknown>).workers as unknown[]).filter(item => {
+    if (!item || typeof item !== 'object') return false;
+    return (item as Record<string, unknown>).instance === normalizedInstance;
+  });
+  if (matches.length === 0) {
+    throw new ConnectionContractError(
+      'DEBUG_WORKER_NOT_FOUND',
+      `No exact runtime target was reported for worker instance ${normalizedInstance}`,
+    );
+  }
+  if (matches.length > 1) {
+    throw new ConnectionContractError(
+      'DEBUG_WORKER_AMBIGUOUS',
+      `Multiple runtime targets were reported for worker instance ${normalizedInstance}`,
+    );
+  }
+  const runtimeId = (matches[0] as Record<string, unknown>).runtimeId;
+  if (typeof runtimeId !== 'string' || !runtimeId.trim()) {
+    throw new ConnectionContractError(
+      'DEBUG_WORKER_RUNTIME_ID_MISSING',
+      `Worker instance ${normalizedInstance} did not report an exact runtimeId`,
+    );
+  }
+  return runtimeId.trim();
 }

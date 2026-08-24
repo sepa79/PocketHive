@@ -9,14 +9,21 @@ import AxeBuilder from '@axe-core/playwright';
 import { chromium } from 'playwright';
 
 const require = createRequire(import.meta.url);
+const { POCKETHIVE_COMPANION_SCOPES } = require('../out/connection/contracts.js');
+const { LoopbackBrowserAuthorization } = require('../out/connection/loopbackBrowser.js');
 const { McpHttpClient } = require('../out/mcp/httpClient.js');
+const {
+  boundCompanionViewModel,
+  VIEW_FIELD_BYTE_LIMIT,
+} = require('../out/webview/viewModelBoundary.js');
+const { EventPagePresentation } = require('../out/webview/eventPresentation.js');
 const { SIDEBAR_EVENT_LIMIT } = require('../out/webview/workspaceTool.js');
 const root = path.resolve(import.meta.dirname, '..');
 const auditDirectory = path.resolve(root, 'reports', 'playwright-ui');
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const endpoint = 'http://localhost:8088/mcp';
 const redirectUri = 'http://127.0.0.1:57548/callback';
-const connectionScopes = ['pockethive:mcp:discover', 'pockethive:mcp:read'];
+const connectionScopes = [...POCKETHIVE_COMPANION_SCOPES];
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'];
 const findings = [];
 
@@ -29,6 +36,10 @@ const browser = await chromium.launch({ headless: true });
 
 try {
   const local = await connectLocalMcp(browser);
+  await captureCallbackOutcome(browser, 'auth-callback-cancelled',
+    '?error=access_denied&state=visual-audit', '21-auth-callback-cancelled');
+  await captureCallbackOutcome(browser, 'auth-callback-error',
+    '?error=server_error&state=visual-audit', '22-auth-callback-error');
   assert.equal(local.evidence.principalLabel, 'local-admin', 'MCP must expose the verified username as its label');
   const context = await browser.newContext({ viewport: { width: 280, height: 900 }, colorScheme: 'dark' });
   const page = await context.newPage();
@@ -45,7 +56,7 @@ try {
     debugActions: [
       { label: 'Workers', needsWorker: false },
       { label: 'Logs', needsWorker: true },
-      { label: 'Versions', needsWorker: true },
+      { label: 'Version', needsWorker: true },
       { label: 'Inspect', needsWorker: true },
       { label: 'Runtime drift', needsWorker: false },
       { label: 'Control plane', needsWorker: false },
@@ -95,6 +106,10 @@ try {
   await show(page, { ...base, page: 'add', draft: { ...draft, displayName: 'Local MCP' }, attempt: ready },
     '03-local-mcp-ready');
   await clickAndExpectMessage(page, 'Save & open', { type: 'saveOpen' });
+  await show(page, { ...base, page: 'environments', profiles: [profile] }, '03-connected-environment');
+  await captureSelected(page, '10-selected-environments');
+  await page.getByText('Credentials are stored securely by VS Code.', { exact: true }).waitFor({ state: 'visible' });
+  await clickAndExpectMessage(page, 'Open', { type: 'openEnvironment', profileId: profile.id });
 
   const workspaceBase = {
     ...base,
@@ -102,6 +117,7 @@ try {
     profiles: [profile],
     draft: profile,
     activeProfile: profile,
+    environmentHealth: local.environmentHealth,
     session: {
       status: 'Connected',
       message: 'Secure session active',
@@ -111,12 +127,62 @@ try {
     },
   };
   await show(page, { ...workspaceBase, activeTab: 'Hive', workspaceData: local.swarms }, '04-workspace-hive');
-  assert.equal(await page.locator('#app > .brand').count(), 0,
-    'the narrow workspace must not reserve vertical space for a global brand header');
+  assert.equal(await page.locator('#app > .brand, .workspace-heading').count(), 0,
+    'the narrow workspace must not reserve vertical space for duplicated environment identity');
+  assert.equal(await page.locator('[role="tab"] .codicon').count(), TABS.length,
+    'every workspace tab must expose a local VS Code icon');
+  assert.equal(await page.evaluate(() => document.fonts.check('16px codicon')), true,
+    'the packaged Codicon font must load in the webview');
+  const healthGeometry = await page.locator('.environment-health').evaluate(rail => {
+    const rect = rail.getBoundingClientRect();
+    return { position: getComputedStyle(rail).position, bottom: rect.bottom, viewport: innerHeight };
+  });
+  assert.equal(healthGeometry.position, 'fixed', 'environment health must remain a fixed slim rail');
+  assert.equal(Math.abs(healthGeometry.viewport - healthGeometry.bottom) <= 1, true,
+    'environment health must remain pinned to the viewport bottom');
+  assert.equal(await page.locator('.environment-health__mark').getAttribute('src'), '/resources/logo-mark.svg',
+    'the environment identity must use the packaged PocketHive hexagon');
+  assert.equal(await page.locator('.environment-health').getByText('Local MCP', { exact: true }).count(), 1);
+  const expectedUnavailable = local.environmentHealth.services
+    .filter(service => service.status === 'UNAVAILABLE').length;
+  const expectedHealthSummary = expectedUnavailable === 0
+    ? `${local.environmentHealth.services.length} services healthy`
+    : `${expectedUnavailable} service${expectedUnavailable === 1 ? '' : 's'} unavailable`;
+  await page.locator('.environment-health').getByText(expectedHealthSummary, { exact: true })
+    .waitFor({ state: 'visible' });
+  await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
+  await page.getByText('PocketHive UI', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('TCP Mock', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('Grafana', { exact: true }).waitFor({ state: 'visible' });
+  const healthDrawerGeometry = await page.evaluate(() => {
+    const panel = document.querySelector('.environment-health__panel');
+    const rail = document.querySelector('.environment-health__rail');
+    const rows = panel?.querySelectorAll('.environment-service');
+    if (!panel || !rail || !rows?.length) return undefined;
+    const panelRect = panel.getBoundingClientRect();
+    const railRect = rail.getBoundingClientRect();
+    const lastRect = rows.item(rows.length - 1).getBoundingClientRect();
+    const style = getComputedStyle(panel);
+    return {
+      panelToRailGap: Math.abs(panelRect.bottom - railRect.top),
+      trailingGap: Math.abs(panelRect.bottom - lastRect.bottom),
+      topLeftRadius: style.borderTopLeftRadius,
+      topRightRadius: style.borderTopRightRadius,
+    };
+  });
+  assert.deepEqual(healthDrawerGeometry, {
+    panelToRailGap: 0,
+    trailingGap: 0,
+    topLeftRadius: '0px',
+    topRightRadius: '0px',
+  }, 'the square health drawer must end at its final service row and meet the rail directly');
   await page.getByLabel('Account', { exact: true }).click();
   const accountPanel = page.locator('.account-menu__panel');
   await accountPanel.getByText('local-admin', { exact: true }).waitFor({ state: 'visible' });
-  await accountPanel.getByText('Secure session active', { exact: true }).waitFor({ state: 'visible' });
+  await accountPanel.getByText('Signed in to Local MCP', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await accountPanel.evaluate(panel => getComputedStyle(panel).position), 'absolute',
+    'the account menu must overlay the health drawer without reserving layout height');
+  await captureSelected(page, '20-environment-health-account-overlay');
   await clickAndExpectMessage(page, 'Sign out', { type: 'signOut' });
 
   const needsSignInSession = {
@@ -183,7 +249,10 @@ try {
       workloadState: 'RUNNING',
       runtimeResourceState: 'PRESENT',
       observationStale: false,
-      bees: [{}, {}],
+      bees: [
+        { instance: 'checkout-generator-1', role: 'generator', image: 'generator:1.2.3' },
+        { instance: 'checkout-request-builder-1', role: 'request-builder', image: 'request-builder:1.2.3' },
+      ],
     },
     {
       id: 'nightly-smoke',
@@ -192,7 +261,7 @@ try {
       workloadState: 'STOPPED',
       runtimeResourceState: 'PRESENT',
       observationStale: false,
-      bees: [{}],
+      bees: [{ instance: 'nightly-generator-1', role: 'generator', image: 'generator:1.2.3' }],
     },
   ];
   const interactionModel = {
@@ -205,6 +274,44 @@ try {
   await captureSelected(page, '11-selected-hive');
   const runningRow = page.locator('.swarm-row').filter({ hasText: 'checkout-load' });
   const readyRow = page.locator('.swarm-row').filter({ hasText: 'nightly-smoke' });
+  assert.equal(await runningRow.locator('.swarm-row__heading .status').count(), 1,
+    'running lifecycle state must remain adjacent to its swarm identity');
+  assert.equal(await readyRow.locator('.swarm-row__heading .status').count(), 1,
+    'ready lifecycle state must remain adjacent to its swarm identity');
+  const swarmGroupGeometry = await page.locator('.swarm-row').evaluateAll(rows => rows.map(row => {
+    const rect = row.getBoundingClientRect();
+    const style = getComputedStyle(row);
+    return {
+      top: rect.top,
+      bottom: rect.bottom,
+      borderLeftWidth: Number.parseFloat(style.borderLeftWidth),
+      borderLeftColor: style.borderLeftColor,
+    };
+  }));
+  assert.equal(swarmGroupGeometry.length, 2, 'each swarm must render as one bounded group');
+  assert.equal(swarmGroupGeometry[1].top - swarmGroupGeometry[0].bottom >= 8, true,
+    'separate swarms must retain a visible group gap');
+  assert.equal(swarmGroupGeometry.every(row => row.borderLeftWidth >= 3), true,
+    'each swarm must expose a lifecycle edge');
+  assert.notEqual(swarmGroupGeometry[0].borderLeftColor, swarmGroupGeometry[1].borderLeftColor,
+    'running and ready swarms must use distinct lifecycle accents');
+  const historyGeometry = await runningRow.evaluate(row => {
+    const disclosure = row.querySelector('.history-toggle');
+    const chevron = row.querySelector('.history-toggle__chevron');
+    const rowRect = row.getBoundingClientRect();
+    const disclosureRect = disclosure.getBoundingClientRect();
+    const chevronRect = chevron.getBoundingClientRect();
+    return {
+      rowWidth: rowRect.width,
+      disclosureWidth: disclosureRect.width,
+      disclosureRight: disclosureRect.right,
+      chevronRight: chevronRect.right,
+    };
+  });
+  assert.equal(Math.abs(historyGeometry.rowWidth - historyGeometry.disclosureWidth) <= 4, true,
+    'run history must use a full-width disclosure row owned by its swarm');
+  assert.equal(historyGeometry.disclosureRight - historyGeometry.chevronRight <= 12, true,
+    'run-history chevron must remain at the far edge of the disclosure row');
   await clickWithinAndExpectMessage(page, runningRow, 'Stop', {
     type: 'runSwarmOperation', action: 'STOP', swarmId: 'checkout-load',
   });
@@ -214,10 +321,64 @@ try {
   await clickWithinAndExpectMessage(page, runningRow, 'Debug', {
     type: 'openDebugForSwarm', swarmId: 'checkout-load',
   });
-  await runningRow.getByText('More', { exact: true }).click();
-  await clickWithinAndExpectMessage(page, runningRow, 'Remove swarm', {
-    type: 'runSwarmOperation', action: 'REMOVE', swarmId: 'checkout-load',
+  await clickWithinAndExpectMessage(page, runningRow, 'View swarm in Web UI', {
+    type: 'openWebUi', destination: 'SWARM', swarmId: 'checkout-load',
   });
+  assert.equal(await runningRow.getByRole('button', { name: 'Remove swarm', exact: true }).isDisabled(), true,
+    'a running swarm must not expose executable removal');
+  await clickWithinAndExpectMessage(page, readyRow, 'Remove swarm', {
+    type: 'runSwarmOperation', action: 'REMOVE', swarmId: 'nightly-smoke',
+  });
+  await runningRow.getByLabel('Workers, 2').click();
+  await runningRow.getByText('checkout-generator-1', { exact: true }).waitFor({ state: 'visible' });
+  const workerLayout = await runningRow.evaluate(row => {
+    const details = row.querySelector('.swarm-workers');
+    const summary = row.querySelector('.swarm-workers__summary');
+    const list = row.querySelector('.swarm-workers__list');
+    const actions = row.querySelector('.swarm-row__secondary');
+    const actionButtons = [...actions.querySelectorAll('button')].map(button => button.getBoundingClientRect());
+    const detailsRect = details.getBoundingClientRect();
+    const summaryRect = summary.getBoundingClientRect();
+    const listRect = list.getBoundingClientRect();
+    const actionsRect = actions.getBoundingClientRect();
+    return {
+      detailsWidth: detailsRect.width,
+      summaryWidth: summaryRect.width,
+      listWidth: listRect.width,
+      actionsWidth: actionsRect.width,
+      listTop: listRect.top,
+      summaryBottom: summaryRect.bottom,
+      actionsTop: actionsRect.top,
+      listBottom: listRect.bottom,
+      actionButtonTops: actionButtons.map(rect => rect.top),
+      actionButtonWidths: actionButtons.map(rect => rect.width),
+    };
+  });
+  assert.equal(Math.abs(workerLayout.detailsWidth - workerLayout.summaryWidth) <= 2, true,
+    'workers must use a full-width disclosure row');
+  assert.equal(Math.abs(workerLayout.detailsWidth - workerLayout.listWidth) <= 2, true,
+    'expanded worker resources must remain full width inside their swarm');
+  assert.equal(workerLayout.listTop >= workerLayout.summaryBottom, true,
+    'worker resources must follow the disclosure without overlap');
+  assert.equal(workerLayout.actionsTop >= workerLayout.listBottom, true,
+    'swarm actions must remain a distinct row below expanded workers');
+  assert.equal(Math.max(...workerLayout.actionButtonTops) - Math.min(...workerLayout.actionButtonTops) <= 2, true,
+    'Debug, Web UI, and Remove must remain on one compact action line');
+  assert.equal(Math.max(...workerLayout.actionButtonWidths) - Math.min(...workerLayout.actionButtonWidths) <= 2, true,
+    'Debug, Web UI, and Remove must use three equal horizontal grid sections');
+  assert.equal(Math.abs(workerLayout.actionsWidth - workerLayout.actionButtonWidths.reduce((total, width) => total + width, 0)) <= 3, true,
+    'the three swarm actions must fill their complete action row');
+  const firstWorker = runningRow.locator('.swarm-worker').first();
+  await clickWithinAndExpectMessage(page, firstWorker, 'Inspect', {
+    type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'checkout-generator-1', action: 'Inspect',
+  });
+  await clickWithinAndExpectMessage(page, firstWorker, 'Logs', {
+    type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'checkout-generator-1', action: 'Logs',
+  });
+  await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
+  await page.getByText('PocketHive UI', { exact: true }).waitFor({ state: 'visible' });
+  await captureSelected(page, '11a-selected-hive-workers-health');
+  await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
 
   await clickWithinAndExpectMessage(page, runningRow, 'Run history', {
     type: 'loadSwarmHistory', swarmId: 'checkout-load',
@@ -249,9 +410,9 @@ try {
   });
 
   const eventFixture = { items: [
-    { timestamp: '2026-08-19T10:42:18Z', severity: 'INFO', kind: 'signal', type: 'swarm-start', swarmId: 'nightly-smoke', origin: 'orchestrator', direction: 'OUT' },
-    { timestamp: '2026-08-19T10:41:53Z', severity: 'ERROR', kind: 'runtime-debug', type: 'runtime-log-snapshot', swarmId: 'auth-regression', origin: 'orchestrator', direction: 'LOCAL' },
-  ] };
+    { detailId: 'fixture-detail-1', timestamp: '2026-08-19T10:42:18Z', severity: 'INFO', kind: 'signal', type: 'swarm-start', swarmId: 'nightly-smoke', origin: 'orchestrator', direction: 'OUT' },
+    { detailId: 'fixture-detail-2', timestamp: '2026-08-19T10:41:53Z', severity: 'ERROR', kind: 'runtime-debug', type: 'runtime-log-snapshot', swarmId: 'auth-regression', origin: 'orchestrator', direction: 'LOCAL' },
+  ], nextCursor: null, hasMore: false };
   await dispatch(page, {
     ...workspaceBase,
     activeTab: 'Journal',
@@ -261,23 +422,45 @@ try {
     journalResult: eventFixture,
   });
   await captureSelected(page, '13-selected-journal');
+  await page.locator('.event-row').first().locator(':scope > summary').click();
+  assert.equal(await page.getByRole('button', { name: 'Open Debug', exact: true }).count(), 0,
+    'Journal event rows must leave diagnostics to the dedicated Debug workspace');
+  await clickAndExpectMessage(page, 'View run in Web UI', {
+    type: 'openWebUi', destination: 'JOURNAL_RUN', swarmId: 'nightly-smoke', runId: 'run-nightly-7',
+  });
   await dispatch(page, { ...workspaceBase, activeTab: 'Buzz', workspaceData: eventFixture });
   await captureSelected(page, '14-selected-buzz');
+  await clickAndExpectMessage(page, 'Open Buzz in Web UI', { type: 'openWebUi', destination: 'BUZZ' });
   assert.equal(await page.locator('.event-row').count(), 2, 'Buzz must render one compact row per event');
+  assert.equal(await page.getByLabel('Severity').isVisible(), false,
+    'advanced event fields must remain collapsed until requested');
+  const eventRowHeights = await page.locator('.event-row > summary').evaluateAll(rows => rows.map(row => (
+    row.getBoundingClientRect().height
+  )));
+  assert.equal(eventRowHeights.every(height => height <= 48), true,
+    'Buzz and Journal event summaries must remain single-line rows');
   await page.getByLabel('Advanced filters').click();
   await page.getByLabel('Severity').selectOption('ERROR');
   assert.equal(await page.locator('.event-row').count(), 1, 'severity filter must narrow the rendered page');
   await page.getByLabel('Search events').fill('auth-regression');
   assert.equal(await page.locator('.event-row').count(), 1, 'search filter must compose with severity');
   await page.locator('.event-row').first().getByText('runtime-debug/runtime-log-snapshot', { exact: true }).click();
-  await clickAndExpectMessage(page, 'Open Debug', {
-    type: 'openDebugForSwarm', swarmId: 'auth-regression',
+  await clickAndExpectMessage(page, 'Open technical details', {
+    type: 'openEventDetails', detailId: 'fixture-detail-2',
   });
+  assert.equal(await page.getByRole('button', { name: 'Open Debug', exact: true }).count(), 0,
+    'Buzz event rows must leave diagnostics to the dedicated Debug workspace');
 
   const scenarioFixture = [
     {
       id: 'checkout-smoke',
       name: 'Checkout smoke',
+      description: 'Exercises the complete checkout path with representative test data and bounded load.',
+      controllerImage: 'swarm-controller:latest',
+      bees: [
+        { role: 'generator', image: 'generator:latest' },
+        { role: 'processor', image: 'http-sequence:latest' },
+      ],
       folderPath: 'bundles',
       bundleKey: 'bundles/checkout-smoke',
       bundlePath: 'bundles/checkout-smoke',
@@ -290,17 +473,351 @@ try {
       bundlePath: 'database/postgres-smoke',
     },
   ];
-  await dispatch(page, { ...workspaceBase, activeTab: 'Scenarios', workspaceData: scenarioFixture });
+  const scenarioFocus = {
+    scenarioFocusScenarioId: 'checkout-smoke',
+    scenarioFocusBundleKey: 'bundles/checkout-smoke',
+    scenarioFocusSection: 'FILES',
+    scenarioFocusTree: { nodes: [
+      { nodeType: 'directory', name: 'datasets', path: 'datasets' },
+      { nodeType: 'directory', name: 'templates', path: 'templates' },
+      { nodeType: 'directory', name: 'http', path: 'templates/http' },
+      { nodeType: 'directory', name: 'checkout', path: 'templates/http/checkout' },
+      { nodeType: 'file', name: 'checkout.csv', path: 'datasets/checkout.csv', size: 164, editorKind: 'text' },
+      { nodeType: 'file', name: 'scenario.yaml', path: 'scenario.yaml', size: 812, editorKind: 'yaml' },
+      { nodeType: 'file', name: 'request.yaml', path: 'templates/http/checkout/request.yaml', size: 204, editorKind: 'yaml' },
+    ] },
+  };
+  const retainedPublication = {
+    publicationError: {
+      attemptId: 'pa-retained-acceptance',
+      code: 'PUBLICATION_RESULT_AMBIGUOUS',
+    },
+  };
+  await dispatch(page, {
+    ...workspaceBase, activeTab: 'Scenarios', workspaceData: scenarioFixture, ...scenarioFocus,
+    bundleResult: retainedPublication,
+  });
+  assert.equal(await page.getByRole('button', { name: /^Deployed/ }).getAttribute('aria-pressed'), 'true',
+    'retained publication state must not override the deployed scenario source');
   await captureSelected(page, '15-selected-scenarios');
+  assert.equal(await page.locator('.scenario-tree__row').count(), 7,
+    'the selected scenario must expose its exact mixed-file deployed tree');
+  assert.equal(await page.getByRole('button', { name: 'Open details', exact: true }).count(), 0,
+    'redundant scenario shortcuts must not compete with the drill-down');
+  const datasetBranch = page.locator('details.scenario-tree__branch').filter({
+    has: page.locator(':scope > summary strong', { hasText: 'datasets' }),
+  });
+  const templateBranch = page.locator('details.scenario-tree__branch').filter({
+    has: page.locator(':scope > summary strong', { hasText: 'templates' }),
+  });
+  assert.equal(await datasetBranch.locator('.scenario-tree__row--file strong', { hasText: 'checkout.csv' }).count(), 1,
+    'dataset files must render inside the datasets branch');
+  assert.equal(await templateBranch.locator('.scenario-tree__row--file strong', { hasText: 'request.yaml' }).count(), 1,
+    'deep template files must render inside their complete directory ancestry');
+  const datasetFile = page.locator('.scenario-tree__row--file').filter({
+    has: page.getByText('checkout.csv', { exact: true }),
+  });
+  await clickWithinAndExpectMessage(page, datasetFile, 'Preview', {
+    type: 'openScenarioBundleFile', bundleKey: 'bundles/checkout-smoke', path: 'datasets/checkout.csv',
+  });
+  await dispatch(page, {
+    ...workspaceBase, activeTab: 'Scenarios', workspaceData: scenarioFixture, ...scenarioFocus,
+    bundleResult: retainedPublication,
+  });
+  assert.equal(await page.getByRole('button', { name: /^Deployed/ }).getAttribute('aria-pressed'), 'true',
+    'deployed file preview refreshes must retain their scenario source');
+
+  await clickAndExpectMessage(page, 'Overview', {
+    type: 'selectScenarioSection',
+    scenarioId: 'checkout-smoke',
+    bundleKey: 'bundles/checkout-smoke',
+    section: 'OVERVIEW',
+  });
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Scenarios',
+    workspaceData: scenarioFixture,
+    ...scenarioFocus,
+    scenarioFocusSection: 'OVERVIEW',
+    bundleResult: retainedPublication,
+  });
+  assert.equal(await page.getByRole('button', { name: /^Deployed/ }).getAttribute('aria-pressed'), 'true',
+    'deployed overview refreshes must retain their scenario source');
+  await captureSelected(page, '15a-selected-scenario-overview');
+  assert.equal(await page.locator('.scenario-overview > .scenario-info-card').count(), 3,
+    'Description, Controller, and Bees must each occupy one overview row');
+  const overviewWidths = await page.locator('.scenario-overview > .scenario-info-card').evaluateAll(cards =>
+    cards.map(card => Math.round(card.getBoundingClientRect().width)));
+  assert.equal(new Set(overviewWidths).size, 1, 'all overview rows must use the same full width');
+  await clickAndExpectMessage(page, 'Inputs', {
+    type: 'selectScenarioSection',
+    scenarioId: 'checkout-smoke',
+    bundleKey: 'bundles/checkout-smoke',
+    section: 'INPUTS',
+  });
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Scenarios',
+    workspaceData: scenarioFixture,
+    ...scenarioFocus,
+    scenarioFocusSection: 'INPUTS',
+    scenarioFocusInputs: {
+      variablesPath: 'variables.yaml',
+      authProfilesPath: 'authProfiles.yaml',
+      suts: [{
+        sutId: 'checkout',
+        descriptor: { name: 'Checkout', endpoints: { api: { baseUrl: 'https://checkout.example/api' } } },
+      }],
+    },
+    bundleResult: retainedPublication,
+  });
+  assert.equal(await page.getByRole('button', { name: /^Deployed/ }).getAttribute('aria-pressed'), 'true',
+    'deployed inputs refreshes must retain their scenario source');
+  await captureSelected(page, '15-selected-scenarios-inputs');
+  await page.getByText('variables.yaml', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('authProfiles.yaml', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('https://checkout.example/api', { exact: true }).waitFor({ state: 'visible' });
   await page.getByLabel('Search bundles').fill('postgres');
   assert.equal(await page.locator('.scenario-row').count(), 1, 'scenario search must narrow compact rows');
+  await page.getByLabel('Scenario filters').click();
   await page.getByLabel('Folder').selectOption('bundles');
   assert.equal(await page.locator('.scenario-row').count(), 0, 'folder and search filters must compose');
 
-  await dispatch(page, { ...workspaceBase, activeTab: 'Debug', workspaceData: interactionSwarms });
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Scenarios',
+    workspaceData: scenarioFixture,
+    repositoryScenarios: {
+      state: 'SCANNED',
+      repositories: [{
+        workspaceName: 'PocketHive',
+        commit: 'a'.repeat(40),
+        candidates: [{
+          candidateId: 'candidate-acceptance-1',
+          bundlePath: 'scenarios/bundles/checkout-smoke',
+          files: [
+            'datasets/checkout.csv',
+            'scenario.yaml',
+            'sut/checkout/sut.yaml',
+            'templates/http/request.yaml',
+            'variables.yaml',
+          ],
+        }],
+      }, {
+        workspaceName: 'SharedScenarios',
+        commit: 'b'.repeat(40),
+        candidates: [{
+          candidateId: 'candidate-acceptance-2',
+          bundlePath: 'scenarios/bundles/nightly-smoke',
+          files: ['scenario.yaml', 'templates/http/control.yaml'],
+        }],
+      }],
+      failures: [{ workspaceName: 'notes', code: 'GIT_REPOSITORY_REQUIRED' }],
+    },
+  });
+  await page.getByRole('button', { name: 'Repository' }).click();
+  await captureSelected(page, '15b-repository-scenarios');
+  await page.getByText('Committed HEAD only. Edit, commit, then refresh before validation or deployment.', { exact: true })
+    .waitFor({ state: 'visible' });
+  assert.equal(await page.getByText('scenarios/bundles/checkout-smoke', { exact: true }).count(), 1,
+    'the repository view must render the exact committed candidate path');
+  assert.equal((await page.locator('.repository-scenarios').textContent()).includes('/workspace/'), false,
+    'the repository projection must not expose extension-host filesystem paths');
+  const repositoryCards = page.locator('.repository-scenario');
+  assert.equal(await repositoryCards.count(), 2,
+    'each committed candidate must render as one self-contained scenario card');
+  const repositoryCard = repositoryCards.first();
+  assert.equal(await repositoryCard.getAttribute('open'), null,
+    'Repository scenarios must be collapsed by default');
+  await repositoryCard.locator('summary').first().click();
+  assert.equal(await repositoryCard.getAttribute('open'), '',
+    'a Repository scenario must open from its own summary');
+  await repositoryCard.locator('summary').first().click();
+  assert.equal(await repositoryCard.getAttribute('open'), null,
+    'the final open Repository scenario must remain collapsed');
+  assert.equal(await repositoryCards.evaluateAll(cards => cards.every(card => !card.hasAttribute('open'))), true,
+    'Repository scenarios must support an explicit all-collapsed state');
+  await repositoryCard.locator('summary').first().click();
+  assert.equal(await repositoryCard.getAttribute('open'), '',
+    'a collapsed Repository scenario must reopen from its own summary');
+  assert.deepEqual(await repositoryCard.locator('.repository-scenario__actions button').allTextContents(),
+    ['Edit', 'Validate', 'Deploy'],
+    'each Repository scenario must own its complete three-action row');
+  assert.deepEqual(await repositoryCard.locator('.repository-scenario__tabs button').allTextContents(),
+    ['Overview', 'Files', 'Inputs'],
+    'Repository drill-down must remain inside the selected scenario card');
+  await page.getByLabel('Search repository scenarios').fill('nightly');
+  assert.equal(await page.locator('.repository-scenario').count(), 1,
+    'Repository search must narrow self-contained cards without calling another owner');
+  await page.getByLabel('Search repository scenarios').fill('');
+  await page.getByLabel('Repository filters').click();
+  await page.getByLabel('Workspace').selectOption('PocketHive');
+  assert.equal(await page.locator('.repository-scenario').count(), 1,
+    'the advanced workspace filter must compose with Repository search');
+  await page.getByLabel('Workspace').selectOption('ALL');
+  await page.getByLabel('Repository filters').click();
+  await repositoryCard.locator('summary').first().click();
+  assert.equal(await repositoryCard.getAttribute('open'), '',
+    'a filtered Repository scenario remains explicitly reopenable');
+  await clickWithinAndExpectMessage(page, repositoryCard.locator('.repository-scenario__actions'), 'Edit', {
+    type: 'openRepositoryBundleFile', candidateId: 'candidate-acceptance-1', path: 'scenario.yaml',
+  });
+  const requestFile = repositoryCard.locator('.scenario-tree__row--file').filter({
+    has: page.getByText('request.yaml', { exact: true }),
+  });
+  await clickWithinAndExpectMessage(page, requestFile, 'Edit', {
+    type: 'openRepositoryBundleFile', candidateId: 'candidate-acceptance-1', path: 'templates/http/request.yaml',
+  });
+  await clickWithinAndExpectMessage(page, repositoryCard, 'Validate', {
+    type: 'validateRepositoryBundle', candidateId: 'candidate-acceptance-1',
+  });
+  const validationReceipt = {
+    receiptId: 'vr-acceptance-1',
+    archiveDigest: `sha256:${'a'.repeat(64)}`,
+    bundleContentDigest: `sha256:${'b'.repeat(64)}`,
+    scenarioId: 'checkout-smoke',
+    scenarioName: 'Checkout smoke',
+  };
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Scenarios',
+    workspaceData: scenarioFixture,
+    repositoryScenarios: {
+      state: 'SCANNED', repositories: [{
+        workspaceName: 'PocketHive', commit: 'a'.repeat(40), candidates: [{
+          candidateId: 'candidate-acceptance-1',
+          bundlePath: 'scenarios/bundles/checkout-smoke',
+          files: ['datasets/checkout.csv', 'scenario.yaml', 'sut/checkout/sut.yaml',
+            'templates/http/request.yaml', 'variables.yaml'],
+        }],
+      }], failures: [],
+    },
+    repositoryPendingCandidateId: 'candidate-acceptance-1',
+    repositoryResultCandidateId: 'candidate-acceptance-1',
+    pendingBundle: {
+      source: { bundlePath: 'scenarios/bundles/checkout-smoke', commit: 'a'.repeat(40) },
+      fileCount: 5,
+      validationReceipt,
+    },
+    bundleResult: { validationReceipt },
+  });
+  const validatedRepositoryCard = page.locator('.repository-scenario').first();
+  await validatedRepositoryCard.getByText('Checkout smoke', { exact: true }).waitFor({ state: 'visible' });
+  await validatedRepositoryCard.locator('.repository-scenario__validation strong')
+    .getByText('Valid', { exact: true }).waitFor({ state: 'visible' });
+  await clickWithinAndExpectMessage(page, validatedRepositoryCard, 'Deploy', {
+    type: 'deployRepositoryBundle', candidateId: 'candidate-acceptance-1',
+  });
+  await clickAndExpectMessage(page, 'Choose committed folder', { type: 'validateCommittedBundle' });
+
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Scenarios',
+    workspaceData: scenarioFixture,
+    repositoryScenarios: {
+      state: 'SCANNED', repositories: [{
+        workspaceName: 'PocketHive', commit: 'a'.repeat(40), candidates: [{
+          candidateId: 'candidate-acceptance-1',
+          bundlePath: 'scenarios/bundles/checkout-smoke', files: ['scenario.yaml'],
+        }],
+      }], failures: [],
+    },
+    repositoryPendingCandidateId: 'candidate-acceptance-1',
+    repositoryResultCandidateId: 'candidate-acceptance-1',
+    pendingBundle: {
+      source: { bundlePath: 'scenarios/bundles/checkout-smoke', commit: 'a'.repeat(40) },
+      fileCount: 1,
+      validationReceipt,
+    },
+    bundleResult: { validationReceipt },
+    repositoryDeploymentConflict: {
+      kind: 'CONFLICT', candidateId: 'candidate-acceptance-1',
+      scenarioId: 'checkout-smoke', scenarioName: 'Checkout smoke',
+      suggestedScenarioId: 'checkout-smoke-01', suggestedScenarioName: 'Checkout smoke-01',
+    },
+  });
+  await captureSelected(page, '15c-repository-deployment-conflict');
+  assert.equal(await page.locator('.repository-scenario pre').count(), 0,
+    'Repository validation evidence must stay concise and self-contained without duplicate raw JSON');
+  const deploymentDialog = page.getByRole('dialog', { name: 'Scenario deployment conflict' });
+  assert.equal(await deploymentDialog.getByLabel('New scenario ID').inputValue(), 'checkout-smoke-01');
+  assert.equal(await deploymentDialog.getByLabel('New scenario name').inputValue(), 'Checkout smoke-01');
+  await clickWithinAndExpectMessage(page, deploymentDialog, 'Replace existing', {
+    type: 'replaceRepositoryBundle', candidateId: 'candidate-acceptance-1',
+  });
+  await deploymentDialog.getByLabel('New scenario ID').fill('checkout-smoke-copy');
+  await deploymentDialog.getByLabel('New scenario name').fill('Checkout smoke copy');
+  await clickWithinAndExpectMessage(page, deploymentDialog, 'Open scenario.yaml', {
+    type: 'openRepositoryRename', candidateId: 'candidate-acceptance-1',
+    scenarioId: 'checkout-smoke-copy', scenarioName: 'Checkout smoke copy',
+  });
+
+  await dispatch(page, {
+    ...workspaceBase, activeTab: 'Debug', workspaceData: interactionSwarms, debugSwarmId: 'checkout-load',
+    debugRuntimeId: 'request-builder-7f8c9',
+    debugWorkersResult: [{ runtimeId: 'request-builder-7f8c9' }],
+    debugAction: 'Logs',
+    debugResult: {
+      target: { runtimeId: 'request-builder-7f8c9', instance: 'request-builder-1' },
+      tailLines: 200,
+      since: null,
+      redacted: true,
+      lineCount: 2,
+      logs: 'Bounded evidence line 1\nBounded evidence line 2',
+    },
+  });
   await captureSelected(page, '16-selected-debug');
-  assert.deepEqual(await page.locator('.debug-group > summary strong').allTextContents(),
-    ['Runtime', 'Messaging', 'Definition', 'Maintenance']);
+  assert.deepEqual(await page.locator('.debug-worker-tabs [role="tab"]').allTextContents(),
+    ['Logs', 'Inspect', 'Version']);
+  await page.getByText('Container logs', { exact: true }).waitFor({ state: 'visible' });
+  await page.getByText('Docker stdout/stderr · tail 200', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await page.locator('.debug-runtime-target .debug-evidence').count(), 1,
+    'worker evidence must remain adjacent to the selected worker diagnostic');
+  assert.deepEqual(await page.locator('.debug-swarm-tools .button').allTextContents(),
+    ['Workers', 'Runtime drift', 'Control plane', 'Rabbit topology', 'Timeline', 'Manifest']);
+  assert.equal(await page.locator('.debug-maintenance').getByText('Plan only', { exact: true }).count(), 1,
+    'cleanup must remain a visibly plan-only maintenance action');
+  assert.equal(await page.locator('.debug-group').count(), 0,
+    'the Debug page must not retain the disjointed disclosure stack');
+  assert.equal(await page.getByLabel('Exact swarm', { exact: true }).getAttribute('role'), 'combobox');
+  assert.equal(await page.getByLabel('Exact swarm', { exact: true }).getAttribute('aria-autocomplete'), 'list');
+  assert.equal(await page.getByLabel('Exact worker', { exact: true }).getAttribute('role'), 'combobox');
+  await clickAndExpectMessage(page, 'Logs', { type: 'runDebug', action: 'Logs', tailLines: 200 }, 'tab');
+  const toolColumns = await page.locator('.debug-swarm-tools').evaluate(element =>
+    getComputedStyle(element).gridTemplateColumns.split(' ').length);
+  assert.equal(toolColumns, 2, 'the normal Side Bar width must keep the compact two-column swarm-tool matrix');
+  await page.getByRole('button', { name: 'Swarm', exact: true }).click();
+  await page.getByRole('button', { name: 'Swarm', exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await page.getByRole('button', { name: 'Swarm', exact: true }).getAttribute('aria-pressed'), 'true',
+    'the compact context control must expose its active swarm target');
+  await page.waitForFunction(() => scrollY > 0);
+  await page.screenshot({ path: path.join(auditDirectory, '16-selected-debug-swarm-tools.png') });
+  await page.getByRole('button', { name: 'Worker', exact: true }).click();
+  assert.equal(await page.getByRole('button', { name: 'Worker', exact: true }).getAttribute('aria-pressed'), 'true',
+    'the compact context control must return to the worker target');
+  await page.evaluate(() => scrollTo(0, 0));
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Debug',
+    workspaceData: interactionSwarms,
+    debugSwarmId: 'checkout-load',
+    debugAction: 'Cleanup plan',
+    debugResult: {
+      candidateSetHash: 'sha256:a91c7be2',
+      executionRisk: 'standard',
+      candidates: [
+        { candidateId: 'docker:container:abc', reason: 'stopped PocketHive runtime resource' },
+        { candidateId: 'docker:network:def', reason: 'orphaned PocketHive runtime network' },
+      ],
+      blocked: [],
+    },
+  });
+  await page.getByText('2 cleanup candidates', { exact: true }).waitFor({ state: 'visible' });
+  assert.equal(await page.getByRole('button', { name: 'Execute cleanup', exact: true }).isDisabled(), true,
+    'cleanup execution must stay disabled without governed HiveGate approval');
+  await page.locator('.debug-maintenance').scrollIntoViewIfNeeded();
+  await page.screenshot({ path: path.join(auditDirectory, '16a-selected-debug-cleanup-plan.png') });
+  await dispatch(page, { ...workspaceBase, activeTab: 'Debug', workspaceData: interactionSwarms });
   await chooseExactAutocomplete(page, 'Exact swarm', 'checkout-load');
   await page.waitForFunction(() => globalThis.__pockethiveMessages?.some(message => (
     message.type === 'selectDebugSwarm' && message.swarmId === 'checkout-load'
@@ -375,6 +892,8 @@ try {
     principalLabel: local.evidence.principalLabel,
     toolCount: local.toolCount,
     journalRunsProbe: local.journalRunsProbe,
+    runtimeDiagnosticsProbe: local.runtimeDiagnosticsProbe,
+    eventPageBoundaryProbe: local.eventPageBoundaryProbe,
     sessionRefresh: local.sessionRefresh,
     screenshots: (await readFileNames()).map(name => path.join(auditDirectory, name)),
     findings,
@@ -387,6 +906,8 @@ try {
     principalLabel: report.principalLabel,
     toolCount: report.toolCount,
     journalRunsProbe: report.journalRunsProbe,
+    runtimeDiagnosticsProbe: report.runtimeDiagnosticsProbe,
+    eventPageBoundaryProbe: report.eventPageBoundaryProbe,
     sessionRefresh: report.sessionRefresh,
     screenshotCount: report.screenshots.length,
     findingCount: findings.length,
@@ -467,6 +988,9 @@ async function inspectState(page, state) {
   const geometry = await page.evaluate(() => {
     const viewportWidth = document.documentElement.clientWidth;
     const visible = [...document.body.querySelectorAll('*')].filter(node => {
+      const closedDisclosure = node.closest('details:not([open])');
+      if (closedDisclosure && node !== closedDisclosure.querySelector(':scope > summary')
+          && !node.closest('summary')) return false;
       const style = getComputedStyle(node);
       return style.display !== 'none' && style.visibility !== 'hidden' && node.getClientRects().length > 0;
     });
@@ -536,16 +1060,6 @@ async function connectLocalMcp(browser) {
     observedLocations.push(`${requested.origin}${requested.pathname}`);
     if (`${requested.origin}${requested.pathname}` === redirectUri) callback = requested;
   });
-  await context.route('**/*', async route => {
-    const requested = new URL(route.request().url());
-    if (`${requested.origin}${requested.pathname}` === redirectUri) {
-      callback = requested;
-      await route.fulfill({ status: 200, contentType: 'text/html', body: '<p>Complete</p>' });
-      return;
-    }
-    await route.continue();
-  });
-
   const resource = await json(`${new URL(endpoint).origin}/.well-known/oauth-protected-resource`);
   assert.equal(resource.resource, endpoint);
   assert.deepEqual(resource.authorization_servers, [`${new URL(endpoint).origin}/auth-service`]);
@@ -554,8 +1068,8 @@ async function connectLocalMcp(browser) {
   const verifier = randomBytes(64).toString('base64url');
   const challenge = createHash('sha256').update(verifier, 'ascii').digest('base64url');
   const state = randomBytes(32).toString('base64url');
-  const authorization = new URL(metadata.authorization_endpoint);
-  authorization.search = new URLSearchParams({
+  const authorizationUrl = new URL(metadata.authorization_endpoint);
+  authorizationUrl.search = new URLSearchParams({
     response_type: 'code',
     client_id: 'pockethive-vscode',
     redirect_uri: redirectUri,
@@ -566,7 +1080,12 @@ async function connectLocalMcp(browser) {
     code_challenge_method: 'S256',
   }).toString();
 
-  const authorizationResponse = await page.goto(authorization.toString(), { waitUntil: 'domcontentloaded' });
+  let authorizationResponse;
+  const callbackController = new AbortController();
+  const callbackResult = new LoopbackBrowserAuthorization(async url => {
+    authorizationResponse = await page.goto(url, { waitUntil: 'domcontentloaded' });
+    return true;
+  }).authorize(authorizationUrl.toString(), callbackController.signal);
   const deadline = Date.now() + 20_000;
   while (!callback && Date.now() < deadline) {
     const username = page.getByLabel('Configured username');
@@ -593,11 +1112,18 @@ async function connectLocalMcp(browser) {
   }
   assert.equal(signInCaptured, true, 'the live PocketHive sign-in page must be rendered and audited');
   if (!callback) {
+    callbackController.abort();
     const location = new URL(page.url());
     throw new Error(`OAuth callback was not observed (initial status ${authorizationResponse?.status() ?? 'none'}) at ${
       location.origin}${location.pathname}; requests=${JSON.stringify(observedLocations.slice(-20))}: ${
       (await page.locator('body').innerText()).replaceAll(/\s+/g, ' ').slice(0, 500)}`);
   }
+  assert.equal((await callbackResult).toString(), callback.toString(),
+    'the live OAuth browser must reach the exact local callback listener');
+  await inspectAuthPage(page, 'auth-callback-success', '20-auth-callback-success');
+  await page.setViewportSize({ width: 280, height: 760 });
+  await inspectAuthPage(page, 'auth-callback-success-mobile', '23-auth-callback-success-mobile');
+  await page.setViewportSize({ width: 520, height: 760 });
   assert.equal(callback.searchParams.get('state'), state);
   const code = callback.searchParams.get('code');
   assert.ok(code, 'OAuth authorization code missing');
@@ -641,7 +1167,7 @@ async function connectLocalMcp(browser) {
   const token = await tokenResponse.json();
   assert.equal(token.token_type, 'Bearer');
   assert.equal(typeof token.access_token, 'string');
-  assert.equal(typeof token.refresh_token, 'string', 'the base companion session must be renewable');
+  assert.equal(typeof token.refresh_token, 'string', 'the companion session must be renewable');
 
   const refreshResponse = await fetch(metadata.token_endpoint, {
     method: 'POST',
@@ -690,14 +1216,34 @@ async function connectLocalMcp(browser) {
     'swarm_stop',
     'swarm_remove',
     'debug_journal_runs',
+    'runtime_tail_worker_logs',
+    'runtime_inspect_worker',
+    'runtime_get_worker_version',
   ]) {
     assert.equal(toolNames.has(requiredTool), true, `live MCP catalogue must expose ${requiredTool}`);
   }
-  const [swarms, scenarios, buzz] = await Promise.all([
+  const [swarms, scenarios, buzz, environmentHealth] = await Promise.all([
     client.callTool('swarm_list'),
     client.callTool('scenario_list'),
     client.callTool('debug_hive_journal', { limit: SIDEBAR_EVENT_LIMIT }),
+    client.readResource('pockethive://environment/health'),
   ]);
+  const buzzBytes = Buffer.byteLength(JSON.stringify(buzz));
+  const eventPresentation = new EventPagePresentation();
+  const presentedBuzz = eventPresentation.replace(buzz);
+  const projectedBytes = Buffer.byteLength(JSON.stringify(presentedBuzz));
+  const boundedBuzz = boundCompanionViewModel({ activeTab: 'Buzz', workspaceData: presentedBuzz }).workspaceData;
+  assert.equal(projectedBytes <= VIEW_FIELD_BYTE_LIMIT, true,
+    'live Buzz summaries must remain inside the general companion field limit');
+  assert.notEqual(boundedBuzz?.error?.code, 'COMPANION_VIEW_DATA_TOO_LARGE',
+    'normal live Buzz summaries must survive the companion presentation boundary');
+  assert.equal(JSON.stringify(presentedBuzz).includes('runtime-log-snapshot')
+    && !JSON.stringify(presentedBuzz).includes('"logs"'), true,
+  'live Buzz must retain summary identity without sending runtime logs to the webview');
+  if (presentedBuzz.items.length > 0) {
+    assert.equal(eventPresentation.require(presentedBuzz.items[0].detailId), buzz.items[0],
+      'the live summary must resolve to the exact current owner record');
+  }
   const swarmId = swarms.find?.(item => typeof item?.id === 'string')?.id;
   const journalRunsSwarmId = swarmId ?? 'pockethive-ui-acceptance-missing-swarm';
   let journalRunsProbe;
@@ -715,18 +1261,73 @@ async function connectLocalMcp(browser) {
     journalRunsProbe = { swarmId: journalRunsSwarmId, outcome: 'owner-not-found' };
   }
   const journal = swarmId
-    ? { swarmId, data: await client.callTool('debug_journal', { swarmId, limit: SIDEBAR_EVENT_LIMIT }) }
+    ? {
+        swarmId,
+        data: new EventPagePresentation().replace(
+          await client.callTool('debug_journal', { swarmId, limit: SIDEBAR_EVENT_LIMIT }),
+        ),
+      }
     : undefined;
+  let runtimeDiagnosticsProbe = { outcome: 'no-swarm' };
+  if (swarmId) {
+    const resources = await client.callTool('runtime_list_workers', { swarmId });
+    const worker = Array.isArray(resources?.workers)
+      ? resources.workers.find(item => typeof item?.runtimeId === 'string')
+      : undefined;
+    if (worker) {
+      const target = { swarmId, runtimeId: worker.runtimeId };
+      const [version, inspect] = await Promise.all([
+        client.callTool('runtime_get_worker_version', target),
+        client.callTool('runtime_inspect_worker', target),
+      ]);
+      assert.equal(typeof version?.reportedVersion === 'string' && version.reportedVersion.trim().length > 0, true,
+        'runtime version must preserve the non-blank owner-provided runtime value');
+      assert.equal(['pockethive.version', 'imageTag'].includes(version?.reportedVersionSource), true,
+        'runtime version source must be the exact Orchestrator projection');
+      assert.equal(inspect?.source?.owner, 'orchestrator',
+        'runtime inspect must identify the established owner projection');
+      assert.equal(inspect?.state && typeof inspect.state === 'object', true,
+        'runtime inspect must preserve the owner state projection');
+      assert.equal(Array.isArray(inspect?.mounts), true,
+        'runtime inspect must preserve the owner mount projection');
+      assert.equal(Array.isArray(inspect?.networks), true,
+        'runtime inspect must preserve the owner network projection');
+      const inspectKeys = Object.keys(inspect).sort();
+      runtimeDiagnosticsProbe = {
+        outcome: 'owner-results',
+        swarmId,
+        runtimeId: worker.runtimeId,
+        version: {
+          version: version?.reportedVersion ?? null,
+          source: version?.reportedVersionSource ?? null,
+          imageTag: version?.imageTag ?? null,
+          imageDigest: version?.imageDigest ?? null,
+        },
+        inspectKeys,
+      };
+    } else {
+      runtimeDiagnosticsProbe = { outcome: 'no-worker', swarmId };
+    }
+  }
   await context.close();
   return {
     client,
     evidence,
     swarms,
     scenarios,
-    buzz,
+    buzz: boundedBuzz,
+    environmentHealth,
     journal,
     toolCount: tools.length,
     journalRunsProbe,
+    runtimeDiagnosticsProbe,
+    eventPageBoundaryProbe: {
+      bytes: buzzBytes,
+      projectedBytes,
+      generalLimitBytes: VIEW_FIELD_BYTE_LIMIT,
+      exceededGeneralLimit: buzzBytes > VIEW_FIELD_BYTE_LIMIT,
+      outcome: 'master-detail',
+    },
     sessionRefresh: { rotated: true, replayRejected: true },
     revoke: async () => {
       for (const [value, hint] of [
@@ -751,12 +1352,18 @@ async function inspectAuthPage(page, state, screenshotName) {
     const card = document.querySelector('.auth-card');
     return {
       logoLoaded: logo instanceof HTMLImageElement && logo.complete && logo.naturalWidth > 0,
+      logoSource: logo instanceof HTMLImageElement ? logo.getAttribute('src') : null,
+      cssMarkPresent: document.querySelector('.auth-brand__mark') !== null,
       themedCard: card instanceof HTMLElement && getComputedStyle(card).backgroundColor !== 'rgba(0, 0, 0, 0)',
       overflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth)
         - document.documentElement.clientWidth,
     };
   });
   if (!assets.logoLoaded) findings.push({ state, kind: 'brand-asset', detail: 'PocketHive logo did not load' });
+  if (assets.cssMarkPresent) findings.push({ state, kind: 'brand-asset', detail: 'CSS-drawn substitute logo remains' });
+  if (state.startsWith('auth-callback') && !assets.logoSource?.startsWith('data:image/svg+xml;base64,')) {
+    findings.push({ state, kind: 'brand-asset', detail: 'Callback did not use the generated canonical data URI' });
+  }
   if (!assets.themedCard) findings.push({ state, kind: 'theme', detail: 'PocketHive auth theme did not load' });
   if (assets.overflow > 1) findings.push({ state, kind: 'overflow', detail: assets.overflow });
   const axe = await new AxeBuilder({ page }).analyze();
@@ -772,6 +1379,23 @@ async function inspectAuthPage(page, state, screenshotName) {
   await page.screenshot({ path: path.join(auditDirectory, `${screenshotName}.png`), fullPage: true });
 }
 
+async function captureCallbackOutcome(browser, state, query, screenshotName) {
+  const context = await browser.newContext({ viewport: { width: 520, height: 760 }, colorScheme: 'dark' });
+  const page = await context.newPage();
+  let listenerReady;
+  const ready = new Promise(resolve => { listenerReady = resolve; });
+  const callbackResult = new LoopbackBrowserAuthorization(async () => {
+    listenerReady();
+    return true;
+  }).authorize('https://issuer.invalid/oauth/authorize', new AbortController().signal);
+  await ready;
+  const callbackUrl = `${redirectUri}${query}`;
+  await page.goto(callbackUrl, { waitUntil: 'domcontentloaded' });
+  assert.equal((await callbackResult).toString(), callbackUrl);
+  await inspectAuthPage(page, state, screenshotName);
+  await context.close();
+}
+
 async function json(url) {
   const response = await fetch(url, { headers: { Accept: 'application/json' }, redirect: 'error' });
   assert.equal(response.ok, true, `${url} returned ${response.status}`);
@@ -783,6 +1407,8 @@ async function startUiServer() {
   const files = new Map([
     ['/media/companion.css', ['text/css', path.join(root, 'media', 'companion.css')]],
     ['/resources/brand-tokens.css', ['text/css', path.join(root, 'resources', 'brand-tokens.css')]],
+    ['/resources/codicon.css', ['text/css', path.join(root, 'resources', 'codicon.css')]],
+    ['/resources/codicon.ttf?9aab6318a6710999273bab9c78a9fd71', ['font/ttf', path.join(root, 'resources', 'codicon.ttf')]],
     ['/resources/logo-mark.svg', ['image/svg+xml', path.join(root, 'resources', 'logo-mark.svg')]],
     ['/out/webview/eventFilters.js', ['text/javascript', path.join(root, 'out', 'webview', 'eventFilters.js')]],
     ['/out/webview/main.js', ['text/javascript', path.join(root, 'out', 'webview', 'main.js')]],
@@ -793,6 +1419,7 @@ async function startUiServer() {
       response.end(`<!doctype html><html lang="en"><head><meta charset="UTF-8">
         <meta name="viewport" content="width=device-width,initial-scale=1">
         <link rel="stylesheet" href="/resources/brand-tokens.css">
+        <link rel="stylesheet" href="/resources/codicon.css">
         <link rel="stylesheet" href="/media/companion.css">
         <style>:root {
           --vscode-button-background:#147ba8;--vscode-button-foreground:#fff;

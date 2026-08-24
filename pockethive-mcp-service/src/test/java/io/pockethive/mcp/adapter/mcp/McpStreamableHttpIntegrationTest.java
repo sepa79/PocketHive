@@ -25,6 +25,7 @@ import org.springframework.security.oauth2.server.resource.introspection.OpaqueT
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT, properties = {
     "pockethive.mcp.pocket-hive-ingress=http://127.0.0.1:8080",
     "pockethive.mcp.owner-api-base=http://127.0.0.1:8080",
+    "pockethive.mcp.environment-health.probe-timeout=PT2S",
     "pockethive.mcp.protocol-revision=2025-11-25",
     "pockethive.mcp.state-mode=MEMORY",
     "pockethive.mcp.state-path=target/mcp-it-state",
@@ -116,7 +117,8 @@ class McpStreamableHttpIntegrationTest {
             "pockethive://knowledge/scenario-contract",
             "pockethive://capabilities/current",
             "pockethive://tools/catalogue",
-            "pockethive://skills/catalogue");
+            "pockethive://skills/catalogue",
+            "pockethive://environment/health");
 
         HttpResponse<String> capabilities = post(
             "{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"resources/read\",\"params\":{\"uri\":\"pockethive://capabilities/current\"}}",
@@ -135,6 +137,14 @@ class McpStreamableHttpIntegrationTest {
         assertThat(visibleTools.statusCode()).isEqualTo(200);
         assertThat(visibleTools.body()).contains("scenario_list", "agent_session_create")
             .doesNotContain("swarm_start", "runtime_cleanup_execute");
+
+        HttpResponse<String> environmentHealth = post(
+            "{\"jsonrpc\":\"2.0\",\"id\":11,\"method\":\"resources/read\",\"params\":{\"uri\":\"pockethive://environment/health\"}}",
+            "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port);
+        assertThat(environmentHealth.statusCode()).isEqualTo(200);
+        assertThat(environmentHealth.body()).contains(
+            "UNAVAILABLE", "pockethive-ui", "orchestrator", "scenario-manager",
+            "network-proxy-manager", "wiremock", "tcp-mock", "grafana");
 
         HttpResponse<String> architecture = post(
             "{\"jsonrpc\":\"2.0\",\"id\":10,\"method\":\"resources/read\",\"params\":{\"uri\":\"pockethive://knowledge/architecture\"}}",

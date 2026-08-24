@@ -77,6 +77,7 @@ public final class ScenarioManagerBundleClient implements ScenarioBundleOwnerPor
         return new OwnerValidationResult(
             result.path("ok").asBoolean(false),
             result.path("scenarioId").asText(""),
+            result.path("scenarioName").asText(""),
             result.path("validation").path("artifactDigest").asText(""),
             result);
     }

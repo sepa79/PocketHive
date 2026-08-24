@@ -1,15 +1,16 @@
 export const VIEW_FIELD_BYTE_LIMIT = 64 * 1024;
 
 const BOUNDED_FIELDS = [
-  'workspaceData',
+  'environmentHealth',
   'swarmPrimaryActions',
   'createSwarmForm',
   'journalResult',
   'swarmHistoryResult',
   'swarmOperationResult',
-  'debugResult',
+  'debugWorkersResult',
   'scenarioFocusTree',
   'scenarioFocusInputs',
+  'repositoryScenarios',
   'pendingBundle',
   'bundleResult',
 ] as const;
@@ -25,22 +26,35 @@ const TOO_LARGE = {
 export function boundCompanionViewModel<T extends Record<string, unknown>>(model: T): T {
   const result: Record<string, unknown> = { ...model };
   for (const field of BOUNDED_FIELDS) result[field] = boundField(model[field]);
+  result.workspaceData = boundField(model.workspaceData);
+  result.debugResult = boundField(model.debugResult);
   return result as T;
 }
 
-function boundField(value: unknown): unknown {
+function boundField(value: unknown, byteLimit = VIEW_FIELD_BYTE_LIMIT): unknown {
   if (value === undefined) return undefined;
-  const redacted = redact(value);
+  const redacted = redact(value, 1000);
   const serialized = JSON.stringify(redacted);
-  return Buffer.byteLength(serialized) <= VIEW_FIELD_BYTE_LIMIT ? redacted : TOO_LARGE;
+  return Buffer.byteLength(serialized) <= byteLimit ? redacted : TOO_LARGE;
 }
 
-function redact(value: unknown): unknown {
-  if (Array.isArray(value)) return value.slice(0, 1000).map(redact);
+export function redactSensitiveValues(value: unknown): unknown {
+  return redact(value);
+}
+
+function redact(value: unknown, collectionLimit?: number): unknown {
+  if (Array.isArray(value)) {
+    const items = value.slice(0, collectionLimit);
+    return items.map(item => redact(item, collectionLimit));
+  }
   if (!value || typeof value !== 'object') return value;
   const result: Record<string, unknown> = {};
-  for (const [key, item] of Object.entries(value as Record<string, unknown>).slice(0, 1000)) {
-    result[key] = /authorization|token|secret|password/i.test(key) ? '[REDACTED]' : redact(item);
+  const entries = Object.entries(value as Record<string, unknown>);
+  const bounded = entries.slice(0, collectionLimit);
+  for (const [key, item] of bounded) {
+    result[key] = /authorization|token|secret|password/i.test(key)
+      ? '[REDACTED]'
+      : redact(item, collectionLimit);
   }
   return result;
 }

@@ -6,6 +6,9 @@ import static org.mockito.Mockito.mock;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.modelcontextprotocol.server.McpSyncServer;
 import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
+import io.pockethive.mcp.application.EnvironmentHealthContract;
+import io.pockethive.mcp.application.EnvironmentHealthService;
+import io.pockethive.mcp.application.EnvironmentHealthTarget;
 import io.pockethive.mcp.application.McpToolExecutor;
 import io.pockethive.mcp.application.ToolCatalogue;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
@@ -26,8 +29,14 @@ class McpServerConfigurationTest {
         PocketHiveMcpProperties properties = properties();
         ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
         ToolCatalogue catalogue = ToolCatalogue.canonical();
+        EnvironmentHealthService environmentHealth = new EnvironmentHealthService(
+            properties.pocketHiveIngress(),
+            List.of(new EnvironmentHealthTarget("ui", "UI", URI.create("/"), "/healthz",
+                EnvironmentHealthContract.PLAIN_OK)),
+            target -> true,
+            Clock.systemUTC());
         McpKnowledgeResources resources = new McpKnowledgeResources(
-            catalogue, properties, objectMapper, Clock.systemUTC());
+            catalogue, environmentHealth, properties, objectMapper, Clock.systemUTC());
 
         HttpServletStreamableServerTransportProvider transport = configuration.transport(objectMapper, properties);
         Properties buildValues = new Properties();
@@ -48,7 +57,7 @@ class McpServerConfigurationTest {
                 "pockethive://knowledge/scenario-manager-bundle-rest",
                 "pockethive://knowledge/correlation-idempotency",
                 "pockethive://capabilities/current", "pockethive://tools/catalogue",
-                "pockethive://skills/catalogue");
+                "pockethive://skills/catalogue", "pockethive://environment/health");
         assertThat(resources.catalogueDigest()).matches("sha256:[0-9a-f]{64}");
         assertThat(servlet.getUrlMappings()).containsExactly("/mcp");
         server.close();

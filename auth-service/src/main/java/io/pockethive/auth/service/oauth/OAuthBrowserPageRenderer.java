@@ -59,7 +59,7 @@ final class OAuthBrowserPageRenderer {
                   <button class="auth-button auth-button--secondary" name="consent_action" value="cancel" type="submit">Decline</button>
                 </div>
               </form>
-              <p class="auth-assurance">Only the permissions listed above will be granted. Base read sessions renew securely; privileged permissions remain short-lived.</p>
+              <p class="auth-assurance">Only the permissions listed above will be granted. This device session renews securely without reopening sign-in for each action.</p>
             </section>
             """.formatted(brand(logo), escape(clientDisplayName(clientId)), escape(resource), escape(action),
             escape(clientId), escape(state), escape(csrfParameter), escape(csrfToken), scopeInputs));

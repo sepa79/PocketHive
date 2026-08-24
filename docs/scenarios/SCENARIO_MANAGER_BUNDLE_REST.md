@@ -131,6 +131,7 @@ Response:
     "artifactDigest": "sha256:..."
   },
   "scenarioId": "webauth-demo",
+  "scenarioName": "WebAuth demo",
   "bundleKey": null,
   "bundlePath": null,
   "summary": {
@@ -146,6 +147,10 @@ by the submitted descriptor, the protocol supported by the validator, the
 Scenario Manager release that performed validation, and a deterministic
 SHA-256 digest of the validated bundle contents (sorted relative paths plus
 file bytes). ZIP container metadata therefore does not change the digest.
+
+`scenarioId` and `scenarioName` are the exact descriptor identity parsed by
+Scenario Manager. Clients must use these owner-reported values when presenting
+publication intent; they must not parse or infer scenario identity independently.
 
 ### Validate an existing bundle by bundle key
 

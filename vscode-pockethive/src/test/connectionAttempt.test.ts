@@ -25,6 +25,7 @@ const profile = createConnectionProfile({
 });
 const session: OAuthSession = {
   accessToken: 'secret-token', expiresAt: '2026-08-18T12:15:00Z',
+  scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
   renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh-token' },
 };
 const evidence: ConnectionEvidence = {
@@ -292,6 +293,7 @@ test('expired retry becomes authentication failure without calling MCP', async (
   const calls: string[] = [];
   const expired: OAuthSession = {
     accessToken: 'expired', expiresAt: '2026-08-18T11:59:59Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
   };
   const attempt = createAttempt(
@@ -314,6 +316,7 @@ test('a session expiring exactly now is rejected on retry', async () => {
   const calls: string[] = [];
   const expiresNow: OAuthSession = {
     accessToken: 'expired', expiresAt: NOW.toISOString(),
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
   };
   const attempt = createAttempt(
@@ -375,6 +378,7 @@ test('saved-profile reconnect rejects an expired session before MCP testing', as
     undefined,
     {
       accessToken: 'expired', expiresAt: NOW.toISOString(),
+      scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
       renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'expired-refresh' },
     },
   );

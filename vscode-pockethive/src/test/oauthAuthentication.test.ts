@@ -7,7 +7,7 @@ import {
   BrowserAuthorizationPort,
   ConnectionContractError,
   OAuthSessionStore,
-  PocketHiveMcpScope,
+  POCKETHIVE_COMPANION_SCOPES,
 } from '../connection/contracts';
 import { createConnectionProfile } from '../connection/profile';
 
@@ -39,7 +39,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
       return json({
         access_token: 'opaque-access-token', token_type: 'Bearer', expires_in: 900,
         refresh_token: 'opaque-refresh-token',
-        scope: 'pockethive:mcp:discover pockethive:mcp:read',
+        scope: 'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate pockethive:mcp:author',
       });
     },
     browser,
@@ -52,6 +52,8 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
 
   assert.deepEqual(session, {
     accessToken: 'opaque-access-token', expiresAt: '2026-08-18T12:15:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read',
+      'pockethive:mcp:operate', 'pockethive:mcp:author'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'opaque-refresh-token' },
   });
   assert.equal(requests[0].url,
@@ -66,7 +68,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   assert.equal(opened?.searchParams.get('state'), Buffer.alloc(32, 7).toString('base64url'));
   assert.equal(opened?.searchParams.get('code_challenge'),
     createHash('sha256').update(verifier, 'ascii').digest('base64url'));
-  assert.equal(opened?.searchParams.get('scope'), 'pockethive:mcp:discover pockethive:mcp:read');
+  assert.equal(opened?.searchParams.get('scope'), POCKETHIVE_COMPANION_SCOPES.join(' '));
   assert.deepEqual(requests[0].init, {
     method: 'GET', redirect: 'error', signal: requests[0].init?.signal,
     headers: { Accept: 'application/json' },
@@ -105,47 +107,11 @@ test('maps access denial to cancellation and makes no token request', async () =
   assert.equal(calls, 1);
 });
 
-test('requests an explicit action scope set without replacing the stored connection session', async () => {
-  const requests: Array<{ url: string; init?: RequestInit }> = [];
-  let opened: URL | undefined;
-  const values = new Map<string, string>([[profile.secretKey, JSON.stringify({
-    accessToken: 'connection-token', expiresAt: '2026-08-18T13:00:00.000Z',
-    renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'connection-refresh' },
-  })]]);
-  const authentication = new PocketHiveOAuthAuthentication(
-    async (url, init) => {
-      requests.push({ url: String(url), init });
-      return requests.length === 1 ? json(metadata()) : json({
-        access_token: 'access-token', token_type: 'Bearer', expires_in: 900,
-      });
-    },
-    { authorize: async authorizationUrl => {
-      opened = new URL(authorizationUrl);
-      return new URL(`http://127.0.0.1:57548/callback?code=action-code&state=${opened.searchParams.get('state')}`);
-    } },
-    store(values),
-    size => new Uint8Array(size).fill(7),
-    () => new Date('2026-08-18T12:00:00Z'),
-  );
-
-  const result = await authentication.authenticateForScopes(
-    profile,
-    endpoint,
-    ['pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:author'],
-    new AbortController().signal,
-  );
-
-  assert.equal(opened?.searchParams.get('scope'),
-    'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:author');
-  assert.equal(result.accessToken, 'access-token');
-  assert.deepEqual(result.renewal, { kind: 'NONE' });
-  assert.equal(JSON.parse(values.get(profile.secretKey) ?? '{}').accessToken, 'connection-token');
-});
-
 test('rotates the stored base session without opening the browser and revokes both exact token types', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const values = new Map<string, string>([[profile.secretKey, JSON.stringify({
     accessToken: 'old-access', expiresAt: '2026-08-18T12:01:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'old-refresh' },
   })]]);
   const authentication = new PocketHiveOAuthAuthentication(
@@ -154,6 +120,7 @@ test('rotates the stored base session without opening the browser and revokes bo
       if (requests.length === 1 || requests.length === 3) return json(metadata());
       if (requests.length === 2) return json({
         access_token: 'new-access', refresh_token: 'new-refresh', token_type: 'Bearer', expires_in: 900,
+        scope: 'pockethive:mcp:discover pockethive:mcp:read',
       });
       return new Response(undefined, { status: 200 });
     },
@@ -169,6 +136,7 @@ test('rotates the stored base session without opening the browser and revokes bo
 
   assert.deepEqual(refreshed, {
     accessToken: 'new-access', expiresAt: '2026-08-18T12:15:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'new-refresh' },
   });
   const refreshBody = new URLSearchParams(String(requests[1].init?.body));
@@ -204,7 +172,74 @@ test('rotates the stored base session without opening the browser and revokes bo
   assert.equal(await authentication.session(profile), undefined);
 });
 
-test('rejects metadata, callback state, missing rotation, and privileged refresh-token drift without fallback', async () => {
+test('distinguishes a definitively revoked refresh grant from a transient OAuth outage', async () => {
+  const previous = {
+    accessToken: 'old-access',
+    expiresAt: '2026-08-18T12:01:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'] as const,
+    renewal: { kind: 'ROTATING_REFRESH_TOKEN' as const, refreshToken: 'old-refresh' },
+  };
+  for (const [response, expectedCode] of [
+    [json({ error: 'invalid_grant', error_description: 'must not reach the UI' }, 400), 'OAUTH_REFRESH_REJECTED'],
+    [json({ error: 'temporarily_unavailable' }, 503), 'OAUTH_HTTP_FAILED'],
+  ] as const) {
+    let calls = 0;
+    const authentication = oauthClient(async () => {
+      calls += 1;
+      return calls === 1 ? json(metadata()) : response;
+    });
+    await rejectsContract(authentication.refresh(
+      profile, endpoint, previous, new AbortController().signal,
+    ), expectedCode);
+    assert.equal(calls, 2);
+  }
+
+  for (const [status, body, expectedCode, expectedMessage] of [
+    [400, { error: 'invalid_grant' }, 'OAUTH_REFRESH_REJECTED',
+      'OAUTH_REFRESH_REJECTED: OAUTH_REFRESH_REJECTED'],
+    [400, { error: 'temporarily_unavailable' }, 'OAUTH_HTTP_FAILED',
+      'OAUTH_HTTP_FAILED: OAUTH_HTTP_FAILED: HTTP 400'],
+    [401, { error: 'invalid_grant' }, 'OAUTH_HTTP_FAILED',
+      'OAUTH_HTTP_FAILED: OAUTH_HTTP_FAILED: HTTP 401'],
+  ] as const) {
+    let calls = 0;
+    const authentication = oauthClient(async () => {
+      calls += 1;
+      return calls === 1 ? json(metadata()) : json(body, status);
+    });
+    await rejectsContract(authentication.refresh(
+      profile, endpoint, previous, new AbortController().signal,
+    ), expectedCode, expectedMessage);
+    assert.equal(calls, 2);
+  }
+});
+
+test('refresh may narrow but can never widen the previously granted companion scopes', async () => {
+  const viewer = {
+    accessToken: 'old-access', expiresAt: '2026-08-18T12:01:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'] as const,
+    renewal: { kind: 'ROTATING_REFRESH_TOKEN' as const, refreshToken: 'old-refresh' },
+  };
+  for (const widenedScope of [
+    'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate pockethive:mcp:author',
+    POCKETHIVE_COMPANION_SCOPES.join(' '),
+  ]) {
+    let calls = 0;
+    const authentication = oauthClient(async () => {
+      calls += 1;
+      return calls === 1 ? json(metadata()) : json({
+        ...validToken(), refresh_token: `rotated-${calls}`, scope: widenedScope,
+      });
+    });
+    await rejectsContract(authentication.refresh(
+      profile, endpoint, viewer, new AbortController().signal,
+    ), 'OAUTH_REFRESH_SCOPE_WIDENED',
+    'OAUTH_REFRESH_SCOPE_WIDENED: OAUTH_REFRESH_SCOPE_WIDENED');
+    assert.equal(calls, 2);
+  }
+});
+
+test('rejects metadata, callback state, malformed grants, and missing rotation without fallback', async () => {
   const invalidMetadata = new PocketHiveOAuthAuthentication(
     async () => json({ ...metadata(), code_challenge_methods_supported: ['plain'] }),
     { authorize: async () => { throw new Error('must not open'); } }, store(new Map()),
@@ -220,7 +255,7 @@ test('rejects metadata, callback state, missing rotation, and privileged refresh
   await assert.rejects(wrongState.authenticate(profile, endpoint, new AbortController().signal), /OAUTH_STATE_MISMATCH/);
 
   let calls = 0;
-  const privilegedRefresh = new PocketHiveOAuthAuthentication(
+  const malformedGrant = new PocketHiveOAuthAuthentication(
     async () => {
       calls += 1;
       return calls === 1 ? json(metadata()) : json({
@@ -232,44 +267,30 @@ test('rejects metadata, callback state, missing rotation, and privileged refresh
     ) },
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
-  await assert.rejects(privilegedRefresh.authenticateForScopes(profile, endpoint, [
-    'pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:operate',
-  ], new AbortController().signal), /OAUTH_TOKEN_RESPONSE_INVALID/);
+  await assert.rejects(malformedGrant.authenticate(
+    profile, endpoint, new AbortController().signal,
+  ), /OAUTH_TOKEN_RESPONSE_INVALID/);
   assert.equal(calls, 2);
 
   const nonRotating = new PocketHiveOAuthAuthentication(
     async (url, init) => String(url).endsWith('/.well-known/oauth-authorization-server')
       ? json(metadata())
-      : json({ access_token: 'new', refresh_token: 'same', token_type: 'Bearer', expires_in: 900 }),
+      : json({
+        access_token: 'new', refresh_token: 'same', token_type: 'Bearer', expires_in: 900,
+        scope: 'pockethive:mcp:discover pockethive:mcp:read',
+      }),
     { authorize: async () => { throw new Error('browser must not open'); } },
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
   await rejectsContract(nonRotating.refresh(profile, endpoint, {
     accessToken: 'old', expiresAt: NOW.toISOString(),
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
     renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'same' },
   }, new AbortController().signal), 'OAUTH_REFRESH_TOKEN_NOT_ROTATED',
   'OAUTH_REFRESH_TOKEN_NOT_ROTATED: OAUTH_REFRESH_TOKEN_NOT_ROTATED');
 });
 
-test('scope, callback, cancellation, and OAuth errors fail explicitly without fallback', async () => {
-  const invalidScopes: readonly (readonly PocketHiveMcpScope[])[] = [
-    [],
-    ['pockethive:mcp:discover'],
-    ['pockethive:mcp:read', 'pockethive:mcp:discover'],
-    ['pockethive:mcp:operate', 'pockethive:mcp:read'],
-    ['pockethive:mcp:discover', 'pockethive:mcp:operate'],
-    ['pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:read'],
-    ['pockethive:mcp:discover', 'pockethive:mcp:read', 'unsupported' as PocketHiveMcpScope],
-  ];
-  for (const scopes of invalidScopes) {
-    let calls = 0;
-    const oauth = oauthClient(async () => { calls += 1; return json(metadata()); });
-    await rejectsContract(oauth.authenticateForScopes(
-      profile, endpoint, scopes, new AbortController().signal,
-    ), 'OAUTH_SCOPE_SET_INVALID', 'OAUTH_SCOPE_SET_INVALID: OAUTH_SCOPE_SET_INVALID');
-    assert.equal(calls, 0);
-  }
-
+test('callback, cancellation, and OAuth errors fail explicitly without fallback', async () => {
   for (const callback of [
     'http://localhost:57548/callback?code=x&state=STATE',
     'http://127.0.0.1:57548/other?code=x&state=STATE',
@@ -325,14 +346,14 @@ test('scope, callback, cancellation, and OAuth errors fail explicitly without fa
 });
 
 test('stored session parsing accepts only the exact explicit renewal contract', async () => {
+  const base = {
+    accessToken: 'access',
+    expiresAt: '2026-08-19T13:00:00.000Z',
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
+  } as const;
   const valid = [
-    {
-      accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' },
-    },
-    {
-      accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z',
-      renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh' },
-    },
+    { ...base, renewal: { kind: 'NONE' } },
+    { ...base, renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh' } },
   ];
   for (const session of valid) {
     const values = new Map([[profile.secretKey, JSON.stringify(session)]]);
@@ -340,6 +361,7 @@ test('stored session parsing accepts only the exact explicit renewal contract', 
   }
   const reordered = Object.create(null) as Record<string, unknown>;
   reordered.renewal = { refreshToken: 'refresh', kind: 'ROTATING_REFRESH_TOKEN' };
+  reordered.scopes = ['pockethive:mcp:discover', 'pockethive:mcp:read'];
   reordered.expiresAt = '2026-08-19T13:00:00.000Z';
   reordered.accessToken = 'access';
   assert.deepEqual(await oauthClient(async () => json(metadata()), undefined,
@@ -347,24 +369,38 @@ test('stored session parsing accepts only the exact explicit renewal contract', 
 
   const invalid: Array<[unknown, string]> = [
     [null, 'not an object'], [[], 'not an object'], ['text', 'not an object'], [1, 'not an object'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z' }, 'unexpected fields'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' }, extra: true }, 'unexpected fields'],
-    [{ wrong: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'unexpected fields'],
-    [{ accessToken: 'access', wrong: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'unexpected fields'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', wrong: { kind: 'NONE' } }, 'unexpected fields'],
-    [{ accessToken: '', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'accessToken missing'],
-    [{ accessToken: '   ', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'accessToken missing'],
-    [{ accessToken: 1, expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'accessToken missing'],
-    [{ accessToken: 'access', expiresAt: '', renewal: { kind: 'NONE' } }, 'expiresAt missing'],
-    [{ accessToken: 'access', expiresAt: 'not-a-date', renewal: { kind: 'NONE' } }, 'invalid expiry'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: null }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: [] }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: {} }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'OTHER', refreshToken: 'x' } }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE', extra: true } }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'ROTATING_REFRESH_TOKEN' } }, 'invalid renewal'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: '' } }, 'refreshToken missing'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'x', extra: true } }, 'invalid renewal'],
+    [{ ...base }, 'unexpected fields'],
+    [{ ...base, renewal: { kind: 'NONE' }, extra: true }, 'unexpected fields'],
+    [{ ...base, accessToken: undefined, wrong: 'access', renewal: { kind: 'NONE' } }, 'unexpected fields'],
+    [{ ...base, expiresAt: undefined, wrong: base.expiresAt, renewal: { kind: 'NONE' } }, 'unexpected fields'],
+    [{ accessToken: base.accessToken, expiresAt: base.expiresAt, renewal: { kind: 'NONE' }, wrong: base.scopes },
+      'unexpected fields'],
+    [{ accessToken: base.accessToken, expiresAt: base.expiresAt, scopes: base.scopes, wrong: { kind: 'NONE' } },
+      'unexpected fields'],
+    [{ ...base, accessToken: '', renewal: { kind: 'NONE' } }, 'accessToken missing'],
+    [{ ...base, accessToken: '   ', renewal: { kind: 'NONE' } }, 'accessToken missing'],
+    [{ ...base, accessToken: 1, renewal: { kind: 'NONE' } }, 'accessToken missing'],
+    [{ ...base, expiresAt: '', renewal: { kind: 'NONE' } }, 'expiresAt missing'],
+    [{ ...base, expiresAt: 'not-a-date', renewal: { kind: 'NONE' } }, 'invalid expiry'],
+    [{ ...base, scopes: [], renewal: { kind: 'NONE' } }, 'invalid scopes'],
+    [{ ...base, scopes: 'pockethive:mcp:discover pockethive:mcp:read', renewal: { kind: 'NONE' } },
+      'invalid scopes'],
+    [{ ...base, scopes: ['pockethive:mcp:discover', 1, 'pockethive:mcp:read'], renewal: { kind: 'NONE' } },
+      'invalid scopes'],
+    [{ ...base, scopes: [1, 2], renewal: { kind: 'NONE' } }, 'invalid scopes'],
+    [{ ...base, scopes: ['pockethive:mcp:discover pockethive:mcp:read'], renewal: { kind: 'NONE' } },
+      'invalid scopes'],
+    [{ ...base, scopes: ['pockethive:mcp:discover'], renewal: { kind: 'NONE' } }, 'invalid scopes'],
+    [{ ...base, scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:cleanup'],
+      renewal: { kind: 'NONE' } }, 'invalid scopes'],
+    [{ ...base, renewal: null }, 'invalid renewal'],
+    [{ ...base, renewal: [] }, 'invalid renewal'],
+    [{ ...base, renewal: {} }, 'invalid renewal'],
+    [{ ...base, renewal: { kind: 'OTHER', refreshToken: 'x' } }, 'invalid renewal'],
+    [{ ...base, renewal: { kind: 'NONE', extra: true } }, 'invalid renewal'],
+    [{ ...base, renewal: { kind: 'ROTATING_REFRESH_TOKEN' } }, 'invalid renewal'],
+    [{ ...base, renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: '' } }, 'refreshToken missing'],
+    [{ ...base, renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'x', extra: true } }, 'invalid renewal'],
   ];
   for (const [session, reason] of invalid) {
     const values = new Map([[profile.secretKey, JSON.stringify(session)]]);
@@ -373,10 +409,9 @@ test('stored session parsing accepts only the exact explicit renewal contract', 
       && error.message.includes(reason));
   }
   for (const [session, field] of [
-    [{ accessToken: '', expiresAt: '2026-08-19T13:00:00.000Z', renewal: { kind: 'NONE' } }, 'accessToken'],
-    [{ accessToken: 'access', expiresAt: '', renewal: { kind: 'NONE' } }, 'expiresAt'],
-    [{ accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z',
-      renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: '' } }, 'refreshToken'],
+    [{ ...base, accessToken: '', renewal: { kind: 'NONE' } }, 'accessToken'],
+    [{ ...base, expiresAt: '', renewal: { kind: 'NONE' } }, 'expiresAt'],
+    [{ ...base, renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: '' } }, 'refreshToken'],
   ] as const) {
     const values = new Map([[profile.secretKey, JSON.stringify(session)]]);
     await rejectsContract(oauthClient(async () => json(metadata()), undefined, values).session(profile),
@@ -417,6 +452,8 @@ test('metadata validation rejects every issuer-owned endpoint and capability dri
     ['scopes_supported', ['pockethive:mcp:discover']],
     ['scopes_supported', 'pockethive:mcp:discover pockethive:mcp:read'],
     ['scopes_supported', ['pockethive:mcp:discover', 'pockethive:mcp:read', 1]],
+    ['scopes_supported', [1, 2, 3]],
+    ['scopes_supported', [...POCKETHIVE_COMPANION_SCOPES, 1]],
   ];
   for (const [key, value] of variants) invalid.push({ ...metadata(), [key]: value });
   for (const candidate of invalid) {
@@ -478,11 +515,22 @@ test('token parsing and JSON transport reject malformed boundary values with exa
     { ...validToken(), access_token: '' },
     { ...validToken(), access_token: 1 },
     { ...validToken(), refresh_token: '' },
+    { ...validToken(), scope: '' },
+    { ...validToken(), scope: '   ' },
+    { ...validToken(), scope: ' pockethive:mcp:discover pockethive:mcp:read' },
+    { ...validToken(), scope: 'pockethive:mcp:discover  pockethive:mcp:read' },
+    { ...validToken(), scope: 'pockethive:mcp:discover' },
+    { ...validToken(), scope: 'pockethive:mcp:read' },
+    { ...validToken(), scope: 'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate' },
+    { ...validToken(), scope: 'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:author pockethive:mcp:publish' },
+    { ...validToken(), scope: 'pockethive:mcp:discover pockethive:mcp:read unsupported' },
+    { ...validToken(), scope: 'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:cleanup' },
+    { ...validToken(), scope: 'pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:read' },
   ];
   for (const token of invalidTokens) {
-    await rejectsContract(authorizeWithToken(token, true), 'OAUTH_TOKEN_RESPONSE_INVALID');
+    await rejectsContract(authorizeWithToken(token), 'OAUTH_TOKEN_RESPONSE_INVALID');
   }
-  const boundary = await authorizeWithToken({ ...validToken(), expires_in: 86_400 }, true);
+  const boundary = await authorizeWithToken({ ...validToken(), expires_in: 86_400 });
   assert.equal(boundary.expiresAt, '2026-08-19T12:00:00.000Z');
 
   const transportFailures: Array<[Response, string, string]> = [
@@ -513,6 +561,15 @@ test('token parsing and JSON transport reject malformed boundary values with exa
       profile, endpoint, new AbortController().signal,
     ), code, message || undefined);
   }
+
+  let authorizationCalls = 0;
+  const authorizationGrantFailure = oauthClient(async () => {
+    authorizationCalls += 1;
+    return authorizationCalls === 1 ? json(metadata()) : json({ error: 'invalid_grant' }, 400);
+  });
+  await rejectsContract(authorizationGrantFailure.authenticate(
+    profile, endpoint, new AbortController().signal,
+  ), 'OAUTH_HTTP_FAILED', 'OAUTH_HTTP_FAILED: OAUTH_HTTP_FAILED: HTTP 400');
 
   const exactLimitBase = JSON.stringify({ value: '' });
   const exactLimit = JSON.stringify({ value: 'x'.repeat(65_536 - exactLimitBase.length) });
@@ -547,7 +604,9 @@ test('production randomness and clock create a usable unpredictable base session
 
 test('refresh and revocation require renewable sessions and report every failed revocation', async () => {
   const ephemeral = {
-    accessToken: 'access', expiresAt: NOW.toISOString(), renewal: { kind: 'NONE' as const },
+    accessToken: 'access', expiresAt: NOW.toISOString(),
+    scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'] as const,
+    renewal: { kind: 'NONE' as const },
   };
   const oauth = oauthClient(async () => json(metadata()));
   await rejectsContract(oauth.refresh(profile, endpoint, ephemeral, new AbortController().signal),
@@ -566,6 +625,7 @@ test('refresh and revocation require renewable sessions and report every failed 
     const expectedCount = failed.size;
     await rejectsContract(failing.revoke(profile, endpoint, {
       accessToken: 'access', expiresAt: NOW.toISOString(),
+      scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
       renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh' },
     }, new AbortController().signal), 'OAUTH_REVOCATION_UNCONFIRMED',
     `OAUTH_REVOCATION_UNCONFIRMED: OAUTH_REVOCATION_UNCONFIRMED: ${expectedCount} request(s) failed`);
@@ -594,6 +654,7 @@ function metadata(): Record<string, unknown> {
 function validToken(): Record<string, unknown> {
   return {
     access_token: 'access', token_type: 'Bearer', expires_in: 900, refresh_token: 'refresh',
+    scope: POCKETHIVE_COMPANION_SCOPES.join(' '),
   };
 }
 
@@ -614,17 +675,13 @@ function oauthClient(
   );
 }
 
-async function authorizeWithToken(token: Record<string, unknown>, renewable: boolean) {
+async function authorizeWithToken(token: Record<string, unknown>) {
   let calls = 0;
   const oauth = oauthClient(async () => {
     calls += 1;
     return calls === 1 ? json(metadata()) : json(token);
   });
-  const signal = new AbortController().signal;
-  return renewable
-    ? oauth.authenticate(profile, endpoint, signal)
-    : oauth.authenticateForScopes(profile, endpoint,
-      ['pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:operate'], signal);
+  return oauth.authenticate(profile, endpoint, new AbortController().signal);
 }
 
 async function rejectsContract(
@@ -649,9 +706,9 @@ function store(values: Map<string, string>): OAuthSessionStore {
   };
 }
 
-function json(body: unknown): Response {
+function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
-    status: 200,
+    status,
     headers: { 'Content-Type': 'application/json' },
   });
 }

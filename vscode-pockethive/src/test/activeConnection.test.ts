@@ -12,6 +12,7 @@ const profile: McpConnectionProfile = {
 };
 const session: OAuthSession = {
   accessToken: 'access', expiresAt: '2026-08-19T13:00:00.000Z',
+  scopes: ['pockethive:mcp:discover', 'pockethive:mcp:read'],
   renewal: { kind: 'ROTATING_REFRESH_TOKEN', refreshToken: 'refresh' },
 };
 const evidence = {
@@ -31,6 +32,13 @@ test('atomically replaces a verified client, delegates calls, and closes once', 
   assert.deepEqual(await active.callTool('swarm_list', { exact: true }), {
     client: 'second', name: 'swarm_list', args: { exact: true },
   });
+  assert.deepEqual(await active.readResource('pockethive://environment/health'), {
+    client: 'second', uri: 'pockethive://environment/health',
+  });
+  const uploadSignal = new AbortController().signal;
+  assert.deepEqual(await active.uploadArchive('/scenario-manager/api/bundles', new Uint8Array([1, 2, 3]), uploadSignal), {
+    client: 'second', uploadUrl: '/scenario-manager/api/bundles', archive: [1, 2, 3], signal: uploadSignal,
+  });
   await active.close();
   await active.close();
   assert.deepEqual(calls, [
@@ -38,6 +46,8 @@ test('atomically replaces a verified client, delegates calls, and closes once', 
     'second:connect:http://127.0.0.1:8088/mcp:access',
     'first:close',
     'second:call:swarm_list',
+    'second:resource:pockethive://environment/health',
+    'second:upload:/scenario-manager/api/bundles:1,2,3',
     'second:close',
   ]);
 });
@@ -67,9 +77,17 @@ test('fails explicitly without an active client and clears ownership before clos
   const active = new ActiveMcpConnection(() => closing);
   await assert.rejects(active.callTool('swarm_list'), error => error instanceof Error
     && error.message === 'MCP_NOT_CONNECTED');
+  await assert.rejects(active.readResource('pockethive://environment/health'), error => error instanceof Error
+    && error.message === 'MCP_NOT_CONNECTED');
+  await assert.rejects(active.uploadArchive('/upload', new Uint8Array()), error => error instanceof Error
+    && error.message === 'MCP_NOT_CONNECTED');
   await active.test(profile, session, new AbortController().signal);
   await assert.rejects(active.close(), /close failed/);
   await assert.rejects(active.callTool('swarm_list'), error => error instanceof Error
+    && error.message === 'MCP_NOT_CONNECTED');
+  await assert.rejects(active.readResource('pockethive://environment/health'), error => error instanceof Error
+    && error.message === 'MCP_NOT_CONNECTED');
+  await assert.rejects(active.uploadArchive('/upload', new Uint8Array()), error => error instanceof Error
     && error.message === 'MCP_NOT_CONNECTED');
   assert.deepEqual(calls, ['closing:connect:http://127.0.0.1:8088/mcp:access', 'closing:close']);
 });
@@ -89,6 +107,14 @@ function client(
     callTool: async (name: string, args: Record<string, unknown>) => {
       calls.push(`${label}:call:${name}`);
       return { client: label, name, args };
+    },
+    readResource: async (uri: string) => {
+      calls.push(`${label}:resource:${uri}`);
+      return { client: label, uri };
+    },
+    uploadArchive: async (uploadUrl: string, archive: Uint8Array, signal?: AbortSignal) => {
+      calls.push(`${label}:upload:${uploadUrl}:${[...archive].join(',')}`);
+      return { client: label, uploadUrl, archive: [...archive], signal };
     },
     close: async () => {
       calls.push(`${label}:close`);

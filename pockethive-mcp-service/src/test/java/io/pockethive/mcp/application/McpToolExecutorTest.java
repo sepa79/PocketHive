@@ -344,6 +344,8 @@ class McpToolExecutorTest {
         Object receiptView = execute("scenario_bundle_validation_receipt_get", Map.of("receiptId", "receipt-a"));
         assertThat(json(receiptView)).contains("\"receiptId\":\"receipt-a\"")
             .contains("\"bundleContentDigest\":\"" + SHA + "\"")
+            .contains("\"scenarioId\":\"scenario-a\"")
+            .contains("\"scenarioName\":\"Scenario A\"")
             .doesNotContain("qa-lead", "issuer.example");
 
         PublicationUploadTicket publication = mock(PublicationUploadTicket.class);
@@ -720,7 +722,7 @@ class McpToolExecutorTest {
             new SourceMetadata("git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED),
             new io.pockethive.mcp.domain.BundleFileManifest(List.of(
                 new io.pockethive.mcp.domain.BundleFileManifestEntry("scenario.yaml", 4, SHA))),
-            SHA, SHA, "scenario-a", NOW);
+            SHA, SHA, "scenario-a", "Scenario A", NOW);
     }
 
     private static ScenarioWorkflow workflow(String id) {

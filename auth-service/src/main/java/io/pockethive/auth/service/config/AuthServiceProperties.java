@@ -62,7 +62,7 @@ public class AuthServiceProperties {
         private URI resource;
         private Duration authorizationCodeTtl = Duration.ofMinutes(2);
         private Duration accessTokenTtl = Duration.ofMinutes(15);
-        private Duration refreshTokenTtl = Duration.ofHours(8);
+        private Duration refreshTokenTtl = Duration.ofDays(30);
         private String vscodeClientId;
         private URI vscodeRedirectUri;
         private String introspectionClientId;

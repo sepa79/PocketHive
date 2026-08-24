@@ -40,8 +40,12 @@
     }
   },
   "scripts": {
-    "assets:generate": "node scripts/generate-logo-assets.mjs",
-    "assets:check": "node scripts/generate-logo-assets.mjs --check",
+    "assets:generate": "npm run assets:logo && npm run assets:icons",
+    "assets:check": "npm run assets:logo:check && npm run assets:icons:check",
+    "assets:logo": "node scripts/generate-logo-assets.mjs",
+    "assets:logo:check": "node scripts/generate-logo-assets.mjs --check",
+    "assets:icons": "node scripts/sync-codicons.mjs",
+    "assets:icons:check": "node scripts/sync-codicons.mjs --check",
     "build": "node scripts/clean-output.mjs && npm run assets:generate && tsc -p ./",
     "build:mutation": "node scripts/clean-output.mjs && node node_modules/typescript/bin/tsc -p ./",
     "test:unit": "npm run build && node --test out/test/*.test.js",
@@ -58,6 +62,7 @@
     "@stryker-mutator/core": "10.0.0",
     "@types/node": "20.19.17",
     "@types/vscode": "1.85.0",
+    "@vscode/codicons": "0.0.46-24",
     "@vscode/vsce": "3.9.2",
     "playwright": "1.60.0",
     "typescript": "5.9.2"

@@ -13,6 +13,9 @@ public final class PocketHiveMcpScopes {
     public static final List<String> ALL_ORDERED = List.of(
         DISCOVER, READ, OPERATE, AUTHOR, PUBLISH, CLEANUP);
     public static final Set<String> ALL = Set.copyOf(ALL_ORDERED);
+    public static final List<String> COMPANION_ORDERED = List.of(
+        DISCOVER, READ, OPERATE, AUTHOR, PUBLISH);
+    public static final Set<String> COMPANION = Set.copyOf(COMPANION_ORDERED);
 
     private PocketHiveMcpScopes() {
     }

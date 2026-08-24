@@ -115,7 +115,9 @@
           <mutationThreshold>100</mutationThreshold>
           <coverageThreshold>100</coverageThreshold>
           <targetClasses>
+            <param>io.pockethive.auth.service.oauth.PocketHiveAccessTokenGenerator</param>
             <param>io.pockethive.auth.service.oauth.PocketHiveRefreshTokenGenerator</param>
+            <param>io.pockethive.auth.service.oauth.PocketHiveCompanionAuthorizationRequestConverter</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationConverter</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationProvider</param>
           </targetClasses>

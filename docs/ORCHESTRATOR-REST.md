@@ -52,7 +52,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
 
-**Response (200)** — Orchestrator projection joining owned intent/operation state with the cached Controller observation. The raw Controller envelope is retained under `observation`; it is evidence, not the swarm state authority.
+**Response (200)** — Orchestrator projection joining owned intent/operation state with the cached Controller context. `observation` is that context projection; it is evidence, not the swarm state authority. The raw control-plane envelope remains an internal transport contract and is not nested in this REST response.
 ```json
 {
   "id": "demo",
@@ -67,82 +67,51 @@ Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it
   "observationStale": false,
   "activeOperation": null,
   "observation": {
-    "receivedAt": "2026-07-22T12:34:56Z",
-    "staleAfterSec": 30,
-    "envelope": {
-      "timestamp": "2026-07-22T12:34:55Z",
-      "version": "2",
-      "kind": "metric",
-      "type": "status-full",
-      "origin": "swarm-controller-instance",
-      "scope": {
-        "swarmId": "demo",
-        "role": "swarm-controller",
-        "instance": "demo-marshal-bee-1234"
-      },
-      "correlationId": null,
-      "idempotencyKey": null,
-      "runtime": {
-        "templateId": "baseline-demo",
-        "runId": "run-20260722-123455Z",
-        "containerId": null,
-        "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
-        "stackName": null
-      },
-      "data": {
-        "config": {},
-        "startedAt": "2026-07-22T12:00:00Z",
-        "io": {},
-        "ioState": {},
-        "context": {
-          "controllerState": "READY",
-          "workloadState": "RUNNING",
-          "health": "HEALTHY",
-          "startupReady": true,
-          "startupArtifactSha256": "sha256-hex",
-          "watermarkAt": "2026-07-22T12:34:55Z",
-          "expectedWorkers": [
-            { "swarmId": "demo", "role": "generator", "instance": "demo-generator-1" }
-          ],
-          "workers": [
-            {
-              "role": "generator",
-              "instance": "demo-generator-1",
-              "enabled": true,
-              "tps": 10,
-              "lastSeenAt": "2026-07-22T12:34:55Z",
-              "stale": false,
-              "ioState": {
-                "work": {
-                  "input": "ok",
-                  "output": "ok"
-                }
-              },
-              "runtime": {
-                "templateId": "baseline-demo",
-                "runId": "run-20260722-123455Z",
-                "containerId": null,
-                "image": "ghcr.io/pockethive/generator:1.2.3",
-                "stackName": null
-              },
-              "config": {
-                "inputs": {
-                  "type": "SCHEDULER",
-                  "ratePerSecond": 10
-                }
-              }
-            }
-          ]
+    "controllerState": "READY",
+    "workloadState": "RUNNING",
+    "health": "HEALTHY",
+    "startupReady": true,
+    "startupArtifactSha256": "sha256-hex",
+    "watermarkAt": "2026-07-22T12:34:55Z",
+    "expectedWorkers": [
+      { "swarmId": "demo", "role": "generator", "instance": "demo-generator-1" }
+    ],
+    "workers": [
+      {
+        "role": "generator",
+        "instance": "demo-generator-1",
+        "enabled": true,
+        "tps": 10,
+        "lastSeenAt": "2026-07-22T12:34:55Z",
+        "stale": false,
+        "ioState": {
+          "work": {
+            "input": "ok",
+            "output": "ok"
+          }
+        },
+        "runtime": {
+          "templateId": "baseline-demo",
+          "runId": "run-20260722-123455Z",
+          "containerId": null,
+          "image": "ghcr.io/pockethive/generator:1.2.3",
+          "stackName": null
+        },
+        "config": {
+          "inputs": {
+            "type": "SCHEDULER",
+            "ratePerSecond": 10
+          }
         }
       }
-    }
+    ]
   }
 }
 ```
 
 Returns `404` only when the swarm id is unknown. Before a fresh Controller observation exists, the owned intent remains available and observed axes are explicitly `UNKNOWN`; absence of status is never treated as absence of the swarm.
 
-`observation.envelope.data.context.workers[].instance` is the runtime worker identity for component
+`observation.workers[].instance` is the runtime worker identity for component
 selection. `role` is the required routing segment for component actions, but
 clients must not join or deduplicate workers by `role`. Runtime worker payloads
 must not expose or require a second `beeId` identity.

@@ -4,6 +4,7 @@ import {
   BrowserAuthorizationPort,
   ConnectionContractError,
 } from './contracts';
+import { CALLBACK_LOGO_DATA_URI } from '../generated/callbackLogo';
 
 const CALLBACK_HOST = '127.0.0.1';
 const CALLBACK_PORT = 57_548;
@@ -37,7 +38,7 @@ export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
           response.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
-            'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'",
+            'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
           });
           response.end(renderCallbackPage(callback));
           resolve(callback);
@@ -117,46 +118,13 @@ function renderCallbackPage(callback: URL): string {
       .auth-brand {
         display: flex;
         align-items: center;
-        gap: 14px;
         padding-bottom: 18px;
         border-bottom: 1px solid var(--ph-border);
       }
-      .auth-brand__mark {
-        position: relative;
-        width: 46px;
-        height: 46px;
-        border: 2px solid var(--ph-brand-hive);
-        border-radius: 14px;
-        transform: rotate(45deg);
-        box-shadow: 0 0 24px rgba(255, 193, 7, 0.18);
-      }
-      .auth-brand__mark::before,
-      .auth-brand__mark::after {
-        content: "";
-        position: absolute;
-        inset: 10px;
-        border: 2px solid rgba(237, 244, 251, 0.92);
-        border-radius: 8px;
-      }
-      .auth-brand__mark::after {
-        inset: 16px;
-        border-radius: 6px;
-        border-color: var(--ph-accent);
-        background: rgba(36, 200, 244, 0.14);
-      }
-      .auth-brand__copy {
-        display: grid;
-        gap: 2px;
-      }
-      .auth-brand__title {
-        font-size: 1.5rem;
-        font-weight: 750;
-        letter-spacing: -0.03em;
-      }
-      .auth-brand__title span { color: var(--ph-brand-hive); }
-      .auth-brand__subtitle {
-        color: var(--ph-muted);
-        font-size: 0.9rem;
+      .auth-brand__logo {
+        display: block;
+        width: min(100%, 220px);
+        height: auto;
       }
       .auth-status {
         display: inline-flex;
@@ -229,11 +197,7 @@ function renderCallbackPage(callback: URL): string {
     <main class="auth-shell">
       <section class="auth-card" aria-labelledby="auth-title">
         <header class="auth-brand">
-          <div class="auth-brand__mark" aria-hidden="true"></div>
-          <div class="auth-brand__copy">
-            <div class="auth-brand__title">Pocket<span>Hive</span></div>
-            <div class="auth-brand__subtitle">VS Code connection hand-off</div>
-          </div>
+          <img class="auth-brand__logo" src="${CALLBACK_LOGO_DATA_URI}" alt="PocketHive">
         </header>
         <div class="auth-status"><span class="auth-status__dot" aria-hidden="true"></span>${escapeHtml(view.badge)}</div>
         <h1 id="auth-title">${escapeHtml(view.heading)}</h1>

@@ -22,13 +22,57 @@ const announcer: HTMLElement = announcerElement;
 
 type Model = Record<string, any>;
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'] as const;
+const TAB_ICONS: Readonly<Record<(typeof TABS)[number], string>> = Object.freeze({
+  Hive: 'server-environment',
+  Buzz: 'broadcast',
+  Journal: 'book',
+  Scenarios: 'folder-library',
+  Debug: 'debug',
+});
+const DEBUG_ACTION_PRESENTATION = Object.freeze([
+  { label: 'Workers', icon: 'organization', context: 'SWARM' },
+  { label: 'Logs', icon: 'output', context: 'WORKER', tailLines: 200 },
+  { label: 'Inspect', icon: 'inspect', context: 'WORKER' },
+  { label: 'Version', icon: 'versions', context: 'WORKER' },
+  { label: 'Runtime drift', icon: 'pulse', context: 'SWARM' },
+  { label: 'Control plane', icon: 'radio-tower', context: 'SWARM' },
+  { label: 'Rabbit topology', icon: 'type-hierarchy', context: 'SWARM' },
+  { label: 'Timeline', icon: 'history', context: 'SWARM' },
+  { label: 'Manifest', icon: 'file-code', context: 'SWARM' },
+  { label: 'Cleanup plan', icon: 'trash', context: 'MAINTENANCE' },
+] as const);
+const ENVIRONMENT_SERVICE_ICONS: Readonly<Record<string, string>> = Object.freeze({
+  'pockethive-ui': 'home',
+  orchestrator: 'server-process',
+  'scenario-manager': 'folder-library',
+  'network-proxy-manager': 'globe',
+  wiremock: 'beaker',
+  'tcp-mock': 'plug',
+  grafana: 'graph-line',
+});
+type DebugContext = 'WORKER' | 'SWARM';
 type ScenarioSection = 'OVERVIEW' | 'FILES' | 'INPUTS';
+type ScenarioSource = 'DEPLOYED' | 'REPOSITORY';
+type ScenarioTreeNodeType = 'directory' | 'file';
+interface ScenarioTreeEntry {
+  readonly node: Model;
+  readonly path: string;
+  readonly name: string;
+  readonly nodeType: ScenarioTreeNodeType;
+  readonly children: ScenarioTreeEntry[];
+}
 let model: Model = { page: 'environments', profiles: [], activeTab: 'Hive', debugActions: [], busy: false };
 let expandedHistorySwarmId: string | undefined;
 let expandedScenarioId: string | undefined;
 let swarmSearch = '';
 let scenarioSearch = '';
 let scenarioFolder = 'ALL';
+let scenarioSource: ScenarioSource = 'DEPLOYED';
+let expandedRepositoryCandidateId: string | null = null;
+let repositoryScenarioSection: ScenarioSection = 'FILES';
+let repositorySearch = '';
+let repositoryWorkspace = 'ALL';
+let debugContext: DebugContext = 'WORKER';
 let createSwarmDraft: {
   swarmId: string;
   templateId: string;
@@ -70,10 +114,10 @@ function render(): void {
 }
 
 function environments(): HTMLElement {
-  const section = el('section', 'page');
+  const section = el('section', 'page environments-page');
   const titleRow = el('div', 'title-row', [
     el('div', '', [text('h1', 'Environments'), text('p', 'Connect to a PocketHive MCP environment.')]),
-    button('Add', () => send({ type: 'addEnvironment' }), 'secondary compact'),
+    iconButton('Add', 'add', () => send({ type: 'addEnvironment' }), 'primary compact'),
   ]);
   section.append(titleRow);
   const profiles = Array.isArray(model.profiles) ? model.profiles : [];
@@ -84,11 +128,15 @@ function environments(): HTMLElement {
       button('Add environment', () => send({ type: 'addEnvironment' }), 'primary'),
     ]));
   } else {
+    if (profiles.length > 0) {
+      section.append(text('p', `${profiles.length} ${profiles.length === 1 ? 'environment' : 'environments'}`, 'environment-count muted'));
+    }
     const list = el('div', 'card-list');
     for (const profile of profiles) list.append(environmentCard(profile));
     section.append(list);
   }
   if (model.page === 'add') section.append(connectionForm());
+  section.append(iconText('shield', 'Credentials are stored securely by VS Code.', 'environment-security muted'));
   return section;
 }
 
@@ -96,16 +144,29 @@ function environmentCard(profile: Model): HTMLElement {
   const status = String(profile.status ?? 'Not connected');
   const card = el('article', 'card environment-card');
   card.append(
-    el('div', 'environment-card__head', [
-      text('h2', String(profile.displayName ?? 'Environment')),
-      statusPill(status),
+    el('div', 'environment-card__main', [
+      brandMark('environment-mark'),
+      el('div', 'environment-card__copy', [
+        el('div', 'environment-card__head', [
+          titled('h2', String(profile.displayName ?? 'Environment'), 'truncate'),
+          statusPill(status),
+        ]),
+        titled('p', String(profile.mcpUrl ?? ''), 'mono truncate'),
+        profile.principalLabel
+          ? iconText('account', `Signed in as ${String(profile.principalLabel)}`, 'muted environment-card__meta')
+          : undefined,
+      ]),
     ]),
-    titled('p', String(profile.mcpUrl ?? ''), 'mono truncate'),
   );
-  if (profile.principalLabel) card.append(text('p', `Signed in as ${String(profile.principalLabel)}`, 'muted'));
-  card.append(el('div', 'actions', [
-    button('Open', () => send({ type: 'openEnvironment', profileId: String(profile.id) }), 'primary compact'),
-    button('Remove', () => send({ type: 'removeEnvironment', profileId: String(profile.id) }), 'quiet compact'),
+  const menu = el('details', 'row-menu environment-card__menu');
+  menu.append(iconSummary('More environment actions', 'ellipsis'), el('div', 'row-menu__panel', [
+    iconButton('Remove environment', 'trash', () =>
+      send({ type: 'removeEnvironment', profileId: String(profile.id) }), 'guarded compact'),
+  ]));
+  card.append(el('div', 'environment-card__actions', [
+    iconButton('Open', 'arrow-right', () =>
+      send({ type: 'openEnvironment', profileId: String(profile.id) }), 'secondary compact'),
+    menu,
   ]));
   return card;
 }
@@ -175,17 +236,9 @@ function workspace(): HTMLElement {
   };
   const activeTab = String(model.activeTab);
   const section = el('section', 'workspace');
-  section.append(button('← Environments', () => send({ type: 'backToEnvironments' }), 'back-link'));
-  section.append(el('div', 'workspace-heading', [
-    el('div', '', [
-      text('h1', String(profile.displayName ?? 'Environment')),
-      profile.principalLabel ? text('p', `Signed in as ${String(profile.principalLabel)}`, 'muted') : undefined,
-    ]),
-    el('div', 'workspace-heading__account', [
-      statusPill(String(session.status ?? profile.status ?? 'Not connected')),
-      accountMenu(profile, session),
-    ]),
-  ].filter(Boolean) as Node[]));
+  section.append(text('h1', String(profile.displayName ?? 'PocketHive environment'), 'sr-only'));
+  section.append(iconButton('Environments', 'arrow-left', () =>
+    send({ type: 'backToEnvironments' }), 'back-link compact'));
   if (!session.canUseWorkspace) section.append(sessionNotice(session));
   section.append(tabStrip());
   const content = el('section', 'tab-content');
@@ -194,18 +247,21 @@ function workspace(): HTMLElement {
   content.setAttribute('aria-labelledby', tabId(activeTab));
   content.tabIndex = 0;
   content.append(el('div', 'section-heading', [
-    text('h2', tabTitle(activeTab)),
+    el('div', 'section-heading__copy', [
+      text('h2', tabTitle(activeTab)),
+      text('p', tabSubtitle(activeTab), 'muted'),
+    ]),
     sectionActions(activeTab),
   ]));
   if (activeTab === 'Debug') content.append(debugView());
   else if (activeTab === 'Journal') content.append(journalView());
-  else if (activeTab === 'Scenarios') content.append(scenarioBundleView(), scenarioListView(model.workspaceData));
+  else if (activeTab === 'Scenarios') content.append(scenariosView());
   else if (activeTab === 'Hive') {
     if (model.createSwarmForm !== undefined) content.append(createSwarmView(model.createSwarmForm));
     content.append(swarmListView(model.workspaceData));
   }
   else content.append(eventListView(model.workspaceData, 'No hive events were observed.', 'Buzz'));
-  section.append(content);
+  section.append(content, environmentHealth(profile, session));
   return section;
 }
 
@@ -215,23 +271,25 @@ function accountMenu(profile: Model, session: Model): HTMLElement {
   const summary = document.createElement('summary');
   summary.setAttribute('aria-label', 'Account');
   summary.title = 'Account';
-  const avatar = text('span', accountInitial(profile), 'account-menu__avatar');
-  avatar.setAttribute('aria-hidden', 'true');
-  summary.append(avatar);
+  summary.append(icon('account', 'account-menu__avatar'));
   details.append(summary);
   const panel = el('div', 'account-menu__panel', [
     text('strong', profile.principalLabel ? String(profile.principalLabel) : 'PocketHive user'),
-    text('span', String(session.message ?? 'Secure session unavailable'), 'muted'),
+    text('span', session.canUseWorkspace
+      ? `Signed in to ${String(profile.displayName ?? 'PocketHive')}`
+      : String(session.message ?? 'Secure session unavailable'), 'muted'),
   ]);
   const actions = el('div', 'account-menu__actions');
   if (session.canSignIn) {
-    actions.append(button('Sign in', () => send({ type: 'reauthorizeEnvironment' }), 'primary compact'));
+    actions.append(iconButton('Sign in', 'sign-in', () =>
+      send({ type: 'reauthorizeEnvironment' }), 'primary compact'));
   }
   if (!session.canUseWorkspace && !session.canSignIn && session.status !== 'Connecting') {
-    actions.append(button('Retry connection', () => send({ type: 'refresh' }), 'secondary compact'));
+    actions.append(iconButton('Retry connection', 'refresh', () =>
+      send({ type: 'refresh' }), 'secondary compact'));
   }
   if (session.canSignOut) {
-    actions.append(button('Sign out', () => send({ type: 'signOut' }), 'quiet compact'));
+    actions.append(iconButton('Sign out', 'sign-out', () => send({ type: 'signOut' }), 'quiet compact'));
   }
   panel.append(actions);
   details.append(panel);
@@ -253,8 +311,97 @@ function sessionNotice(session: Model): HTMLElement {
   return result;
 }
 
-function workspaceActionButton(label: string, action: () => void, className: string): HTMLButtonElement {
-  const control = button(label, action, className);
+function environmentHealth(profile: Model, session: Model): HTMLElement {
+  const connected = session.canUseWorkspace === true && session.status === 'Connected';
+  const services = environmentHealthRows(model.environmentHealth);
+  const unavailable = services.filter(service => service.status === 'UNAVAILABLE').length;
+  const status = connected
+    ? services.length === 0
+      ? 'Health unavailable'
+      : unavailable === 0
+        ? `${services.length} services healthy`
+        : `${unavailable} service${unavailable === 1 ? '' : 's'} unavailable`
+    : String(session.status ?? profile.status ?? 'Not connected');
+  const footer = el('footer', `environment-health${connected ? ' environment-health--connected' : ''}`);
+  const panel = el('section', 'environment-health__panel');
+  panel.hidden = true;
+  panel.setAttribute('aria-label', 'Environment services');
+  if (services.length === 0) {
+    panel.append(el('div', 'environment-health__empty', [
+      icon('warning'),
+      text('span', 'Service health is unavailable from PocketHive MCP.'),
+    ]));
+  } else {
+    for (const service of services) panel.append(environmentServiceRow(service));
+  }
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'environment-health__toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-label', `Environment health: ${status}`);
+  toggle.append(
+    brandMark('environment-health__mark'),
+    el('span', 'environment-health__copy', [
+      text('strong', String(profile.displayName ?? 'Environment'), 'truncate'),
+      text('span', status, 'environment-health__state truncate'),
+    ]),
+    icon('chevron-up', 'environment-health__chevron'),
+  );
+  toggle.addEventListener('click', () => {
+    const expanded = toggle.getAttribute('aria-expanded') !== 'true';
+    toggle.setAttribute('aria-expanded', String(expanded));
+    panel.hidden = !expanded;
+    footer.classList.toggle('environment-health--open', expanded);
+  });
+  footer.append(panel, el('div', 'environment-health__rail', [toggle, accountMenu(profile, session)]));
+  return footer;
+}
+
+interface EnvironmentHealthRow {
+  readonly id: string;
+  readonly name: string;
+  readonly endpoint: string;
+  readonly status: 'HEALTHY' | 'UNAVAILABLE';
+}
+
+function environmentHealthRows(value: unknown): EnvironmentHealthRow[] {
+  const health = objectValue(value);
+  if (!health || !Array.isArray(health.services)) return [];
+  const result: EnvironmentHealthRow[] = [];
+  for (const item of health.services.slice(0, 50)) {
+    const service = objectValue(item);
+    if (!service) continue;
+    const id = stringField(service, 'id');
+    const name = stringField(service, 'name');
+    const endpoint = stringField(service, 'endpoint');
+    const status = stringField(service, 'status');
+    if (id && name && endpoint && (status === 'HEALTHY' || status === 'UNAVAILABLE')) {
+      result.push({ id, name, endpoint, status });
+    }
+  }
+  return result;
+}
+
+function environmentServiceRow(service: EnvironmentHealthRow): HTMLElement {
+  const healthy = service.status === 'HEALTHY';
+  const endpoint = titled('span', service.endpoint, 'environment-service__endpoint');
+  return el('div', `environment-service environment-service--${healthy ? 'healthy' : 'unavailable'}`, [
+    icon(ENVIRONMENT_SERVICE_ICONS[service.id] ?? 'globe', 'environment-service__icon'),
+    el('div', 'environment-service__copy', [text('strong', service.name), endpoint]),
+    el('span', 'environment-service__status', [
+      icon(healthy ? 'check' : 'error'),
+      text('span', healthy ? 'Healthy' : 'Unavailable'),
+    ]),
+  ]);
+}
+
+function workspaceActionIconButton(
+  label: string,
+  iconName: string,
+  action: () => void,
+  className: string,
+): HTMLButtonElement {
+  const control = iconButton(label, iconName, action, className);
   control.disabled = Boolean(model.busy) || model.session?.canUseWorkspace === false;
   return control;
 }
@@ -263,32 +410,39 @@ function sectionActions(activeTab: string): HTMLElement {
   const actions = el('div', 'actions');
   if (activeTab === 'Hive') {
     const createOpen = objectValue(model.createSwarmForm) !== undefined;
-    actions.append(button(createOpen ? 'Cancel create' : 'Create swarm', () => send({
+    actions.append(iconButton(createOpen ? 'Cancel create' : 'Create swarm', createOpen ? 'close' : 'add', () => send({
       type: createOpen ? 'cancelCreateSwarm' : 'openCreateSwarm',
     }), createOpen ? 'quiet compact' : 'primary compact'));
     return actions;
   }
-  actions.append(workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () => send({ type: 'refresh' }), 'secondary compact'));
+  if (activeTab === 'Buzz') {
+    actions.append(workspaceActionIconButton('Open Buzz in Web UI', 'link-external', () =>
+      send({ type: 'openWebUi', destination: 'BUZZ' }), 'secondary compact icon-only-at-narrow'));
+  }
+  actions.append(workspaceActionIconButton(model.busy ? 'Loading…' : 'Refresh', 'refresh', () =>
+    send({ type: 'refresh' }), 'secondary compact icon-only-at-narrow'));
   return actions;
 }
 
 function scenarioBundleView(): HTMLElement {
   const pending = model.pendingBundle;
   const attemptId = publicationAttemptId(model.bundleResult);
-  const result = el('section', 'card scenario-upload');
-  result.append(
-    text('h3', 'Committed bundle'),
-    text('p', 'Select an exact committed Git directory. PocketHive validates the retained ZIP before any explicit publication.', 'muted'),
-  );
+  const result = el('section', `scenario-upload${pending ? ' card' : ''}`);
   if (!pending) {
     const actions = el('div', 'form-actions', [
-      button('Validate committed bundle', () => send({ type: 'validateCommittedBundle' }), 'secondary'),
+      iconButton('Choose committed folder', 'folder-opened', () =>
+        send({ type: 'validateCommittedBundle' }), 'secondary'),
     ]);
     if (attemptId) {
-      actions.append(button('Reconcile attempt', () => send({ type: 'reconcilePublicationAttempt', attemptId }), 'guarded'));
+      actions.append(iconButton('Reconcile attempt', 'sync', () =>
+        send({ type: 'reconcilePublicationAttempt', attemptId }), 'guarded'));
     }
     result.append(actions);
   } else {
+    result.append(
+      text('h3', 'Committed bundle'),
+      text('p', 'PocketHive validates the retained committed ZIP before explicit publication.', 'muted'),
+    );
     const source = pending.source ?? {};
     result.append(
       titled('p', String(source.bundlePath ?? ''), 'mono truncate'),
@@ -310,12 +464,361 @@ function scenarioBundleView(): HTMLElement {
   return result;
 }
 
+function scenariosView(): HTMLElement {
+  const result = el('div', 'scenario-workspace');
+  const deployedCount = topLevelRecords(model.workspaceData)?.length ?? 0;
+  const repositoryCount = repositoryCandidateCount(model.repositoryScenarios);
+  const sourceSwitch = el('div', 'scenario-source-switch');
+  sourceSwitch.setAttribute('role', 'group');
+  sourceSwitch.setAttribute('aria-label', 'Scenario source');
+  for (const source of ['DEPLOYED', 'REPOSITORY'] as const) {
+    const label = source === 'DEPLOYED' ? 'Deployed' : 'Repository';
+    const count = source === 'DEPLOYED' ? deployedCount : repositoryCount;
+    const control = button(label, () => {
+      scenarioSource = source;
+      render();
+    }, `scenario-source-switch__button${scenarioSource === source ? ' active' : ''}`);
+    control.setAttribute('aria-pressed', String(scenarioSource === source));
+    control.append(text('span', String(count), 'count-badge'));
+    sourceSwitch.append(control);
+  }
+  result.append(sourceSwitch);
+  if (scenarioSource === 'DEPLOYED') result.append(scenarioListView(model.workspaceData));
+  else result.append(repositoryScenarioView());
+  return result;
+}
+
+function repositoryScenarioView(): HTMLElement {
+  const value = objectValue(model.repositoryScenarios);
+  if (!value) {
+    const state = model.busy
+      ? emptyState('Scanning committed Scenario Bundles…')
+      : ownerDataError(model.repositoryScenarios, 'repository scenarios');
+    if (!model.repositoryResultCandidateId && publicationAttemptId(model.bundleResult)) {
+      return el('section', 'repository-scenarios', [scenarioBundleView(), state]);
+    }
+    return state;
+  }
+  const state = stringField(value, 'state');
+  if (state === 'NO_WORKSPACE') {
+    return emptyState('Open a Git repository as a VS Code workspace to discover committed Scenario Bundles.');
+  }
+  if (state === 'UNTRUSTED') {
+    return emptyState('Trust this workspace before PocketHive runs read-only Git discovery.');
+  }
+  if (state !== 'SCANNED') return ownerDataError(value, 'repository scenarios');
+
+  const result = el('section', 'repository-scenarios');
+  if (model.pendingBundle && !model.repositoryPendingCandidateId) {
+    result.append(scenarioBundleView());
+  } else if (!model.repositoryResultCandidateId && publicationAttemptId(model.bundleResult)) {
+    result.append(scenarioBundleView());
+  }
+  result.append(el('div', 'repository-scenarios__notice', [
+    el('div', 'repository-scenarios__notice-copy', [
+      icon('git-commit'),
+      text('p', 'Committed HEAD only. Edit, commit, then refresh before validation or deployment.', 'muted'),
+    ]),
+    iconButton('Choose committed folder', 'folder-opened', () =>
+      send({ type: 'validateCommittedBundle' }), 'quiet compact icon-only-at-narrow'),
+  ]));
+  const repositories = Array.isArray(value.repositories) ? value.repositories as Model[] : [];
+  const failures = Array.isArray(value.failures) ? value.failures as Model[] : [];
+  if (repositories.length === 0 && failures.length === 0) {
+    result.append(emptyState('No canonical scenarios/**/scenario.yaml bundles were found at HEAD.'));
+  }
+  const candidates: Array<{ repository: Model; candidate: Model }> = [];
+  for (const repository of repositories) {
+    if (!stringField(repository, 'workspaceName') || !stringField(repository, 'commit')
+      || !Array.isArray(repository.candidates)) {
+      result.append(ownerDataError(repository, 'Git repository'));
+      continue;
+    }
+    for (const candidate of repository.candidates as Model[]) candidates.push({ repository, candidate });
+  }
+  const workspaceNames = [...new Set(candidates
+    .map(item => stringField(item.repository, 'workspaceName'))
+    .filter((name): name is string => Boolean(name)))].sort();
+  if (repositoryWorkspace !== 'ALL' && !workspaceNames.includes(repositoryWorkspace)) {
+    repositoryWorkspace = 'ALL';
+  }
+  const search = searchInput(
+    'Search repository scenarios', 'repositorySearch', repositorySearch, 'Find a scenario', true,
+  );
+  search.control.required = false;
+  const workspace = select('Workspace', 'repositoryWorkspace', [
+    ['ALL', 'All workspaces'], ...workspaceNames.map(name => [name, name]),
+  ], repositoryWorkspace);
+  const advanced = el('details', 'advanced-filters repository-advanced-filters');
+  const advancedSummary = iconSummary('Repository filters', 'filter');
+  const workspaceBadge = text('span', repositoryWorkspace === 'ALL' ? '' : '1', 'filter-count');
+  workspaceBadge.hidden = repositoryWorkspace === 'ALL';
+  advancedSummary.append(workspaceBadge);
+  advanced.append(advancedSummary, el('div', 'advanced-filters__panel', [workspace.wrapper]));
+  const filters = el('div', 'event-search repository-filters', [search.wrapper, advanced]);
+  const list = el('div', 'repository-scenario-list');
+  const availableIds = new Set(candidates.map(item => stringField(item.candidate, 'candidateId')).filter(Boolean));
+  if (expandedRepositoryCandidateId && !availableIds.has(expandedRepositoryCandidateId)) {
+    expandedRepositoryCandidateId = null;
+  }
+  const apply = () => {
+    repositorySearch = search.control.value;
+    repositoryWorkspace = workspace.control.value;
+    workspaceBadge.textContent = repositoryWorkspace === 'ALL' ? '' : '1';
+    workspaceBadge.hidden = repositoryWorkspace === 'ALL';
+    const query = repositorySearch.trim().toLocaleLowerCase();
+    const matches = candidates.filter(item => {
+      const workspaceName = stringField(item.repository, 'workspaceName') ?? '';
+      const bundlePath = stringField(item.candidate, 'bundlePath') ?? '';
+      return (repositoryWorkspace === 'ALL' || workspaceName === repositoryWorkspace)
+        && (!query || `${workspaceName} ${bundlePath}`.toLocaleLowerCase().includes(query));
+    });
+    const focusedVisible = matches.some(item => stringField(item.candidate, 'candidateId')
+      === expandedRepositoryCandidateId);
+    if (expandedRepositoryCandidateId !== null && !focusedVisible) {
+      expandedRepositoryCandidateId = null;
+    }
+    list.replaceChildren(...matches.map(item => repositoryScenarioCard(item.repository, item.candidate)));
+    if (matches.length === 0) list.append(emptyState('No Repository scenarios match these filters.'));
+  };
+  search.control.addEventListener('input', apply);
+  workspace.control.addEventListener('change', apply);
+  result.append(filters, list);
+  apply();
+  for (const failure of failures) {
+    result.append(el('article', 'callout repository-scenarios__failure', [
+      el('div', 'repository-scenarios__identity', [
+        icon('warning'),
+        titled('strong', displayValue(failure.workspaceName), 'truncate'),
+      ]),
+      text('p', displayValue(failure.code), 'muted mono'),
+    ]));
+  }
+  const conflict = objectValue(model.repositoryDeploymentConflict);
+  if (conflict) result.append(repositoryDeploymentDialog(conflict));
+  return result;
+}
+
+function repositoryScenarioCard(repository: Model, candidate: Model): HTMLElement {
+  const workspaceName = stringField(repository, 'workspaceName');
+  const commit = stringField(repository, 'commit');
+  const candidateId = stringField(candidate, 'candidateId');
+  const bundlePath = stringField(candidate, 'bundlePath');
+  const files = Array.isArray(candidate.files)
+    ? candidate.files.filter((path): path is string => typeof path === 'string' && Boolean(path.trim()))
+    : undefined;
+  if (!workspaceName || !commit || !candidateId || !bundlePath || !files) {
+    return ownerDataError(candidate, 'repository scenario candidate');
+  }
+  const pending = model.repositoryPendingCandidateId === candidateId ? objectValue(model.pendingBundle) : undefined;
+  const receipt = objectValue(pending?.validationReceipt);
+  const title = (receipt ? stringField(receipt, 'scenarioName') : undefined) ?? bundlePath.split('/').at(-1)!;
+  const subtitle = (receipt ? stringField(receipt, 'scenarioId') : undefined) ?? bundlePath;
+  const focused = expandedRepositoryCandidateId === candidateId;
+  const details = el('details', 'scenario-row repository-scenario');
+  if (focused) details.setAttribute('open', '');
+  const summary = el('summary', '', [
+    el('div', 'scenario-row__identity', [
+      brandMark('scenario-mark'),
+      el('div', 'scenario-row__copy', [
+        titled('strong', title, 'truncate'),
+        titled('span', subtitle, 'mono muted truncate'),
+      ]),
+    ]),
+    el('div', 'scenario-row__status', [
+      statusPill(receipt ? 'Valid' : 'Repository'),
+      icon('chevron-right', 'disclosure-chevron'),
+    ]),
+  ]);
+  summary.addEventListener('click', event => {
+    event.preventDefault();
+    expandedRepositoryCandidateId = focused ? null : candidateId;
+    render();
+  });
+  details.append(summary);
+  const body = el('div', 'scenario-row__body repository-scenario__body');
+  const actions = el('div', 'repository-scenario__actions', [
+    iconButton('Edit', 'edit', () => send({
+      type: 'openRepositoryBundleFile', candidateId, path: 'scenario.yaml',
+    }), 'quiet'),
+    iconButton('Validate', 'pass-filled', () =>
+      send({ type: 'validateRepositoryBundle', candidateId }), 'quiet'),
+    iconButton('Deploy', 'cloud-upload', () =>
+      send({ type: 'deployRepositoryBundle', candidateId }), 'quiet'),
+  ]);
+  for (const control of Array.from(actions.children) as HTMLButtonElement[]) {
+    control.disabled = Boolean(model.busy);
+  }
+  body.append(actions, el('div', 'compact-tabs scenario-section-tabs repository-scenario__tabs', [
+    repositorySectionButton('Overview', 'OVERVIEW'),
+    repositorySectionButton('Files', 'FILES'),
+    repositorySectionButton('Inputs', 'INPUTS'),
+  ]));
+  if (repositoryScenarioSection === 'OVERVIEW') {
+    body.append(repositoryOverview(repository, bundlePath, receipt));
+  } else if (repositoryScenarioSection === 'FILES') {
+    body.append(repositoryFiles(candidateId, files));
+  } else {
+    body.append(repositoryInputs(candidateId, files));
+  }
+  if (receipt) body.append(repositoryValidation(receipt, files.length));
+  details.append(body);
+  return details;
+}
+
+function repositorySectionButton(label: string, section: ScenarioSection): HTMLButtonElement {
+  const control = button(label, () => {
+    repositoryScenarioSection = section;
+    render();
+  }, 'compact-tab scenario-section-tab');
+  control.append(icon(section === 'OVERVIEW' ? 'preview' : section === 'FILES' ? 'list-tree' : 'symbol-variable'));
+  control.setAttribute('aria-pressed', String(repositoryScenarioSection === section));
+  return control;
+}
+
+function repositoryOverview(repository: Model, bundlePath: string, receipt: Model | undefined): HTMLElement {
+  const overview = el('div', 'scenario-detail-grid scenario-overview');
+  overview.append(
+    scenarioInfoCard('Scenario', receipt
+      ? `${displayValue(receipt.scenarioName)} · ${displayValue(receipt.scenarioId)}`
+      : 'Validate to load the exact scenario.yaml identity.', '', 'scenario-info-card--full'),
+    scenarioInfoCard('Source', bundlePath, 'mono', 'scenario-info-card--full'),
+    scenarioInfoCard('Commit', `${displayValue(repository.workspaceName)} · ${shortHash(displayValue(repository.commit))}`,
+      'mono', 'scenario-info-card--full'),
+  );
+  return overview;
+}
+
+function repositoryFiles(candidateId: string, files: readonly string[]): HTMLElement {
+  const hierarchy = scenarioTreeHierarchy(repositoryTreeNodes(files));
+  if (!hierarchy) return ownerDataError(files, 'repository scenario file hierarchy');
+  const tree = el('div', 'scenario-tree repository-scenario__tree');
+  for (const entry of hierarchy) tree.append(repositoryFileNode(candidateId, entry));
+  return tree;
+}
+
+function repositoryTreeNodes(files: readonly string[]): Model[] {
+  const directories = new Set<string>();
+  for (const path of files) {
+    const segments = path.split('/');
+    for (let index = 1; index < segments.length; index++) {
+      directories.add(segments.slice(0, index).join('/'));
+    }
+  }
+  return [
+    ...[...directories].sort().map(path => ({
+      path, name: path.split('/').at(-1), nodeType: 'directory',
+    })),
+    ...files.map(path => ({ path, name: path.split('/').at(-1), nodeType: 'file' })),
+  ];
+}
+
+function repositoryFileNode(candidateId: string, entry: ScenarioTreeEntry): HTMLElement {
+  if (entry.nodeType === 'directory') {
+    const branch = el('details', 'scenario-tree__branch');
+    branch.setAttribute('open', '');
+    branch.append(el('summary', 'scenario-tree__row scenario-tree__row--directory', [
+      icon('chevron-right', 'scenario-tree__twistie'),
+      icon('folder', 'scenario-tree__icon'),
+      titled('strong', entry.name, 'truncate'),
+    ]));
+    const children = el('div', 'scenario-tree__children');
+    for (const child of entry.children) children.append(repositoryFileNode(candidateId, child));
+    branch.append(children);
+    return branch;
+  }
+  return el('article', 'scenario-tree__row scenario-tree__row--file', [
+    el('div', 'scenario-tree__meta', [
+      icon('file-code', 'scenario-tree__icon'),
+      titled('strong', entry.name, 'truncate'),
+    ]),
+    el('div', 'scenario-tree__actions', [
+      iconButton('Edit', 'edit', () => send({
+        type: 'openRepositoryBundleFile', candidateId, path: entry.path,
+      }), 'secondary compact'),
+    ]),
+  ]);
+}
+
+function repositoryInputs(candidateId: string, files: readonly string[]): HTMLElement {
+  const inputPaths = files.filter(path => path === 'variables.yaml' || path === 'authProfiles.yaml'
+    || /^sut\/[^/]+\/sut\.yaml$/.test(path));
+  if (inputPaths.length === 0) return emptyState('No variables, auth profiles, or SUT descriptors are committed.');
+  return el('div', 'repository-scenario__inputs', inputPaths.map(path => el('div', 'repository-scenario__input', [
+    el('div', 'repository-scenarios__identity', [icon('symbol-variable'), titled('span', path, 'mono truncate')]),
+    iconButton('Edit', 'edit', () => send({
+      type: 'openRepositoryBundleFile', candidateId, path,
+    }), 'secondary compact'),
+  ])));
+}
+
+function repositoryValidation(receipt: Model, fileCount: number): HTMLElement {
+  return el('div', 'repository-scenario__validation', [
+    icon('pass-filled'),
+    text('strong', 'Valid'),
+    text('span', `${fileCount} ${fileCount === 1 ? 'file' : 'files'} checked`, 'muted'),
+    titled('span', displayValue(receipt.scenarioId), 'mono truncate'),
+  ]);
+}
+
+function repositoryDeploymentDialog(conflict: Model): HTMLElement {
+  const candidateId = stringField(conflict, 'candidateId');
+  const scenarioId = stringField(conflict, 'scenarioId');
+  const scenarioName = stringField(conflict, 'scenarioName');
+  const suggestedId = stringField(conflict, 'suggestedScenarioId');
+  const suggestedName = stringField(conflict, 'suggestedScenarioName');
+  if (!candidateId || !scenarioId || !scenarioName || !suggestedId || !suggestedName) {
+    return ownerDataError(conflict, 'repository deployment conflict');
+  }
+  const renameId = input('New scenario ID', 'repositoryRenameScenarioId', suggestedId, suggestedId);
+  const renameName = input('New scenario name', 'repositoryRenameScenarioName', suggestedName, suggestedName);
+  const dialog = el('section', 'repository-deployment-dialog', [
+    el('div', 'repository-deployment-dialog__panel', [
+      el('div', 'repository-deployment-dialog__heading', [
+        icon('warning'),
+        el('div', '', [text('h2', 'Scenario already deployed'),
+          text('p', `${scenarioName} (${scenarioId}) already exists. Choose one explicit path.`, 'muted')]),
+      ]),
+      el('div', 'repository-deployment-dialog__choice', [
+        text('h3', 'Replace existing'),
+        text('p', 'Publish the exact validated committed bytes over the existing scenario.', 'muted'),
+        iconButton('Replace existing', 'replace-all', () =>
+          send({ type: 'replaceRepositoryBundle', candidateId }), 'guarded'),
+      ]),
+      el('div', 'repository-deployment-dialog__choice', [
+        text('h3', 'Rename source'),
+        text('p', 'PocketHive opens local scenario.yaml. Apply these values, commit, refresh, validate, and deploy again.', 'muted'),
+        renameId.wrapper,
+        renameName.wrapper,
+        iconButton('Open scenario.yaml', 'go-to-file', () => send({
+          type: 'openRepositoryRename', candidateId,
+          scenarioId: renameId.control.value,
+          scenarioName: renameName.control.value,
+        }), 'primary'),
+      ]),
+      button('Cancel', () => send({ type: 'discardPendingBundle' }), 'quiet'),
+    ]),
+  ]);
+  dialog.setAttribute('role', 'dialog');
+  dialog.setAttribute('aria-modal', 'true');
+  dialog.setAttribute('aria-label', 'Scenario deployment conflict');
+  return dialog;
+}
+
+function repositoryCandidateCount(value: unknown): number {
+  const repositoryView = objectValue(value);
+  if (!repositoryView || !Array.isArray(repositoryView.repositories)) return 0;
+  return (repositoryView.repositories as Model[]).reduce((count, repository) =>
+    count + (Array.isArray(repository.candidates) ? repository.candidates.length : 0), 0);
+}
+
 function tabStrip(): HTMLElement {
   const nav = el('nav', 'tabs');
   nav.setAttribute('aria-label', 'Environment sections');
   nav.setAttribute('role', 'tablist');
   for (const tab of TABS) {
     const control = button(tab, () => send({ type: 'selectTab', tab }), `tab${model.activeTab === tab ? ' active' : ''}`);
+    control.append(icon(TAB_ICONS[tab], 'tab__icon'));
     control.id = tabId(tab);
     control.setAttribute('role', 'tab');
     control.setAttribute('aria-controls', panelId(tab));
@@ -382,7 +885,7 @@ function swarmListView(value: unknown): HTMLElement {
   if (swarms === undefined) return ownerDataError(value, 'swarm list');
   if (swarms.length === 0) return emptyState('No live swarms are currently visible.');
   const result = el('section', 'swarm-catalogue');
-  const search = input('Search swarms', 'swarmSearch', swarmSearch, 'Swarm or template ID', true);
+  const search = searchInput('Search swarms', 'swarmSearch', swarmSearch, 'Find a swarm', true);
   search.control.required = false;
   const list = el('div', 'swarm-list');
   if (model.swarmOperationResult !== undefined) {
@@ -416,14 +919,14 @@ function swarmBatchActions(): HTMLElement {
   const actions = el('div', 'swarm-batch-actions');
   const available = Object.values(objectValue(model.swarmPrimaryActions) ?? {});
   if (available.includes(model.swarmOperations?.START)) {
-    actions.append(workspaceActionButton('Start all', () =>
+    actions.append(workspaceActionIconButton('Start all', 'run-all', () =>
       send({ type: 'runSwarmBatchOperation', action: 'START' }), 'secondary compact'));
   }
   if (available.includes(model.swarmOperations?.STOP)) {
-    actions.append(workspaceActionButton('Stop all', () =>
+    actions.append(workspaceActionIconButton('Stop all', 'debug-stop', () =>
       send({ type: 'runSwarmBatchOperation', action: 'STOP' }), 'secondary compact'));
   }
-  actions.append(workspaceActionButton(model.busy ? 'Loading…' : 'Refresh', () =>
+  actions.append(workspaceActionIconButton(model.busy ? 'Loading…' : 'Refresh', 'refresh', () =>
     send({ type: 'refresh' }), 'secondary compact'));
   return actions;
 }
@@ -434,32 +937,47 @@ function swarmRowView(swarm: Model): HTMLElement {
   const status = swarmStatus(swarm);
   const bees = swarmBeeCount(swarm);
   const operation = model.swarmPrimaryActions?.[id];
-  const card = el('article', 'swarm-row');
+  const card = el('article', `swarm-row swarm-row--${statusToken(status)}`);
   const identity = el('div', 'swarm-row__identity', [
     brandMark('swarm-mark'),
     el('div', 'swarm-row__copy', [
-      titled('h3', id, 'truncate'),
+      el('div', 'swarm-row__heading', [
+        titled('h3', id, 'truncate'),
+        statusPill(status),
+      ]),
       text('p', [displayValue(swarm.templateId), `${bees} ${bees === 1 ? 'bee' : 'bees'}`].join(' · '), 'muted truncate'),
     ]),
   ]);
-  const actions = el('div', 'swarm-row__actions');
-  actions.append(statusPill(status));
+  let primaryAction: HTMLButtonElement | undefined;
   if (operation) {
     const label = operation === model.swarmOperations?.START ? 'Start' : 'Stop';
-    actions.append(button(label, () => send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact'));
+    primaryAction = iconButton(label, label === 'Start' ? 'play' : 'debug-stop', () =>
+      send({ type: 'runSwarmOperation', action: operation, swarmId: id }), 'secondary compact swarm-row__primary-action');
   }
-  actions.append(button('Details', () => send({ type: 'openSwarmDetails', swarmId: id }), 'secondary compact'));
-  actions.append(button('Debug', () => send({ type: 'openDebugForSwarm', swarmId: id }), 'secondary compact'));
-  const more = el('details', 'row-menu');
-  more.append(text('summary', 'More'), el('div', 'row-menu__panel', [
-    button('Remove swarm', () => send({ type: 'runSwarmOperation', action: model.swarmOperations?.REMOVE, swarmId: id }), 'guarded compact'),
-    technicalDetails(swarm),
+  const secondaryActions = el('div', 'swarm-row__secondary');
+  secondaryActions.append(iconButton('Debug', 'debug', () =>
+    send({ type: 'openDebugForSwarm', swarmId: id }), 'quiet compact'));
+  const openWeb = iconButton('Open in Web UI', 'link-external', () =>
+    send({ type: 'openWebUi', destination: 'SWARM', swarmId: id }), 'quiet compact');
+  openWeb.setAttribute('aria-label', 'View swarm in Web UI');
+  secondaryActions.append(openWeb);
+  const remove = iconButton('Remove', 'trash', () =>
+    send({ type: 'runSwarmOperation', action: model.swarmOperations?.REMOVE, swarmId: id }), 'quiet compact');
+  remove.setAttribute('aria-label', 'Remove swarm');
+  const removeEligible = operation === model.swarmOperations?.START;
+  remove.disabled = remove.disabled || !removeEligible;
+  if (!removeEligible) remove.title = operation === model.swarmOperations?.STOP
+    ? 'Stop the swarm before removing it.'
+    : 'Remove is available only for a fresh ready stopped swarm.';
+  secondaryActions.append(remove);
+  card.append(el('div', 'swarm-row__main', [
+    el('div', 'swarm-row__primary', [identity, primaryAction]),
+    swarmWorkersView(swarm, id),
+    secondaryActions,
   ]));
-  actions.append(more);
-  card.append(el('div', 'swarm-row__main', [identity, actions]));
 
   const expanded = expandedHistorySwarmId === id;
-  const history = button(expanded ? 'Hide run history' : 'Run history', () => {
+  const history = iconButton(expanded ? 'Hide run history' : 'Run history', 'history', () => {
     if (expanded) {
       expandedHistorySwarmId = undefined;
       render();
@@ -469,9 +987,60 @@ function swarmRowView(swarm: Model): HTMLElement {
     }
   }, 'history-toggle quiet compact');
   history.setAttribute('aria-expanded', String(expanded));
+  history.append(icon('chevron-right', 'history-toggle__chevron'));
   card.append(history);
   if (expanded) card.append(swarmRunHistory(id));
   return card;
+}
+
+function swarmWorkersView(swarm: Model, swarmId: string): HTMLElement {
+  const workers = Array.isArray(swarm.bees) ? swarm.bees : [];
+  const details = el('details', 'swarm-workers');
+  const summary = el('summary', 'swarm-workers__summary', [
+    icon('organization'),
+    text('span', 'Workers'),
+    text('span', String(workers.length), 'count-badge'),
+    icon('chevron-right', 'swarm-workers__chevron'),
+  ]);
+  summary.setAttribute('aria-label', `Workers, ${workers.length}`);
+  details.append(summary);
+  const list = el('div', 'swarm-workers__list');
+  if (workers.length === 0) {
+    list.append(text('p', 'No worker summaries were reported.', 'muted swarm-workers__empty'));
+  } else {
+    for (const workerValue of workers.slice(0, 1000)) {
+      const worker = objectValue(workerValue);
+      const instance = worker && stringField(worker, 'instance');
+      const role = worker && stringField(worker, 'role');
+      if (!worker || !instance || !role) {
+        list.append(ownerDataError(workerValue, 'worker summary'));
+        continue;
+      }
+      list.append(el('article', 'swarm-worker', [
+        icon('package', 'swarm-worker__icon'),
+        el('div', 'swarm-worker__copy', [
+          titled('strong', instance, 'truncate'),
+          titled('span', workerRoleLabel(role), 'muted truncate'),
+        ]),
+        el('div', 'swarm-worker__actions', [
+          iconButton('Inspect', 'eye', () => send({
+            type: 'openDebugForWorker', swarmId, instance, action: 'Inspect',
+          }), 'quiet compact'),
+          iconButton('Logs', 'output', () => send({
+            type: 'openDebugForWorker', swarmId, instance, action: 'Logs',
+          }), 'quiet compact'),
+        ]),
+      ]));
+    }
+  }
+  details.append(list);
+  return details;
+}
+
+function workerRoleLabel(role: string): string {
+  return role.split(/[-_]/).filter(Boolean)
+    .map(part => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
 }
 
 function createSwarmView(value: unknown): HTMLElement {
@@ -545,7 +1114,7 @@ function createSwarmView(value: unknown): HTMLElement {
         variablesProfileId: draft.variablesProfileId,
       });
     }, 'primary'),
-    button('Cancel', () => send({ type: 'cancelCreateSwarm' }), 'quiet'),
+    iconButton('Cancel', 'close', () => send({ type: 'cancelCreateSwarm' }), 'quiet'),
   ]));
   return result;
 }
@@ -629,14 +1198,20 @@ function scenarioListView(value: unknown): HTMLElement {
   if (scenarios.length === 0) return emptyState('No deployed Scenario Bundles are visible.');
   const result = el('section', 'scenario-catalogue');
   const folders = [...new Set(scenarios.map(item => stringField(item, 'folderPath')).filter((item): item is string => Boolean(item)))].sort();
-  const search = input('Search bundles', 'scenarioSearch', scenarioSearch, 'Name or scenario ID');
+  const search = searchInput('Search bundles', 'scenarioSearch', scenarioSearch, 'Find a bundle');
   search.control.required = false;
   const folder = select('Folder', 'scenarioFolder', [['ALL', 'All folders'], ...folders.map(item => [item, item])], scenarioFolder);
-  const filters = el('div', 'filter-bar scenario-filters', [search.wrapper, folder.wrapper]);
+  const advanced = el('details', 'advanced-filters scenario-advanced-filters');
+  const advancedSummary = iconSummary('Scenario filters', 'filter');
+  const folderBadge = text('span', scenarioFolder === 'ALL' ? 'All' : '1', 'filter-count');
+  advancedSummary.append(folderBadge);
+  advanced.append(advancedSummary, el('div', 'advanced-filters__panel', [folder.wrapper]));
+  const filters = el('div', 'filter-bar scenario-filters', [search.wrapper, advanced]);
   const list = el('div', 'scenario-list');
   const apply = () => {
     scenarioSearch = search.control.value;
     scenarioFolder = folder.control.value;
+    folderBadge.textContent = scenarioFolder === 'ALL' ? 'All' : '1';
     const query = scenarioSearch.trim().toLocaleLowerCase();
     const filtered = scenarios.filter(item => {
       const exactFolder = stringField(item, 'folderPath') ?? '';
@@ -673,11 +1248,17 @@ function scenarioRow(scenario: Model): HTMLElement {
   if (expandedScenarioId === rowId || focused) details.setAttribute('open', '');
   const summaryMeta = scenarioId ? scenarioId : bundleKey;
   details.append(el('summary', '', [
-    el('div', 'scenario-row__copy', [
-      titled('strong', name, 'truncate'),
-      titled('span', summaryMeta, 'mono muted truncate'),
+    el('div', 'scenario-row__identity', [
+      brandMark('scenario-mark'),
+      el('div', 'scenario-row__copy', [
+        titled('strong', name, 'truncate'),
+        titled('span', summaryMeta, 'mono muted truncate'),
+      ]),
     ]),
-    statusPill(defunct ? 'Defunct' : 'Deployed'),
+    el('div', 'scenario-row__status', [
+      statusPill(defunct ? 'Defunct' : 'Deployed'),
+      icon('chevron-right', 'disclosure-chevron'),
+    ]),
   ]));
   const body = el('div', 'scenario-row__body');
   body.append(dataRows([
@@ -687,13 +1268,7 @@ function scenarioRow(scenario: Model): HTMLElement {
     ['Bundle path', displayValue(scenario.bundlePath)],
   ]));
   if (scenarioId) {
-    body.append(el('div', 'actions', [
-      button('Open details', () => send({ type: 'openScenarioDetails', scenarioId }), 'secondary compact'),
-      button('Open scenario.yaml', () => send({ type: 'openScenarioRaw', scenarioId }), 'secondary compact'),
-      button('Open schema…', () => send({ type: 'openScenarioSchema', scenarioId }), 'secondary compact'),
-      button('Open template…', () => send({ type: 'openScenarioTemplate', scenarioId }), 'secondary compact'),
-    ]));
-    const sectionTabs = el('div', 'scenario-section-tabs', [
+    const sectionTabs = el('div', 'compact-tabs scenario-section-tabs', [
       scenarioSectionButton('Overview', 'OVERVIEW', scenarioId, bundleKey, section, rowId),
       scenarioSectionButton('Files', 'FILES', scenarioId, bundleKey, section, rowId),
       scenarioSectionButton('Inputs', 'INPUTS', scenarioId, bundleKey, section, rowId),
@@ -721,22 +1296,23 @@ function scenarioSectionButton(
   const control = button(label, () => {
     expandedScenarioId = rowId;
     send({ type: 'selectScenarioSection', scenarioId, bundleKey, section });
-  }, `secondary compact${activeSection === section ? ' active-chip' : ''}`);
+  }, 'compact-tab scenario-section-tab');
+  control.append(icon(section === 'OVERVIEW' ? 'preview' : section === 'FILES' ? 'list-tree' : 'symbol-variable'));
   control.setAttribute('aria-pressed', String(activeSection === section));
   return control;
 }
 
 function scenarioOverviewSection(scenario: Model): HTMLElement {
-  const cards = el('div', 'scenario-detail-grid');
+  const cards = el('div', 'scenario-detail-grid scenario-overview');
   if (stringField(scenario, 'description')) {
-    cards.append(scenarioInfoCard('Description', String(scenario.description)));
+    cards.append(scenarioInfoCard('Description', String(scenario.description), '', 'scenario-info-card--full'));
   }
   if (stringField(scenario, 'controllerImage')) {
-    cards.append(scenarioInfoCard('Controller', String(scenario.controllerImage), 'mono'));
+    cards.append(scenarioInfoCard('Controller', String(scenario.controllerImage), 'mono', 'scenario-info-card--full'));
   }
   const bees = Array.isArray(scenario.bees) ? scenario.bees as Model[] : [];
   if (bees.length > 0) {
-    cards.append(el('article', 'card scenario-info-card', [
+    cards.append(el('article', 'card scenario-info-card scenario-info-card--full', [
       text('span', 'Bees', 'eyebrow'),
       el('div', 'scenario-bees', bees.map(bee => text(
         'span',
@@ -748,10 +1324,10 @@ function scenarioOverviewSection(scenario: Model): HTMLElement {
   return cards.children.length > 0 ? cards : emptyState('No additional overview metadata was reported for this bundle.');
 }
 
-function scenarioInfoCard(label: string, value: string, extraClass = ''): HTMLElement {
-  return el('article', `card scenario-info-card${extraClass ? ` ${extraClass}` : ''}`, [
+function scenarioInfoCard(label: string, value: string, valueClass = '', cardClass = ''): HTMLElement {
+  return el('article', `card scenario-info-card${cardClass ? ` ${cardClass}` : ''}`, [
     text('span', label, 'eyebrow'),
-    titled('p', value, `${extraClass} truncate`),
+    titled('p', value, `scenario-info-card__value${valueClass ? ` ${valueClass}` : ''}`),
   ]);
 }
 
@@ -764,32 +1340,66 @@ function scenarioFilesSection(bundleKey: string): HTMLElement {
   const nodes = Array.isArray(tree?.nodes) ? tree.nodes.filter(item => objectValue(item)) as Model[] : undefined;
   if (!nodes) return ownerDataError(model.scenarioFocusTree, 'scenario bundle tree');
   if (nodes.length === 0) return emptyState('No deployed files were reported for this bundle.');
+  const roots = scenarioTreeHierarchy(nodes);
+  if (!roots) return ownerDataError(model.scenarioFocusTree, 'scenario bundle tree hierarchy');
   const list = el('div', 'scenario-tree');
-  for (const node of nodes) list.append(scenarioFileNode(bundleKey, node));
+  for (const entry of roots) list.append(scenarioFileNode(bundleKey, entry));
   return list;
 }
 
-function scenarioFileNode(bundleKey: string, node: Model): HTMLElement {
-  const path = stringField(node, 'path');
-  const name = stringField(node, 'name');
-  const nodeType = stringField(node, 'nodeType');
-  if (!path || !name || !nodeType) return ownerDataError(node, 'bundle tree node');
-  const depth = Math.min(path.split('/').length - 1, 6);
-  const row = el('article', `scenario-tree__row depth-${depth}`);
+function scenarioTreeHierarchy(nodes: Model[]): ScenarioTreeEntry[] | undefined {
+  const entries = new Map<string, ScenarioTreeEntry>();
+  for (const node of nodes) {
+    const path = stringField(node, 'path');
+    const name = stringField(node, 'name');
+    const rawNodeType = stringField(node, 'nodeType');
+    if (!path || !name || (rawNodeType !== 'directory' && rawNodeType !== 'file')
+      || path.split('/').at(-1) !== name || entries.has(path)) return undefined;
+    entries.set(path, { node, path, name, nodeType: rawNodeType, children: [] });
+  }
+
+  const roots: ScenarioTreeEntry[] = [];
+  for (const entry of entries.values()) {
+    const separator = entry.path.lastIndexOf('/');
+    if (separator < 0) {
+      roots.push(entry);
+      continue;
+    }
+    const parent = entries.get(entry.path.slice(0, separator));
+    if (!parent || parent.nodeType !== 'directory') return undefined;
+    parent.children.push(entry);
+  }
+  return roots;
+}
+
+function scenarioFileNode(bundleKey: string, entry: ScenarioTreeEntry): HTMLElement {
+  if (entry.nodeType === 'directory') {
+    const branch = el('details', 'scenario-tree__branch');
+    branch.setAttribute('open', '');
+    branch.append(el('summary', 'scenario-tree__row scenario-tree__row--directory', [
+      icon('chevron-right', 'scenario-tree__twistie'),
+      icon('folder', 'scenario-tree__icon'),
+      titled('strong', entry.name, 'truncate'),
+    ]));
+    const children = el('div', 'scenario-tree__children');
+    for (const child of entry.children) children.append(scenarioFileNode(bundleKey, child));
+    branch.append(children);
+    return branch;
+  }
+
+  const row = el('article', 'scenario-tree__row scenario-tree__row--file');
   const meta = el('div', 'scenario-tree__meta', [
-    text('span', nodeType === 'directory' ? 'Dir' : 'File', `scenario-chip ${nodeType === 'directory' ? 'scenario-chip--dir' : ''}`),
-    titled('strong', name, 'truncate'),
-    titled('span', path, 'mono muted truncate'),
+    icon('file-code', 'scenario-tree__icon'),
+    titled('strong', entry.name, 'truncate'),
   ]);
   row.append(meta);
-  if (nodeType === 'file') {
-    const editorKind = stringField(node, 'editorKind');
-    const label = editorKind === 'unsupported' ? 'Metadata' : 'Preview';
-    row.append(el('div', 'scenario-tree__actions', [
-      text('span', displayValue(node.size), 'muted mono'),
-      button(label, () => send({ type: 'openScenarioBundleFile', bundleKey, path }), 'secondary compact'),
-    ]));
-  }
+  const editorKind = stringField(entry.node, 'editorKind');
+  const label = editorKind === 'unsupported' ? 'Metadata' : 'Preview';
+  row.append(el('div', 'scenario-tree__actions', [
+    text('span', displayValue(entry.node.size), 'muted mono'),
+    iconButton(label, editorKind === 'unsupported' ? 'info' : 'preview', () =>
+      send({ type: 'openScenarioBundleFile', bundleKey, path: entry.path }), 'secondary compact'),
+  ]));
   return row;
 }
 
@@ -824,7 +1434,8 @@ function scenarioFilePresenceCard(label: string, path: unknown, bundleKey: strin
   ]);
   if (exactPath) {
     card.append(el('div', 'actions', [
-      button('Preview', () => send({ type: 'openScenarioBundleFile', bundleKey, path: exactPath }), 'secondary compact'),
+      iconButton('Preview', 'preview', () =>
+        send({ type: 'openScenarioBundleFile', bundleKey, path: exactPath }), 'secondary compact'),
     ]));
   }
   return card;
@@ -882,7 +1493,8 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
   if (events.length === 0) return emptyState(emptyMessage);
   const result = el('section', 'event-stream');
   const criteria = eventCriteria[context];
-  const search = input('Search events', `${context.toLowerCase()}Search`, criteria.search, 'Swarm, type, origin…');
+  const search = searchInput('Search events', `${context.toLowerCase()}Search`, criteria.search,
+    context === 'Buzz' ? 'Search routing, type or origin' : 'Search journal');
   search.control.required = false;
   const time = select('Time', `${context.toLowerCase()}Time`, [
     [EVENT_TIME_WINDOWS.ALL, 'All captured'],
@@ -895,8 +1507,10 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
   const severity = select('Severity', `${context.toLowerCase()}Severity`, [['ALL', 'All severities'], ...severities.map(item => [item, item])], criteria.severity);
   const advanced = document.createElement('details');
   advanced.className = 'advanced-filters';
-  const advancedSummary = text('summary', 'Filters');
+  const advancedSummary = iconSummary('Advanced filters', 'filter');
   advancedSummary.setAttribute('aria-label', 'Advanced filters');
+  const advancedCount = text('span', '', 'filter-count');
+  advancedSummary.append(advancedCount);
   advanced.append(advancedSummary, el('div', 'advanced-filters__panel', [
     time.wrapper,
     kind.wrapper,
@@ -919,9 +1533,10 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
       next.kind !== 'ALL',
       next.severity !== 'ALL',
     ].filter(Boolean).length;
-    advancedSummary.textContent = activeFilterCount ? `Filters (${activeFilterCount})` : 'Filters';
+    advancedCount.textContent = activeFilterCount ? String(activeFilterCount) : '';
+    advancedCount.hidden = activeFilterCount === 0;
     count.textContent = `${filtered.length} of ${events.length} captured events`;
-    list.replaceChildren(...filtered.map(eventRow));
+    list.replaceChildren(...filtered.map(event => eventRow(event, context)));
     if (filtered.length === 0) list.append(emptyState('No captured events match these filters.'));
   };
   for (const control of [time.control, kind.control, severity.control]) control.addEventListener('change', apply);
@@ -931,10 +1546,11 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
   return result;
 }
 
-function eventRow(event: Model): HTMLElement {
+function eventRow(event: Model, context: 'Buzz' | 'Journal'): HTMLElement {
     const kind = stringField(event, 'kind');
     const timestamp = stringField(event, 'timestamp');
-    if (!kind || !timestamp) {
+    const detailId = stringField(event, 'detailId');
+    if (!kind || !timestamp || !detailId) {
       return ownerDataError(event, 'event record');
     }
     const severity = stringField(event, 'severity') ?? 'UNKNOWN';
@@ -942,15 +1558,25 @@ function eventRow(event: Model): HTMLElement {
     const swarmId = stringField(event, 'swarmId');
     const details = el('details', 'event-row');
     details.append(el('summary', '', [
+      icon(severity.toLocaleUpperCase() === 'ERROR' ? 'error' : eventIcon(kind), 'event-row__icon'),
       el('span', 'event-row__identity', [
         titled('strong', `${kind}/${type}`, 'event-row__type truncate'),
         titled('span', swarmId ?? displayValue(event.origin), 'event-row__scope muted truncate'),
       ]),
       statusPill(severity),
       titled('time', compactTime(timestamp), 'event-row__time mono'),
+      icon('chevron-right', 'disclosure-chevron'),
     ]));
     const actions = el('div', 'event-row__actions');
-    if (swarmId) actions.append(button('Open Debug', () => send({ type: 'openDebugForSwarm', swarmId }), 'secondary compact'));
+    actions.append(iconButton('Open technical details', 'code', () =>
+      send({ type: 'openEventDetails', detailId }), 'secondary compact'));
+    const runId = stringField(event, 'runId') ?? (context === 'Journal'
+      ? stringField(model, 'journalRunId')
+      : undefined);
+    if (context === 'Journal' && swarmId && runId) {
+      actions.append(iconButton('View run in Web UI', 'link-external', () =>
+        send({ type: 'openWebUi', destination: 'JOURNAL_RUN', swarmId, runId }), 'secondary compact'));
+    }
     details.append(el('div', 'event-row__body', [
       dataRows([
         ['Observed', timestamp],
@@ -960,7 +1586,6 @@ function eventRow(event: Model): HTMLElement {
         ['Routing', displayValue(event.routingKey)],
       ]),
       actions,
-      technicalDetails(event),
     ]));
     return details;
 }
@@ -1034,7 +1659,7 @@ function dataRows(rows: string[][]): HTMLElement {
 
 function technicalDetails(value: unknown): HTMLElement {
   const details = el('details', 'technical-details');
-  details.append(text('summary', 'Technical details'));
+  details.append(iconSummary('Technical details', 'code'));
   const pre = document.createElement('pre');
   pre.tabIndex = 0;
   pre.textContent = JSON.stringify(value, null, 2);
@@ -1062,6 +1687,41 @@ function debugView(): HTMLElement {
   const result = el('div', 'debug');
   const swarms = (topLevelRecords(model.workspaceData) ?? [])
     .map(item => stringField(item, 'id')).filter((id): id is string => Boolean(id));
+  const configured = Array.isArray(model.debugActions) ? model.debugActions as Model[] : [];
+  const runtimeTarget = debugRuntimeTarget(swarms, configured);
+  const swarmTools = debugSwarmTools(configured);
+  const maintenance = debugMaintenance(configured);
+  result.append(debugContextControl(), runtimeTarget, swarmTools, maintenance);
+  return result;
+}
+
+function debugContextControl(): HTMLElement {
+  const control = el('section', 'debug-context', [text('h3', 'Target context')]);
+  const switcher = el('div', 'debug-scope');
+  for (const item of [
+    { context: 'WORKER' as const, label: 'Worker', iconName: 'account', targetId: 'debug-runtime-target' },
+    { context: 'SWARM' as const, label: 'Swarm', iconName: 'package', targetId: 'debug-swarm-tools' },
+  ]) {
+    const active = debugContext === item.context;
+    const option = iconButton(item.label, item.iconName, () => {
+      debugContext = item.context;
+      render();
+      requestAnimationFrame(() => document.querySelector<HTMLElement>(`#${item.targetId}`)
+        ?.scrollIntoView({ block: 'start' }));
+    }, `debug-scope__button${active ? ' active' : ''}`, true);
+    option.setAttribute('aria-pressed', String(active));
+    option.setAttribute('aria-controls', item.targetId);
+    switcher.append(option);
+  }
+  control.append(switcher);
+  return control;
+}
+
+function debugRuntimeTarget(swarms: string[], configured: Model[]): HTMLElement {
+  const section = el('section', 'debug-section debug-runtime-target');
+  section.id = 'debug-runtime-target';
+  section.append(el('div', 'debug-section__header', [text('h3', 'Runtime target')]));
+  const body = el('div', 'debug-section__body');
   const swarm = searchableChoice(
     'Exact swarm',
     'debugSwarm',
@@ -1073,50 +1733,287 @@ function debugView(): HTMLElement {
     sendExactChoice(swarm.control, swarms, 'swarm', swarmId =>
       send({ type: 'selectDebugSwarm', swarmId }));
   });
-  result.append(swarm.wrapper);
-  const workers = identifiers(model.debugResult, ['runtimeId', 'id', 'name']);
+  const targetRow = el('div', 'debug-target-row', [swarm.wrapper]);
+  const workersAction = configuredDebugAction(configured, 'Workers');
+  if (workersAction) targetRow.append(debugActionButton(workersAction, 'Load workers', 'primary compact'));
+  body.append(targetRow);
+
+  const workers = identifiers(model.debugWorkersResult, ['runtimeId', 'id', 'name']);
   if (workers.length > 0) {
-    const worker = select('Exact worker', 'debugWorker', [['', 'Select a worker'], ...workers.map(id => [id, id])], model.debugRuntimeId ?? '');
+    const worker = searchableChoice(
+      'Exact worker',
+      'debugWorker',
+      workers,
+      model.debugRuntimeId ?? '',
+      'Search exact worker…',
+    );
     worker.control.addEventListener('change', () => {
-      if (worker.control.value) send({ type: 'selectDebugWorker', runtimeId: worker.control.value });
+      sendExactChoice(worker.control, workers, 'worker', runtimeId =>
+        send({ type: 'selectDebugWorker', runtimeId }));
     });
-    result.append(worker.wrapper);
+    body.append(worker.wrapper);
   }
-  const groups = [
-    { name: 'Runtime', labels: ['Workers', 'Logs', 'Versions', 'Inspect', 'Runtime drift'] },
-    { name: 'Messaging', labels: ['Control plane', 'Rabbit topology', 'Timeline'] },
-    { name: 'Definition', labels: ['Manifest'] },
-    { name: 'Maintenance', labels: ['Cleanup plan'] },
-  ];
-  const actions = el('div', 'debug-groups');
-  for (const group of groups) {
-    const details = el('details', 'debug-group');
-    if (group.name === 'Runtime') details.setAttribute('open', '');
-    const configured = (model.debugActions ?? []).filter((action: Model) => group.labels.includes(String(action.label)));
-    details.append(el('summary', '', [text('strong', group.name), text('span', `${configured.length} actions`, 'muted')]));
-    const controls = el('div', 'debug-actions');
-    for (const action of configured) {
-      const needsWorker = Boolean(action.needsWorker);
-      const control = button(String(action.label), () => {
-        const message: Model = { type: 'runDebug', action: String(action.label) };
-        if (action.label === 'Logs') message.tailLines = 200;
-        send(message);
-      }, action.label === 'Cleanup plan' ? 'guarded' : 'secondary');
-      control.disabled = model.busy || !model.debugSwarmId || (needsWorker && !model.debugRuntimeId);
-      controls.append(control);
-    }
-    details.append(controls);
-    actions.append(details);
-  }
-  result.append(text('h3', 'Diagnostic actions'), actions);
-  if (model.debugResult !== undefined) {
-    result.append(el('section', 'debug-output', [
-      el('div', 'debug-output__heading', [text('h3', 'Result'), text('span', 'Bounded MCP evidence', 'muted')]),
-      resultCard(model.debugResult),
+  if (model.debugRuntimeId) {
+    body.append(el('div', 'debug-worker-resource', [
+      el('span', 'debug-worker-resource__identity', [
+        icon('server-process'),
+        titled('strong', String(model.debugRuntimeId), 'truncate'),
+      ]),
+      text('span', 'Selected', 'debug-worker-resource__state'),
     ]));
   }
-  else result.append(text('p', 'Choose an exact target and action. PocketHive will not guess a worker or resource.', 'muted callout'));
-  return result;
+
+  const tabs = el('div', 'compact-tabs debug-worker-tabs');
+  tabs.setAttribute('role', 'tablist');
+  tabs.setAttribute('aria-label', 'Worker diagnostics');
+  const workerPresentations = DEBUG_ACTION_PRESENTATION.filter(item => item.context === 'WORKER');
+  const activeWorkerAction = workerPresentations.some(item => item.label === model.debugAction)
+    ? String(model.debugAction) : workerPresentations[0].label;
+  for (const presentation of workerPresentations) {
+    const action = configuredDebugAction(configured, presentation.label);
+    if (!action) continue;
+    const tab = debugActionButton(action, presentation.label, 'compact-tab debug-worker-tab');
+    tab.setAttribute('role', 'tab');
+    tab.setAttribute('aria-selected', String(presentation.label === activeWorkerAction));
+    tab.setAttribute('aria-controls', 'debug-worker-evidence');
+    tabs.append(tab);
+  }
+  body.append(tabs);
+  if (workerPresentations.some(item => item.label === model.debugAction) && model.debugResult !== undefined) {
+    body.append(debugEvidence(model.debugResult, 'debug-worker-evidence'));
+  } else {
+    const guidance = el('section', 'debug-evidence debug-evidence--empty', [
+      text('p', model.debugRuntimeId
+        ? 'Choose a worker diagnostic. PocketHive will not infer another target.'
+        : 'Load and select one exact worker to run worker diagnostics.', 'muted debug-guidance'),
+    ]);
+    guidance.id = 'debug-worker-evidence';
+    guidance.setAttribute('role', 'tabpanel');
+    body.append(guidance);
+  }
+  section.append(body);
+  return section;
+}
+
+function debugSwarmTools(configured: Model[]): HTMLElement {
+  const section = el('section', 'debug-section');
+  section.id = 'debug-swarm-tools';
+  section.append(el('div', 'debug-section__header', [text('h3', 'Swarm tools')]));
+  const tools = el('div', 'debug-swarm-tools');
+  for (const presentation of DEBUG_ACTION_PRESENTATION.filter(item => item.context === 'SWARM')) {
+    const action = configuredDebugAction(configured, presentation.label);
+    if (!action) continue;
+    const control = debugActionButton(action, presentation.label, 'secondary debug-tool-button');
+    control.append(icon('chevron-right', 'debug-tool-button__chevron'));
+    tools.append(control);
+  }
+  section.append(tools);
+  if (DEBUG_ACTION_PRESENTATION.some(item => item.context === 'SWARM' && item.label === model.debugAction)
+      && model.debugResult !== undefined) {
+    section.append(debugEvidence(model.debugResult, 'debug-swarm-evidence'));
+  }
+  return section;
+}
+
+function debugMaintenance(configured: Model[]): HTMLElement {
+  const section = el('section', 'debug-section debug-maintenance');
+  section.append(el('div', 'debug-section__header', [text('h3', 'Maintenance')]));
+  const action = configuredDebugAction(configured, 'Cleanup plan');
+  if (action) {
+    const row = el('div', 'debug-maintenance__row', [
+      debugActionButton(action, 'Cleanup plan', 'guarded debug-tool-button'),
+      text('span', 'Plan only', 'debug-plan-badge'),
+    ]);
+    section.append(row);
+  }
+  if (model.debugAction === 'Cleanup plan' && model.debugResult !== undefined) {
+    section.append(debugEvidence(model.debugResult, 'debug-maintenance-evidence'));
+  }
+  return section;
+}
+
+function configuredDebugAction(configured: Model[], label: string): Model | undefined {
+  return configured.find(action => action.label === label);
+}
+
+function debugActionButton(action: Model, label: string, className: string): HTMLButtonElement {
+  const presentation = DEBUG_ACTION_PRESENTATION.find(item => item.label === action.label);
+  const control = button('', () => {
+    const message: Model = { type: 'runDebug', action: String(action.label) };
+    if (presentation && 'tailLines' in presentation) message.tailLines = presentation.tailLines;
+    send(message);
+  }, className);
+  control.setAttribute('aria-label', label);
+  control.title = label;
+  control.append(icon(presentation?.icon ?? 'tools'), text('span', label, 'debug-action-label truncate'));
+  control.disabled = model.busy || !model.debugSwarmId || (Boolean(action.needsWorker) && !model.debugRuntimeId);
+  return control;
+}
+
+function debugEvidence(value: unknown, id: string): HTMLElement {
+  const action = String(model.debugAction ?? 'Result');
+  let evidence: HTMLElement;
+  if (action === 'Logs') evidence = debugLogsEvidence(value);
+  else if (action === 'Inspect') evidence = debugInspectEvidence(value);
+  else if (action === 'Version') evidence = debugVersionEvidence(value);
+  else if (action === 'Cleanup plan') evidence = debugCleanupPlanEvidence(value);
+  else evidence = genericDebugEvidence(value, action);
+  evidence.id = id;
+  evidence.setAttribute('role', 'tabpanel');
+  return evidence;
+}
+
+function genericDebugEvidence(value: unknown, action: string): HTMLElement {
+  const evidence = el('section', 'debug-evidence', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', 'Bounded MCP evidence'),
+      text('span', action, 'muted'),
+    ]),
+    resultCard(value),
+  ]);
+  return evidence;
+}
+
+function debugLogsEvidence(value: unknown): HTMLElement {
+  const result = objectValue(value);
+  const target = result && objectValue(result.target);
+  const logs = result && typeof result.logs === 'string' ? result.logs : undefined;
+  const tailLines = result && typeof result.tailLines === 'number' ? result.tailLines : undefined;
+  if (!result || !target || logs === undefined || tailLines === undefined) {
+    return ownerDataError(value, 'runtime log evidence');
+  }
+  const pre = document.createElement('pre');
+  pre.tabIndex = 0;
+  pre.textContent = logs;
+  return el('section', 'debug-evidence debug-evidence--logs', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', 'Container logs'),
+      text('span', runtimeTargetLabel(target), 'muted truncate'),
+    ]),
+    el('article', 'debug-log-output', [pre]),
+    el('div', 'debug-evidence__provenance', [
+      icon('output'),
+      text('span', `Docker stdout/stderr · tail ${tailLines}`),
+      text('span', result.redacted === true ? 'Redacted' : 'Not redacted', 'muted'),
+    ]),
+  ]);
+}
+
+function debugInspectEvidence(value: unknown): HTMLElement {
+  const result = objectValue(value);
+  const target = result && objectValue(result.target);
+  const source = result && objectValue(result.source);
+  const state = result && objectValue(result.state);
+  const mounts = result && Array.isArray(result.mounts) ? result.mounts : undefined;
+  const networks = result && Array.isArray(result.networks) ? result.networks : undefined;
+  if (!result || !target || !source || !state || !mounts || !networks) {
+    return ownerDataError(value, 'runtime inspect evidence');
+  }
+  const projection = {
+    state,
+    createdAt: result.createdAt ?? null,
+    restartCount: result.restartCount ?? null,
+    restartPolicy: result.restartPolicy ?? null,
+    mounts,
+    networks,
+  };
+  const pre = document.createElement('pre');
+  pre.tabIndex = 0;
+  pre.textContent = JSON.stringify(projection, null, 2);
+  return el('section', 'debug-evidence debug-evidence--inspect', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', 'Container inspect'),
+      text('span', runtimeTargetLabel(target), 'muted truncate'),
+    ]),
+    el('article', 'debug-inspect-output', [pre]),
+    el('div', 'debug-evidence__provenance', [
+      icon('json'),
+      text('span', 'Orchestrator inspect projection'),
+      text('span', source.available === true ? 'Available' : 'Unavailable', 'muted'),
+    ]),
+  ]);
+}
+
+function debugVersionEvidence(value: unknown): HTMLElement {
+  const result = objectValue(value);
+  const target = result && objectValue(result.target);
+  if (!result || !target) return ownerDataError(value, 'runtime version evidence');
+  return el('section', 'debug-evidence debug-evidence--version', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', 'Deployed version'),
+      text('span', runtimeTargetLabel(target), 'muted truncate'),
+    ]),
+    dataRows([
+      ['Version', displayValue(result.reportedVersion)],
+      ['Source', displayValue(result.reportedVersionSource)],
+      ['Declared', displayValue(result.declaredVersion)],
+      ['Image', displayValue(result.image)],
+      ['Tag', displayValue(result.imageTag)],
+      ['Digest', displayValue(result.imageDigest)],
+    ]),
+  ]);
+}
+
+function debugCleanupPlanEvidence(value: unknown): HTMLElement {
+  const result = objectValue(value);
+  const candidateSetHash = result && stringField(result, 'candidateSetHash');
+  const candidates = result && Array.isArray(result.candidates) ? result.candidates : undefined;
+  const blocked = result && Array.isArray(result.blocked) ? result.blocked : [];
+  if (!result || !candidateSetHash || candidates === undefined) {
+    return ownerDataError(value, 'runtime cleanup plan');
+  }
+  const count = candidates.length;
+  const evidence = el('section', 'debug-evidence debug-cleanup-plan', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', `${count} cleanup ${count === 1 ? 'candidate' : 'candidates'}`),
+      statusPill(String(result.executionRisk ?? 'UNKNOWN')),
+    ]),
+    dataRows([
+      ['Candidate set', candidateSetHash],
+      ['Blocked', String(blocked.length)],
+    ]),
+  ]);
+  const list = el('div', 'debug-cleanup-candidates');
+  for (const candidateValue of candidates.slice(0, 1000)) {
+    const candidate = objectValue(candidateValue);
+    const candidateId = candidate && stringField(candidate, 'candidateId');
+    if (!candidate || !candidateId) {
+      list.append(ownerDataError(candidateValue, 'cleanup candidate'));
+      continue;
+    }
+    list.append(el('article', 'debug-cleanup-candidate', [
+      icon('trash'),
+      el('div', 'debug-cleanup-candidate__copy', [
+        titled('strong', candidateId, 'mono truncate'),
+        titled('span', displayValue(candidate.reason), 'muted truncate'),
+      ]),
+    ]));
+  }
+  if (count > 0) evidence.append(list);
+  const generate = iconButton('Generate new plan', 'refresh', () =>
+    send({ type: 'runDebug', action: 'Cleanup plan' }), 'secondary compact');
+  const execute = iconButton('Execute cleanup', 'lock', () => undefined, 'secondary compact');
+  execute.disabled = true;
+  execute.title = 'Cleanup execution requires HiveGate approval.';
+  evidence.append(el('div', 'debug-cleanup-actions', [
+    generate,
+    execute,
+    iconText('lock', 'Requires HiveGate approval', 'debug-cleanup-lock muted'),
+  ]));
+  return evidence;
+}
+
+function runtimeTargetLabel(target: Model): string {
+  return stringField(target, 'runtimeId')
+    ?? stringField(target, 'name')
+    ?? stringField(target, 'instance')
+    ?? 'Exact runtime target';
+}
+
+function compactJson(value: unknown): string {
+  if (value === undefined || value === null) return 'Not reported';
+  if (typeof value === 'string') return value;
+  return JSON.stringify(value);
 }
 
 function resultCard(value: unknown): HTMLElement {
@@ -1158,7 +2055,13 @@ function stage(number: string, label: string, done: boolean): HTMLElement {
 }
 
 function statusPill(status: string): HTMLElement {
-  return text('span', status, `status status--${status.toLowerCase().replace(/\s+/g, '-')}`);
+  const result = text('span', status, `status status--${statusToken(status)}`);
+  result.append(icon('circle-filled', 'status__dot'));
+  return result;
+}
+
+function statusToken(status: string): string {
+  return status.toLowerCase().replace(/\s+/g, '-');
 }
 
 function input(
@@ -1177,6 +2080,19 @@ function input(
   control.autocomplete = 'off';
   const wrapper = el('label', 'field', [text('span', label, visuallyHiddenLabel ? 'sr-only' : ''), control]);
   return { wrapper, control };
+}
+
+function searchInput(
+  label: string,
+  id: string,
+  value: string,
+  placeholder: string,
+  visuallyHiddenLabel = true,
+): { wrapper: HTMLElement; control: HTMLInputElement } {
+  const field = input(label, id, value, placeholder, visuallyHiddenLabel);
+  field.wrapper.className += ' search-field';
+  field.wrapper.append(icon('search', 'search-field__icon'));
+  return field;
 }
 
 function select(label: string, id: string, options: string[][], value: string): { wrapper: HTMLElement; control: HTMLSelectElement } {
@@ -1202,21 +2118,77 @@ function searchableChoice(
   placeholder: string,
 ): { wrapper: HTMLElement; control: HTMLInputElement } {
   const control = document.createElement('input');
-  const list = document.createElement('datalist');
+  const wrapper = el('div', 'field searchable-choice');
+  const labelElement = text('label', label);
+  const list = el('div', 'choice-popover');
   const listId = `${id}Choices`;
   control.id = id;
   control.name = id;
   control.value = value;
   control.placeholder = placeholder;
   control.autocomplete = 'off';
-  control.setAttribute('list', listId);
+  control.setAttribute('role', 'combobox');
+  control.setAttribute('aria-label', label);
+  control.setAttribute('aria-autocomplete', 'list');
+  control.setAttribute('aria-controls', listId);
+  control.setAttribute('aria-expanded', 'false');
+  labelElement.setAttribute('for', id);
   list.id = listId;
-  for (const choice of choices) {
-    const option = document.createElement('option');
-    option.value = choice;
-    list.append(option);
-  }
-  return { wrapper: el('label', 'field searchable-choice', [text('span', label), control, list]), control };
+  list.setAttribute('role', 'listbox');
+  list.hidden = true;
+  const open = (visible: boolean): void => {
+    list.hidden = !visible;
+    control.setAttribute('aria-expanded', String(visible));
+  };
+  const renderChoices = (): void => {
+    const query = control.value.trim().toLocaleLowerCase();
+    const matches = choices.filter(choice => !query || choice.toLocaleLowerCase().includes(query));
+    const options = matches.map(choice => {
+      const option = button(choice, () => {
+        control.value = choice;
+        control.setAttribute('aria-invalid', 'false');
+        open(false);
+        control.dispatchEvent(new Event('change', { bubbles: true }));
+      }, 'choice-option');
+      option.setAttribute('role', 'option');
+      option.setAttribute('aria-selected', String(choice === control.value));
+      option.title = choice;
+      return option;
+    });
+    list.replaceChildren(...options);
+    if (matches.length === 0) list.append(text('p', 'No exact matches', 'muted choice-empty'));
+  };
+  control.addEventListener('focus', () => {
+    renderChoices();
+    open(true);
+  });
+  control.addEventListener('input', () => {
+    renderChoices();
+    open(true);
+  });
+  control.addEventListener('keydown', event => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      open(false);
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      open(true);
+      list.querySelector<HTMLElement>('[role="option"]')?.focus();
+    }
+  });
+  wrapper.addEventListener('focusout', event => {
+    const next = event.relatedTarget;
+    if (!(next instanceof Node) || !wrapper.contains(next)) open(false);
+  });
+  wrapper.append(labelElement, el('div', 'choice-control', [
+    icon('search', 'choice-control__icon'),
+    control,
+    icon('chevron-down', 'choice-control__chevron'),
+  ]), list);
+  renderChoices();
+  return { wrapper, control };
 }
 
 function sendExactChoice(
@@ -1259,9 +2231,20 @@ function tabTitle(tab: string): string {
   return tab === 'Hive' ? 'Swarms' : tab;
 }
 
-function accountInitial(profile: Model): string {
-  const label = String(profile.principalLabel ?? profile.displayName ?? 'PocketHive').trim();
-  return label.charAt(0).toLocaleUpperCase() || 'P';
+function tabSubtitle(tab: string): string {
+  if (tab === 'Hive') return 'Live workloads from PocketHive MCP';
+  if (tab === 'Buzz') return 'Live control-plane traffic';
+  if (tab === 'Journal') return 'Control-plane evidence';
+  if (tab === 'Scenarios') return 'Deployed and committed repository Scenario Bundles';
+  return 'Targeted runtime diagnostics';
+}
+
+function eventIcon(kind: string): string {
+  const normalized = kind.toLocaleLowerCase();
+  if (normalized === 'signal') return 'radio-tower';
+  if (normalized === 'outcome') return 'check';
+  if (normalized === 'command') return 'terminal';
+  return 'pulse';
 }
 
 function statusAnnouncement(): string {
@@ -1356,6 +2339,36 @@ function showError(message: string): void {
   existing?.remove();
   const error = text('p', message, 'global-error', 'alert');
   app.prepend(error);
+}
+
+function icon(name: string, extraClass = ''): HTMLElement {
+  const result = text('span', '', `codicon codicon-${name}${extraClass ? ` ${extraClass}` : ''}`);
+  result.setAttribute('aria-hidden', 'true');
+  return result;
+}
+
+function iconText(name: string, label: string, className = ''): HTMLElement {
+  return el('span', `icon-text${className ? ` ${className}` : ''}`, [icon(name), text('span', label)]);
+}
+
+function iconSummary(label: string, iconName: string): HTMLElement {
+  const summary = el('summary', 'icon-summary', [icon(iconName), text('span', label, 'sr-only')]);
+  summary.setAttribute('aria-label', label);
+  summary.title = label;
+  return summary;
+}
+
+function iconButton(
+  label: string,
+  iconName: string,
+  action: () => void,
+  className: string,
+  enabledWhileBusy = false,
+): HTMLButtonElement {
+  const control = button(label, action, className, enabledWhileBusy);
+  control.setAttribute('aria-label', label);
+  control.append(icon(iconName));
+  return control;
 }
 
 function button(

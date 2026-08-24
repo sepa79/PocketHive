@@ -12,6 +12,44 @@ pockethive:
   mcp:
     pocket-hive-ingress: ${PH_MCP_POCKETHIVE_INGRESS}
     owner-api-base: ${PH_MCP_OWNER_API_BASE}
+    environment-health:
+      probe-timeout: ${PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT}
+      targets:
+        - id: pockethive-ui
+          name: PocketHive UI
+          endpoint-path: /
+          probe-path: /healthz
+          contract: PLAIN_OK
+        - id: orchestrator
+          name: Orchestrator
+          endpoint-path: /orchestrator/
+          probe-path: /orchestrator/actuator/health
+          contract: SPRING_UP
+        - id: scenario-manager
+          name: Scenario Manager
+          endpoint-path: /scenario-manager/
+          probe-path: /scenario-manager/actuator/health
+          contract: SPRING_UP
+        - id: network-proxy-manager
+          name: Network Proxy Manager
+          endpoint-path: /network-proxy-manager/
+          probe-path: /network-proxy-manager/actuator/health
+          contract: SPRING_UP
+        - id: wiremock
+          name: WireMock
+          endpoint-path: /wiremock/
+          probe-path: /wiremock/__admin/health
+          contract: WIREMOCK_HEALTHY
+        - id: tcp-mock
+          name: TCP Mock
+          endpoint-path: /tcp-mock/
+          probe-path: /tcp-mock/actuator/health
+          contract: SPRING_UP
+        - id: grafana
+          name: Grafana
+          endpoint-path: /grafana/
+          probe-path: /grafana/api/health
+          contract: GRAFANA_DATABASE_OK
     protocol-revision: ${PH_MCP_PROTOCOL_REVISION}
     state-mode: ${PH_MCP_STATE_MODE}
     state-path: ${PH_MCP_STATE_PATH}

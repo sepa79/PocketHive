@@ -15,6 +15,7 @@ public record BundleValidationReceipt(
     String archiveDigest,
     String bundleContentDigest,
     String scenarioId,
+    String scenarioName,
     Instant createdAt
 ) {
     public BundleValidationReceipt {
@@ -26,6 +27,7 @@ public record BundleValidationReceipt(
         Objects.requireNonNull(archiveDigest);
         Objects.requireNonNull(bundleContentDigest);
         Objects.requireNonNull(scenarioId);
+        Objects.requireNonNull(scenarioName);
         Objects.requireNonNull(createdAt);
     }
 }

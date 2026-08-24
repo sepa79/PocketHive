@@ -9,6 +9,13 @@ export const POCKETHIVE_MCP_SCOPES = Object.freeze({
   CLEANUP: 'pockethive:mcp:cleanup',
 } as const);
 export type PocketHiveMcpScope = typeof POCKETHIVE_MCP_SCOPES[keyof typeof POCKETHIVE_MCP_SCOPES];
+export const POCKETHIVE_COMPANION_SCOPES = Object.freeze([
+  POCKETHIVE_MCP_SCOPES.DISCOVER,
+  POCKETHIVE_MCP_SCOPES.READ,
+  POCKETHIVE_MCP_SCOPES.OPERATE,
+  POCKETHIVE_MCP_SCOPES.AUTHOR,
+  POCKETHIVE_MCP_SCOPES.PUBLISH,
+] as const);
 
 export type EndpointSecurityMode = 'REMOTE_HTTPS' | 'LOCAL_LOOPBACK_HTTP';
 export type AuthenticationMode = 'OAUTH_AUTHORIZATION_CODE_PKCE';
@@ -68,6 +75,7 @@ export type OAuthSessionRenewal =
 export interface OAuthSession {
   readonly accessToken: string;
   readonly expiresAt: string;
+  readonly scopes: readonly PocketHiveMcpScope[];
   readonly renewal: OAuthSessionRenewal;
 }
 
@@ -78,15 +86,6 @@ export interface EndpointValidationPort {
 export interface AuthenticationPort {
   authenticate(profile: McpConnectionProfile, endpoint: ValidatedEndpoint, signal: AbortSignal): Promise<OAuthSession>;
   session(profile: McpConnectionProfile): Promise<OAuthSession | undefined>;
-}
-
-export interface ScopedAuthenticationPort {
-  authenticateForScopes(
-    profile: McpConnectionProfile,
-    endpoint: ValidatedEndpoint,
-    scopes: readonly PocketHiveMcpScope[],
-    signal: AbortSignal,
-  ): Promise<OAuthSession>;
 }
 
 export interface RenewableAuthenticationPort extends AuthenticationPort {

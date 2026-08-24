@@ -5,8 +5,6 @@ import test from 'node:test';
 import {
   ConnectionContractError,
   McpConnectionProfile,
-  OAuthSession,
-  ValidatedEndpoint,
 } from '../connection/contracts';
 import {
   BundleMcpClient,
@@ -19,30 +17,26 @@ const profile: McpConnectionProfile = Object.freeze({
   endpointSecurityMode: 'REMOTE_HTTPS', authenticationMode: 'OAUTH_AUTHORIZATION_CODE_PKCE',
   secretKey: 'secret.nft',
 });
-const endpoint: ValidatedEndpoint = {
-  mcpUrl: profile.mcpUrl,
-  resourceMetadataUrl: 'https://nft.example/.well-known/oauth-protected-resource',
-  authorizationServer: 'https://nft.example/auth-service',
-};
 const retainedArchivePath = join('owned-temp', 'pockethive-test-bundle.zip');
 
-test('validates then explicitly publishes the exact retained committed archive with least-privilege scopes', async () => {
+test('validates then explicitly publishes the exact retained committed archive through the active MCP session', async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  const scopes: string[][] = [];
   const uploads: Uint8Array[] = [];
   let disposed = 0;
-  let closes = 0;
-  const clients = [
-    client(calls, uploads, () => ({
+  const tickets = [
+    {
       ticketId: 'uv-1', uploadUrl: 'https://nft.example/mcp/uploads/uv-123e4567-e89b-12d3-a456-426614174000',
-    }), () => ({ validationReceipt: {
-      receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'mixed-smoke',
-    } }), () => { closes += 1; }),
-    client(calls, uploads, () => ({
+    },
+    {
       ticketId: 'up-1', uploadUrl: 'https://nft.example/mcp/uploads/up-123e4567-e89b-12d3-a456-426614174000',
-    }), () => ({ publicationAttempt: { attemptId: 'pa-1', state: 'SUCCEEDED', scenarioId: 'mixed-smoke' } }),
-    () => { closes += 1; }),
+    },
+  ];
+  const outcomes = [
+    { validationReceipt: {
+      receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'mixed-smoke', scenarioName: 'Mixed smoke',
+    } },
+    { publicationAttempt: { attemptId: 'pa-1', state: 'SUCCEEDED', scenarioId: 'mixed-smoke' } },
   ];
   const coordinator = new ScenarioBundleCoordinator(
     { package: async () => ({
@@ -54,24 +48,13 @@ test('validates then explicitly publishes the exact retained committed archive w
       archivePath: retainedArchivePath,
       dispose: async () => { disposed += 1; },
     }) },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async (_profile, _endpoint, requested) => {
-      scopes.push([...requested]);
-      return {
-        accessToken: `token-${scopes.length}`, expiresAt: '2026-08-18T13:00:00.000Z',
-        renewal: { kind: 'NONE' },
-      };
-    } },
-    () => clients.shift()!,
+    client(calls, uploads, () => tickets.shift(), () => outcomes.shift(), () => {}),
     async () => new Uint8Array([1, 2, 3]),
   );
 
   const pending = await coordinator.validate(profile, '/workspace/scenarios/bundles/mixed-smoke');
   assert.equal(disposed, 0);
   assert.equal(pending.receipt.receiptId, 'vr-1');
-  assert.deepEqual(scopes[0], [
-    'pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:author',
-  ]);
   assert.deepEqual(calls[0], {
     name: 'scenario_bundle_direct_validation_prepare',
     args: { source: pending.bundle.source, fileManifest: pending.bundle.fileManifest },
@@ -79,9 +62,6 @@ test('validates then explicitly publishes the exact retained committed archive w
 
   const result = await coordinator.publish(profile, pending, 'REPLACE', 'mixed-smoke');
   assert.deepEqual(result, { attemptId: 'pa-1', state: 'SUCCEEDED', scenarioId: 'mixed-smoke' });
-  assert.deepEqual(scopes[1], [
-    'pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:publish',
-  ]);
   assert.deepEqual(calls[1], {
     name: 'scenario_bundle_publication_prepare',
     args: {
@@ -92,7 +72,6 @@ test('validates then explicitly publishes the exact retained committed archive w
     },
   });
   assert.deepEqual(uploads.map(bytes => [...bytes]), [[1, 2, 3], [1, 2, 3]]);
-  assert.equal(closes, 2);
   assert.equal(disposed, 1);
 });
 
@@ -107,9 +86,10 @@ test('fails closed, cleans owned bytes, and never infers publication intent', as
       fileManifest: [], archivePath: retainedArchivePath,
       dispose: async () => { disposed += 1; },
     }) },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async () => { throw new Error('access denied'); } },
-    () => { throw new Error('must not create client'); },
+    {
+      callTool: async () => { throw new Error('access denied'); },
+      uploadArchive: async () => { throw new Error('must not upload'); },
+    },
     async () => new Uint8Array([1]),
   );
 
@@ -147,31 +127,39 @@ test('malformed validation tickets, outcomes, and digests fail closed with exact
       outcome: { validationReceipt: 'not-an-object' }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
     { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
       receiptId: 'vr-1', archiveDigest: 'sha256:not-a-digest',
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
     } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
     { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
       receiptId: 'vr-1', archiveDigest: `prefix-sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
     } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
     { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
       receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}-suffix`,
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
+    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
+    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
+      receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: '   ', scenarioName: 'Test scenario',
+    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
+    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
+      receiptId: '   ', archiveDigest: `sha256:${'a'.repeat(64)}`,
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: '   ',
+    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
+    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
+      receiptId: 42, archiveDigest: `sha256:${'a'.repeat(64)}`,
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
+    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
+    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
+      receiptId: 'vr-1', archiveDigest: '   ',
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
+    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
+    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
+      receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
       bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
     } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
     { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
       receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: '   ',
-    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
-    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
-      receiptId: '   ', archiveDigest: `sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
-    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
-    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
-      receiptId: 42, archiveDigest: `sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
-    } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
-    { ticket: { uploadUrl: 'https://nft.example/mcp/uploads/uv-1' }, outcome: { validationReceipt: {
-      receiptId: 'vr-1', archiveDigest: '   ',
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 42,
     } }, code: 'BUNDLE_VALIDATION_OUTCOME_INVALID' },
   ];
   for (const sample of malformed) {
@@ -188,13 +176,13 @@ test('validation normalizes surrounding whitespace at the MCP boundary', async (
     () => ({ uploadUrl: ' https://nft.example/mcp/uploads/uv-1 ' }),
     () => ({ validationReceipt: {
       receiptId: ' vr-1 ', archiveDigest: ` sha256:${'a'.repeat(64)} `,
-      bundleContentDigest: ` sha256:${'b'.repeat(64)} `, scenarioId: ' test ',
+      bundleContentDigest: ` sha256:${'b'.repeat(64)} `, scenarioId: ' test ', scenarioName: ' Test scenario ',
     } }),
     () => {}));
   const pending = await coordinator.validate(profile, '/workspace/bundle');
   assert.deepEqual(pending.receipt, {
     receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
-    bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
+    bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
   });
   await pending.bundle.dispose();
 });
@@ -224,14 +212,15 @@ test('publication is bound to the environment that produced validation evidence'
     'BUNDLE_PROFILE_MISMATCH');
 });
 
-test('publication authentication failure preserves the original error and disposes retained bytes', async () => {
+test('publication MCP failure preserves the original error and disposes retained bytes', async () => {
   const accessDenied = new Error('publication access denied');
   let disposed = 0;
   const coordinator = new ScenarioBundleCoordinator(
     { package: async () => { throw new Error('must not package'); } },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async () => { throw accessDenied; } },
-    () => { throw new Error('must not create client'); },
+    {
+      callTool: async () => { throw accessDenied; },
+      uploadArchive: async () => { throw new Error('must not upload'); },
+    },
     async () => new Uint8Array([1]),
   );
   await assert.rejects(coordinator.publish(profile, pendingBundle(() => { disposed += 1; }), 'CREATE'),
@@ -239,78 +228,50 @@ test('publication authentication failure preserves the original error and dispos
   assert.equal(disposed, 1);
 });
 
-test('reconcile uses the exact attempt id with publish scope and does not require retained bundle bytes', async () => {
+test('reconcile uses the exact attempt id through the active session and does not require retained bundle bytes', async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
-  const scopes: string[][] = [];
-  let closes = 0;
   const coordinator = new ScenarioBundleCoordinator(
     { package: async () => { throw new Error('must not package'); } },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async (_profile, _endpoint, requested) => {
-      scopes.push([...requested]);
-      return {
-        accessToken: 'reconcile-token', expiresAt: '2026-08-18T13:00:00.000Z', renewal: { kind: 'NONE' },
-      };
-    } },
-    () => ({
-      connect: async () => ({
-        serverName: 'pockethive-mcp', serverVersion: '1', principalLabel: 'QA',
-        capabilityFingerprint: 'sha256:x', observedAt: '2026-08-18T12:00:00Z',
-      }),
+    {
       callTool: async (name, args) => {
         calls.push({ name, args });
         return { attemptId: 'pa-ambiguous', state: 'SUCCEEDED', scenarioId: 'mixed-smoke' };
       },
       uploadArchive: async () => { throw new Error('must not upload'); },
-      close: async () => { closes += 1; },
-    }),
+    },
     async () => { throw new Error('must not read archive'); },
   );
 
   assert.deepEqual(await coordinator.reconcile(profile, 'pa-ambiguous'), {
     attemptId: 'pa-ambiguous', state: 'SUCCEEDED', scenarioId: 'mixed-smoke',
   });
-  assert.deepEqual(scopes, [[
-    'pockethive:mcp:discover', 'pockethive:mcp:read', 'pockethive:mcp:publish',
-  ]]);
   assert.deepEqual(calls, [{
     name: 'scenario_bundle_publication_reconcile',
     args: { attemptId: 'pa-ambiguous' },
   }]);
-  assert.equal(closes, 1);
 });
 
-test('reconcile rejects a malformed owner response and always closes a created client', async () => {
-  let closes = 0;
+test('reconcile rejects a malformed owner response from the active client', async () => {
   const coordinator = new ScenarioBundleCoordinator(
     { package: async () => { throw new Error('must not package'); } },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async () => ({
-      accessToken: 'reconcile-token', expiresAt: '2026-08-18T13:00:00.000Z', renewal: { kind: 'NONE' },
-    }) },
-    () => ({
-      connect: async () => ({
-        serverName: 'pockethive-mcp', serverVersion: '1', principalLabel: 'QA',
-        capabilityFingerprint: 'sha256:x', observedAt: '2026-08-18T12:00:00Z',
-      }),
+    {
       callTool: async () => null,
       uploadArchive: async () => { throw new Error('must not upload'); },
-      close: async () => { closes += 1; },
-    }),
+    },
     async () => { throw new Error('must not read archive'); },
   );
 
   await assertContractCode(coordinator.reconcile(profile, 'pa-malformed'), 'BUNDLE_PUBLICATION_ATTEMPT_INVALID');
-  assert.equal(closes, 1);
 });
 
-test('reconcile preserves authentication failure before a client exists', async () => {
+test('reconcile preserves an active MCP failure', async () => {
   const accessDenied = new Error('reconcile access denied');
   const coordinator = new ScenarioBundleCoordinator(
     { package: async () => { throw new Error('must not package'); } },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async () => { throw accessDenied; } },
-    () => { throw new Error('must not create client'); },
+    {
+      callTool: async () => { throw accessDenied; },
+      uploadArchive: async () => { throw new Error('must not upload'); },
+    },
     async () => { throw new Error('must not read archive'); },
   );
 
@@ -322,27 +283,18 @@ function client(
   uploads: Uint8Array[],
   ticket: () => unknown,
   upload: () => unknown,
-  close: () => void,
+  _close: () => void,
 ): BundleMcpClient {
   return {
-    connect: async (_endpoint: string, _accessToken: string, _signal?: AbortSignal) => ({
-      serverName: 'pockethive-mcp', serverVersion: '1', principalLabel: 'QA',
-      capabilityFingerprint: 'sha256:x', observedAt: '2026-08-18T12:00:00Z',
-    }),
     callTool: async (name, args) => { calls.push({ name, args }); return ticket(); },
     uploadArchive: async (_url, archive) => { uploads.push(archive); return upload(); },
-    close: async () => { close(); },
   };
 }
 
 function coordinatorWith(bundleClient: BundleMcpClient, dispose: () => void = () => {}): ScenarioBundleCoordinator {
   return new ScenarioBundleCoordinator(
     { package: async () => pendingBundle(dispose).bundle },
-    { validate: async () => endpoint },
-    { authenticateForScopes: async () => ({
-      accessToken: 'action-token', expiresAt: '2026-08-18T13:00:00.000Z', renewal: { kind: 'NONE' },
-    }) },
-    () => bundleClient,
+    bundleClient,
     async () => new Uint8Array([1]),
   );
 }
@@ -360,7 +312,7 @@ function pendingBundle(dispose: () => void): PendingBundlePublication {
     },
     receipt: {
       receiptId: 'vr-1', archiveDigest: `sha256:${'a'.repeat(64)}`,
-      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test',
+      bundleContentDigest: `sha256:${'b'.repeat(64)}`, scenarioId: 'test', scenarioName: 'Test scenario',
     },
   };
 }

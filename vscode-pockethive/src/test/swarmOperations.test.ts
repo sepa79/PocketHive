@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 
 import {
+  canRemoveSwarm,
   lifecycleToolCall,
   MAX_SWARM_ACTIONS,
   MAX_SWARM_ID_LENGTH,
@@ -12,6 +13,22 @@ import {
   swarmIdsForOperation,
   SWARM_OPERATIONS,
 } from '../operations/swarmOperations';
+
+test('remove is enabled only for a fresh ready stopped swarm', () => {
+  const stopped = {
+    controllerState: 'READY', workloadState: 'STOPPED', observationStale: false,
+    runtimeResourceState: 'PRESENT', activeOperation: null,
+  };
+  assert.equal(canRemoveSwarm(stopped), true);
+  assert.equal(canRemoveSwarm({ ...stopped, workloadState: 'RUNNING' }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, workloadState: 'STARTING' }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, workloadState: 'STOPPING' }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, observationStale: true }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, controllerState: 'FAILED' }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, runtimeResourceState: 'REMOVING' }), false);
+  assert.equal(canRemoveSwarm({ ...stopped, activeOperation: { state: 'ACCEPTED' } }), false);
+  assert.equal(canRemoveSwarm(null), false);
+});
 
 test('known swarm states expose one context-valid primary operation without fallback', () => {
   assert.equal(primaryOperationForStatus('RUNNING'), SWARM_OPERATIONS.STOP);

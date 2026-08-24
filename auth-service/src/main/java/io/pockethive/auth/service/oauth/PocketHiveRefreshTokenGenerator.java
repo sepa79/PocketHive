@@ -10,16 +10,19 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 
-/** Issues rotating bearer material only for the exact least-privilege companion base session. */
+/** Issues rotating bearer material only for one of the declared companion grant profiles. */
 public final class PocketHiveRefreshTokenGenerator implements OAuth2TokenGenerator<OAuth2RefreshToken> {
-    private static final Set<String> BASE_SESSION_SCOPES = Set.of(
-        PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
+    private static final Set<Set<String>> COMPANION_SESSION_SCOPE_PROFILES = Set.of(
+        Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ),
+        Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
+            PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR),
+        PocketHiveMcpScopes.COMPANION);
     private final SecureRandom random = new SecureRandom();
 
     @Override
     public OAuth2RefreshToken generate(OAuth2TokenContext context) {
         if (!OAuth2TokenType.REFRESH_TOKEN.equals(context.getTokenType())
-            || !BASE_SESSION_SCOPES.equals(context.getAuthorizedScopes())) {
+            || !COMPANION_SESSION_SCOPE_PROFILES.contains(context.getAuthorizedScopes())) {
             return null;
         }
         byte[] entropy = new byte[64];

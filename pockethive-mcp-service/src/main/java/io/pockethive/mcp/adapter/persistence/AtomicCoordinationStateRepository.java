@@ -32,9 +32,9 @@ import java.time.Duration;
 import java.time.Instant;
 
 public final class AtomicCoordinationStateRepository implements CoordinationStateRepository, AutoCloseable {
-    private static final int SCHEMA_VERSION = 1;
     private static final String STATE_FILE = "state.json";
     private static final String LOCK_FILE = "state.lock";
+    private static final CoordinationStateSchema STATE_SCHEMA = new CoordinationStateSchema();
 
     private final ObjectMapper mapper;
     private final PocketHiveMcpProperties.StateMode mode;
@@ -103,7 +103,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
         Map<String, AgentSessionSnapshot> sessions = new TreeMap<>(state.sessions());
         sessions.put(session.id(), session.snapshot());
-        replace(new StateDocument(SCHEMA_VERSION, sessions, state.workflows(), state.generatedFiles(),
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -112,7 +112,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         requirePresent(state.sessions(), session.id(), "AGENT_SESSION_NOT_FOUND");
         Map<String, AgentSessionSnapshot> sessions = new TreeMap<>(state.sessions());
         sessions.put(session.id(), session.snapshot());
-        replace(new StateDocument(SCHEMA_VERSION, sessions, state.workflows(), state.generatedFiles(),
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -130,7 +130,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         sessions.put(session.id(), session.snapshot());
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
-        replace(new StateDocument(SCHEMA_VERSION, sessions, workflows, state.generatedFiles(),
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -141,7 +141,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
         files.put(workflow.id(), copyFiles(generatedFiles));
-        replace(new StateDocument(SCHEMA_VERSION, state.sessions(), workflows, files,
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
             state.uploadCoordination()));
     }
 
@@ -150,7 +150,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         requirePresent(state.workflows(), workflow.id(), "SCENARIO_WORKFLOW_NOT_FOUND");
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
-        replace(new StateDocument(SCHEMA_VERSION, state.sessions(), workflows, state.generatedFiles(),
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -161,7 +161,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
         files.remove(workflow.id());
-        replace(new StateDocument(SCHEMA_VERSION, state.sessions(), workflows, files,
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
             state.uploadCoordination()));
     }
 
@@ -177,7 +177,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
 
     @Override
     public synchronized void saveUploadCoordination(UploadCoordinationSnapshot uploadCoordination) {
-        replace(new StateDocument(SCHEMA_VERSION, state.sessions(), state.workflows(), state.generatedFiles(),
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), state.workflows(), state.generatedFiles(),
             uploadCoordination));
     }
 
@@ -217,7 +217,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
                 }
             }
         });
-        replace(new StateDocument(SCHEMA_VERSION, sessions, workflows, files, state.uploadCoordination()));
+        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, files, state.uploadCoordination()));
     }
 
     private void replace(StateDocument candidate) {
@@ -257,8 +257,12 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
                 if (bytes.length > maxStateBytes) {
                     throw new IllegalStateException("MCP_STATE_CAPACITY_EXCEEDED_AT_STARTUP");
                 }
-                state = mapper.readValue(bytes, StateDocument.class);
+                CoordinationStateSchema.Migration migration = STATE_SCHEMA.migrate(mapper.readTree(bytes));
+                state = mapper.treeToValue(migration.encodedState(), StateDocument.class);
                 validateLoadedState(state);
+                if (migration.migrated()) {
+                    replace(state);
+                }
             }
         } catch (IllegalStateException exception) {
             closeAfterInitialisationFailure();
@@ -270,7 +274,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
     }
 
     private void validateLoadedState(StateDocument loaded) {
-        if (loaded.schemaVersion() != SCHEMA_VERSION || loaded.sessions() == null
+        if (loaded.schemaVersion() != CoordinationStateSchema.CURRENT_VERSION || loaded.sessions() == null
             || loaded.workflows() == null || loaded.generatedFiles() == null
             || loaded.uploadCoordination() == null
             || openSessionCount(loaded, null) > maxOpenSessions) {
@@ -387,7 +391,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
 
         static StateDocument empty() {
-            return new StateDocument(SCHEMA_VERSION, Map.of(), Map.of(), Map.of(),
+            return new StateDocument(CoordinationStateSchema.CURRENT_VERSION, Map.of(), Map.of(), Map.of(),
                 UploadCoordinationSnapshot.empty());
         }
     }

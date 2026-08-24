@@ -2,6 +2,7 @@ package io.pockethive.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -12,19 +13,24 @@ import static org.hamcrest.Matchers.containsString;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.contract.AuthGrantDto;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.auth.service.domain.StoredUser;
+import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -39,6 +45,7 @@ class OAuthAuthorizationServerTest {
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
+    @Autowired InMemoryUserStore users;
 
     @Test
     void publishesCanonicalAuthorizationServerMetadata() throws Exception {
@@ -272,6 +279,63 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
+    void companionAuthorizationNarrowsOnceToCurrentGrantsAndRefreshNeverWidens() throws Exception {
+        assertCompanionSession("local-viewer", List.of(
+            PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ));
+        assertCompanionSession("local-runner", List.of(
+            PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
+            PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR));
+        assertCompanionSession("local-admin", PocketHiveMcpScopes.COMPANION_ORDERED);
+    }
+
+    @Test
+    void companionRefreshInvalidatesImmediatelyAfterCurrentGrantReduction() throws Exception {
+        StoredUser runner = users.findByUsername("local-runner").orElseThrow();
+        List<AuthGrantDto> originalGrants = runner.grants();
+        try {
+            List<String> runnerScopes = List.of(
+                PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
+                PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR);
+            MvcResult authorization = mvc.perform(get("/oauth/authorize")
+                    .with(user("local-runner"))
+                    .queryParam("response_type", "code")
+                    .queryParam("client_id", CLIENT_ID)
+                    .queryParam("redirect_uri", REDIRECT_URI)
+                    .queryParam("resource", RESOURCE)
+                    .queryParam("scope", String.join(" ", PocketHiveMcpScopes.COMPANION_ORDERED))
+                    .queryParam("state", "grant-reduction")
+                    .queryParam("code_challenge", challenge(VERIFIER))
+                    .queryParam("code_challenge_method", "S256"))
+                .andExpect(status().is3xxRedirection())
+                .andReturn();
+            String code = UriComponentsBuilder.fromUri(authorizationCallback(
+                    authorization, runnerScopes.toArray(String[]::new)))
+                .build().getQueryParams().getFirst("code");
+            MvcResult tokenResult = mvc.perform(post("/oauth/token")
+                    .param("grant_type", "authorization_code")
+                    .param("client_id", CLIENT_ID)
+                    .param("code", code)
+                    .param("redirect_uri", REDIRECT_URI)
+                    .param("resource", RESOURCE)
+                    .param("code_verifier", VERIFIER))
+                .andExpect(status().isOk())
+                .andReturn();
+            JsonNode token = mapper.readTree(tokenResult.getResponse().getContentAsString());
+
+            users.replaceGrants(runner.id(), List.of(originalGrants.getFirst()));
+            mvc.perform(post("/oauth/token")
+                    .param("grant_type", "refresh_token")
+                    .param("client_id", CLIENT_ID)
+                    .param("refresh_token", token.path("refresh_token").asText())
+                    .param("resource", RESOURCE))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("invalid_grant"));
+        } finally {
+            users.replaceGrants(runner.id(), originalGrants);
+        }
+    }
+
+    @Test
     @WithMockUser(username = "local-admin")
     void privilegedScopeAuthorizationRemainsEphemeral() throws Exception {
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
@@ -408,7 +472,9 @@ class OAuthAuthorizationServerTest {
         if ("/oauth/consent".equals(redirect.getPath())) {
             String consentState = URLDecoder.decode(UriComponentsBuilder.fromUri(redirect).build()
                 .getQueryParams().getFirst("state"), StandardCharsets.UTF_8);
+            MockHttpSession session = (MockHttpSession) authorization.getRequest().getSession(false);
             MvcResult approved = mvc.perform(post("/oauth/authorize")
+                    .session(session)
                     .with(csrf())
                     .param("client_id", CLIENT_ID)
                     .param("state", consentState)
@@ -449,6 +515,51 @@ class OAuthAuthorizationServerTest {
             .andExpect(status().isOk())
             .andReturn();
         return mapper.readTree(token.getResponse().getContentAsString());
+    }
+
+    private void assertCompanionSession(String username, List<String> grantedScopes) throws Exception {
+        MvcResult authorization = mvc.perform(get("/oauth/authorize")
+                .with(user(username))
+                .queryParam("response_type", "code")
+                .queryParam("client_id", CLIENT_ID)
+                .queryParam("redirect_uri", REDIRECT_URI)
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", String.join(" ", PocketHiveMcpScopes.COMPANION_ORDERED))
+                .queryParam("state", "companion-" + username)
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+        String code = UriComponentsBuilder.fromUri(authorizationCallback(
+                authorization, grantedScopes.toArray(String[]::new)))
+            .build().getQueryParams().getFirst("code");
+        MvcResult tokenResult = mvc.perform(post("/oauth/token")
+                .param("grant_type", "authorization_code")
+                .param("client_id", CLIENT_ID)
+                .param("code", code)
+                .param("redirect_uri", REDIRECT_URI)
+                .param("resource", RESOURCE)
+                .param("code_verifier", VERIFIER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")))
+            .andReturn();
+        JsonNode token = mapper.readTree(tokenResult.getResponse().getContentAsString());
+        assertThat(Set.copyOf(List.of(token.path("scope").asText().split(" "))))
+            .containsExactlyInAnyOrderElementsOf(grantedScopes);
+
+        MvcResult refreshedResult = mvc.perform(post("/oauth/token")
+                .param("grant_type", "refresh_token")
+                .param("client_id", CLIENT_ID)
+                .param("refresh_token", token.path("refresh_token").asText())
+                .param("resource", RESOURCE))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")))
+            .andReturn();
+        JsonNode refreshed = mapper.readTree(refreshedResult.getResponse().getContentAsString());
+        assertThat(Set.copyOf(List.of(refreshed.path("scope").asText().split(" "))))
+            .containsExactlyInAnyOrderElementsOf(grantedScopes);
+        assertThat(refreshed.path("refresh_token").asText())
+            .isNotEqualTo(token.path("refresh_token").asText());
     }
 
     private static String challenge(String verifier) throws Exception {

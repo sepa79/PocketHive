@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 const project = resolve(import.meta.dirname, '..');
@@ -7,6 +7,7 @@ const sourcePath = resolve(project, '..', 'ui-v2', 'public', 'logo.svg');
 const activityPath = resolve(project, 'resources', 'activity-mark.svg');
 const brandTokensPath = resolve(project, 'resources', 'brand-tokens.css');
 const headerPath = resolve(project, 'resources', 'logo-mark.svg');
+const callbackLogoPath = resolve(project, 'src', 'generated', 'callbackLogo.ts');
 const source = await readFile(sourcePath, 'utf8');
 const digest = createHash('sha256').update(source).digest('hex');
 const mark = match(source, /<!-- === MARK === -->([\s\S]*?)<!-- === TEXT === -->/).trim();
@@ -71,14 +72,22 @@ const brandTokens = `/* Generated from ui-v2/public/logo.svg sha256:${digest}; d
 }
 `;
 
+const callbackLogo = `// Generated from ui-v2/public/logo.svg sha256:${digest}; do not edit.
+export const CALLBACK_LOGO_DATA_URI =
+  'data:image/svg+xml;base64,${Buffer.from(source, 'utf8').toString('base64')}';
+`;
+
 if (process.argv.includes('--check')) {
   await check(activityPath, activity);
   await check(brandTokensPath, brandTokens);
   await check(headerPath, header);
+  await check(callbackLogoPath, callbackLogo);
 } else {
+  await mkdir(resolve(project, 'src', 'generated'), { recursive: true });
   await writeFile(activityPath, activity);
   await writeFile(brandTokensPath, brandTokens);
   await writeFile(headerPath, header);
+  await writeFile(callbackLogoPath, callbackLogo);
 }
 
 function match(value, pattern) {

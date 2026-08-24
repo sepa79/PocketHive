@@ -325,6 +325,7 @@ services:
     environment:
       PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}
       PH_MCP_OWNER_API_BASE: http://ui:8088
+      PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
       PH_MCP_PROTOCOL_REVISION: "2025-11-25"
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state

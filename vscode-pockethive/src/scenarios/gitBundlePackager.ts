@@ -30,6 +30,12 @@ export interface PreparedCommittedBundle {
   dispose(): Promise<void>;
 }
 
+export interface CommittedBundleReference {
+  readonly repositoryRoot: string;
+  readonly bundlePath: string;
+  readonly commit: string;
+}
+
 export type GitCommand = (cwd: string, args: readonly string[], maxBytes?: number) => Promise<Buffer>;
 
 export interface GitBundleLimits {
@@ -62,24 +68,36 @@ export class GitBundlePackager {
     private readonly limits: GitBundleLimits = DEFAULT_LIMITS,
   ) {}
 
-  async package(selectedDirectory: string): Promise<PreparedCommittedBundle> {
-    const selected = await realpath(selectedDirectory);
-    const repositoryRoot = await this.requiredCommand(selected, ['rev-parse', '--show-toplevel'],
-      'GIT_REPOSITORY_REQUIRED');
-    const root = await realpath(text(repositoryRoot));
-    const relativePath = relative(root, selected);
-    if (!relativePath || isAbsolute(relativePath) || relativePath === '..' || relativePath.startsWith(`..${sep}`)) {
-      throw contract('GIT_BUNDLE_PATH_INVALID');
+  async package(source: string | CommittedBundleReference): Promise<PreparedCommittedBundle> {
+    let root: string;
+    let bundlePath: string;
+    if (typeof source === 'string') {
+      const selected = await realpath(source);
+      const repositoryRoot = await this.requiredCommand(selected, ['rev-parse', '--show-toplevel'],
+        'GIT_REPOSITORY_REQUIRED');
+      root = await realpath(text(repositoryRoot));
+      const relativePath = relative(root, selected);
+      bundlePath = requiredBundlePath(relativePath.split(sep).join('/'));
+    } else {
+      bundlePath = requiredBundlePath(source.bundlePath);
+      requiredCommit(source.commit);
+      try {
+        root = await realpath(source.repositoryRoot);
+      } catch {
+        throw contract('GIT_REPOSITORY_REQUIRED');
+      }
     }
-    const bundlePath = relativePath.split(sep).join('/');
-    await this.requiredCommand(root, ['cat-file', '-e', `HEAD:${bundlePath}`],
+    const commit = requiredCommit(text(await this.requiredCommand(root, ['rev-parse', 'HEAD'],
+      'GIT_COMMIT_REQUIRED')));
+    if (typeof source !== 'string' && source.commit !== commit) {
+      throw contract('GIT_REPOSITORY_HEAD_CHANGED');
+    }
+    await this.requiredCommand(root, ['cat-file', '-e', `${commit}:${bundlePath}`],
       'GIT_BUNDLE_TREE_REQUIRED');
     const repository = text(await this.requiredCommand(root, ['remote', 'get-url', 'origin'],
       'GIT_REMOTE_ORIGIN_REQUIRED'));
-    const commit = text(await this.requiredCommand(root, ['rev-parse', 'HEAD'], 'GIT_COMMIT_REQUIRED'));
-    if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(commit)) throw contract('GIT_COMMIT_INVALID');
     const tree = await this.requiredCommand(root,
-      ['ls-tree', '-r', '-z', '--full-tree', `HEAD:${bundlePath}`], 'GIT_BUNDLE_TREE_REQUIRED');
+      ['ls-tree', '-r', '-z', '--full-tree', `${commit}:${bundlePath}`], 'GIT_BUNDLE_TREE_REQUIRED');
     const entries = parseTree(tree);
     if (entries.length === 0) throw contract('GIT_BUNDLE_FILES_REQUIRED');
     if (entries.length > this.limits.files) throw contract('GIT_BUNDLE_FILE_LIMIT_EXCEEDED');
@@ -100,7 +118,7 @@ export class GitBundlePackager {
     fileManifest.sort((left, right) => left.path.localeCompare(right.path, 'en'));
 
     const archive = await this.requiredCommand(root,
-      ['archive', '--format=zip', `HEAD:${bundlePath}`], 'GIT_BUNDLE_ARCHIVE_FAILED',
+      ['archive', '--format=zip', `${commit}:${bundlePath}`], 'GIT_BUNDLE_ARCHIVE_FAILED',
       this.limits.archiveBytes + 1);
     if (archive.byteLength > this.limits.archiveBytes) throw contract('GIT_BUNDLE_ARCHIVE_LIMIT_EXCEEDED');
     const ownedArchive = await persistArchive(archive);
@@ -185,6 +203,18 @@ function safePath(value: string): boolean {
     && !value.split('/').some(segment => segment === '' || segment === '.' || segment === '..');
 }
 
+function requiredBundlePath(value: string): string {
+  if (value.trim() !== value || isAbsolute(value) || !safePath(value)) {
+    throw contract('GIT_BUNDLE_PATH_INVALID');
+  }
+  return value;
+}
+
+function requiredCommit(value: string): string {
+  if (!/^[0-9a-f]{40}$|^[0-9a-f]{64}$/.test(value)) throw contract('GIT_COMMIT_INVALID');
+  return value;
+}
+
 function text(value: Buffer): string {
   const result = value.toString('utf8').trim();
   if (!result) throw contract('GIT_COMMAND_OUTPUT_REQUIRED');
@@ -195,7 +225,7 @@ function contract(code: string): ConnectionContractError {
   return new ConnectionContractError(code, code);
 }
 
-function runGit(cwd: string, args: readonly string[], maxBytes = 1_048_576): Promise<Buffer> {
+export function runGit(cwd: string, args: readonly string[], maxBytes = 1_048_576): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     execFile('git', [...args], {
       cwd,

@@ -27,6 +27,7 @@ class BundleValidationResultContractTest {
                 "bundles/demo",
                 "bundles/demo",
                 "demo",
+                "Demo scenario",
                 new BundleValidationEvidence("2.0.0", "2.0.0", "0.15.35", "sha256:test"),
                 List.of(
                         new ValidationFinding(
@@ -49,6 +50,7 @@ class BundleValidationResultContractTest {
         assertThat(json.get("ok").asBoolean()).isFalse();
         assertThat(json.get("source").asText()).isEqualTo("uploaded-zip");
         assertThat(json.get("scenarioId").asText()).isEqualTo("demo");
+        assertThat(json.get("scenarioName").asText()).isEqualTo("Demo scenario");
         assertThat(json.at("/validation/scenarioProtocolVersion").asText()).isEqualTo("2.0.0");
         assertThat(json.at("/validation/supportedScenarioProtocolVersion").asText()).isEqualTo("2.0.0");
         assertThat(json.at("/validation/scenarioManagerVersion").asText()).isEqualTo("0.15.35");
@@ -96,6 +98,7 @@ class BundleValidationResultContractTest {
                 .contains("bundleKey: string | null")
                 .contains("bundlePath: string | null")
                 .contains("scenarioId: string | null")
+                .contains("scenarioName: string | null")
                 .contains("validation:")
                 .contains("errors: number")
                 .contains("warnings: number")

@@ -37,6 +37,7 @@ class McpDeploymentContractTest {
             .contains("image: ${DOCKER_REGISTRY:-}pockethive-mcp:${POCKETHIVE_VERSION:-latest}")
             .contains("PH_MCP_POCKETHIVE_INGRESS: http://localhost:8088")
             .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
+            .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S")
             .contains("read_only: true", "cap_drop:", "- ALL", "pockethive-mcp-state:")
             .doesNotContain("3100:8080");
     }
@@ -63,6 +64,17 @@ class McpDeploymentContractTest {
     }
 
     @Test
+    void fullIngressesExposeTheCanonicalTcpMockHealthPath() throws IOException {
+        for (String path : List.of("ui-v2/nginx.conf", "deploy/hiveforge/runtime/nginx.swarm.conf")) {
+            assertThat(text(path)).as(path)
+                .contains("location /tcp-mock/")
+                .contains("set $tcp_mock_host tcp-mock-server;")
+                .contains("rewrite ^/tcp-mock/(.*)$ /$1 break;")
+                .contains("proxy_pass http://$tcp_mock_host:8080;");
+        }
+    }
+
+    @Test
     void hiveForgeReleaseAndStackDeployTheSameMcpImageWithPersistentState() throws IOException {
         assertThat(text("deploy/hiveforge/release-artifact.json"))
             .contains("\"name\": \"pockethive-mcp\"")
@@ -71,7 +83,8 @@ class McpDeploymentContractTest {
             .contains("  pockethive-mcp:")
             .contains("state/pockethive-mcp:/var/lib/pockethive-mcp/state")
             .contains("PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}")
-            .contains("PH_MCP_OWNER_API_BASE: http://ui:8088");
+            .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
+            .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S");
         assertThat(text("deploy/hiveforge/components/stack/ansible/swarm-stack.yml"))
             .contains("state/pockethive-mcp");
     }

@@ -10,7 +10,11 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.security.oauth2.core.OAuth2AccessToken;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
+import org.springframework.security.oauth2.core.OAuth2ErrorCodes;
 import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
@@ -33,7 +37,11 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
         String principalName = context.getAuthorization().getPrincipalName();
         StoredUser stored = users.findByUsername(principalName)
             .filter(StoredUser::active)
-            .orElseThrow(() -> new IllegalStateException("OAUTH_PRINCIPAL_NOT_FOUND"));
+            .orElseThrow(PocketHiveAccessTokenGenerator::invalidGrant);
+        Set<String> effectiveScopes = context.getAuthorizedScopes();
+        if (!McpScopeAuthorizationValidator.allowedScopes(stored.grants()).containsAll(effectiveScopes)) {
+            throw invalidGrant();
+        }
         AuthenticatedUserDto principal = stored.toDto(properties.getProvider());
         Instant issuedAt = Instant.now();
         Instant expiresAt = issuedAt.plus(context.getRegisteredClient().getTokenSettings().getAccessTokenTimeToLive());
@@ -43,13 +51,18 @@ public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerato
         claims.put("aud", List.of(properties.getOauth().getResource().toString()));
         claims.put("client_id", context.getRegisteredClient().getClientId());
         claims.put("username", stored.username());
-        claims.put("scope", String.join(" ", context.getAuthorizedScopes()));
+        claims.put("scope", String.join(" ", effectiveScopes));
         claims.put("iat", issuedAt);
         claims.put("exp", expiresAt);
         claims.put("principal", principal);
         byte[] entropy = new byte[32];
         random.nextBytes(entropy);
         String token = "phmcp_" + Base64.getUrlEncoder().withoutPadding().encodeToString(entropy);
-        return new PocketHiveAccessToken(token, issuedAt, expiresAt, context.getAuthorizedScopes(), claims);
+        return new PocketHiveAccessToken(token, issuedAt, expiresAt, effectiveScopes, claims);
+    }
+
+    private static OAuth2AuthenticationException invalidGrant() {
+        return new OAuth2AuthenticationException(new OAuth2Error(
+            OAuth2ErrorCodes.INVALID_GRANT, "Principal is inactive or no longer grants the authorized scopes", null));
     }
 }

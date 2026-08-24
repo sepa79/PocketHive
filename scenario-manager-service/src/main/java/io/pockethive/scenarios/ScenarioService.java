@@ -1773,6 +1773,7 @@ public class ScenarioService {
                 entry.bundlePath(),
                 null,
                 null,
+                null,
                 entry.bundleDir(),
                 List.of(finding));
         }

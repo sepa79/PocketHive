@@ -28,7 +28,7 @@ class ScenarioManagerBundleClientTest {
     @Test
     void validatesCreatesAndReplacesOnlyThroughTheCanonicalOwnerEndpoints() throws Exception {
         JsonNode validation = mapper.readTree("""
-            {"ok":true,"scenarioId":"db-smoke","validation":{"artifactDigest":"sha256:abc"}}
+            {"ok":true,"scenarioId":"db-smoke","scenarioName":"DB smoke","validation":{"artifactDigest":"sha256:abc"}}
             """);
         when(owner.postZip("/scenario-manager/validation/scenario-bundles", ARCHIVE)).thenReturn(validation);
         when(owner.postZip("/scenario-manager/scenarios/bundles", ARCHIVE)).thenReturn(validation);
@@ -38,6 +38,7 @@ class ScenarioManagerBundleClientTest {
             .satisfies(result -> {
                 assertThat(result.valid()).isTrue();
                 assertThat(result.scenarioId()).isEqualTo("db-smoke");
+                assertThat(result.scenarioName()).isEqualTo("DB smoke");
                 assertThat(result.bundleContentDigest()).isEqualTo("sha256:abc");
             });
         assertThat(client.create(ARCHIVE)).isSameAs(validation);
@@ -52,7 +53,7 @@ class ScenarioManagerBundleClientTest {
                           {"scenarioId":"db/smoke","bundleKey":"folder/db-smoke"}]}
             """));
         JsonNode current = mapper.readTree("""
-            {"ok":true,"scenarioId":"db/smoke","validation":{"artifactDigest":"sha256:current"}}
+            {"ok":true,"scenarioId":"db/smoke","scenarioName":"DB smoke","validation":{"artifactDigest":"sha256:current"}}
             """);
         when(owner.post(
             "/scenario-manager/validation/scenario-bundles/existing?bundleKey=folder%2Fdb-smoke", Map.of()))

@@ -225,13 +225,14 @@ public final class BundleUploadCoordinator {
     private UploadOutcome validate(ValidationUploadTicket ticket, ArchiveInspection inspection,
                                    Path spool, Instant now) {
         OwnerValidationResult ownerResult = owner.validate(spool);
-        if (!ownerResult.valid() || ownerResult.bundleContentDigest() == null
-            || ownerResult.bundleContentDigest().isBlank()) {
+        if (!ownerResult.valid() || ownerResult.scenarioId() == null || ownerResult.scenarioId().isBlank()
+            || ownerResult.scenarioName() == null || ownerResult.scenarioName().isBlank()
+            || ownerResult.bundleContentDigest() == null || ownerResult.bundleContentDigest().isBlank()) {
             throw new UploadRejectedException("SCENARIO_BUNDLE_VALIDATION_FAILED");
         }
         BundleValidationReceipt receipt = new BundleValidationReceipt(id("vr"), ticket.principal(),
             ticket.workflowBinding(), ticket.source(), ticket.manifest(), inspection.archiveDigest(),
-            ownerResult.bundleContentDigest(), ownerResult.scenarioId(), now);
+            ownerResult.bundleContentDigest(), ownerResult.scenarioId(), ownerResult.scenarioName(), now);
         receipts.put(receipt.id(), receipt);
         ticket.consume();
         persistOrRestore();

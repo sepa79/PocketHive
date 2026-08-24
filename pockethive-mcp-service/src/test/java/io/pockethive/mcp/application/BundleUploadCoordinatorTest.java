@@ -64,6 +64,8 @@ class BundleUploadCoordinatorTest {
         BundleValidationReceipt receipt = coordinator.validationReceipt(receiptView.receiptId(), principal);
         assertThat(receipt.archiveDigest()).startsWith("sha256:");
         assertThat(receipt.bundleContentDigest()).isEqualTo("sha256:owner-content");
+        assertThat(receipt.scenarioId()).isEqualTo("safe");
+        assertThat(receipt.scenarioName()).isEqualTo("Safe scenario");
         assertThat(owner.validations).isEqualTo(1);
         assertThat(Files.list(properties().uploadSpoolPath())).isEmpty();
 
@@ -170,7 +172,8 @@ class BundleUploadCoordinatorTest {
         try (AtomicCoordinationStateRepository firstState = state(properties)) {
             BundleUploadCoordinator first = new BundleUploadCoordinator(owner, properties, firstState,
                 lifecycle());
-            receipt = validate(first, principal, archive, manifest);
+            receipt = validate(first, principal, archive, manifest,
+                Instant.parse("2026-08-18T12:00:00Z"));
         }
 
         try (AtomicCoordinationStateRepository restartedState = state(properties)) {
@@ -448,9 +451,13 @@ class BundleUploadCoordinatorTest {
         byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
         for (OwnerValidationResult invalid : List.of(
-            new OwnerValidationResult(false, "safe", "sha256:content", Map.of()),
-            new OwnerValidationResult(true, "safe", null, Map.of()),
-            new OwnerValidationResult(true, "safe", " ", Map.of()))) {
+            new OwnerValidationResult(false, "safe", "Safe scenario", "sha256:content", Map.of()),
+            new OwnerValidationResult(true, "safe", "Safe scenario", null, Map.of()),
+            new OwnerValidationResult(true, "safe", "Safe scenario", " ", Map.of()),
+            new OwnerValidationResult(true, null, "Safe scenario", "sha256:content", Map.of()),
+            new OwnerValidationResult(true, " ", "Safe scenario", "sha256:content", Map.of()),
+            new OwnerValidationResult(true, "safe", null, "sha256:content", Map.of()),
+            new OwnerValidationResult(true, "safe", " ", "sha256:content", Map.of()))) {
             FakeOwner owner = new FakeOwner();
             owner.validationResult = invalid;
             RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
@@ -693,7 +700,7 @@ class BundleUploadCoordinatorTest {
         PrincipalKey principal = principal("qa-lead");
         BundleValidationReceipt receipt = new BundleValidationReceipt("receipt-old", principal,
             UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), "sha256:archive",
-            "sha256:content", "safe", created);
+            "sha256:content", "safe", "Safe scenario", created);
         PublicationAttempt attempt = new PublicationAttempt("attempt-old", principal, PublicationMode.REPLACE,
             "safe", "sha256:content", created);
         ValidationUploadTicket oldTicket = new ValidationUploadTicket("ticket-old", principal,
@@ -733,12 +740,12 @@ class BundleUploadCoordinatorTest {
         BundleFileManifest manifest = new BundleFileManifest(List.of());
         BundleValidationReceipt oldReceipt = new BundleValidationReceipt("old-receipt", principal,
             UploadWorkflowBinding.direct(), source(), manifest, "sha256:old-archive", "sha256:old-content",
-            "old", old);
+            "old", "Old scenario", old);
         ValidationUploadTicket oldTicket = new ValidationUploadTicket("old-ticket", principal,
             UploadWorkflowBinding.direct(), source(), manifest, old.plusSeconds(60));
         BundleValidationReceipt currentReceipt = new BundleValidationReceipt("current-receipt", principal,
             UploadWorkflowBinding.direct(), source(), manifest, "sha256:archive", "sha256:owner-content",
-            "safe", now);
+            "safe", "Safe scenario", now);
         PublicationAttempt oldAttempt = new PublicationAttempt("old-attempt", principal,
             PublicationMode.REPLACE, "old", "sha256:old-content", old);
         RecordingStateRepository state = new RecordingStateRepository(new UploadCoordinationSnapshot(
@@ -779,7 +786,7 @@ class BundleUploadCoordinatorTest {
         PrincipalKey principal = principal("qa-lead");
         BundleValidationReceipt receipt = new BundleValidationReceipt("receipt-only", principal,
             UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), "sha256:archive",
-            "sha256:content", "safe", created);
+            "sha256:content", "safe", "Safe scenario", created);
         RecordingStateRepository receiptState = new RecordingStateRepository(new UploadCoordinationSnapshot(
             Map.of(), Map.of(receipt.id(), receipt), Map.of()));
         BundleUploadCoordinator receiptCoordinator = new BundleUploadCoordinator(new FakeOwner(), properties(),
@@ -831,7 +838,8 @@ class BundleUploadCoordinatorTest {
         Instant now = Instant.parse("2026-08-18T10:00:00Z");
         BundleFileManifest manifest = new BundleFileManifest(List.of());
         BundleValidationReceipt receipt = new BundleValidationReceipt("receipt", principal,
-            UploadWorkflowBinding.direct(), source(), manifest, "sha256:archive", "sha256:content", "safe", now);
+            UploadWorkflowBinding.direct(), source(), manifest, "sha256:archive", "sha256:content", "safe",
+            "Safe scenario", now);
         Map<String, UploadTicketSnapshot> tickets = new java.util.LinkedHashMap<>();
         Map<String, PublicationAttemptSnapshot> attempts = new java.util.LinkedHashMap<>();
 
@@ -902,7 +910,7 @@ class BundleUploadCoordinatorTest {
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
         BundleValidationReceipt canonicalReceipt = new BundleValidationReceipt("canonical-receipt", principal,
             UploadWorkflowBinding.direct(), source(), manifest, "sha256:archive", "sha256:owner-content",
-            "safe", now);
+            "safe", "Safe scenario", now);
         PublicationAttempt canonicalAttempt = new PublicationAttempt("canonical-attempt", principal,
             PublicationMode.REPLACE, "safe", canonicalReceipt.bundleContentDigest(), now);
         RecordingStateRepository state = new RecordingStateRepository(new UploadCoordinationSnapshot(
@@ -973,10 +981,15 @@ class BundleUploadCoordinatorTest {
 
     private BundleValidationReceipt validate(BundleUploadCoordinator coordinator, PrincipalKey principal,
                                          byte[] archive, BundleFileManifest manifest) {
+        return validate(coordinator, principal, archive, manifest, Instant.now());
+    }
+
+    private BundleValidationReceipt validate(BundleUploadCoordinator coordinator, PrincipalKey principal,
+                                         byte[] archive, BundleFileManifest manifest, Instant now) {
         ValidationUploadTicket ticket = coordinator.prepareValidation(principal, "wf-1", source(), manifest,
-            Instant.now());
+            now);
         BundleValidationReceiptView receipt = ((ValidationUploadOutcome) coordinator.receive(ticket.id(), principal,
-            "application/zip", archive.length, new ByteArrayInputStream(archive), Instant.now())).validationReceipt();
+            "application/zip", archive.length, new ByteArrayInputStream(archive), now)).validationReceipt();
         return coordinator.validationReceipt(receipt.receiptId(), principal);
     }
 
@@ -1175,7 +1188,7 @@ class BundleUploadCoordinatorTest {
         boolean rejected;
         RuntimeException validationFailure;
         OwnerValidationResult validationResult =
-            new OwnerValidationResult(true, "safe", "sha256:owner-content", Map.of("ok", true));
+            new OwnerValidationResult(true, "safe", "Safe scenario", "sha256:owner-content", Map.of("ok", true));
         Consumer<Path> onValidate = ignored -> { };
 
         @Override

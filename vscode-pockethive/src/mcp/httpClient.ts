@@ -64,17 +64,9 @@ export class McpHttpClient {
       );
     }
     await this.notification('notifications/initialized', signal);
-    const resource = await this.request<ResourceResult>('resources/read', {
-      uri: 'pockethive://capabilities/current',
-    }, true, signal);
-    const content = resource.contents?.find(item => item.uri === 'pockethive://capabilities/current')?.text;
-    if (!content) {
-      throw new ConnectionContractError(
-        'MCP_CAPABILITY_RESOURCE_INVALID',
-        'MCP_CAPABILITY_RESOURCE_INVALID: missing current capabilities',
-      );
-    }
-    const capabilities = parseObject(content, 'MCP_CAPABILITY_RESOURCE_INVALID');
+    const capabilities = await this.readResource(
+      'pockethive://capabilities/current', signal, 'MCP_CAPABILITY_RESOURCE_INVALID',
+      'MCP_CAPABILITY_RESOURCE_INVALID: missing current capabilities');
     const catalogueDigest = requiredString(capabilities, 'catalogueDigest', 'MCP_CAPABILITY_RESOURCE_INVALID');
     const principalLabel = requiredString(capabilities, 'principalLabel', 'MCP_CAPABILITY_RESOURCE_INVALID');
     return {
@@ -96,6 +88,20 @@ export class McpHttpClient {
       throw new ConnectionContractError('MCP_TOOL_FAILED', JSON.stringify(result.structuredContent ?? result.content));
     }
     return result.structuredContent ?? result.content;
+  }
+
+  async readResource(
+    uri: string,
+    signal?: AbortSignal,
+    errorCode = 'MCP_RESOURCE_INVALID',
+    missingMessage = `${errorCode}: missing ${uri}`,
+  ): Promise<Record<string, unknown>> {
+    const resource = await this.request<ResourceResult>('resources/read', { uri }, true, signal);
+    const content = resource.contents?.find(item => item.uri === uri)?.text;
+    if (!content) {
+      throw new ConnectionContractError(errorCode, missingMessage);
+    }
+    return parseObject(content, errorCode);
   }
 
   async uploadArchive(uploadUrl: string, archive: Uint8Array, signal?: AbortSignal): Promise<unknown> {

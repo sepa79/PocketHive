@@ -33,6 +33,16 @@ export class ActiveMcpConnection implements McpConnectionTestPort {
     return this.client.callTool(name, args);
   }
 
+  async readResource(uri: string): Promise<Record<string, unknown>> {
+    if (!this.client) throw new Error('MCP_NOT_CONNECTED');
+    return this.client.readResource(uri);
+  }
+
+  async uploadArchive(uploadUrl: string, archive: Uint8Array, signal?: AbortSignal): Promise<unknown> {
+    if (!this.client) throw new Error('MCP_NOT_CONNECTED');
+    return this.client.uploadArchive(uploadUrl, archive, signal);
+  }
+
   async close(): Promise<void> {
     const current = this.client;
     this.client = undefined;

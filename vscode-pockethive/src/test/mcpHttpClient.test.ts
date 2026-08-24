@@ -81,6 +81,52 @@ test('rejects protocol or server identity drift without trying another endpoint'
   assert.equal(calls, 1);
 });
 
+test('reads one exact JSON resource after connection without changing target', async () => {
+  const requests: Array<{ url: string; init?: RequestInit }> = [];
+  const responses = connectedResponses();
+  responses.push(json({ jsonrpc: '2.0', id: 3, result: { contents: [{
+    uri: 'pockethive://environment/health',
+    mimeType: 'application/json',
+    text: JSON.stringify({ status: 'HEALTHY', services: [], observedAt: '2026-08-21T12:00:00Z' }),
+  }] } }));
+  const fetcher: typeof fetch = async (url, init) => {
+    requests.push({ url: String(url), init });
+    const response = responses.shift();
+    if (!response) throw new Error('unexpected request');
+    return response;
+  };
+  const client = new McpHttpClient('test', fetcher);
+  await client.connect('https://nft-lab.example/mcp', 'access-token');
+
+  assert.deepEqual(await client.readResource('pockethive://environment/health'), {
+    status: 'HEALTHY', services: [], observedAt: '2026-08-21T12:00:00Z',
+  });
+  assert.equal(requests.length, 4);
+  assert.equal(requests.every(request => request.url === 'https://nft-lab.example/mcp'), true);
+  assert.deepEqual(JSON.parse(String(requests[3].init?.body)), {
+    jsonrpc: '2.0', id: 3, method: 'resources/read',
+    params: { uri: 'pockethive://environment/health' },
+  });
+});
+
+test('rejects a missing resource with the exact default resource contract', async () => {
+  const responses = connectedResponses();
+  responses.push(json({ jsonrpc: '2.0', id: 3, result: { contents: [] } }));
+  const fetcher: typeof fetch = async () => {
+    const response = responses.shift();
+    if (!response) throw new Error('unexpected request');
+    return response;
+  };
+  const client = new McpHttpClient('test', fetcher);
+  await client.connect('https://nft-lab.example/mcp', 'access-token');
+
+  await rejectsContract(
+    client.readResource('pockethive://environment/health'),
+    'MCP_RESOURCE_INVALID',
+    'MCP_RESOURCE_INVALID: MCP_RESOURCE_INVALID: missing pockethive://environment/health',
+  );
+});
+
 test('streams a ticket archive only to the exact selected MCP ingress', async () => {
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const responses = connectedResponses();

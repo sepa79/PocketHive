@@ -156,6 +156,9 @@ public class PocketHiveOAuthConfiguration {
                         new PocketHivePublicSessionClientAuthenticationProvider(clients))))
                 .authorizationEndpoint(endpoint -> endpoint
                     .consentPage("/oauth/consent")
+                    .authorizationRequestConverters(converters -> converters.add(0,
+                        new PocketHiveCompanionAuthorizationRequestConverter(
+                            properties.getOauth().getVscodeClientId(), users)))
                     .authenticationProviders(providers -> providers.forEach(provider -> {
                         if (provider instanceof OAuth2AuthorizationCodeRequestAuthenticationProvider code) {
                             code.setAuthenticationValidator(new McpScopeAuthorizationValidator(users));

@@ -60,6 +60,10 @@ export function primaryOperationForSwarm(value: unknown): SwarmOperation | undef
   return undefined;
 }
 
+export function canRemoveSwarm(value: unknown): boolean {
+  return primaryOperationForSwarm(value) === SWARM_OPERATIONS.START;
+}
+
 export function primaryActionsForSwarms(value: unknown): Readonly<Record<string, SwarmOperation>> {
   if (!Array.isArray(value)) return Object.freeze({});
   const actions: Record<string, SwarmOperation> = {};

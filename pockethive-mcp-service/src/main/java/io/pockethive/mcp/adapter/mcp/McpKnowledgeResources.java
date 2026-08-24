@@ -1,26 +1,27 @@
 package io.pockethive.mcp.adapter.mcp;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import io.modelcontextprotocol.server.McpServerFeatures;
 import io.modelcontextprotocol.spec.McpSchema;
+import io.pockethive.mcp.application.EnvironmentHealthService;
 import io.pockethive.mcp.application.SkillDescriptor;
 import io.pockethive.mcp.application.ToolCatalogue;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
-import java.util.ArrayList;
+import java.io.IOException;
+import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.util.ArrayList;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
-import java.io.IOException;
-import java.io.InputStream;
-import com.fasterxml.jackson.databind.MapperFeature;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -29,15 +30,18 @@ public final class McpKnowledgeResources {
     private static final String MARKDOWN = "text/markdown";
 
     private final ToolCatalogue catalogue;
+    private final EnvironmentHealthService environmentHealth;
     private final PocketHiveMcpProperties properties;
     private final ObjectMapper mapper;
     private final Clock clock;
     private final List<KnowledgeDocument> knowledgeDocuments;
     private final String catalogueDigest;
 
-    public McpKnowledgeResources(ToolCatalogue catalogue, PocketHiveMcpProperties properties,
+    public McpKnowledgeResources(ToolCatalogue catalogue, EnvironmentHealthService environmentHealth,
+                                 PocketHiveMcpProperties properties,
                                  ObjectMapper mapper, Clock clock) {
         this.catalogue = catalogue;
+        this.environmentHealth = environmentHealth;
         this.properties = properties;
         this.mapper = mapper;
         this.clock = clock;
@@ -73,6 +77,9 @@ public final class McpKnowledgeResources {
         resources.add(dynamicJsonResource("pockethive://skills/catalogue", "PocketHive connected skills",
             "Versioned skill index connected to tools visible to this grant.", exchange ->
                 visibleSkills(McpCaller.from(exchange.transportContext()))));
+        resources.add(dynamicJsonResource("pockethive://environment/health", "PocketHive environment health",
+            "Bounded health projection for canonical services behind this environment's public ingress.",
+            exchange -> environmentHealth.read()));
         catalogue.skills().values().forEach(skill -> resources.add(markdownResource(skill)));
         return List.copyOf(resources);
     }

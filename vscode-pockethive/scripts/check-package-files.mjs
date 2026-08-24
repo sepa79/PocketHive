@@ -25,8 +25,9 @@ const { stdout } = await run(vsceCommand, ['ls'], { encoding: 'utf8' });
 const files = stdout.split(/\r?\n/).filter(Boolean).map(path => path.replaceAll('\\', '/'));
 for (const required of [
   'package.json', 'README.md', 'LICENSE', 'media/companion.css',
+  'resources/codicon.css', 'resources/codicon.ttf', 'resources/codicons.LICENSE',
   'resources/activity-mark.svg', 'resources/brand-tokens.css', 'resources/logo-mark.svg',
-  'out/extension.js', 'out/webview/eventFilters.js', 'out/webview/main.js',
+  'out/extension.js', 'out/generated/callbackLogo.js', 'out/webview/eventFilters.js', 'out/webview/main.js',
 ]) {
   assert.equal(files.includes(required), true, `Required VSIX file missing: ${required}`);
 }

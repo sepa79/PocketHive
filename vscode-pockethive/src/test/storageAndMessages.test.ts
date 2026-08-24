@@ -3,9 +3,10 @@ import test from 'node:test';
 
 import { createConnectionProfile } from '../connection/profile';
 import { ConnectionContractError } from '../connection/contracts';
-import { debugToolCall, DEBUG_ACTIONS } from '../debug/actions';
+import { debugToolCall, exactWorkerRuntimeId, DEBUG_ACTIONS } from '../debug/actions';
 import { KeyValueStore, McpConnectionProfileRepository } from '../storage/profileRepository';
 import { decodeWebviewCommand } from '../webview/messages';
+import { WEB_UI_DESTINATIONS } from '../webview/webUiNavigation';
 
 test('profiles persist globally, selection stays workspace-local, and secrets are deleted separately', async () => {
   const global = memory();
@@ -50,6 +51,27 @@ test('corrupt profiles and hostile webview messages fail closed', () => {
   assert.throws(() => decodeWebviewCommand({ type: 'runDebug', action: 'Logs', tailLines: 0 }), /WEBVIEW_MESSAGE_INVALID/);
   assert.deepEqual(decodeWebviewCommand({ type: 'selectTab', tab: 'Debug' }), { type: 'selectTab', tab: 'Debug' });
   assert.deepEqual(decodeWebviewCommand({ type: 'validateCommittedBundle' }), { type: 'validateCommittedBundle' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'validateRepositoryBundle', candidateId: ' candidate-1 ',
+  }), { type: 'validateRepositoryBundle', candidateId: 'candidate-1' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openRepositoryBundleFile', candidateId: ' candidate-1 ', path: ' templates/http/request.yaml ',
+  }), {
+    type: 'openRepositoryBundleFile', candidateId: 'candidate-1', path: 'templates/http/request.yaml',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'deployRepositoryBundle', candidateId: ' candidate-1 ',
+  }), { type: 'deployRepositoryBundle', candidateId: 'candidate-1' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'replaceRepositoryBundle', candidateId: ' candidate-1 ',
+  }), { type: 'replaceRepositoryBundle', candidateId: 'candidate-1' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openRepositoryRename', candidateId: ' candidate-1 ',
+    scenarioId: ' checkout-smoke-01 ', scenarioName: ' Checkout smoke-01 ',
+  }), {
+    type: 'openRepositoryRename', candidateId: 'candidate-1',
+    scenarioId: 'checkout-smoke-01', scenarioName: 'Checkout smoke-01',
+  });
   assert.deepEqual(decodeWebviewCommand({ type: 'discardPendingBundle' }), { type: 'discardPendingBundle' });
   assert.deepEqual(decodeWebviewCommand({
     type: 'reconcilePublicationAttempt', attemptId: ' pa-1 ',
@@ -175,8 +197,24 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     type: 'openSwarmDetails', swarmId: 'checkout-load',
   });
   assert.deepEqual(decodeWebviewCommand({
+    type: 'openWebUi', destination: WEB_UI_DESTINATIONS.BUZZ,
+  }), { type: 'openWebUi', destination: WEB_UI_DESTINATIONS.BUZZ });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openWebUi', destination: WEB_UI_DESTINATIONS.SWARM, swarmId: ' checkout-load ',
+  }), { type: 'openWebUi', destination: WEB_UI_DESTINATIONS.SWARM, swarmId: 'checkout-load' });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openWebUi', destination: WEB_UI_DESTINATIONS.JOURNAL_RUN,
+    swarmId: ' checkout-load ', runId: ' run-42 ',
+  }), {
+    type: 'openWebUi', destination: WEB_UI_DESTINATIONS.JOURNAL_RUN,
+    swarmId: 'checkout-load', runId: 'run-42',
+  });
+  assert.deepEqual(decodeWebviewCommand({
     type: 'openJournalRun', swarmId: ' checkout-load ', runId: ' run-42 ',
   }), { type: 'openJournalRun', swarmId: 'checkout-load', runId: 'run-42' });
+  assert.deepEqual(decodeWebviewCommand({ type: 'openEventDetails', detailId: ' detail-42 ' }), {
+    type: 'openEventDetails', detailId: 'detail-42',
+  });
   assert.deepEqual(decodeWebviewCommand({
     type: 'runSwarmOperation', action: 'START', swarmId: ' checkout-load ',
   }), { type: 'runSwarmOperation', action: 'START', swarmId: 'checkout-load' });
@@ -185,6 +223,16 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
   }), { type: 'runSwarmOperation', action: 'REMOVE', swarmId: 'checkout-load' });
   assert.deepEqual(decodeWebviewCommand({ type: 'openDebugForSwarm', swarmId: ' checkout-load ' }), {
     type: 'openDebugForSwarm', swarmId: 'checkout-load',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openDebugForWorker', swarmId: ' checkout-load ', instance: ' request-builder-1 ', action: 'Inspect',
+  }), {
+    type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'request-builder-1', action: 'Inspect',
+  });
+  assert.deepEqual(decodeWebviewCommand({
+    type: 'openDebugForWorker', swarmId: ' checkout-load ', instance: ' request-builder-1 ', action: 'Logs',
+  }), {
+    type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'request-builder-1', action: 'Logs',
   });
   assert.deepEqual(decodeWebviewCommand({ type: 'selectDebugSwarm', swarmId: ' swarm-1 ' }), {
     type: 'selectDebugSwarm', swarmId: 'swarm-1',
@@ -252,10 +300,19 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'runSwarmBatchOperation', action: 'START', swarmId: 'injected' },
     { type: 'loadSwarmHistory', swarmId: '   ' },
     { type: 'openSwarmDetails', swarmId: '   ' },
+    { type: 'openWebUi', destination: 'DETAILS', swarmId: 'swarm-a' },
+    { type: 'openWebUi', destination: 'UNSUPPORTED', swarmId: 'swarm-a', runId: 'run-1' },
+    { type: 'openWebUi', destination: WEB_UI_DESTINATIONS.BUZZ, swarmId: 'injected' },
+    { type: 'openWebUi', destination: WEB_UI_DESTINATIONS.SWARM, swarmId: '   ' },
+    { type: 'openWebUi', destination: WEB_UI_DESTINATIONS.JOURNAL_RUN, swarmId: 'swarm-a', runId: '   ' },
     { type: 'openJournalRun', swarmId: 'swarm-a', runId: '   ' },
+    { type: 'openEventDetails', detailId: '   ' },
+    { type: 'openEventDetails', detailId: 'detail-42', event: {} },
     { type: 'runSwarmOperation', action: 'RESTART', swarmId: 'swarm-a' },
     { type: 'runSwarmOperation', action: 'START', swarmId: 'swarm-a', injected: true },
     { type: 'openDebugForSwarm', swarmId: '   ' },
+    { type: 'openDebugForWorker', swarmId: 'swarm-a', instance: 'worker-a', action: 'Version' },
+    { type: 'openDebugForWorker', swarmId: 'swarm-a', instance: '   ', action: 'Logs' },
     { type: 'openScenarioDetails', scenarioId: '   ' },
     { type: 'openScenarioRaw', scenarioId: '   ' },
     { type: 'openScenarioSchema', scenarioId: '   ' },
@@ -263,6 +320,13 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: 'bundles/mixed-smoke', section: 'DETAILS' },
     { type: 'selectScenarioSection', scenarioId: '   ', bundleKey: 'bundles/mixed-smoke', section: 'FILES' },
     { type: 'selectScenarioSection', scenarioId: 'mixed-smoke', bundleKey: '   ', section: 'FILES' },
+    { type: 'validateRepositoryBundle', candidateId: '   ' },
+    { type: 'validateRepositoryBundle', candidateId: 'candidate-1', path: '/workspace/private' },
+    { type: 'openRepositoryBundleFile', candidateId: 'candidate-1', path: '   ' },
+    { type: 'openRepositoryBundleFile', candidateId: 'candidate-1', path: 'scenario.yaml', root: '/workspace' },
+    { type: 'deployRepositoryBundle', candidateId: '' },
+    { type: 'replaceRepositoryBundle', candidateId: 'candidate-1', scenarioId: 'forged' },
+    { type: 'openRepositoryRename', candidateId: 'candidate-1', scenarioId: 'copy', scenarioName: '' },
     { type: 'openScenarioBundleFile', bundleKey: 'bundles/mixed-smoke', path: '   ' },
     { type: 'reconcilePublicationAttempt' },
     { type: 'reconcilePublicationAttempt', attemptId: '   ' },
@@ -297,6 +361,10 @@ test('debug actions map exactly to owner tools and never expose cleanup execute'
     name: 'runtime_tail_worker_logs',
     arguments: { swarmId: 'swarm-1', runtimeId: 'worker-2', tailLines: 200 },
   });
+  assert.deepEqual(debugToolCall('Version', 'swarm-1', 'worker-2'), {
+    name: 'runtime_get_worker_version',
+    arguments: { swarmId: 'swarm-1', runtimeId: 'worker-2' },
+  });
   assert.deepEqual(debugToolCall('Logs', ' swarm-1 ', ' worker-2 ', 1), {
     name: 'runtime_tail_worker_logs',
     arguments: { swarmId: 'swarm-1', runtimeId: 'worker-2', tailLines: 1 },
@@ -317,6 +385,52 @@ test('debug actions map exactly to owner tools and never expose cleanup execute'
     error instanceof ConnectionContractError && error.code === 'DEBUG_SWARM_REQUIRED');
   assert.throws(() => debugToolCall('Workers', undefined, undefined), (error: unknown) =>
     error instanceof ConnectionContractError && error.code === 'DEBUG_SWARM_REQUIRED');
+});
+
+test('worker shortcuts resolve one exact owner-reported runtime and never infer an id', () => {
+  assert.equal(exactWorkerRuntimeId({ workers: [
+    { instance: 'processor-1', runtimeId: ' container-abc ' },
+    { instance: 'processor-2', runtimeId: 'container-def' },
+  ] }, ' processor-1 '), 'container-abc');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError
+      && error.code === 'DEBUG_WORKER_NOT_FOUND'
+      && error.message === 'DEBUG_WORKER_NOT_FOUND: No exact runtime target was reported for worker instance processor-1');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [
+    { instance: 'processor-1', runtimeId: 'a' },
+    { instance: 'processor-1', runtimeId: 'b' },
+  ] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError
+      && error.code === 'DEBUG_WORKER_AMBIGUOUS'
+      && error.message === 'DEBUG_WORKER_AMBIGUOUS: Multiple runtime targets were reported for worker instance processor-1');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [
+    { instance: 'processor-1', runtimeId: '   ' },
+  ] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError
+      && error.code === 'DEBUG_WORKER_RUNTIME_ID_MISSING'
+      && error.message === 'DEBUG_WORKER_RUNTIME_ID_MISSING: Worker instance processor-1 did not report an exact runtimeId');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [
+    { instance: 'processor-1', runtimeId: 42 },
+  ] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError && error.code === 'DEBUG_WORKER_RUNTIME_ID_MISSING');
+  assert.throws(() => exactWorkerRuntimeId([{ instance: 'processor-1', runtimeId: 'guessed' }], 'processor-1'),
+    (error: unknown) => error instanceof ConnectionContractError
+      && error.code === 'DEBUG_WORKER_LIST_INVALID'
+      && error.message === 'DEBUG_WORKER_LIST_INVALID: runtime_list_workers did not return its canonical workers collection');
+  assert.throws(() => exactWorkerRuntimeId(null, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError && error.code === 'DEBUG_WORKER_LIST_INVALID');
+  assert.throws(() => exactWorkerRuntimeId(Object.assign(() => undefined, { workers: [] }), 'processor-1'),
+    (error: unknown) => error instanceof ConnectionContractError && error.code === 'DEBUG_WORKER_LIST_INVALID');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [null] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError && error.code === 'DEBUG_WORKER_NOT_FOUND');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [Object.assign(() => undefined, {
+    instance: 'processor-1', runtimeId: 'function-is-not-a-worker-record',
+  })] }, 'processor-1'), (error: unknown) =>
+    error instanceof ConnectionContractError && error.code === 'DEBUG_WORKER_NOT_FOUND');
+  assert.throws(() => exactWorkerRuntimeId({ workers: [] }, '   '), (error: unknown) =>
+    error instanceof ConnectionContractError
+      && error.code === 'DEBUG_WORKER_INSTANCE_REQUIRED'
+      && error.message === 'DEBUG_WORKER_INSTANCE_REQUIRED: Worker instance is required');
 });
 
 function memory(): KeyValueStore & { values: Map<string, unknown> } {

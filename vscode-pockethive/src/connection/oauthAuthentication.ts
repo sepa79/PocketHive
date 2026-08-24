@@ -8,9 +8,9 @@ import {
   McpConnectionProfile,
   OAuthSession,
   OAuthSessionStore,
+  POCKETHIVE_COMPANION_SCOPES,
   PocketHiveMcpScope,
   POCKETHIVE_MCP_SCOPES,
-  ScopedAuthenticationPort,
   RenewableAuthenticationPort,
   ValidatedEndpoint,
 } from './contracts';
@@ -18,11 +18,18 @@ import {
 const CLIENT_ID = 'pockethive-vscode';
 const REDIRECT_URI = 'http://127.0.0.1:57548/callback';
 const MAX_RESPONSE_CHARACTERS = 65_536;
-const CONNECTION_SCOPES = [
-  POCKETHIVE_MCP_SCOPES.DISCOVER,
-  POCKETHIVE_MCP_SCOPES.READ,
-] as const;
-const SUPPORTED_SCOPES = new Set<PocketHiveMcpScope>(Object.values(POCKETHIVE_MCP_SCOPES));
+const COMPANION_SCOPES = new Set<PocketHiveMcpScope>(POCKETHIVE_COMPANION_SCOPES);
+const COMPANION_SCOPE_PROFILES = Object.freeze([
+  Object.freeze([POCKETHIVE_MCP_SCOPES.DISCOVER, POCKETHIVE_MCP_SCOPES.READ]),
+  Object.freeze([
+    POCKETHIVE_MCP_SCOPES.DISCOVER,
+    POCKETHIVE_MCP_SCOPES.READ,
+    POCKETHIVE_MCP_SCOPES.OPERATE,
+    POCKETHIVE_MCP_SCOPES.AUTHOR,
+  ]),
+  POCKETHIVE_COMPANION_SCOPES,
+]);
+const REFRESH_REJECTED_CODE = 'OAUTH_REFRESH_REJECTED';
 
 type RandomBytes = (size: number) => Uint8Array;
 
@@ -36,7 +43,7 @@ type RenewableOAuthSession = OAuthSession & {
   readonly renewal: { readonly kind: 'ROTATING_REFRESH_TOKEN'; readonly refreshToken: string };
 };
 
-export class PocketHiveOAuthAuthentication implements AuthenticationPort, ScopedAuthenticationPort, RenewableAuthenticationPort {
+export class PocketHiveOAuthAuthentication implements AuthenticationPort, RenewableAuthenticationPort {
   constructor(
     private readonly fetcher: typeof fetch,
     private readonly browser: BrowserAuthorizationPort,
@@ -50,79 +57,67 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
     endpoint: ValidatedEndpoint,
     signal: AbortSignal,
   ): Promise<OAuthSession> {
-    const session = await this.authorize(profile, endpoint, CONNECTION_SCOPES, true, signal);
+    const session = await this.authorize(profile, endpoint, signal);
     await this.sessions.store(profile.secretKey, JSON.stringify(session));
     return session;
-  }
-
-  async authenticateForScopes(
-    profile: McpConnectionProfile,
-    endpoint: ValidatedEndpoint,
-    scopes: readonly PocketHiveMcpScope[],
-    signal: AbortSignal,
-  ): Promise<OAuthSession> {
-    return this.authorize(profile, endpoint, scopes, false, signal);
   }
 
   private async authorize(
     profile: McpConnectionProfile,
     endpoint: ValidatedEndpoint,
-    requestedScopes: readonly PocketHiveMcpScope[],
-    renewable: boolean,
     signal: AbortSignal,
   ): Promise<OAuthSession> {
     try {
-    validateRequestedScopes(requestedScopes);
-    const metadataUrl = `${endpoint.authorizationServer}/.well-known/oauth-authorization-server`;
-    const metadata = await this.readJson(metadataUrl, { method: 'GET', redirect: 'error', signal });
-    const server = validateMetadata(metadata, endpoint.authorizationServer, requestedScopes);
-    const state = base64url(this.secureRandom(32));
-    const verifier = base64url(this.secureRandom(64));
-    const challenge = createHash('sha256').update(verifier).digest('base64url');
-    const authorizationUrl = new URL(server.authorizationEndpoint);
-    authorizationUrl.searchParams.set('response_type', 'code');
-    authorizationUrl.searchParams.set('client_id', CLIENT_ID);
-    authorizationUrl.searchParams.set('redirect_uri', REDIRECT_URI);
-    authorizationUrl.searchParams.set('resource', endpoint.mcpUrl);
-    authorizationUrl.searchParams.set('scope', requestedScopes.join(' '));
-    authorizationUrl.searchParams.set('state', state);
-    authorizationUrl.searchParams.set('code_challenge', challenge);
-    authorizationUrl.searchParams.set('code_challenge_method', 'S256');
+      const metadataUrl = `${endpoint.authorizationServer}/.well-known/oauth-authorization-server`;
+      const metadata = await this.readJson(metadataUrl, { method: 'GET', redirect: 'error', signal });
+      const server = validateMetadata(metadata, endpoint.authorizationServer, POCKETHIVE_COMPANION_SCOPES);
+      const state = base64url(this.secureRandom(32));
+      const verifier = base64url(this.secureRandom(64));
+      const challenge = createHash('sha256').update(verifier).digest('base64url');
+      const authorizationUrl = new URL(server.authorizationEndpoint);
+      authorizationUrl.searchParams.set('response_type', 'code');
+      authorizationUrl.searchParams.set('client_id', CLIENT_ID);
+      authorizationUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+      authorizationUrl.searchParams.set('resource', endpoint.mcpUrl);
+      authorizationUrl.searchParams.set('scope', POCKETHIVE_COMPANION_SCOPES.join(' '));
+      authorizationUrl.searchParams.set('state', state);
+      authorizationUrl.searchParams.set('code_challenge', challenge);
+      authorizationUrl.searchParams.set('code_challenge_method', 'S256');
 
-    const callback = await this.browser.authorize(authorizationUrl.toString(), signal);
-    validateCallback(callback, state);
-    if (callback.searchParams.get('error') === 'access_denied') {
-      throw new AuthenticationCancelledError();
-    }
-    const oauthError = callback.searchParams.get('error');
-    if (oauthError) {
-      throw new ConnectionContractError('OAUTH_AUTHORIZATION_FAILED', `OAUTH_AUTHORIZATION_FAILED: ${oauthError}`);
-    }
-    const code = callback.searchParams.get('code');
-    if (!code) {
-      throw new ConnectionContractError('OAUTH_AUTHORIZATION_FAILED', 'OAUTH_AUTHORIZATION_FAILED: code missing');
-    }
-    const body = new URLSearchParams({
-      grant_type: 'authorization_code',
-      client_id: CLIENT_ID,
-      code,
-      redirect_uri: REDIRECT_URI,
-      resource: endpoint.mcpUrl,
-      code_verifier: verifier,
-    });
-    const token = await this.readJson(server.tokenEndpoint, {
-      method: 'POST',
-      headers: {
-        Accept: 'application/json',
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: body.toString(),
-      redirect: 'error',
-      signal,
-    });
-    const session = tokenSession(token, this.now(), renewable);
-    if (signal.aborted) throw new AuthenticationCancelledError();
-    return session;
+      const callback = await this.browser.authorize(authorizationUrl.toString(), signal);
+      validateCallback(callback, state);
+      if (callback.searchParams.get('error') === 'access_denied') {
+        throw new AuthenticationCancelledError();
+      }
+      const oauthError = callback.searchParams.get('error');
+      if (oauthError) {
+        throw new ConnectionContractError('OAUTH_AUTHORIZATION_FAILED', `OAUTH_AUTHORIZATION_FAILED: ${oauthError}`);
+      }
+      const code = callback.searchParams.get('code');
+      if (!code) {
+        throw new ConnectionContractError('OAUTH_AUTHORIZATION_FAILED', 'OAUTH_AUTHORIZATION_FAILED: code missing');
+      }
+      const body = new URLSearchParams({
+        grant_type: 'authorization_code',
+        client_id: CLIENT_ID,
+        code,
+        redirect_uri: REDIRECT_URI,
+        resource: endpoint.mcpUrl,
+        code_verifier: verifier,
+      });
+      const token = await this.readJson(server.tokenEndpoint, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: body.toString(),
+        redirect: 'error',
+        signal,
+      });
+      const session = tokenSession(token, this.now());
+      if (signal.aborted) throw new AuthenticationCancelledError();
+      return session;
     } catch (error) {
       if (signal.aborted) throw new AuthenticationCancelledError();
       throw error;
@@ -138,14 +133,15 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
       if (Array.isArray(parsed)) throw new Error('not an object');
       if (typeof parsed !== 'object') throw new Error('not an object');
       const record = parsed as Record<string, unknown>;
-      if (Object.keys(record).length !== 3) throw new Error('unexpected fields');
+      if (Object.keys(record).length !== 4) throw new Error('unexpected fields');
       if (!Object.hasOwn(record, 'accessToken')) throw new Error('unexpected fields');
       if (!Object.hasOwn(record, 'expiresAt')) throw new Error('unexpected fields');
+      if (!Object.hasOwn(record, 'scopes')) throw new Error('unexpected fields');
       if (!Object.hasOwn(record, 'renewal')) throw new Error('unexpected fields');
       const accessToken = requiredString(record, 'accessToken', 'OAUTH_SESSION_INVALID');
       const expiresAt = requiredString(record, 'expiresAt', 'OAUTH_SESSION_INVALID');
       if (Number.isNaN(Date.parse(expiresAt))) throw new Error('invalid expiry');
-      return { accessToken, expiresAt, renewal: storedRenewal(record.renewal) };
+      return { accessToken, expiresAt, scopes: sessionScopes(record.scopes), renewal: storedRenewal(record.renewal) };
     } catch (error) {
       throw new ConnectionContractError(
         'OAUTH_SESSION_INVALID',
@@ -179,8 +175,11 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
       body: body.toString(),
       redirect: 'error',
       signal,
-    });
-    const refreshed = tokenSession(token, this.now(), true);
+    }, REFRESH_REJECTED_CODE);
+    const refreshed = tokenSession(token, this.now());
+    if (!refreshed.scopes.every(scope => session.scopes.includes(scope))) {
+      throw new ConnectionContractError('OAUTH_REFRESH_SCOPE_WIDENED', 'OAUTH_REFRESH_SCOPE_WIDENED');
+    }
     if (refreshed.renewal.refreshToken === session.renewal.refreshToken) {
       throw new ConnectionContractError('OAUTH_REFRESH_TOKEN_NOT_ROTATED', 'OAUTH_REFRESH_TOKEN_NOT_ROTATED');
     }
@@ -225,7 +224,7 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
     const value = await this.readJson(`${endpoint.authorizationServer}/.well-known/oauth-authorization-server`, {
       method: 'GET', redirect: 'error', signal,
     });
-    return validateMetadata(value, endpoint.authorizationServer, CONNECTION_SCOPES);
+    return validateMetadata(value, endpoint.authorizationServer, POCKETHIVE_COMPANION_SCOPES);
   }
 
   private async postRevocation(
@@ -253,13 +252,19 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
     }
   }
 
-  private async readJson(url: string, init: RequestInit): Promise<Record<string, unknown>> {
+  private async readJson(
+    url: string,
+    init: RequestInit,
+    refreshRejectionCode?: typeof REFRESH_REJECTED_CODE,
+  ): Promise<Record<string, unknown>> {
     const response = await this.fetcher(url, {
       ...init,
       headers: { Accept: 'application/json', ...init.headers },
     });
     const contentType = response.headers.get('Content-Type');
-    if (!response.ok || contentType === null || !contentType.startsWith('application/json')) {
+    const readableRefreshRejection = refreshRejectionCode !== undefined && response.status === 400;
+    if ((!response.ok && !readableRefreshRejection)
+        || contentType === null || !contentType.startsWith('application/json')) {
       throw new ConnectionContractError(
         'OAUTH_HTTP_FAILED',
         `OAUTH_HTTP_FAILED: HTTP ${response.status}`,
@@ -269,18 +274,26 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Scoped
     if (text.length > MAX_RESPONSE_CHARACTERS) {
       throw new ConnectionContractError('OAUTH_RESPONSE_INVALID', 'OAUTH_RESPONSE_INVALID: response too large');
     }
+    let record: Record<string, unknown>;
     try {
       const value: unknown = JSON.parse(text);
       if (value === null) throw new Error('not an object');
       if (Array.isArray(value)) throw new Error('not an object');
       if (typeof value !== 'object') throw new Error('not an object');
-      return value as Record<string, unknown>;
+      record = value as Record<string, unknown>;
     } catch (error) {
       throw new ConnectionContractError(
         'OAUTH_RESPONSE_INVALID',
         `OAUTH_RESPONSE_INVALID: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    if (!response.ok) {
+      if (record.error === 'invalid_grant') {
+        throw new ConnectionContractError(refreshRejectionCode!, refreshRejectionCode!);
+      }
+      throw new ConnectionContractError('OAUTH_HTTP_FAILED', `OAUTH_HTTP_FAILED: HTTP ${response.status}`);
+    }
+    return record;
   }
 }
 
@@ -308,17 +321,6 @@ function validateMetadata(
   return { authorizationEndpoint, tokenEndpoint, revocationEndpoint };
 }
 
-function validateRequestedScopes(scopes: readonly PocketHiveMcpScope[]): void {
-  if (scopes[0] !== POCKETHIVE_MCP_SCOPES.DISCOVER) invalidScopeSet();
-  if (scopes[1] !== POCKETHIVE_MCP_SCOPES.READ) invalidScopeSet();
-  if (new Set(scopes).size !== scopes.length) invalidScopeSet();
-  if (scopes.some(scope => !SUPPORTED_SCOPES.has(scope))) invalidScopeSet();
-}
-
-function invalidScopeSet(): never {
-  throw new ConnectionContractError('OAUTH_SCOPE_SET_INVALID', 'OAUTH_SCOPE_SET_INVALID');
-}
-
 function validateCallback(callback: URL, expectedState: string): void {
   if (`${callback.protocol}//${callback.host}${callback.pathname}` !== REDIRECT_URI) {
     throw new ConnectionContractError('OAUTH_CALLBACK_INVALID', 'OAUTH_CALLBACK_INVALID: redirect URI mismatch');
@@ -328,28 +330,44 @@ function validateCallback(callback: URL, expectedState: string): void {
   }
 }
 
-function tokenSession(token: Record<string, unknown>, now: Date, renewable: true): RenewableOAuthSession;
-function tokenSession(token: Record<string, unknown>, now: Date, renewable: false): OAuthSession;
-function tokenSession(token: Record<string, unknown>, now: Date, renewable: boolean): OAuthSession;
-function tokenSession(token: Record<string, unknown>, now: Date, renewable: boolean): OAuthSession {
+function tokenSession(token: Record<string, unknown>, now: Date): RenewableOAuthSession {
   if (token.token_type !== 'Bearer') invalidTokenResponse();
   if (!Number.isInteger(token.expires_in)) invalidTokenResponse();
   const expiresIn = token.expires_in as number;
   if (expiresIn <= 0) invalidTokenResponse();
   if (expiresIn > 86_400) invalidTokenResponse();
   const accessToken = requiredString(token, 'access_token', 'OAUTH_TOKEN_RESPONSE_INVALID');
-  const renewal = renewable
-    ? { kind: 'ROTATING_REFRESH_TOKEN' as const,
-      refreshToken: requiredString(token, 'refresh_token', 'OAUTH_TOKEN_RESPONSE_INVALID') }
-    : { kind: 'NONE' as const };
-  if (!renewable && token.refresh_token !== undefined) {
-    invalidTokenResponse();
-  }
   return {
     accessToken,
     expiresAt: new Date(now.getTime() + expiresIn * 1000).toISOString(),
-    renewal,
+    scopes: tokenScopes(token.scope),
+    renewal: { kind: 'ROTATING_REFRESH_TOKEN' as const,
+      refreshToken: requiredString(token, 'refresh_token', 'OAUTH_TOKEN_RESPONSE_INVALID') },
   };
+}
+
+function tokenScopes(value: unknown): readonly PocketHiveMcpScope[] {
+  if (typeof value !== 'string') invalidTokenResponse();
+  const values = value.split(' ');
+  if (new Set(values).size !== values.length) {
+    invalidTokenResponse();
+  }
+  const granted = new Set(values as PocketHiveMcpScope[]);
+  if ([...granted].some(scope => !COMPANION_SCOPES.has(scope))) {
+    invalidTokenResponse();
+  }
+  const normalized = POCKETHIVE_COMPANION_SCOPES.filter(scope => granted.has(scope));
+  if (!COMPANION_SCOPE_PROFILES.some(profile => arraysEqual(profile, normalized))) invalidTokenResponse();
+  return Object.freeze(normalized);
+}
+
+function sessionScopes(value: unknown): readonly PocketHiveMcpScope[] {
+  try {
+    const raw = value as readonly unknown[];
+    const parsed = tokenScopes(raw.join(' '));
+    if (arraysEqual(raw as readonly string[], parsed)) return parsed;
+  } catch {}
+  throw new Error('invalid scopes');
 }
 
 function invalidTokenResponse(): never {
@@ -393,6 +411,10 @@ function supportsScopes(value: unknown, required: readonly PocketHiveMcpScope[])
 
 function arrayEquals(metadata: Record<string, unknown>, key: string, required: readonly string[]): boolean {
   return JSON.stringify(metadata[key]) === JSON.stringify(required);
+}
+
+function arraysEqual(left: readonly string[], right: readonly string[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 function requiredString(value: Record<string, unknown>, key: string, code: string): string {

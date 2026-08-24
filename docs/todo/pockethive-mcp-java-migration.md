@@ -347,6 +347,8 @@ Required production configuration:
   container routing and cannot be selected or overridden by a tool caller;
 - `PH_MCP_PROTOCOL_REVISION=2025-11-25`: the only accepted first-release MCP
   revision;
+- `PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT`: required positive ISO-8601
+  connect/read timeout for each declared environment-health probe;
 - `PH_MCP_STATE_MODE=FILE`: explicit persistence mode;
 - `PH_MCP_STATE_PATH`: dedicated persistent-volume path;
 - `PH_MCP_UPLOAD_SPOOL_PATH`: dedicated quarantined temporary-upload path;
@@ -849,6 +851,73 @@ the user's Git-capable client using `git archive <commit> <bundlePath>`. Git
 history is therefore available only when the repository is available to the
 agent or client. The MCP does not add an implicit Git service.
 
+### IDE repository discovery
+
+The VS Code Scenarios tab exposes two explicitly labelled projections:
+
+- `Deployed` is the Scenario Manager catalogue obtained through PocketHive MCP;
+- `Repository` is a read-only discovery of authoring candidates in the trusted
+  VS Code workspace's Git repositories.
+
+Repository discovery is not a second scenario catalogue, validator, or runtime
+authority. It reads committed `HEAD`, matches only canonical
+`scenarios/**/scenario.yaml` paths, and presents each matching parent directory
+as a candidate for the existing validation and publication flow. It projects
+the committed relative file paths needed for local navigation, but does not
+parse scenario semantics, execute bundle content, include working-tree bytes,
+or claim that a candidate is valid or deployed. Scenario Manager remains the
+only semantic validation and deployed-scenario authority.
+
+The extension scans only explicit VS Code workspace folders after VS Code marks
+the workspace trusted. No workspace produces `NO_WORKSPACE`; an untrusted
+workspace produces `UNTRUSTED`; a non-Git folder or failed Git command produces
+an explicit per-folder error. Multi-root workspaces are supported and folders
+inside the same canonical repository root are de-duplicated. Discovery is
+bounded by exact path, output-byte, and candidate-count limits; exceeding a
+limit fails explicitly and never returns a silently truncated candidate set.
+
+The extension host retains the canonical repository root and bundle path. The
+webview receives only a bounded display projection, committed relative file
+paths, and an opaque candidate ID, then returns that exact ID when the user
+selects `Edit`, `Validate`, or `Deploy`. It cannot submit a repository root or
+absolute filesystem path. `Edit` opens only a committed relative file retained
+for that candidate in the trusted local workspace; missing or unlisted files
+fail explicitly and never fall back to Git-object preview. Candidate IDs are
+rebuilt on each scan and an unknown or stale ID fails explicitly. The retained
+candidate also pins the discovered commit;
+validation fails if workspace trust has been withdrawn or repository `HEAD` has
+changed, and Git packaging reads the pinned commit objects rather than mutable
+working-tree bytes. Validation packages the selected committed tree through
+the existing client adapter and ticket upload flow. Manual committed-directory
+selection remains a separate explicit action, not a fallback from discovery.
+
+Each Repository candidate is a self-contained disclosure matching the Deployed
+scenario-card language. One card is focused at a time. Its own three-column
+action row contains `Edit`, `Validate`, and `Deploy`; its own
+`Overview | Files | Inputs` drill-down and validation/publication result remain
+inside that card. No candidate depends on page-bottom actions. `Files` renders
+the committed relative hierarchy and each file action opens the corresponding
+working-tree file in the VS Code editor. The UI states plainly that publication
+still packages committed `HEAD`, so editing requires an explicit commit and
+refresh before validation or deployment.
+
+`Validate` retains the exact validated ZIP and shows owner validation evidence
+inside that candidate. `Deploy` is explicit CREATE intent and uses the exact
+`scenarioId` and `scenarioName` parsed from `scenario.yaml` by Scenario Manager
+and returned in the validation receipt; the extension does not parse or infer
+either field. If the deployed Scenario Manager catalogue already contains that
+exact ID, the card opens a modal overlay with two explicit paths:
+
+1. `Replace existing` publishes the retained bytes with `REPLACE` and that exact
+   owner-reported ID.
+2. `Rename source` defaults the proposed ID and name to the validated values
+   plus `-01`, opens local `scenario.yaml`, discards the retained bytes, and
+   requires the user to edit, commit, refresh, validate, and deploy again.
+
+The suffix is an editable suggestion, not an automatic rewrite or fallback.
+There is no CREATE-to-REPLACE retry, no silent identity change, and no
+publication of uncommitted bytes.
+
 ### Storage and bloat
 
 Scenario Manager continues to store only the current deployed copy. Replacing a
@@ -1190,8 +1259,14 @@ Design and acceptance tests use 280, 320, and 420 CSS-pixel widths plus VS Code
 zoom and font scaling. The layout has:
 
 - one content column and no page-level horizontal scrolling;
-- a compact environment header followed by a sticky top tab strip, with no
-  global logo header consuming Side Bar height;
+- a compact `← Environments` control followed immediately by a sticky top tab
+  strip, with no global logo or duplicated environment header consuming Side
+  Bar height;
+- one fixed slim environment rail at the viewport bottom. It contains the
+  PocketHive hexagon, local environment name, aggregate service state, and the
+  accessible account control. It expands upward into the canonical
+  `pockethive://environment/health` rows and never duplicates service probes in
+  the extension;
 - 14-pixel default body text, visible keyboard focus, and controls at least 32
   CSS pixels high;
 - wrapped descriptions and ellipsised URLs, IDs, and hashes with an accessible
@@ -1248,9 +1323,12 @@ keyboard accessible, reduced-motion safe, and readable at narrow mobile widths.
 No script, remote font, remote style, inferred permission, hidden scope,
 alternate authorization endpoint, or OAuth field transformation is allowed.
 The VS Code loopback callback landing page is also branded and locally rendered
-with inline PocketHive theme tokens so approval, decline, and error hand-off
-states remain professional even though the page is served from the local
-extension callback listener rather than Auth Service.
+with inline PocketHive theme tokens and an exact build-generated data-URI copy
+of the canonical `ui-v2/public/logo.svg`. Approval, decline, and error hand-off
+states therefore use the same brand geometry even though the page is served
+from the local extension callback listener rather than Auth Service. The
+callback contains no separately maintained SVG, CSS-drawn mark, remote asset,
+or asset fallback; its CSP permits only that generated `data:` image.
 Presentation tests assert the canonical issuer form actions and static assets;
 the existing authorization-code, PKCE, state, redirect, resource, consent, and
 token tests remain the behavioral authority.
@@ -1273,18 +1351,19 @@ swarm selection, or Debug result across environments.
 ### Open environment workspace
 
 `Open` and `Save & open` replace the first page with one environment workspace.
-Its header shows `← Environments`, profile name, live connection status,
-verified principal label, and one accessible account menu whose authenticated
-action is `Sign out`. Refresh remains a current-tab action. The header contains
-no logo, region, endpoint selector, environment options, or duplicate navigation.
-A sticky top strip contains exactly these tabs:
+The content header contains only `← Environments`; Refresh remains a current-tab
+action. Profile identity, connection/service state, and account actions have one
+presentation owner: the fixed footer. There is no region, endpoint selector,
+environment options, duplicated identity block, or global logo header. A sticky
+top strip contains exactly these icon-led tabs; icons are presentation only and
+every tab retains its visible text and accessible name:
 
 | Tab | Purpose and MCP source |
 |---|---|
 | `Hive` | Swarm list, lifecycle, health, and configuration tools |
 | `Buzz` | Bounded hive-wide event timeline |
 | `Journal` | Bounded per-swarm journal and evidence views |
-| `Scenarios` | Scenario Manager catalogue, validation, publication, and Git-workspace handoff |
+| `Scenarios` | Separate deployed Scenario Manager and committed Git-repository views, validation, and publication |
 | `Debug` | Orchestrator-backed runtime diagnostics and governed cleanup |
 
 The active tab is presentation state, not MCP or owner state. Refresh re-reads
@@ -1301,14 +1380,69 @@ details disclosure or a bounded Debug result; it is not the primary product
 view. Journal first requires an exact discovered swarm and then calls
 `debug_journal` for that selected swarm without guessing.
 
+The footer summary is one 42-pixel rail. Its left group uses the canonical
+PocketHive hexagon and the locally persisted environment display name; its
+state text is derived from the latest health resource and authenticated MCP
+session. Its right group is the account icon and disclosure control. Expanding
+health opens a full-width drawer directly above the rail with square top
+corners and no trailing content gap after the final service row. Each compact
+row shows the service name, public endpoint, and text-plus-icon state. The
+account disclosure is an anchored overlay above the rail; it never consumes
+drawer height or leaves reserved whitespace. It identifies the verified
+principal and environment and offers only the action valid for the current
+session (`Sign in`, `Retry connection`, or `Sign out`).
+
+`pockethive://environment/health` is a read-only dynamic MCP resource with this
+bounded shape:
+
+```json
+{
+  "status": "HEALTHY|DEGRADED|UNAVAILABLE",
+  "services": [
+    {
+      "id": "pockethive-ui",
+      "name": "PocketHive UI",
+      "endpoint": "https://environment.example/",
+      "status": "HEALTHY|UNAVAILABLE",
+      "observedAt": "2026-08-21T12:00:00Z"
+    }
+  ],
+  "observedAt": "2026-08-21T12:00:00Z"
+}
+```
+
+The service order and probe contracts are canonical in one typed, validated
+MCP configuration catalogue: PocketHive UI, Orchestrator, Scenario Manager,
+Network Proxy Manager, WireMock, TCP Mock, and Grafana. The application layer
+receives that catalogue through construction and owns no HTTP topology or
+timeout defaults. The HTTP adapter calls only the catalogue's explicit public
+paths through the configured `ownerApiBase`; displayed endpoints are resolved
+only from `pocketHiveIngress`. One target failure produces one `UNAVAILABLE`
+row and aggregate `DEGRADED`/`UNAVAILABLE`, never a second target, protocol,
+path, or inferred success. `PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT` is a
+required positive ISO-8601 duration used for both connect and read timeouts.
+The extension reads the resource on open and explicit refresh/tab loads,
+retains the last complete view while a load is in flight, and does not add a
+visual-strobing background poller.
+
 The workspace restores the independently useful controls from the removed Tree
 Views without restoring a second behaviour path:
 
 - each Hive row exposes only the lifecycle action valid for its reported state;
   `Start`, `Stop`, and guarded `Remove` call `swarm_start`, `swarm_stop`, and
   `swarm_remove` through a short-lived least-privilege MCP connection and then
-  refresh the authoritative swarm list. A historical run never exposes Start,
-  Stop, restart, replay, or any other lifecycle action;
+  refresh the authoritative swarm list. `Remove` is disabled unless the
+  authoritative projection is fresh, ready, and stopped. The row renders the
+  exact Orchestrator bee summaries as a full-width human-readable worker
+  disclosure above the swarm action row rather than hiding owner data behind a
+  generic Details preview or overlapping popover. Each expanded worker row has
+  Inspect and Logs actions. The extension first calls `runtime_list_workers`
+  and requires one exact runtime whose instance equals that bee instance before
+  invoking the selected diagnostic; zero or multiple matches fail explicitly.
+  Its Web UI action
+  resolves only the exact `pockethive-ui` endpoint published by environment
+  health and opens `/v2/hive/{swarmId}/view`. A historical run never exposes
+  Start, Stop, restart, replay, or any other lifecycle action;
 - each Hive row has a collapsed run-history disclosure. Opening one row closes
   the previous disclosure and calls the read-only `debug_journal_runs` tool for
   that exact swarm. The tool delegates to Orchestrator's existing
@@ -1326,25 +1460,49 @@ Views without restoring a second behaviour path:
   same filter model after a searchable/autocomplete exact-swarm choice. Debug
   uses the same exact-swarm choice pattern. An entered value not present in the
   current bounded MCP result fails explicitly and is never inferred or sent as
-  another target. Filtering is presentation state over the bounded owner page
-  and never changes endpoint, owner, adapter, or target;
-- Scenario rows are compact, searchable disclosures around the existing
-  Scenario Manager catalogue and committed-bundle publication workflow. The
+  another target. Buzz can open only the top-level `/v2/buzz` Web UI because
+  that owner route has no record deep link. Journal can open
+  `/v2/journal/swarms/{swarmId}?runId={runId}` only when both exact IDs are
+  present. Both routes use the exact `pockethive-ui` health endpoint; the
+  extension does not reconstruct it from the MCP URL. Filtering is
+  presentation state over the bounded owner page and never changes endpoint,
+  owner, adapter, or target. Each event disclosure retains its exact technical
+  details action. Buzz and Journal do not duplicate a Debug shortcut; swarm
+  diagnostics remain owned by the dedicated Debug tab and Hive swarm actions;
+- Scenarios uses explicit `Deployed | Repository` source tabs. `Deployed` rows
+  are compact, searchable disclosures around the existing Scenario Manager
+  catalogue. `Repository` groups the active trusted workspace's committed
+  `HEAD` candidates by canonical Git repository and commit, identifies them by
+  repository-relative bundle path, and sends only an opaque candidate ID back
+  to the extension host for validation. Its
+  exact-folder selector remains behind a collapsed filter control so the search
+  row stays usable at Side Bar width. The
   narrow Side Bar keeps one focused scenario at a time and uses an internal
   `Overview | Files | Inputs` drill-down rather than a second page. `Overview`
-  shows bundle metadata and the existing deployed-summary actions. `Files` uses
-  read-only MCP inspection tools backed by Scenario Manager's bundle workspace
-  API to render the deployed tree and open exact file previews without direct
-  owner calls from the extension. The deployed `scenario.yaml`, schema, and
-  template preview tools return preview text through MCP; bundle-workspace file
-  inspection remains the structured file payload contract. `Inputs` shows exact
+  presents Description, Controller, and Bees as full-width rows without
+  truncation. `Files` is the single file-navigation surface: it uses read-only
+  MCP inspection tools backed by Scenario Manager's bundle workspace API to
+  render the deployed paths as a nested directory hierarchy and open exact file
+  previews without direct owner calls from the extension. Redundant summary,
+  `scenario.yaml`, schema, and template shortcut buttons are not duplicated
+  above the drill-down. Bundle-workspace file inspection remains the structured
+  file payload contract. `Inputs` shows exact
   bundle-local SUT
   descriptors through MCP plus explicit presence and preview actions for
   `variables.yaml` and `authProfiles.yaml` when they exist; and
-- Debug retains every canonical action, grouped as Runtime, Messaging,
-  Definition, and guarded Maintenance disclosures. Selecting an action still
-  invokes the one existing `debugToolCall` mapping and renders one bounded
-  result below the action list.
+- Debug retains every canonical action in one target-first diagnostic workspace.
+  A compact `Worker | Swarm` context control navigates between the primary
+  runtime target and the swarm tools. Worker discovery sits beside the exact
+  swarm selector; the exact discovered runtime remains visible above compact
+  `Logs | Inspect | Version` tabs, with their evidence directly below.
+  Logs render the selected runtime's bounded Docker stdout/stderr response;
+  Inspect renders the same bounded Orchestrator inspect projection used by
+  `ui-v2`; Version renders the exact image/label projection returned by that
+  owner API. MCP and the extension do not call Docker or create a second runtime
+  diagnostic contract.
+  Swarm-level reads use a two-column tool matrix, and guarded Maintenance stays
+  visually separate with `Cleanup plan` labelled `Plan only`. Every control
+  still invokes the one existing `debugToolCall` mapping.
 
 `debug_journal_runs` is additive and read-only. Existing MCP clients and
 `debug_journal` calls without `runId` keep their current behaviour. The MCP
@@ -1358,17 +1516,21 @@ SUT reads remain MCP-first projections of existing Scenario Manager APIs.
 
 ### Debug tab
 
-Debug uses a single-column drill-down. The user first selects an exact swarm
-and, where required, run/runtime. The page then shows authorised actions from
-the discovered `ToolDescriptor` catalogue. Selecting one action renders its
-bounded result below the action list; large output uses the authorised expiring
-resource link defined by the tool contract.
+Debug uses a target-first single-column drill-down sized for the VS Code Side
+Bar. The user selects an exact swarm, explicitly loads its workers, and selects
+an exact discovered runtime where required. `Logs`, `Inspect`, and `Version`
+are compact modes of one worker evidence panel. The remaining swarm-level
+actions form a compact two-column matrix below it. Selecting any action renders
+its bounded result adjacent to the active action context; large output uses the
+authorised expiring resource link defined by the tool contract. The view-model
+keeps the last bounded worker-discovery result separate from later diagnostic
+evidence so an action result cannot erase the exact-worker selector.
 
 | UI action | Canonical MCP tool |
 |---|---|
 | `Workers` | `runtime_list_workers` |
 | `Logs` | `runtime_tail_worker_logs` |
-| `Versions` | `runtime_get_worker_version` |
+| `Version` | `runtime_get_worker_version` |
 | `Inspect` | `runtime_inspect_worker` |
 | `Runtime drift` | `runtime_diff_swarm_runtime` |
 | `Control plane` | `runtime_control_plane_status` |
@@ -1382,12 +1544,17 @@ Worker-specific actions remain disabled until an exact discovered worker is
 selected. The webview never guesses a worker, queue, run, or manifest.
 
 `Cleanup plan` is visually separated as a guarded action. The plan renders the
-exact target, candidate set, running-resource state, and hash before any execute
-action is offered. `runtime_cleanup_execute` is not a top-level Debug action; it
-is available only from that reviewed plan, remains governed by HiveGate, and
-uses the plan-bound inputs defined by the canonical tool contract. Decline,
-expiry, stale hash, or cancellation returns to the plan without executing or
-automatically requesting approval again.
+exact target, candidate set, running-resource state, and hash beside a locked
+`Execute cleanup` control. The extension does not call
+`runtime_cleanup_execute` directly: execution remains disabled until a
+HiveGate-governed approval and execution path is available. The MCP, extension,
+agent, or telemetry cannot approve the plan. Decline, expiry, stale hash, or
+cancellation returns to the plan without executing or automatically requesting
+approval again.
+
+The fixed environment drawer prefixes every known service ID with one explicit
+Codicon mapping. An unrecognised service ID uses the neutral globe icon only;
+it does not infer a service type from its name, endpoint, protocol, or port.
 
 ### Webview security, accessibility, and assets
 
@@ -1415,9 +1582,18 @@ and colour. The packaging build deterministically produces:
   `vscode-pockethive/resources/logo-mark.svg` for compact swarm identity; and
 - a bounded CSS brand token at
   `vscode-pockethive/resources/brand-tokens.css` that colours the selected
-  workspace tab, with accessible light and high-contrast theme treatment.
+  workspace tab, with accessible light and high-contrast theme treatment; and
+- a callback-safe data-URI module at
+  `vscode-pockethive/src/generated/callbackLogo.ts` containing the exact
+  canonical SVG bytes for the local OAuth hand-off page.
 
-All three generated derivatives carry source path and digest metadata, are not
+Action and navigation icons use the official VS Code Codicon font from one
+exact pinned `@vscode/codicons` development dependency. The build copies only
+its local CSS, font, and licence into the packaged extension; the webview CSP
+permits that local font source and no remote icon or font source. Asset drift
+and the VSIX allow-list remain packaging gates.
+
+All four generated derivatives carry source path and digest metadata, are not
 edited by hand, and are checked during packaging. The Activity Bar silhouette
 preserves the canonical hexagon/network/lens identity while remaining legible
 under VS Code active, inactive, hover, and high-contrast treatment.
@@ -1464,6 +1640,16 @@ Required properties:
 - configured cleanup of closed/expired sessions and bounded audit,
   operation-handle, and deployment-receipt metadata retention.
 
+State schema version 2 adds the Scenario Manager-owned `scenarioName` to
+validation receipts. Startup performs one explicit version 1 to version 2
+migration. It preserves sessions, workflows, generated files, publication
+attempts, and receipts that already contain a non-blank owner name. A legacy
+receipt without that owner fact, and any publication ticket that depends on
+that receipt, is invalidated so the caller must validate the committed bundle
+again. The migration never derives a scenario name from the scenario ID or
+bundle path. Unsupported schema versions still fail startup without changing
+the stored evidence.
+
 The store also enforces the configured per-principal session, per-session
 workflow, and total-byte limits before mutation. Limit exhaustion fails with a
 typed capacity error and changes no existing record. State and spool directories
@@ -1485,14 +1671,16 @@ assert prior elicitation or manufacture a state transition.
 
 Session creation returns `expiresAt`, and every session response reports state
 and remaining lifetime. Agent workflow sessions have no implicit renewal or
-state transfer between sessions. The VS Code companion's separate OAuth base
-session renews on demand through the canonical Auth Service refresh grant.
-Renewal is single-flight, rotates an opaque refresh token, and reconnects a
+state transfer between sessions. The VS Code companion's separate OAuth
+environment session is authorised once for the exact UI capability intent,
+narrowed by Auth Service to the principal's current grants, and renewed through
+the canonical Auth Service refresh grant. Renewal is scheduled before expiry
+and checked on demand, is single-flight, rotates an opaque refresh token, and reconnects a
 candidate MCP transport before replacing the current transport. The
 authenticated workspace and its last good owner data remain visible during
 renewal, so a transient session state never sends the user back to
-`Environments` or blanks the active tab. Privileged scoped sessions remain
-ephemeral and receive no refresh token. Cleanup follows only the explicitly
+`Environments` or blanks the active tab. Commands never launch a separate
+browser grant, and cleanup remains outside the companion scope. Cleanup follows only the explicitly
 configured durations; missing retention configuration fails startup. Expiry or
 deletion of MCP state never claims rollback or deletion of source Git history,
 Scenario Manager state, Orchestrator state, or HiveGate evidence.
@@ -2261,6 +2449,301 @@ native VS Code window, or governed HiveForge deployment. Those remain explicit
 release charters; they do not justify a fallback or weaken the current local
 acceptance result.
 
+### Status-rail visual-system follow-up — 2026-08-20
+
+This is local-development evidence for the uncommitted worktree on
+`merge/rewrite-lifecycle-mcp`. It changes only the VS Code presentation adapter,
+its packaged local assets, tests, and this specification. It is not a HiveGate
+approval, remote deployment receipt, commit, push, or release decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| VS Code verification | Compile, 119 unit/integration tests, asset provenance, and atomic cutover checks | Pass |
+| VS Code mutation | Stryker killed 2,033 mutants by assertion, killed nine by timeout, retained eight declared ignores, and reported zero survivor, uncovered mutant, or error | Pass, 100.00% |
+| Live UI acceptance | Public-ingress OAuth/MCP flow; 54-tool catalogue; 25 environment, auth, tab, drill-down, and narrow-width captures | Pass, zero finding |
+| Accessibility and resilience | Axe plus geometry at 140, 240, 280, 320, 428, and 480 CSS pixels | Pass, zero overflow, clipping, undersized target, or Axe violation |
+| Supply chain | Exact pinned official Codicon development package and `npm audit --audit-level=low --ignore-scripts` | Pass, zero vulnerability |
+| Packaging | Asset drift and 37-file extension allow-list; local font, CSS, and licence included | Pass |
+| Design QA | Six normalized page comparisons plus focused Scenario Files/Overview comparisons and Inputs evidence in `vscode-pockethive/design-qa.md` | Pass |
+
+#### RST session `RST-VSCODE-STATUS-RAIL-20260820`
+
+- **Mission:** apply the approved compact enterprise visual system without
+  losing migrated functionality, inventing health facts, or weakening exact
+  target selection.
+- **Oracles:** this specification, current MCP catalogue/view models, SSOT and
+  NFF rules, the approved six-page visual set, VS Code accessibility semantics,
+  package allow-list, and public-ingress browser evidence.
+- **Variations:** empty and connected environments; active and unavailable
+  sessions; all five tabs; running and ready swarms; expanded run history;
+  advanced event and folder filters; exact combobox input; mixed Scenario files;
+  Scenario Inputs; selected Debug swarm; long owner values; 140–480 CSS pixels;
+  browser OAuth sign-in/consent; refresh-token rotation and replay rejection.
+
+The fix loop found and resolved:
+
+1. The first approved visual showed service and mock counts before the MCP
+   exposed them. The follow-up contract adds one canonical read-only MCP health
+   projection. The extension consumes that projection and still performs no
+   direct service probe or second health normalisation path.
+2. The first custom searchable choice lacked an explicit accessible name. The
+   combobox now has one exact label, `aria-autocomplete=list`, an integrated
+   listbox, exact-choice validation, and no inferred-target path.
+3. Replacing text-only affordances invalidated one static cutover selector and
+   one browser interaction selector. Both gates now assert the semantic
+   icon-led controls rather than preserving obsolete visible text.
+4. The 140-pixel 200%-zoom equivalent initially compressed two tabs below the
+   minimum target and clipped the health label. The ultra-narrow tab strip now
+   scrolls explicitly, the health label truncates deliberately, and diagnostic
+   headings remain usable without page overflow.
+5. The first visual evidence captured Scenarios and Debug before their existing
+   detailed states were selected. The final acceptance captures the exact
+   mixed `.yaml`/`.sh` file tree, Variables/Auth/SUT/endpoint Inputs, and a
+   selected Debug swarm rather than presenting empty shells as proof.
+
+The final implementation keeps Start, Stop, guarded Remove, Details, Debug,
+batch lifecycle, single-swarm run history, Buzz/Journal filtering, Scenario
+inspection, and grouped diagnostics. The shared visual system adds no owner
+call, alternate endpoint, background poller, inferred target, or compatibility
+fallback. Remaining remote/native-VS-Code manual checks are release charters,
+not evidence gaps in this local presentation change.
+
+### Git Scenario discovery implementation follow-up — 2026-08-21
+
+This is local-development evidence for the uncommitted worktree on
+`merge/rewrite-lifecycle-mcp`. It adds only the VS Code Git-authoring projection
+and reuses the existing Scenario Manager validation/publication path. It is not
+a commit, push, deployment receipt, or change to Scenario Manager or MCP tools.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| Contract and SSOT review | Repository-wide search found one Git discovery implementation; Scenario Manager remains the only deployed catalogue and semantic validator | Pass |
+| Unit and integration | TypeScript build plus 133 extension tests, including real temporary Git repositories, multi-root de-duplication, trust, stale IDs, pinned commits, mixed files, coordinator reuse, messages, boundary, and UI projection | Pass |
+| Mutation | All 19 mandated files: 2,246 mutants killed by assertion, nine killed by timeout, zero survived, uncovered, or errored | Pass, 100.00% |
+| Live UI acceptance | Public ingress `http://localhost:8088/mcp`, OAuth rotation/replay rejection, 54-tool catalogue, 27 screenshots including Repository scenarios | Pass, zero finding |
+| Package | Asset provenance, atomic cutover, and 39-file VSIX allow-list | Pass |
+| Actual repository proof | Committed `HEAD` exposed 48 canonical candidates; `scenarios/bundles/db-query-postgres-smoke` packaged as 11 files and retained `.sql` and `.sh` | Pass |
+
+#### RST session `RST-VSCODE-GIT-SCENARIOS-20260821`
+
+- **Mission:** make committed Scenario Bundles in the active IDE repository
+  discoverable without creating another scenario authority, leaking host paths,
+  or admitting mutable working-tree bytes.
+- **Oracles:** this specification, `docs/scenarios/README.md`, Scenario Manager
+  bundle REST contract, SSOT/NFF rules, existing ticket upload coordinator, VS
+  Code workspace-trust contract, and the Git object model.
+- **Variations:** no workspace; untrusted workspace; non-Git folder; nested
+  multi-root folders; SHA-1 and SHA-256 commits; invalid UTF-8 and unsafe paths;
+  exact and exceeded output/path/candidate limits; duplicate descriptors;
+  uncommitted additions; removed worktree directory; changed `HEAD`; stale and
+  hostile webview candidate IDs; mixed `.yaml`, `.sql`, and `.sh` bundles; and
+  Side Bar rendering through the public MCP ingress.
+
+The fix loop found and resolved:
+
+1. A simple filesystem scan would include dirty bytes and duplicate Scenario
+   Manager semantics. Discovery now reads only Git `HEAD` paths and never parses
+   bundle meaning.
+2. Sending a path from the webview would make an untrusted presentation surface
+   select host files. The webview now returns one opaque, scan-owned ID; only the
+   extension host resolves its canonical reference.
+3. Passing that reference back as a mutable worktree directory left a symlink
+   and deletion time-of-check/time-of-use gap. Packaging now reads the pinned
+   commit's Git objects and succeeds even when the worktree directory is gone.
+4. A candidate could become stale after repository `HEAD` moved or workspace
+   trust was withdrawn. Both cases now fail explicitly and require refresh;
+   neither silently packages a different revision.
+5. The first mutation run exposed redundant path guards and under-specified
+   boundary cases. Path validation was consolidated into one canonical helper,
+   and exact tests now cover encoding, ordering, every bound, trust, commit
+   drift, and stale registry state. The final full mutation run has no survivor.
+
+### Environment health footer implementation follow-up — 2026-08-21
+
+This is local-development evidence for the uncommitted worktree on
+`merge/rewrite-lifecycle-mcp`. It adds one canonical MCP-owned environment
+health projection, the public-ingress TCP Mock route required by that
+projection, and the selected VS Code footer presentation. It is not a commit,
+push, remote deployment receipt, or release decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| Contract and SSOT review | `pockethive://environment/health` is the sole IDE health projection; the extension performs no direct service probe, fallback, or second normalisation | Pass |
+| MCP verification | Full MCP reactor unit/integration run, including Streamable HTTP resource read and official-ingress probe contracts | Pass, 127/127 |
+| MCP mutation | PIT covered 1,393/1,393 mutated lines and killed 541/541 mutants; zero survived or lacked coverage | Pass, 100% |
+| VS Code verification | TypeScript build, 135 tests, asset provenance, atomic cutover, and package-content checks | Pass |
+| VS Code mutation | Stryker killed 2,253 mutants by assertion and nine by timeout; zero survived, lacked coverage, or errored | Pass, 100.00% |
+| Local deployment | `build-hive.sh --quick --service ui --service pockethive-mcp`; only the selected services were recreated and the official ingress remained healthy | Pass |
+| Live UI acceptance | Public-ingress OAuth/MCP flow, 54 tools, session rotation and replay rejection, exact health/account geometry, and 28 browser captures | Pass, zero finding |
+| Design QA | Option-1 source and live 428 × 917 capture normalized in `vscode-pockethive/design-qa.md` | Pass |
+| Packaging and install | 39-file extension payload allow-list; 41-entry VSIX; forced local replacement of extension 1.0.5 | Pass |
+
+#### RST session `RST-VSCODE-ENVIRONMENT-HEALTH-20260821`
+
+- **Mission:** replace the duplicate workspace identity header with one compact
+  footer-owned identity, service health disclosure, and account overlay without
+  inventing health facts, adding a background poller, or losing narrow-width
+  usability.
+- **Oracles:** this specification, `docs/mcp/README.md`, SSOT/NFF rules, the
+  selected option-1 visual, owner health contracts, the official public ingress,
+  VS Code accessibility semantics, and package/mutation thresholds.
+- **Variations:** all services healthy; one unavailable service; all services
+  unavailable; probe runtime failure; executor failure; interrupted collection;
+  missing or malformed MCP resource; disconnected MCP client; closed and open
+  footer; open account overlay; authenticated, restoring, and expired sessions;
+  280 and 428 CSS-pixel widths; live token rotation and replay rejection.
+
+The fix loop found and resolved:
+
+1. The extension previously had only MCP-session health and could not honestly
+   render service status. The MCP now owns one bounded seven-service projection
+   derived only through the selected environment's public ingress.
+2. TCP Mock had no public Nginx route, so an official-ingress probe resolved to
+   SPA content. The UI and HiveForge ingress contracts now expose the exact
+   `/tcp-mock/` adapter; no direct-port test or fallback was introduced.
+3. The first extension mutation run exposed four missing fail-closed resource
+   assertions. Exact disconnected, default-code, and missing-resource tests
+   killed those mutants; the rerun reached 100.00%.
+4. The first PIT run found five health failure-path mutants and one existing
+   ambiguous-publication accessor without coverage. Interruption, executor
+   failure, complete unavailable projection, Spring constructor, and exact
+   attempt-ID tests raised mutation and mutated-line coverage to 100%.
+5. Removing the visible workspace identity block also removed the level-one
+   heading. A screen-reader-only environment heading restored page semantics
+   without restoring visual headspace; the second 28-state browser run reported
+   zero Axe or layout finding.
+6. Live WireMock was unavailable. The footer reports that owner result and the
+   aggregate degraded state explicitly; it does not substitute the generated
+   visual's healthy example or silently retry another endpoint.
+
+The final footer uses the packaged PocketHive hexagon, square disclosure top
+corners, divider-led full-width service rows with no trailing gap, and an
+absolute account overlay. Health is refreshed with the normal bounded workspace
+read/explicit refresh lifecycle; no independent high-frequency poller or
+strobing presentation was added.
+
+### Hive hierarchy and runtime-diagnostics proof — 2026-08-21
+
+This is local-development evidence for the uncommitted worktree on
+`merge/rewrite-lifecycle-mcp`. It is not a commit, push, remote deployment
+receipt, or release decision.
+
+| Gate | Final evidence | Result |
+|---|---|---|
+| Contract-first review | Orchestrator REST now documents its actual flattened `observation` projection; MCP readiness consumes that single owner contract | Pass |
+| Java verification | Full Orchestrator, Controller, and MCP reactor unit/integration run; no failing Surefire report | Pass |
+| MCP mutation | PIT covered 1,432/1,432 mutated lines and killed 613/613 mutants | Pass, 100% |
+| VS Code verification | TypeScript build, 141 tests, asset provenance, atomic cutover, and 41-file package allow-list | Pass |
+| VS Code mutation | Stryker killed all 2,382 viable mutants: 2,373 by assertion and nine by timeout | Pass, 100% |
+| Live MCP lifecycle | Disposable swarm create, 3/3 readiness, start, Logs, Version, Inspect, stop, and remove through `http://localhost:8088/mcp` | Pass |
+| Visual and accessibility | 33 Playwright captures at responsive widths; equal three-section Hive action grid; no Axe, overflow, clipping, console, or page finding | Pass |
+| Supply chain and package | npm audit found zero vulnerabilities; extension 1.0.5 packaged and forcibly reinstalled | Pass |
+
+#### RST session `RST-VSCODE-HIVE-RUNTIME-20260821`
+
+- **Mission:** reproduce the approved Side Bar hierarchy exactly, prove each
+  worker diagnostic against its owning MCP tool, and preserve the existing
+  swarm while testing lifecycle behavior.
+- **Oracles:** the approved 428 × 917 visual, `docs/ORCHESTRATOR-REST.md`, this
+  specification, SSOT/NFF rules, Docker label contracts, MCP catalogue, and the
+  public-ingress testing rule.
+- **Variations:** expanded and collapsed workers, running and ready swarms,
+  disabled running removal, exact worker Logs/Inspect/Version, stale and fresh
+  observations, malformed readiness responses, literal build placeholders,
+  narrow widths, health drawer open/closed, and lifecycle cleanup.
+
+The fix loop found and resolved:
+
+1. Swarm secondary actions were visually adjacent but did not own three equal
+   horizontal sections. CSS and Playwright geometry now require equal-width
+   `Debug | Open in Web UI | Remove` cells across the full action row.
+2. Live `swarm_wait_ready` still parsed a removed Node-era control-envelope
+   shape. It now reads only the canonical Orchestrator REST projection and
+   fails explicitly on malformed owner state.
+3. The first disposable proof exposed a literal `@project.version@` Docker
+   label. Controller resource filtering now packages the canonical Maven
+   release value, with a regression test at the artifact boundary.
+4. The first post-fix PIT run exposed one blank-state mutant; the missing
+   boundary assertion killed it. The next run exposed record-line coverage
+   attribution only; source formatting removed that instrumentation artifact
+   without changing behavior, and the final gate reached 100% line and mutation
+   coverage.
+
+The proof used a uniquely named disposable swarm and removed it after stop.
+The pre-existing `test-*` containers were neither started, stopped, nor
+removed.
+
+### Event-page presentation boundary follow-up — 2026-08-22
+
+Buzz and Journal use one master-detail presentation boundary. The extension
+host receives each canonical ten-event owner page and replaces its `items` with
+an allowlisted `CompanionEventSummary` projection before posting the page to
+the webview. A summary contains only an opaque `detailId` and the fields needed
+by the existing row, filters, and navigation: `eventId`, `timestamp`,
+`severity`, `kind`, `type`, `swarmId`, `runId`, `origin`, `direction`,
+`routingKey`, and `summary`. Missing optional fields remain absent; the
+extension does not infer them. Owner pagination fields remain unchanged.
+
+The complete owner records remain only in a transient extension-host registry
+keyed by the opaque IDs created for the current page generation. The webview
+can return only one exact `detailId` through `openEventDetails`; it cannot send
+an event object, owner ID, index, path, or environment. Refreshing the event
+page replaces the generation. Selecting another tab, changing or closing the
+environment, signing out, and disposing the provider clear the registry. An
+unknown or stale ID fails explicitly with `EVENT_DETAIL_NOT_AVAILABLE`; an
+opaque-ID collision while creating a page fails with
+`EVENT_DETAIL_ID_COLLISION`. No earlier page, owner call, index, or other
+environment is used as a fallback.
+
+`Open technical details` opens the selected complete record in a VS Code JSON
+preview rather than expanding raw JSON inside the Side Bar. The preview applies
+the companion's single recursive secret-key redaction policy to authorization,
+token, secret, and password values. It does not apply a byte-based redaction,
+truncate strings or collections, or change non-secret evidence. Raw event
+payloads and log snapshots never enter the webview message.
+
+All projected event pages use the existing general 64 KiB fail-closed webview
+field limit; the temporary 1 MiB event exception is removed. Tests must prove
+that ten large `runtime-log-snapshot` records produce a small page containing
+all ten summaries and no raw logs, that exact current IDs return their records,
+that replacement and clearing invalidate earlier IDs, that hostile messages
+cannot inject records or extra fields, that secret values are redacted only in
+the preview projection, and that the Buzz and Journal UI sends the selected
+opaque ID. Integration evidence must exercise the public MCP ingress and show
+that the Side Bar remains usable with the current large owner page.
+
+#### RST session `RST-VSCODE-EVENT-PAGE-BOUNDARY-20260822`
+
+- **Mission:** reproduce `COMPANION_VIEW_DATA_TOO_LARGE` against current local
+  owner data, identify the exact field, and keep complete event evidence
+  available without sending it through the Side Bar webview boundary.
+- **Oracles:** the ten-event Side Bar contract, per-field fail-closed boundary,
+  valid structural view model, public-ingress-only integration rule, complete
+  redacted event details, and zero silent fallback or truncation.
+- **Observed data:** the live Buzz result was 291,528 UTF-8 bytes. Each of its
+  ten `runtime-log-snapshot` records carried about 28 KiB of legitimate
+  `extra.logs` evidence. The same probes measured the swarm list at 9,171
+  bytes, the template catalogue at 30,500 bytes, and the superseded
+  complete-inspect prototype result at 9,522 bytes, isolating the event-page
+  policy as the smallest owner.
+- **Superseded result:** 143/143 extension tests passed. Stryker produced 2,395 mutants;
+  all 2,387 viable mutants were killed (2,378 by assertion and nine by
+  timeout), with zero survivor, uncovered mutant, or error. The live
+  public-ingress Playwright run preserved the 291,528-byte Buzz page, captured
+  34 states, and reported zero accessibility, overflow, console, or page
+  finding. The package allow-list and VSIX build passed, npm audit reported
+  zero vulnerabilities, and extension 1.0.5 was forcibly reinstalled.
+
+That result validated the diagnosis but its 1 MiB transport exception is
+superseded by the master-detail contract above. The replacement must record its
+own current unit, mutation, public-ingress UI, package, audit, and installed
+extension evidence before delivery.
+
+Runtime diagnostics remain owner projections. Acceptance verifies that MCP and
+the extension preserve the exact version and bounded inspect response returned
+by the established Orchestrator endpoint also used by `ui-v2`; they do not add
+Docker access, require new runtime labels, or infer deployment-wide versions.
+
 ## Delivery plan
 
 ### Phase 0 — contracts and proof
@@ -2370,6 +2853,54 @@ acceptance result.
 - publish migration and rollback instructions.
 
 There is no period in which Node and Java are independently supported products.
+
+## Repository scenario cards implementation follow-up — 2026-08-23
+
+The VS Code Repository source now presents each committed Scenario Bundle as a
+self-contained card. Each card owns its `Overview`, `Files`, and `Inputs`
+views plus `Edit`, `Validate`, and `Deploy`. `Edit` opens the exact committed
+file path in the VS Code editor. Validation packages the exact HEAD tree and
+uses only Scenario Manager's returned `scenarioId` and `scenarioName`; the
+extension does not parse or infer either field.
+
+Deployment has two explicit paths. A missing deployed ID uses `CREATE`. An
+existing ID opens a conflict dialog with `Replace existing` and `Rename source`.
+Replace publishes the retained validated bytes with `REPLACE`. Rename suggests
+the exact `-01` suffix, opens local `scenario.yaml`, and requires the user to
+edit, commit, refresh, validate, and deploy again. It does not rewrite bundle
+bytes or fall back to replacement. Validation evidence stays in its scenario
+card; no duplicate raw result is rendered below the list.
+
+State schema version 2 preserves the new owner-provided scenario name across
+restart. The explicit version 1 migration preserves sessions, workflows,
+generated files, publication attempts, and complete receipts. It invalidates
+only receipts missing the owner name and publication tickets that depend on
+them, so those bundles must be validated again. Unsupported or malformed state
+still fails startup.
+
+Qualification evidence:
+
+- Scenario Manager: 171 tests passed.
+- PocketHive MCP: 131 tests passed, including Streamable HTTP integration and
+  restart migration tests.
+- VS Code extension: 154 unit, asset, and cutover tests passed.
+- Java PIT: 572/572 mutations killed, 1,447/1,447 mutated-class lines covered,
+  zero survivors and zero uncovered mutants.
+- Extension Stryker: 2,611/2,611 mutations killed, including nine bounded
+  timeout kills, with zero survivors, uncovered mutants, or errors.
+- Browser acceptance: 35 authenticated public-ingress captures across 140,
+  240, 280, 320, 428, and 480 CSS-pixel widths; zero page, console,
+  accessibility, clipping, overflow, or target-size findings.
+- Local deployment: canonical `build-hive.sh` rebuilt only Scenario Manager
+  and PocketHive MCP as required. The persisted v1 state migrated without
+  deleting its volume, and the public OAuth metadata and MCP ingress recovered.
+
+RST exposed two defects before handoff. A clean service build found one stale
+Java caller and one nondeterministic nanosecond test fixture. The first
+post-deployment browser run then found the v1 receipt incompatibility, and the
+visual comparison exposed the duplicate raw validation projection. Each defect
+entered the red-test, fix, full-regression, and mutation loop before this
+evidence was recorded.
 
 ## Acceptance gate
 

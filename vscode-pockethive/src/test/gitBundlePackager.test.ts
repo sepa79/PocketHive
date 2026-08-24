@@ -9,6 +9,7 @@ import test from 'node:test';
 import { ConnectionContractError } from '../connection/contracts';
 import {
   ArchiveFileOperations,
+  CommittedBundleReference,
   GitBundleLimits,
   GitBundlePackager,
   GitCommand,
@@ -58,6 +59,66 @@ test('packages every regular file from the selected committed Git tree with exac
   }
 });
 
+test('packages a discovered repository reference from Git objects after the worktree directory is removed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-reference-'));
+  const bundlePath = 'scenarios/bundles/removed-worktree';
+  const bundle = join(root, ...bundlePath.split('/'));
+  try {
+    await mkdir(bundle, { recursive: true });
+    await writeFile(join(bundle, 'scenario.yaml'), 'id: removed-worktree\n', 'utf8');
+    await git(root, 'init');
+    await git(root, 'config', 'user.email', 'test@example.invalid');
+    await git(root, 'config', 'user.name', 'PocketHive Test');
+    await git(root, 'remote', 'add', 'origin', 'https://example.invalid/qa/reference.git');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'committed scenario');
+    await rm(bundle, { recursive: true });
+
+    const commit = (await execFile('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' })).stdout.trim();
+    const reference: CommittedBundleReference = { repositoryRoot: root, bundlePath, commit };
+    const prepared = await new GitBundlePackager().package(reference);
+    try {
+      assert.equal(prepared.source.bundlePath, bundlePath);
+      assert.deepEqual(prepared.fileManifest.map(file => file.path), ['scenario.yaml']);
+    } finally {
+      await prepared.dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('repository references reject non-canonical bundle paths before invoking Git', async () => {
+  let calls = 0;
+  const packager = new GitBundlePackager(async () => {
+    calls += 1;
+    throw new Error('must not run');
+  });
+  for (const bundlePath of ['', ' scenarios/smoke', '/scenarios/smoke', 'scenarios\\smoke',
+    'scenarios//smoke', 'scenarios/./smoke', 'scenarios/../smoke']) {
+    await assertCode(packager.package({
+      repositoryRoot: '/workspace/repository', bundlePath, commit: 'a'.repeat(40),
+    }),
+      'GIT_BUNDLE_PATH_INVALID');
+  }
+  assert.equal(calls, 0);
+  await assertCode(packager.package({
+    repositoryRoot: '/workspace/repository-does-not-exist', bundlePath: 'scenarios/smoke',
+    commit: 'a'.repeat(40),
+  }), 'GIT_REPOSITORY_REQUIRED');
+});
+
+test('repository references fail when the discovered commit is invalid or no longer HEAD', async () => {
+  await withSelectedDirectory(async ({ root }) => {
+    const packager = new GitBundlePackager(fakeGit(root, {}));
+    await assertCode(packager.package({ repositoryRoot: root, bundlePath: 'bundle', commit: 'invalid' }),
+      'GIT_COMMIT_INVALID');
+    await assertCode(packager.package({
+      repositoryRoot: root, bundlePath: 'bundle', commit: '2'.repeat(40),
+    }), 'GIT_REPOSITORY_HEAD_CHANGED');
+  });
+});
+
 test('fails explicitly when source identity is absent or selected content is not a committed directory', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-test-'));
   const bundle = join(root, 'bundle');
@@ -95,7 +156,9 @@ test('maps Git identity and tree failures to stable contract codes', async () =>
       'GIT_COMMIT_INVALID');
     await assertCode(new GitBundlePackager(fakeGit(root, { commit: `${'a'.repeat(64)}suffix` })).package(selected),
       'GIT_COMMIT_INVALID');
-    await assertCode(new GitBundlePackager(fakeGit(root, { fail: 'ls-tree -r -z --full-tree HEAD:bundle' }))
+    await assertCode(new GitBundlePackager(fakeGit(root, {
+      fail: `ls-tree -r -z --full-tree ${'1'.repeat(40)}:bundle`,
+    }))
       .package(selected), 'GIT_BUNDLE_TREE_REQUIRED');
     await assertCode(new GitBundlePackager(fakeGit(root, { tree: '' })).package(selected),
       'GIT_BUNDLE_FILES_REQUIRED');
@@ -165,7 +228,9 @@ test('enforces explicit file, expanded-byte, archive-byte, and command-buffer li
     await exactFileLimit.dispose();
     await assertCode(new GitBundlePackager(fakeGit(root, { fail: `cat-file blob ${objectA}` }))
       .package(selected), 'GIT_BUNDLE_READ_FAILED');
-    await assertCode(new GitBundlePackager(fakeGit(root, { fail: 'archive --format=zip HEAD:bundle' }))
+    await assertCode(new GitBundlePackager(fakeGit(root, {
+      fail: `archive --format=zip ${'1'.repeat(40)}:bundle`,
+    }))
       .package(selected), 'GIT_BUNDLE_ARCHIVE_FAILED');
     const exactLimit = await new GitBundlePackager(fakeGit(root, {
       blobs: { [objectA]: Buffer.alloc(5) },
@@ -274,18 +339,21 @@ function fakeGit(root: string, options: FakeGitOptions): GitCommand {
     const command = args.join(' ');
     if (command === options.fail) throw new Error('simulated Git failure');
     if (command === 'rev-parse --show-toplevel') return Buffer.from(options.repositoryRoot ?? root);
-    if (command === 'cat-file -e HEAD:bundle') return Buffer.alloc(0);
+    const commit = options.commit ?? '1'.repeat(40);
+    if (command === `cat-file -e ${commit}:bundle`) return Buffer.alloc(0);
     if (command === 'remote get-url origin') {
       return Buffer.from(options.repository ?? 'https://example.invalid/qa/tests.git');
     }
-    if (command === 'rev-parse HEAD') return Buffer.from(options.commit ?? '1'.repeat(40));
-    if (command === 'ls-tree -r -z --full-tree HEAD:bundle') {
+    if (command === 'rev-parse HEAD') return Buffer.from(commit);
+    if (command === `ls-tree -r -z --full-tree ${commit}:bundle`) {
       return Buffer.from(`${options.tree ?? `100644 blob ${objectId}\tscenario.yaml`}\0`);
     }
     if (args[0] === 'cat-file' && args[1] === 'blob') {
       return options.blobs?.[args[2]] ?? Buffer.from('name: test\n');
     }
-    if (args[0] === 'archive') return options.archive ?? Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+    if (command === `archive --format=zip ${commit}:bundle`) {
+      return options.archive ?? Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+    }
     throw new Error(`Unexpected Git command: ${command}`);
   };
 }

@@ -123,6 +123,7 @@ public final class ScenarioBundleValidator {
 
         Scenario resolved = applyDefaultImageTag(scenario);
         String scenarioId = resolved != null ? resolved.getId() : null;
+        String scenarioName = resolved != null ? resolved.getName() : null;
 
         if (resolved == null) {
             if (findings.isEmpty()) {
@@ -133,7 +134,7 @@ public final class ScenarioBundleValidator {
         } else {
             if (!validateScenarioProtocol(resolved, findings)) {
                 BundleValidationResult result = resultOf(input.source(), input.bundleKey(), input.bundlePath(),
-                    scenarioId, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
+                    scenarioId, scenarioName, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
                 return new ValidationRun(result, descriptorScenario, bundleRoot);
             }
             defunctReason(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
@@ -158,7 +159,7 @@ public final class ScenarioBundleValidator {
             input.source(),
             input.bundleKey(),
             input.bundlePath(),
-            scenarioId, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
+            scenarioId, scenarioName, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
             List.copyOf(findings));
         return new ValidationRun(result, descriptorScenario, bundleRoot);
     }
@@ -229,9 +230,10 @@ public final class ScenarioBundleValidator {
     }
 
     public BundleValidationResult resultOf(BundleValidationSource source, String bundleKey, String bundlePath,
-                                           String scenarioId, String scenarioProtocolVersion, Path bundleRoot,
+                                           String scenarioId, String scenarioName, String scenarioProtocolVersion,
+                                           Path bundleRoot,
                                            List<ValidationFinding> findings) {
-        return BundleValidationResult.of(source, bundleKey, bundlePath, scenarioId,
+        return BundleValidationResult.of(source, bundleKey, bundlePath, scenarioId, scenarioName,
             new BundleValidationEvidence(
                 scenarioProtocolVersion,
                 ScenarioProtocol.CURRENT_VERSION,
@@ -406,6 +408,7 @@ public final class ScenarioBundleValidator {
             null,
             null,
             null,
+            null,
             List.of(findingForException(e)));
     }
 
@@ -420,6 +423,7 @@ public final class ScenarioBundleValidator {
             null,
             null,
             scenarioId,
+            null,
             null,
             null,
             List.of(finding));
