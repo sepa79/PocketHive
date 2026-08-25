@@ -23,11 +23,14 @@ class ToolCatalogueTest {
     void everyPublishedToolHasOneCanonicalIdContractAndConnectedSkill() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
-        assertThat(catalogue.tools()).hasSize(58);
+        assertThat(catalogue.tools()).hasSize(59);
         assertThat(catalogue.tools()).allSatisfy(tool -> {
             assertThat(tool.id()).matches("[a-z][a-z0-9_]*");
             assertThat(tool.description()).isNotBlank();
             assertThat(tool.inputSchema()).containsEntry("type", "object");
+            assertThat(tool.outputSchema()).matches(
+                schema -> schema.containsKey("type") || schema.containsKey("oneOf"),
+                "declare a root type or an explicit root union");
             assertThat(tool.inputSchema()).containsEntry("additionalProperties", false);
             assertThat(tool.inputSchema().get("required")).isInstanceOf(List.class);
             Map<?, ?> properties = (Map<?, ?>) tool.inputSchema().get("properties");
@@ -47,7 +50,10 @@ class ToolCatalogueTest {
             .contains("scenario_bundle_tree_read", "scenario_bundle_file_read",
                 "scenario_suts_list", "scenario_sut_get", "scenario_workflow_question",
                 "scenario_workflow_answer_submit", "scenario_workflow_review_prepare",
-                "scenario_workflow_review_submit");
+                "scenario_workflow_review_submit", "runtime_assess_swarm");
+        assertThat(catalogue.requireTool("scenario_list").outputSchema()).containsEntry("type", "array");
+        assertThat(catalogue.requireTool("scenario_raw_read").outputSchema()).containsEntry("type", "string");
+        assertThat(catalogue.requireTool("swarm_get").outputSchema()).containsEntry("type", "object");
         assertThat(catalogue.skills().values()).allSatisfy(skill -> {
             assertThat(skill.resourceUri()).isEqualTo(
                 "pockethive://skills/%s/%s/SKILL.md".formatted(skill.id(), skill.version()));
@@ -62,8 +68,13 @@ class ToolCatalogueTest {
                 "pockethive://tools/catalogue", "pockethive://skills/catalogue");
         assertThat(catalogue.skills().get("qa-no-inference").version()).isEqualTo("1.2.0");
         assertThat(catalogue.skills().values().stream()
-            .filter(skill -> !skill.id().equals("qa-no-inference")))
+            .filter(skill -> !Set.of("qa-no-inference", "runtime-diagnostics", "live-configuration",
+                "governed-cleanup").contains(skill.id())))
             .allSatisfy(skill -> assertThat(skill.version()).isEqualTo("1.0.0"));
+        assertThat(catalogue.skills().values().stream()
+            .filter(skill -> Set.of("runtime-diagnostics", "live-configuration", "governed-cleanup")
+                .contains(skill.id())))
+            .allSatisfy(skill -> assertThat(skill.version()).isEqualTo("1.1.0"));
         assertThat(catalogue.skills().get("qa-no-inference").markdown())
             .contains("scenario_workflow_question", "scenario_workflow_answer_submit")
             .contains("scenario_workflow_review_prepare", "scenario_workflow_review_submit")
@@ -106,6 +117,29 @@ class ToolCatalogueTest {
         assertThat(runs.requiredScope()).isEqualTo(PocketHiveMcpScopes.READ);
         assertThat(runs.skillIds()).containsExactly("runtime-diagnostics");
         assertThat(runs.inputSchema().get("required")).isEqualTo(List.of("swarmId"));
+
+        Map<String, Object> contracts = catalogue.requireTool("scenario_contracts_get").inputSchema();
+        assertThat(properties(contracts)).isEmpty();
+        assertThat(contracts.get("required")).isEqualTo(List.of());
+
+        Map<String, Object> capabilities = catalogue.requireTool("scenario_capabilities_get").inputSchema();
+        assertThat(properties(capabilities)).containsOnlyKeys("all", "imageName", "imageDigest");
+        assertThat(capabilities.get("required")).isEqualTo(List.of());
+        assertThat(catalogue.requireTool("scenario_capabilities_get").outputSchema())
+            .containsEntry("oneOf", List.of(
+                Map.of("type", "array", "items", Map.of("type", "object")),
+                Map.of("type", "object")));
+
+        Map<String, Object> cleanupPlan = catalogue.requireTool("runtime_cleanup_plan").inputSchema();
+        assertThat(cleanupPlan.get("required"))
+            .isEqualTo(List.of("swarmId", "includeRunning", "includeRabbit"));
+        assertThat(property(cleanupPlan, "includeRunning")).containsEntry("type", "boolean");
+        assertThat(property(cleanupPlan, "includeRabbit")).containsEntry("type", "boolean");
+
+        Map<String, Object> cleanupExecute = catalogue.requireTool("runtime_cleanup_execute").inputSchema();
+        assertThat(cleanupExecute.get("required")).isEqualTo(List.of(
+            "swarmId", "includeRunning", "includeRabbit", "candidateSetHash", "candidateIds",
+            "idempotencyKey", "reason"));
 
         Map<String, Object> publication = catalogue.requireTool("scenario_bundle_publication_prepare").inputSchema();
         assertThat(property(publication, "mode").get("enum")).isEqualTo(List.of("CREATE", "REPLACE"));

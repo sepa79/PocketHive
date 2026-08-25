@@ -41,7 +41,7 @@ class McpServerConfigurationTest {
         Properties buildValues = new Properties();
         buildValues.setProperty("version", "9.8.7-test");
         McpSyncServer server = configuration.server(transport, catalogue, resources,
-            mock(McpToolExecutor.class), objectMapper, new BuildProperties(buildValues));
+            mock(McpToolExecutor.class), new ToolFailureMapper(), objectMapper, new BuildProperties(buildValues));
         ServletRegistrationBean<HttpServletStreamableServerTransportProvider> servlet =
             configuration.mcpServlet(transport);
 

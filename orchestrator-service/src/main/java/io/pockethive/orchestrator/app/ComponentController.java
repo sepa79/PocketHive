@@ -35,27 +35,40 @@ public class ComponentController {
     private static final long CONFIG_UPDATE_TIMEOUT_MS = 60_000L;
     private static final Logger log = LoggerFactory.getLogger(ComponentController.class);
 
-	    private final ControlPlanePublisher controlPublisher;
-	    private final OperationDispatchService operations;
-	    private final ControlResponseFactory controlResponses;
-	    private final String originInstanceId;
-	    private final SwarmStore store;
-        private final OrchestratorEndpointAuthorization endpointAuthorization;
+    private final ControlPlanePublisher controlPublisher;
+    private final OperationDispatchService operations;
+    private final ControlResponseFactory controlResponses;
+    private final String originInstanceId;
+    private final SwarmStore store;
+    private final ComponentConfigPreviewService previews;
+    private final OrchestratorEndpointAuthorization endpointAuthorization;
 
-	    public ComponentController(
-	        ControlPlanePublisher controlPublisher,
-	        OperationDispatchService operations,
-	        SwarmStore store,
-	        ControlPlaneProperties controlPlaneProperties,
-            ControlResponseFactory controlResponses,
-            OrchestratorEndpointAuthorization endpointAuthorization) {
-	        this.controlPublisher = controlPublisher;
-	        this.operations = operations;
-	        this.store = store;
-	        this.originInstanceId = requireOrigin(controlPlaneProperties);
-            this.controlResponses = controlResponses;
-            this.endpointAuthorization = endpointAuthorization;
-	    }
+    public ComponentController(
+        ControlPlanePublisher controlPublisher,
+        OperationDispatchService operations,
+        SwarmStore store,
+        ControlPlaneProperties controlPlaneProperties,
+        ControlResponseFactory controlResponses,
+        OrchestratorEndpointAuthorization endpointAuthorization,
+        ComponentConfigPreviewService previews) {
+        this.controlPublisher = controlPublisher;
+        this.operations = operations;
+        this.store = store;
+        this.originInstanceId = requireOrigin(controlPlaneProperties);
+        this.controlResponses = controlResponses;
+        this.endpointAuthorization = endpointAuthorization;
+        this.previews = previews;
+    }
+
+    @PostMapping("/{role}/{instance}/config/preview")
+    public ResponseEntity<ComponentConfigContracts.PreviewResponse> previewConfig(
+        @PathVariable String role,
+        @PathVariable String instance,
+        @RequestBody ComponentConfigContracts.PreviewRequest request) {
+        String swarmId = requireText("swarmId", request.swarmId());
+        endpointAuthorization.requireManageSwarm(swarmId);
+        return ResponseEntity.ok(previews.preview(swarmId, role, instance, request.patch()));
+    }
 
     @PostMapping("/{role}/{instance}/config")
     public ResponseEntity<ControlResponse> updateConfig(@PathVariable String role,
@@ -71,12 +84,8 @@ public class ComponentController {
             return ResponseEntity.notFound().build();
         }
         Target target = new Target(targetRole, targetInstance);
-        Map<String, Object> patch = request.patch();
-        if (patch != null && patch.isEmpty()) {
-            patch = null;
-        }
-        Map<String, Object> configPatch = patch;
-        var enabledExpectation = enabledExpectation(configPatch);
+        Map<String, Object> configPatch = ComponentConfigPatch.normalizeForUpdate(request.patch());
+        var enabledExpectation = ComponentConfigPatch.enabledExpectation(configPatch);
         var reservation = operations.dispatch(
             swarmId,
             OperationType.CONFIG_UPDATE,
@@ -84,13 +93,13 @@ public class ComponentController {
             request.idempotencyKey(),
             Duration.ofMillis(CONFIG_UPDATE_TIMEOUT_MS),
             correlation -> {
-	              operations.registerConfigExpectation(correlation, enabledExpectation);
-	              ControlSignal payload = ControlSignals.configUpdate(
-	                  originInstanceId,
-	                  ControlScope.forInstance(swarmId, targetRole, targetInstance),
-	                  correlation,
-	                  request.idempotencyKey(),
-	                  configPatch);
+              operations.registerConfigExpectation(correlation, enabledExpectation);
+              ControlSignal payload = ControlSignals.configUpdate(
+                  originInstanceId,
+                  ControlScope.forInstance(swarmId, targetRole, targetInstance),
+                  correlation,
+                  request.idempotencyKey(),
+                  configPatch);
               sendControl(routingKey(swarmId, targetRole, targetInstance), payload, ControlPlaneSignals.CONFIG_UPDATE);
             });
         SwarmOperation operation = reservation.operation();
@@ -100,18 +109,6 @@ public class ComponentController {
         ResponseEntity<ControlResponse> response = accepted(operation);
         logRestResponse("POST", path, response);
         return response;
-    }
-
-    private static io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation enabledExpectation(
-        Map<String, Object> patch) {
-        if (patch == null || !patch.containsKey("enabled")) {
-            return io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation.UNCHANGED;
-        }
-        Object value = patch.get("enabled");
-        if (!(value instanceof Boolean enabled)) {
-            throw new IllegalArgumentException("patch.enabled must be a boolean");
-        }
-        return io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation.fromRequested(enabled);
     }
 
     private static String routingKey(String swarmId, String role, String instance) {

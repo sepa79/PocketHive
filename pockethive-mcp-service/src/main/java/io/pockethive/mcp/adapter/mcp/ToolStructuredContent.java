@@ -1,0 +1,20 @@
+package io.pockethive.mcp.adapter.mcp;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.mcp.application.ToolExecutionException;
+import java.io.IOException;
+
+final class ToolStructuredContent {
+    private ToolStructuredContent() {
+    }
+
+    static Object normalize(ObjectMapper mapper, Object value) {
+        try {
+            return mapper.readValue(mapper.writeValueAsBytes(value), Object.class);
+        } catch (IOException exception) {
+            throw new ToolExecutionException(
+                "TOOL_RESULT_SERIALIZATION_FAILED",
+                "Tool result could not be represented as JSON");
+        }
+    }
+}

@@ -14,9 +14,11 @@ import {
   RenewableAuthenticationPort,
   ValidatedEndpoint,
 } from './contracts';
+import {
+  COMPANION_OAUTH_CLIENT_ID,
+  COMPANION_OAUTH_REDIRECT_URI,
+} from './companionOAuthClient';
 
-const CLIENT_ID = 'pockethive-vscode';
-const REDIRECT_URI = 'http://127.0.0.1:57548/callback';
 const MAX_RESPONSE_CHARACTERS = 65_536;
 const COMPANION_SCOPES = new Set<PocketHiveMcpScope>(POCKETHIVE_COMPANION_SCOPES);
 const COMPANION_SCOPE_PROFILES = Object.freeze([
@@ -76,8 +78,8 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
       const challenge = createHash('sha256').update(verifier).digest('base64url');
       const authorizationUrl = new URL(server.authorizationEndpoint);
       authorizationUrl.searchParams.set('response_type', 'code');
-      authorizationUrl.searchParams.set('client_id', CLIENT_ID);
-      authorizationUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+      authorizationUrl.searchParams.set('client_id', COMPANION_OAUTH_CLIENT_ID);
+      authorizationUrl.searchParams.set('redirect_uri', COMPANION_OAUTH_REDIRECT_URI);
       authorizationUrl.searchParams.set('resource', endpoint.mcpUrl);
       authorizationUrl.searchParams.set('scope', POCKETHIVE_COMPANION_SCOPES.join(' '));
       authorizationUrl.searchParams.set('state', state);
@@ -99,9 +101,9 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
       }
       const body = new URLSearchParams({
         grant_type: 'authorization_code',
-        client_id: CLIENT_ID,
+        client_id: COMPANION_OAUTH_CLIENT_ID,
         code,
-        redirect_uri: REDIRECT_URI,
+        redirect_uri: COMPANION_OAUTH_REDIRECT_URI,
         resource: endpoint.mcpUrl,
         code_verifier: verifier,
       });
@@ -162,7 +164,7 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
     const server = await this.metadata(endpoint, signal);
     const body = new URLSearchParams({
       grant_type: 'refresh_token',
-      client_id: CLIENT_ID,
+      client_id: COMPANION_OAUTH_CLIENT_ID,
       refresh_token: session.renewal.refreshToken,
       resource: endpoint.mcpUrl,
     });
@@ -240,7 +242,7 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
         'Content-Type': 'application/x-www-form-urlencoded',
       },
       body: new URLSearchParams({
-        client_id: CLIENT_ID,
+        client_id: COMPANION_OAUTH_CLIENT_ID,
         token,
         token_type_hint: tokenTypeHint,
       }).toString(),
@@ -322,7 +324,7 @@ function validateMetadata(
 }
 
 function validateCallback(callback: URL, expectedState: string): void {
-  if (`${callback.protocol}//${callback.host}${callback.pathname}` !== REDIRECT_URI) {
+  if (`${callback.protocol}//${callback.host}${callback.pathname}` !== COMPANION_OAUTH_REDIRECT_URI) {
     throw new ConnectionContractError('OAUTH_CALLBACK_INVALID', 'OAUTH_CALLBACK_INVALID: redirect URI mismatch');
   }
   if (callback.searchParams.get('state') !== expectedState) {

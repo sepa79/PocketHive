@@ -34,11 +34,9 @@ const DEBUG_ACTION_PRESENTATION = Object.freeze([
   { label: 'Logs', icon: 'output', context: 'WORKER', tailLines: 200 },
   { label: 'Inspect', icon: 'inspect', context: 'WORKER' },
   { label: 'Version', icon: 'versions', context: 'WORKER' },
-  { label: 'Runtime drift', icon: 'pulse', context: 'SWARM' },
-  { label: 'Control plane', icon: 'radio-tower', context: 'SWARM' },
+  { label: 'Runtime assessment', icon: 'pulse', context: 'SWARM' },
   { label: 'Rabbit topology', icon: 'type-hierarchy', context: 'SWARM' },
   { label: 'Timeline', icon: 'history', context: 'SWARM' },
-  { label: 'Manifest', icon: 'file-code', context: 'SWARM' },
   { label: 'Cleanup plan', icon: 'trash', context: 'MAINTENANCE' },
 ] as const);
 const ENVIRONMENT_SERVICE_ICONS: Readonly<Record<string, string>> = Object.freeze({
@@ -1935,6 +1933,7 @@ function debugEvidence(value: unknown, id: string): HTMLElement {
   if (action === 'Logs') evidence = debugLogsEvidence(value);
   else if (action === 'Inspect') evidence = debugInspectEvidence(value);
   else if (action === 'Version') evidence = debugVersionEvidence(value);
+  else if (action === 'Runtime assessment') evidence = debugAssessmentEvidence(value);
   else if (action === 'Cleanup plan') evidence = debugCleanupPlanEvidence(value);
   else evidence = genericDebugEvidence(value, action);
   evidence.id = id;
@@ -1950,6 +1949,41 @@ function genericDebugEvidence(value: unknown, action: string): HTMLElement {
     ]),
     resultCard(value),
   ]);
+  return evidence;
+}
+
+function debugAssessmentEvidence(value: unknown): HTMLElement {
+  const result = objectValue(value);
+  const overall = result && stringField(result, 'overall');
+  const checks = result && Array.isArray(result.checks) ? result.checks : undefined;
+  if (!result || !overall || checks === undefined) {
+    return ownerDataError(value, 'runtime assessment');
+  }
+  const evidence = el('section', 'debug-evidence debug-assessment', [
+    el('div', 'debug-evidence__heading', [
+      text('h4', 'Runtime assessment'),
+      statusPill(overall),
+    ]),
+  ]);
+  const list = el('div', 'debug-assessment__checks');
+  for (const checkValue of checks.slice(0, 20)) {
+    const check = objectValue(checkValue);
+    const name = check && stringField(check, 'check');
+    const state = check && stringField(check, 'state');
+    if (!check || !name || !state) {
+      list.append(ownerDataError(checkValue, 'runtime assessment check'));
+      continue;
+    }
+    list.append(el('article', 'debug-assessment__check', [
+      icon(state === 'CONSISTENT' ? 'pass' : state === 'DRIFTED' ? 'warning' : 'question'),
+      el('div', 'debug-assessment__copy', [
+        titled('strong', name.replaceAll('_', ' '), 'truncate'),
+        text('span', displayValue(check.summary), 'muted'),
+      ]),
+      statusPill(state),
+    ]));
+  }
+  evidence.append(list, technicalDetails(result, 'debug:assessment:technical'));
   return evidence;
 }
 

@@ -106,11 +106,21 @@ connect and read timeouts use the required positive ISO-8601 duration
 `PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT`; no application-layer default or
 alternate target is permitted.
 
-The server publishes one immutable, scope-filtered tool list and connected,
-versioned skills for every tool. Owner services remain authoritative for live
-state and operations. HiveGate remains authoritative for approval, execution
-tickets, and governed evidence. HiveMind is optional agent-host memory and is
-not an MCP dependency.
+The server publishes one immutable complete tool list. Invocation still enforces
+the required scope from the canonical descriptor, while catalogue resources may
+present a principal-scoped projection. Connected, versioned skills cover every
+tool. Owner services remain authoritative for live state and operations.
+HiveGate remains authoritative for approval, execution tickets, and governed
+evidence. HiveMind is optional agent-host memory and is not an MCP dependency.
+
+Each canonical tool descriptor owns both its closed input schema and its output
+schema. Successful Java values are converted once to JSON-native structured
+content and validated against that descriptor before the SDK returns them.
+Known application, workflow, upload, and owner refusals return
+`CallToolResult(isError=true)` with a stable `code` and safe `message`.
+Unexpected failures remain protocol failures with a correlation ID and no
+internal detail in the client response. Clients must not parse server log text
+or retry a mutating tool merely because a protocol result was lost.
 
 The QA authoring skill asks for explicit requirements. It does not infer
 missing answers. It supports three explicitly selected capture modes over the
@@ -148,6 +158,13 @@ Orchestrator swarm projection. It reports ready only when the top-level
 MCP does not parse a second raw control-plane envelope or infer readiness from
 health alone.
 
+Before the first Controller observation, the canonical Orchestrator projection
+has `controllerState=PROVISIONING`, `workloadState=UNAVAILABLE`,
+`observationStale=true`, and an empty `observation` object. `swarm_wait_ready` maps only
+that exact pre-observation state to `ready=false` with zero desired and healthy
+workers. Missing, malformed, or contradictory owner fields still fail
+explicitly with `SWARM_STATUS_INVALID`.
+
 Temporary message inspection uses the Orchestrator-owned debug-tap contract
 without changing its meaning. `debug_tap` requires the exact swarm, role,
 direction, I/O name, positive item cap, and positive `ttlSeconds` on every
@@ -155,6 +172,25 @@ call. `debug_tap_read` accepts an optional non-negative integer `drain`: omit
 it to read up to the tap's item cap, use `0` for metadata only, or use a
 positive count to drain at most that many samples. A Boolean drain value is
 invalid and never maps to an owner default. Clients close each tap after use.
+
+Runtime diagnosis starts with `runtime_assess_swarm`. Orchestrator alone compares
+the registered swarm and run, cached control-plane state, exact ownership
+manifest, labelled compute inventory, and exact RabbitMQ topology. The result is
+`CONSISTENT`, `DRIFTED`, or `INCOMPLETE` with typed checks and differences.
+`runtime_diff_swarm_runtime`, `runtime_control_plane_status`, and
+`runtime_manifest_validate` remain discoverable compatibility names over that
+same owner response. The companion presents the canonical assessment once.
+
+`scenario_contracts_get` accepts no selectors and returns only the authoring
+contract and fingerprint. `scenario_capabilities_get` accepts an empty input for
+the characterised complete read, or exactly one of `all=true`, `imageName`, and
+`imageDigest`; unsupported, false, or conflicting selectors fail before an
+owner call. Component config preview resolves the exact currently observed
+worker and performs only the documented deterministic shallow merge. Update
+continues to use the existing Orchestrator endpoint and sends only its owner DTO.
+The capability result schema preserves Scenario Manager's existing response:
+the complete `all=true` read is an array, while an exact image-name or digest
+read is one manifest object.
 
 Read-only scenario inspection also stays on the MCP surface. IDE clients may
 inspect deployed bundle catalogue metadata, bundle trees, individual deployed

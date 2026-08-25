@@ -29,7 +29,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   const browser: BrowserAuthorizationPort = {
     authorize: async authorizationUrl => {
       opened = new URL(authorizationUrl);
-      return new URL(`http://127.0.0.1:57548/callback?code=code-123&state=${opened.searchParams.get('state')}`);
+      return new URL(`http://127.0.0.1:52000/callback?code=code-123&state=${opened.searchParams.get('state')}`);
     },
   };
   const oauth = new PocketHiveOAuthAuthentication(
@@ -61,7 +61,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   assert.equal(requests[1].url, 'http://127.0.0.1:8080/auth-service/oauth/token');
   assert.equal(opened?.searchParams.get('response_type'), 'code');
   assert.equal(opened?.searchParams.get('client_id'), 'pockethive-vscode');
-  assert.equal(opened?.searchParams.get('redirect_uri'), 'http://127.0.0.1:57548/callback');
+  assert.equal(opened?.searchParams.get('redirect_uri'), 'http://127.0.0.1:52000/callback');
   assert.equal(opened?.searchParams.get('resource'), profile.mcpUrl);
   assert.equal(opened?.searchParams.get('code_challenge_method'), 'S256');
   const verifier = Buffer.alloc(64, 7).toString('base64url');
@@ -95,7 +95,7 @@ test('maps access denial to cancellation and makes no token request', async () =
     async () => { calls += 1; return json(metadata()); },
     { authorize: async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:57548/callback?error=access_denied&state=${state}`);
+      return new URL(`http://127.0.0.1:52000/callback?error=access_denied&state=${state}`);
     } },
     store(new Map()),
     length => Buffer.alloc(length, 3),
@@ -249,7 +249,7 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
 
   const wrongState = new PocketHiveOAuthAuthentication(
     async () => json(metadata()),
-    { authorize: async () => new URL('http://127.0.0.1:57548/callback?code=x&state=wrong') },
+    { authorize: async () => new URL('http://127.0.0.1:52000/callback?code=x&state=wrong') },
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
   await assert.rejects(wrongState.authenticate(profile, endpoint, new AbortController().signal), /OAUTH_STATE_MISMATCH/);
@@ -263,7 +263,7 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
       });
     },
     { authorize: async authorizationUrl => new URL(
-      `http://127.0.0.1:57548/callback?code=x&state=${new URL(authorizationUrl).searchParams.get('state')}`,
+      `http://127.0.0.1:52000/callback?code=x&state=${new URL(authorizationUrl).searchParams.get('state')}`,
     ) },
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
@@ -292,9 +292,9 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
 
 test('callback, cancellation, and OAuth errors fail explicitly without fallback', async () => {
   for (const callback of [
-    'http://localhost:57548/callback?code=x&state=STATE',
-    'http://127.0.0.1:57548/other?code=x&state=STATE',
-    'http://127.0.0.1:57548/callback?code=x&state=wrong',
+    'http://localhost:52000/callback?code=x&state=STATE',
+    'http://127.0.0.1:52000/other?code=x&state=STATE',
+    'http://127.0.0.1:52000/callback?code=x&state=wrong',
   ]) {
     const oauth = oauthClient(async () => json(metadata()), async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state')!;
@@ -311,7 +311,7 @@ test('callback, cancellation, and OAuth errors fail explicitly without fallback'
     let calls = 0;
     const oauth = oauthClient(async () => { calls += 1; return json(metadata()); }, async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:57548/callback?state=${state}${query ? `&${query}` : ''}`);
+      return new URL(`http://127.0.0.1:52000/callback?state=${state}${query ? `&${query}` : ''}`);
     });
     await rejectsContract(oauth.authenticate(profile, endpoint, new AbortController().signal),
       'OAUTH_AUTHORIZATION_FAILED', expected);
@@ -498,7 +498,7 @@ test('metadata validation rejects every issuer-owned endpoint and capability dri
   }, async authorizationUrl => {
     browserOpened = true;
     const state = new URL(authorizationUrl).searchParams.get('state');
-    return new URL(`http://127.0.0.1:57548/callback?code=x&state=${state}`);
+    return new URL(`http://127.0.0.1:52000/callback?code=x&state=${state}`);
   });
   assert.equal((await accepted.authenticate(profile, endpoint, new AbortController().signal)).accessToken, 'access');
   assert.equal(browserOpened, true);
@@ -590,7 +590,7 @@ test('production randomness and clock create a usable unpredictable base session
     },
     { authorize: async authorizationUrl => {
       opened = new URL(authorizationUrl);
-      return new URL(`http://127.0.0.1:57548/callback?code=x&state=${opened.searchParams.get('state')}`);
+      return new URL(`http://127.0.0.1:52000/callback?code=x&state=${opened.searchParams.get('state')}`);
     } },
     store(new Map()),
   );
@@ -667,7 +667,7 @@ function oauthClient(
     fetcher,
     { authorize: authorize ?? (async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:57548/callback?code=code&state=${state}`);
+      return new URL(`http://127.0.0.1:52000/callback?code=code&state=${state}`);
     }) },
     store(values),
     length => Buffer.alloc(length, 1),

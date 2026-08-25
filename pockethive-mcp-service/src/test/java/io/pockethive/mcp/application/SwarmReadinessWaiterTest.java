@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.IntStream;
@@ -36,6 +37,18 @@ class SwarmReadinessWaiterTest {
     }
 
     @Test
+    void returnsNotReadyForCanonicalProvisioningStateBeforeFirstObservation() {
+        FakeOwner owner = new FakeOwner(preObservationStatus("PROVISIONING", "UNAVAILABLE", true));
+
+        SwarmReadinessResult result = new SwarmReadinessObserver(owner, new ObjectMapper())
+            .observe(PATH, "swarm/one");
+
+        assertThat(result).isEqualTo(new SwarmReadinessResult(
+            false, "swarm/one", Map.of("desired", 0, "healthy", 0), "PROVISIONING", 1));
+        assertThat(owner.calls).isEqualTo(1);
+    }
+
+    @Test
     void readinessRequiresFreshStoppedStartupReadyObservationAndPositiveDesiredWorkers() {
         assertReady(status("READY", "STOPPED", false, true, 0, 0), false);
         assertReady(status("PROVISIONING", "STOPPED", false, true, 1, 1), false);
@@ -57,6 +70,14 @@ class SwarmReadinessWaiterTest {
                 "workloadState", "STOPPED",
                 "observationStale", false,
                 "observation", Map.of("startupReady", true, "expectedWorkers", List.of())),
+            Map.of(
+                "controllerState", "PROVISIONING",
+                "workloadState", "UNAVAILABLE",
+                "observationStale", true),
+            nullObservationStatus(),
+            preObservationStatus("READY", "UNAVAILABLE", true),
+            preObservationStatus("PROVISIONING", "STOPPED", true),
+            preObservationStatus("PROVISIONING", "UNAVAILABLE", false),
             Map.of(
                 "controllerState", "READY",
                 "workloadState", "STOPPED",
@@ -147,6 +168,24 @@ class SwarmReadinessWaiterTest {
                 "startupReady", startupReady,
                 "expectedWorkers", expectedWorkers,
                 "workers", workers));
+    }
+
+    private static Map<String, Object> preObservationStatus(Object controllerState,
+                                                             Object workloadState,
+                                                             boolean observationStale) {
+        Map<String, Object> status = new LinkedHashMap<>();
+        status.put("controllerState", controllerState);
+        status.put("workloadState", workloadState);
+        status.put("observationStale", observationStale);
+        status.put("observation", Map.of());
+        return status;
+    }
+
+    private static Map<String, Object> nullObservationStatus() {
+        Map<String, Object> status = new LinkedHashMap<>(
+            preObservationStatus("PROVISIONING", "UNAVAILABLE", true));
+        status.put("observation", null);
+        return status;
     }
 
     private static final class FakeOwner implements OwnerApiPort {

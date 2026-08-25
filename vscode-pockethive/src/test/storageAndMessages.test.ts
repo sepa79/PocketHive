@@ -352,7 +352,7 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
 });
 
 test('debug actions map exactly to owner tools and never expose cleanup execute', () => {
-  assert.equal(DEBUG_ACTIONS.length, 10);
+  assert.equal(DEBUG_ACTIONS.length, 8);
   assert.equal(DEBUG_ACTIONS.some(action => String(action.tool) === 'runtime_cleanup_execute'), false);
   assert.deepEqual(debugToolCall('Workers', 'swarm-1', undefined), {
     name: 'runtime_list_workers', arguments: { swarmId: 'swarm-1' },
@@ -364,6 +364,9 @@ test('debug actions map exactly to owner tools and never expose cleanup execute'
   assert.deepEqual(debugToolCall('Version', 'swarm-1', 'worker-2'), {
     name: 'runtime_get_worker_version',
     arguments: { swarmId: 'swarm-1', runtimeId: 'worker-2' },
+  });
+  assert.deepEqual(debugToolCall('Runtime assessment', 'swarm-1', undefined), {
+    name: 'runtime_assess_swarm', arguments: { swarmId: 'swarm-1' },
   });
   assert.deepEqual(debugToolCall('Logs', ' swarm-1 ', ' worker-2 ', 1), {
     name: 'runtime_tail_worker_logs',

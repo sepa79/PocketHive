@@ -17,15 +17,17 @@ export class ActiveMcpConnection implements McpConnectionTestPort {
     signal: AbortSignal,
   ): Promise<ConnectionEvidence> {
     const candidate = this.clients();
+    let evidence: ConnectionEvidence;
     try {
-      const evidence = await candidate.connect(profile.mcpUrl, session.accessToken, signal);
-      await this.close();
-      this.client = candidate;
-      return evidence;
+      evidence = await candidate.connect(profile.mcpUrl, session.accessToken, signal);
     } catch (error) {
       await candidate.close().catch(() => undefined);
       throw error;
     }
+    const replaced = this.client;
+    this.client = candidate;
+    if (replaced) await replaced.close().catch(() => undefined);
+    return evidence;
   }
 
   async callTool(name: string, args: Record<string, unknown> = {}): Promise<unknown> {

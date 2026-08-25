@@ -121,7 +121,7 @@ public class McpToolExecutor {
             case "scenario_sut_get" -> owners.get(SCENARIO_PREFIX + "/scenarios/" + segment(input, "scenarioId")
                 + "/suts/" + segment(input, "sutId"));
             case "scenario_contracts_get" -> scenarioContracts();
-            case "scenario_capabilities_get" -> owners.get(SCENARIO_PREFIX + "/api/capabilities?all=true");
+            case "scenario_capabilities_get" -> owners.get(scenarioCapabilitiesPath(input));
             case "scenario_templates_catalog" -> owners.get(SCENARIO_PREFIX + "/api/templates");
             case "swarm_list" -> owners.get(ORCHESTRATOR_PREFIX + "/api/swarms");
             case "swarm_get" -> owners.get(ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId"));
@@ -144,24 +144,25 @@ public class McpToolExecutor {
             case "debug_tap_read" -> owners.get(ORCHESTRATOR_PREFIX + "/api/debug/taps/" + segment(input, "tapId")
                 + (input.containsKey("drain") ? "?drain=" + query(input, "drain") : ""));
             case "debug_tap_close" -> owners.delete(ORCHESTRATOR_PREFIX + "/api/debug/taps/" + segment(input, "tapId"));
-            case "component_config_preview" -> Map.of(
-                "sideEffect", "no-config-write",
-                "target", body(input, "swarmId", "role", "instanceId"),
-                "patch", require(input, "patch"),
-                "swarm", owners.get(ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId")));
+            case "component_config_preview" -> owners.post(ORCHESTRATOR_PREFIX + "/api/components/"
+                + segment(input, "role") + "/" + segment(input, "instanceId") + "/config/preview",
+                body(input, "swarmId", "patch"));
             case "component_config_update" -> owners.post(ORCHESTRATOR_PREFIX + "/api/components/"
-                + segment(input, "role") + "/" + segment(input, "instanceId") + "/config", input);
-            case "runtime_cleanup_plan" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/cleanup/plan", input);
-            case "runtime_cleanup_execute" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/cleanup/execute", input);
+                + segment(input, "role") + "/" + segment(input, "instanceId") + "/config",
+                body(input, "swarmId", "patch", "idempotencyKey"));
+            case "runtime_cleanup_plan" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/cleanup/plan",
+                cleanupPlanBody(input));
+            case "runtime_cleanup_execute" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/cleanup/execute",
+                cleanupExecuteBody(input));
             case "runtime_tail_worker_logs" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/resources/logs", input);
             case "runtime_get_worker_version" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/resources/version", input);
             case "runtime_list_workers" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/resources/list", input);
             case "runtime_inspect_worker" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/resources/inspect", input);
             case "runtime_rabbit_topology_snapshot" -> owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/rabbit/topology", input);
-            case "runtime_diff_swarm_runtime" -> runtimeAggregate(input, true, true);
-            case "runtime_control_plane_status" -> runtimeAggregate(input, false, true);
+            case "runtime_assess_swarm", "runtime_diff_swarm_runtime", "runtime_control_plane_status",
+                 "runtime_manifest_validate" -> owners.post(
+                    ORCHESTRATOR_PREFIX + "/api/runtime/debug/assessment", runtimeAssessmentBody(input));
             case "runtime_swarm_timeline" -> runtimeTimeline(input);
-            case "runtime_manifest_validate" -> runtimeAggregate(input, true, true);
             default -> throw new ToolExecutionException("TOOL_HANDLER_MISSING", toolId);
         };
     }
@@ -169,9 +170,31 @@ public class McpToolExecutor {
     private Object scenarioContracts() {
         return Map.of(
             "authoringContract", owners.get(SCENARIO_PREFIX + "/api/authoring-contract"),
-            "fingerprint", owners.get(SCENARIO_PREFIX + "/api/authoring-contract/fingerprint"),
-            "capabilities", owners.get(SCENARIO_PREFIX + "/api/capabilities?all=true"),
-            "templates", owners.get(SCENARIO_PREFIX + "/api/templates"));
+            "fingerprint", owners.get(SCENARIO_PREFIX + "/api/authoring-contract/fingerprint"));
+    }
+
+    private static String scenarioCapabilitiesPath(Map<String, Object> input) {
+        Set<String> selectors = Set.of("all", "imageName", "imageDigest");
+        if (input.keySet().stream().anyMatch(key -> !selectors.contains(key))) {
+            throw new ToolExecutionException("TOOL_INPUT_INVALID", "scenario capability selector");
+        }
+        long selected = selectors.stream().filter(input::containsKey).count();
+        if (selected > 1) {
+            throw new ToolExecutionException("TOOL_INPUT_INVALID", "select exactly one scenario capability selector");
+        }
+        if (input.containsKey("all")) {
+            if (!booleanValue(input, "all")) {
+                throw new ToolExecutionException("TOOL_INPUT_INVALID", "all must be true");
+            }
+            return SCENARIO_PREFIX + "/api/capabilities?all=true";
+        }
+        if (input.containsKey("imageName")) {
+            return SCENARIO_PREFIX + "/api/capabilities?imageName=" + query(input, "imageName");
+        }
+        if (input.containsKey("imageDigest")) {
+            return SCENARIO_PREFIX + "/api/capabilities?imageDigest=" + query(input, "imageDigest");
+        }
+        return SCENARIO_PREFIX + "/api/capabilities?all=true";
     }
 
     private Object lifecycle(Map<String, Object> input, String action) {
@@ -179,16 +202,21 @@ public class McpToolExecutor {
             Map.of("idempotencyKey", text(input, "idempotencyKey")));
     }
 
-    private Object runtimeAggregate(Map<String, Object> input, boolean includeResources, boolean includeTopology) {
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("swarm", owners.get(ORCHESTRATOR_PREFIX + "/api/swarms/" + segment(input, "swarmId")));
-        if (includeResources) {
-            result.put("resources", owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/resources/list", input));
-        }
-        if (includeTopology) {
-            result.put("rabbitTopology", owners.post(ORCHESTRATOR_PREFIX + "/api/runtime/debug/rabbit/topology", input));
-        }
-        return result;
+    private static Map<String, Object> runtimeAssessmentBody(Map<String, Object> input) {
+        return body(input, "swarmId", "runId");
+    }
+
+    private static Map<String, Object> cleanupPlanBody(Map<String, Object> input) {
+        booleanValue(input, "includeRunning");
+        booleanValue(input, "includeRabbit");
+        return body(input, "swarmId", "runId", "includeRunning", "includeRabbit");
+    }
+
+    private static Map<String, Object> cleanupExecuteBody(Map<String, Object> input) {
+        booleanValue(input, "includeRunning");
+        booleanValue(input, "includeRabbit");
+        return body(input, "swarmId", "runId", "includeRunning", "includeRabbit",
+            "candidateSetHash", "candidateIds", "idempotencyKey", "reason", "actor");
     }
 
     private Object runtimeTimeline(Map<String, Object> input) {
@@ -703,6 +731,14 @@ public class McpToolExecutor {
         } catch (NumberFormatException exception) {
             throw new ToolExecutionException("TOOL_INPUT_INVALID", field);
         }
+    }
+
+    private static boolean booleanValue(Map<String, Object> input, String field) {
+        Object value = require(input, field);
+        if (value instanceof Boolean result) {
+            return result;
+        }
+        throw new ToolExecutionException("TOOL_INPUT_INVALID", field);
     }
 
     private static String segment(Map<String, Object> input, String field) {

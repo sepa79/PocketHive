@@ -69,6 +69,21 @@ class DynamicClientRegistrationServiceTest {
     }
 
     @Test
+    void assignsCanonicalInteractiveScopesWhenRegistrationScopeIsOmitted() {
+        PocketHiveRegisteredClientRepository clients = repository(new MutableClock(NOW), 1);
+        DynamicClientRegistrationService service =
+            new DynamicClientRegistrationService(clients, TOKENS, Clock.fixed(NOW, ZoneOffset.UTC));
+
+        DynamicClientRegistrationResponse response = service.register(request(
+            "kiro", List.of("http://localhost:38124/oauth/callback"), grants(), codes(), "none", null));
+
+        assertThat(response.scope()).isEqualTo(String.join(" ", PocketHiveMcpScopes.COMPANION_ORDERED));
+        assertThat(clients.findByClientId(response.clientId()).getScopes())
+            .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION_ORDERED)
+            .doesNotContain(PocketHiveMcpScopes.CLEANUP);
+    }
+
+    @Test
     void acceptsTheDeclaredLoopbackAndHttpsRedirectFormsAndAuthorizationCodeOnly() {
         DynamicClientRegistrationService service = service(8);
         for (String redirect : List.of(
@@ -117,7 +132,6 @@ class DynamicClientRegistrationServiceTest {
                 PocketHiveMcpScopes.DISCOVER),
             request("client", List.of(safe), grants(), codes(), "client_secret_basic",
                 PocketHiveMcpScopes.DISCOVER),
-            request("client", List.of(safe), grants(), codes(), "none", null),
             request("client", List.of(safe), grants(), codes(), "none", " "),
             request("client", List.of(safe), grants(), codes(), "none",
                 PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.DISCOVER),

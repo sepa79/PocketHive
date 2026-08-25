@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -38,6 +39,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.Health;
+import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
@@ -58,6 +63,40 @@ class ComponentControllerTest {
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
     @Test
+    void previewConfigReturnsTheOwnerProjectionWithoutPublishingAControlSignal() {
+        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
+        Swarm swarm = store.find(SWARM_ID).orElseThrow();
+        swarm.updateObservation(
+            ControllerState.READY,
+            WorkloadState.STOPPED,
+            Health.HEALTHY,
+            RuntimeResourceState.PRESENT,
+            Map.of("workers", List.of(Map.of(
+                "role", "generator",
+                "instance", "c1",
+                "config", Map.of("enabled", false, "rate", 10)))),
+            java.time.Instant.now());
+        ComponentController controller = new ComponentController(
+            publisher,
+            operationDispatch(store),
+            store,
+            controlPlaneProperties(),
+            new ControlResponseFactory(controlPlaneProperties()),
+            endpointAuthorization(store),
+            new ComponentConfigPreviewService(store));
+
+        var response = controller.previewConfig(
+            "generator",
+            "c1",
+            new ComponentConfigContracts.PreviewRequest(SWARM_ID, Map.of("rate", 20)));
+
+        assertThat(response.getBody()).isNotNull();
+        assertThat(response.getBody().sideEffect()).isEqualTo(ComponentConfigContracts.SideEffect.NONE);
+        assertThat(response.getBody().effectiveConfig()).containsEntry("rate", 20);
+        verify(publisher, never()).publishSignal(any());
+    }
+
+    @Test
 	    void updateConfigPublishesControlSignal() throws Exception {
 	        SwarmStore store = storeWithSwarm(mapper, SWARM_ID, TEMPLATE_ID, RUN_ID);
 	        ComponentController controller = new ComponentController(
@@ -66,7 +105,8 @@ class ComponentControllerTest {
 	            store,
 	            controlPlaneProperties(),
                 new ControlResponseFactory(controlPlaneProperties()),
-                endpointAuthorization(store));
+                endpointAuthorization(store),
+                new ComponentConfigPreviewService(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of("enabled", true), null, SWARM_ID);
 
@@ -100,7 +140,8 @@ class ComponentControllerTest {
 	            store,
 	            controlPlaneProperties(),
                 new ControlResponseFactory(controlPlaneProperties()),
-                endpointAuthorization(store));
+                endpointAuthorization(store),
+                new ComponentConfigPreviewService(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 
@@ -122,7 +163,8 @@ class ComponentControllerTest {
 	            store,
 	            controlPlaneProperties(),
                 new ControlResponseFactory(controlPlaneProperties()),
-                endpointAuthorization(store));
+                endpointAuthorization(store),
+                new ComponentConfigPreviewService(store));
         ComponentController.ConfigUpdateRequest request =
             new ComponentController.ConfigUpdateRequest("idem", Map.of(), null, SWARM_ID);
 
@@ -157,7 +199,8 @@ class ComponentControllerTest {
             store,
             controlPlaneProperties(),
             new ControlResponseFactory(controlPlaneProperties()),
-            endpointAuthorization(store));
+            endpointAuthorization(store),
+            new ComponentConfigPreviewService(store));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(

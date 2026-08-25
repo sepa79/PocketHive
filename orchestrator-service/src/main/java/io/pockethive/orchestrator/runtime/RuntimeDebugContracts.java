@@ -6,6 +6,8 @@ import java.util.Map;
 public final class RuntimeDebugContracts {
     public static final String RUNTIME_DEBUG_CONTRACT_VERSION = "4";
     public static final String CLEANUP_CONTRACT_VERSION = "3";
+    public static final String RUNTIME_ASSESSMENT_CONTRACT_VERSION = "1";
+    public static final String COMPONENT_CONFIG_PREVIEW_CONTRACT_VERSION = "1";
 
     private RuntimeDebugContracts() {
     }
@@ -13,6 +15,8 @@ public final class RuntimeDebugContracts {
     public record Capabilities(
         String runtimeDebugContractVersion,
         String cleanupContractVersion,
+        String runtimeAssessmentContractVersion,
+        String componentConfigPreviewContractVersion,
         boolean runtimeDebugReadsBackedByOrchestrator,
         boolean cleanupPlanHasExecutionRisk,
         boolean cleanupPlanUsesApprovalFields,
@@ -24,6 +28,8 @@ public final class RuntimeDebugContracts {
             return new Capabilities(
                 RUNTIME_DEBUG_CONTRACT_VERSION,
                 CLEANUP_CONTRACT_VERSION,
+                RUNTIME_ASSESSMENT_CONTRACT_VERSION,
+                COMPONENT_CONFIG_PREVIEW_CONTRACT_VERSION,
                 true,
                 true,
                 false,

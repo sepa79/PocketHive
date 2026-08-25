@@ -7,6 +7,7 @@ public record ToolDescriptor(
     String id,
     String description,
     Map<String, Object> inputSchema,
+    Map<String, Object> outputSchema,
     ToolOwner owner,
     String requiredScope,
     boolean readOnly,

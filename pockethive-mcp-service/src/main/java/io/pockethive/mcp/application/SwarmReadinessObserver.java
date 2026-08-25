@@ -35,8 +35,23 @@ public final class SwarmReadinessObserver {
         if (!projection.isObject()
             || !nonBlankText(controllerState)
             || !nonBlankText(workloadState)
-            || !observationStale.isBoolean()
-            || !observation.isObject()
+            || !observationStale.isBoolean()) {
+            throw invalidStatus();
+        }
+        ControllerState canonicalControllerState = requiredState(
+            ControllerState.class, controllerState.textValue());
+        WorkloadState canonicalWorkloadState = requiredState(
+            WorkloadState.class, workloadState.textValue());
+        if (observation.isObject() && observation.isEmpty()) {
+            if (canonicalControllerState == ControllerState.PROVISIONING
+                && canonicalWorkloadState == WorkloadState.UNAVAILABLE
+                && observationStale.booleanValue()) {
+                return new Status(canonicalControllerState, canonicalWorkloadState,
+                    true, false, 0, 0, Map.of("desired", 0, "healthy", 0));
+            }
+            throw invalidStatus();
+        }
+        if (!observation.isObject()
             || !startupReady.isBoolean()
             || !expectedWorkers.isArray()
             || !workers.isArray()) {
@@ -55,8 +70,8 @@ public final class SwarmReadinessObserver {
         int desired = expectedWorkers.size();
         Map<String, Object> totals = Map.of("desired", desired, "healthy", healthy);
         return new Status(
-            requiredState(ControllerState.class, controllerState.textValue()),
-            requiredState(WorkloadState.class, workloadState.textValue()),
+            canonicalControllerState,
+            canonicalWorkloadState,
             observationStale.booleanValue(),
             startupReady.booleanValue(),
             desired,

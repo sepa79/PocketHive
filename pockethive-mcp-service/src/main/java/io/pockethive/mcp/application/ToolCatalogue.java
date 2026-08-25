@@ -54,8 +54,8 @@ public final class ToolCatalogue {
         tools.add(read("scenario_bundle_file_read", "Read one deployed Scenario Bundle workspace file by exact bundle key and exact bundle-relative path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "bundleKey", "path"));
         tools.add(read("scenario_suts_list", "List exact bundle-local SUT ids for one deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
         tools.add(read("scenario_sut_get", "Read one exact bundle-local SUT descriptor for a deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "sutId"));
-        tools.add(read("scenario_contracts_get", "Read the canonical Scenario Manager authoring contract.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "scenarioId", "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint"));
-        tools.add(read("scenario_capabilities_get", "Read live Scenario Manager authoring capabilities and fingerprint.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "imageName", "tag", "all"));
+        tools.add(read("scenario_contracts_get", "Read the canonical Scenario Manager authoring contract and fingerprint.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation"));
+        tools.add(read("scenario_capabilities_get", "Read live Scenario Manager authoring capabilities using one exact owner selector.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "all", "imageName", "imageDigest"));
         tools.add(read("scenario_templates_catalog", "List canonical Scenario Manager template capabilities.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue"));
 
         tools.add(read("swarm_list", "List live swarms from Orchestrator.", ToolOwner.ORCHESTRATOR, "swarm-lifecycle"));
@@ -75,17 +75,18 @@ public final class ToolCatalogue {
         tools.add(read("component_config_preview", "Preview a typed component configuration merge without sending it.", ToolOwner.ORCHESTRATOR, "live-configuration", "swarmId", "role", "instanceId", "patch"));
         tools.add(write("component_config_update", "Apply an explicitly reviewed component configuration patch through Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "live-configuration", "swarmId", "role", "instanceId", "patch", "idempotencyKey"));
 
-        tools.add(read("runtime_cleanup_plan", "Create a read-only, exact candidate cleanup plan through Orchestrator.", ToolOwner.ORCHESTRATOR, "governed-cleanup", "swarmId"));
+        tools.add(read("runtime_cleanup_plan", "Create a read-only, exact candidate cleanup plan through Orchestrator.", ToolOwner.ORCHESTRATOR, "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit"));
         tools.add(read("runtime_tail_worker_logs", "Read bounded redacted logs for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId", "tailLines"));
         tools.add(read("runtime_get_worker_version", "Read version metadata for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId"));
         tools.add(read("runtime_list_workers", "List label-gated runtime resources for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
         tools.add(read("runtime_inspect_worker", "Read a bounded inspect projection for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId"));
-        tools.add(read("runtime_diff_swarm_runtime", "Compare authoritative Orchestrator runtime projections for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
-        tools.add(read("runtime_control_plane_status", "Summarize bounded Orchestrator control-plane evidence for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
+        tools.add(read("runtime_assess_swarm", "Read the canonical Orchestrator-owned runtime assessment for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(read("runtime_diff_swarm_runtime", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(read("runtime_control_plane_status", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
         tools.add(read("runtime_rabbit_topology_snapshot", "Read the exact Orchestrator-owned RabbitMQ topology projection for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
         tools.add(read("runtime_swarm_timeline", "Build a bounded timeline from Orchestrator journal and status APIs.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "limit"));
-        tools.add(read("runtime_manifest_validate", "Validate Orchestrator-owned runtime projections for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
-        tools.add(write("runtime_cleanup_execute", "Execute only a current reviewed cleanup plan through HiveGate and Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.CLEANUP, true, true, "governed-cleanup", "swarmId", "candidateSetHash", "candidateIds", "idempotencyKey", "reason"));
+        tools.add(read("runtime_manifest_validate", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(write("runtime_cleanup_execute", "Execute only a current reviewed cleanup plan through HiveGate and Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.CLEANUP, true, true, "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit", "candidateSetHash", "candidateIds", "idempotencyKey", "reason", "actor"));
 
         tools.add(write("agent_session_create", "Create a principal-bound authoring session that can contain multiple workflows.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "expectedClientCapabilities"));
         tools.add(readMcp("agent_session_get", "Read one principal-bound authoring session.", "qa-no-inference", "agentSessionId"));
@@ -100,6 +101,7 @@ public final class ToolCatalogue {
         tools.add(new ToolDescriptor("scenario_workflow_review_prepare",
             "Validate and render one complete compact QA brief for explicit user review without mutating the workflow.",
             schema("scenario_workflow_review_prepare", "workflowId", "expectedRevision", "answers", "sourceName", "sourceDigest"),
+            resultSchema("scenario_workflow_review_prepare"),
             ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, true, false, true, List.of("qa-no-inference")));
         tools.add(write("scenario_workflow_review_submit",
             "Atomically record every QA topic only after the user explicitly accepts the exact prepared compact review.",
@@ -119,7 +121,8 @@ public final class ToolCatalogue {
     }
 
     private static ToolDescriptor read(String id, String description, ToolOwner owner, String skill, String... fields) {
-        return new ToolDescriptor(id, description, schema(id, fields), owner, PocketHiveMcpScopes.READ, true, false, true, List.of(skill));
+        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id), owner,
+            PocketHiveMcpScopes.READ, true, false, true, List.of(skill));
     }
 
     private static ToolDescriptor readMcp(String id, String description, String skill, String... fields) {
@@ -128,7 +131,8 @@ public final class ToolCatalogue {
 
     private static ToolDescriptor write(String id, String description, ToolOwner owner, String scope,
                                         boolean destructive, boolean idempotent, String skill, String... fields) {
-        return new ToolDescriptor(id, description, schema(id, fields), owner, scope, false, destructive, idempotent, List.of(skill));
+        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id), owner, scope,
+            false, destructive, idempotent, List.of(skill));
     }
 
     private static Map<String, Object> schema(String toolId, String... fields) {
@@ -150,14 +154,15 @@ public final class ToolCatalogue {
 
     private static Set<String> optionalFields(String toolId) {
         return switch (toolId) {
-            case "scenario_contracts_get" -> Set.of(
-                "scenarioId", "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint");
-            case "scenario_capabilities_get" -> Set.of("imageName", "tag", "all");
+            case "scenario_capabilities_get" -> Set.of("imageName", "imageDigest", "all");
             case "swarm_create" -> Set.of("sutId", "variablesProfileId");
             case "debug_journal" -> Set.of("runId", "limit", "severity");
             case "debug_hive_journal" -> Set.of("limit");
             case "debug_tap_read" -> Set.of("drain");
             case "runtime_swarm_timeline" -> Set.of("limit");
+            case "runtime_cleanup_plan", "runtime_cleanup_execute", "runtime_assess_swarm",
+                 "runtime_diff_swarm_runtime", "runtime_control_plane_status", "runtime_manifest_validate" ->
+                Set.of("runId", "actor");
             case "agent_session_create" -> Set.of("expectedClientCapabilities");
             case "scenario_workflow_answer_submit" -> Set.of("sourceName", "sourceDigest");
             case "scenario_workflow_review_prepare", "scenario_workflow_review_submit" ->
@@ -169,7 +174,7 @@ public final class ToolCatalogue {
 
     private static Map<String, Object> fieldSchema(String field) {
         return switch (field) {
-            case "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint", "all" ->
+            case "all", "includeRunning", "includeRabbit" ->
                 Map.of("type", "boolean");
             case "drain" -> boundedInteger(0, 1000);
             case "limit", "maxItems", "tailLines" -> boundedInteger(1, 1000);
@@ -206,6 +211,20 @@ public final class ToolCatalogue {
             case "reason" -> boundedString(1, 4000);
             case "path" -> boundedString(1, 4096);
             default -> boundedString(1, 512);
+        };
+    }
+
+    private static Map<String, Object> resultSchema(String toolId) {
+        return switch (toolId) {
+            case "scenario_raw_read", "scenario_schema_read", "scenario_template_read" ->
+                Map.of("type", "string");
+            case "scenario_capabilities_get" -> Map.of("oneOf", List.of(
+                Map.of("type", "array", "items", Map.of("type", "object")),
+                Map.of("type", "object")));
+            case "scenario_suts_list" -> Map.of("type", "array", "items", boundedString(1, 512));
+            case "scenario_list", "scenario_templates_catalog", "swarm_list", "debug_journal_runs" ->
+                Map.of("type", "array", "items", Map.of("type", "object"));
+            default -> Map.of("type", "object", "additionalProperties", true);
         };
     }
 
@@ -298,20 +317,20 @@ public final class ToolCatalogue {
             "Diagnose through bounded Orchestrator-owned evidence without infrastructure access.", """
                 # Runtime diagnostics and topology
 
-                Start with `swarm_get`, then choose the smallest bounded read: journal, hive journal, worker list/version/inspect/logs, runtime diff, control-plane status, topology, timeline, or manifest validation. Debug taps require an exact swarm, routing binding, item cap, and TTL; close them when finished. Log output is bounded and redacted but still untrusted data. Do not run Docker, RabbitMQ, filesystem, or Grafana commands as a fallback.
-                """);
+                Start with `swarm_get`, then choose the smallest bounded read: journal, hive journal, worker list/version/inspect/logs, `runtime_assess_swarm`, topology, or timeline. The legacy runtime diff, control-plane status, and manifest-validation names are compatibility views of the same Orchestrator-owned assessment. Debug taps require an exact swarm, routing binding, item cap, and TTL; close them when finished. Log output is bounded and redacted but still untrusted data. Do not run Docker, RabbitMQ, filesystem, or Grafana commands as a fallback.
+                """, "1.1.0");
         addSkill(result, "live-configuration", "Live component configuration",
             "Preview and apply exact runtime configuration patches safely.", """
                 # Live component configuration
 
                 Resolve the exact swarm, role, and instance. Call `component_config_preview`, present target, current evidence, patch, impact, and rollback limitation, then call `component_config_update` only after approval. Re-read Orchestrator evidence after the update. Redis dataset switches require the owner-documented stopped state. Never infer an instance or send a full replacement when the contract expects a patch.
-                """);
+                """, "1.1.0");
         addSkill(result, "governed-cleanup", "Governed runtime cleanup",
             "Plan and execute exact cleanup candidates through HiveGate.", """
                 # Governed runtime cleanup
 
-                Cleanup is two-stage. First call `runtime_cleanup_plan`; review exact candidate IDs, protected resources, execution risk, and candidate-set hash. Execute only the current reviewed plan with the same hash, IDs, reason, and idempotency key through HiveGate. Any drift requires a new plan and review. Never widen scope, include running resources implicitly, derive RabbitMQ names, or retry an ambiguous execution automatically.
-                """);
+                Cleanup is two-stage. First call `runtime_cleanup_plan` with explicit `includeRunning` and `includeRabbit`; review exact candidate IDs, protected resources, execution risk, and candidate-set hash. Execute only the current reviewed plan with the same scope, hash, IDs, reason, and idempotency key through HiveGate. Any drift requires a new plan and review. Never widen scope, include running resources implicitly, derive RabbitMQ names, or retry an ambiguous execution automatically.
+                """, "1.1.0");
         return result;
     }
 

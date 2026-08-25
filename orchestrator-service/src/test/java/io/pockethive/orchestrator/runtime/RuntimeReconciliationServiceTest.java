@@ -29,8 +29,12 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResourc
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.Health;
+import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
 import io.pockethive.swarm.model.lifecycle.RuntimeIntent;
 import io.pockethive.swarm.model.lifecycle.Target;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
@@ -115,6 +119,29 @@ class RuntimeReconciliationServiceTest {
     assertThat(plan.candidates()).isEmpty();
     assertThat(plan.blocked()).singleElement()
         .extracting("reason").asString().contains("active REMOVE operation");
+  }
+
+  @Test
+  void registeredRunningSwarmRequiresExplicitIncludeRunningAndMarksCandidateHighRisk() {
+    Swarm swarm = new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT);
+    swarm.updateObservation(ControllerState.READY, WorkloadState.RUNNING, Health.HEALTHY,
+        RuntimeResourceState.PRESENT, Map.of(), Instant.now());
+    swarms.register(swarm);
+
+    Plan protectedPlan = service.plan(new PlanRequest("sw1", "run-1", false, false));
+    assertThat(protectedPlan.candidates()).isEmpty();
+    assertThat(protectedPlan.blocked()).singleElement()
+        .satisfies(blocked -> {
+          assertThat(blocked.candidateId()).isEqualTo("lifecycle:swarm:sw1");
+          assertThat(blocked.reason()).contains("includeRunning=true");
+        });
+
+    Plan explicitPlan = service.plan(new PlanRequest("sw1", "run-1", true, false));
+    assertThat(explicitPlan.candidates()).singleElement()
+        .satisfies(candidate -> {
+          assertThat(candidate.running()).isTrue();
+          assertThat(candidate.highRisk()).isTrue();
+        });
   }
 
   @Test

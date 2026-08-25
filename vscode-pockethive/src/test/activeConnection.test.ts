@@ -71,6 +71,27 @@ test('a rejected candidate is closed and never replaces the prior verified clien
   ]);
 });
 
+test('a verified refreshed client replaces an expired session even when stale-session close fails', async () => {
+  const calls: string[] = [];
+  const expired = client('expired', calls, undefined, new Error('401 expired'));
+  const refreshed = client('refreshed', calls);
+  const values = [expired, refreshed];
+  const active = new ActiveMcpConnection(() => values.shift()!);
+  await active.test(profile, session, new AbortController().signal);
+
+  assert.deepEqual(await active.test(profile, { ...session, accessToken: 'refreshed-access' },
+    new AbortController().signal), evidence);
+  assert.deepEqual(await active.callTool('swarm_list'), {
+    client: 'refreshed', name: 'swarm_list', args: {},
+  });
+  assert.deepEqual(calls, [
+    'expired:connect:http://127.0.0.1:8088/mcp:access',
+    'refreshed:connect:http://127.0.0.1:8088/mcp:refreshed-access',
+    'expired:close',
+    'refreshed:call:swarm_list',
+  ]);
+});
+
 test('fails explicitly without an active client and clears ownership before close failure', async () => {
   const calls: string[] = [];
   const closing = client('closing', calls, undefined, new Error('close failed'));

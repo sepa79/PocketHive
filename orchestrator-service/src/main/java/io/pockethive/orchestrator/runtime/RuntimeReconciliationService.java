@@ -470,14 +470,21 @@ public class RuntimeReconciliationService {
                 Map.of()));
             return;
         }
+        if (workloadActive(swarm) && !scope.includeRunning()) {
+            blocked.add(new Blocked(
+                "lifecycle:swarm:" + scope.swarmId(),
+                RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
+                scope.swarmId(),
+                "swarm",
+                "active registered swarm requires includeRunning=true",
+                Map.of()));
+            return;
+        }
         candidates.add(lifecycleCandidate(scope, swarm));
     }
 
     private Candidate lifecycleCandidate(CleanupScope scope, Swarm swarm) {
-        boolean workloadActive = switch (swarm.getWorkloadState()) {
-            case STARTING, RUNNING, STOPPING -> true;
-            case UNAVAILABLE, STOPPED, UNKNOWN -> false;
-        };
+        boolean workloadActive = workloadActive(swarm);
         return new Candidate(
             "lifecycle:swarm:" + scope.swarmId(),
             RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM,
@@ -492,9 +499,16 @@ public class RuntimeReconciliationService {
             null,
             null,
             workloadActive,
-            false,
+            workloadActive,
             "registered swarm must be removed through the canonical REMOVE operation",
             Map.of());
+    }
+
+    private static boolean workloadActive(Swarm swarm) {
+        return switch (swarm.getWorkloadState()) {
+            case STARTING, RUNNING, STOPPING -> true;
+            case UNAVAILABLE, STOPPED, UNKNOWN -> false;
+        };
     }
 
     private Candidate candidate(ComputeRuntimeResource resource, boolean running) {

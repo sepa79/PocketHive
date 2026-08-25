@@ -5,11 +5,9 @@ export const DEBUG_ACTION_LABELS = Object.freeze({
   LOGS: 'Logs',
   VERSION: 'Version',
   INSPECT: 'Inspect',
-  RUNTIME_DRIFT: 'Runtime drift',
-  CONTROL_PLANE: 'Control plane',
+  ASSESSMENT: 'Runtime assessment',
   RABBIT_TOPOLOGY: 'Rabbit topology',
   TIMELINE: 'Timeline',
-  MANIFEST: 'Manifest',
   CLEANUP_PLAN: 'Cleanup plan',
 } as const);
 
@@ -18,11 +16,9 @@ export const DEBUG_ACTIONS = Object.freeze([
   { label: DEBUG_ACTION_LABELS.LOGS, tool: 'runtime_tail_worker_logs', needsWorker: true },
   { label: DEBUG_ACTION_LABELS.VERSION, tool: 'runtime_get_worker_version', needsWorker: true },
   { label: DEBUG_ACTION_LABELS.INSPECT, tool: 'runtime_inspect_worker', needsWorker: true },
-  { label: DEBUG_ACTION_LABELS.RUNTIME_DRIFT, tool: 'runtime_diff_swarm_runtime', needsWorker: false },
-  { label: DEBUG_ACTION_LABELS.CONTROL_PLANE, tool: 'runtime_control_plane_status', needsWorker: false },
+  { label: DEBUG_ACTION_LABELS.ASSESSMENT, tool: 'runtime_assess_swarm', needsWorker: false },
   { label: DEBUG_ACTION_LABELS.RABBIT_TOPOLOGY, tool: 'runtime_rabbit_topology_snapshot', needsWorker: false },
   { label: DEBUG_ACTION_LABELS.TIMELINE, tool: 'runtime_swarm_timeline', needsWorker: false },
-  { label: DEBUG_ACTION_LABELS.MANIFEST, tool: 'runtime_manifest_validate', needsWorker: false },
   { label: DEBUG_ACTION_LABELS.CLEANUP_PLAN, tool: 'runtime_cleanup_plan', needsWorker: false },
 ] as const);
 

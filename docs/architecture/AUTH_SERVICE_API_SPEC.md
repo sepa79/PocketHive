@@ -86,7 +86,10 @@ The interoperability choices are explicit:
   fetching;
 - dynamic registration accepts only bounded public clients using
   `token_endpoint_auth_method=none`, authorization code, exact redirect URIs,
-  and scopes from the non-cleanup MCP client scope set;
+  and scopes from the non-cleanup MCP client scope set; the RFC 7591 `scope`
+  metadata is optional, and omission assigns the one canonical interactive
+  MCP scope allow-list owned by `PocketHiveMcpScopes` so clients can negotiate
+  their explicit requested scope during authorization;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
 - exact redirect URI matching; no wildcard, prefix, pattern, or alternate-port
   matching;
@@ -124,12 +127,17 @@ The interoperability choices are explicit:
   fail explicitly without fallback.
 
 The required PocketHive VS Code public client ID is `pockethive-vscode`. Its
-callback is exactly `http://127.0.0.1:57548/callback`. A conforming external MCP
+callback is exactly `http://127.0.0.1:52000/callback`. A conforming external MCP
 client obtains its own opaque client ID through dynamic registration. Dynamic
 registration is bounded, expires with the configured registration lifetime,
 and never grants cleanup. A registration is client metadata, not a user grant,
 an authentication result, or a support claim. Product support is determined by
 the PocketHive MCP client conformance matrix.
+
+PocketHive ingress reserves `/.well-known/*` for protocol discovery. The two
+supported MCP OAuth metadata routes return their canonical JSON contracts;
+every other route under that prefix returns `404` and must never fall through
+to the PocketHive HTML application.
 
 Remote authorization and token endpoints require HTTPS. Loopback HTTP is
 permitted only for an explicitly configured local development issuer and
@@ -462,11 +470,14 @@ pre-registered. It requires:
   `refresh_token`, with no other value;
 - `response_types=["code"]`;
 - `token_endpoint_auth_method="none"`; and
-- one or more scopes from the canonical interactive scope set: discover, read,
-  operate, author, and publish.
+- optional space-separated `scope` metadata. When present it contains one or
+  more values from the canonical interactive scope set: discover, read,
+  operate, author, and publish. When omitted, Auth Service registers the client
+  with that complete canonical interactive allow-list.
 
-The endpoint rejects cleanup, unknown scopes, confidential-client methods,
-implicit grants, malformed metadata, duplicates, and untrusted redirect URIs.
+The endpoint rejects blank scope metadata, cleanup, unknown scopes,
+confidential-client methods, implicit grants, malformed metadata, duplicates,
+and untrusted redirect URIs.
 Successful registration returns a high-entropy `client_id`, issue time, and the
 exact normalized metadata accepted by Auth Service; it returns no client
 secret. Exact redirect and scope values become the registered-client contract

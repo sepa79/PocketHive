@@ -1,6 +1,8 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.Capabilities;
+import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentRequest;
+import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentResponse;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
@@ -24,10 +26,15 @@ import org.springframework.web.bind.annotation.RestController;
 public class RuntimeDebugController {
     private final RuntimeDebugService service;
     private final RuntimeReconciliationService reconciliationService;
+    private final RuntimeAssessmentService assessmentService;
 
-    public RuntimeDebugController(RuntimeDebugService service, RuntimeReconciliationService reconciliationService) {
+    public RuntimeDebugController(
+        RuntimeDebugService service,
+        RuntimeReconciliationService reconciliationService,
+        RuntimeAssessmentService assessmentService) {
         this.service = service;
         this.reconciliationService = reconciliationService;
+        this.assessmentService = assessmentService;
     }
 
     @GetMapping("/capabilities")
@@ -63,6 +70,11 @@ public class RuntimeDebugController {
     @PostMapping("/manifest")
     public ResponseEntity<RuntimeOwnershipManifest> ownershipManifest(@RequestBody RabbitTopologyRequest request) {
         return ResponseEntity.ok(reconciliationService.ownershipManifest(request));
+    }
+
+    @PostMapping("/assessment")
+    public ResponseEntity<AssessmentResponse> assessment(@RequestBody AssessmentRequest request) {
+        return ResponseEntity.ok(assessmentService.assess(request));
     }
 
     @ExceptionHandler(RuntimeDebugException.class)

@@ -163,6 +163,12 @@ Bundle format. The connected agent can then:
 27. `ui-v2/public/logo.svg` is the canonical PocketHive brand asset. VS Code
     package assets are deterministic platform-specific derivatives, never a
     separately hand-maintained logo design.
+28. Post-cutover semantic corrections are owner-first and backward compatible.
+    Existing Orchestrator lifecycle, configuration-update, runtime-debug, and
+    cleanup endpoint paths and response contracts remain available. New owner
+    semantics use additive read-only endpoints. A correction may make an
+    existing operation reject input that the published contract already
+    prohibits; it must not add a second lifecycle or authority path.
 
 ## Scope
 
@@ -202,7 +208,12 @@ Bundle format. The connected agent can then:
 
 ### Excluded
 
-- changes to Scenario Manager, Orchestrator, or their persistence models;
+- changes to Scenario Manager or to any PocketHive persistence model;
+- Orchestrator redesigns or changes to existing lifecycle, configuration-update,
+  runtime-debug, or cleanup endpoint contracts. The additive component-config
+  preview and runtime-assessment reads, plus enforcement of the existing
+  `includeRunning=false` cleanup invariant, are the only Orchestrator changes
+  authorised by the post-cutover correction below;
 - an MCP-owned Scenario Bundle repository or version store;
 - server-side Git access, repository checkout, directory scanning, file editing,
   or bundle-root configuration;
@@ -244,6 +255,42 @@ Bundle format. The connected agent can then:
 | Protocol ownership | Runtime-specific | Pinned official Java SDK owns protocol negotiation and implementation; ingress is transparent |
 | Project memory | Optional external tooling | Optional external tooling; never an MCP dependency |
 | Runtime operations | Includes direct infrastructure paths | Only documented Scenario Manager or Orchestrator APIs |
+
+## Post-cutover semantic correction
+
+Status: `APPROVED / IN PROGRESS`
+
+The direct Rapid Software Testing session found six semantic defects after the
+local cutover. Correct them without adding another authority or changing an
+existing Orchestrator endpoint.
+
+| Concern | Canonical correction |
+|---|---|
+| Expired VS Code MCP session | Connect and install the refreshed candidate first, then close the replaced transport best-effort. A stale transport close failure is telemetry, not a failed refresh. |
+| Scenario authoring reads | `scenario_contracts_get` has no selectors and returns only the authoring contract plus fingerprint. `scenario_capabilities_get` supports exactly one owner selector: `all=true`, `imageName`, or `imageDigest`; an empty input retains the characterised all-capabilities read. Unsupported or conflicting selectors fail before the owner call. |
+| Component config | Add read-only `POST /api/components/{role}/{instance}/config/preview`. It verifies the exact observed target and returns current config, requested patch, and the deterministic shallow merged projection. `component_config_update` keeps its existing endpoint but the MCP sends only `swarmId`, `patch`, and `idempotencyKey` in the body; route fields never leak into the owner DTO. |
+| Runtime semantics | Add read-only `POST /api/runtime/debug/assessment`, owned by Orchestrator. It compares registry, ownership manifest, exact runtime inventory, RabbitMQ topology, and control-plane observation and returns `CONSISTENT`, `DRIFTED`, or `INCOMPLETE` with typed checks and differences. |
+| Runtime MCP compatibility | Add `runtime_assess_swarm`. Retain `runtime_diff_swarm_runtime`, `runtime_control_plane_status`, and `runtime_manifest_validate` as compatibility façades over the same owner assessment; do not keep their former raw-aggregate implementation. |
+| Cleanup safety | A registered swarm with active workload state is blocked when `includeRunning=false`; it becomes the canonical high-risk lifecycle-remove candidate only when `includeRunning=true`. Plan and execute expose the full identical scope: `swarmId`, optional `runId`, required `includeRunning`, and required `includeRabbit`. |
+| Tool failures | One MCP failure mapper returns known application, workflow, upload, and owner failures as `CallToolResult(isError=true)` with stable `code` and safe `message`. Unexpected failures remain protocol failures with a correlation ID and no internal details. |
+| Tool schemas | `ToolDescriptor` owns both input and output schema. Tool registration, catalogue resources, connected skills, and contract tests derive from it. Owner list results retain their characterised result shape until a separately approved versioned result-envelope migration. |
+
+The new Orchestrator reads are additive. They do not mutate swarm state, inspect
+infrastructure through a new path, or replace any existing endpoint. MCP runtime
+tools call only these owner contracts. Scenario Manager and Auth Service require
+no implementation change.
+
+### Compatibility acceptance
+
+- Existing Orchestrator endpoint tests pass unchanged.
+- Existing MCP tool names remain discoverable except inputs previously advertised
+  but ignored; those unsupported inputs now fail explicitly.
+- Existing runtime tool names return the owner assessment and preserve any
+  characterised top-level projection fields used by the VS Code companion.
+- The new runtime assessment and config preview have direct controller contract
+  tests and public-ingress integration coverage.
+- No Orchestrator lifecycle, control-plane message, routing, persistence, or
+  deployment contract changes.
 
 ## Authority model
 
@@ -1610,12 +1657,16 @@ evidence so an action result cannot erase the exact-worker selector.
 | `Logs` | `runtime_tail_worker_logs` |
 | `Version` | `runtime_get_worker_version` |
 | `Inspect` | `runtime_inspect_worker` |
-| `Runtime drift` | `runtime_diff_swarm_runtime` |
-| `Control plane` | `runtime_control_plane_status` |
+| `Runtime assessment` | `runtime_assess_swarm` |
 | `Rabbit topology` | `runtime_rabbit_topology_snapshot` |
 | `Timeline` | `runtime_swarm_timeline` |
-| `Manifest` | `runtime_manifest_validate` |
 | `Cleanup plan` | `runtime_cleanup_plan` |
+
+The older `runtime_diff_swarm_runtime`, `runtime_control_plane_status`, and
+`runtime_manifest_validate` tool IDs remain backward-compatible projections of
+the same Orchestrator-owned runtime assessment. New UI and agent workflows use
+the canonical assessment so they cannot derive contradictory conclusions from
+three independent views.
 
 Logs require an explicit bounded tail and show target plus observation time.
 Worker-specific actions remain disabled until an exact discovered worker is
@@ -3115,6 +3166,61 @@ combinations, reverse-order input, unknown client metadata, and the exact
 20,000-character answer boundary. Every rejected prepare or submit left the
 workflow unchanged; no partial answer set was observed. The earlier live guided
 interview remains intact at its prior revision and was not silently converted.
+
+## MCP semantic-correction and runtime-assessment evidence — 2026-08-25
+
+This change remains additive at the Orchestrator boundary. It adds config
+preview and canonical runtime assessment endpoints, retains every existing
+lifecycle and runtime-debug endpoint, and leaves existing request and response
+fields intact. The MCP retains the three former runtime diagnostic tools as
+compatibility projections of the one Orchestrator-owned assessment. It also
+corrects strict tool semantics: exact capability selectors are honoured,
+preview never mutates, running cleanup candidates are blocked unless the caller
+explicitly includes them, declared tool outputs are validated, and expected
+owner refusals return typed MCP tool errors instead of transport failures.
+
+TDD and RST used malformed owner data, contradictory swarm state, both valid
+capability-result shapes, stale OAuth close failure, false preview success,
+running cleanup candidates, owner refusal, output-schema drift, asynchronous
+stop convergence, and the create-to-first-observation race. The live race
+showed that a canonical new swarm may be `PROVISIONING` with an empty
+observation before the first controller report. The fix maps only that complete
+owner state to not-ready; null, missing, partial, or contradictory observations
+still fail explicitly.
+
+Qualification evidence:
+
+- the complete affected Java reactor passed;
+- the extension passed 175 tests plus deterministic asset, cutover, syntax, and
+  43-file VSIX content checks;
+- MCP PIT covered 1,932/1,932 mutated-class lines and killed 779/779 mutants,
+  with zero survivors or uncovered mutants;
+- Orchestrator PIT covered all 352 selected decision-logic lines and killed all
+  145 mutants across config patching, config preview, and runtime assessment,
+  with zero survivors or uncovered mutants;
+- VS Code Stryker killed all 2,795 mutants: 2,785 by assertion and ten by the
+  bounded timeout, with zero survivors, uncovered mutants, or errors;
+- `build-hive.sh --quick` rebuilt and recreated only the affected Orchestrator
+  and Java MCP services, and the public ingress and Compose services reported
+  healthy;
+- the authenticated public-ingress acceptance journey discovered 59 tools,
+  proved exact scenario capability selection, proved config preview caused no
+  mutation, compared the three compatibility tools with the canonical runtime
+  assessment, blocked cleanup with `includeRunning=false`, classified the same
+  running candidate as high risk with `includeRunning=true`, rotated the OAuth
+  refresh token, rejected replay, and removed its disposable swarm; and
+- the packaged webview journey captured 35 screenshots and reported zero
+  accessibility, layout, page, or console findings. No pre-existing swarm was
+  started, stopped, or removed.
+
+The first detailed assessment probe reported three `UNEXPECTED_RUNTIME`
+differences for healthy workers. RST showed the comparison had treated the
+manager-only launch manifest as a complete worker manifest. The contract and
+implementation were corrected: the launch manifest owns manager identity, and
+the current controller observation owns expected worker role, instance, and
+reported image. The final disposable assessment was `CONSISTENT` across
+registry, control plane, ownership manifest, runtime inventory, and RabbitMQ
+topology, while the dedicated drift and incomplete unit cases remained green.
 
 ## Acceptance gate
 

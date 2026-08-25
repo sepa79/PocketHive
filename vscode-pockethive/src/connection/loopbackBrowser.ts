@@ -4,11 +4,13 @@ import {
   BrowserAuthorizationPort,
   ConnectionContractError,
 } from './contracts';
+import {
+  COMPANION_OAUTH_CALLBACK_HOST,
+  COMPANION_OAUTH_CALLBACK_PATH,
+  COMPANION_OAUTH_CALLBACK_PORT,
+} from './companionOAuthClient';
 import { CALLBACK_LOGO_DATA_URI } from '../generated/callbackLogo';
 
-const CALLBACK_HOST = '127.0.0.1';
-const CALLBACK_PORT = 57_548;
-const CALLBACK_PATH = '/callback';
 const TIMEOUT_MS = 120_000;
 
 export type ExternalBrowser = (url: string) => PromiseLike<boolean>;
@@ -26,15 +28,19 @@ export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
           return;
         }
         server = createServer((request, response) => {
-          if (request.socket.remoteAddress !== CALLBACK_HOST
+          if (request.socket.remoteAddress !== COMPANION_OAUTH_CALLBACK_HOST
               || request.method !== 'GET'
               || !request.url
-              || new URL(request.url, `http://${CALLBACK_HOST}:${CALLBACK_PORT}`).pathname !== CALLBACK_PATH) {
+              || new URL(request.url, `http://${COMPANION_OAUTH_CALLBACK_HOST}:${COMPANION_OAUTH_CALLBACK_PORT}`).pathname
+                !== COMPANION_OAUTH_CALLBACK_PATH) {
             response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             response.end('Not found');
             return;
           }
-          const callback = new URL(request.url, `http://${CALLBACK_HOST}:${CALLBACK_PORT}`);
+          const callback = new URL(
+            request.url,
+            `http://${COMPANION_OAUTH_CALLBACK_HOST}:${COMPANION_OAUTH_CALLBACK_PORT}`,
+          );
           response.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
@@ -46,7 +52,7 @@ export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
         server.once('error', error => reject(new ConnectionContractError(
           'OAUTH_CALLBACK_LISTENER_FAILED', error.message,
         )));
-        server.listen(CALLBACK_PORT, CALLBACK_HOST, async () => {
+        server.listen(COMPANION_OAUTH_CALLBACK_PORT, COMPANION_OAUTH_CALLBACK_HOST, async () => {
           try {
             if (!await this.openExternal(authorizationUrl)) {
               reject(new ConnectionContractError('OAUTH_BROWSER_OPEN_FAILED', 'VS Code declined the browser request'));

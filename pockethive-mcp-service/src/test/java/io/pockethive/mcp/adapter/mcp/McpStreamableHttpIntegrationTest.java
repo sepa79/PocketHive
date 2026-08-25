@@ -9,6 +9,7 @@ import io.modelcontextprotocol.spec.HttpHeaders;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.mcp.application.BundleUploadContract;
 import io.pockethive.mcp.application.BundleUploadCoordinator;
+import io.pockethive.mcp.application.OwnerApiPort;
 import io.pockethive.mcp.application.PreparedUpload;
 import io.pockethive.mcp.application.ValidationUploadTicket;
 import io.pockethive.mcp.domain.BundleFileManifest;
@@ -129,6 +130,51 @@ class McpStreamableHttpIntegrationTest {
         assertThat(unknown.body()).contains("2025-11-25");
         delete("qa-token", "2026-07-28",
             unknown.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow());
+    }
+
+    @Test
+    void returnsKnownDomainRefusalsAsToolResultsInsteadOfJsonRpcFailures() throws Exception {
+        HttpResponse<String> initialized = post(initialize(REVISION), "qa-token", REVISION, null,
+            "http://127.0.0.1:" + port);
+        String sessionId = initialized.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow();
+
+        HttpResponse<String> response = post(toolCall(
+            41,
+            "agent_session_get",
+            Map.of("agentSessionId", "as-does-not-exist")),
+            "qa-token",
+            REVISION,
+            sessionId,
+            "http://127.0.0.1:" + port);
+        JsonNode result = rpcResult(response);
+
+        assertThat(result.path("isError").asBoolean()).isTrue();
+        assertThat(result.path("structuredContent").path("code").asText())
+            .isEqualTo("AGENT_SESSION_NOT_FOUND");
+        assertThat(result.path("structuredContent").path("message").asText())
+            .isEqualTo("as-does-not-exist");
+        delete("qa-token", REVISION, sessionId);
+    }
+
+    @Test
+    void preservesBothCanonicalScenarioCapabilityResultShapesOverHttp() throws Exception {
+        HttpResponse<String> initialized = post(initialize(REVISION), "qa-token", REVISION, null,
+            "http://127.0.0.1:" + port);
+        String sessionId = initialized.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow();
+
+        JsonNode all = rpcResult(post(toolCall(42, "scenario_capabilities_get", Map.of()),
+            "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port));
+        assertThat(all.path("isError").asBoolean()).isFalse();
+        assertThat(all.path("structuredContent").isArray()).isTrue();
+        assertThat(all.path("structuredContent").path(0).path("role").asText()).isEqualTo("generator");
+
+        JsonNode exact = rpcResult(post(toolCall(43, "scenario_capabilities_get",
+                Map.of("imageName", "generator")),
+            "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port));
+        assertThat(exact.path("isError").asBoolean()).isFalse();
+        assertThat(exact.path("structuredContent").isObject()).isTrue();
+        assertThat(exact.path("structuredContent").path("role").asText()).isEqualTo("generator");
+        delete("qa-token", REVISION, sessionId);
     }
 
     @Test
@@ -443,16 +489,20 @@ class McpStreamableHttpIntegrationTest {
     }
 
     private JsonNode toolResult(HttpResponse<String> response) throws Exception {
+        JsonNode result = rpcResult(response);
+        assertThat(result.path("isError").asBoolean()).isFalse();
+        assertThat(result.path("structuredContent").isObject()).isTrue();
+        return result.path("structuredContent");
+    }
+
+    private JsonNode rpcResult(HttpResponse<String> response) throws Exception {
         assertThat(response.statusCode()).isEqualTo(200);
         String data = response.body().lines()
             .filter(line -> line.startsWith("data: "))
             .map(line -> line.substring("data: ".length()))
             .findFirst()
             .orElseThrow();
-        JsonNode result = mapper.readTree(data).path("result");
-        assertThat(result.path("isError").asBoolean()).isFalse();
-        assertThat(result.path("structuredContent").isObject()).isTrue();
-        return result.path("structuredContent");
+        return mapper.readTree(data).path("result");
     }
 
     private HttpResponse<String> delete(String token, String revision, String sessionId) throws Exception {
@@ -485,6 +535,38 @@ class McpStreamableHttpIntegrationTest {
 
     @TestConfiguration
     static class AuthenticationConfiguration {
+        @Bean
+        @Primary
+        OwnerApiPort scenarioCapabilityOwner() {
+            return new OwnerApiPort() {
+                @Override
+                public Object get(String path) {
+                    if ("/scenario-manager/api/capabilities?all=true".equals(path)) {
+                        return List.of(Map.of("role", "generator"));
+                    }
+                    if ("/scenario-manager/api/capabilities?imageName=generator".equals(path)) {
+                        return Map.of("role", "generator");
+                    }
+                    throw new IllegalArgumentException("unexpected owner GET path");
+                }
+
+                @Override
+                public String getText(String path) {
+                    throw new IllegalArgumentException("unexpected owner text path");
+                }
+
+                @Override
+                public Object post(String path, Object body) {
+                    throw new IllegalArgumentException("unexpected owner POST path");
+                }
+
+                @Override
+                public Object delete(String path) {
+                    throw new IllegalArgumentException("unexpected owner DELETE path");
+                }
+            };
+        }
+
         @Bean
         @Primary
         OpaqueTokenIntrospector testTokens(

@@ -12,7 +12,6 @@ import io.modelcontextprotocol.spec.McpSchema;
 import io.pockethive.mcp.application.McpToolExecutor;
 import io.pockethive.mcp.application.ToolCatalogue;
 import io.pockethive.mcp.application.ToolDescriptor;
-import io.pockethive.mcp.application.ToolExecutionException;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import java.time.Duration;
 import java.util.List;
@@ -55,11 +54,12 @@ public class McpServerConfiguration {
                          ToolCatalogue catalogue,
                          McpKnowledgeResources resources,
                          McpToolExecutor executor,
+                         ToolFailureMapper failureMapper,
                          ObjectMapper objectMapper,
                          BuildProperties buildProperties) {
         JacksonMcpJsonMapper mapper = new JacksonMcpJsonMapper(objectMapper);
         List<McpServerFeatures.SyncToolSpecification> tools = catalogue.tools().stream()
-            .map(descriptor -> tool(descriptor, executor, objectMapper))
+            .map(descriptor -> tool(descriptor, executor, failureMapper, objectMapper))
             .toList();
         return McpServer.sync(transport)
             .serverInfo(SERVER_NAME, buildProperties.getVersion())
@@ -89,6 +89,7 @@ public class McpServerConfiguration {
 
     private static McpServerFeatures.SyncToolSpecification tool(ToolDescriptor descriptor,
                                                                  McpToolExecutor executor,
+                                                                 ToolFailureMapper failureMapper,
                                                                  ObjectMapper mapper) {
         McpSchema.ToolAnnotations annotations = McpSchema.ToolAnnotations.builder()
             .readOnlyHint(descriptor.readOnly())
@@ -100,6 +101,7 @@ public class McpServerConfiguration {
             .name(descriptor.id())
             .description(descriptor.description())
             .inputSchema(descriptor.inputSchema())
+            .outputSchema(descriptor.outputSchema())
             .annotations(annotations)
             .meta(Map.of(
                 "owner", descriptor.owner().name(),
@@ -109,13 +111,17 @@ public class McpServerConfiguration {
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             try {
                 Object result = executor.execute(descriptor, exchange, request.arguments());
+                Object structuredContent = ToolStructuredContent.normalize(mapper, result);
+                ToolOutputValidator.validate(descriptor, structuredContent);
                 return McpSchema.CallToolResult.builder()
-                    .addTextContent(json(mapper, result))
-                    .structuredContent(result)
+                    .addTextContent(json(mapper, structuredContent))
+                    .structuredContent(structuredContent)
                     .isError(false)
                     .build();
-            } catch (ToolExecutionException exception) {
-                Map<String, Object> error = Map.of("code", exception.code(), "message", exception.getMessage());
+            } catch (RuntimeException exception) {
+                KnownToolFailure failure = failureMapper.known(exception)
+                    .orElseThrow(() -> failureMapper.unexpected(descriptor.id(), exception));
+                Map<String, Object> error = failure.structuredContent();
                 return McpSchema.CallToolResult.builder()
                     .addTextContent(json(mapper, error))
                     .structuredContent(error)

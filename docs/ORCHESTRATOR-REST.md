@@ -34,7 +34,7 @@ Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it
     "observedAt": "2026-07-22T12:00:00Z",
     "observationStale": false,
     "activeOperation": null,
-    "observation": null,
+    "observation": {},
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
@@ -53,6 +53,10 @@ Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it
 `GET /api/swarms/{swarmId}`
 
 **Response (200)** — Orchestrator projection joining owned intent/operation state with the cached Controller context. `observation` is that context projection; it is evidence, not the swarm state authority. The raw control-plane envelope remains an internal transport contract and is not nested in this REST response.
+
+Before the first Controller status observation, `observation` is the empty
+object, `observedAt` is `null`, `observationStale` is `true`,
+`controllerState` is `PROVISIONING`, and `workloadState` is `UNAVAILABLE`.
 ```json
 {
   "id": "demo",
@@ -404,7 +408,9 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
   "cleanupPlanUsesApprovalFields": false,
   "cleanupExecuteRequiresCandidateSetHash": true,
   "rabbitTopologyExactByDefault": true,
-  "cleanupSupportsRegisteredStateOverride": true
+  "cleanupSupportsRegisteredStateOverride": true,
+  "runtimeAssessmentContractVersion": "1",
+  "componentConfigPreviewContractVersion": "1"
 }
 ```
 
@@ -549,7 +555,63 @@ prefix, or expose a RabbitMQ management fallback in the MCP.
 When the ownership manifest is missing, the response is still exact-only and
 returns no Rabbit resources instead of guessing by prefix.
 
-#### 2.9.7 Plan cleanup
+#### 2.9.8 Runtime assessment
+
+`POST /api/runtime/debug/assessment`
+
+Adds one read-only owner assessment without replacing any existing runtime-debug
+endpoint. Orchestrator compares its registry, exact runtime ownership manifest,
+PocketHive-labelled compute inventory, exact RabbitMQ topology, and cached
+control-plane observation. The MCP must not reconstruct these semantics.
+The launch manifest is authoritative for manager runtime identity. The current
+controller observation is authoritative for expected worker `role` and
+`instance`, and for worker image only when it reports one. This reflects the
+existing lifecycle: Orchestrator launches the manager, while the manager
+launches and reports its workers. A reported worker is therefore not classified
+as unexpected merely because it is absent from the manager launch manifest.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional"
+}
+```
+
+**Response (200)**
+```json
+{
+  "assessmentContractVersion": "1",
+  "overall": "CONSISTENT",
+  "swarmId": "demo",
+  "runId": "run-1",
+  "assessedAt": "2026-08-25T10:00:00Z",
+  "checks": [
+    {
+      "check": "RUNTIME_INVENTORY",
+      "state": "CONSISTENT",
+      "summary": "Expected manager and worker runtimes match the exact labelled inventory.",
+      "differences": []
+    }
+  ],
+  "swarm": { "id": "demo", "runId": "run-1" },
+  "resources": { "workers": [], "managers": [], "blocked": [] },
+  "manifest": { "swarmId": "demo", "runId": "run-1" },
+  "rabbitTopology": { "swarmId": "demo", "runId": "run-1", "exactOnly": true }
+}
+```
+
+`overall` and each check state are `CONSISTENT`, `DRIFTED`, or `INCOMPLETE`.
+Differences are typed records containing `kind`, `resourceType`, `resourceId`,
+`expected`, and `actual`. A missing source is `INCOMPLETE`; a present source that
+contradicts another owned source is `DRIFTED`. The endpoint is side-effect free.
+The `swarm`, `resources`, `manifest`, and `rabbitTopology` fields are read-only
+compatibility projections from the same assessment inputs. They preserve the
+existing MCP aggregate's top-level navigation without creating another
+assessment implementation. `manifest` is `null` when that owner source is
+unavailable; the typed checks remain the authoritative conclusion.
+
+#### 2.9.9 Plan cleanup
 `POST /api/runtime/cleanup/plan`
 
 **Request**
@@ -597,7 +659,15 @@ returns no Rabbit resources instead of guessing by prefix.
 }
 ```
 
-#### 2.9.8 Execute cleanup
+The existing Orchestrator REST DTO remains backward compatible: an omitted
+`includeRunning` means `false`, and an omitted `includeRabbit` means `true`.
+The agent-facing MCP contract is stricter and requires both Boolean fields so
+an agent cannot infer cleanup scope. A registered swarm in `STARTING`,
+`RUNNING`, or `STOPPING` is blocked when `includeRunning=false`. With
+`includeRunning=true`, its canonical `LIFECYCLE_REMOVE_SWARM` candidate is
+marked `running=true` and `highRisk=true`.
+
+#### 2.9.10 Execute cleanup
 `POST /api/runtime/cleanup/execute`
 
 Recomputes the plan, verifies the candidate hash and idempotency key, then
@@ -806,6 +876,37 @@ identity; `role` alone is not a stable target.
   "timeoutMs": 60000
 }
 ```
+
+### 4.2 Preview config
+
+`POST /api/components/{role}/{instance}/config/preview`
+
+This additive read-only endpoint verifies that the exact `role` and `instance`
+exist in the selected swarm's current control-plane observation. It performs no
+config write and does not reserve an operation.
+
+**Request**
+```json
+{
+  "swarmId": "required",
+  "patch": { "enabled": true }
+}
+```
+
+**Response (200)**
+```json
+{
+  "sideEffect": "NONE",
+  "target": { "swarmId": "demo", "role": "generator", "instance": "demo-generator-1" },
+  "currentConfig": { "enabled": false },
+  "patch": { "enabled": true },
+  "effectiveConfig": { "enabled": true }
+}
+```
+
+The preview uses the same shallow patch meaning as the component configuration
+signal. Missing swarms or targets fail explicitly. The existing update endpoint
+and signal contract are unchanged.
 
 ## 5. Control-plane sync (debug-only)
 These endpoints are intended for local diagnostics and should be secured behind admin access or removed before exposing the orchestrator publicly.

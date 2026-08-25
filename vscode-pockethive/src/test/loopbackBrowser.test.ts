@@ -18,7 +18,7 @@ test('accepts one exact IPv4 loopback callback and closes the listener', async (
   );
   await ready;
 
-  const response = await fetch('http://127.0.0.1:57548/callback?code=code&state=state');
+  const response = await fetch('http://127.0.0.1:52000/callback?code=code&state=state');
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /PocketHive sign-in complete/);
@@ -26,8 +26,8 @@ test('accepts one exact IPv4 loopback callback and closes the listener', async (
   assert.match(html, /auth-shell/);
   await assertCanonicalCallbackLogo(response, html);
   assert.equal((await authorization).toString(),
-    'http://127.0.0.1:57548/callback?code=code&state=state');
-  await assert.rejects(fetch('http://127.0.0.1:57548/callback'), /fetch failed/);
+    'http://127.0.0.1:52000/callback?code=code&state=state');
+  await assert.rejects(fetch('http://127.0.0.1:52000/callback'), /fetch failed/);
 });
 
 test('renders a themed cancellation callback page before handing control back to VS Code', async () => {
@@ -43,14 +43,14 @@ test('renders a themed cancellation callback page before handing control back to
   );
   await ready;
 
-  const response = await fetch('http://127.0.0.1:57548/callback?error=access_denied&state=state');
+  const response = await fetch('http://127.0.0.1:52000/callback?error=access_denied&state=state');
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /Sign-in cancelled/);
   assert.match(html, /PocketHive/);
   await assertCanonicalCallbackLogo(response, html);
   assert.equal((await authorization).toString(),
-    'http://127.0.0.1:57548/callback?error=access_denied&state=state');
+    'http://127.0.0.1:52000/callback?error=access_denied&state=state');
 });
 
 test('renders a themed OAuth error page for non-cancel redirect failures', async () => {
@@ -66,14 +66,14 @@ test('renders a themed OAuth error page for non-cancel redirect failures', async
   );
   await ready;
 
-  const response = await fetch('http://127.0.0.1:57548/callback?error=server_error&state=state');
+  const response = await fetch('http://127.0.0.1:52000/callback?error=server_error&state=state');
   assert.equal(response.status, 200);
   const html = await response.text();
   assert.match(html, /did not complete/);
   assert.match(html, /server_error/);
   await assertCanonicalCallbackLogo(response, html);
   assert.equal((await authorization).toString(),
-    'http://127.0.0.1:57548/callback?error=server_error&state=state');
+    'http://127.0.0.1:52000/callback?error=server_error&state=state');
 });
 
 test('aborting authorization closes the callback listener', async () => {
@@ -90,7 +90,7 @@ test('aborting authorization closes the callback listener', async () => {
   controller.abort();
 
   await assert.rejects(authorization, /OAUTH_AUTHORIZATION_CANCELLED/);
-  await assert.rejects(fetch('http://127.0.0.1:57548/callback'), /fetch failed/);
+  await assert.rejects(fetch('http://127.0.0.1:52000/callback'), /fetch failed/);
 });
 
 async function assertCanonicalCallbackLogo(response: Response, html: string): Promise<void> {

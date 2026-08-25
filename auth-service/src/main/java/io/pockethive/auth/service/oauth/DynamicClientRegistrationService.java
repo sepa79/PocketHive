@@ -167,7 +167,8 @@ public final class DynamicClientRegistrationService {
     }
 
     private static List<String> scopes(String value) {
-        if (value == null || value.isBlank()) throw invalidMetadata("scope is required");
+        if (value == null) return PocketHiveMcpScopes.COMPANION_ORDERED;
+        if (value.isBlank()) throw invalidMetadata("scope is invalid");
         List<String> requested = List.of(value.trim().split("\\s+"));
         Set<String> unique = Set.copyOf(requested);
         if (unique.size() != requested.size() || !PocketHiveMcpScopes.COMPANION.containsAll(unique)) {

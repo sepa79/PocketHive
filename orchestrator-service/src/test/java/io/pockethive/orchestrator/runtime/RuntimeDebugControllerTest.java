@@ -11,6 +11,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.JacksonConfiguration;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
+import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentRequest;
+import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentResponse;
+import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentState;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListResponse;
@@ -36,6 +39,8 @@ class RuntimeDebugControllerTest {
     RuntimeDebugService service;
     @Mock
     RuntimeReconciliationService reconciliationService;
+    @Mock
+    RuntimeAssessmentService assessmentService;
 
     private final ObjectMapper mapper = new JacksonConfiguration().objectMapper();
 
@@ -45,6 +50,8 @@ class RuntimeDebugControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.runtimeDebugContractVersion").value("4"))
             .andExpect(jsonPath("$.cleanupContractVersion").value("3"))
+            .andExpect(jsonPath("$.runtimeAssessmentContractVersion").value("1"))
+            .andExpect(jsonPath("$.componentConfigPreviewContractVersion").value("1"))
             .andExpect(jsonPath("$.runtimeDebugReadsBackedByOrchestrator").value(true))
             .andExpect(jsonPath("$.cleanupPlanHasExecutionRisk").value(true))
             .andExpect(jsonPath("$.cleanupPlanUsesApprovalFields").value(false))
@@ -190,8 +197,38 @@ class RuntimeDebugControllerTest {
         verify(reconciliationService).ownershipManifest(any(RabbitTopologyRequest.class));
     }
 
+    @Test
+    void assessmentDelegatesToCanonicalAssessmentService() throws Exception {
+        when(assessmentService.assess(any(AssessmentRequest.class))).thenReturn(new AssessmentResponse(
+            "1",
+            AssessmentState.CONSISTENT,
+            "sw1",
+            "run-1",
+            java.time.Instant.parse("2026-08-25T10:00:00Z"),
+            List.of(),
+            null,
+            null,
+            null,
+            null));
+
+        mvc().perform(post("/api/runtime/debug/assessment")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "swarmId": "sw1",
+                      "runId": "run-1"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.assessmentContractVersion").value("1"))
+            .andExpect(jsonPath("$.overall").value("CONSISTENT"));
+
+        verify(assessmentService).assess(any(AssessmentRequest.class));
+    }
+
     private MockMvc mvc() {
-        return MockMvcBuilders.standaloneSetup(new RuntimeDebugController(service, reconciliationService))
+        return MockMvcBuilders.standaloneSetup(
+                new RuntimeDebugController(service, reconciliationService, assessmentService))
             .setMessageConverters(new MappingJackson2HttpMessageConverter(mapper))
             .build();
     }

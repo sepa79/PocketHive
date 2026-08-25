@@ -105,7 +105,7 @@ class McpToolExecutorTest {
             "/scenario-manager/scenarios/scenario%2Fa/suts");
         assertOwnerGet("scenario_sut_get", input,
             "/scenario-manager/scenarios/scenario%2Fa/suts/sut-a");
-        assertOwnerGet("scenario_capabilities_get", input, "/scenario-manager/api/capabilities?all=true");
+        assertOwnerGet("scenario_capabilities_get", Map.of(), "/scenario-manager/api/capabilities?all=true");
         assertOwnerGet("scenario_templates_catalog", input, "/scenario-manager/api/templates");
         assertOwnerGet("swarm_list", input, "/orchestrator/api/swarms");
         assertOwnerGet("swarm_get", input, "/orchestrator/api/swarms/swarm%2Fa");
@@ -146,19 +146,23 @@ class McpToolExecutorTest {
         when(owners.get(any())).thenAnswer(invocation -> Map.of("get", invocation.getArgument(0)));
         when(owners.post(any(), any())).thenAnswer(invocation -> Map.of("post", invocation.getArgument(0)));
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> preview = (Map<String, Object>) execute("component_config_preview", input);
-        assertThat(preview).containsEntry("sideEffect", "no-config-write")
-            .containsEntry("patch", input.get("patch"));
-        assertThat(preview.get("target")).isEqualTo(Map.of(
-            "swarmId", "swarm/a", "role", "generator", "instanceId", "gen/a"));
-        verify(owners).get("/orchestrator/api/swarms/swarm%2Fa");
-        clearInvocations(owners);
+        assertOwnerPost("component_config_preview", input,
+            "/orchestrator/api/components/generator/gen%2Fa/config/preview",
+            Map.of("swarmId", "swarm/a", "patch", Map.of("rate", 5)));
 
         assertOwnerPost("component_config_update", input,
-            "/orchestrator/api/components/generator/gen%2Fa/config", input);
-        assertOwnerPost("runtime_cleanup_plan", input, "/orchestrator/api/runtime/cleanup/plan", input);
-        assertOwnerPost("runtime_cleanup_execute", input, "/orchestrator/api/runtime/cleanup/execute", input);
+            "/orchestrator/api/components/generator/gen%2Fa/config",
+            Map.of("swarmId", "swarm/a", "patch", Map.of("rate", 5), "idempotencyKey", "idem-a"));
+        Map<String, Object> cleanupPlanBody = Map.of(
+            "swarmId", "swarm/a", "runId", "run/a", "includeRunning", false, "includeRabbit", true);
+        assertOwnerPost("runtime_cleanup_plan", input, "/orchestrator/api/runtime/cleanup/plan", cleanupPlanBody);
+        Map<String, Object> cleanupExecuteBody = new LinkedHashMap<>(cleanupPlanBody);
+        cleanupExecuteBody.put("candidateSetHash", SHA);
+        cleanupExecuteBody.put("candidateIds", List.of("runtime-a"));
+        cleanupExecuteBody.put("idempotencyKey", "idem-a");
+        cleanupExecuteBody.put("reason", "reviewed cleanup");
+        assertOwnerPost("runtime_cleanup_execute", input, "/orchestrator/api/runtime/cleanup/execute",
+            cleanupExecuteBody);
         assertOwnerPost("runtime_tail_worker_logs", input, "/orchestrator/api/runtime/debug/resources/logs", input);
         assertOwnerPost("runtime_get_worker_version", input, "/orchestrator/api/runtime/debug/resources/version", input);
         assertOwnerPost("runtime_list_workers", input, "/orchestrator/api/runtime/debug/resources/list", input);
@@ -166,20 +170,15 @@ class McpToolExecutorTest {
         assertOwnerPost("runtime_rabbit_topology_snapshot", input,
             "/orchestrator/api/runtime/debug/rabbit/topology", input);
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> diff = (Map<String, Object>) execute("runtime_diff_swarm_runtime", input);
-        assertThat(diff).containsOnlyKeys("swarm", "resources", "rabbitTopology");
-        verifyAggregateCalls(input, true);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> status = (Map<String, Object>) execute("runtime_control_plane_status", input);
-        assertThat(status).containsOnlyKeys("swarm", "rabbitTopology");
-        verifyAggregateCalls(input, false);
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> manifest = (Map<String, Object>) execute("runtime_manifest_validate", input);
-        assertThat(manifest).containsOnlyKeys("swarm", "resources", "rabbitTopology");
-        verifyAggregateCalls(input, true);
+        Map<String, Object> assessmentBody = Map.of("swarmId", "swarm/a", "runId", "run/a");
+        assertOwnerPost("runtime_assess_swarm", input,
+            "/orchestrator/api/runtime/debug/assessment", assessmentBody);
+        assertOwnerPost("runtime_diff_swarm_runtime", input,
+            "/orchestrator/api/runtime/debug/assessment", assessmentBody);
+        assertOwnerPost("runtime_control_plane_status", input,
+            "/orchestrator/api/runtime/debug/assessment", assessmentBody);
+        assertOwnerPost("runtime_manifest_validate", input,
+            "/orchestrator/api/runtime/debug/assessment", assessmentBody);
 
         Object timeline = execute("runtime_swarm_timeline", input);
         assertThat(timeline).isEqualTo(Map.of(
@@ -195,8 +194,27 @@ class McpToolExecutorTest {
 
         assertThat(result).containsEntry("authoringContract", "/scenario-manager/api/authoring-contract")
             .containsEntry("fingerprint", "/scenario-manager/api/authoring-contract/fingerprint")
-            .containsEntry("capabilities", "/scenario-manager/api/capabilities?all=true")
-            .containsEntry("templates", "/scenario-manager/api/templates");
+            .doesNotContainKeys("capabilities", "templates");
+    }
+
+    @Test
+    void mapsExactScenarioCapabilitySelectorsAndRejectsAmbiguity() {
+        when(owners.get(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        assertThat(execute("scenario_capabilities_get", Map.of()))
+            .isEqualTo("/scenario-manager/api/capabilities?all=true");
+        assertThat(execute("scenario_capabilities_get", Map.of("all", true)))
+            .isEqualTo("/scenario-manager/api/capabilities?all=true");
+        assertThat(execute("scenario_capabilities_get", Map.of("imageName", "request builder")))
+            .isEqualTo("/scenario-manager/api/capabilities?imageName=request%20builder");
+        assertThat(execute("scenario_capabilities_get", Map.of("imageDigest", "sha256:abc")))
+            .isEqualTo("/scenario-manager/api/capabilities?imageDigest=sha256:abc");
+        assertCode("TOOL_INPUT_INVALID", () -> execute("scenario_capabilities_get",
+            Map.of("unexpected", true)));
+        assertCode("TOOL_INPUT_INVALID", () -> execute("scenario_capabilities_get", Map.of("all", "true")));
+        assertCode("TOOL_INPUT_INVALID", () -> execute("scenario_capabilities_get", Map.of("all", false)));
+        assertCode("TOOL_INPUT_INVALID", () -> execute("scenario_capabilities_get",
+            Map.of("all", true, "imageName", "processor")));
     }
 
     @Test
@@ -709,10 +727,12 @@ class McpToolExecutorTest {
 
         authenticateCaller();
         ToolDescriptor missing = new ToolDescriptor("missing", "missing", Map.of("type", "object"),
-            ToolOwner.MCP, PocketHiveMcpScopes.READ, true, false, true, List.of("pockethive-orientation"));
+            Map.of("type", "object"), ToolOwner.MCP, PocketHiveMcpScopes.READ,
+            true, false, true, List.of("pockethive-orientation"));
         assertCode("TOOL_HANDLER_MISSING", () -> executor.execute(missing, exchange, Map.of()));
         ToolDescriptor ownerMissing = new ToolDescriptor("missing", "missing", Map.of("type", "object"),
-            ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.READ, true, false, true, List.of("pockethive-orientation"));
+            Map.of("type", "object"), ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.READ,
+            true, false, true, List.of("pockethive-orientation"));
         assertCode("TOOL_HANDLER_MISSING", () -> executor.execute(ownerMissing, exchange, Map.of()));
 
         assertCode("TOOL_INPUT_REQUIRED", () -> execute("scenario_get", Map.of()));
@@ -1012,6 +1032,8 @@ class McpToolExecutorTest {
         input.put("candidateSetHash", SHA);
         input.put("candidateIds", List.of("runtime-a"));
         input.put("reason", "reviewed cleanup");
+        input.put("includeRunning", false);
+        input.put("includeRabbit", true);
         return input;
     }
 

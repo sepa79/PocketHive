@@ -39,7 +39,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @AutoConfigureMockMvc
 class OAuthAuthorizationServerTest {
     private static final String CLIENT_ID = "pockethive-vscode";
-    private static final String REDIRECT_URI = "http://127.0.0.1:57548/callback";
+    private static final String REDIRECT_URI = "http://127.0.0.1:52000/callback";
     private static final String RESOURCE = "http://localhost:8080/mcp";
     private static final String VERIFIER = "test-verifier-that-is-at-least-forty-three-characters-long";
 
@@ -165,6 +165,21 @@ class OAuthAuthorizationServerTest {
             .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.allOf(
                 org.hamcrest.Matchers.startsWith("phrfr_"),
                 org.hamcrest.Matchers.not(refreshToken))));
+    }
+
+    @Test
+    void dynamicallyRegistersAmazonQMetadataThatDefersScopeSelection() throws Exception {
+        String redirectUri = "http://localhost:38124/oauth/callback";
+
+        mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistrationWithoutScope("kiro", redirectUri)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.client_id").isNotEmpty())
+            .andExpect(jsonPath("$.client_secret").doesNotExist())
+            .andExpect(jsonPath("$.client_name").value("kiro"))
+            .andExpect(jsonPath("$.redirect_uris[0]").value(redirectUri))
+            .andExpect(jsonPath("$.scope").value(String.join(" ", PocketHiveMcpScopes.COMPANION_ORDERED)));
     }
 
     @Test
@@ -566,7 +581,7 @@ class OAuthAuthorizationServerTest {
         invalidAuthorize(null, REDIRECT_URI, "S256");
         invalidAuthorize("http://localhost:8080/other", REDIRECT_URI, "S256");
         invalidAuthorize(RESOURCE, REDIRECT_URI, "plain");
-        invalidAuthorize(RESOURCE, "http://127.0.0.1:57549/callback", "S256");
+        invalidAuthorize(RESOURCE, "http://127.0.0.1:52001/callback", "S256");
     }
 
     private void invalidAuthorize(String resource, String redirect, String method) throws Exception {
@@ -624,6 +639,18 @@ class OAuthAuthorizationServerTest {
               "scope":"%s"
             }
             """.formatted(clientName, redirectUri, scopes);
+    }
+
+    private static String dynamicRegistrationWithoutScope(String clientName, String redirectUri) {
+        return """
+            {
+              "client_name":"%s",
+              "redirect_uris":["%s"],
+              "grant_types":["authorization_code","refresh_token"],
+              "response_types":["code"],
+              "token_endpoint_auth_method":"none"
+            }
+            """.formatted(clientName, redirectUri);
     }
 
     private JsonNode issueBaseSession(String state) throws Exception {

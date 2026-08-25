@@ -24,7 +24,7 @@ pockethive:
       dynamic-client-ttl: ${POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL:P31D}
       dynamic-client-capacity: ${POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY:256}
       vscode-client-id: pockethive-vscode
-      vscode-redirect-uri: ${POCKETHIVE_AUTH_OAUTH_VSCODE_REDIRECT_URI:http://127.0.0.1:57548/callback}
+      vscode-redirect-uri: ${POCKETHIVE_AUTH_OAUTH_VSCODE_REDIRECT_URI:http://127.0.0.1:52000/callback}
       introspection-client-id: pockethive-mcp
       introspection-client-secret: ${POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET:pockethive-mcp-local-introspection-secret}
     users:

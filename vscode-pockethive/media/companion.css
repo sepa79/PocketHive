@@ -682,6 +682,11 @@ details[open] > summary .disclosure-chevron { transform: rotate(90deg); }
   display: flex; align-items: center; flex-wrap: wrap; gap: 6px; min-width: 0; font-size: .7rem;
 }
 .debug-evidence__provenance > .muted { margin-left: auto; }
+.debug-assessment__checks { display: grid; gap: 1px; overflow: hidden; border: 1px solid var(--ph-border); }
+.debug-assessment__check { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 8px; background: var(--ph-surface-raised); }
+.debug-assessment__copy { display: grid; gap: 2px; min-width: 0; }
+.debug-assessment__copy strong { font-size: .72rem; text-transform: capitalize; }
+.debug-assessment__copy span { font-size: .68rem; line-height: 1.35; }
 .debug-log-output { overflow: hidden; border: 1px solid var(--ph-border); border-radius: 6px; background: var(--vscode-editor-background); }
 .debug-inspect-output { overflow: hidden; border: 1px solid var(--ph-border); border-radius: 6px; background: var(--vscode-editor-background); }
 .debug-inspect-output pre { max-height: 420px; margin: 0; overflow: auto; white-space: pre; }

@@ -466,11 +466,9 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
       { label: 'Logs', needsWorker: true },
       { label: 'Version', needsWorker: true },
       { label: 'Inspect', needsWorker: true },
-      { label: 'Runtime drift', needsWorker: false },
-      { label: 'Control plane', needsWorker: false },
+      { label: 'Runtime assessment', needsWorker: false },
       { label: 'Rabbit topology', needsWorker: false },
       { label: 'Timeline', needsWorker: false },
-      { label: 'Manifest', needsWorker: false },
       { label: 'Cleanup plan', needsWorker: false },
     ];
     windowMessageHandler!({
@@ -695,7 +693,7 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
     assert.ok(swarmTools);
     assert.deepEqual(findAll(swarmTools, element => element.tagName === 'button')
       .map(item => item.getAttribute('aria-label')), [
-      'Workers', 'Runtime drift', 'Control plane', 'Rabbit topology', 'Timeline', 'Manifest',
+      'Workers', 'Runtime assessment', 'Rabbit topology', 'Timeline',
     ]);
     const maintenance = findFirst(app, element => element.className.includes('debug-maintenance'));
     assert.ok(maintenance);
@@ -704,6 +702,26 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
     assert.ok(findFirst(maintenance, element => element.textContent === 'Plan only'));
     assert.equal(findFirst(app, element => element.className.includes('debug-group')), null,
       'the redesigned Debug page must not retain the disjointed disclosure stack');
+
+    windowMessageHandler!({ data: { type: 'viewModel', model: {
+      ...workspaceModel,
+      activeTab: 'Debug',
+      debugSwarmId: 'checkout-load',
+      debugAction: 'Runtime assessment',
+      debugResult: {
+        assessmentContractVersion: '1',
+        overall: 'DRIFTED',
+        checks: [
+          { check: 'REGISTRY', state: 'CONSISTENT', summary: 'Exact swarm is registered.' },
+          { check: 'RUNTIME_INVENTORY', state: 'DRIFTED', summary: 'One runtime is missing.' },
+        ],
+      },
+      debugActions,
+    } } });
+    assert.ok(findFirst(app, element => element.textContent === 'Runtime assessment'));
+    assert.ok(findFirst(app, element => element.textContent === 'DRIFTED'));
+    assert.ok(findFirst(app, element => element.textContent === 'RUNTIME INVENTORY'));
+    assert.ok(findFirst(app, element => element.textContent === 'One runtime is missing.'));
 
     windowMessageHandler!({ data: { type: 'viewModel', model: {
       ...workspaceModel,

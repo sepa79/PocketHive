@@ -42,6 +42,7 @@ const config: Config = {
             "architecture/**",
             "scenarios/**",
             "sdk/**",
+            "mcp/README.md",
             "control-plane/worker-guide.md",
             "ARCHITECTURE.md",
             "USAGE.md",

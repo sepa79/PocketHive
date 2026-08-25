@@ -22,7 +22,7 @@ const root = path.resolve(import.meta.dirname, '..');
 const auditDirectory = path.resolve(root, 'reports', 'playwright-ui');
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const endpoint = 'http://localhost:8088/mcp';
-const redirectUri = 'http://127.0.0.1:57548/callback';
+const redirectUri = 'http://127.0.0.1:52000/callback';
 const connectionScopes = [...POCKETHIVE_COMPANION_SCOPES];
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'];
 const findings = [];
@@ -58,11 +58,9 @@ try {
       { label: 'Logs', needsWorker: true },
       { label: 'Version', needsWorker: true },
       { label: 'Inspect', needsWorker: true },
-      { label: 'Runtime drift', needsWorker: false },
-      { label: 'Control plane', needsWorker: false },
+      { label: 'Runtime assessment', needsWorker: false },
       { label: 'Rabbit topology', needsWorker: false },
       { label: 'Timeline', needsWorker: false },
-      { label: 'Manifest', needsWorker: false },
       { label: 'Cleanup plan', needsWorker: false },
     ],
     swarmOperations: { START: 'START', STOP: 'STOP', REMOVE: 'REMOVE' },
@@ -809,7 +807,7 @@ try {
   assert.equal(await page.locator('.debug-runtime-target .debug-evidence').count(), 1,
     'worker evidence must remain adjacent to the selected worker diagnostic');
   assert.deepEqual(await page.locator('.debug-swarm-tools .button').allTextContents(),
-    ['Workers', 'Runtime drift', 'Control plane', 'Rabbit topology', 'Timeline', 'Manifest']);
+    ['Workers', 'Runtime assessment', 'Rabbit topology', 'Timeline']);
   assert.equal(await page.locator('.debug-maintenance').getByText('Plan only', { exact: true }).count(), 1,
     'cleanup must remain a visibly plan-only maintenance action');
   assert.equal(await page.locator('.debug-group').count(), 0,
@@ -973,6 +971,8 @@ try {
     serverVersion: local.evidence.serverVersion,
     principalLabel: local.evidence.principalLabel,
     toolCount: local.toolCount,
+    scenarioCapabilitiesProbe: local.scenarioCapabilitiesProbe,
+    disposableRuntimeProbe: local.disposableRuntimeProbe,
     journalRunsProbe: local.journalRunsProbe,
     runtimeDiagnosticsProbe: local.runtimeDiagnosticsProbe,
     debugTapProbe: local.debugTapProbe,
@@ -989,6 +989,8 @@ try {
     serverVersion: report.serverVersion,
     principalLabel: report.principalLabel,
     toolCount: report.toolCount,
+    scenarioCapabilitiesProbe: report.scenarioCapabilitiesProbe,
+    disposableRuntimeProbe: report.disposableRuntimeProbe,
     journalRunsProbe: report.journalRunsProbe,
     runtimeDiagnosticsProbe: report.runtimeDiagnosticsProbe,
     debugTapProbe: report.debugTapProbe,
@@ -1290,7 +1292,9 @@ async function connectLocalMcp(browser) {
   const toolList = await client.listTools();
   const tools = Array.isArray(toolList?.tools) ? toolList.tools : [];
   const toolNames = new Set(tools.map(tool => tool?.name).filter(name => typeof name === 'string'));
-  assert.equal(tools.length >= 50, true, 'live MCP must expose the expected full tool catalogue');
+  assert.equal(tools.length, 59, 'live MCP must expose the immutable complete tool catalogue');
+  assert.equal(tools.every(tool => tool?.outputSchema?.type || tool?.outputSchema?.oneOf), true,
+    'every live MCP tool must declare one explicit output root contract');
   for (const requiredTool of [
     'scenario_list',
     'scenario_templates_catalog',
@@ -1310,6 +1314,10 @@ async function connectLocalMcp(browser) {
     'runtime_tail_worker_logs',
     'runtime_inspect_worker',
     'runtime_get_worker_version',
+    'runtime_assess_swarm',
+    'runtime_diff_swarm_runtime',
+    'runtime_control_plane_status',
+    'runtime_manifest_validate',
   ]) {
     assert.equal(toolNames.has(requiredTool), true, `live MCP catalogue must expose ${requiredTool}`);
   }
@@ -1324,6 +1332,32 @@ async function connectLocalMcp(browser) {
   assert.deepEqual(debugTapReadTool?.inputSchema?.properties?.drain,
     { type: 'integer', minimum: 0, maximum: 1000 },
     'debug_tap_read drain must be a bounded non-negative integer');
+  const scenarioCapabilitiesTool = tools.find(tool => tool?.name === 'scenario_capabilities_get');
+  assert.deepEqual(Object.keys(scenarioCapabilitiesTool?.inputSchema?.properties ?? {}).sort(),
+    ['all', 'imageDigest', 'imageName'],
+    'scenario capabilities must expose only exact owner selectors');
+  assert.equal(Array.isArray(scenarioCapabilitiesTool?.outputSchema?.oneOf), true,
+    'scenario capabilities must declare the owner array-or-object result union');
+  const allCapabilities = await client.callTool('scenario_capabilities_get');
+  assert.equal(Array.isArray(allCapabilities), true,
+    'the characterised complete capability read must remain an array');
+  assert.equal(allCapabilities.length > 0, true,
+    'the live Scenario Manager must publish at least one worker capability');
+  const exactImageName = allCapabilities.find(item =>
+    typeof item?.image?.name === 'string' && item.image.name.trim().length > 0)?.image.name;
+  assert.equal(typeof exactImageName, 'string',
+    'a live worker capability must expose its exact owner image name');
+  const exactCapability = await client.callTool('scenario_capabilities_get', { imageName: exactImageName });
+  assert.equal(Array.isArray(exactCapability), false,
+    'an exact image-name capability read must remain one owner object');
+  assert.equal(exactCapability?.image?.name, exactImageName,
+    'the exact capability selector must reach the selected owner record');
+  const scenarioCapabilitiesProbe = {
+    allShape: 'array',
+    count: allCapabilities.length,
+    exactShape: 'object',
+    exactImageName,
+  };
   const compactReviewTool = tools.find(tool => tool?.name === 'scenario_workflow_review_prepare');
   const compactTopics = compactReviewTool?.inputSchema?.properties?.answers?.items?.properties?.topic?.enum;
   assert.equal(Array.isArray(compactTopics), true, 'compact review must publish its canonical QA topics');
@@ -1378,6 +1412,7 @@ async function connectLocalMcp(browser) {
     client.callTool('debug_hive_journal', { limit: SIDEBAR_EVENT_LIMIT }),
     client.readResource('pockethive://environment/health'),
   ]);
+  const disposableRuntimeProbe = await probeDisposableRuntime(client, scenarios);
   const buzzBytes = Buffer.byteLength(JSON.stringify(buzz));
   const eventPresentation = new EventPagePresentation();
   const presentedBuzz = eventPresentation.replace(buzz);
@@ -1519,6 +1554,8 @@ async function connectLocalMcp(browser) {
     environmentHealth,
     journal,
     toolCount: tools.length,
+    scenarioCapabilitiesProbe,
+    disposableRuntimeProbe,
     journalRunsProbe,
     runtimeDiagnosticsProbe,
     debugTapProbe,
@@ -1545,6 +1582,164 @@ async function connectLocalMcp(browser) {
       }
     },
   };
+}
+
+async function probeDisposableRuntime(client, scenarios) {
+  const templateId = 'capability-controls-io-matrix';
+  assert.equal(scenarios.some?.(scenario => scenario?.id === templateId && scenario?.defunct !== true), true,
+    `live Scenario Manager must expose the ${templateId} acceptance template`);
+  const swarmId = `mcp-acceptance-${randomBytes(6).toString('hex')}`;
+  const key = action => `${swarmId}-${action}`;
+  let created = false;
+  try {
+    await client.callTool('swarm_create', {
+      swarmId,
+      templateId,
+      idempotencyKey: key('create'),
+    });
+    created = true;
+    const ready = await pollUntil('disposable swarm readiness',
+      () => client.callTool('swarm_wait_ready', { swarmId }),
+      value => value?.ready === true);
+    assert.equal(ready?.swarmStatus, 'READY');
+
+    const beforePreview = await client.callTool('swarm_get', { swarmId });
+    const observedWorker = beforePreview?.observation?.workers?.find(worker =>
+      typeof worker?.role === 'string'
+      && typeof worker?.instance === 'string'
+      && worker?.config
+      && typeof worker.config === 'object'
+      && !Array.isArray(worker.config));
+    assert.ok(observedWorker, 'a ready disposable swarm must expose an exact observed worker config');
+    const preview = await client.callTool('component_config_preview', {
+      swarmId,
+      role: observedWorker.role,
+      instanceId: observedWorker.instance,
+      patch: { enabled: false },
+    });
+    assert.equal(preview?.sideEffect, 'NONE', 'component config preview must declare no side effect');
+    assert.deepEqual(preview?.target, {
+      swarmId,
+      role: observedWorker.role,
+      instance: observedWorker.instance,
+    });
+    assert.equal(preview?.effectiveConfig?.enabled, false,
+      'component config preview must return the deterministic effective patch');
+    const afterPreview = await client.callTool('swarm_get', { swarmId });
+    const afterWorker = afterPreview?.observation?.workers?.find(worker =>
+      worker?.role === observedWorker.role && worker?.instance === observedWorker.instance);
+    assert.deepEqual(afterWorker?.config, observedWorker.config,
+      'component config preview must not mutate the owner observation');
+
+    const assessment = await client.callTool('runtime_assess_swarm', { swarmId });
+    assert.equal(assessment?.assessmentContractVersion, '1');
+    assert.equal(['CONSISTENT', 'DRIFTED', 'INCOMPLETE'].includes(assessment?.overall), true,
+      'runtime assessment must return one canonical typed conclusion');
+    assert.deepEqual(assessment?.checks?.map(check => check?.check), [
+      'REGISTRY',
+      'CONTROL_PLANE',
+      'OWNERSHIP_MANIFEST',
+      'RUNTIME_INVENTORY',
+      'RABBIT_TOPOLOGY',
+    ], 'runtime assessment must preserve the complete owner check order');
+    for (const compatibilityTool of [
+      'runtime_diff_swarm_runtime',
+      'runtime_control_plane_status',
+      'runtime_manifest_validate',
+    ]) {
+      const compatibility = await client.callTool(compatibilityTool, { swarmId });
+      for (const field of [
+        'assessmentContractVersion', 'overall', 'swarmId', 'runId', 'checks',
+        'swarm', 'resources', 'manifest', 'rabbitTopology',
+      ]) {
+        assert.deepEqual(compatibility?.[field], assessment?.[field],
+          `${compatibilityTool} must remain a projection of the canonical assessment`);
+      }
+    }
+
+    await client.callTool('swarm_start', { swarmId, idempotencyKey: key('start') });
+    await pollUntil('disposable swarm running state',
+      () => client.callTool('swarm_get', { swarmId }),
+      value => value?.workloadState === 'RUNNING' && value?.observationStale === false);
+    const safePlan = await client.callTool('runtime_cleanup_plan', {
+      swarmId,
+      includeRunning: false,
+      includeRabbit: false,
+    });
+    assert.equal(safePlan?.blocked?.some(candidate =>
+      candidate?.action === 'LIFECYCLE_REMOVE_SWARM'
+      && candidate?.reason === 'active registered swarm requires includeRunning=true'), true,
+    'active cleanup must block canonical swarm removal unless includeRunning is explicit');
+    const runningPlan = await client.callTool('runtime_cleanup_plan', {
+      swarmId,
+      includeRunning: true,
+      includeRabbit: false,
+    });
+    const lifecycleCandidate = runningPlan?.candidates?.find(candidate =>
+      candidate?.action === 'LIFECYCLE_REMOVE_SWARM');
+    assert.equal(lifecycleCandidate?.running, true,
+      'an explicitly included active swarm must remain marked running');
+    assert.equal(lifecycleCandidate?.highRisk, true,
+      'an explicitly included active swarm must remain marked high risk');
+
+    await client.callTool('swarm_stop', { swarmId, idempotencyKey: key('stop') });
+    await waitForStoppedIdleSwarm(client, swarmId, 'disposable swarm stopped state');
+    await client.callTool('swarm_remove', { swarmId, idempotencyKey: key('remove') });
+    await pollUntil('disposable swarm removal',
+      () => client.callTool('swarm_list'),
+      value => Array.isArray(value) && !value.some(swarm => swarm?.id === swarmId));
+    created = false;
+    return {
+      swarmId,
+      templateId,
+      readiness: 'READY',
+      configPreview: 'NO_MUTATION',
+      assessment: assessment.overall,
+      assessmentChecks: assessment.checks.map(check => ({
+        check: check.check,
+        state: check.state,
+        differenceKinds: Array.isArray(check.differences)
+          ? check.differences.map(difference => difference?.kind)
+          : [],
+      })),
+      compatibilityTools: 3,
+      includeRunningFalse: 'BLOCKED',
+      includeRunningTrue: 'HIGH_RISK',
+      removed: true,
+    };
+  } catch (error) {
+    if (created) await removeDisposableSwarm(client, swarmId, key).catch(() => undefined);
+    throw error;
+  }
+}
+
+async function removeDisposableSwarm(client, swarmId, key) {
+  const swarm = await client.callTool('swarm_get', { swarmId }).catch(() => undefined);
+  if (!swarm) return;
+  if (swarm.workloadState !== 'STOPPED') {
+    await client.callTool('swarm_stop', { swarmId, idempotencyKey: key('cleanup-stop') }).catch(() => undefined);
+  }
+  await waitForStoppedIdleSwarm(client, swarmId, 'failed-probe swarm stopped state');
+  await client.callTool('swarm_remove', { swarmId, idempotencyKey: key('cleanup-remove') });
+}
+
+async function waitForStoppedIdleSwarm(client, swarmId, label) {
+  return pollUntil(label,
+    () => client.callTool('swarm_get', { swarmId }),
+    value => value?.workloadState === 'STOPPED'
+      && value?.observationStale === false
+      && value?.activeOperation == null);
+}
+
+async function pollUntil(label, read, accept, timeoutMs = 60_000) {
+  const deadline = Date.now() + timeoutMs;
+  let last;
+  while (Date.now() < deadline) {
+    last = await read();
+    if (accept(last)) return last;
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  throw new Error(`${label} timed out; last=${JSON.stringify(last)?.slice(0, 1000)}`);
 }
 
 async function inspectAuthPage(page, state, screenshotName) {
