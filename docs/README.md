@@ -60,5 +60,6 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## MCP and IDE integrations
 
+- [Local MCP and VS Code quick start](USAGE.md#local-mcp-and-vs-code-quick-start)
 - [PocketHive MCP](mcp/README.md)
 - [PocketHive VS Code extension](../vscode-pockethive/README.md)

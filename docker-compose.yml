@@ -250,6 +250,8 @@ services:
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: ${POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET:-pockethive-mcp-local-service-secret}
       POCKETHIVE_AUTH_OAUTH_ISSUER: http://localhost:8088/auth-service
       POCKETHIVE_AUTH_OAUTH_RESOURCE: http://localhost:8088/mcp
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
       POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: ${POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET:-pockethive-mcp-local-introspection-secret}
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
@@ -266,7 +268,6 @@ services:
       PH_MCP_POCKETHIVE_INGRESS: http://localhost:8088
       PH_MCP_OWNER_API_BASE: http://ui:8088
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
-      PH_MCP_PROTOCOL_REVISION: "2025-11-25"
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
       PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool

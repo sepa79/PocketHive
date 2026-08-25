@@ -17,6 +17,7 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -28,6 +29,7 @@ public final class BundleUploadCoordinator {
     private final ZipBundleInspector inspector;
     private final CoordinationStateRepository stateRepository;
     private final BundleUploadLifecycle lifecycle;
+    private final UploadCapabilityAuthority uploadCapabilities;
     private final Map<String, BundleUploadTicket> tickets = new ConcurrentHashMap<>();
     private final Map<String, BundleValidationReceipt> receipts = new ConcurrentHashMap<>();
     private final Map<String, PublicationAttempt> attempts = new ConcurrentHashMap<>();
@@ -35,13 +37,16 @@ public final class BundleUploadCoordinator {
     private final AtomicInteger concurrentUploads = new AtomicInteger();
     private final AtomicLong reservedSpoolBytes = new AtomicLong();
 
+    @Autowired
     public BundleUploadCoordinator(ScenarioBundleOwnerPort owner, PocketHiveMcpProperties properties,
                                    CoordinationStateRepository stateRepository,
-                                   BundleUploadLifecycle lifecycle) {
+                                   BundleUploadLifecycle lifecycle,
+                                   UploadCapabilityAuthority uploadCapabilities) {
         this.owner = owner;
         this.properties = properties;
         this.stateRepository = stateRepository;
         this.lifecycle = lifecycle;
+        this.uploadCapabilities = uploadCapabilities;
         this.inspector = new ZipBundleInspector(properties.maxArchiveFiles(),
             properties.maxArchiveExpandedBytes(), properties.maxArchiveNesting(),
             properties.maxArchiveCompressionRatio());
@@ -49,27 +54,45 @@ public final class BundleUploadCoordinator {
         restoreAndRecover();
     }
 
+    BundleUploadCoordinator(ScenarioBundleOwnerPort owner, PocketHiveMcpProperties properties,
+                            CoordinationStateRepository stateRepository,
+                            BundleUploadLifecycle lifecycle) {
+        this(owner, properties, stateRepository, lifecycle, new UploadCapabilityAuthority());
+    }
+
     public ValidationUploadTicket prepareValidation(PrincipalKey principal, String workflowId,
                                                      SourceMetadata source, BundleFileManifest manifest,
                                                      Instant now) {
+        return prepareValidationWithCapability(principal, workflowId, source, manifest, now).ticket();
+    }
+
+    public PreparedUpload<ValidationUploadTicket> prepareValidationWithCapability(
+        PrincipalKey principal, String workflowId, SourceMetadata source, BundleFileManifest manifest,
+        Instant now) {
         return prepareValidation(principal, UploadWorkflowBinding.workflow(workflowId), source, manifest, now);
     }
 
     public ValidationUploadTicket prepareDirectValidation(PrincipalKey principal,
                                                            SourceMetadata source, BundleFileManifest manifest,
                                                            Instant now) {
+        return prepareDirectValidationWithCapability(principal, source, manifest, now).ticket();
+    }
+
+    public PreparedUpload<ValidationUploadTicket> prepareDirectValidationWithCapability(
+        PrincipalKey principal, SourceMetadata source, BundleFileManifest manifest, Instant now) {
         return prepareValidation(principal, UploadWorkflowBinding.direct(), source, manifest, now);
     }
 
-    private ValidationUploadTicket prepareValidation(PrincipalKey principal, UploadWorkflowBinding binding,
-                                                      SourceMetadata source, BundleFileManifest manifest,
-                                                      Instant now) {
+    private PreparedUpload<ValidationUploadTicket> prepareValidation(
+        PrincipalKey principal, UploadWorkflowBinding binding, SourceMetadata source,
+        BundleFileManifest manifest, Instant now) {
         maintain(now);
+        IssuedUploadCapability capability = uploadCapabilities.issue();
         ValidationUploadTicket ticket = new ValidationUploadTicket(id("uv"), principal, binding,
-            source, manifest, now.plus(properties.uploadTicketTtl()));
+            source, manifest, capability.digest(), now.plus(properties.uploadTicketTtl()));
         tickets.put(ticket.id(), ticket);
         persistOrRestore();
-        return ticket;
+        return new PreparedUpload<>(ticket, capability.value());
     }
 
     public PublicationUploadTicket preparePublication(PrincipalKey principal, String validationReceiptId,
@@ -77,6 +100,14 @@ public final class BundleUploadCoordinator {
                                                        SourceMetadata source, BundleFileManifest manifest,
                                                        String expectedArchiveDigest,
                                                        String expectedContentDigest, Instant now) {
+        return preparePublicationWithCapability(principal, validationReceiptId, mode, scenarioId, source,
+            manifest, expectedArchiveDigest, expectedContentDigest, now).ticket();
+    }
+
+    public PreparedUpload<PublicationUploadTicket> preparePublicationWithCapability(
+        PrincipalKey principal, String validationReceiptId, PublicationMode mode, String scenarioId,
+        SourceMetadata source, BundleFileManifest manifest, String expectedArchiveDigest,
+        String expectedContentDigest, Instant now) {
         maintain(now);
         BundleValidationReceipt receipt = receipt(validationReceiptId, principal);
         if (!receipt.source().equals(source) || !receipt.manifest().equals(manifest)
@@ -88,13 +119,21 @@ public final class BundleUploadCoordinator {
         String reconciliationScenarioId = mode == PublicationMode.CREATE ? receipt.scenarioId() : scenarioId;
         PublicationAttempt attempt = new PublicationAttempt(attemptId, principal, mode, reconciliationScenarioId,
             expectedContentDigest, now);
+        IssuedUploadCapability capability = uploadCapabilities.issue();
         PublicationUploadTicket ticket = new PublicationUploadTicket(id("up"), principal,
-            receipt.workflowBinding(), source, manifest, now.plus(properties.uploadTicketTtl()), attemptId,
+            receipt.workflowBinding(), source, manifest, capability.digest(),
+            now.plus(properties.uploadTicketTtl()), attemptId,
             receipt.id(), expectedArchiveDigest, expectedContentDigest, mode, scenarioId);
         attempts.put(attemptId, attempt);
         tickets.put(ticket.id(), ticket);
         persistOrRestore();
-        return ticket;
+        return new PreparedUpload<>(ticket, capability.value());
+    }
+
+    public UploadOutcome receiveWithCapability(String ticketId, String uploadCapability, String contentType,
+                                               long contentLength, InputStream input, Instant now) {
+        BundleUploadTicket ticket = authenticateCapability(ticketId, uploadCapability);
+        return receive(ticketId, ticket.principal(), contentType, contentLength, input, now);
     }
 
     public UploadOutcome receive(String ticketId, PrincipalKey principal, String contentType,
@@ -219,6 +258,14 @@ public final class BundleUploadCoordinator {
         concurrentUploads.incrementAndGet();
         principalCount.incrementAndGet();
         reservedSpoolBytes.addAndGet(contentLength);
+        return ticket;
+    }
+
+    private BundleUploadTicket authenticateCapability(String ticketId, String uploadCapability) {
+        BundleUploadTicket ticket = tickets.get(ticketId);
+        if (ticket == null || !uploadCapabilities.matches(uploadCapability, ticket.uploadCapabilityDigest())) {
+            throw new UploadAuthenticationException("UPLOAD_AUTHENTICATION_REQUIRED");
+        }
         return ticket;
     }
 

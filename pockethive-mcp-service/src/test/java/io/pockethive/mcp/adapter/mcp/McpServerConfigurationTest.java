@@ -35,10 +35,9 @@ class McpServerConfigurationTest {
                 EnvironmentHealthContract.PLAIN_OK)),
             target -> true,
             Clock.systemUTC());
-        McpKnowledgeResources resources = new McpKnowledgeResources(
-            catalogue, environmentHealth, properties, objectMapper, Clock.systemUTC());
-
         HttpServletStreamableServerTransportProvider transport = configuration.transport(objectMapper, properties);
+        McpKnowledgeResources resources = new McpKnowledgeResources(
+            catalogue, environmentHealth, properties, objectMapper, Clock.systemUTC(), transport);
         Properties buildValues = new Properties();
         buildValues.setProperty("version", "9.8.7-test");
         McpSyncServer server = configuration.server(transport, catalogue, resources,
@@ -66,7 +65,7 @@ class McpServerConfigurationTest {
     private static PocketHiveMcpProperties properties() {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, "2025-11-25", PocketHiveMcpProperties.StateMode.MEMORY,
+            ingress, ingress, PocketHiveMcpProperties.StateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"), Duration.ofMinutes(30),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5),
             100, 10, 100, 10, 10_000_000, 2, 10,

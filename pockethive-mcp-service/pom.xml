@@ -190,11 +190,15 @@
             <param>io.pockethive.mcp.domain.*</param>
             <param>io.pockethive.mcp.application.*</param>
             <param>io.pockethive.mcp.adapter.persistence.CoordinationStateSchema</param>
+            <param>io.pockethive.mcp.security.McpAuthenticationEntryPoint</param>
+            <param>io.pockethive.mcp.security.ProtectedResourceMetadataController</param>
+            <param>io.pockethive.mcp.security.McpProtocolSecurityFilter</param>
           </targetClasses>
           <targetTests>
             <param>io.pockethive.mcp.domain.*Test</param>
             <param>io.pockethive.mcp.application.*Test</param>
             <param>io.pockethive.mcp.adapter.persistence.AtomicCoordinationStateRepositoryTest</param>
+            <param>io.pockethive.mcp.security.*Test</param>
           </targetTests>
         </configuration>
       </plugin>

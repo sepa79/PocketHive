@@ -2,6 +2,7 @@ package io.pockethive.mcp.domain;
 
 import java.util.Collections;
 import java.util.EnumMap;
+import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 
@@ -54,6 +55,26 @@ public final class ScenarioWorkflow {
     public void answer(long expectedRevision, QaRequirementTopic topic, RequirementAnswer answer) {
         requireMutable();
         requireRevision(expectedRevision);
+        validateAnswer(expectedRevision, topic, answer);
+        requirements.put(topic, answer);
+        finishAnswerMutation();
+    }
+
+    public void answerAll(long expectedRevision, Map<QaRequirementTopic, RequirementAnswer> answers) {
+        requireMutable();
+        requireRevision(expectedRevision);
+        Objects.requireNonNull(answers, "answers");
+        if (!answers.keySet().equals(EnumSet.allOf(QaRequirementTopic.class))) {
+            throw new WorkflowRuleViolation("WORKFLOW_REQUIREMENT_SET_INCOMPLETE");
+        }
+        for (QaRequirementTopic topic : QaRequirementTopic.values()) {
+            validateAnswer(expectedRevision, topic, answers.get(topic));
+        }
+        requirements.putAll(answers);
+        finishAnswerMutation();
+    }
+
+    private void validateAnswer(long expectedRevision, QaRequirementTopic topic, RequirementAnswer answer) {
         Objects.requireNonNull(topic, "topic");
         Objects.requireNonNull(answer, "answer");
         if (answer.disposition() == RequirementDisposition.UNKNOWN || answer.provenance() == null) {
@@ -72,7 +93,9 @@ public final class ScenarioWorkflow {
         if (provenance.workflowRevision() != expectedRevision) {
             throw new WorkflowRuleViolation("ELICITATION_REVISION_MISMATCH");
         }
-        requirements.put(topic, answer);
+    }
+
+    private void finishAnswerMutation() {
         invalidateDownstream();
         state = hasUnknownRequirement() ? ScenarioWorkflowState.DISCOVERING : ScenarioWorkflowState.REVIEW_REQUIRED;
         revision++;

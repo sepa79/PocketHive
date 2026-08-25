@@ -12,6 +12,7 @@ public record UploadTicketSnapshot(
     UploadWorkflowBinding workflowBinding,
     SourceMetadata source,
     BundleFileManifest manifest,
+    String uploadCapabilityDigest,
     Instant expiresAt,
     UploadTicketState state,
     String attemptId,
@@ -24,12 +25,14 @@ public record UploadTicketSnapshot(
     public static UploadTicketSnapshot from(BundleUploadTicket ticket) {
         if (ticket instanceof PublicationUploadTicket publication) {
             return new UploadTicketSnapshot(UploadTicketPurpose.PUBLICATION, ticket.id(), ticket.principal(),
-                ticket.workflowBinding(), ticket.source(), ticket.manifest(), ticket.expiresAt(), ticket.state(),
+                ticket.workflowBinding(), ticket.source(), ticket.manifest(), ticket.uploadCapabilityDigest(),
+                ticket.expiresAt(), ticket.state(),
                 publication.attemptId(), publication.validationReceiptId(), publication.expectedArchiveDigest(),
                 publication.expectedContentDigest(), publication.mode(), publication.scenarioId());
         }
         return new UploadTicketSnapshot(UploadTicketPurpose.VALIDATION, ticket.id(), ticket.principal(),
-            ticket.workflowBinding(), ticket.source(), ticket.manifest(), ticket.expiresAt(), ticket.state(),
+            ticket.workflowBinding(), ticket.source(), ticket.manifest(), ticket.uploadCapabilityDigest(),
+            ticket.expiresAt(), ticket.state(),
             null, null, null, null, null, null);
     }
 

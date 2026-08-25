@@ -304,6 +304,8 @@ services:
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_mcp_service_secret }}
       POCKETHIVE_AUTH_OAUTH_ISSUER: {{ pockethive_public_ingress }}/auth-service
       POCKETHIVE_AUTH_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
       POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_mcp_introspection_secret }}
     ports:
       - target: 8080
@@ -326,7 +328,6 @@ services:
       PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}
       PH_MCP_OWNER_API_BASE: http://ui:8088
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
-      PH_MCP_PROTOCOL_REVISION: "2025-11-25"
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
       PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool

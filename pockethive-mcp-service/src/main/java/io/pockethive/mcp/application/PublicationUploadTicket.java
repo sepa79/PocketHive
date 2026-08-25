@@ -12,6 +12,7 @@ public final class PublicationUploadTicket implements BundleUploadTicket {
     private final UploadWorkflowBinding workflowBinding;
     private final SourceMetadata source;
     private final BundleFileManifest manifest;
+    private final String uploadCapabilityDigest;
     private final Instant expiresAt;
     private final String attemptId;
     private final String validationReceiptId;
@@ -22,7 +23,8 @@ public final class PublicationUploadTicket implements BundleUploadTicket {
     private UploadTicketState state = UploadTicketState.PREPARED;
 
     public PublicationUploadTicket(String id, PrincipalKey principal, UploadWorkflowBinding workflowBinding,
-                                   SourceMetadata source, BundleFileManifest manifest, Instant expiresAt,
+                                   SourceMetadata source, BundleFileManifest manifest, String uploadCapabilityDigest,
+                                   Instant expiresAt,
                                    String attemptId, String validationReceiptId, String expectedArchiveDigest,
                                    String expectedContentDigest, PublicationMode mode, String scenarioId) {
         this.id = Objects.requireNonNull(id);
@@ -30,6 +32,7 @@ public final class PublicationUploadTicket implements BundleUploadTicket {
         this.workflowBinding = Objects.requireNonNull(workflowBinding);
         this.source = Objects.requireNonNull(source);
         this.manifest = Objects.requireNonNull(manifest);
+        this.uploadCapabilityDigest = UploadCapabilityAuthority.requireDigest(uploadCapabilityDigest);
         this.expiresAt = Objects.requireNonNull(expiresAt);
         this.attemptId = Objects.requireNonNull(attemptId);
         this.validationReceiptId = Objects.requireNonNull(validationReceiptId);
@@ -47,7 +50,8 @@ public final class PublicationUploadTicket implements BundleUploadTicket {
 
     static PublicationUploadTicket restore(UploadTicketSnapshot snapshot) {
         PublicationUploadTicket ticket = new PublicationUploadTicket(snapshot.id(), snapshot.principal(),
-            snapshot.workflowBinding(), snapshot.source(), snapshot.manifest(), snapshot.expiresAt(),
+            snapshot.workflowBinding(), snapshot.source(), snapshot.manifest(), snapshot.uploadCapabilityDigest(),
+            snapshot.expiresAt(),
             snapshot.attemptId(), snapshot.validationReceiptId(), snapshot.expectedArchiveDigest(),
             snapshot.expectedContentDigest(), snapshot.publicationMode(), snapshot.scenarioId());
         ticket.state = snapshot.state();
@@ -59,6 +63,7 @@ public final class PublicationUploadTicket implements BundleUploadTicket {
     @Override public UploadWorkflowBinding workflowBinding() { return workflowBinding; }
     @Override public SourceMetadata source() { return source; }
     @Override public BundleFileManifest manifest() { return manifest; }
+    @Override public String uploadCapabilityDigest() { return uploadCapabilityDigest; }
     @Override public Instant expiresAt() { return expiresAt; }
     @Override public UploadTicketState state() { return state; }
     public String attemptId() { return attemptId; }

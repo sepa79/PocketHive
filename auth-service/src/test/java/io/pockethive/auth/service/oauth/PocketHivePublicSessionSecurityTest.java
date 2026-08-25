@@ -54,7 +54,7 @@ class PocketHivePublicSessionSecurityTest {
         for (Set<String> scopes : List.of(
                 Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ),
                 Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
-                    PocketHiveMcpScopes.OPERATE, PocketHiveMcpScopes.AUTHOR),
+                    PocketHiveMcpScopes.AUTHOR),
                 Set.copyOf(PocketHiveMcpScopes.COMPANION_ORDERED))) {
             OAuth2TokenContext context = tokenContext(OAuth2TokenType.REFRESH_TOKEN, scopes);
             OAuth2RefreshToken first = generator.generate(context);
@@ -80,7 +80,8 @@ class PocketHivePublicSessionSecurityTest {
             Set.of(PocketHiveMcpScopes.DISCOVER)))).isNull();
         assertThat(generator.generate(tokenContext(
             OAuth2TokenType.REFRESH_TOKEN,
-            Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ, PocketHiveMcpScopes.OPERATE)))).isNull();
+            Set.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ,
+                PocketHiveMcpScopes.CLEANUP)))).isNull();
     }
 
     @Test
@@ -119,15 +120,15 @@ class PocketHivePublicSessionSecurityTest {
     }
 
     @Test
-    void companionConverterNarrowsOnlyTheExactAuthenticatedCompanionIntent() {
-        PocketHiveCompanionAuthorizationRequestConverter converter =
-            new PocketHiveCompanionAuthorizationRequestConverter(CLIENT_ID, users("viewer", true));
+    void interactiveConverterNarrowsEveryAuthenticatedNonCleanupIntent() {
+        PocketHiveInteractiveAuthorizationRequestConverter converter =
+            new PocketHiveInteractiveAuthorizationRequestConverter(users("viewer", true));
         Authentication viewer = UsernamePasswordAuthenticationToken.authenticated("viewer", "", List.of());
 
         assertThat(convert(converter, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED, viewer).getScopes())
             .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
         assertThat(convert(converter, "other-client", PocketHiveMcpScopes.COMPANION_ORDERED, viewer).getScopes())
-            .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION);
+            .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
         assertThat(convert(converter, CLIENT_ID,
             List.of(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ), viewer).getScopes())
             .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ);
@@ -136,22 +137,20 @@ class PocketHivePublicSessionSecurityTest {
     }
 
     @Test
-    void companionConverterKeepsUnknownOrInactivePrincipalsForCanonicalValidationAndRejectsInvalidConstruction() {
+    void interactiveConverterKeepsUnknownOrInactivePrincipalsForCanonicalValidation() {
         Authentication unknown = UsernamePasswordAuthenticationToken.authenticated("unknown", "", List.of());
-        PocketHiveCompanionAuthorizationRequestConverter active =
-            new PocketHiveCompanionAuthorizationRequestConverter(CLIENT_ID, users("viewer", true));
-        PocketHiveCompanionAuthorizationRequestConverter inactive =
-            new PocketHiveCompanionAuthorizationRequestConverter(CLIENT_ID, users("viewer", false));
+        PocketHiveInteractiveAuthorizationRequestConverter active =
+            new PocketHiveInteractiveAuthorizationRequestConverter(users("viewer", true));
+        PocketHiveInteractiveAuthorizationRequestConverter inactive =
+            new PocketHiveInteractiveAuthorizationRequestConverter(users("viewer", false));
 
         assertThat(convert(active, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED, unknown).getScopes())
             .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION);
         assertThat(convert(inactive, CLIENT_ID, PocketHiveMcpScopes.COMPANION_ORDERED,
             UsernamePasswordAuthenticationToken.authenticated("viewer", "", List.of())).getScopes())
             .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION);
-        assertThatThrownBy(() -> new PocketHiveCompanionAuthorizationRequestConverter(" ", users("viewer", true)))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessage("OAUTH_COMPANION_CLIENT_ID_REQUIRED");
-        assertThatThrownBy(() -> new PocketHiveCompanionAuthorizationRequestConverter(CLIENT_ID, null))
+        assertThat(convert(active, CLIENT_ID, List.of(), unknown).getScopes()).isEmpty();
+        assertThatThrownBy(() -> new PocketHiveInteractiveAuthorizationRequestConverter(null))
             .isInstanceOf(NullPointerException.class).hasMessage("users");
     }
 
@@ -270,7 +269,7 @@ class PocketHivePublicSessionSecurityTest {
     }
 
     private static OAuth2AuthorizationCodeRequestAuthenticationToken convert(
-        PocketHiveCompanionAuthorizationRequestConverter converter,
+        PocketHiveInteractiveAuthorizationRequestConverter converter,
         String clientId,
         List<String> scopes,
         Authentication principal

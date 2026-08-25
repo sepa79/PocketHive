@@ -658,6 +658,7 @@ details[open] > summary .disclosure-chevron { transform: rotate(90deg); }
   min-width: 0; overflow: hidden; border: 1px solid var(--ph-border); border-radius: 8px;
   background: var(--ph-surface-raised);
 }
+.debug-runtime-target { position: relative; z-index: 4; overflow: visible; }
 .debug-section__header { padding: 10px 11px 8px; border-bottom: 1px solid var(--ph-border); }
 .debug-section__header h3 { font-size: .92rem; }
 .debug-section__body { display: grid; gap: 10px; padding: 10px; }

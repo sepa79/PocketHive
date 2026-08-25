@@ -15,7 +15,7 @@ final class OAuthBrowserPageRenderer {
               <div class="auth-intro">
                 <p class="auth-eyebrow">Secure environment access</p>
                 <h1 id="auth-title">Sign in to PocketHive</h1>
-                <p>Authenticate with the selected PocketHive environment to continue in VS Code.</p>
+                <p>Authenticate with the selected PocketHive environment to continue in your MCP client.</p>
               </div>
               <form class="auth-form" method="post" action="%s">
                 <label class="auth-field" for="username">
@@ -26,12 +26,12 @@ final class OAuthBrowserPageRenderer {
                 <input type="hidden" name="%s" value="%s">
                 <button class="auth-button auth-button--primary" type="submit">Sign in</button>
               </form>
-              <p class="auth-assurance">Your session is protected by the selected environment and stored securely by VS Code.</p>
+              <p class="auth-assurance">Your session is protected by the selected environment and stored by your MCP client.</p>
             </section>
             """.formatted(brand(logo), escape(action), escape(csrfParameter), escape(csrfToken)));
     }
 
-    String consent(String action, String clientId, String resource, String state,
+    String consent(String action, String clientId, String clientName, String resource, String state,
                    String csrfParameter, String csrfToken, List<String> scopes, String stylesheet, String logo) {
         String scopeInputs = scopes.stream().map(this::scopeInput).reduce("", String::concat);
         return page("PocketHive access", stylesheet, """
@@ -61,7 +61,7 @@ final class OAuthBrowserPageRenderer {
               </form>
               <p class="auth-assurance">Only the permissions listed above will be granted. This device session renews securely without reopening sign-in for each action.</p>
             </section>
-            """.formatted(brand(logo), escape(clientDisplayName(clientId)), escape(resource), escape(action),
+            """.formatted(brand(logo), escape(clientName), escape(resource), escape(action),
             escape(clientId), escape(state), escape(csrfParameter), escape(csrfToken), scopeInputs));
     }
 
@@ -99,10 +99,6 @@ final class OAuthBrowserPageRenderer {
               <span class="auth-brand__product">MCP access</span>
             </header>
             """.formatted(escape(logo));
-    }
-
-    private static String clientDisplayName(String clientId) {
-        return "pockethive-vscode".equals(clientId) ? "PocketHive for VS Code" : clientId;
     }
 
     private static String scopeDescription(String scope) {

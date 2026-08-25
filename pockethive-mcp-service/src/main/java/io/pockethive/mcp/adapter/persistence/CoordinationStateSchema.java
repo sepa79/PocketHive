@@ -2,20 +2,31 @@ package io.pockethive.mcp.adapter.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import java.util.ArrayList;
 import java.util.HashSet;
-import java.util.List;
 import java.util.Set;
 
 final class CoordinationStateSchema {
-    static final int CURRENT_VERSION = 2;
+    static final int CURRENT_VERSION = 3;
     private static final int LEGACY_RECEIPT_VERSION = 1;
+    private static final int LEGACY_UPLOAD_AUTHENTICATION_VERSION = 2;
 
     Migration migrate(JsonNode encodedState) {
-        if (!(encodedState instanceof ObjectNode root)
-            || root.path("schemaVersion").asInt(Integer.MIN_VALUE) != LEGACY_RECEIPT_VERSION) {
+        if (!(encodedState instanceof ObjectNode root)) {
             return new Migration(encodedState, false);
         }
+        int version = root.path("schemaVersion").asInt(Integer.MIN_VALUE);
+        if (version != LEGACY_RECEIPT_VERSION && version != LEGACY_UPLOAD_AUTHENTICATION_VERSION) {
+            return new Migration(encodedState, false);
+        }
+        if (version == LEGACY_RECEIPT_VERSION) {
+            removeReceiptsWithoutOwnerIdentity(root);
+        }
+        invalidateLegacyUploadTickets(root);
+        root.put("schemaVersion", CURRENT_VERSION);
+        return new Migration(root, true);
+    }
+
+    private static void removeReceiptsWithoutOwnerIdentity(ObjectNode root) {
         JsonNode coordination = root.path("uploadCoordination");
         JsonNode receiptNode = coordination.path("receipts");
         if (!(receiptNode instanceof ObjectNode receipts)) {
@@ -30,20 +41,27 @@ final class CoordinationStateSchema {
         });
         invalidReceiptIds.forEach(receipts::remove);
 
-        JsonNode ticketNode = coordination.path("tickets");
-        if (!(ticketNode instanceof ObjectNode tickets)) {
+        if (!(coordination.path("tickets") instanceof ObjectNode)) {
             throw new IllegalStateException("MCP_STATE_CORRUPT");
         }
-        List<String> invalidTicketIds = new ArrayList<>();
-        tickets.fields().forEachRemaining(entry -> {
-            JsonNode receiptId = entry.getValue().path("validationReceiptId");
-            if (receiptId.isTextual() && invalidReceiptIds.contains(receiptId.textValue())) {
-                invalidTicketIds.add(entry.getKey());
+    }
+
+    private static void invalidateLegacyUploadTickets(ObjectNode root) {
+        JsonNode coordination = root.path("uploadCoordination");
+        JsonNode ticketNode = coordination.path("tickets");
+        JsonNode attemptNode = coordination.path("attempts");
+        if (!(ticketNode instanceof ObjectNode tickets) || !(attemptNode instanceof ObjectNode attempts)) {
+            throw new IllegalStateException("MCP_STATE_CORRUPT");
+        }
+        Set<String> invalidAttemptIds = new HashSet<>();
+        tickets.elements().forEachRemaining(ticket -> {
+            JsonNode attemptId = ticket.path("attemptId");
+            if (attemptId.isTextual() && !attemptId.textValue().isBlank()) {
+                invalidAttemptIds.add(attemptId.textValue());
             }
         });
-        invalidTicketIds.forEach(tickets::remove);
-        root.put("schemaVersion", CURRENT_VERSION);
-        return new Migration(root, true);
+        tickets.removeAll();
+        invalidAttemptIds.forEach(attempts::remove);
     }
 
     record Migration(JsonNode encodedState, boolean migrated) {

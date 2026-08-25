@@ -55,6 +55,7 @@ import {
   scanRepositoryScenarios,
 } from './repositoryScenarios';
 import { boundCompanionViewModel, redactSensitiveValues } from './viewModelBoundary';
+import { VisibleAutoRefresh } from './visibleAutoRefresh';
 import { resolvePocketHiveWebUiUrl, WebUiDestination } from './webUiNavigation';
 import { SIDEBAR_EVENT_LIMIT, workspaceToolCall } from './workspaceTool';
 import {
@@ -75,6 +76,28 @@ const REAUTHENTICATION_REQUIRED_CODES = new Set([
   'OAUTH_SESSION_NOT_RENEWABLE',
   'OAUTH_TOKEN_RESPONSE_INVALID',
 ]);
+const TAB_REFRESH_MODES = Object.freeze({
+  FOREGROUND: 'FOREGROUND',
+  BACKGROUND: 'BACKGROUND',
+} as const);
+type TabRefreshMode = typeof TAB_REFRESH_MODES[keyof typeof TAB_REFRESH_MODES];
+
+interface ActiveTabRead {
+  readonly tab: CompanionTab;
+  readonly journalSwarmId?: string;
+  readonly journalRunId?: string;
+}
+
+type JournalRead =
+  | { readonly state: 'NOT_REQUESTED' }
+  | { readonly state: 'SUCCESS'; readonly ownerData: unknown }
+  | { readonly state: 'FAILED'; readonly error: unknown };
+
+interface ActiveTabSnapshot {
+  readonly ownerData: unknown;
+  readonly environmentHealth: unknown;
+  readonly journal: JournalRead;
+}
 
 interface ProfileRow extends McpConnectionProfile {
   readonly status: LiveStatus;
@@ -141,6 +164,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private readonly live = new Map<string, { status: LiveStatus; evidence?: ConnectionEvidence }>();
   private readonly currentView = new CurrentView<vscode.WebviewView>();
   private readonly eventDetails = new EventPagePresentation();
+  private readonly tabAutoRefresh: VisibleAutoRefresh;
   private page: CompanionViewModel['page'] = 'environments';
   private activeTab: CompanionTab = 'Hive';
   private draft?: McpConnectionProfile;
@@ -174,6 +198,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private sessionActivity: SessionActivity = SESSION_ACTIVITIES.NEEDS_SIGN_IN;
   private busy = false;
   private disposed = false;
+  private backgroundRefreshRevision = 0;
 
   constructor(private readonly context: vscode.ExtensionContext) {
     const version = extensionVersion(context.extension.packageJSON);
@@ -207,10 +232,12 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     this.bundles = new ScenarioBundleCoordinator(
       new GitBundlePackager(), this.activeConnection,
     );
+    this.tabAutoRefresh = new VisibleAutoRefresh(() => this.refreshTabInBackground());
   }
 
   resolveWebviewView(view: vscode.WebviewView): void {
     this.currentView.attach(view);
+    this.tabAutoRefresh.setVisible(view.visible);
     view.webview.options = {
       enableScripts: true,
       localResourceRoots: [
@@ -222,12 +249,26 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     view.webview.html = html(view.webview, this.context.extensionUri);
     this.context.subscriptions.push(
       view.webview.onDidReceiveMessage(value => this.receive(value)),
-      view.onDidDispose(() => this.currentView.detach(view)),
+      view.onDidChangeVisibility(() => {
+        if (this.currentView.value() !== view) return;
+        this.backgroundRefreshRevision += 1;
+        this.tabAutoRefresh.setVisible(view.visible);
+      }),
+      view.onDidDispose(() => {
+        const wasCurrent = this.currentView.value() === view;
+        this.currentView.detach(view);
+        if (wasCurrent) {
+          this.backgroundRefreshRevision += 1;
+          this.tabAutoRefresh.setVisible(false);
+        }
+      }),
     );
   }
 
   async dispose(): Promise<void> {
     this.disposed = true;
+    this.backgroundRefreshRevision += 1;
+    this.tabAutoRefresh.dispose();
     this.eventDetails.clear();
     const view = this.currentView.value();
     if (view) this.currentView.detach(view);
@@ -238,6 +279,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private async receive(value: unknown): Promise<void> {
     try {
       const command = decodeWebviewCommand(value);
+      if (command.type !== 'ready') this.backgroundRefreshRevision += 1;
       if (this.busy && command.type !== 'ready' && command.type !== 'cancelConnection') {
         throw new ConnectionContractError('COMPANION_BUSY', 'Wait for the current operation to finish');
       }
@@ -538,27 +580,11 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           this.scenarioCandidates,
         );
       }
-      await this.ensureAuthorizedSession();
-      const call = workspaceToolCall(this.activeTab);
-      const health = this.activeConnection.readResource(ENVIRONMENT_HEALTH_RESOURCE)
-        .catch(error => ({ error: safeError(error), observedAt: new Date().toISOString() }));
-      const ownerData = await this.activeConnection.callTool(call.name, call.arguments);
-      this.workspaceData = this.activeTab === 'Buzz' ? this.eventDetails.replace(ownerData) : ownerData;
-      this.environmentHealth = await health;
+      const read = this.activeTabRead();
+      const snapshot = await this.readActiveTab(read);
+      this.applyActiveTabSnapshot(read, snapshot, TAB_REFRESH_MODES.FOREGROUND);
       if (this.activeTab === 'Scenarios') {
         await this.refreshScenarioFocusData();
-      }
-      if (this.activeTab === 'Journal' && this.journalSwarmId) {
-        try {
-          const ownerJournal = await this.activeConnection.callTool('debug_journal', {
-            swarmId: this.journalSwarmId,
-            limit: SIDEBAR_EVENT_LIMIT,
-            ...(this.journalRunId ? { runId: this.journalRunId } : {}),
-          });
-          this.journalResult = this.eventDetails.replace(ownerJournal);
-        } catch (error) {
-          this.journalResult = { error: safeError(error), observedAt: new Date().toISOString() };
-        }
       }
     } catch (error) {
       this.workspaceData = { error: safeError(error), observedAt: new Date().toISOString() };
@@ -566,6 +592,82 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
       this.busy = false;
       await this.postView();
     }
+  }
+
+  private async refreshTabInBackground(): Promise<void> {
+    if (this.disposed || this.busy || this.page !== 'workspace'
+      || this.sessionActivity !== SESSION_ACTIVITIES.ACTIVE) return;
+    const revision = this.backgroundRefreshRevision;
+    const read = this.activeTabRead();
+    try {
+      const snapshot = await this.readActiveTab(read);
+      if (!this.backgroundRefreshIsCurrent(revision, read.tab)) return;
+      this.applyActiveTabSnapshot(read, snapshot, TAB_REFRESH_MODES.BACKGROUND);
+      await this.postView();
+    } catch {
+      if (this.backgroundRefreshIsCurrent(revision, read.tab)
+        && this.sessionActivity !== SESSION_ACTIVITIES.ACTIVE) await this.postView();
+    }
+  }
+
+  private activeTabRead(): ActiveTabRead {
+    return {
+      tab: this.activeTab,
+      journalSwarmId: this.journalSwarmId,
+      journalRunId: this.journalRunId,
+    };
+  }
+
+  private async readActiveTab(read: ActiveTabRead): Promise<ActiveTabSnapshot> {
+    await this.ensureAuthorizedSession();
+    const call = workspaceToolCall(read.tab);
+    const health = this.activeConnection.readResource(ENVIRONMENT_HEALTH_RESOURCE)
+      .catch(error => ({ error: safeError(error), observedAt: new Date().toISOString() }));
+    const ownerData = await this.activeConnection.callTool(call.name, call.arguments);
+    let journal: JournalRead = { state: 'NOT_REQUESTED' };
+    if (read.tab === 'Journal' && read.journalSwarmId) {
+      try {
+        journal = {
+          state: 'SUCCESS',
+          ownerData: await this.activeConnection.callTool('debug_journal', {
+            swarmId: read.journalSwarmId,
+            limit: SIDEBAR_EVENT_LIMIT,
+            ...(read.journalRunId ? { runId: read.journalRunId } : {}),
+          }),
+        };
+      } catch (error) {
+        journal = { state: 'FAILED', error };
+      }
+    }
+    return { ownerData, environmentHealth: await health, journal };
+  }
+
+  private applyActiveTabSnapshot(
+    read: ActiveTabRead,
+    snapshot: ActiveTabSnapshot,
+    mode: TabRefreshMode,
+  ): void {
+    this.workspaceData = read.tab === 'Buzz'
+      ? this.eventDetails.replace(snapshot.ownerData)
+      : snapshot.ownerData;
+    this.environmentHealth = snapshot.environmentHealth;
+    if (snapshot.journal.state === 'SUCCESS') {
+      this.journalResult = this.eventDetails.replace(snapshot.journal.ownerData);
+    } else if (snapshot.journal.state === 'FAILED' && mode === TAB_REFRESH_MODES.FOREGROUND) {
+      this.journalResult = {
+        error: safeError(snapshot.journal.error),
+        observedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  private backgroundRefreshIsCurrent(revision: number, tab: CompanionTab): boolean {
+    return !this.disposed
+      && !this.busy
+      && this.page === 'workspace'
+      && this.sessionActivity === SESSION_ACTIVITIES.ACTIVE
+      && this.backgroundRefreshRevision === revision
+      && this.activeTab === tab;
   }
 
   private async loadJournal(): Promise<void> {
@@ -1247,6 +1349,10 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   }
 
   private async postView(): Promise<void> {
+    this.tabAutoRefresh.setEnabled(!this.disposed
+      && !this.busy
+      && this.page === 'workspace'
+      && this.sessionActivity === SESSION_ACTIVITIES.ACTIVE);
     const profiles = this.repository.list().map(profile => row(profile, this.live.get(profile.id)));
     const active = this.draft ? row(this.draft, this.live.get(this.draft.id)) : undefined;
     await this.post({

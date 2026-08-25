@@ -66,9 +66,9 @@ Future:
 ### 3.1 PocketHive MCP OAuth extension
 
 The Java PocketHive MCP is a separate OAuth protected resource. Auth Service is
-the only authorization server and grant authority for it. The first release
-uses opaque, audience-bound MCP access tokens and the OAuth 2.1 authorization
-code flow for public clients.
+the only authorization server and grant authority for it. It uses opaque,
+audience-bound MCP access tokens and the OAuth 2.1 authorization-code flow for
+public clients.
 
 This extension does not reclassify a legacy `phauth_*` product session as an MCP
 access token. An MCP token has its own `phmcp_*` namespace, exact resource,
@@ -76,12 +76,17 @@ client ID, scopes, principal, issue time, and expiry. PocketHive MCP accepts onl
 tokens resolved by the OAuth introspection contract below and never forwards an
 inbound MCP token to Scenario Manager, Orchestrator, or another owner API.
 
-First-release choices are explicit:
+The interoperability choices are explicit:
 
-- one authorization-code grant plus refresh-token rotation for each VS Code
-  companion environment session;
-- public pre-registered clients only; no Dynamic Client Registration or Client
-  ID Metadata Document fetching;
+- one authorization-code grant plus refresh-token rotation for each consented
+  interactive MCP environment session;
+- the first-party VS Code companion remains pre-registered, while other MCP
+  clients use the same RFC 7591 Dynamic Client Registration endpoint; there is
+  no product-specific registration branch and no Client ID Metadata Document
+  fetching;
+- dynamic registration accepts only bounded public clients using
+  `token_endpoint_auth_method=none`, authorization code, exact redirect URIs,
+  and scopes from the non-cleanup MCP client scope set;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
 - exact redirect URI matching; no wildcard, prefix, pattern, or alternate-port
   matching;
@@ -91,20 +96,20 @@ First-release choices are explicit:
 - the default access-token lifetime is 15 minutes and the default rotating
   companion refresh-token lifetime is 30 days; deployments may shorten either
   through the canonical Auth Service properties;
-- the VS Code client requests its exact companion intent once:
+- an interactive MCP client requests its declared non-cleanup intent once:
   `pockethive:mcp:discover`, `pockethive:mcp:read`,
   `pockethive:mcp:operate`, `pockethive:mcp:author`, and
   `pockethive:mcp:publish`; Auth Service narrows that request to the
   authenticated principal's current PocketHive grants before consent and
   returns the exact granted scope set in the token response;
-- a consented companion scope set containing discover and read receives one
+- a consented interactive scope set containing discover and read receives one
   opaque rotating refresh token; the grant never includes
   `pockethive:mcp:cleanup`; refresh preserves the originally consented scope
   set, never widens it, and rejects a current-grant reduction;
 - every successful refresh rotates the refresh token; a retired, expired,
   revoked, wrong-client, or wrong-resource refresh token fails explicitly and
   issues no token;
-- the VS Code companion schedules renewal before access-token expiry and also
+- each MCP client schedules renewal before access-token expiry and also
   checks on demand before every MCP action. Renewal is single-flight, retries
   no command by opening a browser, and keeps the last good workspace visible
   while renewal completes. A transient refresh or transport failure retains
@@ -119,11 +124,12 @@ First-release choices are explicit:
   fail explicitly without fallback.
 
 The required PocketHive VS Code public client ID is `pockethive-vscode`. Its
-first-release callback is exactly
-`http://127.0.0.1:57548/callback`. A deployment may register other clients only
-as an explicit list of client IDs, display names, and exact redirect URIs. Their
-support status is determined by the PocketHive MCP client conformance matrix;
-registration alone is not a support claim.
+callback is exactly `http://127.0.0.1:57548/callback`. A conforming external MCP
+client obtains its own opaque client ID through dynamic registration. Dynamic
+registration is bounded, expires with the configured registration lifetime,
+and never grants cleanup. A registration is client metadata, not a user grant,
+an authentication result, or a support claim. Product support is determined by
+the PocketHive MCP client conformance matrix.
 
 Remote authorization and token endpoints require HTTPS. Loopback HTTP is
 permitted only for an explicitly configured local development issuer and
@@ -144,12 +150,12 @@ IDs are shared constants, not raw strings in handlers:
 | `pockethive:mcp:publish` | `ALL` | Scenario Bundle create or replace preparation |
 | `pockethive:mcp:cleanup` | `ALL` | Governed runtime cleanup execution |
 
-The companion request is an explicit OAuth policy case, not a fallback or a
-scope alias. A principal with `VIEW` receives discover/read; `RUN` additionally
-receives operate/author; `ALL` additionally receives publish. Cleanup is never
-part of the VS Code companion session. The OAuth response always reports the
-actual granted scope when Auth Service narrows the request, as required by the
-OAuth scope contract.
+The interactive-client request is an explicit OAuth policy case, not a fallback
+or a scope alias. A principal with `VIEW` receives discover/read; `RUN`
+additionally receives operate/author; `ALL` additionally receives publish.
+Cleanup is never part of an ordinary interactive MCP session. The OAuth
+response always reports the actual granted scope when Auth Service narrows the
+request, as required by the OAuth scope contract.
 
 Scopes constrain discovery and invocation but do not replace resource-level
 PocketHive grants or HiveGate policy. Auth Service returns the principal's full
@@ -172,10 +178,10 @@ resource mismatch, client mismatch, or verifier mismatch invalidates the
 exchange and issues no token.
 
 An opaque MCP access-token record binds token digest, principal, client,
-resource, scopes, issue time, and expiry. A companion-session refresh-token
+resource, scopes, issue time, and expiry. An interactive-session refresh-token
 record also binds its authorization family, principal, public client, exact
-resource, exact consented scope set, issue time, and expiry. Rotation retires the presented
-refresh token before returning its replacement. Raw access or refresh tokens,
+resource, exact consented scope set, issue time, and expiry. Rotation retires
+the presented refresh token before returning its replacement. Raw access or refresh tokens,
 authorization codes, PKCE verifiers, request cookies, and OAuth `state` values
 must not enter logs, telemetry, error bodies, or persisted evidence.
 
@@ -398,7 +404,13 @@ Rules:
 
 ### 6.8 OAuth authorization-server metadata
 
-`GET /.well-known/oauth-authorization-server` → `application/json`
+`GET /.well-known/oauth-authorization-server/auth-service` at the PocketHive
+public ingress → `application/json`
+
+This is the RFC 8414 discovery location for the configured issuer path
+`/auth-service`. The ingress routes it to Auth Service's internal
+`GET /.well-known/oauth-authorization-server` handler. Auth Service remains the
+single metadata owner; Nginx must not construct, cache, or replace the JSON.
 
 The response follows RFC 8414 and is generated only from configured canonical
 values. It contains:
@@ -408,6 +420,7 @@ values. It contains:
   "issuer": "https://environment.example/auth-service",
   "authorization_endpoint": "https://environment.example/auth-service/oauth/authorize",
   "token_endpoint": "https://environment.example/auth-service/oauth/token",
+  "registration_endpoint": "https://environment.example/auth-service/oauth/register",
   "introspection_endpoint": "https://environment.example/auth-service/oauth/introspect",
   "response_types_supported": ["code"],
   "grant_types_supported": ["authorization_code", "refresh_token"],
@@ -420,17 +433,66 @@ values. It contains:
     "pockethive:mcp:read",
     "pockethive:mcp:operate",
     "pockethive:mcp:author",
-    "pockethive:mcp:publish",
-    "pockethive:mcp:cleanup"
+    "pockethive:mcp:publish"
   ]
 }
 ```
+
+OAuth discovery advertises exactly the canonical interactive scope set accepted
+by public dynamic registration. Governed cleanup is deliberately absent: it is
+not an interactive-client bootstrap capability and remains available only
+through the HiveGate-governed execution path. A client may safely use the
+published `scopes_supported` value as its RFC 7591 registration request without
+encountering a discover/register contract mismatch.
 
 The service must not derive the issuer or endpoints from `Host`, `Forwarded`, or
 `X-Forwarded-*` request headers. Missing or inconsistent canonical issuer
 configuration fails startup.
 
-### 6.9 OAuth authorization endpoint
+### 6.9 OAuth dynamic client registration
+
+`POST /oauth/register` consumes and returns `application/json` according to RFC
+7591. It is the generic bootstrap path for public MCP clients that are not
+pre-registered. It requires:
+
+- one bounded, non-blank `client_name`;
+- one to eight exact `redirect_uris` with no fragment, user information, or
+  wildcard; each URI is either HTTPS or HTTP on an explicit loopback host;
+- `grant_types` containing `authorization_code` and optionally
+  `refresh_token`, with no other value;
+- `response_types=["code"]`;
+- `token_endpoint_auth_method="none"`; and
+- one or more scopes from the canonical interactive scope set: discover, read,
+  operate, author, and publish.
+
+The endpoint rejects cleanup, unknown scopes, confidential-client methods,
+implicit grants, malformed metadata, duplicates, and untrusted redirect URIs.
+Successful registration returns a high-entropy `client_id`, issue time, and the
+exact normalized metadata accepted by Auth Service; it returns no client
+secret. Exact redirect and scope values become the registered-client contract
+used by the authorization server.
+
+Dynamic registrations use one canonical in-memory registry shared with OAuth
+authorization. The registry has an explicit configured capacity and inactivity
+lifetime. A successful lookup of an active dynamic client renews that
+inactivity deadline; registrations that receive no successful lookup expire.
+The registry prunes expired registrations before reads and writes, and fails
+with a bounded OAuth registration error when capacity is exhausted. Auth
+Service restart invalidates dynamic registrations together with its other
+in-memory OAuth state. Dynamic registration does not authenticate a user, grant
+a permission, or imply client conformance. Client ID Metadata Document fetching
+is not implemented; accepting attacker-selected metadata URLs would add an
+unrelated outbound trust and SSRF boundary.
+
+`POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY` is the required positive
+instance capacity and defaults to `256`. The required positive
+`POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL` defaults to `P31D` and must be
+strictly longer than the configured refresh-token lifetime, which defaults to
+`P30D`. The default one-day margin and lookup renewal keep an actively used
+refresh session's client registration available while still reclaiming inactive
+registrations.
+
+### 6.10 OAuth authorization endpoint
 
 `GET /oauth/authorize`
 
@@ -456,7 +518,7 @@ The DEV provider asks for one configured active username. A future LDAP or OIDC
 provider changes only the principal-authentication adapter; it does not change
 the OAuth request, consent, code, token, or client contracts.
 
-### 6.10 OAuth token endpoint
+### 6.11 OAuth token endpoint
 
 `POST /oauth/token` → request
 `application/x-www-form-urlencoded`, response `application/json`
@@ -482,11 +544,11 @@ Success returns:
 }
 ```
 
-The `refresh_token` field is returned only for a consented VS Code companion
-scope set that contains discover/read, is a subset of the declared companion
-intent, and excludes cleanup. The response `scope` is mandatory and is the
-exact granted set. A non-companion or cleanup scope set receives the same
-response without `refresh_token`.
+The `refresh_token` field is returned only for a consented interactive scope
+set that contains discover/read, is a subset of the client's registered intent,
+and excludes cleanup. The response `scope` is mandatory and is the exact
+granted set. A cleanup scope set receives the same response without
+`refresh_token`.
 
 Refresh fields are exact and explicit:
 
@@ -508,7 +570,7 @@ the standard `error` field and a bounded non-sensitive `error_description`. A
 failed authorization-code exchange consumes no valid code except where OAuth
 replay protection requires invalidating the attempted code family.
 
-### 6.11 OAuth token revocation
+### 6.12 OAuth token revocation
 
 `POST /oauth/revoke` uses `application/x-www-form-urlencoded` with the exact
 registered public `client_id`, one `token`, and one `token_type_hint` of either
@@ -518,7 +580,7 @@ revokes both current token types on explicit sign-out. Unknown clients,
 credentials, duplicate fields, and unsupported authentication methods fail
 explicitly.
 
-### 6.12 OAuth token introspection
+### 6.13 OAuth token introspection
 
 `POST /oauth/introspect` → request
 `application/x-www-form-urlencoded`, response `application/json`
@@ -566,7 +628,8 @@ Minimum status codes:
 - `401` missing/invalid/expired authentication,
 - `403` authenticated caller lacks admin permission for auth admin API,
 - `404` user not found,
-- `409` conflicting username or conflicting admin mutation.
+- `409` conflicting username or conflicting admin mutation,
+- `429` bounded dynamic-registration capacity exhausted.
 
 Response shape:
 

@@ -25,6 +25,7 @@
     "src/webview/eventPresentation.ts",
     "src/webview/sessionPresentation.ts",
     "src/webview/viewModelBoundary.ts",
+    "src/webview/visibleAutoRefresh.ts",
     "src/webview/workspaceTool.ts"
   ],
   "reporters": ["clear-text", "progress", "json"],

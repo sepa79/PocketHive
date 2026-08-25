@@ -16,6 +16,8 @@ import org.springframework.security.core.context.SecurityContext;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -26,13 +28,16 @@ public final class OAuthBrowserController {
     private final AuthServiceProperties properties;
     private final InMemoryUserStore users;
     private final OAuthBrowserPageRenderer pages;
+    private final RegisteredClientRepository clients;
     private final HttpSessionSecurityContextRepository contexts = new HttpSessionSecurityContextRepository();
 
     public OAuthBrowserController(AuthServiceProperties properties, InMemoryUserStore users,
-                                  OAuthBrowserPageRenderer pages) {
+                                  OAuthBrowserPageRenderer pages,
+                                  RegisteredClientRepository clients) {
         this.properties = properties;
         this.users = users;
         this.pages = pages;
+        this.clients = clients;
     }
 
     @GetMapping(value = "/oauth/dev/login", produces = MediaType.TEXT_HTML_VALUE)
@@ -72,10 +77,16 @@ public final class OAuthBrowserController {
         CsrfToken csrf = (CsrfToken) request.getAttribute(CsrfToken.class.getName());
         List<String> scopes = scope == null ? List.of() : scope.stream()
             .flatMap(value -> java.util.Arrays.stream(value.split(" "))).filter(value -> !value.isBlank()).toList();
+        RegisteredClient client = clients.findByClientId(clientId);
+        if (client == null) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                org.springframework.http.HttpStatus.BAD_REQUEST, "Unknown OAuth client");
+        }
         response.setContentType(MediaType.TEXT_HTML_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(pages.consent(
-            publicEndpoint("/oauth/authorize"), clientId, properties.getOauth().getResource().toString(), state,
+            publicEndpoint("/oauth/authorize"), clientId, client.getClientName(),
+            properties.getOauth().getResource().toString(), state,
             csrf.getParameterName(), csrf.getToken(), scopes, publicEndpoint("/oauth/pockethive-auth.css"),
             publicEndpoint("/oauth/logo.svg")));
     }

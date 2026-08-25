@@ -368,6 +368,26 @@ try {
     'Debug, Web UI, and Remove must use three equal horizontal grid sections');
   assert.equal(Math.abs(workerLayout.actionsWidth - workerLayout.actionButtonWidths.reduce((total, width) => total + width, 0)) <= 3, true,
     'the three swarm actions must fill their complete action row');
+  const swarmSearchControl = page.getByLabel('Search swarms');
+  await swarmSearchControl.fill('checkout');
+  await runningRow.getByLabel('Workers, 2').click();
+  await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
+  await swarmSearchControl.evaluate(control => {
+    control.focus();
+    control.setSelectionRange(3, 3);
+  });
+  await dispatch(page, { ...interactionModel, workspaceData: [...interactionSwarms] });
+  assert.equal(await runningRow.locator('.swarm-workers').getAttribute('open'), '',
+    'a same-tab background replacement must preserve an expanded worker disclosure');
+  assert.equal(await page.locator('.environment-health__panel').isVisible(), true,
+    'a same-tab background replacement must preserve the health disclosure');
+  assert.deepEqual(await page.evaluate(() => ({
+    id: document.activeElement?.id,
+    selectionStart: document.activeElement?.selectionStart,
+    selectionEnd: document.activeElement?.selectionEnd,
+  })), { id: 'swarmSearch', selectionStart: 3, selectionEnd: 3 },
+  'a same-tab background replacement must preserve focused search and its caret');
+  await swarmSearchControl.fill('');
   const firstWorker = runningRow.locator('.swarm-worker').first();
   await clickWithinAndExpectMessage(page, firstWorker, 'Inspect', {
     type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'checkout-generator-1', action: 'Inspect',
@@ -375,7 +395,6 @@ try {
   await clickWithinAndExpectMessage(page, firstWorker, 'Logs', {
     type: 'openDebugForWorker', swarmId: 'checkout-load', instance: 'checkout-generator-1', action: 'Logs',
   });
-  await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
   await page.getByText('PocketHive UI', { exact: true }).waitFor({ state: 'visible' });
   await captureSelected(page, '11a-selected-hive-workers-health');
   await page.getByLabel(`Environment health: ${expectedHealthSummary}`).click();
@@ -445,6 +464,22 @@ try {
   await page.getByLabel('Search events').fill('auth-regression');
   assert.equal(await page.locator('.event-row').count(), 1, 'search filter must compose with severity');
   await page.locator('.event-row').first().getByText('runtime-debug/runtime-log-snapshot', { exact: true }).click();
+  const buzzSearchControl = page.getByLabel('Search events');
+  await buzzSearchControl.evaluate(control => {
+    control.focus();
+    control.setSelectionRange(4, 4);
+  });
+  await dispatch(page, { ...workspaceBase, activeTab: 'Buzz', workspaceData: { ...eventFixture } });
+  assert.equal(await page.getByLabel('Severity').isVisible(), true,
+    'a same-tab background replacement must preserve expanded advanced filters');
+  assert.equal(await page.locator('.event-row').first().getAttribute('open'), '',
+    'a same-tab background replacement must preserve an expanded event');
+  assert.deepEqual(await page.evaluate(() => ({
+    id: document.activeElement?.id,
+    selectionStart: document.activeElement?.selectionStart,
+    selectionEnd: document.activeElement?.selectionEnd,
+  })), { id: 'buzzSearch', selectionStart: 4, selectionEnd: 4 },
+  'a same-tab background replacement must preserve event-search focus and its caret');
   await clickAndExpectMessage(page, 'Open technical details', {
     type: 'openEventDetails', detailId: 'fixture-detail-2',
   });
@@ -796,6 +831,53 @@ try {
   assert.equal(await page.getByRole('button', { name: 'Worker', exact: true }).getAttribute('aria-pressed'), 'true',
     'the compact context control must return to the worker target');
   await page.evaluate(() => scrollTo(0, 0));
+  const dropdownSwarms = Array.from({ length: 12 }, (_, index) => ({
+    id: `debug-swarm-${String(index + 1).padStart(2, '0')}`,
+  }));
+  const dropdownWorkers = Array.from({ length: 12 }, (_, index) => ({
+    runtimeId: `debug-worker-${String(index + 1).padStart(2, '0')}`,
+  }));
+  await dispatch(page, {
+    ...workspaceBase,
+    activeTab: 'Debug',
+    workspaceData: dropdownSwarms,
+    debugSwarmId: dropdownSwarms[0].id,
+    debugWorkersResult: dropdownWorkers,
+  });
+  for (const label of ['Exact swarm', 'Exact worker']) {
+    const control = page.getByLabel(label, { exact: true });
+    await control.fill('');
+    await control.focus();
+    const menu = control.locator('..').locator('..').locator('.choice-popover');
+    const geometry = await menu.evaluate(popover => {
+      const popoverRect = popover.getBoundingClientRect();
+      const clippingAncestors = [];
+      for (let ancestor = popover.parentElement; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        const clipsX = ['hidden', 'clip'].includes(style.overflowX);
+        const clipsY = ['hidden', 'clip'].includes(style.overflowY);
+        if (!clipsX && !clipsY) continue;
+        const rect = ancestor.getBoundingClientRect();
+        if ((clipsX && (popoverRect.left < rect.left - 1 || popoverRect.right > rect.right + 1))
+            || (clipsY && (popoverRect.top < rect.top - 1 || popoverRect.bottom > rect.bottom + 1))) {
+          clippingAncestors.push(`${ancestor.tagName}.${ancestor.className}`);
+        }
+      }
+      return {
+        clippingAncestors,
+        clientHeight: popover.clientHeight,
+        scrollHeight: popover.scrollHeight,
+      };
+    });
+    assert.ok(geometry.scrollHeight > geometry.clientHeight,
+      `${label} fixture must exercise a long, internally scrollable list`);
+    assert.deepEqual(geometry.clippingAncestors, [],
+      `${label} choices must escape every clipping ancestor`);
+    if (label === 'Exact worker') {
+      await page.screenshot({ path: path.join(auditDirectory, '16b-selected-debug-dropdowns.png') });
+    }
+    await control.press('Escape');
+  }
   await dispatch(page, {
     ...workspaceBase,
     activeTab: 'Debug',
@@ -893,6 +975,8 @@ try {
     toolCount: local.toolCount,
     journalRunsProbe: local.journalRunsProbe,
     runtimeDiagnosticsProbe: local.runtimeDiagnosticsProbe,
+    debugTapProbe: local.debugTapProbe,
+    compactReviewProbe: local.compactReviewProbe,
     eventPageBoundaryProbe: local.eventPageBoundaryProbe,
     sessionRefresh: local.sessionRefresh,
     screenshots: (await readFileNames()).map(name => path.join(auditDirectory, name)),
@@ -907,6 +991,8 @@ try {
     toolCount: report.toolCount,
     journalRunsProbe: report.journalRunsProbe,
     runtimeDiagnosticsProbe: report.runtimeDiagnosticsProbe,
+    debugTapProbe: report.debugTapProbe,
+    compactReviewProbe: report.compactReviewProbe,
     eventPageBoundaryProbe: report.eventPageBoundaryProbe,
     sessionRefresh: report.sessionRefresh,
     screenshotCount: report.screenshots.length,
@@ -1209,12 +1295,17 @@ async function connectLocalMcp(browser) {
     'scenario_list',
     'scenario_templates_catalog',
     'scenario_suts_list',
+    'scenario_workflow_review_prepare',
+    'scenario_workflow_review_submit',
     'swarm_list',
     'swarm_get',
     'swarm_create',
     'swarm_start',
     'swarm_stop',
     'swarm_remove',
+    'debug_tap',
+    'debug_tap_read',
+    'debug_tap_close',
     'debug_journal_runs',
     'runtime_tail_worker_logs',
     'runtime_inspect_worker',
@@ -1222,6 +1313,65 @@ async function connectLocalMcp(browser) {
   ]) {
     assert.equal(toolNames.has(requiredTool), true, `live MCP catalogue must expose ${requiredTool}`);
   }
+  const debugTapTool = tools.find(tool => tool?.name === 'debug_tap');
+  const debugTapReadTool = tools.find(tool => tool?.name === 'debug_tap_read');
+  assert.deepEqual(debugTapTool?.inputSchema?.required,
+    ['swarmId', 'role', 'direction', 'ioName', 'maxItems', 'ttlSeconds'],
+    'debug_tap must require the complete explicit owner contract');
+  assert.deepEqual(debugTapTool?.inputSchema?.properties?.ttlSeconds,
+    { type: 'integer', minimum: 1, maximum: 2147483647 },
+    'debug_tap ttlSeconds must be an explicit positive integer');
+  assert.deepEqual(debugTapReadTool?.inputSchema?.properties?.drain,
+    { type: 'integer', minimum: 0, maximum: 1000 },
+    'debug_tap_read drain must be a bounded non-negative integer');
+  const compactReviewTool = tools.find(tool => tool?.name === 'scenario_workflow_review_prepare');
+  const compactTopics = compactReviewTool?.inputSchema?.properties?.answers?.items?.properties?.topic?.enum;
+  assert.equal(Array.isArray(compactTopics), true, 'compact review must publish its canonical QA topics');
+  assert.equal(compactTopics.length, 12, 'compact review must cover every canonical QA topic');
+  const requirementSource = 'Public-ingress compact review acceptance requirement';
+  const compactAnswers = compactTopics.map(topic => ({
+    topic,
+    disposition: 'USER_CONFIRMED_SOURCE',
+    answer: `Explicit acceptance value for ${topic}`,
+  }));
+  const authoringSession = await client.callTool('agent_session_create');
+  const compactWorkflow = await client.callTool('scenario_workflow_create', {
+    agentSessionId: authoringSession.agentSessionId,
+    expectedSessionRevision: authoringSession.revision,
+  });
+  const compactCandidate = {
+    workflowId: compactWorkflow.workflowId,
+    expectedRevision: compactWorkflow.revision,
+    sourceName: 'playwright public-ingress acceptance requirement',
+    sourceDigest: `sha256:${createHash('sha256').update(requirementSource).digest('hex')}`,
+    answers: compactAnswers,
+  };
+  const preparedReview = await client.callTool('scenario_workflow_review_prepare', compactCandidate);
+  assert.equal(preparedReview.captureMode, 'COMPACT_REVIEW');
+  assert.equal(preparedReview.workflowRevision, 0,
+    'preparing a compact review must not mutate the workflow');
+  assert.match(preparedReview.message, /Review every requirement below/);
+  assert.match(preparedReview.answerSetDigest, /^sha256:[0-9a-f]{64}$/);
+  const submittedReview = await client.callTool('scenario_workflow_review_submit', {
+    ...compactCandidate,
+    reviewId: preparedReview.reviewId,
+    requestedSchemaDigest: preparedReview.requestedSchemaDigest,
+    answerSetDigest: preparedReview.answerSetDigest,
+  });
+  assert.equal(submittedReview.revision, 1,
+    'one accepted compact review must record all topics in one workflow revision');
+  assert.equal(submittedReview.state, 'REVIEW_REQUIRED');
+  assert.equal(Object.keys(submittedReview.requirements ?? {}).length, compactTopics.length);
+  await client.callTool('agent_session_close', {
+    agentSessionId: authoringSession.agentSessionId,
+    expectedRevision: 1,
+  });
+  const compactReviewProbe = {
+    topicCount: compactTopics.length,
+    prepareRevision: preparedReview.workflowRevision,
+    submitRevision: submittedReview.revision,
+    state: submittedReview.state,
+  };
   const [swarms, scenarios, buzz, environmentHealth] = await Promise.all([
     client.callTool('swarm_list'),
     client.callTool('scenario_list'),
@@ -1237,9 +1387,14 @@ async function connectLocalMcp(browser) {
     'live Buzz summaries must remain inside the general companion field limit');
   assert.notEqual(boundedBuzz?.error?.code, 'COMPANION_VIEW_DATA_TOO_LARGE',
     'normal live Buzz summaries must survive the companion presentation boundary');
-  assert.equal(JSON.stringify(presentedBuzz).includes('runtime-log-snapshot')
-    && !JSON.stringify(presentedBuzz).includes('"logs"'), true,
-  'live Buzz must retain summary identity without sending runtime logs to the webview');
+  const rawBuzzJson = JSON.stringify(buzz);
+  const presentedBuzzJson = JSON.stringify(presentedBuzz);
+  assert.equal(presentedBuzzJson.includes('"logs"'), false,
+    'live Buzz must not send runtime logs to the webview');
+  if (rawBuzzJson.includes('runtime-log-snapshot')) {
+    assert.equal(presentedBuzzJson.includes('runtime-log-snapshot'), true,
+      'live Buzz must retain runtime-log-snapshot identity when the bounded owner page contains it');
+  }
   if (presentedBuzz.items.length > 0) {
     assert.equal(eventPresentation.require(presentedBuzz.items[0].detailId), buzz.items[0],
       'the live summary must resolve to the exact current owner record');
@@ -1269,7 +1424,52 @@ async function connectLocalMcp(browser) {
       }
     : undefined;
   let runtimeDiagnosticsProbe = { outcome: 'no-swarm' };
+  let debugTapProbe = { outcome: 'no-swarm' };
   if (swarmId) {
+    const swarm = await client.callTool('swarm_get', { swarmId });
+    const edge = swarm?.observation?.bindings?.work?.edges?.find(item =>
+      typeof item?.to?.role === 'string' && typeof item?.to?.port === 'string');
+    if (edge) {
+      let tapId;
+      try {
+        const created = await client.callTool('debug_tap', {
+          swarmId,
+          role: edge.to.role,
+          direction: 'IN',
+          ioName: edge.to.port,
+          maxItems: 3,
+          ttlSeconds: 45,
+        });
+        tapId = created?.tapId;
+        assert.equal(typeof tapId === 'string' && tapId.length > 0, true,
+          'debug_tap must return an exact tap ID');
+        assert.equal(created?.maxItems, 3, 'debug_tap must preserve the explicit item cap');
+        assert.equal(created?.ttlSeconds, 45, 'debug_tap must preserve the explicit TTL');
+        const metadata = await client.callTool('debug_tap_read', { tapId, drain: 0 });
+        assert.equal(metadata?.tapId, tapId, 'metadata-only debug tap reads must preserve tap identity');
+        assert.equal(Array.isArray(metadata?.samples), true,
+          'metadata-only debug tap reads must preserve the owner sample shape');
+        const drained = await client.callTool('debug_tap_read', { tapId, drain: 2 });
+        assert.equal(drained?.tapId, tapId, 'bounded debug tap drains must preserve tap identity');
+        const closed = await client.callTool('debug_tap_close', { tapId });
+        const closedTapId = tapId;
+        tapId = undefined;
+        assert.equal(closed?.tapId, closedTapId, 'debug_tap_close must close the exact created tap');
+        debugTapProbe = {
+          outcome: 'created-read-drained-closed',
+          swarmId,
+          role: edge.to.role,
+          direction: 'IN',
+          ioName: edge.to.port,
+          maxItems: created.maxItems,
+          ttlSeconds: created.ttlSeconds,
+        };
+      } finally {
+        if (tapId) await client.callTool('debug_tap_close', { tapId });
+      }
+    } else {
+      debugTapProbe = { outcome: 'no-work-binding', swarmId };
+    }
     const resources = await client.callTool('runtime_list_workers', { swarmId });
     const worker = Array.isArray(resources?.workers)
       ? resources.workers.find(item => typeof item?.runtimeId === 'string')
@@ -1321,6 +1521,8 @@ async function connectLocalMcp(browser) {
     toolCount: tools.length,
     journalRunsProbe,
     runtimeDiagnosticsProbe,
+    debugTapProbe,
+    compactReviewProbe,
     eventPageBoundaryProbe: {
       bytes: buzzBytes,
       projectedBytes,

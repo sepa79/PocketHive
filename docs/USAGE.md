@@ -13,16 +13,109 @@ When the stack starts only the Orchestrator (Queen) is running. New swarms are c
 
 ## PocketHive MCP and VS Code
 
-The local Java MCP is available only through the supported UI ingress at
-`http://localhost:8088/mcp`. Remote environments use their exact HTTPS
-`/mcp` URL. Configure that URL in each agent or IDE client; do not configure a
-Java service port, the removed Node server, stdio, or a fallback endpoint.
+### Local MCP and VS Code quick start
 
-The PocketHive VS Code Activity Bar opens on Environments. Add the MCP URL,
-choose **Connect** to validate/authenticate/test it, then **Save & open**. The
-extension persists environment profiles locally and stores OAuth material in
-VS Code Secret Storage. Its Hive, Buzz, Journal, Scenarios, and Debug tabs all
-use the selected MCP connection.
+This is the canonical first-time local setup. It starts the Java PocketHive MCP
+inside the normal PocketHive stack, installs the PocketHive VS Code companion,
+and connects both through the supported public ingress. The companion is a
+PocketHive user interface; it is separate from VS Code's built-in MCP agent
+configuration.
+
+#### 1. Check requirements
+
+Install:
+
+- Docker with Docker Compose;
+- Java 21;
+- `curl` and a Bash-compatible shell; and
+- VS Code 1.85 or later, Node.js, and npm when building the companion from
+  source.
+
+The `code` command is optional. Without it, install the generated VSIX through
+VS Code's **Extensions: Install from VSIX...** command.
+
+#### 2. Build and start PocketHive
+
+From the repository root, run:
+
+```bash
+./build-hive.sh
+```
+
+This full build includes `auth-service` and the Java `pockethive-mcp` service.
+It builds their JARs and images and deploys them with the rest of the local
+Compose stack. Use `--quick` only for a later development rebuild where
+skipping the Maven test phase is intentional.
+
+Verify the supported public ingress, not a service container port:
+
+```bash
+curl -fsS http://localhost:8088/healthz
+curl -fsS http://localhost:8088/.well-known/oauth-protected-resource
+```
+
+The first command returns `ok`. The second returns OAuth protected-resource
+metadata whose `resource` is `http://localhost:8088/mcp`. A protected `/mcp`
+request may return an authentication challenge before sign-in; that does not
+mean the MCP is unavailable.
+
+#### 3. Build and install the VS Code companion
+
+From the repository root, run:
+
+```bash
+cd vscode-pockethive
+./init.sh --install
+```
+
+The script installs the locked npm dependencies, builds and verifies the
+extension, creates `pockethive-vscode-<version>.vsix`, and force-installs that
+package when the `code` command is available. Force installation replaces an
+older installed build even when it has the same version.
+
+If `code` is unavailable, run `./init.sh --package`, then use **Extensions:
+Install from VSIX...** and select the generated file. After either route, run
+**Developer: Reload Window** in VS Code so the new extension host is active.
+
+#### 4. Connect the companion
+
+1. Open the PocketHive hexagon in the VS Code Activity Bar.
+2. Add an environment named `Local PocketHive` with the exact MCP URL
+   `http://localhost:8088/mcp`.
+3. Choose **Connect**. Complete the PocketHive browser sign-in and consent.
+   The default local DEV administrator username is `local-admin`.
+4. Confirm that **Authenticated** and **Connection test** both succeed.
+5. Choose **Save & open**.
+
+The workspace should show the Hive, Buzz, Journal, Scenarios, and Debug tabs,
+with the local environment reported as connected. Profiles are stored locally,
+while OAuth material is stored through VS Code Secret Storage.
+
+#### 5. Configure an MCP agent client when required
+
+The companion profile above does not configure VS Code/Copilot, Amazon Q,
+Codex, Cursor, or Windsurf as agent clients. Configure each required client
+separately with the same exact Streamable HTTP URL. Ready repository examples
+are available in `.vscode/mcp.json`, `.amazonq/mcp.json.dist`, `mcp.json`,
+`.cursor/mcp.json`, and `.windsurf/mcp.json`.
+
+Use native Streamable HTTP and OAuth support. Do not configure a Java service
+port, the removed Node server, stdio, an npm proxy, or a fallback endpoint. See
+the [PocketHive MCP connection contract](mcp/README.md#connect) for client
+configuration and authentication behaviour.
+
+#### Troubleshooting
+
+- If `healthz` fails, inspect `docker compose ps` and rerun `./build-hive.sh`;
+  do not switch the client to a backend service port.
+- If the PocketHive Activity Bar still shows an older interface, reinstall with
+  `./init.sh --install` and run **Developer: Reload Window**.
+- If connection validation reports a loopback error, use the exact local URL
+  `http://localhost:8088/mcp`; do not use an unspecified host or a container
+  hostname.
+- If authentication has expired or was declined, use the explicit **Sign in**
+  action. Ordinary tab and swarm commands must not open a separate browser
+  authorization flow.
 
 Scenario Bundle source remains in Git. From the Scenarios tab select a committed
 bundle directory; the extension uploads the exact committed regular files for

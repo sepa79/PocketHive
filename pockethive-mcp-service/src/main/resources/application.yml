@@ -50,7 +50,6 @@ pockethive:
           endpoint-path: /grafana/
           probe-path: /grafana/api/health
           contract: GRAFANA_DATABASE_OK
-    protocol-revision: ${PH_MCP_PROTOCOL_REVISION}
     state-mode: ${PH_MCP_STATE_MODE}
     state-path: ${PH_MCP_STATE_PATH}
     upload-spool-path: ${PH_MCP_UPLOAD_SPOOL_PATH}

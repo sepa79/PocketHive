@@ -25,6 +25,7 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
@@ -74,7 +75,7 @@ public class McpToolExecutor {
     private Object executeMcp(String toolId, McpSyncServerExchange exchange, McpCaller caller,
                               Map<String, Object> input) {
         return switch (toolId) {
-            case "agent_session_create" -> createSession(exchange, caller);
+            case "agent_session_create" -> createSession(caller);
             case "agent_session_get" -> sessionView(requireSession(text(input, "agentSessionId"), caller));
             case "agent_session_list_workflows", "scenario_workflow_list" -> listWorkflows(
                 requireSession(text(input, "agentSessionId"), caller));
@@ -82,11 +83,16 @@ public class McpToolExecutor {
             case "scenario_workflow_create" -> createWorkflow(input, caller);
             case "scenario_workflow_get" -> workflowView(requireWorkflow(text(input, "workflowId"), caller));
             case "scenario_workflow_answer" -> answerWorkflow(exchange, input, caller);
+            case "scenario_workflow_question" -> questionWorkflow(input, caller);
+            case "scenario_workflow_answer_submit" -> submitWorkflowAnswer(exchange, input, caller);
+            case "scenario_workflow_review_prepare" -> prepareWorkflowReview(input, caller);
+            case "scenario_workflow_review_submit" -> submitWorkflowReview(exchange, input, caller);
             case "scenario_workflow_generate" -> generateWorkflow(input, caller);
             case "scenario_workflow_cancel" -> cancelWorkflow(input, caller);
             case "scenario_bundle_validation_prepare" -> prepareValidation(input, caller);
             case "scenario_bundle_direct_validation_prepare" -> validationTicketView(
-                uploads.prepareDirectValidation(caller.principal(), source(input), manifest(input), clock.instant()));
+                uploads.prepareDirectValidationWithCapability(caller.principal(), source(input), manifest(input),
+                    clock.instant()));
             case "scenario_bundle_validation_receipt_get" -> BundleValidationReceiptView.from(
                 uploads.validationReceipt(text(input, "receiptId"), caller.principal()));
             case "scenario_bundle_publication_prepare" -> preparePublication(input, caller);
@@ -190,12 +196,7 @@ public class McpToolExecutor {
             + "/journal/page?limit=" + queryOr(input, "limit", "100"));
     }
 
-    private Object createSession(McpSyncServerExchange exchange, McpCaller caller) {
-        if (exchange.getClientCapabilities() == null || exchange.getClientCapabilities().elicitation() == null
-            || exchange.getClientCapabilities().elicitation().form() == null) {
-            throw new ToolExecutionException("ELICITATION_CAPABILITY_REQUIRED",
-                "The client must support MCP form elicitation");
-        }
+    private Object createSession(McpCaller caller) {
         Instant now = clock.instant();
         state.maintainSessions(now, properties.closedSessionRetention());
         String id = "as-" + UUID.randomUUID();
@@ -221,21 +222,17 @@ public class McpToolExecutor {
     }
 
     private Object answerWorkflow(McpSyncServerExchange exchange, Map<String, Object> input, McpCaller caller) {
+        requireFormElicitation(exchange);
         ScenarioWorkflow workflow = requireMutableWorkflow(text(input, "workflowId"), caller);
         long expectedRevision = number(input, "expectedRevision");
-        QaRequirementTopic topic = QaRequirementTopic.valueOf(text(input, "topic").toUpperCase(Locale.ROOT));
-        Map<String, Object> requestedSchema = Map.of(
-            "type", "object",
-            "properties", Map.of(
-                "disposition", Map.of("type", "string", "enum", List.of(
-                    "USER_PROVIDED", "USER_CONFIRMED_SOURCE", "NOT_APPLICABLE")),
-                "answer", Map.of("type", "string", "minLength", 1, "maxLength", 20000),
-                "sourceName", Map.of("type", "string", "minLength", 1, "maxLength", 2048),
-                "sourceDigest", Map.of("type", "string", "pattern", "^sha256:[0-9a-f]{64}$")),
-            "required", List.of("disposition", "answer"),
-            "additionalProperties", false);
+        QaRequirementTopic topic = topic(input);
+        QaRequirementQuestionContract question = QaRequirementQuestionContract.forTopic(
+            topic, QaAnswerCaptureMode.MCP_FORM);
         McpSchema.ElicitResult result = exchange.createElicitation(
-            McpSchema.ElicitFormRequest.builder(question(topic), requestedSchema).build());
+            McpSchema.ElicitFormRequest.builder(question.message(), question.responseSchema()).build());
+        if (result == null) {
+            throw new ToolExecutionException("ELICITATION_RESULT_INVALID", "The client returned no elicitation result");
+        }
         if (result.action() != McpSchema.ElicitResult.Action.ACCEPT) {
             return Map.of(
                 "workflowId", workflow.id(),
@@ -245,31 +242,161 @@ public class McpToolExecutor {
                 "elicitationAction", result.action(),
                 "disposition", "UNKNOWN");
         }
-        String disposition = text(result.content(), "disposition");
-        String answer = text(result.content(), "answer");
-        String schemaDigest = sha256(json(requestedSchema));
-        String contentDigest = sha256(json(result.content()));
+        return applyAcceptedAnswer(exchange, caller, workflow, expectedRevision, question, result.content());
+    }
+
+    private Object questionWorkflow(Map<String, Object> input, McpCaller caller) {
+        ScenarioWorkflow workflow = requireMutableWorkflow(text(input, "workflowId"), caller);
+        QaRequirementQuestionContract question = QaRequirementQuestionContract.forTopic(
+            topic(input), QaAnswerCaptureMode.AGENT_MEDIATED);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workflowId", workflow.id());
+        result.put("workflowRevision", workflow.revision());
+        result.put("topic", question.topic().name());
+        result.put("captureMode", question.captureMode().name());
+        result.put("questionId", question.questionId());
+        result.put("message", question.message());
+        result.put("responseSchema", question.responseSchema());
+        result.put("requestedSchemaDigest", schemaDigest(question));
+        return result;
+    }
+
+    private Object submitWorkflowAnswer(McpSyncServerExchange exchange, Map<String, Object> input, McpCaller caller) {
+        ScenarioWorkflow workflow = requireMutableWorkflow(text(input, "workflowId"), caller);
+        long expectedRevision = number(input, "expectedRevision");
+        if (workflow.revision() != expectedRevision) {
+            throw new ToolExecutionException("WORKFLOW_VERSION_CONFLICT", workflow.id());
+        }
+        QaRequirementQuestionContract question = QaRequirementQuestionContract.forTopic(
+            topic(input), QaAnswerCaptureMode.AGENT_MEDIATED);
+        if (!question.questionId().equals(text(input, "questionId"))) {
+            throw new ToolExecutionException("QA_QUESTION_ID_MISMATCH", question.questionId());
+        }
+        String requestedSchemaDigest = text(input, "requestedSchemaDigest");
+        if (!schemaDigest(question).equals(requestedSchemaDigest)) {
+            throw new ToolExecutionException("QA_QUESTION_SCHEMA_MISMATCH", question.questionId());
+        }
+        Map<String, Object> content = new LinkedHashMap<>();
+        content.put("disposition", text(input, "disposition"));
+        content.put("answer", text(input, "answer"));
+        if (input.containsKey("sourceName")) {
+            content.put("sourceName", text(input, "sourceName"));
+        }
+        if (input.containsKey("sourceDigest")) {
+            content.put("sourceDigest", text(input, "sourceDigest"));
+        }
+        return applyAcceptedAnswer(exchange, caller, workflow, expectedRevision, question, content);
+    }
+
+    private Object prepareWorkflowReview(Map<String, Object> input, McpCaller caller) {
+        ScenarioWorkflow workflow = requireMutableWorkflow(text(input, "workflowId"), caller);
+        requireWorkflowRevision(workflow, number(input, "expectedRevision"));
+        QaRequirementReviewContract review = reviewContract(input);
+        return workflowReviewView(workflow, review);
+    }
+
+    private Object submitWorkflowReview(McpSyncServerExchange exchange, Map<String, Object> input,
+                                        McpCaller caller) {
+        ScenarioWorkflow workflow = requireMutableWorkflow(text(input, "workflowId"), caller);
+        long expectedRevision = number(input, "expectedRevision");
+        requireWorkflowRevision(workflow, expectedRevision);
+        if (!QaRequirementReviewContract.REVIEW_ID.equals(text(input, "reviewId"))) {
+            throw new ToolExecutionException("QA_REVIEW_ID_MISMATCH", QaRequirementReviewContract.REVIEW_ID);
+        }
+        String requestedSchemaDigest = text(input, "requestedSchemaDigest");
+        String canonicalSchemaDigest = reviewSchemaDigest();
+        if (!canonicalSchemaDigest.equals(requestedSchemaDigest)) {
+            throw new ToolExecutionException("QA_REVIEW_SCHEMA_MISMATCH", QaRequirementReviewContract.REVIEW_ID);
+        }
+        QaRequirementReviewContract review = reviewContract(input);
+        String answerSetDigest = reviewDigest(review);
+        if (!answerSetDigest.equals(text(input, "answerSetDigest"))) {
+            throw new ToolExecutionException("QA_REVIEW_ANSWER_SET_MISMATCH", QaRequirementReviewContract.REVIEW_ID);
+        }
+        String clientName = exchange.getClientInfo() == null ? "unknown" : exchange.getClientInfo().name();
+        String clientVersion = exchange.getClientInfo() == null ? "unknown" : exchange.getClientInfo().version();
+        Map<QaRequirementTopic, RequirementAnswer> requirements = new EnumMap<>(QaRequirementTopic.class);
+        for (QaRequirementReviewContract.ReviewAnswer answer : review.answers()) {
+            AnswerProvenance provenance = new AnswerProvenance(
+                caller.principal(), caller.clientId(), clientName, clientVersion,
+                workflow.id(), expectedRevision, QaAnswerCaptureMode.COMPACT_REVIEW.questionId(answer.topic()),
+                requestedSchemaDigest, ElicitationAction.ACCEPT, answerSetDigest, clock.instant());
+            RequirementAnswer requirement = reviewRequirement(answer, review.source(), provenance);
+            requirements.put(answer.topic(), requirement);
+        }
+        workflow.answerAll(expectedRevision, requirements);
+        state.saveWorkflowAndRemoveGeneratedFiles(workflow);
+        return workflowView(workflow);
+    }
+
+    private static RequirementAnswer reviewRequirement(QaRequirementReviewContract.ReviewAnswer answer,
+                                                       ConfirmedSource source, AnswerProvenance provenance) {
+        if (answer.disposition() == io.pockethive.mcp.domain.RequirementDisposition.USER_PROVIDED) {
+            return RequirementAnswer.userProvided(answer.answer(), provenance);
+        }
+        if (answer.disposition() == io.pockethive.mcp.domain.RequirementDisposition.USER_CONFIRMED_SOURCE) {
+            return RequirementAnswer.userConfirmedSource(answer.answer(), source, provenance);
+        }
+        return RequirementAnswer.notApplicable(answer.answer(), provenance);
+    }
+
+    private Map<String, Object> workflowReviewView(ScenarioWorkflow workflow,
+                                                   QaRequirementReviewContract review) {
+        String canonicalJson = json(review.canonicalPayload());
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workflowId", workflow.id());
+        result.put("workflowRevision", workflow.revision());
+        result.put("captureMode", QaAnswerCaptureMode.COMPACT_REVIEW.name());
+        result.put("reviewId", QaRequirementReviewContract.REVIEW_ID);
+        result.put("message", review.reviewMessage(canonicalJson));
+        result.put("responseSchema", QaRequirementReviewContract.responseSchema());
+        result.put("requestedSchemaDigest", reviewSchemaDigest());
+        result.put("answerSetDigest", sha256(canonicalJson));
+        result.putAll(review.canonicalPayload());
+        return result;
+    }
+
+    private QaRequirementReviewContract reviewContract(Map<String, Object> input) {
+        return QaRequirementReviewContract.parse(
+            require(input, "answers"), optionalText(input, "sourceName"), optionalText(input, "sourceDigest"));
+    }
+
+    private String reviewDigest(QaRequirementReviewContract review) {
+        return sha256(json(review.canonicalPayload()));
+    }
+
+    private String reviewSchemaDigest() {
+        return sha256(json(QaRequirementReviewContract.responseSchema()));
+    }
+
+    private Object applyAcceptedAnswer(McpSyncServerExchange exchange, McpCaller caller,
+                                       ScenarioWorkflow workflow, long expectedRevision,
+                                       QaRequirementQuestionContract question, Map<String, Object> content) {
+        question.validateResponseFields(content);
+        String disposition = text(content, "disposition");
+        String answer = text(content, "answer");
+        String contentDigest = sha256(json(content));
         String clientName = exchange.getClientInfo() == null ? "unknown" : exchange.getClientInfo().name();
         String clientVersion = exchange.getClientInfo() == null ? "unknown" : exchange.getClientInfo().version();
         AnswerProvenance provenance = new AnswerProvenance(
             caller.principal(), caller.clientId(), clientName, clientVersion,
-            workflow.id(), expectedRevision, topic.name().toLowerCase(Locale.ROOT), schemaDigest,
+            workflow.id(), expectedRevision, question.questionId(), schemaDigest(question),
             ElicitationAction.ACCEPT, contentDigest, clock.instant());
         RequirementAnswer requirement = switch (disposition) {
             case "USER_PROVIDED" -> {
-                rejectSourceFields(result.content());
+                rejectSourceFields(content);
                 yield RequirementAnswer.userProvided(answer, provenance);
             }
             case "USER_CONFIRMED_SOURCE" -> RequirementAnswer.userConfirmedSource(answer,
-                new ConfirmedSource(text(result.content(), "sourceName"),
-                    text(result.content(), "sourceDigest")), provenance);
+                new ConfirmedSource(text(content, "sourceName"),
+                    text(content, "sourceDigest")), provenance);
             case "NOT_APPLICABLE" -> {
-                rejectSourceFields(result.content());
+                rejectSourceFields(content);
                 yield RequirementAnswer.notApplicable(answer, provenance);
             }
             default -> throw new ToolExecutionException("REQUIREMENT_DISPOSITION_INVALID", disposition);
         };
-        workflow.answer(expectedRevision, topic, requirement);
+        workflow.answer(expectedRevision, question.topic(), requirement);
         state.saveWorkflowAndRemoveGeneratedFiles(workflow);
         return workflowView(workflow);
     }
@@ -305,8 +432,8 @@ public class McpToolExecutor {
         if (workflow.state() != io.pockethive.mcp.domain.ScenarioWorkflowState.GENERATED) {
             throw new ToolExecutionException("WORKFLOW_NOT_GENERATED", workflow.id());
         }
-        return validationTicketView(uploads.prepareValidation(caller.principal(), workflow.id(), source(input),
-            manifest(input), clock.instant()));
+        return validationTicketView(uploads.prepareValidationWithCapability(caller.principal(), workflow.id(),
+            source(input), manifest(input), clock.instant()));
     }
 
     private Object preparePublication(Map<String, Object> input, McpCaller caller) {
@@ -317,7 +444,7 @@ public class McpToolExecutor {
             if (receipt.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
                 requireMutableWorkflow(receipt.workflowBinding().workflowId(), caller);
             }
-            return publicationTicketView(uploads.preparePublication(caller.principal(), receiptId,
+            return publicationTicketView(uploads.preparePublicationWithCapability(caller.principal(), receiptId,
                 PublicationMode.valueOf(text(input, "mode").toUpperCase(Locale.ROOT)), scenarioId,
                 source(input), manifest(input), text(input, "archiveDigest"),
                 text(input, "bundleContentDigest"), clock.instant()));
@@ -326,17 +453,23 @@ public class McpToolExecutor {
         }
     }
 
-    private ValidationUploadTicketView validationTicketView(ValidationUploadTicket ticket) {
-        return new ValidationUploadTicketView(ticket.id(), uploadUrl(ticket.id()), ticket.expiresAt());
+    private ValidationUploadTicketView validationTicketView(
+        PreparedUpload<ValidationUploadTicket> prepared) {
+        ValidationUploadTicket ticket = prepared.ticket();
+        return new ValidationUploadTicketView(ticket.id(), uploadUrl(ticket.id()),
+            prepared.uploadCapability(), ticket.expiresAt());
     }
 
-    private PublicationUploadTicketView publicationTicketView(PublicationUploadTicket ticket) {
-        return new PublicationUploadTicketView(ticket.id(), uploadUrl(ticket.id()), ticket.expiresAt(),
+    private PublicationUploadTicketView publicationTicketView(
+        PreparedUpload<PublicationUploadTicket> prepared) {
+        PublicationUploadTicket ticket = prepared.ticket();
+        return new PublicationUploadTicketView(ticket.id(), uploadUrl(ticket.id()), prepared.uploadCapability(),
+            ticket.expiresAt(),
             ticket.attemptId(), ticket.validationReceiptId(), ticket.mode(), ticket.scenarioId());
     }
 
     private URI uploadUrl(String ticketId) {
-        return properties.pocketHiveIngress().resolve("/mcp/uploads/" + ticketId);
+        return properties.pocketHiveIngress().resolve(BundleUploadContract.PATH_PREFIX + ticketId);
     }
 
     @SuppressWarnings("unchecked")
@@ -482,21 +615,26 @@ public class McpToolExecutor {
         }
     }
 
-    private static String question(QaRequirementTopic topic) {
-        return switch (topic) {
-            case GOAL_AND_RISK -> "What goal, risks, scope, and out-of-scope behaviour must this test cover?";
-            case SUT_AND_ENDPOINTS -> "Which systems under test, endpoints, protocols, owners, and environments are in scope?";
-            case JOURNEYS_SCHEMAS_AND_EXPECTATIONS -> "Which journeys, example tests, schemas, contracts, and expected outcomes apply?";
-            case SLA_AND_STOPPING -> "Which SLAs, thresholds, error budgets, stopping criteria, and abort conditions apply?";
-            case LOAD_PROFILE_AND_TRAFFIC_SHAPE -> "What load, concurrency, arrival model, duration, ramping, and traffic shape are required?";
-            case TEST_DATA_STRATEGY -> "What test-data sources, profiles, storage, volumes, privacy, retention, Redis/CSV use, and cleanup are required?";
-            case AUTHENTICATION_AND_SECRETS -> "Which authentication profiles and approved secret references are required? Do not provide secret values.";
-            case SETUP_TEARDOWN_AND_DEPENDENCIES -> "What setup, teardown, reset, seeding, and dependency requirements apply?";
-            case BACKGROUND_TRAFFIC_AND_ISOLATION -> "Is background traffic required, and how must it be isolated from foreground traffic?";
-            case ORACLES_OBSERVABILITY_AND_TRIAGE -> "Which oracles, negative cases, observability, diagnostics, and triage evidence are required?";
-            case REPORTING_TRACEABILITY_AND_RETENTION -> "Which reporting, traceability, ownership, provenance, and retention requirements apply?";
-            case SAFETY_GOVERNANCE_AND_ABORT -> "Which safety limits, approvals, governance constraints, and abort rules apply?";
-        };
+    private static void requireFormElicitation(McpSyncServerExchange exchange) {
+        if (exchange.getClientCapabilities() == null || exchange.getClientCapabilities().elicitation() == null
+            || exchange.getClientCapabilities().elicitation().form() == null) {
+            throw new ToolExecutionException("ELICITATION_CAPABILITY_REQUIRED",
+                "The client must support MCP form elicitation");
+        }
+    }
+
+    private static QaRequirementTopic topic(Map<String, Object> input) {
+        return QaRequirementTopic.valueOf(text(input, "topic").toUpperCase(Locale.ROOT));
+    }
+
+    private static void requireWorkflowRevision(ScenarioWorkflow workflow, long expectedRevision) {
+        if (workflow.revision() != expectedRevision) {
+            throw new ToolExecutionException("WORKFLOW_VERSION_CONFLICT", workflow.id());
+        }
+    }
+
+    private String schemaDigest(QaRequirementQuestionContract question) {
+        return sha256(json(question.responseSchema()));
     }
 
     private static Map<String, Object> body(Map<String, Object> source, String... fields) {
@@ -541,6 +679,10 @@ public class McpToolExecutor {
             throw new ToolExecutionException("TOOL_INPUT_REQUIRED", field);
         }
         return value;
+    }
+
+    private static String optionalText(Map<String, Object> input, String field) {
+        return input.containsKey(field) ? text(input, field) : null;
     }
 
     private static String rawText(Map<String, Object> input, String field) {

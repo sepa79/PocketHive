@@ -7,6 +7,7 @@ import java.time.Instant;
 public record PublicationUploadTicketView(
     String ticketId,
     URI uploadUrl,
+    String uploadCapability,
     Instant expiresAt,
     String attemptId,
     String validationReceiptId,

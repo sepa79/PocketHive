@@ -17,7 +17,6 @@ import org.springframework.validation.annotation.Validated;
 public record PocketHiveMcpProperties(
     @NotNull URI pocketHiveIngress,
     @NotNull URI ownerApiBase,
-    @NotBlank String protocolRevision,
     @NotNull StateMode stateMode,
     @NotNull Path statePath,
     @NotNull Path uploadSpoolPath,
@@ -49,16 +48,9 @@ public record PocketHiveMcpProperties(
     @NotBlank String downstreamServiceName,
     @NotBlank String downstreamServiceSecret
 ) {
-    public static final String REQUIRED_PROTOCOL_REVISION = "2025-11-25";
-
     public enum StateMode {
         FILE,
         MEMORY
-    }
-
-    @AssertTrue(message = "protocolRevision must be 2025-11-25")
-    public boolean hasSupportedProtocolRevision() {
-        return REQUIRED_PROTOCOL_REVISION.equals(protocolRevision);
     }
 
     @AssertTrue(message = "production ingress and OAuth resource must use HTTPS; HTTP is loopback-only")

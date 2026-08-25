@@ -4,6 +4,13 @@ The extension is a narrow HTML Side Bar companion for PocketHive MCP. It does
 not spawn a local MCP process, read direct PocketHive service URLs, or persist
 Scenario Bundle roots.
 
+## Install locally
+
+Follow the canonical
+[local MCP and VS Code quick start](../docs/USAGE.md#local-mcp-and-vs-code-quick-start)
+to build the PocketHive stack, package or install the VSIX, authenticate, and
+verify the connection. The steps below describe an installed extension.
+
 ## Use
 
 1. Open the PocketHive Activity Bar view.
@@ -74,6 +81,21 @@ Storage. A saved profile is never displayed as connected until it is
 revalidated. If VS Code reconstructs the Side Bar webview, the extension host
 reattaches only the newest view and restores its current model; disposal of an
 older view cannot detach or freeze its replacement.
+
+While a connected workspace is visible, the extension refreshes the active
+tab's MCP-owned data and environment health every 15 seconds. The schedule is
+single-flight and pauses while the view is hidden, the session is disconnected,
+or a foreground operation is busy. A background refresh keeps the last good
+model visible until a complete replacement is ready and never enters the
+foreground Loading state. Revealing a connected workspace requests one
+immediate refresh. Repository candidate discovery remains an explicit manual
+refresh because each opaque candidate is bound to an exact Git commit and must
+not be invalidated during Edit, Validate, or Deploy; the deployed Scenarios
+catalogue still refreshes automatically.
+Same-context replacement preserves focused search text and caret position plus
+open Workers, filters, events, Scenario directories, health, and account
+disclosures. A page, environment, tab, or session-state transition clears that
+transient presentation state.
 
 The companion authenticates once per environment and requests the exact set of
 capabilities its UI exposes: discover, read, operate, author, and publish. Auth

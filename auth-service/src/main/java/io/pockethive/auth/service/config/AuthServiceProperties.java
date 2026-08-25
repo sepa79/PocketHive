@@ -63,6 +63,8 @@ public class AuthServiceProperties {
         private Duration authorizationCodeTtl = Duration.ofMinutes(2);
         private Duration accessTokenTtl = Duration.ofMinutes(15);
         private Duration refreshTokenTtl = Duration.ofDays(30);
+        private Duration dynamicClientTtl = Duration.ofDays(31);
+        private int dynamicClientCapacity = 256;
         private String vscodeClientId;
         private URI vscodeRedirectUri;
         private String introspectionClientId;
@@ -78,6 +80,10 @@ public class AuthServiceProperties {
         public void setAccessTokenTtl(Duration value) { this.accessTokenTtl = value; }
         public Duration getRefreshTokenTtl() { return refreshTokenTtl; }
         public void setRefreshTokenTtl(Duration value) { this.refreshTokenTtl = value; }
+        public Duration getDynamicClientTtl() { return dynamicClientTtl; }
+        public void setDynamicClientTtl(Duration value) { this.dynamicClientTtl = value; }
+        public int getDynamicClientCapacity() { return dynamicClientCapacity; }
+        public void setDynamicClientCapacity(int value) { this.dynamicClientCapacity = value; }
         public String getVscodeClientId() { return vscodeClientId; }
         public void setVscodeClientId(String value) { this.vscodeClientId = value; }
         public URI getVscodeRedirectUri() { return vscodeRedirectUri; }

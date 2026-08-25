@@ -69,7 +69,7 @@ public final class ToolCatalogue {
         tools.add(read("debug_journal", "Read a bounded journal page for one exact swarm and optional exact run.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId", "limit", "severity"));
         tools.add(read("debug_journal_runs", "List authoritative journal run summaries for one exact swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
         tools.add(read("debug_hive_journal", "Read a bounded hive-wide journal page.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "limit"));
-        tools.add(write("debug_tap", "Create a bounded temporary debug tap for one exact swarm and binding.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, false, "runtime-diagnostics", "swarmId", "role", "direction", "ioName", "maxItems"));
+        tools.add(write("debug_tap", "Create a bounded temporary debug tap for one exact swarm and binding.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, false, "runtime-diagnostics", "swarmId", "role", "direction", "ioName", "maxItems", "ttlSeconds"));
         tools.add(read("debug_tap_read", "Read bounded samples from one exact Orchestrator debug tap.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "tapId", "drain"));
         tools.add(write("debug_tap_close", "Close one exact Orchestrator debug tap.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, true, true, "runtime-diagnostics", "tapId"));
         tools.add(read("component_config_preview", "Preview a typed component configuration merge without sending it.", ToolOwner.ORCHESTRATOR, "live-configuration", "swarmId", "role", "instanceId", "patch"));
@@ -94,7 +94,18 @@ public final class ToolCatalogue {
         tools.add(write("scenario_workflow_create", "Create one independent QA-led Scenario Bundle workflow in a session.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "agentSessionId", "expectedSessionRevision"));
         tools.add(readMcp("scenario_workflow_list", "List the authenticated principal's workflows without exposing answers from another principal.", "qa-no-inference", "agentSessionId"));
         tools.add(readMcp("scenario_workflow_get", "Read one workflow, unresolved QA topics, state, revision, and safe next actions.", "qa-no-inference", "workflowId"));
-        tools.add(write("scenario_workflow_answer", "Elicit and record one explicit QA requirement disposition; never infer it.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic"));
+        tools.add(write("scenario_workflow_answer", "Use native MCP form elicitation to record one explicit QA requirement disposition; never infer it.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic"));
+        tools.add(readMcp("scenario_workflow_question", "Read the canonical question and evidence required for one explicit agent-mediated QA answer.", "qa-no-inference", "workflowId", "topic"));
+        tools.add(write("scenario_workflow_answer_submit", "Record only the user's explicit answer to a previously presented canonical QA question.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic", "questionId", "requestedSchemaDigest", "disposition", "answer", "sourceName", "sourceDigest"));
+        tools.add(new ToolDescriptor("scenario_workflow_review_prepare",
+            "Validate and render one complete compact QA brief for explicit user review without mutating the workflow.",
+            schema("scenario_workflow_review_prepare", "workflowId", "expectedRevision", "answers", "sourceName", "sourceDigest"),
+            ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, true, false, true, List.of("qa-no-inference")));
+        tools.add(write("scenario_workflow_review_submit",
+            "Atomically record every QA topic only after the user explicitly accepts the exact prepared compact review.",
+            ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference",
+            "workflowId", "expectedRevision", "reviewId", "requestedSchemaDigest", "answerSetDigest",
+            "answers", "sourceName", "sourceDigest"));
         tools.add(write("scenario_workflow_generate", "Record and return a deterministic proposed mixed-file set after every requirement is resolved.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, true, "scenario-authoring", "workflowId", "expectedRevision", "files"));
         tools.add(write("scenario_workflow_cancel", "Cancel one unpublished workflow at an expected revision.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, true, "qa-no-inference", "workflowId", "expectedRevision"));
         tools.add(write("scenario_bundle_validation_prepare", "Prepare a principal-bound ticket for pre-owner verified Scenario Manager validation.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "git-publication", "workflowId", "expectedRevision", "source", "fileManifest"));
@@ -148,6 +159,9 @@ public final class ToolCatalogue {
             case "debug_tap_read" -> Set.of("drain");
             case "runtime_swarm_timeline" -> Set.of("limit");
             case "agent_session_create" -> Set.of("expectedClientCapabilities");
+            case "scenario_workflow_answer_submit" -> Set.of("sourceName", "sourceDigest");
+            case "scenario_workflow_review_prepare", "scenario_workflow_review_submit" ->
+                Set.of("sourceName", "sourceDigest");
             case "scenario_bundle_publication_prepare" -> Set.of("scenarioId");
             default -> Set.of();
         };
@@ -155,9 +169,11 @@ public final class ToolCatalogue {
 
     private static Map<String, Object> fieldSchema(String field) {
         return switch (field) {
-            case "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint", "all", "drain" ->
+            case "includeCapabilities", "includeTemplates", "forceRefresh", "checkFingerprint", "all" ->
                 Map.of("type", "boolean");
+            case "drain" -> boundedInteger(0, 1000);
             case "limit", "maxItems", "tailLines" -> boundedInteger(1, 1000);
+            case "ttlSeconds" -> boundedInteger(1, Integer.MAX_VALUE);
             case "expectedRevision", "expectedSessionRevision" -> boundedInteger(0, Long.MAX_VALUE);
             case "patch", "expectedClientCapabilities" -> Map.of(
                 "type", "object", "minProperties", 1, "additionalProperties", true);
@@ -173,13 +189,19 @@ public final class ToolCatalogue {
                         "content", boundedString(0, 2_000_000)),
                     "required", List.of("path", "content"),
                     "additionalProperties", false));
+            case "answers" -> QaRequirementReviewContract.answersSchema();
             case "source" -> sourceSchema();
             case "fileManifest" -> fileManifestSchema();
             case "mode" -> Map.of("type", "string", "enum", List.of("CREATE", "REPLACE"));
             case "topic" -> Map.of(
                 "type", "string",
                 "enum", Arrays.stream(QaRequirementTopic.values()).map(Enum::name).toList());
-            case "archiveDigest", "bundleContentDigest", "candidateSetHash" -> Map.of(
+            case "disposition", "answer", "sourceName", "sourceDigest" ->
+                QaRequirementQuestionContract.responseFieldSchema(field);
+            case "reviewId" -> Map.of(
+                "type", "string", "enum", List.of(QaRequirementReviewContract.REVIEW_ID));
+            case "archiveDigest", "bundleContentDigest", "candidateSetHash", "requestedSchemaDigest",
+                 "answerSetDigest" -> Map.of(
                 "type", "string", "pattern", "^sha256:[0-9a-f]{64}$");
             case "reason" -> boundedString(1, 4000);
             case "path" -> boundedString(1, 4096);
@@ -242,10 +264,16 @@ public final class ToolCatalogue {
             "Run a novice-friendly QA requirements interview without inventing test intent.", """
                 # QA lead no-inference interview
 
-                Act as a QA lead. Create an agent session, then one workflow per requested Scenario Bundle. Explain terms in plain language and ask one small, answerable question at a time through `scenario_workflow_answer`. Never fill a required answer, applicability, SLA, load, data, authentication, setup, expected result, safety limit, or approval from inference or a default.
+                Act as a QA lead. Create an agent session, then one workflow per requested Scenario Bundle. Explain PocketHive terms in plain language. Never fill a required answer, applicability, SLA, load, data, authentication, setup, expected result, safety limit, or approval from inference or a default.
+
+                Explicitly select `COMPACT_REVIEW`, `MCP_FORM`, or `AGENT_MEDIATED`; you must not switch modes automatically. Prefer `COMPACT_REVIEW` when the user supplies a complete narrative. Deterministically extract candidate values with a named SHA-256 source, preserve material unknowns, then check the canonical authoring contract and live capabilities as soon as goal, SUT, and journey candidates exist. Report unsupported intent before lower-value follow-ups. Ask only about material unknowns, conflicts, or unsupported intent.
+
+                For compact capture, build exactly one candidate for every canonical topic. Call `scenario_workflow_review_prepare`, present its returned message unchanged, and stop. Call `scenario_workflow_review_submit` with the unchanged candidate and evidence only after the user explicitly accepts that exact review. Any user edit requires a new prepare/review step. Submission is atomic; never submit a partial review or convert an unknown into not-applicable.
+
+                Use `scenario_workflow_answer` only when the client visibly presents native MCP form elicitation. For a guided chat-mediated interview, call `scenario_workflow_question`, present the returned question unchanged, stop and wait for the user's explicit response, then call `scenario_workflow_answer_submit` with that response and the unchanged workflow revision, question ID, and schema digest. A declined or cancelled native form remains UNKNOWN; begin guided capture only as a new explicitly selected question/response step and never reuse prior model or repository text as the answer.
 
                 Obtain explicit dispositions for: goal/risk/scope; SUTs/endpoints/protocols; journeys/examples/schemas/expected outcomes; SLAs/stopping; load profile/concurrency/arrival/duration/ramping/traffic shape; test-data strategy/storage/profiles/sources/volume/privacy/retention/Redis/CSV/cleanup; auth profiles and secret references; setup/teardown/reset/seeding/dependencies; background traffic/isolation; oracles/negative cases/observability/triage; reporting/traceability/ownership/retention; safety/governance/approvals/abort. A decline or cancel stays UNKNOWN. Unsupported intent stays BLOCKED. Do not ask for secrets—ask for approved secret-reference names.
-                """);
+                """, "1.2.0");
         addSkill(result, "scenario-authoring", "Scenario Bundle authoring",
             "Turn confirmed QA requirements into deterministic files in the client's Git workspace.", """
                 # Scenario Bundle authoring
@@ -256,7 +284,7 @@ public final class ToolCatalogue {
             "Package, validate, and publish the exact committed mixed-file bundle safely.", """
                 # Git bundle validation and publication
 
-                Git is the source/version authority. Repository, commit, and path fields are client-asserted in this release. Package every regular file under the selected committed path without changing its bytes. Keep ZIP bytes outside model context. Prepare a validation ticket, stream the archive through the authenticated upload route, and retain the exact ZIP until publication. The MCP fully checks limits, traversal, entry types, manifest, and SHA-256 before calling Scenario Manager.
+                Git is the source/version authority. Repository, commit, and path fields are client-asserted in this release. Package every regular file under the selected committed path without changing its bytes. Keep ZIP bytes outside model context. Prepare a validation ticket, then stream the archive to its exact uploadUrl using exactly one authentication mode: the client's existing OAuth Bearer session, or the returned uploadCapability in the PocketHive-Upload-Capability header. Never put the capability in a URL, query string, log, or archive. Retain the exact ZIP until publication. The MCP fully checks limits, traversal, entry types, manifest, and SHA-256 before calling Scenario Manager.
 
                 Publication always names `CREATE` or `REPLACE`; never try the other mode after failure. Use the validation receipt's exact archive and canonical content digests. A timeout or lost response after owner mutation begins is AMBIGUOUS: call reconciliation and never replay the mutation. Scenario Manager replace is last-write-wins. Delete the client's temporary ZIP after terminal success/failure/cancel/expiry.
                 """);
@@ -289,7 +317,11 @@ public final class ToolCatalogue {
 
     private static void addSkill(Map<String, SkillDescriptor> skills, String id, String name,
                                  String description, String markdown) {
-        String version = "1.0.0";
+        addSkill(skills, id, name, description, markdown, "1.0.0");
+    }
+
+    private static void addSkill(Map<String, SkillDescriptor> skills, String id, String name,
+                                 String description, String markdown, String version) {
         skills.put(id, new SkillDescriptor(
             id,
             name,

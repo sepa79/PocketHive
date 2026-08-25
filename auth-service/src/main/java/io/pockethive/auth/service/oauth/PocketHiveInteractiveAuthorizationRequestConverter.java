@@ -11,18 +11,13 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.web.authentication.OAuth2AuthorizationCodeRequestAuthenticationConverter;
 import org.springframework.security.web.authentication.AuthenticationConverter;
 
-/** Resolves the one declared companion intent to the principal's current grant ceiling before consent. */
-public final class PocketHiveCompanionAuthorizationRequestConverter implements AuthenticationConverter {
+/** Narrows any declared interactive MCP intent to the principal's current grant ceiling. */
+public final class PocketHiveInteractiveAuthorizationRequestConverter implements AuthenticationConverter {
     private final OAuth2AuthorizationCodeRequestAuthenticationConverter delegate =
         new OAuth2AuthorizationCodeRequestAuthenticationConverter();
-    private final String companionClientId;
     private final InMemoryUserStore users;
 
-    public PocketHiveCompanionAuthorizationRequestConverter(String companionClientId, InMemoryUserStore users) {
-        if (companionClientId == null || companionClientId.isBlank()) {
-            throw new IllegalArgumentException("OAUTH_COMPANION_CLIENT_ID_REQUIRED");
-        }
-        this.companionClientId = companionClientId;
+    public PocketHiveInteractiveAuthorizationRequestConverter(InMemoryUserStore users) {
         this.users = java.util.Objects.requireNonNull(users, "users");
     }
 
@@ -30,8 +25,8 @@ public final class PocketHiveCompanionAuthorizationRequestConverter implements A
     public Authentication convert(HttpServletRequest request) {
         Authentication converted = delegate.convert(request);
         if (!(converted instanceof OAuth2AuthorizationCodeRequestAuthenticationToken candidate)
-            || !companionClientId.equals(candidate.getClientId())
-            || !PocketHiveMcpScopes.COMPANION.equals(candidate.getScopes())) {
+            || candidate.getScopes().isEmpty()
+            || !PocketHiveMcpScopes.COMPANION.containsAll(candidate.getScopes())) {
             return converted;
         }
         Authentication principal = (Authentication) candidate.getPrincipal();
@@ -50,7 +45,7 @@ public final class PocketHiveCompanionAuthorizationRequestConverter implements A
         Set<String> allowedScopes
     ) {
         Set<String> grantedScopes = new HashSet<>(allowedScopes);
-        grantedScopes.retainAll(PocketHiveMcpScopes.COMPANION);
+        grantedScopes.retainAll(candidate.getScopes());
         return new OAuth2AuthorizationCodeRequestAuthenticationToken(
             candidate.getAuthorizationUri(),
             candidate.getClientId(),

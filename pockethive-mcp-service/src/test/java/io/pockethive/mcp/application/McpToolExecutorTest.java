@@ -135,7 +135,7 @@ class McpToolExecutorTest {
             "/orchestrator/api/swarms/swarm%2Fa/journal/runs");
         assertOwnerGet("debug_hive_journal", input, "/orchestrator/api/journal/hive/page?limit=25");
         assertOwnerPost("debug_tap", input, "/orchestrator/api/debug/taps", input);
-        assertOwnerGet("debug_tap_read", input, "/orchestrator/api/debug/taps/tap%2Fa?drain=true");
+        assertOwnerGet("debug_tap_read", input, "/orchestrator/api/debug/taps/tap%2Fa?drain=3");
         execute("debug_tap_close", input);
         verify(owners).delete("/orchestrator/api/debug/taps/tap%2Fa");
     }
@@ -303,6 +303,284 @@ class McpToolExecutorTest {
     }
 
     @Test
+    void recordsAnExplicitAgentMediatedAnswerWithoutFormElicitation() {
+        when(exchange.getClientCapabilities()).thenReturn(null);
+        Object created = execute("agent_session_create", Map.of());
+        String sessionId = textField(created, "agentSessionId");
+        Object workflowCreated = execute("scenario_workflow_create", Map.of(
+            "agentSessionId", sessionId, "expectedSessionRevision", 0));
+        String workflowId = textField(workflowCreated, "workflowId");
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
+            "workflowId", workflowId, "topic", "GOAL_AND_RISK"));
+
+        assertThat(question)
+            .containsEntry("workflowId", workflowId)
+            .containsEntry("workflowRevision", 0L)
+            .containsEntry("topic", "GOAL_AND_RISK")
+            .containsEntry("captureMode", "AGENT_MEDIATED")
+            .containsEntry("message", "What goal, risks, scope, and out-of-scope behaviour must this test cover?");
+        assertThat(question.get("questionId")).isEqualTo("agent-mediated/goal_and_risk");
+        assertThat(question.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
+        assertThat(question.get("responseSchema")).isInstanceOf(Map.class);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> submitted = (Map<String, Object>) execute("scenario_workflow_answer_submit", Map.of(
+            "workflowId", workflowId,
+            "expectedRevision", question.get("workflowRevision"),
+            "topic", "GOAL_AND_RISK",
+            "questionId", question.get("questionId"),
+            "requestedSchemaDigest", question.get("requestedSchemaDigest"),
+            "disposition", "USER_PROVIDED",
+            "answer", "Provision cardholders for later performance testing."));
+
+        assertThat(submitted).containsEntry("workflowId", workflowId).containsEntry("revision", 1L);
+        var answer = state.workflows.get(workflowId).requirements().get(QaRequirementTopic.GOAL_AND_RISK);
+        assertThat(answer.value()).isEqualTo("Provision cardholders for later performance testing.");
+        assertThat(answer.provenance().questionId()).isEqualTo("agent-mediated/goal_and_risk");
+        assertThat(answer.provenance().requestedSchemaDigest()).isEqualTo(question.get("requestedSchemaDigest"));
+        assertThat(answer.provenance().acceptedContentDigest()).matches("sha256:[0-9a-f]{64}");
+        verify(exchange, never()).createElicitation(any());
+    }
+
+    @Test
+    void preparesAndAtomicallySubmitsOneExplicitCompactReview() {
+        Object created = execute("agent_session_create", Map.of());
+        String sessionId = textField(created, "agentSessionId");
+        Object workflowCreated = execute("scenario_workflow_create", Map.of(
+            "agentSessionId", sessionId, "expectedSessionRevision", 0));
+        String workflowId = textField(workflowCreated, "workflowId");
+        Map<String, Object> candidate = compactReviewInput(workflowId);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> prepared = (Map<String, Object>) execute(
+            "scenario_workflow_review_prepare", candidate);
+
+        assertThat(prepared)
+            .containsEntry("workflowId", workflowId)
+            .containsEntry("workflowRevision", 0L)
+            .containsEntry("captureMode", "COMPACT_REVIEW")
+            .containsEntry("reviewId", "compact-review/all-topics");
+        assertThat(prepared.get("message")).asString()
+            .contains("Review every requirement below", "GOAL_AND_RISK", "Explicit goal");
+        assertThat(prepared.get("requestedSchemaDigest")).asString().matches("sha256:[0-9a-f]{64}");
+        assertThat(prepared.get("answerSetDigest")).asString().matches("sha256:[0-9a-f]{64}");
+        assertThat(prepared).containsEntry("sourceName", "user requirement narrative")
+            .containsEntry("sourceDigest", SHA);
+        assertThat(prepared.get("answers")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+            .hasSize(QaRequirementTopic.values().length);
+        assertThat(state.workflows.get(workflowId).revision()).isZero();
+
+        Map<String, Object> submission = new LinkedHashMap<>(candidate);
+        submission.put("reviewId", prepared.get("reviewId"));
+        submission.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+        submission.put("answerSetDigest", prepared.get("answerSetDigest"));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> submitted = (Map<String, Object>) execute(
+            "scenario_workflow_review_submit", submission);
+
+        assertThat(submitted).containsEntry("revision", 1L)
+            .containsEntry("state", io.pockethive.mcp.domain.ScenarioWorkflowState.REVIEW_REQUIRED);
+        ScenarioWorkflow workflow = state.workflows.get(workflowId);
+        assertThat(workflow.requirements().values()).allSatisfy(answer -> {
+            assertThat(answer.provenance().questionId()).startsWith("compact-review/");
+            assertThat(answer.provenance().acceptedContentDigest()).isEqualTo(prepared.get("answerSetDigest"));
+        });
+        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value())
+            .isEqualTo("Explicit goal");
+        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).confirmedSource().name())
+            .isEqualTo("user requirement narrative");
+        assertThat(state.removedGeneratedFiles).contains(workflowId);
+    }
+
+    @Test
+    void compactReviewRejectsIncompleteDuplicateStaleAndTamperedEvidenceWithoutMutation() {
+        ScenarioWorkflow workflow = workflow("wf-compact-invalid");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        Map<String, Object> candidate = compactReviewInput(workflow.id());
+
+        Map<String, Object> stalePrepare = new LinkedHashMap<>(candidate);
+        stalePrepare.put("expectedRevision", 1);
+        assertCode("WORKFLOW_VERSION_CONFLICT",
+            () -> execute("scenario_workflow_review_prepare", stalePrepare));
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> prepared = (Map<String, Object>) execute(
+            "scenario_workflow_review_prepare", candidate);
+        Map<String, Object> valid = new LinkedHashMap<>(candidate);
+        valid.put("reviewId", prepared.get("reviewId"));
+        valid.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+        valid.put("answerSetDigest", prepared.get("answerSetDigest"));
+
+        Map<String, Object> wrongId = new LinkedHashMap<>(valid);
+        wrongId.put("reviewId", "compact-review/wrong");
+        assertCode("QA_REVIEW_ID_MISMATCH",
+            () -> execute("scenario_workflow_review_submit", wrongId));
+
+        Map<String, Object> wrongSchema = new LinkedHashMap<>(valid);
+        wrongSchema.put("requestedSchemaDigest", SHA);
+        assertCode("QA_REVIEW_SCHEMA_MISMATCH",
+            () -> execute("scenario_workflow_review_submit", wrongSchema));
+
+        Map<String, Object> tampered = new LinkedHashMap<>(valid);
+        tampered.put("answerSetDigest", SHA);
+        assertCode("QA_REVIEW_ANSWER_SET_MISMATCH",
+            () -> execute("scenario_workflow_review_submit", tampered));
+
+        Map<String, Object> stale = new LinkedHashMap<>(valid);
+        stale.put("expectedRevision", 1);
+        assertCode("WORKFLOW_VERSION_CONFLICT",
+            () -> execute("scenario_workflow_review_submit", stale));
+
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> originalAnswers = (List<Map<String, Object>>) candidate.get("answers");
+        Map<String, Object> incomplete = new LinkedHashMap<>(candidate);
+        incomplete.put("answers", originalAnswers.subList(0, originalAnswers.size() - 1));
+        assertCode("QA_REVIEW_TOPICS_INCOMPLETE",
+            () -> execute("scenario_workflow_review_prepare", incomplete));
+
+        Map<String, Object> duplicate = new LinkedHashMap<>(candidate);
+        List<Map<String, Object>> duplicatedAnswers = new java.util.ArrayList<>(originalAnswers);
+        duplicatedAnswers.set(duplicatedAnswers.size() - 1, originalAnswers.getFirst());
+        duplicate.put("answers", duplicatedAnswers);
+        assertCode("QA_REVIEW_TOPIC_DUPLICATE",
+            () -> execute("scenario_workflow_review_prepare", duplicate));
+
+        assertThat(workflow.revision()).isZero();
+        assertThat(workflow.requirements().values())
+            .allSatisfy(answer -> assertThat(answer.value()).isNull());
+    }
+
+    @Test
+    void compactReviewRecordsUnknownClientAndEverySupportedDisposition() {
+        ScenarioWorkflow workflow = workflow("wf-compact-unknown-client");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        when(exchange.getClientInfo()).thenReturn(null);
+        List<Map<String, Object>> answers = java.util.Arrays.stream(QaRequirementTopic.values())
+            .map(topic -> Map.<String, Object>of(
+                "topic", topic.name(),
+                "disposition", topic == QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT
+                    ? "NOT_APPLICABLE" : "USER_PROVIDED",
+                "answer", "Explicit " + topic.name()))
+            .toList();
+        Map<String, Object> candidate = new LinkedHashMap<>();
+        candidate.put("workflowId", workflow.id());
+        candidate.put("expectedRevision", 0);
+        candidate.put("answers", answers);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> prepared = (Map<String, Object>) execute(
+            "scenario_workflow_review_prepare", candidate);
+        candidate.put("reviewId", prepared.get("reviewId"));
+        candidate.put("requestedSchemaDigest", prepared.get("requestedSchemaDigest"));
+        candidate.put("answerSetDigest", prepared.get("answerSetDigest"));
+        execute("scenario_workflow_review_submit", candidate);
+
+        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).provenance())
+            .satisfies(provenance -> {
+                assertThat(provenance.declaredClientName()).isEqualTo("unknown");
+                assertThat(provenance.declaredClientVersion()).isEqualTo("unknown");
+            });
+        assertThat(workflow.requirements().get(QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT).disposition())
+            .isEqualTo(io.pockethive.mcp.domain.RequirementDisposition.NOT_APPLICABLE);
+    }
+
+    @Test
+    void rejectsNativeAnswersWithoutFormCapabilityAndNeverSwitchesCaptureMode() {
+        ScenarioWorkflow workflow = workflow("wf-native-no-form");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        when(exchange.getClientCapabilities()).thenReturn(null);
+
+        assertCode("ELICITATION_CAPABILITY_REQUIRED", () -> execute("scenario_workflow_answer", Map.of(
+            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+
+        assertThat(workflow.revision()).isZero();
+        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
+        verify(exchange, never()).createElicitation(any());
+    }
+
+    @Test
+    void rejectsInvalidNativeElicitationResultsAndUnexpectedFields() {
+        ScenarioWorkflow workflow = workflow("wf-invalid-native");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        when(exchange.createElicitation(any())).thenReturn(null);
+        assertCode("ELICITATION_RESULT_INVALID", () -> execute("scenario_workflow_answer", Map.of(
+            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+
+        when(exchange.createElicitation(any())).thenReturn(new McpSchema.ElicitResult(
+            McpSchema.ElicitResult.Action.ACCEPT,
+            Map.of("disposition", "USER_PROVIDED", "answer", "Explicit", "unexpected", "value")));
+        assertCode("QA_RESPONSE_FIELD_UNEXPECTED", () -> execute("scenario_workflow_answer", Map.of(
+            "workflowId", workflow.id(), "expectedRevision", 0, "topic", "GOAL_AND_RISK")));
+        assertThat(workflow.revision()).isZero();
+    }
+
+    @Test
+    void rejectsTamperedOrStaleAgentMediatedQuestionEvidenceWithoutMutation() {
+        ScenarioWorkflow workflow = workflow("wf-mediated-evidence");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
+            "workflowId", workflow.id(), "topic", "GOAL_AND_RISK"));
+        Map<String, Object> valid = mediatedAnswer(question, "USER_PROVIDED", "Explicit goal");
+
+        Map<String, Object> wrongId = new LinkedHashMap<>(valid);
+        wrongId.put("questionId", "agent-mediated/sut_and_endpoints");
+        assertCode("QA_QUESTION_ID_MISMATCH",
+            () -> execute("scenario_workflow_answer_submit", wrongId));
+
+        Map<String, Object> wrongDigest = new LinkedHashMap<>(valid);
+        wrongDigest.put("requestedSchemaDigest", SHA);
+        assertCode("QA_QUESTION_SCHEMA_MISMATCH",
+            () -> execute("scenario_workflow_answer_submit", wrongDigest));
+
+        Map<String, Object> stale = new LinkedHashMap<>(valid);
+        stale.put("expectedRevision", 1);
+        assertCode("WORKFLOW_VERSION_CONFLICT",
+            () -> execute("scenario_workflow_answer_submit", stale));
+
+        assertThat(workflow.revision()).isZero();
+        assertThat(workflow.requirements().get(QaRequirementTopic.GOAL_AND_RISK).value()).isNull();
+    }
+
+    @Test
+    void appliesTheSameDispositionAndSourceRulesToAgentMediatedAnswers() {
+        ScenarioWorkflow workflow = workflow("wf-mediated-source");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
+        @SuppressWarnings("unchecked")
+        Map<String, Object> question = (Map<String, Object>) execute("scenario_workflow_question", Map.of(
+            "workflowId", workflow.id(), "topic", "JOURNEYS_SCHEMAS_AND_EXPECTATIONS"));
+
+        Map<String, Object> missingSource = mediatedAnswer(
+            question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
+        assertCode("TOOL_INPUT_REQUIRED",
+            () -> execute("scenario_workflow_answer_submit", missingSource));
+
+        Map<String, Object> forbiddenSource = mediatedAnswer(question, "NOT_APPLICABLE", "No schema applies");
+        forbiddenSource.put("sourceName", "openapi.yaml");
+        forbiddenSource.put("sourceDigest", SHA);
+        assertCode("REQUIREMENT_SOURCE_FORBIDDEN",
+            () -> execute("scenario_workflow_answer_submit", forbiddenSource));
+
+        Map<String, Object> valid = mediatedAnswer(
+            question, "USER_CONFIRMED_SOURCE", "Use the referenced contract");
+        valid.put("sourceName", "openapi.yaml");
+        valid.put("sourceDigest", SHA);
+        execute("scenario_workflow_answer_submit", valid);
+
+        var answer = workflow.requirements().get(QaRequirementTopic.JOURNEYS_SCHEMAS_AND_EXPECTATIONS);
+        assertThat(answer.confirmedSource().name()).isEqualTo("openapi.yaml");
+        assertThat(answer.confirmedSource().digest()).isEqualTo(SHA);
+    }
+
+    @Test
     void preparesWorkflowAndDirectValidationWithExactManifestAndSource() {
         ScenarioWorkflow workflow = generatedWorkflow("wf-generated", "as-generated");
         state.workflows.put(workflow.id(), workflow);
@@ -313,16 +591,17 @@ class McpToolExecutorTest {
         ValidationUploadTicket ticket = mock(ValidationUploadTicket.class);
         when(ticket.id()).thenReturn("uv-test");
         when(ticket.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(uploads.prepareValidation(eq(PRINCIPAL), eq(workflow.id()), any(), any(), eq(NOW)))
-            .thenReturn(ticket);
+        when(uploads.prepareValidationWithCapability(eq(PRINCIPAL), eq(workflow.id()), any(), any(), eq(NOW)))
+            .thenReturn(new PreparedUpload<>(ticket, "validation-capability"));
 
         assertThat(json(execute("scenario_bundle_validation_prepare", input)))
             .contains("\"ticketId\":\"uv-test\"")
             .contains("\"uploadUrl\":\"http://127.0.0.1:8080/mcp/uploads/uv-test\"")
+            .contains("\"uploadCapability\":\"validation-capability\"")
             .contains("\"expiresAt\":");
         ArgumentCaptor<io.pockethive.mcp.domain.BundleFileManifest> manifest =
             ArgumentCaptor.forClass(io.pockethive.mcp.domain.BundleFileManifest.class);
-        verify(uploads).prepareValidation(eq(PRINCIPAL), eq(workflow.id()),
+        verify(uploads).prepareValidationWithCapability(eq(PRINCIPAL), eq(workflow.id()),
             eq(new SourceMetadata("git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED)),
             manifest.capture(), eq(NOW));
         assertThat(manifest.getValue().files()).hasSize(1);
@@ -331,10 +610,12 @@ class McpToolExecutorTest {
         ValidationUploadTicket direct = mock(ValidationUploadTicket.class);
         when(direct.id()).thenReturn("uv-direct");
         when(direct.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(uploads.prepareDirectValidation(eq(PRINCIPAL), any(), any(), eq(NOW))).thenReturn(direct);
+        when(uploads.prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW)))
+            .thenReturn(new PreparedUpload<>(direct, "direct-capability"));
         assertThat(json(execute("scenario_bundle_direct_validation_prepare", bundleInput())))
-            .contains("\"ticketId\":\"uv-direct\"");
-        verify(uploads).prepareDirectValidation(eq(PRINCIPAL), any(), any(), eq(NOW));
+            .contains("\"ticketId\":\"uv-direct\"")
+            .contains("\"uploadCapability\":\"direct-capability\"");
+        verify(uploads).prepareDirectValidationWithCapability(eq(PRINCIPAL), any(), any(), eq(NOW));
     }
 
     @Test
@@ -354,8 +635,9 @@ class McpToolExecutorTest {
         when(publication.attemptId()).thenReturn("attempt-a");
         when(publication.validationReceiptId()).thenReturn("receipt-a");
         when(publication.mode()).thenReturn(PublicationMode.CREATE);
-        when(uploads.preparePublication(eq(PRINCIPAL), eq("receipt-a"), eq(PublicationMode.CREATE),
-            eq(null), any(), any(), eq(SHA), eq(SHA), eq(NOW))).thenReturn(publication);
+        when(uploads.preparePublicationWithCapability(eq(PRINCIPAL), eq("receipt-a"),
+            eq(PublicationMode.CREATE), eq(null), any(), any(), eq(SHA), eq(SHA), eq(NOW)))
+            .thenReturn(new PreparedUpload<>(publication, "publication-capability"));
         Map<String, Object> create = bundleInput();
         create.put("validationReceiptId", "receipt-a");
         create.put("mode", "create");
@@ -363,11 +645,13 @@ class McpToolExecutorTest {
         create.put("bundleContentDigest", SHA);
         assertThat(json(execute("scenario_bundle_publication_prepare", create)))
             .contains("\"ticketId\":\"up-test\"")
+            .contains("\"uploadCapability\":\"publication-capability\"")
             .contains("\"attemptId\":\"attempt-a\"")
             .contains("\"mode\":\"CREATE\"");
 
-        when(uploads.preparePublication(eq(PRINCIPAL), eq("receipt-a"), eq(PublicationMode.REPLACE),
-            eq("existing"), any(), any(), eq(SHA), eq(SHA), eq(NOW))).thenReturn(publication);
+        when(uploads.preparePublicationWithCapability(eq(PRINCIPAL), eq("receipt-a"),
+            eq(PublicationMode.REPLACE), eq("existing"), any(), any(), eq(SHA), eq(SHA), eq(NOW)))
+            .thenReturn(new PreparedUpload<>(publication, "replace-capability"));
         Map<String, Object> replace = new LinkedHashMap<>(create);
         replace.put("mode", "REPLACE");
         replace.put("scenarioId", "existing");
@@ -399,8 +683,8 @@ class McpToolExecutorTest {
         state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
         when(uploads.validationReceipt("receipt-a", PRINCIPAL))
             .thenReturn(receipt(UploadWorkflowBinding.workflow(workflow.id())));
-        when(uploads.preparePublication(any(), any(), any(), any(), any(), any(), any(), any(), any()))
-            .thenReturn(mock(PublicationUploadTicket.class));
+        when(uploads.preparePublicationWithCapability(any(), any(), any(), any(), any(), any(), any(), any(), any()))
+            .thenReturn(new PreparedUpload<>(mock(PublicationUploadTicket.class), "publication-capability"));
         Map<String, Object> input = bundleInput();
         input.put("validationReceiptId", "receipt-a");
         input.put("mode", "CREATE");
@@ -415,7 +699,7 @@ class McpToolExecutorTest {
     @Test
     void rejectsMissingCapabilitiesScopesUnknownHandlersAndMalformedInputExplicitly() {
         when(exchange.getClientCapabilities()).thenReturn(null);
-        assertCode("ELICITATION_CAPABILITY_REQUIRED", () -> execute("agent_session_create", Map.of()));
+        assertThat(execute("agent_session_create", Map.of())).isNotNull();
 
         when(exchange.transportContext()).thenReturn(McpTransportContext.create(Map.of(
             "pockethive.issuer", PRINCIPAL.issuer().toString(), "pockethive.subject", PRINCIPAL.subject(),
@@ -571,7 +855,7 @@ class McpToolExecutorTest {
         assertCode("WORKFLOW_VERSION_CONFLICT", () -> execute("scenario_bundle_validation_prepare", input));
         input.put("expectedRevision", 0);
         assertCode("WORKFLOW_NOT_GENERATED", () -> execute("scenario_bundle_validation_prepare", input));
-        verify(uploads, never()).prepareValidation(any(), any(), any(), any(), any());
+        verify(uploads, never()).prepareValidationWithCapability(any(), any(), any(), any(), any());
     }
 
     @Test
@@ -631,6 +915,37 @@ class McpToolExecutorTest {
         return executor.execute(catalogue.requireTool(toolId), exchange, input);
     }
 
+    private static Map<String, Object> mediatedAnswer(Map<String, Object> question,
+                                                       String disposition, String answer) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("workflowId", question.get("workflowId"));
+        result.put("expectedRevision", question.get("workflowRevision"));
+        result.put("topic", String.valueOf(question.get("topic")));
+        result.put("questionId", question.get("questionId"));
+        result.put("requestedSchemaDigest", question.get("requestedSchemaDigest"));
+        result.put("disposition", disposition);
+        result.put("answer", answer);
+        return result;
+    }
+
+    private static Map<String, Object> compactReviewInput(String workflowId) {
+        List<Map<String, Object>> answers = java.util.Arrays.stream(QaRequirementTopic.values())
+            .map(topic -> Map.<String, Object>of(
+                "topic", topic.name(),
+                "disposition", "USER_CONFIRMED_SOURCE",
+                "answer", topic == QaRequirementTopic.GOAL_AND_RISK
+                    ? "Explicit goal"
+                    : "Explicit " + topic.name()))
+            .toList();
+        Map<String, Object> input = new LinkedHashMap<>();
+        input.put("workflowId", workflowId);
+        input.put("expectedRevision", 0);
+        input.put("sourceName", "user requirement narrative");
+        input.put("sourceDigest", SHA);
+        input.put("answers", answers);
+        return input;
+    }
+
     private void assertOwnerGet(String toolId, Map<String, Object> input, String path) {
         execute(toolId, input);
         verify(owners).get(path);
@@ -685,8 +1000,12 @@ class McpToolExecutorTest {
         input.put("runId", "run/a");
         input.put("severity", "WARN");
         input.put("tapId", "tap/a");
-        input.put("drain", true);
+        input.put("drain", 3);
         input.put("role", "generator");
+        input.put("direction", "IN");
+        input.put("ioName", "in");
+        input.put("maxItems", 5);
+        input.put("ttlSeconds", 60);
         input.put("instanceId", "gen/a");
         input.put("patch", Map.of("rate", 5));
         input.put("runtimeId", "runtime-a");
@@ -765,7 +1084,7 @@ class McpToolExecutorTest {
     private static PocketHiveMcpProperties properties() {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, "2025-11-25", PocketHiveMcpProperties.StateMode.MEMORY,
+            ingress, ingress, PocketHiveMcpProperties.StateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"), Duration.ofMinutes(30), Duration.ofHours(1),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5), 100, 10, 100, 10, 10_000_000,
             2, 10, 10_000_000, 20_000_000, 200, 20_000_000, 8, 100,

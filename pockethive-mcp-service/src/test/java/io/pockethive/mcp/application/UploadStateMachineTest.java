@@ -19,6 +19,7 @@ class UploadStateMachineTest {
         new PrincipalKey(URI.create("https://issuer.example"), "qa-lead");
     private static final Instant NOW = Instant.parse("2026-08-18T12:00:00Z");
     private static final String SHA = "sha256:" + "a".repeat(64);
+    private static final String CAPABILITY_DIGEST = "sha256:" + "b".repeat(64);
     private static final SourceMetadata SOURCE = new SourceMetadata(
         "https://git.example/repo", "a".repeat(40), "scenarios/sample", SourceVerification.CLIENT_ASSERTED);
     private static final BundleFileManifest MANIFEST = new BundleFileManifest(List.of(
@@ -156,6 +157,7 @@ class UploadStateMachineTest {
         assertThat(ticket.workflowBinding()).isEqualTo(UploadWorkflowBinding.direct());
         assertThat(ticket.source()).isEqualTo(SOURCE);
         assertThat(ticket.manifest()).isEqualTo(MANIFEST);
+        assertThat(ticket.uploadCapabilityDigest()).isEqualTo(CAPABILITY_DIGEST);
         assertThat(ticket.expiresAt()).isEqualTo(NOW.plusSeconds(60));
         assertThat(ticket.state()).isEqualTo(UploadTicketState.PREPARED);
     }
@@ -167,6 +169,7 @@ class UploadStateMachineTest {
         assertThat(ticket.workflowBinding()).isEqualTo(UploadWorkflowBinding.direct());
         assertThat(ticket.source()).isEqualTo(SOURCE);
         assertThat(ticket.manifest()).isEqualTo(MANIFEST);
+        assertThat(ticket.uploadCapabilityDigest()).isEqualTo(CAPABILITY_DIGEST);
         assertThat(ticket.expiresAt()).isEqualTo(NOW.plusSeconds(60));
         assertThat(ticket.attemptId()).isEqualTo("attempt-a");
         assertThat(ticket.validationReceiptId()).isEqualTo("receipt-a");
@@ -190,12 +193,12 @@ class UploadStateMachineTest {
 
     private static ValidationUploadTicket validation(String id) {
         return new ValidationUploadTicket(id, PRINCIPAL, UploadWorkflowBinding.direct(), SOURCE, MANIFEST,
-            NOW.plusSeconds(60));
+            CAPABILITY_DIGEST, NOW.plusSeconds(60));
     }
 
     private static PublicationUploadTicket publication(String id, PublicationMode mode, String scenarioId) {
         return new PublicationUploadTicket(id, PRINCIPAL, UploadWorkflowBinding.direct(), SOURCE, MANIFEST,
-            NOW.plusSeconds(60), "attempt-a", "receipt-a", SHA, SHA, mode, scenarioId);
+            CAPABILITY_DIGEST, NOW.plusSeconds(60), "attempt-a", "receipt-a", SHA, SHA, mode, scenarioId);
     }
 
     private static PublicationAttempt attempt(String id) {

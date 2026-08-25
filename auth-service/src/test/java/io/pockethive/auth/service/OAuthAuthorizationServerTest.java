@@ -55,6 +55,8 @@ class OAuthAuthorizationServerTest {
             .andExpect(jsonPath("$.authorization_endpoint").value(
                 "http://localhost:8080/auth-service/oauth/authorize"))
             .andExpect(jsonPath("$.token_endpoint").value("http://localhost:8080/auth-service/oauth/token"))
+            .andExpect(jsonPath("$.registration_endpoint").value(
+                "http://localhost:8080/auth-service/oauth/register"))
             .andExpect(jsonPath("$.introspection_endpoint").value(
                 "http://localhost:8080/auth-service/oauth/introspect"))
             .andExpect(jsonPath("$.code_challenge_methods_supported[0]").value("S256"))
@@ -73,13 +75,121 @@ class OAuthAuthorizationServerTest {
         assertThat(arrayValues(metadata, "introspection_endpoint_auth_methods_supported"))
             .containsExactly("client_secret_basic");
         assertThat(arrayValues(metadata, "scopes_supported"))
-            .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.ALL);
+            .containsExactlyElementsOf(PocketHiveMcpScopes.COMPANION_ORDERED);
         assertThat(metadata.fieldNames()).toIterable().containsExactlyInAnyOrder(
             "issuer", "authorization_endpoint", "token_endpoint",
+            "registration_endpoint",
             "token_endpoint_auth_methods_supported", "scopes_supported",
             "response_types_supported", "grant_types_supported", "introspection_endpoint",
             "introspection_endpoint_auth_methods_supported", "code_challenge_methods_supported",
             "revocation_endpoint", "revocation_endpoint_auth_methods_supported");
+
+        mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("Discovery contract client",
+                    "http://127.0.0.1:38122/oauth/callback",
+                    String.join(" ", arrayValues(metadata, "scopes_supported")))))
+            .andExpect(status().isCreated());
+    }
+
+    @Test
+    void dynamicallyRegistersAndAuthorizesAStandardsConformingPublicMcpClient() throws Exception {
+        String redirectUri = "http://127.0.0.1:38123/oauth/callback";
+        MvcResult registration = mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("Portable MCP test client", redirectUri,
+                    PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.READ)))
+            .andExpect(status().isCreated())
+            .andExpect(jsonPath("$.client_id").isNotEmpty())
+            .andExpect(jsonPath("$.client_secret").doesNotExist())
+            .andExpect(jsonPath("$.client_name").value("Portable MCP test client"))
+            .andExpect(jsonPath("$.redirect_uris[0]").value(redirectUri))
+            .andExpect(jsonPath("$.grant_types[0]").value("authorization_code"))
+            .andExpect(jsonPath("$.grant_types[1]").value("refresh_token"))
+            .andExpect(jsonPath("$.response_types[0]").value("code"))
+            .andExpect(jsonPath("$.token_endpoint_auth_method").value("none"))
+            .andReturn();
+        String clientId = mapper.readTree(registration.getResponse().getContentAsString())
+            .path("client_id").asText();
+
+        mvc.perform(get("/oauth/consent")
+                .with(user("local-admin"))
+                .param("client_id", clientId)
+                .param("state", "portable-consent")
+                .param("scope", PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString("Portable MCP test client")));
+
+        MvcResult authorization = mvc.perform(get("/oauth/authorize")
+                .with(user("local-admin"))
+                .queryParam("response_type", "code")
+                .queryParam("client_id", clientId)
+                .queryParam("redirect_uri", redirectUri)
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.READ)
+                .queryParam("state", "portable-state")
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+        String code = UriComponentsBuilder.fromUri(authorizationCallbackFor(
+                authorization, clientId, redirectUri,
+                PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))
+            .build().getQueryParams().getFirst("code");
+
+        MvcResult tokenResult = mvc.perform(post("/oauth/token")
+                .param("grant_type", "authorization_code")
+                .param("client_id", clientId)
+                .param("code", code)
+                .param("redirect_uri", redirectUri)
+                .param("resource", RESOURCE)
+                .param("code_verifier", VERIFIER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")))
+            .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")))
+            .andExpect(jsonPath("$.scope").isNotEmpty())
+            .andDo(result -> assertThat(Set.copyOf(List.of(
+                    mapper.readTree(result.getResponse().getContentAsString()).path("scope").asText().split(" "))))
+                .containsExactlyInAnyOrder(PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))
+            .andReturn();
+        String refreshToken = mapper.readTree(tokenResult.getResponse().getContentAsString())
+            .path("refresh_token").asText();
+
+        mvc.perform(post("/oauth/token")
+                .param("grant_type", "refresh_token")
+                .param("client_id", clientId)
+                .param("refresh_token", refreshToken)
+                .param("resource", RESOURCE))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")))
+            .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.allOf(
+                org.hamcrest.Matchers.startsWith("phrfr_"),
+                org.hamcrest.Matchers.not(refreshToken))));
+    }
+
+    @Test
+    void dynamicRegistrationRejectsUnsafeOrOverPrivilegedClientMetadata() throws Exception {
+        String safeRedirect = "http://localhost:38123/callback";
+        mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("Unsafe", "http://remote.example/callback",
+                    PocketHiveMcpScopes.DISCOVER)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("invalid_redirect_uri"));
+        mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("Over privileged", safeRedirect,
+                    PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.CLEANUP)))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("invalid_client_metadata"));
+        mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("Confidential", safeRedirect,
+                    PocketHiveMcpScopes.DISCOVER).replace(
+                        "\"token_endpoint_auth_method\":\"none\"",
+                        "\"token_endpoint_auth_method\":\"client_secret_basic\"")))
+            .andExpect(status().isBadRequest())
+            .andExpect(jsonPath("$.error").value("invalid_client_metadata"));
     }
 
     @Test
@@ -145,8 +255,16 @@ class OAuthAuthorizationServerTest {
     @Test
     @WithMockUser(username = "local-admin")
     void consentFormEscapesUntrustedBrowserValues() throws Exception {
+        MvcResult registration = mvc.perform(post("/oauth/register")
+                .contentType("application/json")
+                .content(dynamicRegistration("<script>client</script>",
+                    "http://127.0.0.1:38124/callback", PocketHiveMcpScopes.DISCOVER)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String clientId = mapper.readTree(registration.getResponse().getContentAsString())
+            .path("client_id").asText();
         mvc.perform(get("/oauth/consent")
-                .param("client_id", "<script>client</script>")
+                .param("client_id", clientId)
                 .param("state", "state\" autofocus onfocus=\"alert(1)")
                 .param("scope", "<img/src=x/onerror=alert(1)>"))
             .andExpect(status().isOk())
@@ -337,7 +455,7 @@ class OAuthAuthorizationServerTest {
 
     @Test
     @WithMockUser(username = "local-admin")
-    void privilegedScopeAuthorizationRemainsEphemeral() throws Exception {
+    void declaredInteractiveSubsetReceivesARotatingSession() throws Exception {
         MvcResult authorization = mvc.perform(get("/oauth/authorize")
                 .queryParam("response_type", "code")
                 .queryParam("client_id", CLIENT_ID)
@@ -363,7 +481,7 @@ class OAuthAuthorizationServerTest {
                 .param("code_verifier", VERIFIER))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")))
-            .andExpect(jsonPath("$.refresh_token").doesNotExist());
+            .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")));
     }
 
     @Test
@@ -467,6 +585,11 @@ class OAuthAuthorizationServerTest {
     }
 
     private URI authorizationCallback(MvcResult authorization, String... scopes) throws Exception {
+        return authorizationCallbackFor(authorization, CLIENT_ID, REDIRECT_URI, scopes);
+    }
+
+    private URI authorizationCallbackFor(MvcResult authorization, String clientId, String redirectUri,
+                                         String... scopes) throws Exception {
         URI redirect = URI.create(authorization.getResponse().getRedirectedUrl());
         URI callback;
         if ("/oauth/consent".equals(redirect.getPath())) {
@@ -476,7 +599,7 @@ class OAuthAuthorizationServerTest {
             MvcResult approved = mvc.perform(post("/oauth/authorize")
                     .session(session)
                     .with(csrf())
-                    .param("client_id", CLIENT_ID)
+                    .param("client_id", clientId)
                     .param("state", consentState)
                     .param("scope", scopes))
                 .andExpect(status().is3xxRedirection())
@@ -486,8 +609,21 @@ class OAuthAuthorizationServerTest {
             callback = redirect;
         }
         assertThat(callback.getScheme() + "://" + callback.getAuthority() + callback.getPath())
-            .isEqualTo(REDIRECT_URI);
+            .isEqualTo(redirectUri);
         return callback;
+    }
+
+    private static String dynamicRegistration(String clientName, String redirectUri, String scopes) {
+        return """
+            {
+              "client_name":"%s",
+              "redirect_uris":["%s"],
+              "grant_types":["authorization_code","refresh_token"],
+              "response_types":["code"],
+              "token_endpoint_auth_method":"none",
+              "scope":"%s"
+            }
+            """.formatted(clientName, redirectUri, scopes);
     }
 
     private JsonNode issueBaseSession(String state) throws Exception {

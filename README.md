@@ -22,6 +22,7 @@ PocketHive is a RabbitMQ‑centric load & behavior simulator that orchestrates s
 - [Core Components](#core-components)
 - [Configuration](#configuration)
 - [Observability](#observability)
+- [Quick start](#quick-start)
 - [Branching Strategy](#branching-strategy)
 - [Contributing](#contributing)
 - [License](#license)
@@ -242,6 +243,8 @@ Keep configuration **explicit**—favor declaring values over hidden defaults.
      - `--quick` skips tests during Maven build, but for full-stack runs it still tears down and restarts the local compose stack.
      - `--service <name>` or `--module <module>` rebuilds targeted services (e.g., `--service generator --module orchestrator-service`), independent of `--restart`.
 3. Open <http://localhost:8088>. Only the Orchestrator (Queen) runs initially. Create and start swarms from the Hive view by selecting a scenario.
+4. To connect an agent or install the PocketHive VS Code companion, follow the
+   [local MCP and VS Code quick start](docs/USAGE.md#local-mcp-and-vs-code-quick-start).
 
 ### Service Proxies
 The UI container fronted by Nginx proxies several internal services so browsers never talk to container hostnames directly. Useful routes:

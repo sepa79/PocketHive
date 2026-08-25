@@ -32,11 +32,11 @@ deliberate boundary changes:
 6. One Java MCP image is deployed locally by `build-hive.sh` or remotely by
    HiveForge. Remote clients connect to `https://<environment>/mcp`; an explicit
    local-loopback profile may use HTTP. Both use the existing PocketHive public
-   ingress, which transparently proxies the pinned MCP transport to the Java
+   ingress, which transparently proxies the MCP transport to the Java
    service. There is no scheme or endpoint fallback.
-7. The first release pins MCP `2025-11-25` and the official Java SDK version
-   proved by Phase 0. MCP `2026-07-28` is a future, explicit protocol migration,
-   not a negotiated fallback.
+7. The service pins the official Java SDK version proved by Phase 0. That SDK is
+   the single owner of standards-defined MCP protocol-version negotiation. The
+   service does not maintain a second revision allow-list or negotiation path.
 8. The VS Code extension replaces its five product Tree Views with one modern,
    narrow HTML `WebviewView`. It opens on locally persisted MCP environments,
    uses one explicit `Connect` flow, then presents Hive, Buzz, Journal,
@@ -47,7 +47,7 @@ last-write-wins because it has no atomic expected-version precondition. Git
 provides history and rollback, but cannot make a concurrent replace atomic.
 
 The state boundary deliberately accepts one MCP replica while the first release
-uses its file store. This preserves server-enforced elicitation-response
+uses its file store. This preserves server-enforced accepted-answer
 provenance, restart recovery, cross-client resume, optimistic concurrency, and
 single-use upload controls without adding a database or changing a PocketHive
 service.
@@ -56,8 +56,10 @@ The former remote-authentication prerequisite is delivered contract-first in
 `docs/architecture/AUTH_SERVICE_API_SPEC.md`. Auth Service remains the single
 identity and grant authority and now owns authorization-code + PKCE S256,
 resource indicators, exact redirect matching, scopes, metadata, opaque tokens,
-introspection, and the pre-registered VS Code client. The MCP accepts only that
-audience-bound contract and obtains separate downstream service-principal
+introspection, the pre-registered VS Code client, and bounded RFC 7591 dynamic
+registration for other public MCP clients. No client product receives a
+private authorization path. The MCP accepts only that audience-bound contract
+and obtains separate downstream service-principal
 tokens; it does not reclassify legacy unscoped tokens or introduce another
 identity authority.
 
@@ -168,7 +170,7 @@ Bundle format. The connected agent can then:
 
 - a Java 21 MCP service using Spring Boot, the official Java MCP SDK, and
   hexagonal boundaries;
-- authenticated MCP `2025-11-25` Streamable HTTP transport;
+- authenticated, SDK-negotiated MCP Streamable HTTP transport;
 - transparent MCP and binary-upload routes through the existing PocketHive
   public ingress;
 - an MCP OAuth protected-resource adapter, principal-scoped catalogue
@@ -239,7 +241,7 @@ Bundle format. The connected agent can then:
 | Environment selection | Server/IDE PocketHive endpoint settings | One immutable endpoint per MCP instance; VS Code stores MCP connection profiles |
 | VS Code product surface | Five Tree Views plus settings and a locally spawned MCP | One narrow HTML `WebviewView`; extension host connects to the selected MCP HTTP endpoint |
 | Public transport | Direct stdio or service-specific connection | One authenticated `/mcp` route through PocketHive public ingress |
-| Protocol ownership | Runtime-specific | Java MCP validates and implements pinned `2025-11-25`; ingress is transparent |
+| Protocol ownership | Runtime-specific | Pinned official Java SDK owns protocol negotiation and implementation; ingress is transparent |
 | Project memory | Optional external tooling | Optional external tooling; never an MCP dependency |
 | Runtime operations | Includes direct infrastructure paths | Only documented Scenario Manager or Orchestrator APIs |
 
@@ -291,7 +293,7 @@ streaming stay in adapters.
 |---|---|---|
 | `AgentSessionService` | Own session lifecycle and workflow membership | `AgentSessionRepository` |
 | `ScenarioWorkflowService` | Enforce workflow transitions and optimistic revision checks | `ScenarioWorkflowRepository` |
-| `RequirementsInterviewService` | Select the next unresolved QA topic and apply user answers | `McpInteractionPort` |
+| `RequirementsInterviewService` | Own each canonical QA question/schema and apply explicitly submitted answers | `McpInteractionPort` |
 | `CapabilityService` | Pin and compare current authoring capabilities | `AuthoringContractPort` |
 | `BundleCompiler` | Deterministically produce a bounded bundle file set | None beyond accepted inputs |
 | `BundleValidationService` | Validate an exact archive and record the canonical content digest | `BundleValidationPort`, `UploadTicketPort` |
@@ -313,7 +315,7 @@ product guarantee that an owning PocketHive service cannot provide:
 
 | Concern | State rule |
 |---|---|
-| QA interview | Persist the principal-bound session, workflow, authenticated elicitation-response provenance, state, and revision so elicitation, resume, and optimistic concurrency remain enforceable |
+| QA interview | Persist the principal-bound session, workflow, authenticated accepted-answer provenance, state, and revision so interview resume and optimistic concurrency remain enforceable |
 | Bundle upload | Persist only short-lived ticket and attempt metadata. A bounded quarantined spool may hold one in-flight archive until pre-owner validation completes; archive bytes are never durable state and are deleted deterministically |
 | MCP-owned multi-call operation | Persist the minimum coordination metadata only when no single owner API owns the whole operation |
 | Owner operation | Use the owner's operation reference and current status; do not mirror its state in MCP |
@@ -321,7 +323,7 @@ product guarantee that an owning PocketHive service cannot provide:
 | Client | May cache opaque IDs and revisions, but is not the authority for workflow answers, transitions, provenance, tickets, or operation state |
 
 This boundary keeps novice pause/resume, multiple workflows, evidence that an
-authenticated conforming client returned an elicitation response, stale-write
+authenticated conforming client returned an accepted answer, stale-write
 rejection, and single-use publication controls. It does not prove that a human
 personally authored a response. Moving the workflow into a client-provided
 snapshot would require every MCP client to own recovery and concurrency, and
@@ -345,8 +347,6 @@ Required production configuration:
 - `PH_MCP_OWNER_API_BASE`: one fixed deployment-internal base URI for the same
   PocketHive ingress adapter; this separates client-visible identity from
   container routing and cannot be selected or overridden by a tool caller;
-- `PH_MCP_PROTOCOL_REVISION=2025-11-25`: the only accepted first-release MCP
-  revision;
 - `PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT`: required positive ISO-8601
   connect/read timeout for each declared environment-health probe;
 - `PH_MCP_STATE_MODE=FILE`: explicit persistence mode;
@@ -383,24 +383,34 @@ part of this migration.
 
 ### Public ingress and protocol contract
 
-The first release implements only MCP `2025-11-25` through an explicitly pinned
-official Java SDK. Phase 0 must record the exact SDK version, protocol schema
-digest, supported client matrix, and conformance results. Unsupported or missing
-protocol revisions fail explicitly. Do not hand-code a partial newer revision,
-run dual protocol runtimes, or negotiate down to another revision.
+The service implements MCP through an explicitly pinned official Java SDK.
+Phase 0 records the exact SDK version, supported protocol revisions, protocol
+schema digests, supported client matrix, and conformance results. The SDK owns
+standards-defined initialization negotiation and rejects revisions it does not
+support. PocketHive must not hand-code another revision allow-list, negotiate in
+Nginx, or run a second protocol runtime.
 
 `McpInteractionPort` keeps the application workflow independent of protocol
-mechanics. Its `2025-11-25` adapter uses MCP elicitation. A future
-`2026-07-28` adapter may use Multi Round-Trip Requests only after the official
-Java SDK and every supported client pass the approved conformance matrix. This
-port is not permission to support both adapters in one deployment.
+mechanics. Its adapter uses capabilities negotiated by the pinned SDK. Native
+form elicitation and explicit agent-mediated question/submit are two declared
+answer-capture modes over one canonical question, schema, digest, validator, and
+workflow transition. The server never switches between them automatically. A
+future SDK upgrade may expose Multi Round-Trip Requests
+only after every supported client passes the approved conformance matrix. This
+port is not permission to add a parallel protocol implementation.
 
 The existing PocketHive public ingress, currently the UI Nginx container, owns
 TLS termination and stable edge routing:
 
-- `/mcp` proxies the exact `2025-11-25` Streamable HTTP endpoint, including
+- `/mcp` proxies the SDK Streamable HTTP endpoint, including
   required `POST` and `GET`/SSE behaviour;
 - `/mcp/uploads/{ticketId}` streams a ticket-bound archive to the Java service;
+- `/.well-known/oauth-protected-resource` proxies the Java MCP resource
+  metadata owner and advertises exactly the public interactive scopes accepted
+  by dynamic registration; governed cleanup is not a direct-client scope;
+- `/.well-known/oauth-authorization-server/auth-service` proxies Auth Service's
+  one metadata handler, as required by RFC 8414 for issuer path
+  `/auth-service`, and never falls through to the UI SPA;
 - authentication, `Origin`, `Accept`, `Last-Event-ID`,
   `MCP-Protocol-Version`, correlation, and trace headers are preserved;
 - request buffering, response buffering, body-size limits, rate limits, and
@@ -424,7 +434,7 @@ termination is supported. An invalid supplied `Origin` fails HTTP `403`; there
 is no permissive origin fallback.
 
 The external contract authorities are the official
-[MCP `2025-11-25` specification](https://modelcontextprotocol.io/specification/2025-11-25),
+[MCP specification](https://modelcontextprotocol.io/specification/2025-11-25),
 [Streamable HTTP contract](https://modelcontextprotocol.io/specification/2025-11-25/basic/transports),
 [authorisation contract](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization),
 and [Java SDK release](https://github.com/modelcontextprotocol/java-sdk/releases).
@@ -437,8 +447,8 @@ The first-release implementation baseline is:
 
 | Item | Pin |
 |---|---|
-| MCP specification | `2025-11-25`, tag object `38c84e9f93ad191d9eb26d92b945d17bd0efcaf3` |
-| Official protocol schema | `schema/2025-11-25/schema.json`, SHA-256 `1ffe4c5577974012f5fa02af14ea88df4b7146679df1abaaad497c8d9230ca8a` |
+| MCP specification baseline | `2025-11-25`, tag object `38c84e9f93ad191d9eb26d92b945d17bd0efcaf3` |
+| Official protocol schema baseline | `schema/2025-11-25/schema.json`, SHA-256 `1ffe4c5577974012f5fa02af14ea88df4b7146679df1abaaad497c8d9230ca8a` |
 | Official Java SDK | `2.0.0`, annotated tag `7fcb504ce1d7d0898fbfc341d0b5389a7a9623ff`, commit `f56d038409473210c59d6eddef09c4b5cd36042b` |
 | JSON binding | `mcp-json-jackson2:2.0.0`; no second MCP JSON mapper |
 | Server transport | SDK Servlet Streamable HTTP provider, stateful session mode |
@@ -452,9 +462,9 @@ The first-release client conformance matrix is capability-based and explicit:
 
 | Client class | Direct read/operation tools | QA interview | Ticket upload/publication |
 |---|---|---|---|
-| PocketHive VS Code extension shipped by this repository | Required | Required through form elicitation | Required through the extension-host binary upload adapter |
-| Other MCP `2025-11-25` client | Supported only after the published conformance suite passes for the exact client/version | Supported only when form elicitation, accept/decline/cancel, and server identity presentation pass | Supported only when a registered trusted host adapter can stream the ticket upload without exposing credentials or bytes to model context |
-| Client without a required capability | Only the conforming subset advertised for that principal/client | Fails `ELICITATION_CAPABILITY_REQUIRED` | Fails `CLIENT_CAPABILITY_REQUIRED` |
+| PocketHive VS Code extension shipped by this repository | Required | Native form elicitation, or the explicit question/submit tools when the host presents the exact server question and waits for the user's answer | Required through the extension-host binary upload adapter using its OAuth Bearer session |
+| Other standards-conforming MCP client | Supported only after the published conformance suite passes for the exact client/version and negotiated revision | Native form elicitation after accept/decline/cancel conformance, or explicit agent-mediated question/submit after exact-question and no-inference conformance | Supported when its host can stream the ZIP with the prepare result's one-use upload capability header; no reusable OAuth token is exported |
+| Client without a required capability | Only the conforming subset advertised for that principal/client | Native form calls fail `ELICITATION_CAPABILITY_REQUIRED`; agent-mediated submission fails closed unless it carries the current server-issued question ID, revision, schema digest, and explicit user answer | Fails `CLIENT_CAPABILITY_REQUIRED` |
 
 Registration is not a support claim. The server publishes the exact capability
 requirements and does not simulate a missing client feature. The release
@@ -537,7 +547,7 @@ defaults are forbidden.
 
 `AnswerProvenance` records the verified principal key, verified OAuth client ID,
 declared MCP client name/version, workflow and question IDs, requested-schema
-digest, elicitation action, accepted-content digest when present, and
+digest, answer action, accepted-content digest when present, and
 observation time. The principal key is the verified `(issuer, subject)` pair;
 username, display name, and email are never identity keys. Client identity is
 recorded separately and does not replace the principal.
@@ -549,10 +559,35 @@ and blocking unless the user separately and explicitly supplies the reason for
 `NOT_APPLICABLE`. Response evidence proves only what the authenticated client
 returned; it does not prove human authorship.
 
-Required QA-intent elicitation uses the flat form schema supported by the pinned
-MCP revision, omits `default` values, requests no credentials, and is validated
-again by the server. The service rejects unexpected fields, invalid content, and
-answers for a different workflow revision or principal.
+Each required QA-intent topic has one canonical server-owned question and
+response schema. The schema omits `default` values, requests no credentials,
+and is validated again by the server. Native form elicitation sends that
+contract through the pinned MCP revision. Guided agent-mediated capture is an
+explicit two-step protocol: `scenario_workflow_question` returns the exact
+question, current workflow revision, question ID, schema, and schema digest;
+after the agent presents that question unchanged and waits for a user response,
+`scenario_workflow_answer_submit` records the explicit response.
+
+Compact agent-mediated review is a separate, explicitly selected two-step
+protocol for a complete user narrative. The agent deterministically maps the
+source into a candidate answer for every canonical topic, preserving material
+unknowns instead of filling them. `scenario_workflow_review_prepare` validates
+that the candidate has each topic exactly once, canonicalises it, and returns
+the exact review text, review ID, workflow revision, response-schema digest,
+source metadata, normalised answers, and answer-set digest. The agent presents
+that review unchanged and waits for explicit acceptance.
+`scenario_workflow_review_submit` accepts the unchanged evidence and candidate,
+recomputes every digest, and records all topics in one atomic revision. Missing,
+duplicate, unexpected, invalid, stale, or tampered entries cause no mutation.
+The batch may use `USER_CONFIRMED_SOURCE` only with the named SHA-256 source the
+user reviewed; `NOT_APPLICABLE` still requires an explicit reason. A user edit
+requires a new prepare/review step and digest.
+
+Question and review IDs are namespaced by the declared capture mode, so
+persisted provenance remains auditable without a second state model. The
+service rejects answers for a different workflow revision or principal. It
+never turns a declined native form or an unaccepted compact review into another
+capture mode automatically.
 
 ### Bundle File Manifest — PROPOSED
 
@@ -753,20 +788,34 @@ The interview must cover and explicitly dispose of at least:
 11. reporting, traceability, provenance, ownership, and evidence retention; and
 12. safety limits, governance, approvals, and abort conditions.
 
-The service selects the next unresolved topic deterministically. It never asks
-an LLM to invent a requirement. Generation remains blocked while an applicable
-topic is `UNKNOWN` or required user confirmation is absent.
+The service selects unresolved topics deterministically. It never asks an LLM
+to invent a requirement. Generation remains blocked while an applicable topic
+is `UNKNOWN` or required user confirmation is absent.
 
-No-inference assurance requires MCP elicitation support in the selected client
-and pinned `2025-11-25` protocol. Phase 0 must prove this compatibility. An
-incompatible client fails `ELICITATION_CAPABILITY_REQUIRED`; the service must
-not silently treat agent-authored text as a user answer.
+No-inference assurance requires one explicitly selected, conforming capture
+mode. Native mode requires MCP form elicitation in the selected client and a
+revision negotiated by the pinned SDK; an incompatible native call fails
+`ELICITATION_CAPABILITY_REQUIRED`. Guided agent-mediated mode uses the exact
+question protocol above. Compact review mode uses the exact prepare, present,
+accept, and atomic-submit protocol above. The server does not infer a response,
+select or switch modes, or silently treat repository content, prior model text,
+or a declined/cancelled form as a user answer.
 
-The supported-client matrix must prove that the client identifies the requesting
-server, lets the user review and modify form content, and exposes distinct
-accept, decline, and cancel actions. The service sends no default for a required
-QA-intent field. It records only the `AnswerProvenance` contract above. Decline
-or cancel never becomes `NOT_APPLICABLE`, approval, or permission to continue.
+For compact review, capability reconciliation starts as soon as goal, SUT, and
+journey candidates are available and before lower-value follow-ups. The agent
+reads the canonical Scenario Manager authoring contract and live capabilities,
+then reports exact unsupported intent. Only material unknowns, conflicts, and
+unsupported requirements produce follow-up questions. Capability output is
+evidence, not permission to rewrite the user's requested journey.
+
+For native mode, the supported-client matrix must prove that the client
+identifies the requesting server, lets the user review and modify form content,
+and exposes distinct accept, decline, and cancel actions. For agent-mediated
+mode, it must prove exact question presentation, a wait for new user input, no
+answer inference, and rejection of stale or tampered question evidence. The
+service sends no default for a required QA-intent field. It records only the
+`AnswerProvenance` contract above. Decline or cancel never becomes
+`NOT_APPLICABLE`, approval, or permission to continue.
 
 The interview reconciles requirements against the current Scenario Manager
 authoring contract. Unsupported intent is reported with the exact missing
@@ -981,8 +1030,10 @@ owner contract and must not redefine it as an MCP-owned API.
    `BundleFileManifest`; a validation-prepare MCP tool binds them into a
    short-lived validation upload ticket. The tool mutates only bounded MCP
    coordination state and makes no Scenario Manager call.
-2. The client streams a ZIP with authenticated binary HTTP `PUT` to
-   `/mcp/uploads/{ticketId}` through the public ingress.
+2. The client streams a ZIP with binary HTTP `PUT` to
+   `/mcp/uploads/{ticketId}` through the public ingress. It supplies exactly one
+   authentication mode: its existing OAuth Bearer token, or the opaque value
+   returned by the prepare tool in `PocketHive-Upload-Capability`.
 3. The MCP receives the complete ZIP into quarantine, enforces all upload and
    archive bounds, recomputes and compares the `BundleFileManifest`, and computes
    an `archiveDigest` SHA-256 over the exact ZIP bytes.
@@ -1020,6 +1071,21 @@ owner contract and must not redefine it as an MCP-owned API.
 ticket, source metadata record, or owner response fails explicitly. If the
 client cannot perform binary ticket uploads, fail
 `CLIENT_CAPABILITY_REQUIRED`; there is no inline/base64 fallback.
+
+Each prepare tool returns `uploadCapability` exactly once alongside `ticketId`,
+`uploadUrl`, and `expiresAt`. The capability is cryptographically random and is
+bound to that ticket's already persisted principal, purpose, source metadata,
+manifest, digests, publication intent, expiry, and single-use state. The MCP
+persists only a SHA-256 digest and compares presented values in constant time.
+It accepts the capability only in the `PocketHive-Upload-Capability` request
+header on the exact upload `PUT`; URLs and query strings never carry it. Missing
+or invalid upload authentication fails HTTP `401` without revealing whether a
+ticket exists and advertises only the `PocketHiveUploadCapability` challenge.
+Supplying both a Bearer token and an upload capability fails
+`UPLOAD_AUTHENTICATION_AMBIGUOUS`; neither mode falls back to the other. An
+expired, receiving, failed, or consumed ticket cannot be retried. Restart
+migration invalidates legacy prepared tickets that predate capability digests;
+the caller must prepare a fresh ticket.
 
 Scenario Manager currently offers no atomic expected-version condition for
 replace. A preflight read followed by `PUT` would not close that race and must
@@ -1301,8 +1367,9 @@ drives the `McpConnectionAttempt` state machine:
 1. validate and canonicalise the entered MCP URL against the profile's explicit
    endpoint-security mode without endpoint discovery or scheme fallback;
 2. run the one configured OAuth flow;
-3. after successful authentication, initialise MCP `2025-11-25`, validate the
-   expected PocketHive server identity, and read the minimum authorised
+3. after successful authentication, initialise MCP through the pinned SDK,
+   record the negotiated supported revision, validate the expected PocketHive
+   server identity, and read the minimum authorised
    capability resource; and
 4. report authentication and connection-test results as separate status rows.
 
@@ -1366,11 +1433,21 @@ every tab retains its visible text and accessible name:
 | `Scenarios` | Separate deployed Scenario Manager and committed Git-repository views, validation, and publication |
 | `Debug` | Orchestrator-backed runtime diagnostics and governed cleanup |
 
-The active tab is presentation state, not MCP or owner state. Refresh re-reads
-the current owner-backed data and always shows its observation time. Background
-refresh is bounded, pauses while hidden, and cannot mutate or silently retry.
-An unavailable owner produces the exact typed state within the selected tab;
-the client never switches environment, endpoint, owner, or adapter.
+The active tab is presentation state, not MCP or owner state. Explicit Refresh
+re-reads the current owner-backed data. While the connected workspace is
+visible, one extension-host schedule refreshes only the active tab's MCP-owned
+data and environment health every 15 seconds. It is single-flight, pauses while
+hidden, disconnected, or occupied by a foreground operation, and requests one
+immediate refresh when a connected view is revealed. Background work never
+opens authorization, mutates owner state, silently retries, or enters the
+foreground Loading presentation. It retains the last complete model until a
+complete replacement is ready; a failed scheduled read leaves that data visible
+while an authentication failure reports the resulting session state and a
+completed health error updates the footer, without switching environment,
+endpoint, owner, or adapter. Repository candidate discovery remains explicit
+because its opaque IDs bind an exact Git commit and must not change underneath
+Edit, Validate, or Deploy. The deployed Scenario Manager catalogue remains part
+of active-tab refresh.
 
 Owner responses use bounded, tab-specific list, card, empty, and error states.
 Hive shows swarm identity, lifecycle state, health, and bee count; Buzz and
@@ -1421,9 +1498,10 @@ only from `pocketHiveIngress`. One target failure produces one `UNAVAILABLE`
 row and aggregate `DEGRADED`/`UNAVAILABLE`, never a second target, protocol,
 path, or inferred success. `PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT` is a
 required positive ISO-8601 duration used for both connect and read timeouts.
-The extension reads the resource on open and explicit refresh/tab loads,
-retains the last complete view while a load is in flight, and does not add a
-visual-strobing background poller.
+The extension reads the resource on open, explicit refresh/tab loads, and the
+same 15-second visibility-aware active-tab schedule. It retains the last
+complete view while a load is in flight and never renders a background loading
+state or overlapping poll.
 
 The workspace restores the independently useful controls from the removed Tree
 Views without restoring a second behaviour path:
@@ -1614,7 +1692,7 @@ subject to supply-chain scanning.
 ## Persistence, concurrency, and recovery
 
 The Java migration keeps a small JSON file store because server-side authoring
-coordination preserves elicitation-response provenance, restart recovery,
+coordination preserves accepted-answer provenance, restart recovery,
 cross-client resume, workflow isolation, optimistic concurrency, and single-use
 upload controls. A fully client-carried workflow would lose those guarantees or
 replace this store with a more complex cryptographic state capsule.
@@ -1685,6 +1763,14 @@ configured durations; missing retention configuration fails startup. Expiry or
 deletion of MCP state never claims rollback or deletion of source Git history,
 Scenario Manager state, Orchestrator state, or HiveGate evidence.
 
+Public native MCP clients use the same bounded dynamic-client registry. Its
+expiry is an inactivity deadline renewed by successful active-client lookup,
+not a fixed registration-age deadline. The configured dynamic-client lifetime
+must be strictly longer than refresh-token lifetime so a rotating refresh
+session cannot remain valid after its registration disappears. This policy is
+client-neutral and must not branch for Codex, VS Code, Amazon Q, or any other
+MCP host.
+
 A write whose outcome is uncertain returns an explicit ambiguous-result error.
 The client must reconcile before deciding whether to retry.
 
@@ -1697,24 +1783,21 @@ every persisted transition are explicit integration and RST cases.
 
 ## Security and failure semantics
 
-The Java MCP is an OAuth protected resource, not a bearer-token proxy. The
-current Auth Service contract supports opaque PocketHive tokens resolved through
-`POST /api/auth/resolve`; it does not yet define the MCP OAuth authorization
-flow, authorization-server metadata, resource indicators, or MCP scopes. The
-Java adapter therefore cannot be implemented until the Auth Service owner
-extends its canonical contract and that prerequisite passes integration tests.
-No second user/grant database or MCP-local token issuer is permitted.
+The Java MCP is an OAuth protected resource, not a bearer-token proxy. The Auth
+Service contract owns the MCP OAuth flow, authorization-server metadata,
+resource indicators, scopes, client registration, and opaque-token
+introspection. No second user/grant database or MCP-local token issuer is
+permitted.
 
 The approved target publishes Protected Resource Metadata and validates the
 configured authorization-server identity, audience/resource indicator, expiry,
 and scopes on every protected request. It uses exactly one explicit token
-validation adapter per deployment: signature validation for a contractually
-defined JWT or Auth Service introspection/resolution for a contractually defined
-opaque OAuth access token. It never tries one after the other. The VS Code
-client is pre-registered for the first release. Phase 0 must approve exactly one
-registration mechanism for other supported clients; the service must not
-cascade between pre-registration, Dynamic Client Registration, or Client ID
-Metadata Documents.
+validation adapter per deployment: Auth Service introspection for its
+contractually defined opaque OAuth access token. It never tries another adapter.
+The VS Code client is pre-registered. Other public MCP clients use the single
+advertised RFC 7591 Dynamic Client Registration endpoint. There is no
+client-product branch, Client ID Metadata Document fetch, or registration
+fallback chain.
 
 The owning Auth Service contract must also select and define all mandatory flow
 controls before implementation:
@@ -1875,15 +1958,18 @@ Use the official interfaces and production-shaped adapters to prove:
 
 - Nginx public-ingress routing for `/mcp` and `/mcp/uploads/{ticketId}`, with no
   direct-container test path;
-- exact `2025-11-25` Streamable HTTP initialisation, `POST`, `GET`/SSE,
-  resumption, required-header preservation, buffering behaviour, and explicit
-  rejection of unsupported revisions;
+- SDK-owned Streamable HTTP initialization negotiation for every revision in
+  the pinned SDK's published supported set, `POST`, `GET`/SSE, resumption,
+  required-header preservation, buffering behaviour, and explicit rejection of
+  unsupported revisions;
 - cryptographically random transport sessions bound to verified principals,
   authentication on every protected request, missing-session `400`, terminated
   session `404`, selected `DELETE` behaviour, and invalid-origin `403`;
-- OAuth Protected Resource Metadata, issuer/audience/resource validation,
-  principal-scoped catalogue resources, pre-registered VS Code authentication, and proof
-  that inbound bearer tokens are not forwarded downstream;
+- OAuth Protected Resource Metadata with a Bearer `resource_metadata`
+  challenge, issuer/audience/resource validation, principal-scoped catalogue
+  resources, pre-registered VS Code authentication, generic public-client
+  registration, and proof that inbound bearer tokens are not forwarded
+  downstream;
 - PKCE `S256`, exact redirect URI, single-use short-lived `state`, authorization
   code replay rejection, and the approved refresh-token policy;
 - rejection of legacy opaque tokens that lack the approved MCP
@@ -1945,8 +2031,11 @@ At minimum prove:
 10. Concurrent/ambiguous replace exposes the documented limitation and never
    auto-retries.
 11. The MCP starts and all non-memory tools work when HiveMind is absent.
-12. A client without elicitation or binary upload support receives the explicit
-    capability error.
+12. A client without native form elicitation can complete the QA interview only
+    through the explicit question/submit contract; a native form call or a
+    stale/tampered mediated submission receives an explicit capability or
+    contract error. A client without binary upload support receives the
+    explicit upload capability error.
 13. VS Code uses MCP HTTP only, isolates profiles correctly, exposes one HTML
     `pockethive.companion` view, and never contacts backend services directly.
 14. Local and HiveForge deployments run the same built image and do not use a
@@ -1969,8 +2058,9 @@ At minimum prove:
     remains usable without unnecessary skill reads.
 20. Open, closed, and expired session retention behaves exactly as configured,
     and expiry never mutates Git or owning PocketHive services.
-21. The Java service rejects unsupported MCP revisions and works only through
-    the public ingress; Nginx performs no protocol translation.
+21. The pinned Java SDK owns supported MCP revision negotiation and rejects an
+    unsupported revision; the service works only through the public ingress and
+    Nginx performs no protocol translation.
 22. MCP authentication cannot be replayed as a downstream bearer token, upload
     ticket IDs grant no access by themselves, and secrets do not enter traces,
     logs, results, or state.
@@ -2618,9 +2708,9 @@ The fix loop found and resolved:
 
 The final footer uses the packaged PocketHive hexagon, square disclosure top
 corners, divider-led full-width service rows with no trailing gap, and an
-absolute account overlay. Health is refreshed with the normal bounded workspace
-read/explicit refresh lifecycle; no independent high-frequency poller or
-strobing presentation was added.
+absolute account overlay. Health follows the same bounded, visibility-aware
+active-tab schedule as workspace data; there is no second health poller and no
+strobing presentation.
 
 ### Hive hierarchy and runtime-diagnostics proof — 2026-08-21
 
@@ -2743,6 +2833,11 @@ Runtime diagnostics remain owner projections. Acceptance verifies that MCP and
 the extension preserve the exact version and bounded inspect response returned
 by the established Orchestrator endpoint also used by `ui-v2`; they do not add
 Docker access, require new runtime labels, or infer deployment-wide versions.
+The `debug_tap` MCP contract requires explicit `maxItems` and `ttlSeconds`
+positive integers and forwards them unchanged to Orchestrator. Its paired
+`debug_tap_read` accepts only an optional non-negative integer drain count,
+where omission uses the owner tap cap and zero requests metadata only. Boolean
+drain values and hidden MCP defaults are contract violations.
 
 ## Delivery plan
 
@@ -2754,11 +2849,13 @@ Docker access, require new runtime labels, or infer deployment-wide versions.
   canonically document the already-implemented validation, create, and replace
   endpoints plus regular-file path/byte preservation and POSIX-mode behaviour;
   do not duplicate those contracts in MCP or change Scenario Manager;
-- select and pin MCP `2025-11-25`, the official Java SDK, the protocol schema
-  digest, and the supported-client conformance matrix;
-- prove every target client supports `2025-11-25` elicitation, authenticated
-  binary ticket upload, SSE/resumption where used, explicit transport-session
-  handling, complete deterministic tool listing, and resource/skill reads;
+- select and pin the official Java SDK, its supported MCP revisions and schema
+  digests, and the supported-client conformance matrix;
+- prove every target client negotiates a revision supported by the pinned SDK;
+  supports at least one declared QA answer-capture mode; and supports
+  authenticated binary ticket upload, SSE/resumption where used, explicit
+  transport-session handling, complete deterministic tool listing, and
+  resource/skill reads;
 - approve the separate Auth Service MCP OAuth extension, then define the Java
   resource-server adapter, other-client registration, scopes, selected token
   validation, exact redirect matching, PKCE, `state`, code replay protection,
@@ -2790,8 +2887,8 @@ Docker access, require new runtime labels, or infer deployment-wide versions.
 
 ### Phase 1 — mechanical Java port
 
-- build the Java OAuth resource server, exact `2025-11-25` Streamable HTTP
-  transport, health, and immutable ingress binding;
+- build the Java OAuth resource server, SDK-owned Streamable HTTP transport,
+  health, and immutable ingress binding;
 - add the transparent public-ingress routes and prove the Java container port is
   not a supported client path;
 - port valid tool handlers behind narrow owner API ports;
@@ -2837,7 +2934,8 @@ Docker access, require new runtime labels, or infer deployment-wide versions.
 - add local `build-hive.sh` installation/deployment;
 - add HiveForge deployment of the same immutable image;
 - verify persistent volume, auth, public ingress, health, and upgrade handling;
-- prove pre-registered VS Code auth and no inbound-token forwarding; and
+- prove pre-registered VS Code auth, generic RFC 7591 public-client auth, and no
+  inbound-token forwarding; and
 - prove clean rebuilds against stale JAR/image/cache scenarios.
 
 ### Phase 4 — quality and atomic cutover
@@ -2902,6 +3000,122 @@ visual comparison exposed the duplicate raw validation projection. Each defect
 entered the red-test, fix, full-regression, and mutation loop before this
 evidence was recorded.
 
+## Active-tab auto-refresh follow-up — 2026-08-24
+
+The extension host now owns one fixed 15-second active-tab schedule. It is
+visibility-aware, single-flight, and enabled only for an idle authenticated
+workspace. Foreground commands and visibility changes advance a revision, so
+an older in-flight result cannot replace a newer tab, selection, or operation.
+The scheduled path reuses the same tab-read owner and health resource as
+explicit Refresh, but does not set foreground busy state, rescan Git repository
+candidates, or refresh a deployed Scenario drill-down. Journal preserves a
+last good selected page when only its scheduled detail read fails.
+
+The webview preserves search focus and caret plus stable open disclosures only
+when page, environment, tab, and session status are unchanged. Environment,
+tab, or session transitions clear that transient presentation state. This keeps
+Workers, advanced filters, event rows, Scenario directories, health, and the
+account overlay stable during a scheduled replacement without carrying UI
+state into another operational context.
+
+Qualification evidence:
+
+- TDD red gate: the scheduler test failed because its production contract did
+  not exist; the first green run then exposed and fixed disposal rearming.
+- Extension unit/contract gate: 174 tests passed, plus deterministic asset and
+  atomic-cutover checks.
+- Extension Stryker: 2,783 mutants killed and ten timed out, with zero
+  survivors, uncovered mutants, or errors; mutation score and coverage were
+  100.00%. The new scheduler killed 61/61 mutants independently.
+- Browser/public-ingress acceptance: 35 authenticated captures, 54 discovered
+  tools, refresh-token rotation and replay rejection, and zero Axe, layout,
+  page, or console findings. Same-tab replacements preserved expanded Workers,
+  health, advanced Buzz filters, an expanded Buzz event, focused search text,
+  and caret position.
+- Packaging and install: the 45-file `1.0.5` VSIX passed its allow-list and was
+  force-installed. The installed scheduler JavaScript digest exactly matched
+  the packaged build (`a84319b209a8d6c98c8bd95aed1e5bdb69c51ba680880d4a9d14e5487fe94973`).
+
+RST concentrated on stale-result races, hidden-view work, overlapping timers,
+repository candidate invalidation, transient owner failure, and interaction
+reset. The fix loop added revision invalidation, kept Repository discovery
+manual, made disposal cancel without rearming, and preserved same-context UI
+state. The browser harness drives the real packaged webview and live public MCP
+ingress but simulates the extension-host model arrival; scheduler timing and
+VS Code visibility are covered at the isolated clock and cutover-contract
+layers rather than by sleeping a native Extension Host for 15 seconds.
+
+## Debug-tap contract fix and RST evidence — 2026-08-24
+
+The Java MCP now exposes the complete Orchestrator debug-tap contract. A create
+call requires the exact swarm, role, direction, I/O name, positive item cap,
+and positive TTL. A read accepts only an optional non-negative integer drain
+count. The MCP neither supplies hidden values nor converts a Boolean drain.
+
+The RST charter varied omitted TTL, Boolean and numeric drain values, stopped
+swarm state, empty samples, OAuth renewal, and owner cleanup. The original
+Boolean drift reproduced an owner `400`. The fix loop aligned discovery and
+forwarding with the owner contract, then added unit, integration, mutation, and
+public-ingress acceptance oracles.
+
+Qualification evidence:
+
+- 22 focused catalogue/executor tests passed after the red schema gate failed
+  on the missing required TTL.
+- The MCP reactor passed 153 MCP tests and 41 shared-model tests.
+- PIT killed 665/665 mutants with 100% line and mutation coverage.
+- `build-hive.sh --quick --service pockethive-mcp` rebuilt and recreated only
+  the local MCP service; it reported healthy.
+- The authenticated public-ingress journey discovered 54 tools, verified the
+  exact integer schemas, created a tap with `maxItems=3` and `ttlSeconds=45`,
+  read it with `drain=0` and `drain=2`, and closed the exact tap. It also
+  rotated the refresh token, rejected retired-token replay, produced 36
+  screenshots, and reported zero accessibility, layout, page, or console
+  findings.
+- The proof swarm remained present but stopped: controller `READY`, workload
+  `STOPPED`, health `HEALTHY`, and no active operation.
+
+The current Codex host stored a refresh token but did not send a refresh grant
+after access-token expiry. PocketHive's standards-based renewal passed through
+the same public ingress, so this remains a client-host interoperability issue.
+PocketHive does not add expired-token grace, a client-specific OAuth branch, a
+long-lived-token workaround, or a protocol fallback.
+
+## Compact QA review implementation and RST evidence — 2026-08-24
+
+The no-inference workflow now supports an explicit `COMPACT_REVIEW` mode for a
+complete user narrative. The agent maps the named, SHA-256-bound source to one
+candidate for every canonical QA topic, checks PocketHive capability alignment
+as soon as goal, SUT, and journey are known, asks only about material gaps, and
+then presents one server-rendered review. Acceptance applies all 12 answers in
+one revision. The existing `MCP_FORM` and `AGENT_MEDIATED` modes remain explicit
+alternatives; the MCP never switches modes automatically.
+
+The implementation was qualified through a red/green/fix loop:
+
+- the initial focused contract tests failed because the compact mode, tools,
+  and atomic domain operation did not exist;
+- 170 MCP tests and 41 shared-model tests then passed with no failures, errors,
+  or skips;
+- PIT mutated-class line coverage was 1,860/1,860 and mutation coverage was
+  816/816 killed, both 100%;
+- 174 VS Code extension tests and its deterministic asset/cutover checks
+  passed;
+- `build-hive.sh --quick --service pockethive-mcp` rebuilt and recreated the
+  local Java MCP service without rebuilding unrelated services; and
+- the authenticated public-ingress acceptance journey discovered 58 tools,
+  prepared all 12 topics without changing revision 0, submitted the accepted
+  review as revision 1 in `REVIEW_REQUIRED`, rotated the refresh token, rejected
+  replay, captured 36 screenshots, and reported zero accessibility, layout,
+  page, or console findings.
+
+RST probes covered incomplete and duplicate topic sets, stale revisions,
+altered review identifiers and digests, all supported source/disposition
+combinations, reverse-order input, unknown client metadata, and the exact
+20,000-character answer boundary. Every rejected prepare or submit left the
+workflow unchanged; no partial answer set was observed. The earlier live guided
+interview remains intact at its prior revision and was not silently converted.
+
 ## Acceptance gate
 
 The migration is complete only when all of the following are true:
@@ -2910,8 +3124,8 @@ The migration is complete only when all of the following are true:
 - retained tool schemas and behaviours pass characterisation tests;
 - the owning Scenario Manager REST document is the only contract authority for
   bundle validation/create/replace endpoints;
-- MCP `2025-11-25`, the official Java SDK, supported clients, and their
-  conformance evidence are pinned; unsupported revisions fail explicitly;
+- the official Java SDK, its supported MCP revisions, supported clients, and
+  their conformance evidence are pinned; unsupported revisions fail explicitly;
 - all MCP and upload traffic uses the public ingress, whose configuration is
   transparent and contains no semantic translation;
 - OAuth metadata, audience/resource/scope validation, client registration, and
@@ -2995,24 +3209,24 @@ The migration is complete only when all of the following are true:
   Manager contract explicitly guarantees it.
 - The file workflow store requires a single MCP replica. Horizontal scaling is
   a future, separately approved design. This is an accepted cost of preserving
-  server-enforced elicitation-response provenance, restart recovery,
+  server-enforced accepted-answer provenance, restart recovery,
   cross-client resume,
   optimistic concurrency, and single-use upload controls in the first release.
 - Fully client-carried workflow snapshots and signed or encrypted continuation
   capsules are rejected for this migration. They shift recovery and concurrency
   into every client or add a second token/key lifecycle without changing a
   PocketHive authority.
-- Clients must support elicitation and binary upload tickets. There is no
-  degraded fallback mode.
+- Clients must support either native form elicitation or the explicit
+  agent-mediated question/submit contract, plus binary upload tickets. These
+  are declared modes, not a degraded or automatic fallback chain.
 - Remote use requires the explicit HTTPS ingress/host and Auth Service MCP
   secrets declared by the HiveForge contract. Existing opaque PocketHive login
   tokens are not silently reclassified as MCP OAuth access tokens. Live remote
   deployment and approval remain governed HiveGate/HiveForge operations rather
   than implementation evidence created by this branch.
-- The first release supports only MCP `2025-11-25`. MCP `2026-07-28`, Multi
-  Round-Trip Requests, header-routed stateless semantics, and protocol cache
-  hints require a separately approved Java-SDK/client migration; Nginx will not
-  bridge the revisions.
+- Multi Round-Trip Requests, header-routed stateless semantics, and protocol
+  cache hints require a separately approved Java-SDK/client migration; Nginx
+  will not bridge revisions or capabilities.
 - MCP Tasks remain excluded from the first release. Long work uses explicit
   PocketHive operation handles and tools until the extension is deliberately
   adopted with conformance evidence.

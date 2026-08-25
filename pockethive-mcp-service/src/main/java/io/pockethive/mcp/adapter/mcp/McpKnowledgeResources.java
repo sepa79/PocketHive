@@ -5,8 +5,10 @@ import com.fasterxml.jackson.databind.MapperFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import io.modelcontextprotocol.server.McpServerFeatures;
+import io.modelcontextprotocol.server.transport.HttpServletStreamableServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
 import io.pockethive.mcp.application.EnvironmentHealthService;
+import io.pockethive.mcp.application.QaAnswerCaptureMode;
 import io.pockethive.mcp.application.SkillDescriptor;
 import io.pockethive.mcp.application.ToolCatalogue;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
@@ -34,17 +36,20 @@ public final class McpKnowledgeResources {
     private final PocketHiveMcpProperties properties;
     private final ObjectMapper mapper;
     private final Clock clock;
+    private final List<String> supportedProtocolRevisions;
     private final List<KnowledgeDocument> knowledgeDocuments;
     private final String catalogueDigest;
 
     public McpKnowledgeResources(ToolCatalogue catalogue, EnvironmentHealthService environmentHealth,
                                  PocketHiveMcpProperties properties,
-                                 ObjectMapper mapper, Clock clock) {
+                                 ObjectMapper mapper, Clock clock,
+                                 HttpServletStreamableServerTransportProvider transport) {
         this.catalogue = catalogue;
         this.environmentHealth = environmentHealth;
         this.properties = properties;
         this.mapper = mapper;
         this.clock = clock;
+        this.supportedProtocolRevisions = List.copyOf(transport.protocolVersions());
         this.knowledgeDocuments = List.of(
             document("architecture", "PocketHive architecture", "docs/ARCHITECTURE.md", "ARCHITECTURE.md"),
             document("scenario-contract", "Scenario Bundle contract",
@@ -128,10 +133,13 @@ public final class McpKnowledgeResources {
     private Map<String, Object> currentCapabilities(McpCaller caller) {
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("serverName", "pockethive-mcp");
-        result.put("protocolRevision", properties.protocolRevision());
+        result.put("supportedProtocolRevisions", supportedProtocolRevisions);
         result.put("pocketHiveIngress", properties.pocketHiveIngress().toString());
         result.put("oauthResource", properties.oauthResource().toString());
         result.put("stateMode", properties.stateMode().name());
+        result.put("qaAnswerCaptureModes", java.util.Arrays.stream(QaAnswerCaptureMode.values())
+            .map(Enum::name)
+            .toList());
         result.put("principalLabel", caller.principalLabel());
         result.put("clientId", caller.clientId());
         result.put("grantedScopes", caller.scopes().stream().sorted().toList());

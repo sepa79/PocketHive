@@ -42,6 +42,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class BundleUploadCoordinatorTest {
+    private static final String CAPABILITY_DIGEST = "sha256:" + "b".repeat(64);
+
     @TempDir
     Path temporaryDirectory;
 
@@ -81,6 +83,33 @@ class BundleUploadCoordinatorTest {
         assertThatThrownBy(() -> coordinator.receive(publication.id(), principal, "application/zip",
             archive.length, new ByteArrayInputStream(archive), Instant.now()))
             .isInstanceOf(UploadRejectedException.class).hasMessageContaining("UPLOAD_TICKET_CONSUMED");
+    }
+
+    @Test
+    void capabilityAuthenticationIsExactDoesNotConsumeOnMismatchAndCannotReplay() throws IOException {
+        FakeOwner owner = new FakeOwner();
+        BundleUploadCoordinator coordinator = coordinator(owner);
+        Instant now = Instant.parse("2026-08-18T10:00:00Z");
+        byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
+        BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
+        PreparedUpload<ValidationUploadTicket> prepared = coordinator.prepareDirectValidationWithCapability(
+            principal("owner"), source(), manifest, now);
+        assertThat(UploadTicketSnapshot.from(prepared.ticket()).toString())
+            .contains(prepared.ticket().uploadCapabilityDigest())
+            .doesNotContain(prepared.uploadCapability());
+
+        assertThatThrownBy(() -> coordinator.receiveWithCapability(prepared.ticket().id(),
+            "wrong-capability", "application/zip", archive.length, new ByteArrayInputStream(archive), now))
+            .isInstanceOf(UploadAuthenticationException.class)
+            .hasMessage("UPLOAD_AUTHENTICATION_REQUIRED");
+
+        assertThat(coordinator.receiveWithCapability(prepared.ticket().id(), prepared.uploadCapability(),
+            "application/zip", archive.length, new ByteArrayInputStream(archive), now))
+            .isInstanceOf(ValidationUploadOutcome.class);
+        assertThat(owner.validations).isEqualTo(1);
+        assertRejected(() -> coordinator.receiveWithCapability(prepared.ticket().id(),
+            prepared.uploadCapability(), "application/zip", archive.length,
+            new ByteArrayInputStream(archive), now), "UPLOAD_TICKET_CONSUMED");
     }
 
     @Test
@@ -188,7 +217,7 @@ class BundleUploadCoordinatorTest {
             attempt.ownerCallInFlight();
             PublicationUploadTicket ticket = new PublicationUploadTicket("up-restart", principal,
                 UploadWorkflowBinding.workflow("wf-1"),
-                source(), manifest, Instant.now().plusSeconds(60), attempt.id(), receipt.id(),
+                source(), manifest, CAPABILITY_DIGEST, Instant.now().plusSeconds(60), attempt.id(), receipt.id(),
                 receipt.archiveDigest(), receipt.bundleContentDigest(), PublicationMode.REPLACE, "safe");
             ticket.begin();
             restartedState.saveUploadCoordination(new UploadCoordinationSnapshot(
@@ -704,7 +733,8 @@ class BundleUploadCoordinatorTest {
         PublicationAttempt attempt = new PublicationAttempt("attempt-old", principal, PublicationMode.REPLACE,
             "safe", "sha256:content", created);
         ValidationUploadTicket oldTicket = new ValidationUploadTicket("ticket-old", principal,
-            UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), created.plusSeconds(60));
+            UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), CAPABILITY_DIGEST,
+            created.plusSeconds(60));
         UploadCoordinationSnapshot initial = new UploadCoordinationSnapshot(
             Map.of(oldTicket.id(), UploadTicketSnapshot.from(oldTicket)), Map.of(receipt.id(), receipt),
             Map.of(attempt.id(), attempt.snapshot()));
@@ -742,7 +772,7 @@ class BundleUploadCoordinatorTest {
             UploadWorkflowBinding.direct(), source(), manifest, "sha256:old-archive", "sha256:old-content",
             "old", "Old scenario", old);
         ValidationUploadTicket oldTicket = new ValidationUploadTicket("old-ticket", principal,
-            UploadWorkflowBinding.direct(), source(), manifest, old.plusSeconds(60));
+            UploadWorkflowBinding.direct(), source(), manifest, CAPABILITY_DIGEST, old.plusSeconds(60));
         BundleValidationReceipt currentReceipt = new BundleValidationReceipt("current-receipt", principal,
             UploadWorkflowBinding.direct(), source(), manifest, "sha256:archive", "sha256:owner-content",
             "safe", "Safe scenario", now);
@@ -844,11 +874,11 @@ class BundleUploadCoordinatorTest {
         Map<String, PublicationAttemptSnapshot> attempts = new java.util.LinkedHashMap<>();
 
         ValidationUploadTicket validation = new ValidationUploadTicket("validation-receiving", principal,
-            UploadWorkflowBinding.direct(), source(), manifest, now.plusSeconds(60));
+            UploadWorkflowBinding.direct(), source(), manifest, CAPABILITY_DIGEST, now.plusSeconds(60));
         validation.begin();
         tickets.put(validation.id(), UploadTicketSnapshot.from(validation));
         ValidationUploadTicket prepared = new ValidationUploadTicket("validation-prepared", principal,
-            UploadWorkflowBinding.direct(), source(), manifest, now.plusSeconds(60));
+            UploadWorkflowBinding.direct(), source(), manifest, CAPABILITY_DIGEST, now.plusSeconds(60));
         tickets.put(prepared.id(), UploadTicketSnapshot.from(prepared));
 
         addRecoverablePublication(tickets, attempts, receipt, principal, manifest, now,
@@ -882,7 +912,8 @@ class BundleUploadCoordinatorTest {
         PrincipalKey principal = principal("qa-lead");
         Instant now = Instant.parse("2026-08-18T10:00:00Z");
         ValidationUploadTicket canonical = new ValidationUploadTicket("canonical", principal,
-            UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), now.plusSeconds(60));
+            UploadWorkflowBinding.direct(), source(), new BundleFileManifest(List.of()), CAPABILITY_DIGEST,
+            now.plusSeconds(60));
         RecordingStateRepository state = new RecordingStateRepository(new UploadCoordinationSnapshot(
             Map.of(canonical.id(), UploadTicketSnapshot.from(canonical)), Map.of(), Map.of()));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties(), state,
@@ -1068,7 +1099,8 @@ class BundleUploadCoordinatorTest {
             attempt.ownerCallInFlight();
         }
         PublicationUploadTicket ticket = new PublicationUploadTicket("publication-" + suffix, principal,
-            UploadWorkflowBinding.direct(), source(), manifest, now.plusSeconds(60), attempt.id(), receipt.id(),
+            UploadWorkflowBinding.direct(), source(), manifest, CAPABILITY_DIGEST, now.plusSeconds(60),
+            attempt.id(), receipt.id(),
             receipt.archiveDigest(), receipt.bundleContentDigest(), PublicationMode.REPLACE, "safe");
         ticket.begin();
         tickets.put(ticket.id(), UploadTicketSnapshot.from(ticket));
@@ -1108,7 +1140,7 @@ class BundleUploadCoordinatorTest {
                                                 Duration attemptRetention, Duration receiptRetention) {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, "2025-11-25", mode,
+            ingress, ingress, mode,
             temporaryDirectory.resolve("state"), temporaryDirectory.resolve("spool"), Duration.ofMinutes(30),
             Duration.ofHours(1), attemptRetention, receiptRetention, Duration.ofMinutes(5),
             100, 10, 100, 10, 1_000_000, maxPerPrincipal, maxConcurrent, maxUploadBytes, maxSpoolBytes,
@@ -1121,7 +1153,7 @@ class BundleUploadCoordinatorTest {
     private PocketHiveMcpProperties propertiesWithSpool(Path spoolPath) {
         PocketHiveMcpProperties source = properties();
         return new PocketHiveMcpProperties(
-            source.pocketHiveIngress(), source.ownerApiBase(), source.protocolRevision(), source.stateMode(), source.statePath(), spoolPath,
+            source.pocketHiveIngress(), source.ownerApiBase(), source.stateMode(), source.statePath(), spoolPath,
             source.openSessionTtl(), source.closedSessionRetention(), source.attemptRetention(),
             source.receiptRetention(), source.uploadTicketTtl(), source.maxOpenSessions(),
             source.maxOpenSessionsPerPrincipal(), source.maxTransportSessions(), source.maxWorkflowsPerSession(), source.maxStateBytes(),

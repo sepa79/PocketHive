@@ -35,6 +35,17 @@ class AtomicCoordinationStateRepositoryTest {
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
 
     @Test
+    void schemaLeavesNonDocumentNodesUnmigratedForTheRepositoryToReject() {
+        var encoded = mapper.createArrayNode();
+
+        CoordinationStateSchema.Migration migration = new CoordinationStateSchema().migrate(encoded);
+
+        assertThat(migration).isNotNull();
+        assertThat(migration.encodedState()).isSameAs(encoded);
+        assertThat(migration.migrated()).isFalse();
+    }
+
+    @Test
     void atomicallyRestoresSessionsWorkflowsAndGeneratedFilesAfterRestart() throws Exception {
         Path state = temporaryDirectory.resolve("state");
         AgentSession session = AgentSession.open("as-1", PRINCIPAL, Instant.parse("2026-08-18T12:00:00Z"),
@@ -79,6 +90,13 @@ class AtomicCoordinationStateRepositoryTest {
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("MCP_STATE_CORRUPT");
         assertThat(Files.readString(corrupt.resolve("state.json"))).isEqualTo("not-json");
+
+        Path wrongShape = temporaryDirectory.resolve("wrong-shape");
+        Files.createDirectories(wrongShape);
+        Files.writeString(wrongShape.resolve("state.json"), "[]");
+        assertThatThrownBy(() -> repository(wrongShape, 1_000_000, 10, 4))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("MCP_STATE_CORRUPT");
 
         Path locked = temporaryDirectory.resolve("locked");
         try (AtomicCoordinationStateRepository first = repository(locked, 1_000_000, 10, 4)) {
@@ -129,7 +147,7 @@ class AtomicCoordinationStateRepositoryTest {
         }
 
         assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
-            .isEqualTo(2);
+            .isEqualTo(3);
     }
 
     @Test
@@ -152,7 +170,27 @@ class AtomicCoordinationStateRepositoryTest {
             assertThat(migrated.loadUploadCoordination().receipts()).containsEntry(receipt.id(), receipt);
         }
         assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
-            .isEqualTo(2);
+            .isEqualTo(3);
+    }
+
+    @Test
+    void versionTwoMigrationInvalidatesCapabilitylessTicketsAndTheirPublicationAttempts() throws Exception {
+        Path state = temporaryDirectory.resolve("legacy-v2-upload-authentication");
+        Files.createDirectories(state);
+        ObjectNode root = emptyState(2);
+        ObjectNode coordination = (ObjectNode) root.path("uploadCoordination");
+        ((ObjectNode) coordination.path("tickets")).putObject("up-legacy")
+            .put("attemptId", "pa-legacy");
+        ((ObjectNode) coordination.path("attempts")).putObject("pa-legacy")
+            .put("state", "PREPARED");
+        mapper.writeValue(state.resolve("state.json").toFile(), root);
+
+        try (AtomicCoordinationStateRepository migrated = repository(state, 1_000_000, 10, 4)) {
+            assertThat(migrated.loadUploadCoordination().tickets()).isEmpty();
+            assertThat(migrated.loadUploadCoordination().attempts()).isEmpty();
+        }
+        assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
+            .isEqualTo(3);
     }
 
     @Test
@@ -168,9 +206,18 @@ class AtomicCoordinationStateRepositoryTest {
                 .hasMessageContaining("MCP_STATE_CORRUPT");
         }
 
+        Path malformedAttempts = temporaryDirectory.resolve("legacy-v2-malformed-attempts");
+        Files.createDirectories(malformedAttempts);
+        ObjectNode legacyV2 = emptyState(2);
+        ((ObjectNode) legacyV2.path("uploadCoordination")).set("attempts", mapper.createArrayNode());
+        mapper.writeValue(malformedAttempts.resolve("state.json").toFile(), legacyV2);
+        assertThatThrownBy(() -> repository(malformedAttempts, 1_000_000, 10, 4))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("MCP_STATE_CORRUPT");
+
         Path unsupported = temporaryDirectory.resolve("unsupported-version");
         Files.createDirectories(unsupported);
-        mapper.writeValue(unsupported.resolve("state.json").toFile(), emptyState(3));
+        mapper.writeValue(unsupported.resolve("state.json").toFile(), emptyState(4));
         assertThatThrownBy(() -> repository(unsupported, 1_000_000, 10, 4))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("MCP_STATE_CORRUPT");

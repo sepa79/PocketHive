@@ -40,6 +40,18 @@ assert.match(webviewSource, /const TAB_ICONS:/,
   'The workspace must expose one canonical icon mapping for its five tabs');
 assert.match(webviewSource, /summary\.setAttribute\('aria-label', 'Account'\)/,
   'The workspace must expose the accessible account menu');
+assert.match(providerSource, /new VisibleAutoRefresh\(\(\) => this\.refreshTabInBackground\(\)\)/,
+  'The extension host must own one active-tab auto-refresh schedule');
+assert.match(providerSource, /onDidChangeVisibility\(\(\) => \{[\s\S]*?tabAutoRefresh\.setVisible\(view\.visible\)/,
+  'The active-tab refresh schedule must follow VS Code view visibility');
+assert.match(providerSource, /tabAutoRefresh\.setEnabled\(!this\.disposed[\s\S]*?!this\.busy[\s\S]*?SESSION_ACTIVITIES\.ACTIVE\)/,
+  'The active-tab refresh schedule must pause outside an idle authenticated workspace');
+const backgroundRefreshSource = providerSource.slice(
+  providerSource.indexOf('private async refreshTabInBackground'),
+  providerSource.indexOf('private activeTabRead'),
+);
+assert.doesNotMatch(backgroundRefreshSource, /scanRepositoryScenarios/,
+  'Automatic refresh must not invalidate commit-bound repository candidates');
 const sourceEntries = sources.map(path => ({ nativePath: path, portablePath: toPortablePath(path) }));
 const product = (await Promise.all(sourceEntries
   .filter(({ portablePath }) => !isTestSource(portablePath))

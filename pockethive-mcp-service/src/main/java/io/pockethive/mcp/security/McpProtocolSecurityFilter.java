@@ -1,7 +1,6 @@
 package io.pockethive.mcp.security;
 
 import io.modelcontextprotocol.spec.HttpHeaders;
-import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import io.pockethive.mcp.domain.PrincipalKey;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
@@ -22,22 +21,16 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 public final class McpProtocolSecurityFilter extends OncePerRequestFilter {
-    private final String requiredProtocolRevision;
     private final Clock clock;
     private final Duration sessionTtl;
     private final Semaphore sessionCapacity;
     private final Map<String, SessionBinding> sessionPrincipals = new ConcurrentHashMap<>();
 
-    public McpProtocolSecurityFilter(String requiredProtocolRevision, Clock clock, Duration sessionTtl,
-                                     int maxSessions) {
-        if (!PocketHiveMcpProperties.REQUIRED_PROTOCOL_REVISION.equals(requiredProtocolRevision)) {
-            throw new IllegalArgumentException("MCP_PROTOCOL_REVISION_UNSUPPORTED");
-        }
+    public McpProtocolSecurityFilter(Clock clock, Duration sessionTtl, int maxSessions) {
         if (clock == null || sessionTtl == null || sessionTtl.isNegative() || sessionTtl.isZero()
             || maxSessions < 1) {
             throw new IllegalArgumentException("MCP_TRANSPORT_SESSION_CONFIGURATION_INVALID");
         }
-        this.requiredProtocolRevision = requiredProtocolRevision;
         this.clock = clock;
         this.sessionTtl = sessionTtl;
         this.sessionCapacity = new Semaphore(maxSessions);
@@ -46,13 +39,13 @@ public final class McpProtocolSecurityFilter extends OncePerRequestFilter {
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response,
                                     FilterChain chain) throws ServletException, IOException {
-        String protocolRevision = request.getHeader(HttpHeaders.PROTOCOL_VERSION);
-        if (!requiredProtocolRevision.equals(protocolRevision)) {
-            reject(response, HttpServletResponse.SC_BAD_REQUEST, "MCP_PROTOCOL_REVISION_UNSUPPORTED");
+        SessionIdentity principal = principal(request);
+        if (principal == null) {
+            chain.doFilter(request, response);
             return;
         }
-        SessionIdentity principal = principal(request);
         String sessionId = request.getHeader(HttpHeaders.MCP_SESSION_ID);
+        if (sessionId != null && sessionId.isBlank()) sessionId = null;
         if (sessionId != null && !sessionId.isBlank()) {
             SessionBinding bound = sessionPrincipals.get(sessionId);
             if (bound == null) {
@@ -108,9 +101,7 @@ public final class McpProtocolSecurityFilter extends OncePerRequestFilter {
         BearerTokenAuthentication authentication = current instanceof BearerTokenAuthentication bearer
             ? bearer
             : request.getUserPrincipal() instanceof BearerTokenAuthentication bearer ? bearer : null;
-        if (authentication == null) {
-            throw new IllegalStateException("MCP_AUTHENTICATION_REQUIRED");
-        }
+        if (authentication == null) return null;
         Object issuer = authentication.getTokenAttributes().get("iss");
         Object subject = authentication.getTokenAttributes().get("sub");
         Object clientId = authentication.getTokenAttributes().get("client_id");

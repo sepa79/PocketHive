@@ -10,15 +10,17 @@ import java.util.Objects;
 import java.util.Map;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
+import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 
 public final class OAuthResourceParameterFilter extends OncePerRequestFilter {
     private final String expectedResource;
-    private final String expectedRedirectUri;
+    private final RegisteredClientRepository clients;
     private final ObjectMapper mapper = new ObjectMapper();
 
-    public OAuthResourceParameterFilter(String expectedResource, String expectedRedirectUri) {
+    public OAuthResourceParameterFilter(String expectedResource, RegisteredClientRepository clients) {
         this.expectedResource = Objects.requireNonNull(expectedResource, "expectedResource");
-        this.expectedRedirectUri = Objects.requireNonNull(expectedRedirectUri, "expectedRedirectUri");
+        this.clients = Objects.requireNonNull(clients, "clients");
     }
 
     @Override
@@ -27,11 +29,11 @@ public final class OAuthResourceParameterFilter extends OncePerRequestFilter {
         String path = request.getRequestURI();
         if ("GET".equals(request.getMethod()) && "/oauth/authorize".equals(path)) {
             if (!singleEquals(request, "resource", expectedResource)
-                || !singleEquals(request, "redirect_uri", expectedRedirectUri)
+                || !singleRegisteredRedirect(request)
                 || !singleNonBlank(request, "state")
                 || !singleEquals(request, "code_challenge_method", "S256")) {
                 error(response, "invalid_request",
-                    "resource, exact redirect_uri, state, and PKCE S256 are required");
+                    "resource, exact registered redirect_uri, state, and PKCE S256 are required");
                 return;
             }
         } else if ("/oauth/token".equals(path) && !singleEquals(request, "resource", expectedResource)) {
@@ -49,6 +51,17 @@ public final class OAuthResourceParameterFilter extends OncePerRequestFilter {
     private static boolean singleNonBlank(HttpServletRequest request, String name) {
         String[] values = request.getParameterValues(name);
         return values != null && values.length == 1 && !values[0].isBlank();
+    }
+
+    private boolean singleRegisteredRedirect(HttpServletRequest request) {
+        String[] clientIds = request.getParameterValues("client_id");
+        String[] redirectUris = request.getParameterValues("redirect_uri");
+        if (clientIds == null || clientIds.length != 1 || clientIds[0].isBlank()
+            || redirectUris == null || redirectUris.length != 1 || redirectUris[0].isBlank()) {
+            return false;
+        }
+        RegisteredClient client = clients.findByClientId(clientIds[0]);
+        return client != null && client.getRedirectUris().contains(redirectUris[0]);
     }
 
     private void error(HttpServletResponse response, String code, String description) throws IOException {

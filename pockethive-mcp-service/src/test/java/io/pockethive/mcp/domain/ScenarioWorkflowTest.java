@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
 import java.time.Instant;
+import java.util.EnumMap;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class ScenarioWorkflowTest {
@@ -43,6 +45,55 @@ class ScenarioWorkflowTest {
             RequirementAnswer.userProvided("checkout", acceptedProvenance(PRINCIPAL, workflow.id(), 0))))
             .isInstanceOf(WorkflowRuleViolation.class)
             .hasMessage("WORKFLOW_VERSION_CONFLICT");
+    }
+
+    @Test
+    void completeReviewAppliesEveryTopicAtomicallyWithOneRevision() {
+        ScenarioWorkflow workflow = ScenarioWorkflow.create("workflow-1", "session-1", PRINCIPAL);
+        Map<QaRequirementTopic, RequirementAnswer> answers = completeReviewAnswers(workflow);
+
+        workflow.answerAll(0, answers);
+
+        assertThat(workflow.revision()).isEqualTo(1);
+        assertThat(workflow.state()).isEqualTo(ScenarioWorkflowState.REVIEW_REQUIRED);
+        assertThat(workflow.requirements()).containsExactlyInAnyOrderEntriesOf(answers);
+    }
+
+    @Test
+    void incompleteOrInvalidReviewDoesNotPartiallyMutateWorkflow() {
+        ScenarioWorkflow workflow = ScenarioWorkflow.create("workflow-1", "session-1", PRINCIPAL);
+        Map<QaRequirementTopic, RequirementAnswer> incomplete = completeReviewAnswers(workflow);
+        incomplete.remove(QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT);
+
+        assertThatThrownBy(() -> workflow.answerAll(0, incomplete))
+            .isInstanceOf(WorkflowRuleViolation.class)
+            .hasMessage("WORKFLOW_REQUIREMENT_SET_INCOMPLETE");
+        assertThat(workflow.revision()).isZero();
+        assertThat(workflow.requirements().values())
+            .allSatisfy(answer -> assertThat(answer.disposition()).isEqualTo(RequirementDisposition.UNKNOWN));
+
+        Map<QaRequirementTopic, RequirementAnswer> invalid = completeReviewAnswers(workflow);
+        invalid.put(QaRequirementTopic.SAFETY_GOVERNANCE_AND_ABORT,
+            RequirementAnswer.userProvided("invalid", acceptedProvenance(
+                new PrincipalKey(URI.create("https://issuer.example"), "other"), workflow.id(), 0)));
+        assertThatThrownBy(() -> workflow.answerAll(0, invalid))
+            .isInstanceOf(WorkflowRuleViolation.class)
+            .hasMessage("WORKFLOW_PRINCIPAL_MISMATCH");
+        assertThat(workflow.revision()).isZero();
+        assertThat(workflow.requirements().values())
+            .allSatisfy(answer -> assertThat(answer.disposition()).isEqualTo(RequirementDisposition.UNKNOWN));
+
+        Map<QaRequirementTopic, RequirementAnswer> complete = completeReviewAnswers(workflow);
+        assertThatThrownBy(() -> workflow.answerAll(1, complete))
+            .isInstanceOf(WorkflowRuleViolation.class)
+            .hasMessage("WORKFLOW_VERSION_CONFLICT");
+        assertThat(workflow.revision()).isZero();
+
+        workflow.cancel(0);
+        Map<QaRequirementTopic, RequirementAnswer> cancelledAnswers = completeReviewAnswers(workflow);
+        assertThatThrownBy(() -> workflow.answerAll(1, cancelledAnswers))
+            .isInstanceOf(WorkflowRuleViolation.class)
+            .hasMessage("WORKFLOW_IMMUTABLE");
     }
 
     @Test
@@ -261,6 +312,15 @@ class ScenarioWorkflowTest {
                 "Explicitly outside this test", acceptedProvenance(PRINCIPAL, workflow.id(), revision)));
         }
         return workflow;
+    }
+
+    private static Map<QaRequirementTopic, RequirementAnswer> completeReviewAnswers(ScenarioWorkflow workflow) {
+        Map<QaRequirementTopic, RequirementAnswer> answers = new EnumMap<>(QaRequirementTopic.class);
+        for (QaRequirementTopic topic : QaRequirementTopic.values()) {
+            answers.put(topic, RequirementAnswer.userProvided(
+                "Explicit " + topic.name(), acceptedProvenance(PRINCIPAL, workflow.id(), workflow.revision())));
+        }
+        return answers;
     }
 
     private static AnswerProvenance acceptedProvenance(PrincipalKey principal, String workflowId, long revision) {

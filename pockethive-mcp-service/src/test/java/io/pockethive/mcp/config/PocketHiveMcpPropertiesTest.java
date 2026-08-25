@@ -34,8 +34,8 @@ class PocketHiveMcpPropertiesTest {
     private static PocketHiveMcpProperties properties(URI ingress, URI owner, int totalSessions,
                                                        int sessionsPerPrincipal) {
         return new PocketHiveMcpProperties(
-            ingress, owner, PocketHiveMcpProperties.REQUIRED_PROTOCOL_REVISION,
-            PocketHiveMcpProperties.StateMode.MEMORY, Path.of("target/state"), Path.of("target/spool"),
+            ingress, owner, PocketHiveMcpProperties.StateMode.MEMORY,
+            Path.of("target/state"), Path.of("target/spool"),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1),
             Duration.ofMinutes(5), totalSessions, sessionsPerPrincipal, 100, 10, 1_000_000,
             2, 10, 100_000, 200_000, 20, 200_000, 8, 100,

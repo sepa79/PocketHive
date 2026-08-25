@@ -73,6 +73,8 @@ let repositoryScenarioSection: ScenarioSection = 'FILES';
 let repositorySearch = '';
 let repositoryWorkspace = 'ALL';
 let debugContext: DebugContext = 'WORKER';
+const disclosureState = new Map<string, boolean>();
+let environmentHealthExpanded = false;
 let createSwarmDraft: {
   swarmId: string;
   templateId: string;
@@ -90,9 +92,15 @@ window.addEventListener('message', event => {
   if (!message || typeof message !== 'object' || Array.isArray(message)) return;
   const value = message as Record<string, unknown>;
   if (value.type === 'viewModel' && value.model && typeof value.model === 'object') {
-    reconcileCreateSwarmDraft(value.model as Model);
-    model = value.model as Model;
-    render();
+    const nextModel = value.model as Model;
+    const preserveInteractionState = samePresentationContext(model, nextModel);
+    if (!preserveInteractionState) {
+      disclosureState.clear();
+      environmentHealthExpanded = false;
+    }
+    reconcileCreateSwarmDraft(nextModel);
+    model = nextModel;
+    render(preserveInteractionState);
     return;
   }
   if (value.type === 'error' && value.error && typeof value.error === 'object') {
@@ -104,13 +112,23 @@ window.addEventListener('message', event => {
 
 vscode.postMessage({ type: 'ready' });
 
-function render(): void {
+function render(preserveInteractionState = true): void {
+  const focus = preserveInteractionState ? captureFocus() : undefined;
+  if (preserveInteractionState) captureDisclosureState();
   app.replaceChildren();
   if (model.page === 'workspace') app.append(workspace());
   else app.append(environments());
   announcer.textContent = statusAnnouncement();
+  restoreFocus(focus);
   requestAnimationFrame(() => document.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
     ?.scrollIntoView({ block: 'nearest', inline: 'nearest' }));
+}
+
+function samePresentationContext(current: Model, next: Model): boolean {
+  return current.page === next.page
+    && current.activeTab === next.activeTab
+    && current.activeProfile?.id === next.activeProfile?.id
+    && current.session?.status === next.session?.status;
 }
 
 function environments(): HTMLElement {
@@ -266,8 +284,7 @@ function workspace(): HTMLElement {
 }
 
 function accountMenu(profile: Model, session: Model): HTMLElement {
-  const details = document.createElement('details');
-  details.className = 'account-menu';
+  const details = refreshStableDetails('workspace:account', 'account-menu');
   const summary = document.createElement('summary');
   summary.setAttribute('aria-label', 'Account');
   summary.title = 'Account';
@@ -322,9 +339,9 @@ function environmentHealth(profile: Model, session: Model): HTMLElement {
         ? `${services.length} services healthy`
         : `${unavailable} service${unavailable === 1 ? '' : 's'} unavailable`
     : String(session.status ?? profile.status ?? 'Not connected');
-  const footer = el('footer', `environment-health${connected ? ' environment-health--connected' : ''}`);
+  const footer = el('footer', `environment-health${connected ? ' environment-health--connected' : ''}${environmentHealthExpanded ? ' environment-health--open' : ''}`);
   const panel = el('section', 'environment-health__panel');
-  panel.hidden = true;
+  panel.hidden = !environmentHealthExpanded;
   panel.setAttribute('aria-label', 'Environment services');
   if (services.length === 0) {
     panel.append(el('div', 'environment-health__empty', [
@@ -337,7 +354,7 @@ function environmentHealth(profile: Model, session: Model): HTMLElement {
   const toggle = document.createElement('button');
   toggle.type = 'button';
   toggle.className = 'environment-health__toggle';
-  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-expanded', String(environmentHealthExpanded));
   toggle.setAttribute('aria-label', `Environment health: ${status}`);
   toggle.append(
     brandMark('environment-health__mark'),
@@ -348,10 +365,10 @@ function environmentHealth(profile: Model, session: Model): HTMLElement {
     icon('chevron-up', 'environment-health__chevron'),
   );
   toggle.addEventListener('click', () => {
-    const expanded = toggle.getAttribute('aria-expanded') !== 'true';
-    toggle.setAttribute('aria-expanded', String(expanded));
-    panel.hidden = !expanded;
-    footer.classList.toggle('environment-health--open', expanded);
+    environmentHealthExpanded = !environmentHealthExpanded;
+    toggle.setAttribute('aria-expanded', String(environmentHealthExpanded));
+    panel.hidden = !environmentHealthExpanded;
+    footer.classList.toggle('environment-health--open', environmentHealthExpanded);
   });
   footer.append(panel, el('div', 'environment-health__rail', [toggle, accountMenu(profile, session)]));
   return footer;
@@ -549,7 +566,10 @@ function repositoryScenarioView(): HTMLElement {
   const workspace = select('Workspace', 'repositoryWorkspace', [
     ['ALL', 'All workspaces'], ...workspaceNames.map(name => [name, name]),
   ], repositoryWorkspace);
-  const advanced = el('details', 'advanced-filters repository-advanced-filters');
+  const advanced = refreshStableDetails(
+    'scenarios:repository:filters',
+    'advanced-filters repository-advanced-filters',
+  );
   const advancedSummary = iconSummary('Repository filters', 'filter');
   const workspaceBadge = text('span', repositoryWorkspace === 'ALL' ? '' : '1', 'filter-count');
   workspaceBadge.hidden = repositoryWorkspace === 'ALL';
@@ -715,8 +735,11 @@ function repositoryTreeNodes(files: readonly string[]): Model[] {
 
 function repositoryFileNode(candidateId: string, entry: ScenarioTreeEntry): HTMLElement {
   if (entry.nodeType === 'directory') {
-    const branch = el('details', 'scenario-tree__branch');
-    branch.setAttribute('open', '');
+    const branch = refreshStableDetails(
+      `scenarios:repository:${candidateId}:directory:${entry.path}`,
+      'scenario-tree__branch',
+      true,
+    );
     branch.append(el('summary', 'scenario-tree__row scenario-tree__row--directory', [
       icon('chevron-right', 'scenario-tree__twistie'),
       icon('folder', 'scenario-tree__icon'),
@@ -995,7 +1018,7 @@ function swarmRowView(swarm: Model): HTMLElement {
 
 function swarmWorkersView(swarm: Model, swarmId: string): HTMLElement {
   const workers = Array.isArray(swarm.bees) ? swarm.bees : [];
-  const details = el('details', 'swarm-workers');
+  const details = refreshStableDetails(`hive:workers:${swarmId}`, 'swarm-workers');
   const summary = el('summary', 'swarm-workers__summary', [
     icon('organization'),
     text('span', 'Workers'),
@@ -1201,7 +1224,10 @@ function scenarioListView(value: unknown): HTMLElement {
   const search = searchInput('Search bundles', 'scenarioSearch', scenarioSearch, 'Find a bundle');
   search.control.required = false;
   const folder = select('Folder', 'scenarioFolder', [['ALL', 'All folders'], ...folders.map(item => [item, item])], scenarioFolder);
-  const advanced = el('details', 'advanced-filters scenario-advanced-filters');
+  const advanced = refreshStableDetails(
+    'scenarios:deployed:filters',
+    'advanced-filters scenario-advanced-filters',
+  );
   const advancedSummary = iconSummary('Scenario filters', 'filter');
   const folderBadge = text('span', scenarioFolder === 'ALL' ? 'All' : '1', 'filter-count');
   advancedSummary.append(folderBadge);
@@ -1280,7 +1306,7 @@ function scenarioRow(scenario: Model): HTMLElement {
   } else {
     body.append(text('p', 'This bundle is defunct or missing a canonical scenario ID, so bundle drill-down actions are unavailable.', 'muted callout'));
   }
-  body.append(technicalDetails(scenario));
+  body.append(technicalDetails(scenario, `scenarios:deployed:${rowId}:technical`));
   details.append(body);
   return details;
 }
@@ -1374,8 +1400,11 @@ function scenarioTreeHierarchy(nodes: Model[]): ScenarioTreeEntry[] | undefined 
 
 function scenarioFileNode(bundleKey: string, entry: ScenarioTreeEntry): HTMLElement {
   if (entry.nodeType === 'directory') {
-    const branch = el('details', 'scenario-tree__branch');
-    branch.setAttribute('open', '');
+    const branch = refreshStableDetails(
+      `scenarios:deployed:${bundleKey}:directory:${entry.path}`,
+      'scenario-tree__branch',
+      true,
+    );
     branch.append(el('summary', 'scenario-tree__row scenario-tree__row--directory', [
       icon('chevron-right', 'scenario-tree__twistie'),
       icon('folder', 'scenario-tree__icon'),
@@ -1505,8 +1534,7 @@ function eventListView(value: unknown, emptyMessage: string, context: 'Buzz' | '
   const severities = distinctEventField(events, 'severity');
   const kind = select('Kind', `${context.toLowerCase()}Kind`, [['ALL', 'All kinds'], ...kinds.map(item => [item, item])], criteria.kind);
   const severity = select('Severity', `${context.toLowerCase()}Severity`, [['ALL', 'All severities'], ...severities.map(item => [item, item])], criteria.severity);
-  const advanced = document.createElement('details');
-  advanced.className = 'advanced-filters';
+  const advanced = refreshStableDetails(`${context.toLowerCase()}:filters`, 'advanced-filters');
   const advancedSummary = iconSummary('Advanced filters', 'filter');
   advancedSummary.setAttribute('aria-label', 'Advanced filters');
   const advancedCount = text('span', '', 'filter-count');
@@ -1556,7 +1584,7 @@ function eventRow(event: Model, context: 'Buzz' | 'Journal'): HTMLElement {
     const severity = stringField(event, 'severity') ?? 'UNKNOWN';
     const type = stringField(event, 'type') ?? 'untyped';
     const swarmId = stringField(event, 'swarmId');
-    const details = el('details', 'event-row');
+    const details = refreshStableDetails(eventDisclosureKey(event, context), 'event-row');
     details.append(el('summary', '', [
       icon(severity.toLocaleUpperCase() === 'ERROR' ? 'error' : eventIcon(kind), 'event-row__icon'),
       el('span', 'event-row__identity', [
@@ -1657,14 +1685,65 @@ function dataRows(rows: string[][]): HTMLElement {
   return result;
 }
 
-function technicalDetails(value: unknown): HTMLElement {
-  const details = el('details', 'technical-details');
+function technicalDetails(value: unknown, key = 'workspace:technical'): HTMLElement {
+  const details = refreshStableDetails(key, 'technical-details');
   details.append(iconSummary('Technical details', 'code'));
   const pre = document.createElement('pre');
   pre.tabIndex = 0;
   pre.textContent = JSON.stringify(value, null, 2);
   details.append(pre);
   return details;
+}
+
+interface FocusSnapshot {
+  readonly id: string;
+  readonly selectionStart: number | null;
+  readonly selectionEnd: number | null;
+}
+
+function captureFocus(): FocusSnapshot | undefined {
+  const active = document.activeElement as HTMLInputElement | HTMLTextAreaElement | undefined;
+  if (!active?.id || (active.tagName !== 'INPUT' && active.tagName !== 'TEXTAREA')) return undefined;
+  return { id: active.id, selectionStart: active.selectionStart, selectionEnd: active.selectionEnd };
+}
+
+function restoreFocus(snapshot: FocusSnapshot | undefined): void {
+  if (!snapshot || typeof document.getElementById !== 'function') return;
+  const replacement = document.getElementById(snapshot.id) as HTMLInputElement | HTMLTextAreaElement | null;
+  if (!replacement || (replacement.tagName !== 'INPUT' && replacement.tagName !== 'TEXTAREA')) return;
+  replacement.focus({ preventScroll: true });
+  if (snapshot.selectionStart !== null && snapshot.selectionEnd !== null) {
+    replacement.setSelectionRange(snapshot.selectionStart, snapshot.selectionEnd);
+  }
+}
+
+function captureDisclosureState(): void {
+  if (typeof document.querySelectorAll !== 'function') return;
+  document.querySelectorAll<HTMLDetailsElement>('details[data-refresh-key]').forEach(details => {
+    const key = details.getAttribute('data-refresh-key');
+    if (key) disclosureState.set(key, details.open);
+  });
+}
+
+function refreshStableDetails(key: string, className: string, openByDefault = false): HTMLDetailsElement {
+  const details = document.createElement('details');
+  details.className = className;
+  details.setAttribute('data-refresh-key', key);
+  if (disclosureState.get(key) ?? openByDefault) details.setAttribute('open', '');
+  return details;
+}
+
+function eventDisclosureKey(event: Model, context: 'Buzz' | 'Journal'): string {
+  return [
+    context,
+    displayValue(event.eventId),
+    displayValue(event.timestamp),
+    displayValue(event.kind),
+    displayValue(event.type),
+    displayValue(event.swarmId),
+    displayValue(event.origin),
+    displayValue(event.routingKey),
+  ].join(':');
 }
 
 function emptyState(message: string): HTMLElement {

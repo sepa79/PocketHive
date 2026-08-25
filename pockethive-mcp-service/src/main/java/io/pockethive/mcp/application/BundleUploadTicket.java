@@ -11,6 +11,7 @@ public sealed interface BundleUploadTicket permits ValidationUploadTicket, Publi
     UploadWorkflowBinding workflowBinding();
     SourceMetadata source();
     BundleFileManifest manifest();
+    String uploadCapabilityDigest();
     Instant expiresAt();
     UploadTicketState state();
     void begin();
@@ -18,6 +19,6 @@ public sealed interface BundleUploadTicket permits ValidationUploadTicket, Publi
     void consume();
 
     default String uploadPath() {
-        return "/mcp/uploads/" + id();
+        return BundleUploadContract.PATH_PREFIX + id();
     }
 }

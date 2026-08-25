@@ -117,12 +117,15 @@
           <targetClasses>
             <param>io.pockethive.auth.service.oauth.PocketHiveAccessTokenGenerator</param>
             <param>io.pockethive.auth.service.oauth.PocketHiveRefreshTokenGenerator</param>
-            <param>io.pockethive.auth.service.oauth.PocketHiveCompanionAuthorizationRequestConverter</param>
+            <param>io.pockethive.auth.service.oauth.PocketHiveInteractiveAuthorizationRequestConverter</param>
+            <param>io.pockethive.auth.service.oauth.DynamicClientRegistrationService</param>
+            <param>io.pockethive.auth.service.oauth.PocketHiveRegisteredClientRepository</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationConverter</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationProvider</param>
           </targetClasses>
           <targetTests>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionSecurityTest</param>
+            <param>io.pockethive.auth.service.oauth.DynamicClientRegistrationServiceTest</param>
           </targetTests>
         </configuration>
       </plugin>

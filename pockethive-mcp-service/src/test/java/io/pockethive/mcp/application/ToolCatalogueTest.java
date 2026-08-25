@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.mcp.domain.QaRequirementTopic;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
@@ -22,7 +23,7 @@ class ToolCatalogueTest {
     void everyPublishedToolHasOneCanonicalIdContractAndConnectedSkill() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
-        assertThat(catalogue.tools()).hasSize(54);
+        assertThat(catalogue.tools()).hasSize(58);
         assertThat(catalogue.tools()).allSatisfy(tool -> {
             assertThat(tool.id()).matches("[a-z][a-z0-9_]*");
             assertThat(tool.description()).isNotBlank();
@@ -44,9 +45,10 @@ class ToolCatalogueTest {
             .hasSize(catalogue.tools().size());
         assertThat(catalogue.tools().stream().map(ToolDescriptor::id))
             .contains("scenario_bundle_tree_read", "scenario_bundle_file_read",
-                "scenario_suts_list", "scenario_sut_get");
+                "scenario_suts_list", "scenario_sut_get", "scenario_workflow_question",
+                "scenario_workflow_answer_submit", "scenario_workflow_review_prepare",
+                "scenario_workflow_review_submit");
         assertThat(catalogue.skills().values()).allSatisfy(skill -> {
-            assertThat(skill.version()).isEqualTo("1.0.0");
             assertThat(skill.resourceUri()).isEqualTo(
                 "pockethive://skills/%s/%s/SKILL.md".formatted(skill.id(), skill.version()));
             assertThat(skill.contentDigest()).startsWith("sha256:").hasSize(71);
@@ -58,6 +60,16 @@ class ToolCatalogueTest {
         assertThat(catalogue.skills().get("pockethive-orientation").markdown())
             .contains("pockethive://knowledge/overview", "pockethive://capabilities/current",
                 "pockethive://tools/catalogue", "pockethive://skills/catalogue");
+        assertThat(catalogue.skills().get("qa-no-inference").version()).isEqualTo("1.2.0");
+        assertThat(catalogue.skills().values().stream()
+            .filter(skill -> !skill.id().equals("qa-no-inference")))
+            .allSatisfy(skill -> assertThat(skill.version()).isEqualTo("1.0.0"));
+        assertThat(catalogue.skills().get("qa-no-inference").markdown())
+            .contains("scenario_workflow_question", "scenario_workflow_answer_submit")
+            .contains("scenario_workflow_review_prepare", "scenario_workflow_review_submit")
+            .contains("present the returned question unchanged", "wait for the user's explicit response")
+            .contains("must not switch modes automatically")
+            .contains("goal, SUT, and journey", "material unknowns, conflicts, or unsupported intent");
     }
 
     @Test
@@ -72,6 +84,22 @@ class ToolCatalogueTest {
         Map<String, Object> journal = catalogue.requireTool("debug_journal").inputSchema();
         assertThat(journal.get("required")).isEqualTo(List.of("swarmId"));
         assertThat(properties(journal)).containsKeys("swarmId", "runId", "limit", "severity");
+
+        Map<String, Object> tap = catalogue.requireTool("debug_tap").inputSchema();
+        assertThat(tap.get("required"))
+            .isEqualTo(List.of("swarmId", "role", "direction", "ioName", "maxItems", "ttlSeconds"));
+        assertThat(property(tap, "maxItems"))
+            .containsEntry("type", "integer")
+            .containsEntry("minimum", 1L);
+        assertThat(property(tap, "ttlSeconds"))
+            .containsEntry("type", "integer")
+            .containsEntry("minimum", 1L);
+
+        Map<String, Object> tapRead = catalogue.requireTool("debug_tap_read").inputSchema();
+        assertThat(tapRead.get("required")).isEqualTo(List.of("tapId"));
+        assertThat(property(tapRead, "drain"))
+            .containsEntry("type", "integer")
+            .containsEntry("minimum", 0L);
 
         ToolDescriptor runs = catalogue.requireTool("debug_journal_runs");
         assertThat(runs.owner()).isEqualTo(ToolOwner.ORCHESTRATOR);
@@ -92,6 +120,34 @@ class ToolCatalogueTest {
         @SuppressWarnings("unchecked")
         Map<String, Object> generatedFile = (Map<String, Object>) property(generation, "files").get("items");
         assertThat(property(generatedFile, "content")).containsEntry("minLength", 0);
+
+        Map<String, Object> question = catalogue.requireTool("scenario_workflow_question").inputSchema();
+        assertThat(question.get("required")).isEqualTo(List.of("workflowId", "topic"));
+
+        Map<String, Object> submitted = catalogue.requireTool("scenario_workflow_answer_submit").inputSchema();
+        assertThat(submitted.get("required")).isEqualTo(List.of(
+            "workflowId", "expectedRevision", "topic", "questionId", "requestedSchemaDigest",
+            "disposition", "answer"));
+        assertThat(property(submitted, "disposition").get("enum")).isEqualTo(List.of(
+            "USER_PROVIDED", "USER_CONFIRMED_SOURCE", "NOT_APPLICABLE"));
+        assertThat(property(submitted, "requestedSchemaDigest").get("pattern"))
+            .isEqualTo("^sha256:[0-9a-f]{64}$");
+        assertThat(submitted.get("required")).asInstanceOf(org.assertj.core.api.InstanceOfAssertFactories.LIST)
+            .doesNotContain("sourceName", "sourceDigest");
+
+        Map<String, Object> review = catalogue.requireTool("scenario_workflow_review_prepare").inputSchema();
+        assertThat(review.get("required")).isEqualTo(List.of("workflowId", "expectedRevision", "answers"));
+        assertThat(property(review, "answers"))
+            .containsEntry("type", "array")
+            .containsEntry("minItems", QaRequirementTopic.values().length)
+            .containsEntry("maxItems", QaRequirementTopic.values().length);
+
+        Map<String, Object> reviewSubmit = catalogue.requireTool("scenario_workflow_review_submit").inputSchema();
+        assertThat(reviewSubmit.get("required")).isEqualTo(List.of(
+            "workflowId", "expectedRevision", "reviewId", "requestedSchemaDigest", "answerSetDigest",
+            "answers"));
+        assertThat(property(reviewSubmit, "answerSetDigest").get("pattern"))
+            .isEqualTo("^sha256:[0-9a-f]{64}$");
     }
 
     @SuppressWarnings("unchecked")

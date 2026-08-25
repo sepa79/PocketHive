@@ -38,6 +38,7 @@ class McpDeploymentContractTest {
             .contains("PH_MCP_POCKETHIVE_INGRESS: http://localhost:8088")
             .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
             .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S")
+            .contains("POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D")
             .contains("read_only: true", "cap_drop:", "- ALL", "pockethive-mcp-state:")
             .doesNotContain("3100:8080");
     }
@@ -53,6 +54,8 @@ class McpDeploymentContractTest {
                 .contains("location = /mcp")
                 .contains("location ^~ /mcp/uploads/")
                 .contains("location = /.well-known/oauth-protected-resource")
+                .contains("location = /.well-known/oauth-authorization-server/auth-service")
+                .contains("proxy_pass http://$auth_service:8080/.well-known/oauth-authorization-server")
                 .contains("proxy_pass http://$pockethive_mcp:8080")
                 .contains("proxy_buffering off")
                 .doesNotContain("rewrite ^/mcp");
@@ -84,7 +87,8 @@ class McpDeploymentContractTest {
             .contains("state/pockethive-mcp:/var/lib/pockethive-mcp/state")
             .contains("PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}")
             .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
-            .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S");
+            .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S")
+            .contains("POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D");
         assertThat(text("deploy/hiveforge/components/stack/ansible/swarm-stack.yml"))
             .contains("state/pockethive-mcp");
     }

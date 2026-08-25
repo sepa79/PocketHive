@@ -20,7 +20,7 @@ public class ProtectedResourceMetadataController {
         return Map.of(
             "resource", properties.oauthResource().toString(),
             "authorization_servers", List.of(properties.oauthIssuer().toString()),
-            "scopes_supported", PocketHiveMcpScopes.ALL_ORDERED,
+            "scopes_supported", PocketHiveMcpScopes.COMPANION_ORDERED,
             "bearer_methods_supported", List.of("header"));
     }
 }

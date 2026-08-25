@@ -1,12 +1,13 @@
 package io.pockethive.mcp.config;
 
 import io.pockethive.mcp.security.McpOpaqueTokenIntrospector;
+import io.pockethive.mcp.application.BundleUploadContract;
+import io.pockethive.mcp.security.McpAuthenticationEntryPoint;
 import io.pockethive.mcp.security.McpProtocolSecurityFilter;
 import java.time.Clock;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.annotation.Order;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
@@ -27,12 +28,18 @@ public class McpSecurityConfiguration {
     SecurityFilterChain protectedMcpRoutes(HttpSecurity http, OpaqueTokenIntrospector introspector,
                                            PocketHiveMcpProperties properties, Clock clock) throws Exception {
         var paths = PathPatternRequestMatcher.withDefaults();
+        McpAuthenticationEntryPoint authenticationRequired = new McpAuthenticationEntryPoint(properties);
         return http
             .securityMatcher(new OrRequestMatcher(paths.matcher("/mcp"), paths.matcher("/mcp/**")))
-            .authorizeHttpRequests(authorize -> authorize.anyRequest().authenticated())
-            .oauth2ResourceServer(oauth -> oauth.opaqueToken(token -> token.introspector(introspector)))
-            .addFilterAfter(new McpProtocolSecurityFilter(properties.protocolRevision(), clock,
-                    properties.openSessionTtl(), properties.maxTransportSessions()),
+            .authorizeHttpRequests(authorize -> authorize
+                .requestMatchers(BundleUploadContract.SECURITY_PATTERN).permitAll()
+                .anyRequest().authenticated())
+            .oauth2ResourceServer(oauth -> oauth
+                .authenticationEntryPoint(authenticationRequired)
+                .opaqueToken(token -> token.introspector(introspector)))
+            .exceptionHandling(errors -> errors.authenticationEntryPoint(authenticationRequired))
+            .addFilterAfter(new McpProtocolSecurityFilter(clock, properties.openSessionTtl(),
+                    properties.maxTransportSessions()),
                 BearerTokenAuthenticationFilter.class)
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .csrf(csrf -> csrf.disable())
@@ -47,7 +54,6 @@ public class McpSecurityConfiguration {
                 .requestMatchers("/.well-known/oauth-protected-resource", "/actuator/health", "/actuator/info")
                 .permitAll()
                 .anyRequest().denyAll())
-            .httpBasic(Customizer.withDefaults())
             .csrf(csrf -> csrf.disable())
             .build();
     }
