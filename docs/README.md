@@ -55,6 +55,8 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
+- [Engineering Rules](ENGINEERING_RULES.md)
+- [Review Rules](REVIEW_RULES.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
 

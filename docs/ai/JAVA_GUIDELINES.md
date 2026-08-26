@@ -8,6 +8,7 @@ Goals:
 - Keep configuration explicit (no implicit fallbacks, no “optional core state”).
 
 Authoritative references (SSOT):
+- Implementation units and boundary shapes: `docs/ENGINEERING_RULES.md`
 - Architecture/layering: `docs/ARCHITECTURE.md`
 - Correlation vs idempotency: `docs/correlation-vs-idempotency.md`
 - Control-plane testing strategy: `docs/ci/control-plane-testing.md`
@@ -17,6 +18,10 @@ Authoritative references (SSOT):
 - Do not blend concerns across modules (orchestrator, swarm-controller, generator, moderator, processor, postprocessor, trigger).
 - Domain logic depends on ports; concrete adapters live in infra (DIP). Prefer small interfaces (ISP).
 - Extend behaviour by adding new handlers/components; avoid modifying shared contracts “just for this case” (OCP).
+- Use one Java production type per file by default and one responsibility per file. Only the narrow private nested-type exception in `docs/ENGINEERING_RULES.md` is allowed; public nested DTO/enum bags are forbidden.
+- New or materially changed runtime/boundary types require the ownership header defined in `docs/ENGINEERING_RULES.md`.
+- Keep listeners and REST controllers thin: decode/map, establish boundary context, and delegate to focused handlers/application services.
+- Do not grow an existing mixed class. Extract the changed responsibility before extending its behaviour.
 
 ## 2) Configuration (explicit, validated, no fallback chains)
 

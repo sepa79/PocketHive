@@ -30,6 +30,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Before approving a non-trivial change, search the whole repository for alternative owners of every affected responsibility. Two active authorities are a **CRITICAL** finding and block approval unless the architecture explicitly defines distinct, non-overlapping ownership.
 - **KISS.**
   - Prefer straightforward, maintainable implementations over clever abstractions.
+- **Strict implementation-unit separation.**
+  - Follow `docs/ENGINEERING_RULES.md`: one Java production type per file by default, one TypeScript/React runtime module or component concern per file, one clear responsibility per file, and no kitchen-sink classes or public nested contract bags. Only the narrow private nested-type exception defined there is allowed.
+  - Existing mixed files are debt, not precedent. Do not add behavior to a mixed file; extract the affected responsibility first.
+  - Every new or materially changed runtime class, REST controller, message listener, command/event handler, state machine, coordinator, boundary parser, projection, repository, or infrastructure adapter must declare a concise JavaDoc responsibility header with `Responsibility`, `Must not`, and `Contract`.
+  - Transport listeners decode, establish context, and dispatch. REST controllers map HTTP and delegate. Neither owns domain state transitions, lifecycle convergence, persistence, or terminal outcome construction.
 - **No magic strings for core behavior.**
   - Never hardcode raw string literals to drive domain behavior (roles, protocols, event types, routing keys, header names).
   - Use shared constants/enums/contract types.
@@ -91,6 +96,10 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Usage & local run: `docs/USAGE.md`
   - Project overview hub: `docs/README.md`
 
+- **Engineering policy**
+  - Engineering rules (implementation units and boundaries): `docs/ENGINEERING_RULES.md`
+  - Review rules (mandatory non-trivial review checklist): `docs/REVIEW_RULES.md`
+
 - **Agent hygiene**
   - AI guidelines: `docs/ai/AI_GUIDELINES.md`
   - HiveMind workflow: `docs/ai/HIVEMIND_WORKFLOW.md`
@@ -106,11 +115,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ## 3) Contribution workflow (short)
 
-1. **Plan**: If your change affects routing, message schema, or REST, edit the relevant doc first (see §2) and get review.
-2. **Implement**: Keep code inside its module’s boundaries; prefer ports + adapters; use Lombok to avoid boilerplate.
+1. **Plan**: If your change affects routing, message schema, REST, or responsibility ownership, edit the relevant doc first (see §2) and get review.
+2. **Implement**: Declare the owner and its responsibility header before code. Keep code inside its module’s boundaries; prefer ports + adapters; use Lombok to avoid boilerplate.
 3. **Test**: Add/adjust tests at the right layer per `control-plane-testing.md`.
 4. **Observe**: Ensure logs/metrics match `observability.md`.
-5. **Review**: Run through `ai/REVIEW_CHECKLIST.md` before opening a PR.
+5. **Review**: Run through `docs/REVIEW_RULES.md` and `docs/ai/REVIEW_CHECKLIST.md` before opening a PR.
 
 **Protected areas — require explicit approval:**
 - Routing utility, shared message envelopes, public contracts, prod compose/k8s manifests, and security config.
