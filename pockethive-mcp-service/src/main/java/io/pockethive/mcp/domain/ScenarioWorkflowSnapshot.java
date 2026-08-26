@@ -3,6 +3,12 @@ package io.pockethive.mcp.domain;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the ScenarioWorkflowSnapshot MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record ScenarioWorkflowSnapshot(
     String id,
     String agentSessionId,

@@ -20,6 +20,12 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: Coordinate bounded bundle upload lifecycle, capacity, recovery, and persistence.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Service
 public final class BundleUploadCoordinator {
     private static final String ZIP_CONTENT_TYPE = "application/zip";

@@ -15,6 +15,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+/**
+ * Responsibility: Probe configured PocketHive services through their canonical ingress health contracts.
+ * Must not: Own domain state transitions or duplicate owner-service contracts.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Component
 public final class IngressEnvironmentHealthProbe implements EnvironmentHealthProbePort {
     private static final String STATUS = "status";

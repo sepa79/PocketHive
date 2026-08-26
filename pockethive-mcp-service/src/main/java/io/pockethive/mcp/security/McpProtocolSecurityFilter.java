@@ -20,6 +20,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * Responsibility: Bind bounded MCP protocol sessions to their authenticated principal.
+ * Must not: Grant scopes, infer identities, or bypass the Auth Service token contract.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 public final class McpProtocolSecurityFilter extends OncePerRequestFilter {
     private final Clock clock;
     private final Duration sessionTtl;

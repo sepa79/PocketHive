@@ -21,6 +21,12 @@ import org.springframework.boot.info.BuildProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Responsibility: Assemble the MCP server, tool callbacks, and bounded coordination repository.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Configuration
 public class McpServerConfiguration {
     private static final String SERVER_NAME = "pockethive-mcp";

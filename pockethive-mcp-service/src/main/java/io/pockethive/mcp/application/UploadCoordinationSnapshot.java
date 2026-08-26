@@ -3,6 +3,12 @@ package io.pockethive.mcp.application;
 import java.util.Map;
 import java.util.TreeMap;
 
+/**
+ * Responsibility: Carry immutable upload coordination snapshot application data.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record UploadCoordinationSnapshot(
     Map<String, UploadTicketSnapshot> tickets,
     Map<String, BundleValidationReceipt> receipts,

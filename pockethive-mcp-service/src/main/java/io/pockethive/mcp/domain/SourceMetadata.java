@@ -2,6 +2,12 @@ package io.pockethive.mcp.domain;
 
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the SourceMetadata MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record SourceMetadata(String repository, String commit, String bundlePath,
                              SourceVerification verification) {
     public SourceMetadata {

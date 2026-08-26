@@ -6,6 +6,12 @@ import io.pockethive.mcp.domain.SourceMetadata;
 import java.time.Instant;
 import java.util.Objects;
 
+/**
+ * Responsibility: Own the validation upload ticket state machine and bound validation intent.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class ValidationUploadTicket implements BundleUploadTicket {
     private final String id;
     private final PrincipalKey principal;

@@ -168,7 +168,7 @@ class OAuthAuthorizationServerTest {
     }
 
     @Test
-    void dynamicallyRegistersAmazonQMetadataThatDefersScopeSelection() throws Exception {
+    void dynamicallyRegistersAmazonQMetadataThatOmitsPublicMethodAndScopeSelection() throws Exception {
         String redirectUri = "http://localhost:38124/oauth/callback";
 
         mvc.perform(post("/oauth/register")
@@ -179,6 +179,7 @@ class OAuthAuthorizationServerTest {
             .andExpect(jsonPath("$.client_secret").doesNotExist())
             .andExpect(jsonPath("$.client_name").value("kiro"))
             .andExpect(jsonPath("$.redirect_uris[0]").value(redirectUri))
+            .andExpect(jsonPath("$.token_endpoint_auth_method").value("none"))
             .andExpect(jsonPath("$.scope").value(String.join(" ", PocketHiveMcpScopes.COMPANION_ORDERED)));
     }
 
@@ -659,8 +660,7 @@ class OAuthAuthorizationServerTest {
               "client_name":"%s",
               "redirect_uris":["%s"],
               "grant_types":["authorization_code","refresh_token"],
-              "response_types":["code"],
-              "token_endpoint_auth_method":"none"
+              "response_types":["code"]
             }
             """.formatted(clientName, redirectUri);
     }

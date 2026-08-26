@@ -1,4 +1,5 @@
 package io.pockethive.mcp.application;
+import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -18,6 +19,7 @@ import io.pockethive.mcp.domain.ScenarioWorkflow;
 import io.pockethive.mcp.domain.ScenarioWorkflowState;
 import java.net.URI;
 import java.nio.file.Path;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.security.MessageDigest;
@@ -40,9 +42,10 @@ class CoordinationWorkflowUploadLifecycleTest {
         PrincipalKey principal = new PrincipalKey(URI.create("https://issuer.example"), "qa-lead");
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
         try (AtomicCoordinationStateRepository state = new AtomicCoordinationStateRepository(mapper,
-            PocketHiveMcpProperties.StateMode.MEMORY, temporaryDirectory, 1_000_000, 10, 5)) {
+            McpStateMode.MEMORY, temporaryDirectory, 1_000_000, 10, 5)) {
             ScenarioWorkflow workflow = generatedWorkflow(state, principal);
-            CoordinationWorkflowUploadLifecycle lifecycle = new CoordinationWorkflowUploadLifecycle(state, mapper);
+            CoordinationWorkflowUploadLifecycle lifecycle = new CoordinationWorkflowUploadLifecycle(
+                state, mapper, workflowAccess(state));
 
             lifecycle.validated(principal, workflow.id(), "sha256:archive", "sha256:content");
             assertThat(state.findWorkflow(workflow.id())).get().satisfies(validated -> {
@@ -85,14 +88,14 @@ class CoordinationWorkflowUploadLifecycleTest {
         ObjectMapper failingMapper = mock(ObjectMapper.class);
         when(failingMapper.writeValueAsBytes(any())).thenThrow(new JsonProcessingException("cannot serialize") { });
         CoordinationWorkflowUploadLifecycle serialization =
-            new CoordinationWorkflowUploadLifecycle(state, failingMapper);
+            new CoordinationWorkflowUploadLifecycle(state, failingMapper, workflowAccess(state));
         assertThatThrownBy(() -> serialization.published(principal, workflow.id(), attempt))
             .isInstanceOf(ToolExecutionException.class)
             .extracting(error -> ((ToolExecutionException) error).code())
             .isEqualTo("PUBLICATION_RECEIPT_SERIALIZATION_FAILED");
 
         CoordinationWorkflowUploadLifecycle digest = new CoordinationWorkflowUploadLifecycle(
-            state, new ObjectMapper().findAndRegisterModules());
+            state, new ObjectMapper().findAndRegisterModules(), workflowAccess(state));
         try (MockedStatic<MessageDigest> digests = mockStatic(MessageDigest.class)) {
             digests.when(() -> MessageDigest.getInstance("SHA-256"))
                 .thenThrow(new NoSuchAlgorithmException("missing"));
@@ -110,6 +113,10 @@ class CoordinationWorkflowUploadLifecycleTest {
         attempt.ownerCallInFlight();
         attempt.succeeded(java.util.Map.of("id", "safe"));
         return attempt;
+    }
+
+    private static WorkflowAccess workflowAccess(CoordinationStateRepository state) {
+        return new WorkflowAccess(state, mock(PocketHiveMcpProperties.class), Clock.systemUTC());
     }
 
     private static ScenarioWorkflow generatedWorkflow(CoordinationStateRepository state,

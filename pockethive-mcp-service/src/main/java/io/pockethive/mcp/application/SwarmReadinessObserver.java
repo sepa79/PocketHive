@@ -7,6 +7,12 @@ import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import java.util.Map;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: Observe one exact swarm readiness result through the Orchestrator owner port.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 /** Performs one authoritative readiness observation; retry timing belongs to the client. */
 @Service
 public final class SwarmReadinessObserver {

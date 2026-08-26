@@ -7,6 +7,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Responsibility: Publish the canonical QA requirement question and answer schemas.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 record QaRequirementQuestionContract(
     QaRequirementTopic topic,
     QaAnswerCaptureMode captureMode,

@@ -11,6 +11,7 @@ assert.equal(manifest.dependencies, undefined);
 
 const sources = (await files('src')).filter(path => path.endsWith('.ts'));
 const webviewSource = await readFile('src/webview/main.ts', 'utf8');
+const environmentViewSource = await readFile('src/webview/environmentViews.ts', 'utf8');
 const webviewStyles = await readFile('media/companion.css', 'utf8');
 const providerSource = await readFile('src/webview/companionProvider.ts', 'utf8');
 const callbackSource = await readFile('src/connection/loopbackBrowser.ts', 'utf8');
@@ -26,6 +27,12 @@ assert.match(webviewStyles, /\.button\.tab\.active\s*\{[^}]*color:\s*var\(--ph-b
   'Selected workspace tabs must consume the generated Hive colour');
 assert.match(providerSource, /resources', 'brand-tokens\.css'/,
   'Webview must load the generated canonical brand token');
+assert.match(providerSource, /WEBVIEW_SCRIPT_FILES\.map/,
+  'Webview host must load the canonical ordered script manifest');
+const scriptManifestSource = await readFile('src/webview/scriptManifest.ts', 'utf8');
+assert.match(scriptManifestSource,
+  /'eventFilters\.js',[\s\S]*'debugEvidence\.js',[\s\S]*'scenarioViews\.js',[\s\S]*'hiveViews\.js',[\s\S]*'debugViews\.js',[\s\S]*'eventViews\.js',[\s\S]*'environmentViews\.js',[\s\S]*'main\.js'/,
+  'Webview presentation modules must load before the composition root');
 assert.match(callbackLogoSource, new RegExp(`ui-v2/public/logo\\.svg sha256:${canonicalLogoDigest}`),
   'Generated callback logo must declare canonical source provenance');
 assert.match(callbackSource, /CALLBACK_LOGO_DATA_URI/,
@@ -38,7 +45,7 @@ assert.match(webviewSource, /iconButton\('Environments', 'arrow-left'/,
   'The workspace must expose the compact icon-led return action');
 assert.match(webviewSource, /const TAB_ICONS:/,
   'The workspace must expose one canonical icon mapping for its five tabs');
-assert.match(webviewSource, /summary\.setAttribute\('aria-label', 'Account'\)/,
+assert.match(environmentViewSource, /summary\.setAttribute\('aria-label', 'Account'\)/,
   'The workspace must expose the accessible account menu');
 assert.match(providerSource, /new VisibleAutoRefresh\(\(\) => this\.refreshTabInBackground\(\)\)/,
   'The extension host must own one active-tab auto-refresh schedule');

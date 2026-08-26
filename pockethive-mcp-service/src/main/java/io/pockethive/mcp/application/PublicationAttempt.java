@@ -4,6 +4,12 @@ import io.pockethive.mcp.domain.PrincipalKey;
 import java.time.Instant;
 import java.util.Objects;
 
+/**
+ * Responsibility: Own the durable publication attempt state machine and terminal owner evidence.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class PublicationAttempt {
     private final String id;
     private final PrincipalKey principal;

@@ -24,6 +24,12 @@ import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Responsibility: Authenticate and map bounded bundle uploads into the upload coordinator.
+ * Must not: Own domain state transitions or duplicate owner-service contracts.
+ * Contract: docs/mcp/README.md.
+ */
+
 @RestController
 public final class BundleUploadController {
     private final BundleUploadCoordinator coordinator;

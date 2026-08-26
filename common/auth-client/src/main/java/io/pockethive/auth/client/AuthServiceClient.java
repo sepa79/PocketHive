@@ -13,6 +13,12 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
+/**
+ * Responsibility: Execute the shared typed HTTP contract for Auth Service operations.
+ * Must not: Cache credentials, make authorization decisions, or infer an alternative Auth Service endpoint.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 public final class AuthServiceClient {
     private final RestClient restClient;
 
@@ -31,7 +37,7 @@ public final class AuthServiceClient {
             .build();
     }
 
-    AuthServiceClient(RestClient restClient) {
+    public AuthServiceClient(RestClient restClient) {
         this.restClient = Objects.requireNonNull(restClient, "restClient");
     }
 

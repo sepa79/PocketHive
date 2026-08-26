@@ -3,6 +3,7 @@ package io.pockethive.auth.service.service;
 import io.pockethive.auth.contract.AuthGrantDto;
 import io.pockethive.auth.contract.UserUpsertRequestDto;
 import io.pockethive.auth.service.config.AuthServiceProperties;
+import io.pockethive.auth.service.config.AuthServiceUserProperties;
 import io.pockethive.auth.service.domain.StoredUser;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -15,6 +16,11 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Responsibility: Store and query the configured Auth Service user projection in memory.
+ * Must not: Authenticate callers, issue sessions, or decide grant authorization.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
 @Service
 public class InMemoryUserStore {
     private final Map<UUID, StoredUser> usersById = new LinkedHashMap<>();
@@ -24,7 +30,7 @@ public class InMemoryUserStore {
         if (properties.getUsers() == null || properties.getUsers().isEmpty()) {
             throw new IllegalStateException("pockethive.auth-service.users must not be empty");
         }
-        for (AuthServiceProperties.UserConfig user : properties.getUsers()) {
+        for (AuthServiceUserProperties user : properties.getUsers()) {
             StoredUser stored = toStoredUser(user);
             putInternal(stored, false);
         }
@@ -91,7 +97,7 @@ public class InMemoryUserStore {
         idsByUsername.put(user.username(), user.id());
     }
 
-    private static StoredUser toStoredUser(AuthServiceProperties.UserConfig user) {
+    private static StoredUser toStoredUser(AuthServiceUserProperties user) {
         if (user.getId() == null) {
             throw new IllegalStateException("pockethive.auth-service.users[].id must not be null");
         }

@@ -5,6 +5,12 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the BundleFileManifestEntry MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record BundleFileManifestEntry(String path, long byteCount, String sha256) {
     public BundleFileManifestEntry {
         Objects.requireNonNull(path, "path");

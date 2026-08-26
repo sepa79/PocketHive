@@ -55,6 +55,7 @@ class McpDeploymentContractTest {
                 .contains("location ^~ /mcp/uploads/")
                 .contains("location = /.well-known/oauth-protected-resource")
                 .contains("location = /.well-known/oauth-authorization-server/auth-service")
+                .contains("location = /.well-known/oauth-authorization-server {")
                 .contains("proxy_pass http://$auth_service:8080/.well-known/oauth-authorization-server")
                 .contains("proxy_pass http://$pockethive_mcp:8080")
                 .contains("proxy_buffering off")

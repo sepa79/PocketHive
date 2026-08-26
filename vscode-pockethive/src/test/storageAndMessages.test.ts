@@ -150,6 +150,9 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     scenarioId: ' smoke ',
     sutId: ' wiremock-local ',
     variablesProfileId: ' vars-smoke ',
+    autoPullImages: true,
+    networkMode: 'PROXIED',
+    networkProfileId: ' proxy-a ',
   }), {
     type: 'submitCreateSwarm',
     swarmId: 'checkout-load',
@@ -157,32 +160,55 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     scenarioId: 'smoke',
     sutId: 'wiremock-local',
     variablesProfileId: 'vars-smoke',
+    autoPullImages: true,
+    networkMode: 'PROXIED',
+    networkProfileId: 'proxy-a',
   });
   assert.deepEqual(decodeWebviewCommand({
     type: 'submitCreateSwarm',
     swarmId: ' checkout-load ',
     templateId: ' smoke ',
     scenarioId: ' smoke ',
-    sutId: '',
-    variablesProfileId: '',
+    sutId: null,
+    variablesProfileId: null,
+    autoPullImages: false,
+    networkMode: 'DIRECT',
+    networkProfileId: null,
   }), {
-    type: 'submitCreateSwarm',
-    swarmId: 'checkout-load',
-    templateId: 'smoke',
-    scenarioId: 'smoke',
+    type: 'submitCreateSwarm', swarmId: 'checkout-load', templateId: 'smoke', scenarioId: 'smoke',
+    sutId: null, variablesProfileId: null, autoPullImages: false,
+    networkMode: 'DIRECT', networkProfileId: null,
   });
+  const validCreate = {
+    type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke',
+    sutId: null, variablesProfileId: null, autoPullImages: true,
+    networkMode: 'DIRECT', networkProfileId: null,
+  };
+  for (const invalidNullableField of [
+    { ...validCreate, sutId: 42 },
+    { ...validCreate, variablesProfileId: 42 },
+    { ...validCreate, networkProfileId: 42 },
+    { ...validCreate, sutId: '   ' },
+    { ...validCreate, variablesProfileId: '   ' },
+    { ...validCreate, networkProfileId: '   ' },
+  ]) {
+    assert.throws(() => decodeWebviewCommand(invalidNullableField), (error: unknown) =>
+      error instanceof ConnectionContractError && error.code === 'WEBVIEW_MESSAGE_INVALID');
+  }
   assert.deepEqual(decodeWebviewCommand({
     type: 'submitCreateSwarm',
     swarmId: 'checkout-load',
     templateId: 'smoke',
     scenarioId: 'smoke',
-    sutId: undefined,
+    sutId: null,
     variablesProfileId: null,
+    autoPullImages: true,
+    networkMode: 'DIRECT',
+    networkProfileId: null,
   }), {
-    type: 'submitCreateSwarm',
-    swarmId: 'checkout-load',
-    templateId: 'smoke',
-    scenarioId: 'smoke',
+    type: 'submitCreateSwarm', swarmId: 'checkout-load', templateId: 'smoke', scenarioId: 'smoke',
+    sutId: null, variablesProfileId: null, autoPullImages: true,
+    networkMode: 'DIRECT', networkProfileId: null,
   });
   assert.deepEqual(decodeWebviewCommand({ type: 'runSwarmBatchOperation', action: 'START' }), {
     type: 'runSwarmBatchOperation', action: 'START',
@@ -292,6 +318,9 @@ test('webview decoder accepts only exact typed commands and boundary values', ()
     { type: 'selectCreateSwarmTemplate', templateId: 'smoke', scenarioId: '   ' },
     { type: 'selectCreateSwarmTemplate', templateId: '   ', scenarioId: 'smoke' },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke' },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: undefined, variablesProfileId: null, autoPullImages: true, networkMode: 'DIRECT', networkProfileId: null },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: null, variablesProfileId: null, autoPullImages: 'true', networkMode: 'DIRECT', networkProfileId: null },
+    { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: null, variablesProfileId: null, autoPullImages: true, networkMode: 'AUTO', networkProfileId: null },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: 42, variablesProfileId: '' },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', sutId: 'valid', variablesProfileId: '   ' },
     { type: 'submitCreateSwarm', swarmId: 'swarm-a', templateId: 'smoke', scenarioId: 'smoke', variablesProfileId: '   ' },

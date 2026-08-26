@@ -18,6 +18,12 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationToken;
 import org.springframework.security.oauth2.server.authorization.authentication.OAuth2AuthorizationCodeRequestAuthenticationValidator;
 
+/**
+ * Responsibility: Validate requested MCP scopes against the canonical principal grants.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 public final class McpScopeAuthorizationValidator
     implements Consumer<OAuth2AuthorizationCodeRequestAuthenticationContext> {
     private final InMemoryUserStore users;

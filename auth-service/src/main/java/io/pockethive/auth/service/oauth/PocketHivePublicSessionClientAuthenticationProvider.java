@@ -10,6 +10,12 @@ import org.springframework.security.oauth2.server.authorization.authentication.O
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 
+/**
+ * Responsibility: Authenticate registered public-session clients without a client secret.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 /** Validates an explicitly marked refresh/revocation request against the registered public client. */
 final class PocketHivePublicSessionClientAuthenticationProvider implements AuthenticationProvider {
     private final RegisteredClientRepository clients;

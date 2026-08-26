@@ -1,3 +1,8 @@
+/**
+ * Responsibility: Adapt VS Code companion commands and lifecycle events to bounded MCP client ports.
+ * Must not: Contact PocketHive owner services directly or reimplement their domain outcomes.
+ * Contract: vscode-pockethive/README.md and docs/mcp/README.md.
+ */
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 
@@ -20,9 +25,7 @@ import { AuthorizedMcpSession } from '../connection/authorizedMcpSession';
 import { createConnectionProfile } from '../connection/profile';
 import { debugToolCall, exactWorkerRuntimeId, DEBUG_ACTION_LABELS, DEBUG_ACTIONS } from '../debug/actions';
 import {
-  lifecycleToolCall,
   primaryActionsForSwarms,
-  swarmIdsForOperation,
   SwarmOperation,
   SWARM_OPERATIONS,
 } from '../operations/swarmOperations';
@@ -43,9 +46,16 @@ import {
   SCENARIO_ASSETS,
   ScenarioAsset,
 } from '../scenarios/scenarioReads';
-import { CompanionTab, decodeWebviewCommand, ScenarioSection, WorkerDebugAction } from './messages';
+import {
+  CompanionTab,
+  decodeWebviewCommand,
+  ScenarioSection,
+  SwarmNetworkMode,
+  WorkerDebugAction,
+} from './messages';
 import { CurrentView } from './currentView';
 import { EventPagePresentation } from './eventPresentation';
+import { WEBVIEW_SCRIPT_FILES } from './scriptManifest';
 import {
   RepositoryScenarioCandidateRegistry,
   assertRepositoryScenarioFileWritable,
@@ -64,6 +74,7 @@ import {
   SessionPresentation,
   sessionPresentation,
 } from './sessionPresentation';
+import { CreateSwarmFormState, SwarmWorkspaceService } from './swarmWorkspaceService';
 
 type LiveStatus = 'Connected' | 'Connecting' | 'Needs sign-in' | 'Unavailable' | 'Not connected';
 const ENVIRONMENT_HEALTH_RESOURCE = 'pockethive://environment/health';
@@ -102,13 +113,6 @@ interface ActiveTabSnapshot {
 interface ProfileRow extends McpConnectionProfile {
   readonly status: LiveStatus;
   readonly principalLabel?: string;
-}
-
-interface CreateSwarmFormState {
-  readonly templates: unknown;
-  readonly selectedTemplateId?: string;
-  readonly selectedScenarioId?: string;
-  readonly sutIds?: readonly string[];
 }
 
 interface CompanionViewModel {
@@ -156,6 +160,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private readonly repository: McpConnectionProfileRepository;
   private readonly endpoints = new PocketHiveEndpointValidator();
   private readonly activeConnection: ActiveMcpConnection;
+  private readonly swarms: SwarmWorkspaceService;
   private readonly authentication: PocketHiveOAuthAuthentication;
   private readonly authorizedSession: AuthorizedMcpSession;
   private readonly bundles: ScenarioBundleCoordinator;
@@ -204,6 +209,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     const version = extensionVersion(context.extension.packageJSON);
     const clients = () => new McpHttpClient(version);
     this.activeConnection = new ActiveMcpConnection(clients);
+    this.swarms = new SwarmWorkspaceService(this.activeConnection);
     const secrets: OAuthSessionStore = {
       get: key => context.secrets.get(key),
       store: (key, value) => context.secrets.store(key, value),
@@ -348,7 +354,8 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
           break;
         case 'submitCreateSwarm':
           await this.submitCreateSwarm(command.swarmId, command.templateId, command.scenarioId,
-            command.sutId, command.variablesProfileId);
+            command.autoPullImages, command.sutId, command.variablesProfileId,
+            command.networkMode, command.networkProfileId);
           break;
         case 'selectJournalSwarm':
           this.journalSwarmId = command.swarmId;
@@ -700,7 +707,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
-      this.swarmHistoryResult = await this.activeConnection.callTool('debug_journal_runs', { swarmId });
+      this.swarmHistoryResult = await this.swarms.history(swarmId);
     } catch (error) {
       this.swarmHistoryResult = { error: safeError(error), observedAt: new Date().toISOString() };
     } finally {
@@ -714,7 +721,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
-      await openJsonPreview(`Swarm ${swarmId}`, await this.activeConnection.callTool('swarm_get', { swarmId }));
+      await openJsonPreview(`Swarm ${swarmId}`, await this.swarms.details(swarmId));
     } finally {
       this.busy = false;
       await this.postView();
@@ -734,7 +741,6 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   }
 
   private async runSwarmOperation(action: SwarmOperation, swarmId: string): Promise<void> {
-    const call = lifecycleToolCall(action, swarmId, randomUUID());
     this.busy = true;
     this.swarmOperationResult = undefined;
     await this.postView();
@@ -748,8 +754,9 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
         );
         if (approved !== 'Remove swarm') return;
       }
-      this.swarmOperationResult = await this.activeConnection.callTool(call.name, call.arguments);
-      this.workspaceData = await this.activeConnection.callTool('swarm_list');
+      const result = await this.swarms.operate(action, swarmId);
+      this.swarmOperationResult = result.operationResult;
+      this.workspaceData = result.swarms;
     } finally {
       this.busy = false;
       await this.postView();
@@ -757,28 +764,14 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   }
 
   private async runSwarmBatchOperation(action: Exclude<SwarmOperation, 'REMOVE'>): Promise<void> {
-    const targets = swarmIdsForOperation(this.workspaceData, action);
-    if (targets.length === 0) {
-      throw new ConnectionContractError('SWARM_BATCH_TARGETS_MISSING', `No swarms are eligible for ${action.toLowerCase()}`);
-    }
     this.busy = true;
     this.swarmOperationResult = undefined;
     await this.postView();
     try {
       await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.OPERATE);
-      const succeeded: string[] = [];
-      const failed: Array<{ swarmId: string; error: { code: string; message: string } }> = [];
-      for (const swarmId of targets) {
-        try {
-          const call = lifecycleToolCall(action, swarmId, randomUUID());
-          await this.activeConnection.callTool(call.name, call.arguments);
-          succeeded.push(swarmId);
-        } catch (error) {
-          failed.push({ swarmId, error: safeError(error) });
-        }
-      }
-      this.swarmOperationResult = { batchOperation: action, requested: targets.length, succeeded, failed };
-      this.workspaceData = await this.activeConnection.callTool('swarm_list');
+      const result = await this.swarms.operateBatch(action, this.workspaceData);
+      this.swarmOperationResult = result.operationResult;
+      this.workspaceData = result.swarms;
     } finally {
       this.busy = false;
       await this.postView();
@@ -790,15 +783,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
-      const templates = await this.activeConnection.callTool('scenario_templates_catalog');
-      const selected = firstCreatableTemplate(templates);
-      const sutIds = selected ? await this.readScenarioSutIds(selected.scenarioId) : [];
-      this.createSwarmForm = {
-        templates,
-        selectedTemplateId: selected?.templateId,
-        selectedScenarioId: selected?.scenarioId,
-        sutIds,
-      };
+      this.createSwarmForm = await this.swarms.createForm();
     } finally {
       this.busy = false;
       await this.postView();
@@ -814,12 +799,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     await this.postView();
     try {
       await this.ensureAuthorizedSession();
-      this.createSwarmForm = {
-        ...current,
-        selectedTemplateId: templateId,
-        selectedScenarioId: scenarioId,
-        sutIds: await this.readScenarioSutIds(scenarioId),
-      };
+      this.createSwarmForm = await this.swarms.selectTemplate(current, templateId, scenarioId);
     } finally {
       this.busy = false;
       await this.postView();
@@ -830,29 +810,34 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
     swarmId: string,
     templateId: string,
     scenarioId: string,
-    sutId?: string,
-    variablesProfileId?: string,
+    autoPullImages: boolean,
+    sutId: string | null,
+    variablesProfileId: string | null,
+    networkMode: SwarmNetworkMode,
+    networkProfileId: string | null,
   ): Promise<void> {
     const form = this.createSwarmForm;
     if (!form) {
       throw new ConnectionContractError('CREATE_SWARM_FORM_MISSING', 'Open Create swarm first');
     }
-    requireCreateSwarmSelection(form.templates, templateId, scenarioId);
-    const arguments_: Record<string, unknown> = {
-      swarmId,
-      templateId,
-      idempotencyKey: randomUUID(),
-    };
-    if (sutId) arguments_.sutId = sutId;
-    if (variablesProfileId) arguments_.variablesProfileId = variablesProfileId;
     this.busy = true;
     this.swarmOperationResult = undefined;
     await this.postView();
     try {
       await this.ensureAuthorizedSession(POCKETHIVE_MCP_SCOPES.OPERATE);
-      this.swarmOperationResult = await this.activeConnection.callTool('swarm_create', arguments_);
+      const result = await this.swarms.create(form, {
+        swarmId,
+        templateId,
+        scenarioId,
+        autoPullImages,
+        sutId,
+        variablesProfileId,
+        networkMode,
+        networkProfileId,
+      });
+      this.swarmOperationResult = result.operationResult;
       this.createSwarmForm = undefined;
-      this.workspaceData = await this.activeConnection.callTool('swarm_list');
+      this.workspaceData = result.swarms;
     } finally {
       this.busy = false;
       await this.postView();
@@ -1435,32 +1420,6 @@ function row(
   };
 }
 
-function firstCreatableTemplate(value: unknown): { templateId: string; scenarioId: string } | undefined {
-  return creatableTemplates(value)[0];
-}
-
-function requireCreateSwarmSelection(value: unknown, templateId: string, scenarioId: string): void {
-  const match = creatableTemplates(value).some(template =>
-    template.templateId === templateId && template.scenarioId === scenarioId);
-  if (!match) {
-    throw new ConnectionContractError('CREATE_SWARM_TEMPLATE_INVALID',
-      'Select one exact non-defunct Scenario Manager template');
-  }
-}
-
-function creatableTemplates(value: unknown): Array<{ templateId: string; scenarioId: string }> {
-  if (!Array.isArray(value)) return [];
-  const result: Array<{ templateId: string; scenarioId: string }> = [];
-  for (const item of value) {
-    if (!item || typeof item !== 'object' || Array.isArray(item)) continue;
-    const record = item as Record<string, unknown>;
-    const templateId = typeof record.id === 'string' && record.id.trim() ? record.id.trim() : undefined;
-    if (!templateId || record.defunct === true) continue;
-    result.push({ templateId, scenarioId: templateId });
-  }
-  return result;
-}
-
 function extensionVersion(packageJson: unknown): string {
   if (!packageJson || typeof packageJson !== 'object' || Array.isArray(packageJson)) {
     throw new ConnectionContractError('EXTENSION_VERSION_INVALID', 'PocketHive extension manifest is unavailable');
@@ -1517,13 +1476,15 @@ function html(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   const brandTokens = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'brand-tokens.css'));
   const codicons = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'codicon.css'));
   const style = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'media', 'companion.css'));
-  const script = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'main.js'));
-  const eventFilters = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', 'eventFilters.js'));
+  const scripts = WEBVIEW_SCRIPT_FILES.map(file => {
+    const uri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'out', 'webview', file));
+    return `<script nonce="${nonce}" src="${uri}"></script>`;
+  }).join('');
   const logo = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'resources', 'logo-mark.svg'));
   return `<!doctype html>
 <html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${webview.cspSource}; font-src ${webview.cspSource}; style-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${brandTokens}"><link rel="stylesheet" href="${codicons}"><link rel="stylesheet" href="${style}"><title>PocketHive</title></head>
 <body><main id="app" data-logo="${logo}"></main><div id="announcer" class="sr-only" aria-live="polite"></div>
-<script nonce="${nonce}" src="${eventFilters}"></script><script nonce="${nonce}" src="${script}"></script></body></html>`;
+${scripts}</body></html>`;
 }

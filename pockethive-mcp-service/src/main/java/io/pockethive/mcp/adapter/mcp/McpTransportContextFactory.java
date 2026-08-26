@@ -6,6 +6,12 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthentication;
 
+/**
+ * Responsibility: Create an MCP transport context from authenticated ingress request attributes.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class McpTransportContextFactory {
     private McpTransportContextFactory() {
     }

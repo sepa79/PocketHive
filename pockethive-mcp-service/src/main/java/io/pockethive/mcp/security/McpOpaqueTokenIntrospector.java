@@ -17,6 +17,12 @@ import org.springframework.security.oauth2.server.resource.introspection.BadOpaq
 import org.springframework.security.oauth2.server.resource.introspection.OpaqueTokenIntrospector;
 import org.springframework.security.oauth2.server.resource.introspection.SpringOpaqueTokenIntrospector;
 
+/**
+ * Responsibility: Introspect bearer tokens and enforce canonical issuer, audience, and lifetime claims.
+ * Must not: Grant scopes, infer identities, or bypass the Auth Service token contract.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 public final class McpOpaqueTokenIntrospector implements OpaqueTokenIntrospector {
     private final OpaqueTokenIntrospector delegate;
     private final String expectedAudience;

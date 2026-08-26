@@ -4,6 +4,12 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the AgentSessionSnapshot MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record AgentSessionSnapshot(
     String id,
     PrincipalKey principal,

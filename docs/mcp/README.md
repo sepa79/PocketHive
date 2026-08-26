@@ -24,11 +24,22 @@ RFC 7591 dynamic-registration endpoint. No client product receives a private
 authentication path. Tokens are scoped, audience-bound, and must never be
 forwarded to PocketHive owner services.
 
+Owner-service calls use the shared JVM service-account token provider. When an
+owner rejects the cached service token with HTTP `401`, the MCP refreshes that
+exact credential and repeats the same owner request once. A second `401`, or
+any other owner failure, is returned explicitly; the MCP does not switch
+identity, endpoint, protocol, or operation.
+
 For issuer `https://<environment>/auth-service`, clients discover authorization
 metadata at the RFC 8414 path
 `https://<environment>/.well-known/oauth-authorization-server/auth-service`.
 The ingress transparently routes that request to the one Auth Service metadata
 owner. A request for a well-known path must never fall through to the UI SPA.
+The ingress also routes the exact origin-relative interoperability location
+`https://<environment>/.well-known/oauth-authorization-server` to that same
+owner for native MCP clients that resolve discovery against the public origin.
+Both locations return the same configured metadata; Nginx never constructs or
+rewrites the document and no product-specific OAuth flow is introduced.
 
 Interactive clients use one consented, renewable environment session rather
 than a browser grant per tool. They declare a bounded subset of discover, read,
@@ -71,6 +82,11 @@ authorization-server discovery, dynamic public-client registration, PKCE, and
 browser consent. PocketHive contains no Codex-, Amazon Q-, Copilot-, or
 companion-specific branch in that flow.
 
+The registration owner accepts explicit `token_endpoint_auth_method="none"`.
+For native MCP clients that omit that optional request member, it explicitly
+substitutes public `none` in the RFC 7591 response and never issues a client
+secret. Supplied confidential-client methods remain rejected.
+
 ## Agent contract
 
 After `initialize`, read these resources before operating PocketHive:
@@ -112,6 +128,25 @@ present a principal-scoped projection. Connected, versioned skills cover every
 tool. Owner services remain authoritative for live state and operations.
 HiveGate remains authoritative for approval, execution tickets, and governed
 evidence. HiveMind is optional agent-host memory and is not an MCP dependency.
+
+Runtime invocation has one scope-enforcing facade. It delegates by the
+descriptor's explicit owner to separate Scenario Manager, Orchestrator, and MCP
+application handlers. The MCP-owned dispatcher routes each tool to exactly one
+bundle, agent-session, or scenario-workflow handler. Workflow projection,
+workflow access, and argument validation each have one application owner;
+owner adapters do not duplicate those decisions.
+
+The canonical tool identifier contract is typed once inside the MCP. Catalogue
+publication, scope enforcement, and owner dispatch use that same identifier;
+handlers must not repeat independently interpreted string identifiers.
+
+`swarm_create` preserves the complete Orchestrator create contract. Callers
+must provide `swarmId`, `templateId`, `idempotencyKey`, `autoPullImages`,
+`sutId`, `variablesProfileId`, `networkMode`, and `networkProfileId` explicitly.
+The two optional identifiers and the network profile remain required JSON
+properties whose value may be `null`. `networkMode` is exactly `DIRECT` or
+`PROXIED`; the MCP validates and forwards these values without selecting a
+network policy or image-pull policy for the caller.
 
 Each canonical tool descriptor owns both its closed input schema and its output
 schema. Successful Java values are converted once to JSON-native structured
@@ -172,6 +207,12 @@ call. `debug_tap_read` accepts an optional non-negative integer `drain`: omit
 it to read up to the tap's item cap, use `0` for metadata only, or use a
 positive count to drain at most that many samples. A Boolean drain value is
 invalid and never maps to an owner default. Clients close each tap after use.
+
+Bounded MCP journal reads publish their defaults in the canonical tool input
+schemas. `debug_journal` and `debug_hive_journal` default `limit` to `50`, and
+`runtime_swarm_timeline` defaults it to `100`. An explicitly supplied limit
+always wins. These are MCP presentation bounds; they do not redefine the
+Orchestrator REST defaults.
 
 Runtime diagnosis starts with `runtime_assess_swarm`. Orchestrator alone compares
 the registered swarm and run, cached control-plane state, exact ownership

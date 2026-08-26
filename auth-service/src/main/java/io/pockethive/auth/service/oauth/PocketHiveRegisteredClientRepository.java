@@ -10,6 +10,12 @@ import java.util.Objects;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClient;
 import org.springframework.security.oauth2.server.authorization.client.RegisteredClientRepository;
 
+/**
+ * Responsibility: Own bounded registered-client lookup, renewal, expiry, and dynamic registration state.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 /** One bounded owner for immutable first-party and expiring dynamically registered clients. */
 public final class PocketHiveRegisteredClientRepository implements RegisteredClientRepository {
     private final Map<String, RegisteredClient> fixedById;

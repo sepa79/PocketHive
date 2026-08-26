@@ -1,4 +1,5 @@
 package io.pockethive.mcp.adapter.mcp;
+import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
@@ -65,7 +66,7 @@ class McpServerConfigurationTest {
     private static PocketHiveMcpProperties properties() {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, PocketHiveMcpProperties.StateMode.MEMORY,
+            ingress, ingress, McpStateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"), Duration.ofMinutes(30),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5),
             100, 10, 100, 10, 10_000_000, 2, 10,

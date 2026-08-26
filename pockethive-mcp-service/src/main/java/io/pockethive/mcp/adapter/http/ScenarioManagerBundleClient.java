@@ -13,6 +13,12 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClientResponseException;
 
+/**
+ * Responsibility: Map bundle validation and publication operations to Scenario Manager ingress APIs.
+ * Must not: Own domain state transitions or duplicate owner-service contracts.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Component
 public final class ScenarioManagerBundleClient implements ScenarioBundleOwnerPort {
     private static final String PREFIX = "/scenario-manager";

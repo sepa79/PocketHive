@@ -18,6 +18,7 @@ const {
 } = require('../out/webview/viewModelBoundary.js');
 const { EventPagePresentation } = require('../out/webview/eventPresentation.js');
 const { SIDEBAR_EVENT_LIMIT } = require('../out/webview/workspaceTool.js');
+const { WEBVIEW_SCRIPT_FILES } = require('../out/webview/scriptManifest.js');
 const root = path.resolve(import.meta.dirname, '..');
 const auditDirectory = path.resolve(root, 'reports', 'playwright-ui');
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -1601,6 +1602,11 @@ async function probeDisposableRuntime(client, scenarios) {
       swarmId,
       templateId,
       idempotencyKey: key('create'),
+      autoPullImages: false,
+      sutId: null,
+      variablesProfileId: null,
+      networkMode: 'DIRECT',
+      networkProfileId: null,
     });
     created = true;
     const ready = await pollUntil('disposable swarm readiness',
@@ -1822,8 +1828,10 @@ async function startUiServer() {
     ['/resources/codicon.css', ['text/css', path.join(root, 'resources', 'codicon.css')]],
     ['/resources/codicon.ttf?9aab6318a6710999273bab9c78a9fd71', ['font/ttf', path.join(root, 'resources', 'codicon.ttf')]],
     ['/resources/logo-mark.svg', ['image/svg+xml', path.join(root, 'resources', 'logo-mark.svg')]],
-    ['/out/webview/eventFilters.js', ['text/javascript', path.join(root, 'out', 'webview', 'eventFilters.js')]],
-    ['/out/webview/main.js', ['text/javascript', path.join(root, 'out', 'webview', 'main.js')]],
+    ...WEBVIEW_SCRIPT_FILES.map(file => [
+      `/out/webview/${file}`,
+      ['text/javascript', path.join(root, 'out', 'webview', file)],
+    ]),
   ]);
   const http = createServer(async (request, response) => {
     if (request.url === '/') {
@@ -1848,8 +1856,8 @@ async function startUiServer() {
         <body class="vscode-dark"><main id="app" data-logo="/resources/logo-mark.svg"></main>
         <div id="announcer" class="sr-only" aria-live="polite"></div>
         <script>globalThis.__pockethiveMessages=[];globalThis.acquireVsCodeApi=()=>({postMessage(message){globalThis.__pockethiveMessages.push(message);}});</script>
-        <script src="/out/webview/eventFilters.js"></script>
-        <script src="/out/webview/main.js"></script></body></html>`);
+        ${WEBVIEW_SCRIPT_FILES.map(file => `<script src="/out/webview/${file}"></script>`).join('')}
+        </body></html>`);
       return;
     }
     const file = files.get(request.url ?? '');

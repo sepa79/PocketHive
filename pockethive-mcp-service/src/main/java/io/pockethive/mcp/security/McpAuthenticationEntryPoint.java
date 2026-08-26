@@ -12,6 +12,12 @@ import org.springframework.http.MediaType;
 import org.springframework.security.core.AuthenticationException;
 import org.springframework.security.web.AuthenticationEntryPoint;
 
+/**
+ * Responsibility: Return the canonical OAuth resource challenge for unauthenticated MCP requests.
+ * Must not: Grant scopes, infer identities, or bypass the Auth Service token contract.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 /** Advertises the standards-defined OAuth discovery path for every MCP client. */
 public final class McpAuthenticationEntryPoint implements AuthenticationEntryPoint {
     static final String PROTECTED_RESOURCE_METADATA_PATH = "/.well-known/oauth-protected-resource";

@@ -2,6 +2,12 @@ package io.pockethive.mcp.domain;
 
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the ConfirmedSource MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record ConfirmedSource(String name, String digest) {
     private static final java.util.regex.Pattern SHA_256 =
         java.util.regex.Pattern.compile("sha256:[0-9a-f]{64}");

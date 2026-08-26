@@ -16,6 +16,12 @@ import org.springframework.security.oauth2.server.resource.web.authentication.Be
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 
+/**
+ * Responsibility: Assemble MCP resource-server authentication and protocol-session security filters.
+ * Must not: Own domain transitions or reconstruct configuration outside the canonical properties.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Configuration
 public class McpSecurityConfiguration {
     @Bean

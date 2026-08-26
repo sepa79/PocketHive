@@ -5,6 +5,12 @@ import java.util.List;
 import org.springframework.stereotype.Component;
 import org.springframework.web.util.HtmlUtils;
 
+/**
+ * Responsibility: Render escaped PocketHive-themed OAuth browser pages.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 @Component
 final class OAuthBrowserPageRenderer {
 

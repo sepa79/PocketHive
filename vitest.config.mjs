@@ -1,7 +1,7 @@
-import { configDefaults, defineConfig } from 'vitest/config'
+import { defineConfig } from 'vitest/config'
 
 export default defineConfig({
   test: {
-    exclude: [...configDefaults.exclude, 'ui/**', 'archive/**'],
+    include: ['scripts/**/*.test.mjs', 'tools/mcp-orchestrator-debug/**/*.test.mjs'],
   },
 })

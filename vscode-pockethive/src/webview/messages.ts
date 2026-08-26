@@ -1,3 +1,8 @@
+/**
+ * Responsibility: Define and strictly decode the companion webview-to-extension command contract.
+ * Must not: Execute commands, own UI state, or infer missing command fields.
+ * Contract: vscode-pockethive/README.md and docs/mcp/README.md.
+ */
 import { ConnectionContractError, EndpointSecurityMode } from '../connection/contracts';
 import { SWARM_OPERATIONS, SwarmOperation } from '../operations/swarmOperations';
 import { WEB_UI_DESTINATIONS, WebUiDestination } from './webUiNavigation';
@@ -5,6 +10,7 @@ import { WEB_UI_DESTINATIONS, WebUiDestination } from './webUiNavigation';
 export type CompanionTab = 'Hive' | 'Buzz' | 'Journal' | 'Scenarios' | 'Debug';
 export type ScenarioSection = 'OVERVIEW' | 'FILES' | 'INPUTS';
 export type WorkerDebugAction = 'Logs' | 'Inspect';
+export type SwarmNetworkMode = 'DIRECT' | 'PROXIED';
 
 export type WebviewCommand =
   | { readonly type: 'ready' }
@@ -29,8 +35,11 @@ export type WebviewCommand =
       readonly swarmId: string;
       readonly templateId: string;
       readonly scenarioId: string;
-      readonly sutId?: string;
-      readonly variablesProfileId?: string;
+      readonly autoPullImages: boolean;
+      readonly sutId: string | null;
+      readonly variablesProfileId: string | null;
+      readonly networkMode: SwarmNetworkMode;
+      readonly networkProfileId: string | null;
     }
   | { readonly type: 'selectJournalSwarm'; readonly swarmId: string }
   | { readonly type: 'loadSwarmHistory'; readonly swarmId: string }
@@ -125,16 +134,22 @@ export function decodeWebviewCommand(value: unknown): WebviewCommand {
         scenarioId: string(object, 'scenarioId'),
       };
     case 'submitCreateSwarm': {
-      exact(object, ['type', 'swarmId', 'templateId', 'scenarioId', 'sutId', 'variablesProfileId']);
-      const sutId = optionalString(object, 'sutId');
-      const variablesProfileId = optionalString(object, 'variablesProfileId');
+      exact(object, [
+        'type', 'swarmId', 'templateId', 'scenarioId', 'autoPullImages', 'sutId',
+        'variablesProfileId', 'networkMode', 'networkProfileId',
+      ]);
+      const networkMode = string(object, 'networkMode');
+      if (networkMode !== 'DIRECT' && networkMode !== 'PROXIED') invalid();
       return {
         type,
         swarmId: string(object, 'swarmId'),
         templateId: string(object, 'templateId'),
         scenarioId: string(object, 'scenarioId'),
-        ...(sutId ? { sutId } : {}),
-        ...(variablesProfileId ? { variablesProfileId } : {}),
+        autoPullImages: boolean(object, 'autoPullImages'),
+        sutId: nullableString(object, 'sutId'),
+        variablesProfileId: nullableString(object, 'variablesProfileId'),
+        networkMode,
+        networkProfileId: nullableString(object, 'networkProfileId'),
       };
     }
     case 'openJournalRun':
@@ -269,11 +284,17 @@ function string(value: Record<string, unknown>, field: string): string {
   return result.trim();
 }
 
-function optionalString(value: Record<string, unknown>, field: string): string | undefined {
+function nullableString(value: Record<string, unknown>, field: string): string | null {
   const result = value[field];
-  if (result === undefined || result === null || result === '') return undefined;
+  if (result === null) return null;
   if (typeof result !== 'string' || !result.trim()) invalid();
   return result.trim();
+}
+
+function boolean(value: Record<string, unknown>, field: string): boolean {
+  const result = value[field];
+  if (typeof result !== 'boolean') invalid();
+  return result;
 }
 
 function exact(value: Record<string, unknown>, expected: string[]): void {

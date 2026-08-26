@@ -1,4 +1,5 @@
 package io.pockethive.mcp.application;
+import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -192,7 +193,7 @@ class BundleUploadCoordinatorTest {
     @Test
     void receiptsSurviveRestartAndInFlightOwnerCallsRecoverAsAmbiguous() throws IOException {
         FakeOwner owner = new FakeOwner();
-        PocketHiveMcpProperties properties = properties(PocketHiveMcpProperties.StateMode.FILE);
+        PocketHiveMcpProperties properties = properties(McpStateMode.FILE);
         PrincipalKey principal = principal("qa-lead");
         byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
@@ -387,7 +388,7 @@ class BundleUploadCoordinatorTest {
     @Test
     void everyReceiveFailureMarksTheTicketPersistsItAndReleasesAllReservations() throws IOException {
         FakeOwner owner = new FakeOwner();
-        PocketHiveMcpProperties properties = properties(PocketHiveMcpProperties.StateMode.MEMORY,
+        PocketHiveMcpProperties properties = properties(McpStateMode.MEMORY,
             1, 1, 100_000, 100_000, Duration.ofHours(1), Duration.ofHours(1));
         RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties, state, lifecycle());
@@ -593,7 +594,7 @@ class BundleUploadCoordinatorTest {
         PrincipalKey firstPrincipal = principal("first");
         PrincipalKey secondPrincipal = principal("second");
 
-        PocketHiveMcpProperties exactProperties = properties(PocketHiveMcpProperties.StateMode.MEMORY,
+        PocketHiveMcpProperties exactProperties = properties(McpStateMode.MEMORY,
             1, 1, archive.length, archive.length, Duration.ofHours(1), Duration.ofHours(1));
         BundleUploadCoordinator exact = new BundleUploadCoordinator(new FakeOwner(), exactProperties,
             new RecordingStateRepository(UploadCoordinationSnapshot.empty()), lifecycle());
@@ -607,7 +608,7 @@ class BundleUploadCoordinatorTest {
             new ByteArrayInputStream(archive), Instant.now())).isInstanceOf(ValidationUploadOutcome.class);
         assertCapacityReleased(exact);
 
-        PocketHiveMcpProperties totalProperties = properties(PocketHiveMcpProperties.StateMode.MEMORY,
+        PocketHiveMcpProperties totalProperties = properties(McpStateMode.MEMORY,
             2, 1, 100_000, 200_000, Duration.ofHours(1), Duration.ofHours(1));
         BundleUploadCoordinator total = new BundleUploadCoordinator(new FakeOwner(), totalProperties,
             new RecordingStateRepository(UploadCoordinationSnapshot.empty()), lifecycle());
@@ -625,7 +626,7 @@ class BundleUploadCoordinatorTest {
             assertThat(running.get(5, TimeUnit.SECONDS)).isInstanceOf(ValidationUploadOutcome.class);
         }
 
-        PocketHiveMcpProperties spoolProperties = properties(PocketHiveMcpProperties.StateMode.MEMORY,
+        PocketHiveMcpProperties spoolProperties = properties(McpStateMode.MEMORY,
             2, 2, 100_000, archive.length, Duration.ofHours(1), Duration.ofHours(1));
         BundleUploadCoordinator spool = new BundleUploadCoordinator(new FakeOwner(), spoolProperties,
             new RecordingStateRepository(UploadCoordinationSnapshot.empty()), lifecycle());
@@ -739,7 +740,7 @@ class BundleUploadCoordinatorTest {
             Map.of(oldTicket.id(), UploadTicketSnapshot.from(oldTicket)), Map.of(receipt.id(), receipt),
             Map.of(attempt.id(), attempt.snapshot()));
         RecordingStateRepository state = new RecordingStateRepository(initial);
-        PocketHiveMcpProperties properties = properties(PocketHiveMcpProperties.StateMode.MEMORY,
+        PocketHiveMcpProperties properties = properties(McpStateMode.MEMORY,
             2, 10, 100_000, 200_000, Duration.ofHours(1), Duration.ofHours(1));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties, state,
             lifecycle());
@@ -1127,14 +1128,14 @@ class BundleUploadCoordinatorTest {
     }
 
     private PocketHiveMcpProperties properties() {
-        return properties(PocketHiveMcpProperties.StateMode.MEMORY);
+        return properties(McpStateMode.MEMORY);
     }
 
-    private PocketHiveMcpProperties properties(PocketHiveMcpProperties.StateMode mode) {
+    private PocketHiveMcpProperties properties(McpStateMode mode) {
         return properties(mode, 2, 10, 100_000, 200_000, Duration.ofHours(1), Duration.ofHours(1));
     }
 
-    private PocketHiveMcpProperties properties(PocketHiveMcpProperties.StateMode mode,
+    private PocketHiveMcpProperties properties(McpStateMode mode,
                                                 int maxPerPrincipal, int maxConcurrent,
                                                 long maxUploadBytes, long maxSpoolBytes,
                                                 Duration attemptRetention, Duration receiptRetention) {

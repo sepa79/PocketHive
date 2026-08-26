@@ -1,5 +1,11 @@
 package io.pockethive.mcp.application;
 
+/**
+ * Responsibility: Carry immutable upload workflow binding application data.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 /** Explicitly distinguishes direct publication from workflow-bound publication. */
 public record UploadWorkflowBinding(UploadWorkflowMode mode, String workflowId) {
     public UploadWorkflowBinding {

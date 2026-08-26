@@ -9,6 +9,12 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Responsibility: Map RFC 7591 HTTP registration requests to the registration service.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 @RestController
 final class DynamicClientRegistrationController {
     private final DynamicClientRegistrationService registrations;
