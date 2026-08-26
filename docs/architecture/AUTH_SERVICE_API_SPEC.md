@@ -127,8 +127,15 @@ The interoperability choices are explicit:
   fail explicitly without fallback.
 
 The required PocketHive VS Code public client ID is `pockethive-vscode`. Its
-callback is exactly `http://127.0.0.1:52000/callback`. A conforming external MCP
-client obtains its own opaque client ID through dynamic registration. Dynamic
+registered loopback callback is exactly `http://127.0.0.1/callback`, without a
+port. For each interactive sign-in, the extension binds an available
+operating-system-assigned port before opening the browser and sends the exact
+runtime callback `http://127.0.0.1:<port>/callback`. Authorization permits only
+that port substitution for an explicitly registered IP-loopback redirect;
+scheme, host, path, query, and fragment rules remain exact. The authorization
+code remains bound to the complete runtime redirect URI and token exchange must
+repeat it exactly. A conforming external MCP client obtains its own opaque
+client ID through dynamic registration. Dynamic
 registration is bounded, expires with the configured registration lifetime,
 and never grants cleanup. A registration is client metadata, not a user grant,
 an authentication result, or a support claim. Product support is determined by
@@ -464,8 +471,11 @@ configuration fails startup.
 pre-registered. It requires:
 
 - one bounded, non-blank `client_name`;
-- one to eight exact `redirect_uris` with no fragment, user information, or
-  wildcard; each URI is either HTTPS or HTTP on an explicit loopback host;
+- one to eight exact registered `redirect_uris` with no fragment, user
+  information, or wildcard; each URI is either HTTPS or HTTP on an explicit
+  loopback host. At authorization time, an IP-loopback URI may substitute only
+  its port with the exact runtime listener port; this is not a wildcard in
+  registered metadata;
 - `grant_types` containing `authorization_code` and optionally
   `refresh_token`, with no other value;
 - `response_types=["code"]`;
@@ -511,7 +521,8 @@ Required query parameters:
 
 - `response_type=code`;
 - registered `client_id`;
-- exact registered `redirect_uri`;
+- registered `redirect_uri`, matched exactly except that an explicitly
+  registered IP-loopback URI may use its runtime listener port;
 - non-empty `state`;
 - `code_challenge` and `code_challenge_method=S256`;
 - exact configured MCP `resource`; and

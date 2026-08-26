@@ -48,7 +48,7 @@
     "assets:icons:check": "node scripts/sync-codicons.mjs --check",
     "build": "node scripts/clean-output.mjs && npm run assets:generate && tsc -p ./",
     "build:mutation": "node scripts/clean-output.mjs && node node_modules/typescript/bin/tsc -p ./",
-    "test:unit": "npm run build && node --test out/test/*.test.js",
+    "test:unit": "npm run build && node scripts/run-tests.mjs",
     "test": "npm run test:unit && npm run assets:check && node scripts/check-cutover.mjs",
     "watch": "tsc -watch -p ./",
     "package:check": "node scripts/check-package-files.mjs",

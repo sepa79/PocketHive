@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
 import test from 'node:test';
 
 import {
@@ -17,8 +16,6 @@ const profile: McpConnectionProfile = Object.freeze({
   endpointSecurityMode: 'REMOTE_HTTPS', authenticationMode: 'OAUTH_AUTHORIZATION_CODE_PKCE',
   secretKey: 'secret.nft',
 });
-const retainedArchivePath = join('owned-temp', 'pockethive-test-bundle.zip');
-
 test('validates then explicitly publishes the exact retained committed archive through the active MCP session', async () => {
   const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
   const uploads: Uint8Array[] = [];
@@ -45,11 +42,10 @@ test('validates then explicitly publishes the exact retained committed archive t
         bundlePath: 'scenarios/bundles/mixed-smoke', verification: 'CLIENT_ASSERTED',
       },
       fileManifest: [{ path: 'scenario.yaml', byteCount: 18, sha256: `sha256:${'c'.repeat(64)}` }],
-      archivePath: retainedArchivePath,
+      archive: new Uint8Array([1, 2, 3]),
       dispose: async () => { disposed += 1; },
     }) },
     client(calls, uploads, () => tickets.shift(), () => outcomes.shift(), () => {}),
-    async () => new Uint8Array([1, 2, 3]),
   );
 
   const pending = await coordinator.validate(profile, '/workspace/scenarios/bundles/mixed-smoke');
@@ -83,14 +79,13 @@ test('fails closed, cleans owned bytes, and never infers publication intent', as
         repository: 'https://example.invalid/tests.git', commit: '1'.repeat(40),
         bundlePath: 'bundle', verification: 'CLIENT_ASSERTED',
       },
-      fileManifest: [], archivePath: retainedArchivePath,
+      fileManifest: [], archive: new Uint8Array([1]),
       dispose: async () => { disposed += 1; },
     }) },
     {
       callTool: async () => { throw new Error('access denied'); },
       uploadArchive: async () => { throw new Error('must not upload'); },
     },
-    async () => new Uint8Array([1]),
   );
 
   await assert.rejects(coordinator.validate(profile, '/workspace/bundle'), /access denied/);
@@ -221,7 +216,6 @@ test('publication MCP failure preserves the original error and disposes retained
       callTool: async () => { throw accessDenied; },
       uploadArchive: async () => { throw new Error('must not upload'); },
     },
-    async () => new Uint8Array([1]),
   );
   await assert.rejects(coordinator.publish(profile, pendingBundle(() => { disposed += 1; }), 'CREATE'),
     error => error === accessDenied);
@@ -239,7 +233,6 @@ test('reconcile uses the exact attempt id through the active session and does no
       },
       uploadArchive: async () => { throw new Error('must not upload'); },
     },
-    async () => { throw new Error('must not read archive'); },
   );
 
   assert.deepEqual(await coordinator.reconcile(profile, 'pa-ambiguous'), {
@@ -258,7 +251,6 @@ test('reconcile rejects a malformed owner response from the active client', asyn
       callTool: async () => null,
       uploadArchive: async () => { throw new Error('must not upload'); },
     },
-    async () => { throw new Error('must not read archive'); },
   );
 
   await assertContractCode(coordinator.reconcile(profile, 'pa-malformed'), 'BUNDLE_PUBLICATION_ATTEMPT_INVALID');
@@ -272,7 +264,6 @@ test('reconcile preserves an active MCP failure', async () => {
       callTool: async () => { throw accessDenied; },
       uploadArchive: async () => { throw new Error('must not upload'); },
     },
-    async () => { throw new Error('must not read archive'); },
   );
 
   await assert.rejects(coordinator.reconcile(profile, 'pa-auth-failure'), error => error === accessDenied);
@@ -295,7 +286,6 @@ function coordinatorWith(bundleClient: BundleMcpClient, dispose: () => void = ()
   return new ScenarioBundleCoordinator(
     { package: async () => pendingBundle(dispose).bundle },
     bundleClient,
-    async () => new Uint8Array([1]),
   );
 }
 
@@ -307,7 +297,7 @@ function pendingBundle(dispose: () => void): PendingBundlePublication {
         repository: 'https://example.invalid/tests.git', commit: '1'.repeat(40),
         bundlePath: 'bundle', verification: 'CLIENT_ASSERTED',
       },
-      fileManifest: [], archivePath: retainedArchivePath,
+      fileManifest: [], archive: new Uint8Array([1, 2, 3]),
       dispose: async () => { dispose(); },
     },
     receipt: {

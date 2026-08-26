@@ -16,7 +16,6 @@ import {
 } from './contracts';
 import {
   COMPANION_OAUTH_CLIENT_ID,
-  COMPANION_OAUTH_REDIRECT_URI,
 } from './companionOAuthClient';
 
 const MAX_RESPONSE_CHARACTERS = 65_536;
@@ -76,18 +75,20 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
       const state = base64url(this.secureRandom(32));
       const verifier = base64url(this.secureRandom(64));
       const challenge = createHash('sha256').update(verifier).digest('base64url');
-      const authorizationUrl = new URL(server.authorizationEndpoint);
-      authorizationUrl.searchParams.set('response_type', 'code');
-      authorizationUrl.searchParams.set('client_id', COMPANION_OAUTH_CLIENT_ID);
-      authorizationUrl.searchParams.set('redirect_uri', COMPANION_OAUTH_REDIRECT_URI);
-      authorizationUrl.searchParams.set('resource', endpoint.mcpUrl);
-      authorizationUrl.searchParams.set('scope', POCKETHIVE_COMPANION_SCOPES.join(' '));
-      authorizationUrl.searchParams.set('state', state);
-      authorizationUrl.searchParams.set('code_challenge', challenge);
-      authorizationUrl.searchParams.set('code_challenge_method', 'S256');
-
-      const callback = await this.browser.authorize(authorizationUrl.toString(), signal);
-      validateCallback(callback, state);
+      const authorization = await this.browser.authorize(redirectUri => {
+        const authorizationUrl = new URL(server.authorizationEndpoint);
+        authorizationUrl.searchParams.set('response_type', 'code');
+        authorizationUrl.searchParams.set('client_id', COMPANION_OAUTH_CLIENT_ID);
+        authorizationUrl.searchParams.set('redirect_uri', redirectUri);
+        authorizationUrl.searchParams.set('resource', endpoint.mcpUrl);
+        authorizationUrl.searchParams.set('scope', POCKETHIVE_COMPANION_SCOPES.join(' '));
+        authorizationUrl.searchParams.set('state', state);
+        authorizationUrl.searchParams.set('code_challenge', challenge);
+        authorizationUrl.searchParams.set('code_challenge_method', 'S256');
+        return authorizationUrl.toString();
+      }, signal);
+      const callback = authorization.callback;
+      validateCallback(callback, state, authorization.redirectUri);
       if (callback.searchParams.get('error') === 'access_denied') {
         throw new AuthenticationCancelledError();
       }
@@ -103,7 +104,7 @@ export class PocketHiveOAuthAuthentication implements AuthenticationPort, Renewa
         grant_type: 'authorization_code',
         client_id: COMPANION_OAUTH_CLIENT_ID,
         code,
-        redirect_uri: COMPANION_OAUTH_REDIRECT_URI,
+        redirect_uri: authorization.redirectUri,
         resource: endpoint.mcpUrl,
         code_verifier: verifier,
       });
@@ -323,8 +324,8 @@ function validateMetadata(
   return { authorizationEndpoint, tokenEndpoint, revocationEndpoint };
 }
 
-function validateCallback(callback: URL, expectedState: string): void {
-  if (`${callback.protocol}//${callback.host}${callback.pathname}` !== COMPANION_OAUTH_REDIRECT_URI) {
+function validateCallback(callback: URL, expectedState: string, expectedRedirectUri: string): void {
+  if (`${callback.protocol}//${callback.host}${callback.pathname}` !== expectedRedirectUri) {
     throw new ConnectionContractError('OAUTH_CALLBACK_INVALID', 'OAUTH_CALLBACK_INVALID: redirect URI mismatch');
   }
   if (callback.searchParams.get('state') !== expectedState) {

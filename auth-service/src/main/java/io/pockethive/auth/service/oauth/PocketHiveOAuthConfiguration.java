@@ -210,9 +210,9 @@ public class PocketHiveOAuthConfiguration {
 
     @Bean
     FilterRegistrationBean<OAuthResourceParameterFilter> oauthResourceParameterFilter(
-        AuthServiceProperties properties, RegisteredClientRepository clients) {
+        AuthServiceProperties properties) {
         var registration = new FilterRegistrationBean<>(
-            new OAuthResourceParameterFilter(properties.getOauth().getResource().toString(), clients));
+            new OAuthResourceParameterFilter(properties.getOauth().getResource().toString()));
         registration.setOrder(SecurityProperties.DEFAULT_FILTER_ORDER - 1);
         return registration;
     }
@@ -232,7 +232,7 @@ public class PocketHiveOAuthConfiguration {
             || oauth.getDynamicClientTtl().compareTo(oauth.getRefreshTokenTtl()) <= 0
             || oauth.getDynamicClientCapacity() < 1
             || !secureOrLoopback(oauth.getIssuer()) || !secureOrLoopback(oauth.getResource())
-            || !loopbackRedirect(oauth.getVscodeRedirectUri())) {
+            || !vscodeRedirectBase(oauth.getVscodeRedirectUri())) {
             throw new IllegalStateException("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");
         }
         return oauth;
@@ -249,7 +249,13 @@ public class PocketHiveOAuthConfiguration {
                     || "::1".equals(uri.getHost())));
     }
 
-    private static boolean loopbackRedirect(java.net.URI uri) {
-        return secureOrLoopback(uri) && uri.getFragment() == null && uri.getQuery() == null;
+    private static boolean vscodeRedirectBase(java.net.URI uri) {
+        return "http".equalsIgnoreCase(uri.getScheme())
+            && "127.0.0.1".equals(uri.getHost())
+            && uri.getPort() == -1
+            && "/callback".equals(uri.getPath())
+            && uri.getUserInfo() == null
+            && uri.getFragment() == null
+            && uri.getQuery() == null;
     }
 }

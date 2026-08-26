@@ -909,8 +909,9 @@ threats, not model-behaviour assumptions.
 3. The client writes those files into the active Git repository.
 4. The user reviews the diff and commits through their normal Git process.
 5. The client packages the exact committed bundle path.
-6. The client retains that exact ZIP in bounded local temporary storage through
-   validation and publication; it does not put the bytes in model context.
+6. The VS Code client retains that exact ZIP in bounded extension-host memory
+   through validation and publication; it does not write a local temporary file
+   or put the bytes in model context.
 7. Validation and publication carry client-asserted repository identity, commit
    SHA, and bundle path plus archive and canonical bundle-content digests.
 8. A rollback packages the selected historical commit and republishes it
@@ -936,11 +937,11 @@ templates, fixtures, documentation, and setup assets such as `.yaml`, `.yml`,
 each relative path and byte digest. The MCP treats these files as opaque data and
 never executes scripts, SQL, Compose files, or other bundle content.
 
-Validation and publication upload the same retained ZIP bytes. The client
-deletes its temporary ZIP after success, cancellation, ticket expiry, or a
-terminal failure. If those bytes are lost or the committed path changes, the
-client must create a new archive and repeat validation; it cannot reuse the old
-validation receipt or rely on byte-equivalent repackaging.
+Validation and publication upload the same retained ZIP bytes. The VS Code
+client zeroes the retained buffer after success, cancellation, ticket expiry,
+or a terminal failure. If those bytes are lost or the committed path changes,
+the client must create a new archive and repeat validation; it cannot reuse the
+old validation receipt or rely on byte-equivalent repackaging.
 
 A historical bundle is obtained without changing the worktree, for example by
 the user's Git-capable client using `git archive <commit> <bundlePath>`. Git
@@ -1361,7 +1362,7 @@ Use narrow ports:
 
 The webview receives only bounded, redacted, serialisable view models. The
 extension host owns authentication, MCP sessions, tool calls, profile storage,
-temporary ZIP handling, and cancellation. The webview never receives a bearer
+retained ZIP handling, and cancellation. The webview never receives a bearer
 token, secret reference value, upload bytes, unbounded log body, owner URL, or
 raw unvalidated owner response.
 
@@ -1733,8 +1734,8 @@ PocketHive/RabbitMQ/WireMock/TCP Mock URLs, or legacy product Tree Views after
 cutover. Deployed scenarios and capabilities come through MCP resources/tools.
 Authoring files remain in the active Git workspace. `Upload committed bundle`
 packages the selected committed path and performs the ticketed upload flow
-using one owner-only bounded temporary ZIP outside the workspace, then deletes
-it at the terminal outcome.
+using one bounded ZIP retained only in extension-host memory, then zeroes it at
+the terminal outcome.
 
 This removes Node/npm from the privileged MCP server, not from VS Code itself.
 Extension dependencies must remain minimal, pinned, locked, audited, and
@@ -1855,7 +1856,9 @@ controls before implementation:
 
 - PKCE with `S256` and refusal when the authorization-server metadata does not
   advertise support;
-- exact registered redirect-URI matching with no wildcard or pattern matching;
+- exact registered redirect-URI matching with no wildcard or pattern matching,
+  except the standards-defined runtime port substitution for a registered
+  IP-loopback redirect URI;
 - a cryptographically random, principal/client/redirect-bound, short-lived,
   single-use OAuth `state` value and exact callback validation;
 - short-lived, single-use authorization codes with replay rejection;
@@ -2264,9 +2267,9 @@ coverage. Run and record sessions for:
 - mixed-content bundle preservation using
   `scenarios/bundles/db-query-postgres-smoke`, including `.yaml`, `.yml`, `.sql`,
   `.sh`, and `.md`, with attempts to make the MCP execute them;
-- client temporary ZIP loss, stale validation receipts, repackaging differences,
-  workspace switching, and cleanup after success, cancellation, expiry, or
-  failure;
+- client retained-archive loss, stale validation receipts, repackaging
+  differences, workspace switching, and cleanup after success, cancellation,
+  expiry, or failure;
 - Scenario Manager temporary storage and current-only retention;
 - complete operation without HiveMind;
 - owner-boundary attempts through direct infrastructure;
@@ -2285,7 +2288,8 @@ coverage. Run and record sessions for:
   create mirrored MCP operation state;
 - long-call timeout, cancel/status races, user decline, stop failure, and owner
   completion after cancellation;
-- OAuth discovery, exact redirect URI, PKCE downgrade, `state` and authorization
+- OAuth discovery, exact loopback redirect components and runtime port binding,
+  PKCE downgrade, `state` and authorization
   code replay, audience/resource confusion, scope changes, token forwarding,
   ticket guessing, and expired resource links;
 - transport-session fixation and hijacking, cross-principal session reuse,

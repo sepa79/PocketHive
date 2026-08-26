@@ -305,7 +305,7 @@ public final class ToolCatalogue {
 
                 Git is the source/version authority. Repository, commit, and path fields are client-asserted in this release. Package every regular file under the selected committed path without changing its bytes. Keep ZIP bytes outside model context. Prepare a validation ticket, then stream the archive to its exact uploadUrl using exactly one authentication mode: the client's existing OAuth Bearer session, or the returned uploadCapability in the PocketHive-Upload-Capability header. Never put the capability in a URL, query string, log, or archive. Retain the exact ZIP until publication. The MCP fully checks limits, traversal, entry types, manifest, and SHA-256 before calling Scenario Manager.
 
-                Publication always names `CREATE` or `REPLACE`; never try the other mode after failure. Use the validation receipt's exact archive and canonical content digests. A timeout or lost response after owner mutation begins is AMBIGUOUS: call reconciliation and never replay the mutation. Scenario Manager replace is last-write-wins. Delete the client's temporary ZIP after terminal success/failure/cancel/expiry.
+                Publication always names `CREATE` or `REPLACE`; never try the other mode after failure. Use the validation receipt's exact archive and canonical content digests. A timeout or lost response after owner mutation begins is AMBIGUOUS: call reconciliation and never replay the mutation. Scenario Manager replace is last-write-wins. Dispose the client's retained archive bytes after terminal success/failure/cancel/expiry.
                 """);
         addSkill(result, "swarm-lifecycle", "Swarm lifecycle",
             "Create, inspect, start, stop, and remove swarms through Orchestrator.", """

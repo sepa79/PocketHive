@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { resolve } from 'node:path';
 import test from 'node:test';
 
 import { ConnectionContractError } from '../connection/contracts';
@@ -90,11 +91,11 @@ test('repository scan projects opaque candidate ids and resolves them only in th
     commit: 'a'.repeat(40),
   });
   assert.equal(resolveRepositoryScenarioFile(true, 'candidate-1', 'scenario.yaml', registry),
-    '/workspace/project/scenarios/bundles/mixed-smoke/scenario.yaml');
+    resolve('/workspace/project', 'scenarios', 'bundles', 'mixed-smoke', 'scenario.yaml'));
   assert.equal(resolveRepositoryScenarioFile(true, 'candidate-1', ' templates/http/request.yaml ', registry),
-    '/workspace/project/scenarios/bundles/mixed-smoke/templates/http/request.yaml');
+    resolve('/workspace/project', 'scenarios', 'bundles', 'mixed-smoke', 'templates', 'http', 'request.yaml'));
   assert.equal(resolveRepositoryScenarioFile(true, ' candidate-1 ', 'scenario.yaml', registry),
-    '/workspace/project/scenarios/bundles/mixed-smoke/scenario.yaml');
+    resolve('/workspace/project', 'scenarios', 'bundles', 'mixed-smoke', 'scenario.yaml'));
   assert.throws(() => resolveRepositoryScenarioFile(true, 'candidate-1', '../secret', registry),
     (error: unknown) => error instanceof ConnectionContractError
       && error.code === 'REPOSITORY_SCENARIO_FILE_UNKNOWN'

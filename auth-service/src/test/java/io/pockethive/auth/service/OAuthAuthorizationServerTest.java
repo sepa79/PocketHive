@@ -39,7 +39,7 @@ import org.springframework.web.util.UriComponentsBuilder;
 @AutoConfigureMockMvc
 class OAuthAuthorizationServerTest {
     private static final String CLIENT_ID = "pockethive-vscode";
-    private static final String REDIRECT_URI = "http://127.0.0.1:52000/callback";
+    private static final String REDIRECT_URI = "http://127.0.0.1:38125/callback";
     private static final String RESOURCE = "http://localhost:8080/mcp";
     private static final String VERIFIER = "test-verifier-that-is-at-least-forty-three-characters-long";
 
@@ -581,7 +581,19 @@ class OAuthAuthorizationServerTest {
         invalidAuthorize(null, REDIRECT_URI, "S256");
         invalidAuthorize("http://localhost:8080/other", REDIRECT_URI, "S256");
         invalidAuthorize(RESOURCE, REDIRECT_URI, "plain");
-        invalidAuthorize(RESOURCE, "http://127.0.0.1:52001/callback", "S256");
+        invalidAuthorize(RESOURCE, "http://localhost:38125/callback", "S256");
+        invalidAuthorize(RESOURCE, "http://127.0.0.1:38125/other", "S256");
+        invalidAuthorize(RESOURCE, "http://127.0.0.1:38125/callback?unexpected=true", "S256");
+        mvc.perform(get("/oauth/authorize")
+                .queryParam("response_type", "code")
+                .queryParam("client_id", CLIENT_ID, CLIENT_ID)
+                .queryParam("redirect_uri", REDIRECT_URI)
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", PocketHiveMcpScopes.DISCOVER)
+                .queryParam("state", "state")
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().isBadRequest());
     }
 
     private void invalidAuthorize(String resource, String redirect, String method) throws Exception {

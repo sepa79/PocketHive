@@ -1,8 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
-import { mkdtemp, realpath, rmdir, unlink, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { isAbsolute, join, relative, sep } from 'node:path';
+import { realpath } from 'node:fs/promises';
+import { isAbsolute, relative, sep } from 'node:path';
 
 import { ConnectionContractError } from '../connection/contracts';
 
@@ -26,7 +25,7 @@ export interface BundleFileManifestEntry {
 export interface PreparedCommittedBundle {
   readonly source: BundleSourceMetadata;
   readonly fileManifest: readonly BundleFileManifestEntry[];
-  readonly archivePath: string;
+  readonly archive: Uint8Array;
   dispose(): Promise<void>;
 }
 
@@ -42,18 +41,6 @@ export interface GitBundleLimits {
   readonly archiveBytes: number;
   readonly expandedBytes: number;
   readonly files: number;
-}
-
-export interface ArchiveFileOperations {
-  createTemporaryDirectory(prefix: string): Promise<string>;
-  write(path: string, bytes: Buffer, mode: number): Promise<void>;
-  unlink(path: string): Promise<void>;
-  rmdir(path: string): Promise<void>;
-}
-
-export interface OwnedArchive {
-  readonly archivePath: string;
-  dispose(): Promise<void>;
 }
 
 const DEFAULT_LIMITS: GitBundleLimits = Object.freeze({
@@ -121,12 +108,11 @@ export class GitBundlePackager {
       ['archive', '--format=zip', `${commit}:${bundlePath}`], 'GIT_BUNDLE_ARCHIVE_FAILED',
       this.limits.archiveBytes + 1);
     if (archive.byteLength > this.limits.archiveBytes) throw contract('GIT_BUNDLE_ARCHIVE_LIMIT_EXCEEDED');
-    const ownedArchive = await persistArchive(archive);
     return Object.freeze({
       source: Object.freeze({ repository, commit, bundlePath, verification: 'CLIENT_ASSERTED' as const }),
       fileManifest: Object.freeze(fileManifest.map(file => Object.freeze(file))),
-      archivePath: ownedArchive.archivePath,
-      dispose: ownedArchive.dispose,
+      archive,
+      dispose: async () => { archive.fill(0); },
     });
   }
 
@@ -142,39 +128,6 @@ export class GitBundlePackager {
       throw contract(code);
     }
   }
-}
-
-const NODE_ARCHIVE_FILES: ArchiveFileOperations = Object.freeze({
-  createTemporaryDirectory: (prefix: string) => mkdtemp(prefix),
-  write: async (path: string, bytes: Buffer, mode: number) => writeFile(path, bytes, { mode }),
-  unlink: (path: string) => unlink(path),
-  rmdir: (path: string) => rmdir(path),
-});
-
-export async function persistArchive(
-  archive: Buffer,
-  files: ArchiveFileOperations = NODE_ARCHIVE_FILES,
-): Promise<OwnedArchive> {
-  const temporaryDirectory = await files.createTemporaryDirectory(join(tmpdir(), 'pockethive-bundle-'));
-  const archivePath = join(temporaryDirectory, 'bundle.zip');
-  try {
-    await files.write(archivePath, archive, 0o600);
-  } catch (error) {
-    await files.unlink(archivePath).catch(() => undefined);
-    await files.rmdir(temporaryDirectory).catch(() => undefined);
-    throw error;
-  }
-  return Object.freeze({
-    archivePath,
-    dispose: async () => {
-      await files.unlink(archivePath).catch(error => {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      });
-      await files.rmdir(temporaryDirectory).catch(error => {
-        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error;
-      });
-    },
-  });
 }
 
 interface TreeEntry {

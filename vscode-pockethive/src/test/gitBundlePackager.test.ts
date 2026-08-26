@@ -1,19 +1,17 @@
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, mkdir, readFile, rmdir, rm, stat, unlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { promisify } from 'node:util';
 import test from 'node:test';
 
 import { ConnectionContractError } from '../connection/contracts';
 import {
-  ArchiveFileOperations,
   CommittedBundleReference,
   GitBundleLimits,
   GitBundlePackager,
   GitCommand,
-  persistArchive,
 } from '../scenarios/gitBundlePackager';
 
 const execFile = promisify(execFileCallback);
@@ -35,6 +33,7 @@ test('packages every regular file from the selected committed Git tree with exac
     await writeFile(join(bundle, 'query.sql'), 'uncommitted bytes must not be packaged\n', 'utf8');
 
     const prepared = await new GitBundlePackager().package(bundle);
+    const retainedArchive = prepared.archive;
     try {
       assert.equal(prepared.source.repository, 'https://example.invalid/qa/pockethive-tests.git');
       assert.match(prepared.source.commit, /^[0-9a-f]{40}$/);
@@ -46,14 +45,12 @@ test('packages every regular file from the selected committed Git tree with exac
         ['scenario.yaml', 18],
       ]);
       assert.ok(prepared.fileManifest.every(file => /^sha256:[0-9a-f]{64}$/.test(file.sha256)));
-      assert.ok((await readFile(prepared.archivePath)).byteLength > 0);
-      assert.equal(prepared.archivePath.startsWith(root), false);
-      assert.equal((await stat(dirname(prepared.archivePath))).mode & 0o777, 0o700);
-      assert.equal((await stat(prepared.archivePath)).mode & 0o777, 0o600);
+      assert.ok(retainedArchive.byteLength > 0);
+      assert.deepEqual([...retainedArchive.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
     } finally {
       await prepared.dispose();
     }
-    await assert.rejects(readFile(prepared.archivePath), /ENOENT/);
+    assert.equal(retainedArchive.every(byte => byte === 0), true);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -264,63 +261,19 @@ test('enforces explicit file, expanded-byte, archive-byte, and command-buffer li
   });
 });
 
-test('dispose tolerates independently removed owned files and directories and remains idempotent', async () => {
+test('dispose zeroizes retained archive bytes and remains idempotent', async () => {
   await withSelectedDirectory(async ({ root, selected }) => {
-    const first = await new GitBundlePackager(fakeGit(root, {})).package(selected);
-    await unlink(first.archivePath);
-    await first.dispose();
-    await first.dispose();
+    const prepared = await new GitBundlePackager(fakeGit(root, {
+      archive: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+    })).package(selected);
+    const retainedArchive = prepared.archive;
+    assert.deepEqual([...retainedArchive], [0x50, 0x4b, 0x03, 0x04]);
 
-    const second = await new GitBundlePackager(fakeGit(root, {})).package(selected);
-    const temporaryDirectory = dirname(second.archivePath);
-    await unlink(second.archivePath);
-    await rmdir(temporaryDirectory);
-    await second.dispose();
-
-    const third = await new GitBundlePackager(fakeGit(root, {})).package(selected);
-    const blockingFile = join(dirname(third.archivePath), 'still-present.txt');
-    await writeFile(blockingFile, 'block removal');
-    await assert.rejects(third.dispose(), (error: unknown) =>
-      (error as NodeJS.ErrnoException).code === 'ENOTEMPTY');
-    await unlink(blockingFile);
-    await third.dispose();
-
-    const fourth = await new GitBundlePackager(fakeGit(root, {})).package(selected);
-    const fourthDirectory = dirname(fourth.archivePath);
-    await unlink(fourth.archivePath);
-    await mkdir(fourth.archivePath);
-    await assert.rejects(fourth.dispose(), (error: unknown) =>
-      (error as NodeJS.ErrnoException).code === 'EISDIR');
-    await rmdir(fourth.archivePath);
-    await rmdir(fourthDirectory);
+    await prepared.dispose();
+    assert.deepEqual([...retainedArchive], [0, 0, 0, 0]);
+    await prepared.dispose();
+    assert.deepEqual([...retainedArchive], [0, 0, 0, 0]);
   });
-});
-
-test('archive persistence cleans partial state when secure creation fails', async () => {
-  const calls: string[] = [];
-  const failure = new Error('simulated archive write failure');
-  const ownedDirectory = join('owned-temp', 'owned-test-directory');
-  const archivePath = join(ownedDirectory, 'bundle.zip');
-  const files: ArchiveFileOperations = {
-    createTemporaryDirectory: async prefix => {
-      calls.push(`create:${prefix}`);
-      return ownedDirectory;
-    },
-    write: async (path, _bytes, mode) => {
-      calls.push(`write:${path}:${mode.toString(8)}`);
-      throw failure;
-    },
-    unlink: async path => { calls.push(`unlink:${path}`); },
-    rmdir: async path => { calls.push(`rmdir:${path}`); },
-  };
-
-  await assert.rejects(persistArchive(Buffer.from('archive'), files), error => error === failure);
-  assert.deepEqual(calls.slice(1), [
-    `write:${archivePath}:600`,
-    `unlink:${archivePath}`,
-    `rmdir:${ownedDirectory}`,
-  ]);
-  assert.match(calls[0], /^create:.*pockethive-bundle-$/);
 });
 
 interface FakeGitOptions {

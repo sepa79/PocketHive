@@ -105,7 +105,15 @@ export interface RenewableAuthenticationPort extends AuthenticationPort {
 }
 
 export interface BrowserAuthorizationPort {
-  authorize(authorizationUrl: string, signal: AbortSignal): Promise<URL>;
+  authorize(
+    authorizationUrl: (redirectUri: string) => string,
+    signal: AbortSignal,
+  ): Promise<BrowserAuthorizationResult>;
+}
+
+export interface BrowserAuthorizationResult {
+  readonly callback: URL;
+  readonly redirectUri: string;
 }
 
 export interface OAuthSessionStore {

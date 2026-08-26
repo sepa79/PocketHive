@@ -22,7 +22,6 @@ const root = path.resolve(import.meta.dirname, '..');
 const auditDirectory = path.resolve(root, 'reports', 'playwright-ui');
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
 const endpoint = 'http://localhost:8088/mcp';
-const redirectUri = 'http://127.0.0.1:52000/callback';
 const connectionScopes = [...POCKETHIVE_COMPANION_SCOPES];
 const TABS = ['Hive', 'Buzz', 'Journal', 'Scenarios', 'Debug'];
 const findings = [];
@@ -1134,6 +1133,7 @@ async function connectLocalMcp(browser) {
   const context = await browser.newContext({ viewport: { width: 520, height: 760 }, colorScheme: 'dark' });
   const page = await context.newPage();
   let callback;
+  let redirectUri;
   let signInCaptured = false;
   let consentCaptured = false;
   const observedLocations = [];
@@ -1146,7 +1146,7 @@ async function connectLocalMcp(browser) {
   page.on('request', request => {
     const requested = new URL(request.url());
     observedLocations.push(`${requested.origin}${requested.pathname}`);
-    if (`${requested.origin}${requested.pathname}` === redirectUri) callback = requested;
+    if (redirectUri && `${requested.origin}${requested.pathname}` === redirectUri) callback = requested;
   });
   const resource = await json(`${new URL(endpoint).origin}/.well-known/oauth-protected-resource`);
   assert.equal(resource.resource, endpoint);
@@ -1156,24 +1156,26 @@ async function connectLocalMcp(browser) {
   const verifier = randomBytes(64).toString('base64url');
   const challenge = createHash('sha256').update(verifier, 'ascii').digest('base64url');
   const state = randomBytes(32).toString('base64url');
-  const authorizationUrl = new URL(metadata.authorization_endpoint);
-  authorizationUrl.search = new URLSearchParams({
-    response_type: 'code',
-    client_id: 'pockethive-vscode',
-    redirect_uri: redirectUri,
-    resource: endpoint,
-    scope: connectionScopes.join(' '),
-    state,
-    code_challenge: challenge,
-    code_challenge_method: 'S256',
-  }).toString();
-
   let authorizationResponse;
   const callbackController = new AbortController();
   const callbackResult = new LoopbackBrowserAuthorization(async url => {
     authorizationResponse = await page.goto(url, { waitUntil: 'domcontentloaded' });
     return true;
-  }).authorize(authorizationUrl.toString(), callbackController.signal);
+  }).authorize(runtimeRedirectUri => {
+    redirectUri = runtimeRedirectUri;
+    const authorizationUrl = new URL(metadata.authorization_endpoint);
+    authorizationUrl.search = new URLSearchParams({
+      response_type: 'code',
+      client_id: 'pockethive-vscode',
+      redirect_uri: redirectUri,
+      resource: endpoint,
+      scope: connectionScopes.join(' '),
+      state,
+      code_challenge: challenge,
+      code_challenge_method: 'S256',
+    }).toString();
+    return authorizationUrl.toString();
+  }, callbackController.signal);
   const deadline = Date.now() + 20_000;
   while (!callback && Date.now() < deadline) {
     const username = page.getByLabel('Configured username');
@@ -1206,8 +1208,11 @@ async function connectLocalMcp(browser) {
       location.origin}${location.pathname}; requests=${JSON.stringify(observedLocations.slice(-20))}: ${
       (await page.locator('body').innerText()).replaceAll(/\s+/g, ' ').slice(0, 500)}`);
   }
-  assert.equal((await callbackResult).toString(), callback.toString(),
+  const completedCallback = await callbackResult;
+  assert.equal(completedCallback.callback.toString(), callback.toString(),
     'the live OAuth browser must reach the exact local callback listener');
+  assert.equal(completedCallback.redirectUri, redirectUri,
+    'authorization and token exchange must use the listener-owned redirect URI');
   await inspectAuthPage(page, 'auth-callback-success', '20-auth-callback-success');
   await page.setViewportSize({ width: 280, height: 760 });
   await inspectAuthPage(page, 'auth-callback-success-mobile', '23-auth-callback-success-mobile');
@@ -1650,11 +1655,19 @@ async function probeDisposableRuntime(client, scenarios) {
       const compatibility = await client.callTool(compatibilityTool, { swarmId });
       for (const field of [
         'assessmentContractVersion', 'overall', 'swarmId', 'runId', 'checks',
-        'swarm', 'resources', 'manifest', 'rabbitTopology',
+        'resources', 'manifest', 'rabbitTopology',
       ]) {
         assert.deepEqual(compatibility?.[field], assessment?.[field],
           `${compatibilityTool} must remain a projection of the canonical assessment`);
       }
+      const { observedAt: assessmentObservedAt, ...assessmentSwarm } = assessment?.swarm ?? {};
+      const { observedAt: compatibilityObservedAt, ...compatibilitySwarm } = compatibility?.swarm ?? {};
+      assert.deepEqual(compatibilitySwarm, assessmentSwarm,
+        `${compatibilityTool} must preserve the canonical swarm projection`);
+      assert.equal(Number.isNaN(Date.parse(assessmentObservedAt)), false,
+        'the canonical swarm projection must carry a valid observation timestamp');
+      assert.equal(Number.isNaN(Date.parse(compatibilityObservedAt)), false,
+        `${compatibilityTool} must carry its own valid observation timestamp`);
     }
 
     await client.callTool('swarm_start', { swarmId, idempotencyKey: key('start') });
@@ -1780,15 +1793,17 @@ async function captureCallbackOutcome(browser, state, query, screenshotName) {
   const context = await browser.newContext({ viewport: { width: 520, height: 760 }, colorScheme: 'dark' });
   const page = await context.newPage();
   let listenerReady;
+  let redirectUri;
   const ready = new Promise(resolve => { listenerReady = resolve; });
-  const callbackResult = new LoopbackBrowserAuthorization(async () => {
+  const callbackResult = new LoopbackBrowserAuthorization(async () => true).authorize(runtimeRedirectUri => {
+    redirectUri = runtimeRedirectUri;
     listenerReady();
-    return true;
-  }).authorize('https://issuer.invalid/oauth/authorize', new AbortController().signal);
+    return 'https://issuer.invalid/oauth/authorize';
+  }, new AbortController().signal);
   await ready;
   const callbackUrl = `${redirectUri}${query}`;
   await page.goto(callbackUrl, { waitUntil: 'domcontentloaded' });
-  assert.equal((await callbackResult).toString(), callbackUrl);
+  assert.equal((await callbackResult).callback.toString(), callbackUrl);
   await inspectAuthPage(page, state, screenshotName);
   await context.close();
 }

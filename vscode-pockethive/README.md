@@ -123,6 +123,12 @@ record, closes the MCP transport, and returns to Environments only after local
 session teardown. It does not claim a remote logout if revocation could not be
 confirmed.
 
+For each interactive sign-in, the extension first binds an available
+OS-assigned port on `127.0.0.1`, then opens the browser with the exact runtime
+callback `http://127.0.0.1:<port>/callback`. The same URI is used for callback
+validation and token exchange. No fixed callback port, alternate host, or
+listener fallback is used.
+
 Browser sign-in and consent are rendered by Auth Service with a responsive
 PocketHive theme, the canonical logo, explicit client/resource/scope context,
 and accessible form controls. The loopback callback landing page shown after
@@ -152,11 +158,16 @@ such as shell, SQL, YAML/YML, JSON, CSV, and Markdown. Validation and publicatio
 use the MCP ticket upload flow. `CREATE` or `REPLACE` is always an explicit user
 decision; dirty workspace bytes and historical source require an explicit Git
 commit selection outside the extension.
+The bounded committed ZIP remains only in extension-host memory between
+validation and publication and is zeroed on every terminal outcome; no
+workspace or operating-system temporary file is created.
 
 ## Develop and verify
 
 The extension remains TypeScript because that is the VS Code extension-host
 platform boundary. Dependencies are pinned and locked.
+The unit/package gate runs on Node 20 on both Linux and Windows in CI; mutation
+testing runs on Linux against the same source and test contracts.
 
 ```bash
 cd vscode-pockethive

@@ -2,7 +2,7 @@
   "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
   "testRunner": "command",
   "commandRunner": {
-    "command": "node scripts/ensure-build.mjs && node --test out/test/*.test.js"
+    "command": "node scripts/ensure-build.mjs && node scripts/run-tests.mjs"
   },
   "ignorePatterns": ["/out"],
   "mutate": [

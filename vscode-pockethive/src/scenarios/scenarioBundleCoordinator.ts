@@ -1,5 +1,3 @@
-import { readFile } from 'node:fs/promises';
-
 import {
   ConnectionContractError,
   McpConnectionProfile,
@@ -37,13 +35,10 @@ interface BundlePackagerPort {
   package(source: string | CommittedBundleReference): Promise<PreparedCommittedBundle>;
 }
 
-type ArchiveReader = (path: string) => Promise<Uint8Array>;
-
 export class ScenarioBundleCoordinator {
   constructor(
     private readonly packager: BundlePackagerPort = new GitBundlePackager(),
     private readonly client: BundleMcpClient,
-    private readonly archives: ArchiveReader = readFile,
   ) {}
 
   async validate(
@@ -59,7 +54,7 @@ export class ScenarioBundleCoordinator {
       }), 'BUNDLE_VALIDATION_TICKET_INVALID');
       const uploadUrl = requiredString(ticket, 'uploadUrl', 'BUNDLE_VALIDATION_TICKET_INVALID');
       const outcome = object(await this.client.uploadArchive(
-        uploadUrl, await this.archives(bundle.archivePath), signal),
+        uploadUrl, bundle.archive, signal),
         'BUNDLE_VALIDATION_OUTCOME_INVALID');
       const receipt = validationReceipt(outcome.validationReceipt);
       return Object.freeze({ profileId: profile.id, bundle, receipt });
@@ -90,7 +85,7 @@ export class ScenarioBundleCoordinator {
       }), 'BUNDLE_PUBLICATION_TICKET_INVALID');
       const uploadUrl = requiredString(ticket, 'uploadUrl', 'BUNDLE_PUBLICATION_TICKET_INVALID');
       const outcome = object(await this.client.uploadArchive(uploadUrl,
-        await this.archives(pending.bundle.archivePath), signal), 'BUNDLE_PUBLICATION_OUTCOME_INVALID');
+        pending.bundle.archive, signal), 'BUNDLE_PUBLICATION_OUTCOME_INVALID');
       return object(outcome.publicationAttempt, 'BUNDLE_PUBLICATION_OUTCOME_INVALID');
     } finally {
       await pending.bundle.dispose();

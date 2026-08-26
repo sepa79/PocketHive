@@ -2,12 +2,13 @@ import { createServer, Server } from 'node:http';
 
 import {
   BrowserAuthorizationPort,
+  BrowserAuthorizationResult,
   ConnectionContractError,
 } from './contracts';
 import {
   COMPANION_OAUTH_CALLBACK_HOST,
   COMPANION_OAUTH_CALLBACK_PATH,
-  COMPANION_OAUTH_CALLBACK_PORT,
+  companionOAuthRedirectUri,
 } from './companionOAuthClient';
 import { CALLBACK_LOGO_DATA_URI } from '../generated/callbackLogo';
 
@@ -18,20 +19,25 @@ export type ExternalBrowser = (url: string) => PromiseLike<boolean>;
 export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
   constructor(private readonly openExternal: ExternalBrowser) {}
 
-  async authorize(authorizationUrl: string, signal: AbortSignal): Promise<URL> {
+  async authorize(
+    authorizationUrl: (redirectUri: string) => string,
+    signal: AbortSignal,
+  ): Promise<BrowserAuthorizationResult> {
     let server: Server | undefined;
     let timeout: NodeJS.Timeout | undefined;
     try {
-      const callback = new Promise<URL>((resolve, reject) => {
+      const callback = new Promise<BrowserAuthorizationResult>((resolve, reject) => {
         if (signal.aborted) {
           reject(new ConnectionContractError('OAUTH_AUTHORIZATION_CANCELLED', 'OAuth authorization was cancelled'));
           return;
         }
+        let redirectUri: string | undefined;
         server = createServer((request, response) => {
           if (request.socket.remoteAddress !== COMPANION_OAUTH_CALLBACK_HOST
               || request.method !== 'GET'
               || !request.url
-              || new URL(request.url, `http://${COMPANION_OAUTH_CALLBACK_HOST}:${COMPANION_OAUTH_CALLBACK_PORT}`).pathname
+              || redirectUri === undefined
+              || new URL(request.url, redirectUri).pathname
                 !== COMPANION_OAUTH_CALLBACK_PATH) {
             response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
             response.end('Not found');
@@ -39,7 +45,7 @@ export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
           }
           const callback = new URL(
             request.url,
-            `http://${COMPANION_OAUTH_CALLBACK_HOST}:${COMPANION_OAUTH_CALLBACK_PORT}`,
+            redirectUri,
           );
           response.writeHead(200, {
             'Content-Type': 'text/html; charset=utf-8',
@@ -47,14 +53,22 @@ export class LoopbackBrowserAuthorization implements BrowserAuthorizationPort {
             'Content-Security-Policy': "default-src 'none'; img-src data:; style-src 'unsafe-inline'",
           });
           response.end(renderCallbackPage(callback));
-          resolve(callback);
+          resolve(Object.freeze({ callback, redirectUri }));
         });
         server.once('error', error => reject(new ConnectionContractError(
           'OAUTH_CALLBACK_LISTENER_FAILED', error.message,
         )));
-        server.listen(COMPANION_OAUTH_CALLBACK_PORT, COMPANION_OAUTH_CALLBACK_HOST, async () => {
+        server.listen(0, COMPANION_OAUTH_CALLBACK_HOST, async () => {
           try {
-            if (!await this.openExternal(authorizationUrl)) {
+            const address = server?.address();
+            if (address === undefined || address === null || typeof address === 'string') {
+              reject(new ConnectionContractError(
+                'OAUTH_CALLBACK_LISTENER_FAILED', 'OAuth callback listener did not expose a TCP port',
+              ));
+              return;
+            }
+            redirectUri = companionOAuthRedirectUri(address.port);
+            if (!await this.openExternal(authorizationUrl(redirectUri))) {
               reject(new ConnectionContractError('OAUTH_BROWSER_OPEN_FAILED', 'VS Code declined the browser request'));
             }
           } catch (error) {

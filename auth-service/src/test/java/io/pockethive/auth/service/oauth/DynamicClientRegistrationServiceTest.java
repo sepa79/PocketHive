@@ -245,6 +245,31 @@ class DynamicClientRegistrationServiceTest {
     }
 
     @Test
+    void requiresCanonicalPortlessIpLoopbackForVscodeRedirect() {
+        AuthServiceProperties properties = validOAuthProperties();
+        AuthServiceProperties.OAuthConfig oauth = properties.getOauth();
+
+        for (String redirect : List.of(
+            "http://127.0.0.1:52000/callback",
+            "http://localhost/callback",
+            "https://127.0.0.1/callback",
+            "http://127.0.0.1/other",
+            "http://user@127.0.0.1/callback",
+            "http://127.0.0.1/callback?query=value",
+            "http://127.0.0.1/callback#fragment"
+        )) {
+            oauth.setVscodeRedirectUri(URI.create(redirect));
+            assertThatThrownBy(() -> PocketHiveOAuthConfiguration.requireValid(properties))
+                .as(redirect)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");
+        }
+
+        oauth.setVscodeRedirectUri(URI.create("http://127.0.0.1/callback"));
+        assertThat(PocketHiveOAuthConfiguration.requireValid(properties)).isSameAs(oauth);
+    }
+
+    @Test
     void defaultsDynamicClientInactivityLifetimeBeyondRefreshLifetime() {
         AuthServiceProperties.OAuthConfig oauth = new AuthServiceProperties.OAuthConfig();
 

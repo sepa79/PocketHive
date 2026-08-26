@@ -12,6 +12,7 @@ import {
 import { createConnectionProfile } from '../connection/profile';
 
 const NOW = new Date('2026-08-18T12:00:00Z');
+const TEST_REDIRECT_URI = 'http://127.0.0.1:38125/callback';
 const profile = createConnectionProfile({
   id: 'local', displayName: 'Local', mcpUrl: 'http://127.0.0.1:8080/mcp',
   endpointSecurityMode: 'LOCAL_LOOPBACK_HTTP', secretKey: 'ph.local.oauth',
@@ -26,12 +27,10 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   const requests: Array<{ url: string; init?: RequestInit }> = [];
   const saved = new Map<string, string>();
   let opened: URL | undefined;
-  const browser: BrowserAuthorizationPort = {
-    authorize: async authorizationUrl => {
+  const browser = browserAuthorization(async authorizationUrl => {
       opened = new URL(authorizationUrl);
-      return new URL(`http://127.0.0.1:52000/callback?code=code-123&state=${opened.searchParams.get('state')}`);
-    },
-  };
+      return new URL(`${TEST_REDIRECT_URI}?code=code-123&state=${opened.searchParams.get('state')}`);
+  });
   const oauth = new PocketHiveOAuthAuthentication(
     async (url, init) => {
       requests.push({ url: String(url), init });
@@ -61,7 +60,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   assert.equal(requests[1].url, 'http://127.0.0.1:8080/auth-service/oauth/token');
   assert.equal(opened?.searchParams.get('response_type'), 'code');
   assert.equal(opened?.searchParams.get('client_id'), 'pockethive-vscode');
-  assert.equal(opened?.searchParams.get('redirect_uri'), 'http://127.0.0.1:52000/callback');
+  assert.equal(opened?.searchParams.get('redirect_uri'), TEST_REDIRECT_URI);
   assert.equal(opened?.searchParams.get('resource'), profile.mcpUrl);
   assert.equal(opened?.searchParams.get('code_challenge_method'), 'S256');
   const verifier = Buffer.alloc(64, 7).toString('base64url');
@@ -82,6 +81,7 @@ test('performs exact S256 authorization-code flow and stores only OAuth session 
   const tokenBody = new URLSearchParams(String(requests[1].init?.body));
   assert.equal(tokenBody.get('grant_type'), 'authorization_code');
   assert.equal(tokenBody.get('code'), 'code-123');
+  assert.equal(tokenBody.get('redirect_uri'), TEST_REDIRECT_URI);
   assert.equal(tokenBody.get('resource'), profile.mcpUrl);
   assert.equal(tokenBody.get('code_verifier')?.length, 86);
   assert.deepEqual(await oauth.session(profile), session);
@@ -93,10 +93,10 @@ test('maps access denial to cancellation and makes no token request', async () =
   let calls = 0;
   const oauth = new PocketHiveOAuthAuthentication(
     async () => { calls += 1; return json(metadata()); },
-    { authorize: async authorizationUrl => {
+    browserAuthorization(async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:52000/callback?error=access_denied&state=${state}`);
-    } },
+      return new URL(`${TEST_REDIRECT_URI}?error=access_denied&state=${state}`);
+    }),
     store(new Map()),
     length => Buffer.alloc(length, 3),
     () => NOW,
@@ -124,7 +124,7 @@ test('rotates the stored base session without opening the browser and revokes bo
       });
       return new Response(undefined, { status: 200 });
     },
-    { authorize: async () => { throw new Error('browser must not open'); } },
+    browserAuthorization(async () => { throw new Error('browser must not open'); }),
     store(values),
     size => new Uint8Array(size).fill(7),
     () => NOW,
@@ -242,14 +242,14 @@ test('refresh may narrow but can never widen the previously granted companion sc
 test('rejects metadata, callback state, malformed grants, and missing rotation without fallback', async () => {
   const invalidMetadata = new PocketHiveOAuthAuthentication(
     async () => json({ ...metadata(), code_challenge_methods_supported: ['plain'] }),
-    { authorize: async () => { throw new Error('must not open'); } }, store(new Map()),
+    browserAuthorization(async () => { throw new Error('must not open'); }), store(new Map()),
     length => Buffer.alloc(length, 1), () => NOW,
   );
   await assert.rejects(invalidMetadata.authenticate(profile, endpoint, new AbortController().signal), /OAUTH_METADATA_INVALID/);
 
   const wrongState = new PocketHiveOAuthAuthentication(
     async () => json(metadata()),
-    { authorize: async () => new URL('http://127.0.0.1:52000/callback?code=x&state=wrong') },
+    browserAuthorization(async () => new URL(`${TEST_REDIRECT_URI}?code=x&state=wrong`)),
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
   await assert.rejects(wrongState.authenticate(profile, endpoint, new AbortController().signal), /OAUTH_STATE_MISMATCH/);
@@ -262,9 +262,9 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
         access_token: 'token', token_type: 'Bearer', expires_in: 900, refresh_token: 'forbidden',
       });
     },
-    { authorize: async authorizationUrl => new URL(
-      `http://127.0.0.1:52000/callback?code=x&state=${new URL(authorizationUrl).searchParams.get('state')}`,
-    ) },
+    browserAuthorization(async authorizationUrl => new URL(
+      `${TEST_REDIRECT_URI}?code=x&state=${new URL(authorizationUrl).searchParams.get('state')}`,
+    )),
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
   await assert.rejects(malformedGrant.authenticate(
@@ -279,7 +279,7 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
         access_token: 'new', refresh_token: 'same', token_type: 'Bearer', expires_in: 900,
         scope: 'pockethive:mcp:discover pockethive:mcp:read',
       }),
-    { authorize: async () => { throw new Error('browser must not open'); } },
+    browserAuthorization(async () => { throw new Error('browser must not open'); }),
     store(new Map()), length => Buffer.alloc(length, 1), () => NOW,
   );
   await rejectsContract(nonRotating.refresh(profile, endpoint, {
@@ -292,9 +292,9 @@ test('rejects metadata, callback state, malformed grants, and missing rotation w
 
 test('callback, cancellation, and OAuth errors fail explicitly without fallback', async () => {
   for (const callback of [
-    'http://localhost:52000/callback?code=x&state=STATE',
-    'http://127.0.0.1:52000/other?code=x&state=STATE',
-    'http://127.0.0.1:52000/callback?code=x&state=wrong',
+    'http://localhost:38125/callback?code=x&state=STATE',
+    'http://127.0.0.1:38125/other?code=x&state=STATE',
+    `${TEST_REDIRECT_URI}?code=x&state=wrong`,
   ]) {
     const oauth = oauthClient(async () => json(metadata()), async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state')!;
@@ -311,7 +311,7 @@ test('callback, cancellation, and OAuth errors fail explicitly without fallback'
     let calls = 0;
     const oauth = oauthClient(async () => { calls += 1; return json(metadata()); }, async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:52000/callback?state=${state}${query ? `&${query}` : ''}`);
+      return new URL(`${TEST_REDIRECT_URI}?state=${state}${query ? `&${query}` : ''}`);
     });
     await rejectsContract(oauth.authenticate(profile, endpoint, new AbortController().signal),
       'OAUTH_AUTHORIZATION_FAILED', expected);
@@ -498,7 +498,7 @@ test('metadata validation rejects every issuer-owned endpoint and capability dri
   }, async authorizationUrl => {
     browserOpened = true;
     const state = new URL(authorizationUrl).searchParams.get('state');
-    return new URL(`http://127.0.0.1:52000/callback?code=x&state=${state}`);
+    return new URL(`${TEST_REDIRECT_URI}?code=x&state=${state}`);
   });
   assert.equal((await accepted.authenticate(profile, endpoint, new AbortController().signal)).accessToken, 'access');
   assert.equal(browserOpened, true);
@@ -588,10 +588,10 @@ test('production randomness and clock create a usable unpredictable base session
       calls += 1;
       return calls === 1 ? json(metadata()) : json(validToken());
     },
-    { authorize: async authorizationUrl => {
+    browserAuthorization(async authorizationUrl => {
       opened = new URL(authorizationUrl);
-      return new URL(`http://127.0.0.1:52000/callback?code=x&state=${opened.searchParams.get('state')}`);
-    } },
+      return new URL(`${TEST_REDIRECT_URI}?code=x&state=${opened.searchParams.get('state')}`);
+    }),
     store(new Map()),
   );
   const session = await oauth.authenticate(profile, endpoint, new AbortController().signal);
@@ -660,19 +660,30 @@ function validToken(): Record<string, unknown> {
 
 function oauthClient(
   fetcher: typeof fetch,
-  authorize?: BrowserAuthorizationPort['authorize'],
+  authorize?: AuthorizationHandler,
   values: Map<string, string> = new Map(),
 ): PocketHiveOAuthAuthentication {
   return new PocketHiveOAuthAuthentication(
     fetcher,
-    { authorize: authorize ?? (async authorizationUrl => {
+    browserAuthorization(authorize ?? (async authorizationUrl => {
       const state = new URL(authorizationUrl).searchParams.get('state');
-      return new URL(`http://127.0.0.1:52000/callback?code=code&state=${state}`);
-    }) },
+      return new URL(`${TEST_REDIRECT_URI}?code=code&state=${state}`);
+    })),
     store(values),
     length => Buffer.alloc(length, 1),
     () => NOW,
   );
+}
+
+type AuthorizationHandler = (authorizationUrl: string) => Promise<URL>;
+
+function browserAuthorization(authorize: AuthorizationHandler): BrowserAuthorizationPort {
+  return {
+    authorize: async authorizationUrl => ({
+      callback: await authorize(authorizationUrl(TEST_REDIRECT_URI)),
+      redirectUri: TEST_REDIRECT_URI,
+    }),
+  };
 }
 
 async function authorizeWithToken(token: Record<string, unknown>) {
