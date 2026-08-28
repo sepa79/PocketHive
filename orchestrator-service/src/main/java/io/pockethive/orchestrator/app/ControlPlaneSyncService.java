@@ -11,30 +11,35 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: Coordinate an explicitly requested control-plane refresh or reset.
+ * Must not: Build status payloads or consume control-plane messages.
+ * Contract: Publish Orchestrator status and controller status requests at most once per throttle interval.
+ */
 @Service
 public class ControlPlaneSyncService {
 
     private static final Duration MIN_INTERVAL = Duration.ofSeconds(2);
 
     private final SwarmStore store;
-    private final SwarmSignalListener orchestratorSignals;
+    private final OrchestratorStatusPublisher orchestratorStatus;
     private final ControlPlaneStatusRequestPublisher publisher;
     private final Clock clock;
     private final AtomicLong lastIssuedMs = new AtomicLong(0L);
 
     @Autowired
     public ControlPlaneSyncService(SwarmStore store,
-                                   SwarmSignalListener orchestratorSignals,
+                                   OrchestratorStatusPublisher orchestratorStatus,
                                    ControlPlaneStatusRequestPublisher publisher) {
-        this(store, orchestratorSignals, publisher, Clock.systemUTC());
+        this(store, orchestratorStatus, publisher, Clock.systemUTC());
     }
 
     ControlPlaneSyncService(SwarmStore store,
-                            SwarmSignalListener orchestratorSignals,
+                            OrchestratorStatusPublisher orchestratorStatus,
                             ControlPlaneStatusRequestPublisher publisher,
                             Clock clock) {
         this.store = Objects.requireNonNull(store, "store");
-        this.orchestratorSignals = Objects.requireNonNull(orchestratorSignals, "orchestratorSignals");
+        this.orchestratorStatus = Objects.requireNonNull(orchestratorStatus, "orchestratorStatus");
         this.publisher = Objects.requireNonNull(publisher, "publisher");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
@@ -61,7 +66,7 @@ public class ControlPlaneSyncService {
             store.clear();
         }
 
-        orchestratorSignals.requestStatusFull();
+        orchestratorStatus.publishFull();
 
         String correlationId = UUID.randomUUID().toString();
         String idempotencyKey = "status-request:" + UUID.randomUUID();

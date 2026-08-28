@@ -22,16 +22,16 @@ class ControlPlaneSyncServiceTest {
     @Test
     void refreshRequestsAllControllersWhenNoSwarmsKnown() {
         SwarmStore store = Mockito.mock(SwarmStore.class);
-        SwarmSignalListener orchestratorSignals = Mockito.mock(SwarmSignalListener.class);
+        OrchestratorStatusPublisher orchestratorStatus = Mockito.mock(OrchestratorStatusPublisher.class);
         ControlPlaneStatusRequestPublisher publisher = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
 
         when(store.all()).thenReturn(List.of());
 
-        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorSignals, publisher, clock);
+        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorStatus, publisher, clock);
         ControlPlaneSyncResponse response = service.refresh();
 
-        verify(orchestratorSignals).requestStatusFull();
+        verify(orchestratorStatus).publishFull();
         verify(publisher).requestStatusForAllControllers(anyString(), anyString());
         verify(publisher, never()).requestStatusForSwarm(anyString(), anyString(), anyString());
         assertThat(response.throttled()).isFalse();
@@ -41,7 +41,7 @@ class ControlPlaneSyncServiceTest {
     @Test
     void refreshRequestsKnownSwarmsWhenRegistryNotEmpty() {
         SwarmStore store = Mockito.mock(SwarmStore.class);
-        SwarmSignalListener orchestratorSignals = Mockito.mock(SwarmSignalListener.class);
+        OrchestratorStatusPublisher orchestratorStatus = Mockito.mock(OrchestratorStatusPublisher.class);
         ControlPlaneStatusRequestPublisher publisher = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
 
@@ -50,10 +50,10 @@ class ControlPlaneSyncServiceTest {
             new Swarm("sw2", "controller-2", "cid-2", "run-2", NetworkMode.DIRECT)
         ));
 
-        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorSignals, publisher, clock);
+        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorStatus, publisher, clock);
         ControlPlaneSyncResponse response = service.refresh();
 
-        verify(orchestratorSignals).requestStatusFull();
+        verify(orchestratorStatus).publishFull();
         verify(publisher).requestStatusForSwarm(Mockito.eq("sw1"), anyString(), anyString());
         verify(publisher).requestStatusForSwarm(Mockito.eq("sw2"), anyString(), anyString());
         verify(publisher, never()).requestStatusForAllControllers(anyString(), anyString());
@@ -64,17 +64,17 @@ class ControlPlaneSyncServiceTest {
     @Test
     void resetClearsRegistryBeforeBroadcast() {
         SwarmStore store = Mockito.mock(SwarmStore.class);
-        SwarmSignalListener orchestratorSignals = Mockito.mock(SwarmSignalListener.class);
+        OrchestratorStatusPublisher orchestratorStatus = Mockito.mock(OrchestratorStatusPublisher.class);
         ControlPlaneStatusRequestPublisher publisher = Mockito.mock(ControlPlaneStatusRequestPublisher.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
 
         when(store.all()).thenReturn(List.of());
 
-        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorSignals, publisher, clock);
+        ControlPlaneSyncService service = new ControlPlaneSyncService(store, orchestratorStatus, publisher, clock);
         service.reset();
 
         verify(store).clear();
-        verify(orchestratorSignals).requestStatusFull();
+        verify(orchestratorStatus).publishFull();
         verify(publisher).requestStatusForAllControllers(anyString(), anyString());
     }
 }

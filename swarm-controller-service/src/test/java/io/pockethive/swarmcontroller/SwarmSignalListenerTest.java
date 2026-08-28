@@ -19,11 +19,7 @@ import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
-import io.pockethive.swarm.model.lifecycle.RemoveRequest;
-import io.pockethive.swarm.model.lifecycle.RemoveResult;
-import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import io.pockethive.swarmcontroller.SwarmMetrics;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -76,7 +72,8 @@ class SwarmSignalListenerTest {
   }
 
   private SwarmSignalListener newListener(SwarmLifecycle lifecycle, RabbitTemplate rabbit, String instanceId, ObjectMapper mapper) {
-    return newListener(lifecycle, rabbit, instanceId, mapper, removeStore());
+    return newListener(lifecycle, rabbit, instanceId, mapper,
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), mock(SwarmRemoveCommandHandler.class));
   }
 
   private SwarmSignalListener newListener(
@@ -84,9 +81,9 @@ class SwarmSignalListenerTest {
       RabbitTemplate rabbit,
       String instanceId,
       ObjectMapper mapper,
-      FilesystemSwarmRemoveStore removeStore) {
-    return newListener(lifecycle, rabbit, instanceId, mapper, removeStore,
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop());
+      SwarmRemoveCommandHandler removeCommands) {
+    return newListener(lifecycle, rabbit, instanceId, mapper,
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), removeCommands);
   }
 
   private SwarmSignalListener newListener(
@@ -94,8 +91,8 @@ class SwarmSignalListenerTest {
       RabbitTemplate rabbit,
       String instanceId,
       ObjectMapper mapper,
-      FilesystemSwarmRemoveStore removeStore,
-      io.pockethive.swarmcontroller.runtime.SwarmJournal journal) {
+      io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
+      SwarmRemoveCommandHandler removeCommands) {
     SwarmSignalListener listener = new SwarmSignalListener(
         lifecycle,
         rabbit,
@@ -105,7 +102,7 @@ class SwarmSignalListenerTest {
         journal,
         "run-1",
         startupArtifactLoader(),
-        removeStore,
+        removeCommands,
         codec);
     return listener;
   }
@@ -116,10 +113,6 @@ class SwarmSignalListenerTest {
     when(loader.load(TEST_SWARM_ID)).thenReturn(
         SwarmStartupArtifact.v1(new SwarmPlan(TEST_SWARM_ID, List.of()), Map.of()));
     return loader;
-  }
-
-  private FilesystemSwarmRemoveStore removeStore() {
-    return mock(FilesystemSwarmRemoveStore.class);
   }
 
   private static final Map<String, QueueStats> DEFAULT_QUEUE_STATS =
@@ -147,7 +140,7 @@ class SwarmSignalListenerTest {
   void initialHealthObservationIsNotJournaledAsATransition() {
     RecordingJournal journal = new RecordingJournal();
 
-    newListener(lifecycle, rabbit, "controller-1", mapper, removeStore(), journal);
+    newListener(lifecycle, rabbit, "controller-1", mapper, journal, mock(SwarmRemoveCommandHandler.class));
 
     assertThat(journal.entries).noneMatch(entry ->
         "swarm-health-degraded".equals(entry.type())
@@ -541,52 +534,17 @@ class SwarmSignalListenerTest {
   }
 
   @Test
-  void removeEmitsErrorOnFailure() throws Exception {
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-    FilesystemSwarmRemoveStore removeStore = removeStore();
-    RemoveRequest request = RemoveRequest.create(TEST_SWARM_ID, "run-1", "inst", "c3", "i3", Instant.now());
-    when(removeStore.findResult(TEST_SWARM_ID, "c3")).thenReturn(java.util.Optional.empty());
-    when(removeStore.loadRequest(TEST_SWARM_ID, "c3")).thenReturn(request);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper, removeStore);
-    reset(rabbit);
-    doThrow(new RuntimeException("boom")).when(lifecycle).remove();
-    listener.handle(
-        signal(ControlPlaneSignals.SWARM_REMOVE, "inst", "i3", "c3"),
-        controllerInstanceSignal(ControlPlaneSignals.SWARM_REMOVE, "inst"));
-
-    ArgumentCaptor<RemoveResult> result = ArgumentCaptor.forClass(RemoveResult.class);
-    verify(removeStore).saveResult(result.capture());
-    assertThat(result.getValue().status()).isEqualTo(TerminalStatus.FAILED);
-    assertThat(result.getValue().errors()).singleElement().satisfies(error -> {
-      assertThat(error.code()).isEqualTo("RuntimeException");
-      assertThat(error.message()).isEqualTo("boom");
-    });
-    verifyNoInteractions(rabbit);
-  }
-
-  @Test
-  void removeEmitsSuccessConfirmation() throws Exception {
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(0,0,0,0, java.time.Instant.now()));
-    FilesystemSwarmRemoveStore removeStore = removeStore();
-    RemoveRequest request = RemoveRequest.create(TEST_SWARM_ID, "run-1", "inst", "c3", "i3", Instant.now());
-    when(removeStore.findResult(TEST_SWARM_ID, "c3")).thenReturn(java.util.Optional.empty());
-    when(removeStore.loadRequest(TEST_SWARM_ID, "c3")).thenReturn(request);
-    when(lifecycle.remove()).thenReturn(List.of());
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper, removeStore);
+  void removeSignalDispatchesToRemoveHandler() {
+    SwarmRemoveCommandHandler removeCommands = mock(SwarmRemoveCommandHandler.class);
+    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper, removeCommands);
     reset(lifecycle, rabbit);
-    stubLifecycleDefaults();
 
     listener.handle(
         signal(ControlPlaneSignals.SWARM_REMOVE, "inst", "i3", "c3"),
         controllerInstanceSignal(ControlPlaneSignals.SWARM_REMOVE, "inst"));
 
-    verify(lifecycle).remove();
-    ArgumentCaptor<RemoveResult> result = ArgumentCaptor.forClass(RemoveResult.class);
-    verify(removeStore).saveResult(result.capture());
-    assertThat(result.getValue().status()).isEqualTo(TerminalStatus.SUCCEEDED);
-    assertThat(result.getValue().correlationId()).isEqualTo("c3");
-    assertThat(result.getValue().idempotencyKey()).isEqualTo("i3");
+    verify(removeCommands).handle(argThat(signal ->
+        "c3".equals(signal.correlationId()) && "i3".equals(signal.idempotencyKey())));
     verifyNoInteractions(rabbit);
   }
 
@@ -648,7 +606,7 @@ class SwarmSignalListenerTest {
 	        journal,
           "run-1",
           startupArtifactLoader(),
-          removeStore(),
+          mock(SwarmRemoveCommandHandler.class),
           codec);
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
@@ -673,7 +631,7 @@ class SwarmSignalListenerTest {
         journal,
         "run-1",
         startupArtifactLoader(),
-        removeStore(),
+        mock(SwarmRemoveCommandHandler.class),
         codec);
 
     assertThatCode(() -> listener.handle("{}", " "))

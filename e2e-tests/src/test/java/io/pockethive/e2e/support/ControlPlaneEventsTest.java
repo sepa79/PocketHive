@@ -17,17 +17,19 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import io.pockethive.control.ControlScope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.Alerts;
 
 class ControlPlaneEventsTest {
 
-  private ControlPlaneEventParser parser;
+  private ControlPlaneCodec codec;
   private ControlPlaneEvents events;
 
   @BeforeEach
   void setUp() {
-    parser = new ControlPlaneEventParser();
-    events = new ControlPlaneEvents(parser);
+    codec = ControlPlaneCodec.create();
+    events = new ControlPlaneEvents(codec);
   }
 
   @Test
@@ -118,13 +120,11 @@ class ControlPlaneEventsTest {
     try (InputStream stream = getClass().getResourceAsStream("/fixtures/status-full.json")) {
       assertNotNull(stream, "Fixture /fixtures/status-full.json is missing");
       byte[] body = stream.readAllBytes();
-      ControlPlaneEventParser.ParsedEvent parsed = parser.parse(
+      StatusMetric status = codec.decode(
+          new String(body, java.nio.charset.StandardCharsets.UTF_8),
           "event.metric.status-full.swarm-alpha.processor.processor-1",
-          body
-      );
-      StatusEvent status = parsed.status();
-      assertNotNull(status, "Expected parsed status event");
-      return status;
+          StatusMetric.class);
+      return new StatusEvent(status);
     }
   }
 

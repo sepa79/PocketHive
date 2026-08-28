@@ -32,11 +32,7 @@ import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
 import io.pockethive.swarmcontroller.runtime.SwarmControlPlaneJournalErrors;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
 import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader;
-import io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
-import io.pockethive.swarm.model.lifecycle.RemoveError;
-import io.pockethive.swarm.model.lifecycle.RemoveRequest;
-import io.pockethive.swarm.model.lifecycle.RemoveResult;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
@@ -110,7 +106,7 @@ public class SwarmSignalListener {
   private volatile Instant healthJournalSuppressUntil;
   private volatile boolean healthWorkloadsEnabled;
   private final ConcurrentMap<String, Long> lastWorkerErrorCounts = new ConcurrentHashMap<>();
-  private final FilesystemSwarmRemoveStore removeStore;
+  private final SwarmRemoveCommandHandler removeCommands;
   private final io.pockethive.controlplane.codec.ControlPlaneCodec controlPlaneCodec;
 
   @Autowired
@@ -122,14 +118,14 @@ public class SwarmSignalListener {
                              SwarmJournal journal,
                              @Value("${pockethive.journal.run-id:}") String journalRunId,
                              FilesystemSwarmStartupArtifactLoader startupArtifactLoader,
-                             FilesystemSwarmRemoveStore removeStore,
+                             SwarmRemoveCommandHandler removeCommands,
                              ControlPlaneCodec controlPlaneCodec) {
     this.lifecycle = lifecycle;
     this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper.findAndRegisterModules();
     this.properties = properties;
-    this.removeStore = Objects.requireNonNull(removeStore, "removeStore");
+    this.removeCommands = Objects.requireNonNull(removeCommands, "removeCommands");
     this.swarmId = properties.getSwarmId();
     this.role = properties.getRole();
     this.controlExchange = properties.getControlExchange();
@@ -686,7 +682,7 @@ public class SwarmSignalListener {
       }
       case ControlPlaneSignals.SWARM_REMOVE -> {
         if (isForLocalSwarm(cs)) {
-          processRemove(cs);
+          removeCommands.handle(cs);
         }
       }
       case ControlPlaneSignals.STATUS_REQUEST -> {
@@ -697,54 +693,6 @@ public class SwarmSignalListener {
       default -> {
         // ignore other signals
       }
-    }
-  }
-
-  private void processRemove(ControlSignal signal) {
-    String targetSwarm = swarmIdOrDefault(signal);
-    removeStore.findResult(targetSwarm, signal.correlationId()).ifPresentOrElse(existing -> {
-      if (!existing.idempotencyKey().equals(signal.idempotencyKey())) {
-        throw new IllegalStateException("Existing remove result belongs to a different idempotency key");
-      }
-      log.info("Remove already completed for swarm={} correlation={}", targetSwarm, signal.correlationId());
-    }, () -> executeRemove(signal, targetSwarm));
-  }
-
-  private void executeRemove(ControlSignal signal, String targetSwarm) {
-    RemoveRequest request = removeStore.loadRequest(targetSwarm, signal.correlationId());
-    requireRemoveIdentity(signal, request);
-    try {
-      List<io.pockethive.swarm.model.lifecycle.RemoveResource> removed = lifecycle.remove();
-      removeStore.saveResult(RemoveResult.succeeded(
-          request.swarmId(), request.runId(), request.controllerInstance(), request.correlationId(),
-          request.idempotencyKey(), removed, Instant.now()));
-    } catch (Exception failure) {
-      RemoveResult result = new RemoveResult(
-          RemoveResult.SCHEMA,
-          request.swarmId(),
-          request.runId(),
-          request.controllerInstance(),
-          request.correlationId(),
-          request.idempotencyKey(),
-          TerminalStatus.FAILED,
-          true,
-          List.of(),
-          List.of(new RemoveError(
-              failure.getClass().getSimpleName(),
-              Objects.toString(failure.getMessage(), failure.getClass().getName()),
-              null)),
-          Instant.now());
-      removeStore.saveResult(result);
-      log.warn("Remove failed for swarm={} correlation={}", targetSwarm, signal.correlationId(), failure);
-    }
-  }
-
-  private void requireRemoveIdentity(ControlSignal signal, RemoveRequest request) {
-    if (!swarmId.equals(request.swarmId())
-        || !instanceId.equals(request.controllerInstance())
-        || !signal.correlationId().equals(request.correlationId())
-        || !signal.idempotencyKey().equals(request.idempotencyKey())) {
-      throw new IllegalArgumentException("Remove signal does not match filesystem request identity");
     }
   }
 

@@ -1,9 +1,14 @@
 # Lifecycle Control-Plane Rewrite — Release Verification Matrix
 
-Status: active release gate
+Status: historical release evidence
 Scope: `0ba64e1e..47bfefe1` (`rewrite/lifecycle-control-plane`), 14 commits,
 407 files changed, plus the current uncommitted E2E acceptance and release
 evidence additions.
+
+The custom E2E control-plane parser/audit recorded below was retired by the later
+control-plane simplification work. Its results remain historical evidence for the
+named revision, but it is not a current release gate. Current work is tracked in
+`docs/todo/control-plane-simplification-plan.md`.
 
 This is the acceptance record for the lifecycle/control-plane rewrite. It
 separates code presence, automated proof, observed large-swarm behaviour, and

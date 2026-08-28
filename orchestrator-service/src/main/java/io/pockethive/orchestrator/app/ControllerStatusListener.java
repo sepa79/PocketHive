@@ -10,6 +10,7 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.control.StatusMetric;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.ControlPlaneEventTypes;
+import io.pockethive.controlplane.ControlPlaneRoles;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import org.slf4j.Logger;
@@ -32,20 +33,22 @@ import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 
 /**
- * Consumes swarm-controller aggregate status events and updates the local store.
+ * Responsibility: Consume controller status events, update the swarm projection, and dispatch observations.
+ * Must not: Own lifecycle operations, construct terminal outcomes, or publish Orchestrator status.
+ * Contract: Ignore unregistered swarms and apply deltas only after a canonical full-status baseline exists.
  */
 @Component
 @EnableScheduling
 public class ControllerStatusListener {
     private static final Logger log = LoggerFactory.getLogger(ControllerStatusListener.class);
     private static final Duration FAILED_AFTER = Duration.ofSeconds(40);
-    private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
+    private static final String SWARM_CONTROLLER_ROLE = ControlPlaneRoles.SWARM_CONTROLLER;
 
     private final SwarmStore store;
     private final ObjectMapper mapper;
     private final ControlPlaneCodec codec;
     private final ControlPlaneStatusRequestPublisher statusRequests;
-    private final SwarmSignalListener swarmSignals;
+    private final SwarmOperationObservationHandler observations;
     private final HiveJournal hiveJournal;
     private final ControlPlaneJournalErrors journalErrors;
 
@@ -53,15 +56,16 @@ public class ControllerStatusListener {
                                     ObjectMapper mapper,
                                     ControlPlaneCodec codec,
                                     ControlPlaneStatusRequestPublisher statusRequests,
-                                    SwarmSignalListener swarmSignals,
+                                    SwarmOperationObservationHandler observations,
                                     HiveJournal hiveJournal) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
         this.codec = Objects.requireNonNull(codec, "codec");
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
-        this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
+        this.observations = Objects.requireNonNull(observations, "observations");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
-        this.journalErrors = new ControlPlaneJournalErrors(this.hiveJournal, "orchestrator", "controller-status-listener");
+        this.journalErrors = new ControlPlaneJournalErrors(
+            this.hiveJournal, ControlPlaneRoles.ORCHESTRATOR, "controller-status-listener");
     }
 
     @RabbitListener(queues = "#{controllerStatusQueue.name}")
@@ -109,7 +113,7 @@ public class ControllerStatusListener {
                     Instant observedAt = Instant.now();
                     store.cacheControllerStatusFull(swarmId, node, observedAt);
                     updateObservation(swarm, context, observedAt);
-                    swarmSignals.handleControllerStatusFull(routingKey, node);
+                    observations.handleControllerStatusFull(swarmId, controllerInstance, node);
                 } else if (statusDelta) {
                     Instant observedAt = Instant.now();
                     SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, observedAt);
@@ -120,7 +124,7 @@ public class ControllerStatusListener {
                         return;
                     } else if (result == SwarmStore.DeltaApplyResult.MERGED) {
                         updateObservation(swarm, swarm.getControllerStatusFull().path("data").path("context"), observedAt);
-                        swarmSignals.handleControllerObservation(swarmId);
+                        observations.handleControllerObservation(swarmId);
                     }
                 }
             }

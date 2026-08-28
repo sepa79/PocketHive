@@ -35,8 +35,8 @@ class ControllerStatusListenerTest {
     Swarm swarm = new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT);
     store.register(swarm);
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
-    SwarmSignalListener signals = mock(SwarmSignalListener.class);
-    ControllerStatusListener listener = listener(store, requests, signals);
+    SwarmOperationObservationHandler observations = mock(SwarmOperationObservationHandler.class);
+    ControllerStatusListener listener = listener(store, requests, observations);
 
     String json = status("status-full", """
         {
@@ -55,8 +55,8 @@ class ControllerStatusListenerTest {
     assertThat(swarm.getHealth()).isEqualTo(Health.HEALTHY);
     assertThat(swarm.getSutId()).isEqualTo("wiremock-proxy-local");
     assertThat(swarm.getNetworkMode()).isEqualTo(NetworkMode.DIRECT);
-    verify(signals).handleControllerStatusFull(
-        eq("event.metric.status-full.sw1.swarm-controller.inst1"),
+    verify(observations).handleControllerStatusFull(
+        eq("sw1"), eq("inst1"),
         org.mockito.ArgumentMatchers.any());
   }
 
@@ -65,8 +65,8 @@ class ControllerStatusListenerTest {
     SwarmStore store = new SwarmStore();
     store.register(new Swarm("sw1", "inst1", "c1", "run-1", NetworkMode.DIRECT));
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
-    SwarmSignalListener signals = mock(SwarmSignalListener.class);
-    ControllerStatusListener listener = listener(store, requests, signals);
+    SwarmOperationObservationHandler observations = mock(SwarmOperationObservationHandler.class);
+    ControllerStatusListener listener = listener(store, requests, observations);
 
     listener.handle(status("status-delta", """
         {"controllerState":"READY","workloadState":"STOPPED","health":"HEALTHY"}
@@ -81,40 +81,40 @@ class ControllerStatusListenerTest {
   void statusNeverReconstructsAnUnregisteredSwarm() {
     SwarmStore store = new SwarmStore();
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
-    SwarmSignalListener signals = mock(SwarmSignalListener.class);
-    ControllerStatusListener listener = listener(store, requests, signals);
+    SwarmOperationObservationHandler observations = mock(SwarmOperationObservationHandler.class);
+    ControllerStatusListener listener = listener(store, requests, observations);
 
     listener.handle(status("status-full", """
         {"controllerState":"READY","workloadState":"STOPPED","health":"HEALTHY"}
         """), "event.metric.status-full.sw1.swarm-controller.inst1");
 
     assertThat(store.find("sw1")).isEmpty();
-    verifyNoInteractions(requests, signals);
+    verifyNoInteractions(requests, observations);
   }
 
   @Test
   void rejectsMissingTransportIdentityWithoutThrowing() {
     SwarmStore store = mock(SwarmStore.class);
     ControlPlaneStatusRequestPublisher requests = mock(ControlPlaneStatusRequestPublisher.class);
-    SwarmSignalListener signals = mock(SwarmSignalListener.class);
-    ControllerStatusListener listener = listener(store, requests, signals);
+    SwarmOperationObservationHandler observations = mock(SwarmOperationObservationHandler.class);
+    ControllerStatusListener listener = listener(store, requests, observations);
 
     assertThatCode(() -> listener.handle("{}", " ")).doesNotThrowAnyException();
     assertThatCode(() -> listener.handle(" ", "event.metric.status-full.sw1.swarm-controller.inst1"))
         .doesNotThrowAnyException();
-    verifyNoInteractions(store, requests, signals);
+    verifyNoInteractions(store, requests, observations);
   }
 
   private ControllerStatusListener listener(
       SwarmStore store,
       ControlPlaneStatusRequestPublisher requests,
-      SwarmSignalListener signals) {
+      SwarmOperationObservationHandler observations) {
     return new ControllerStatusListener(
         store,
         mapper,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         requests,
-        signals,
+        observations,
         HiveJournal.noop());
   }
 
