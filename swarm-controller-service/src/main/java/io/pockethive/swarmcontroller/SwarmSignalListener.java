@@ -4,11 +4,9 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.StatusMetric;
-import io.pockethive.observability.StatusEnvelopeBuilder;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.ControlPlaneEventTypes;
@@ -18,14 +16,10 @@ import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
-import io.pockethive.controlplane.messaging.EventMessage;
-import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.manager.guard.BufferGuardSettings;
 import io.pockethive.observability.ControlPlaneJson;
-import io.pockethive.swarm.model.BufferGuardPolicy;
-import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
@@ -36,8 +30,6 @@ import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.lifecycle.Target;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
-import io.pockethive.swarm.model.lifecycle.ControllerState;
-import io.pockethive.swarm.model.lifecycle.Health;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarmcontroller.runtime.SwarmJournalEntries;
 import org.slf4j.Logger;
@@ -61,51 +53,41 @@ import java.util.List;
 import java.util.Map;
 import java.util.Locale;
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
+/**
+ * Responsibility: Receive control-plane AMQP messages and dispatch them during the staged listener simplification.
+ * Must not: Gain new lifecycle, projection, persistence, or terminal-outcome responsibilities.
+ * Contract: Preserve accepted routing and command behavior while each remaining legacy workflow is extracted once.
+ * TODO: Finish removing lifecycle convergence and config workflows in a separate refactor pass.
+ */
 @Component
 @EnableScheduling
 public class SwarmSignalListener {
   private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
   private final SwarmLifecycle lifecycle;
-  private final RabbitTemplate rabbit;
   private final String instanceId;
   private final ObjectMapper mapper;
   private final ManagerControlPlane controlPlane;
   private final io.pockethive.controlplane.messaging.ControlPlaneEmitter emitter;
-  private final SwarmControllerProperties properties;
   private final String swarmId;
   private final String role;
-  private final String controlExchange;
-  private final SwarmDiagnosticsAggregator diagnostics;
-  private final SwarmIoStateAggregator ioStates;
-  private final SwarmWorkersAggregator workers;
   private final SwarmJournal journal;
   private final SwarmControlPlaneJournalErrors journalErrors;
   private final String journalRunId;
   private final Map<String, Object> baseRuntimeMeta;
   private final String templateId;
   private static final long STATUS_INTERVAL_MS = 5000L;
-  private static final long STATUS_FULL_TIMEOUT_MS = 5000L;
   private static final long LIFECYCLE_CONVERGENCE_TIMEOUT_MS = 30_000L;
-  private static final long MAX_STALENESS_MS = 15_000L;
   private final AtomicReference<PendingLifecycle> pendingLifecycle = new AtomicReference<>();
-  private final AtomicReference<PendingStatusFull> pendingStatusFull = new AtomicReference<>();
   private final AtomicBoolean startupArtifactApplied = new AtomicBoolean(false);
-  private final AtomicBoolean startupReadyStatusEmitted = new AtomicBoolean(false);
-  private final java.time.Instant startedAt;
-  private final String configuredSutId;
-  private final String startupArtifactSha256;
-  private volatile NetworkMode networkMode;
-  private volatile String networkProfileId;
-  private volatile String lastHealthState;
-  private volatile Instant healthJournalSuppressUntil;
-  private volatile boolean healthWorkloadsEnabled;
-  private final ConcurrentMap<String, Long> lastWorkerErrorCounts = new ConcurrentHashMap<>();
+  private final SwarmWorkerStatusHandler workerStatuses;
+  private final SwarmWorkerAlertHandler workerAlerts;
+  private final SwarmControllerNetworkContext networkContext;
+  private final SwarmControllerStatusPublisher statusPublisher;
+  private final SwarmStatusFullCoordinator statusFullCoordinator;
   private final SwarmRemoveCommandHandler removeCommands;
   private final io.pockethive.controlplane.codec.ControlPlaneCodec controlPlaneCodec;
 
@@ -119,19 +101,20 @@ public class SwarmSignalListener {
                              @Value("${pockethive.journal.run-id:}") String journalRunId,
                              FilesystemSwarmStartupArtifactLoader startupArtifactLoader,
                              SwarmRemoveCommandHandler removeCommands,
+                             SwarmWorkerStatusHandler workerStatuses,
+                             SwarmWorkerAlertHandler workerAlerts,
+                             SwarmHealthJournal healthJournal,
                              ControlPlaneCodec controlPlaneCodec) {
     this.lifecycle = lifecycle;
-    this.rabbit = rabbit;
     this.instanceId = instanceId;
     this.mapper = mapper.findAndRegisterModules();
-    this.properties = properties;
     this.removeCommands = Objects.requireNonNull(removeCommands, "removeCommands");
+    this.workerStatuses = Objects.requireNonNull(workerStatuses, "workerStatuses");
+    this.workerAlerts = Objects.requireNonNull(workerAlerts, "workerAlerts");
+    SwarmHealthJournal resolvedHealthJournal = Objects.requireNonNull(healthJournal, "healthJournal");
     this.swarmId = properties.getSwarmId();
     this.role = properties.getRole();
-    this.controlExchange = properties.getControlExchange();
-    this.diagnostics = new SwarmDiagnosticsAggregator(this.mapper);
-    this.ioStates = new SwarmIoStateAggregator();
-    this.workers = new SwarmWorkersAggregator(MAX_STALENESS_MS);
+    String controlExchange = properties.getControlExchange();
     this.journal = Objects.requireNonNull(journal, "journal");
     this.journalErrors = new SwarmControlPlaneJournalErrors(this.journal, swarmId, role, instanceId, "swarm-signal-listener");
     this.journalRunId = journalRunId != null && !journalRunId.isBlank() ? journalRunId.trim() : null;
@@ -154,19 +137,27 @@ public class SwarmSignalListener {
             properties.getControlQueuePrefixBase(),
             Map.of())
     , runtimeMetaSnapshot());
-    this.startedAt = java.time.Instant.now();
-    this.configuredSutId = trimToNull(envValue("POCKETHIVE_SUT_ID"));
-    this.networkMode = parseNetworkMode(envValue("POCKETHIVE_NETWORK_MODE"));
-    this.networkProfileId = trimToNull(envValue("POCKETHIVE_NETWORK_PROFILE_ID"));
-    this.lastHealthState = null;
-    this.healthJournalSuppressUntil = null;
-    this.healthWorkloadsEnabled = false;
     FilesystemSwarmStartupArtifactLoader resolvedLoader =
         Objects.requireNonNull(startupArtifactLoader, "startupArtifactLoader");
-    this.startupArtifactSha256 = resolvedLoader.expectedSha256();
+    String startupArtifactSha256 = resolvedLoader.expectedSha256();
+    this.networkContext = SwarmControllerNetworkContext.fromEnvironment(lifecycle, role);
+    this.statusPublisher = new SwarmControllerStatusPublisher(
+        lifecycle,
+        workerStatuses,
+        resolvedHealthJournal,
+        properties,
+        instanceId,
+        publisher,
+        runtimeMetaSnapshot(),
+        startupArtifactSha256,
+        this::isInitialized,
+        Instant.now(),
+        networkContext);
+    this.statusFullCoordinator = new SwarmStatusFullCoordinator(
+        lifecycle, statusPublisher, this::isInitialized);
     initializeFromFilesystem(resolvedLoader);
     try {
-      sendStatusFull();
+      statusPublisher.publishFull();
     } catch (Exception e) {
       log.warn("initial status", e);
     }
@@ -282,97 +273,19 @@ public class SwarmSignalListener {
         // Do not treat controller self-status as a worker heartbeat; it skews totals by +1.
         return;
       }
-      JsonNode node = mapper.valueToTree(status);
       boolean isStatusFull = isStatusFullEvent(eventKey);
-      lifecycle.updateHeartbeat(role, instance);
-      if (isStatusFull) {
-        lifecycle.recordStatusSnapshot(role, instance, System.currentTimeMillis());
-      }
-      diagnostics.updateFromWorkerStatus(role, instance, node.path("data"));
-      ioStates.updateFromWorkerStatus(role, instance, node.path("data"));
-      workers.updateFromWorkerStatus(role, instance, node.path("data"), node.path("runtime"));
-      maybeJournalWorkerErrorIndicators(role, instance, node);
-
-      JsonNode enabledNode = node.path("data").get("enabled");
-      if (enabledNode == null || !enabledNode.isBoolean()) {
-        throw new IllegalArgumentException("worker status data.enabled must be a boolean");
-      }
-      boolean enabled = enabledNode.asBoolean();
-      lifecycle.updateEnabled(role, instance, enabled);
-      if (!enabled) {
-        boolean ready = lifecycle.markReady(role, instance);
-        if (ready) {
-          maybeEmitStartupReadyStatusFull();
-        }
+      if (workerStatuses.observe(role, instance, status, isStatusFull)) {
+        statusFullCoordinator.maybePublishStartupReady();
       }
       if (isStatusFull) {
-        sendStatusFull();
+        statusPublisher.publishFull();
       }
       tryCompletePendingLifecycle();
-      maybeEmitPendingStatusFull();
+      statusFullCoordinator.maybePublishPending();
     } catch (Exception e) {
       log.warn("status parse", e);
       journalErrors.errorDrop("status-parse-error", routingKey, "payload parse", body, e);
     }
-  }
-
-  private void maybeJournalWorkerErrorIndicators(String workerRole, String workerInstance, JsonNode statusEnvelope) {
-    if (workerRole == null || workerRole.isBlank() || workerInstance == null || workerInstance.isBlank()) {
-      return;
-    }
-    if (statusEnvelope == null || !statusEnvelope.isObject()) {
-      return;
-    }
-    JsonNode data = statusEnvelope.path("data");
-    if (!data.isObject()) {
-      return;
-    }
-    JsonNode context = data.path("context");
-    if (!context.isObject()) {
-      return;
-    }
-    JsonNode errorCountNode = context.get("errorCount");
-    if (errorCountNode == null || !errorCountNode.isNumber()) {
-      return;
-    }
-    long current = errorCountNode.asLong(0L);
-    if (current <= 0L) {
-      return;
-    }
-    String key = workerRole + ":" + workerInstance;
-    long previous = lastWorkerErrorCounts.getOrDefault(key, 0L);
-    if (current <= previous) {
-      lastWorkerErrorCounts.put(key, current);
-      return;
-    }
-    lastWorkerErrorCounts.put(key, current);
-
-    Map<String, Object> entry = new LinkedHashMap<>();
-    entry.put("role", workerRole);
-    entry.put("instance", workerInstance);
-    entry.put("errorCount", current);
-    entry.put("errorDelta", current - previous);
-    JsonNode errorTpsNode = context.get("errorTps");
-    if (errorTpsNode != null && errorTpsNode.isNumber()) {
-      entry.put("errorTps", errorTpsNode.numberValue());
-    }
-    JsonNode serviceIdNode = context.get("serviceId");
-    if (serviceIdNode != null && serviceIdNode.isTextual() && !serviceIdNode.asText().isBlank()) {
-      entry.put("serviceId", serviceIdNode.asText());
-    }
-    JsonNode templateRootNode = context.get("templateRoot");
-    if (templateRootNode != null && templateRootNode.isTextual() && !templateRootNode.asText().isBlank()) {
-      entry.put("templateRoot", templateRootNode.asText());
-    }
-
-    journal.append(SwarmJournalEntries.local(
-        swarmId,
-        "ERROR",
-        "worker-error",
-        instanceId,
-        io.pockethive.control.ControlScope.forInstance(swarmId, workerRole, workerInstance),
-        entry,
-        Map.of("source", "status-delta")));
   }
 
   private void handleAlertEvent(String routingKey, String body) {
@@ -392,22 +305,7 @@ public class SwarmSignalListener {
       String payloadRole = alert != null && alert.scope() != null ? alert.scope().role() : null;
       String payloadInstance = alert != null && alert.scope() != null ? alert.scope().instance() : null;
       warnMissingScopeFields("alert", routingKey, body, payloadSwarm, payloadRole, payloadInstance);
-      if (alert != null && instanceId.equals(alert.origin())) {
-        // Avoid duplicating alerts that the controller itself emitted (they are already journaled as OUT).
-        return;
-      }
-      journal.append(SwarmJournalEntries.inAlert(mapper, routingKey, alert));
-      String phase = alert.data() != null && alert.data().context() != null
-          ? textOrNull(mapper.valueToTree(alert.data().context()).path("phase"))
-          : null;
-      if (!"config-update".equalsIgnoreCase(phase)) {
-        return;
-      }
-      String role = alert.scope() != null ? alert.scope().role() : null;
-      String instance = alert.scope() != null ? alert.scope().instance() : null;
-      String message = alert.data() != null ? alert.data().message() : null;
-      lifecycle.handleConfigUpdateError(role, instance, message)
-          .ifPresent(this::failPendingLifecycle);
+      workerAlerts.handle(routingKey, alert).ifPresent(this::failPendingLifecycle);
     } catch (Exception e) {
       log.warn("alert parse", e);
       journalErrors.errorDrop("alert-parse-error", routingKey, "payload parse", body, e);
@@ -503,9 +401,7 @@ public class SwarmSignalListener {
         emitSuccess(
             pending.signal(), pending.resolvedSignal(), pending.swarmIdFallback(),
             terminalResult(pending.signal(), pending.resolvedSignal(), status, evidence));
-        queueStatusFull(
-            pending.expectedEnabled() ? StatusFullTrigger.START : StatusFullTrigger.STOP,
-            pending.freshnessCutoffMillis());
+        statusFullCoordinator.queueAfterLifecycle(pending.freshnessCutoffMillis());
         return;
       }
     }
@@ -535,7 +431,7 @@ public class SwarmSignalListener {
     if (cs.data() != null) {
       node = mapper.valueToTree(cs.data());
     }
-    boolean networkContextOnly = isControllerNetworkContextOnly(targetRole, node);
+    boolean networkContextOnly = networkContext.isOnlyNetworkContext(targetRole, node);
     if (rejectIfNotReady(cs, resolvedSignal, swarmIdOrDefault(cs), !networkContextOnly)) {
       return;
     }
@@ -543,7 +439,7 @@ public class SwarmSignalListener {
     try {
       JsonNode dataNode = node;
       Boolean enabledFlag = dataNode.has("enabled") ? dataNode.path("enabled").asBoolean() : null;
-      boolean networkContextChanged = applyNetworkContextOverride(dataNode);
+      boolean networkContextChanged = networkContext.applyOverride(dataNode);
 
       Map<String, Object> details = new LinkedHashMap<>();
       boolean scenarioChanged = false;
@@ -563,7 +459,7 @@ public class SwarmSignalListener {
             details.put("trafficPolicy", Map.of("bufferGuard", Map.of("enabled", false)));
           } else {
             lifecycle.configureBufferGuards(List.of(updated));
-            TrafficPolicy effectivePolicy = trafficPolicyFromSettings(updated);
+            TrafficPolicy effectivePolicy = BufferGuardTrafficPolicyMapper.toTrafficPolicy(updated);
             details.put("trafficPolicy", mapper.convertValue(effectivePolicy, MAP_TYPE));
           }
         }
@@ -574,7 +470,7 @@ public class SwarmSignalListener {
       if (controllerTarget) {
         if (enabledFlag != null) {
           lifecycle.setSwarmEnabled(enabledFlag);
-          sendStatusDelta();
+          statusPublisher.publishDelta();
         }
         ScenarioChange change = applyScenarioOverrides(dataNode);
         scenarioChanged = scenarioChanged || change.changed();
@@ -586,7 +482,7 @@ public class SwarmSignalListener {
       }
 
       if (scenarioChanged || networkContextChanged) {
-        sendStatusDelta();
+        statusPublisher.publishDelta();
       }
       TerminalResult state = configCommandResult(cs, details, TerminalStatus.SUCCEEDED);
       emitSuccess(cs, resolvedSignal, null, state);
@@ -687,7 +583,7 @@ public class SwarmSignalListener {
       }
       case ControlPlaneSignals.STATUS_REQUEST -> {
         log.debug("Status request received: {}", envelope.routingKey());
-        sendStatusFull();
+        statusPublisher.publishFull();
       }
       case ControlPlaneSignals.CONFIG_UPDATE -> processConfigUpdate(envelope, signal);
       default -> {
@@ -745,10 +641,10 @@ public class SwarmSignalListener {
 
   @Scheduled(fixedRate = STATUS_INTERVAL_MS)
   public void status() {
-    sendStatusDelta();
-    maybeEmitStartupReadyStatusFull();
+    statusPublisher.publishDelta();
+    statusFullCoordinator.maybePublishStartupReady();
     tryCompletePendingLifecycle();
-    maybeEmitPendingStatusFull();
+    statusFullCoordinator.maybePublishPending();
   }
 
   private void emitSuccess(ControlSignal cs, String resolvedSignal, String swarmIdFallback) {
@@ -878,47 +774,6 @@ public class SwarmSignalListener {
       boolean expectedEnabled,
       long deadlineMillis) {}
 
-  private record PendingStatusFull(StatusFullTrigger trigger, long freshnessCutoffMillis, long queuedAtMillis) {}
-
-  private enum StatusFullTrigger {
-    START,
-    STOP
-  }
-
-  private void queueStatusFull(StatusFullTrigger trigger) {
-    queueStatusFull(trigger, System.currentTimeMillis());
-  }
-
-  private void queueStatusFull(StatusFullTrigger trigger, long freshnessCutoffMillis) {
-    PendingStatusFull next = new PendingStatusFull(trigger, freshnessCutoffMillis, System.currentTimeMillis());
-    PendingStatusFull previous = pendingStatusFull.getAndSet(next);
-    if (previous != null) {
-      log.debug("Replacing pending status-full trigger {} with {}", previous.trigger(), trigger);
-    }
-    maybeEmitPendingStatusFull();
-  }
-
-  private void maybeEmitPendingStatusFull() {
-    PendingStatusFull pending = pendingStatusFull.get();
-    if (pending == null) {
-      return;
-    }
-    long now = System.currentTimeMillis();
-    boolean ready = switch (pending.trigger()) {
-      case START, STOP -> lifecycle.hasFreshWorkerStatusSnapshotsSince(pending.freshnessCutoffMillis());
-    };
-    boolean timedOut = switch (pending.trigger()) {
-      case START, STOP -> now - pending.queuedAtMillis() >= STATUS_FULL_TIMEOUT_MS;
-      default -> false;
-    };
-    if (!ready && !timedOut) {
-      return;
-    }
-    if (pendingStatusFull.compareAndSet(pending, null)) {
-      sendStatusFull();
-    }
-  }
-
   private boolean isStatusFullEvent(RoutingKey key) {
     if (key == null || key.type() == null) {
       return false;
@@ -948,101 +803,6 @@ public class SwarmSignalListener {
       throw new IllegalArgumentException(context + " requires a resolved control signal");
     }
     return signal;
-  }
-
-  private void sendStatusFull() {
-    refreshQueueMetricsForStatusFull();
-    SwarmMetrics m = lifecycle.getMetrics();
-    String state = determineState(m);
-    maybeJournalHealthTransition(state, m);
-    WorkloadState status = lifecycle.getWorkloadState();
-    String health = determineHealth(status, m);
-    ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
-    String rk = ControlPlaneRouting.event(StatusMetric.KIND, StatusMetric.STATUS_FULL, scope);
-    StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-        .type(StatusMetric.STATUS_FULL)
-        .role(role)
-        .instance(instanceId)
-        .origin(instanceId)
-        .swarmId(swarmId)
-        .workPlaneEnabled(false)
-        .enabledRequired(false)
-        .tpsEnabled(false)
-        .filesystemEnabled(true)
-        .data("controllerState", controllerState(status))
-        .data("workloadState", status.name())
-        .data("health", health)
-        .data("startupReady", startupReady())
-        .data("startupArtifactSha256", startupArtifactSha256)
-        .data("watermarkAt", Instant.now())
-        .data("expectedWorkers", lifecycle.expectedWorkers())
-        .data("startedAt", startedAt)
-        .config(statusConfigSnapshot())
-        .data("workers", workers.snapshot())
-        .data("swarmDiagnostics", diagnostics.snapshot())
-        .data("scenario", scenarioProgress())
-        .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
-    appendNetworkContext(builder);
-    builder.runtime(runtimeMetaSnapshot());
-    String controlQueue = properties.controlQueueName(role, instanceId);
-    builder.controlIn(controlQueue)
-        .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
-        .controlOut(rk);
-    appendTrafficDiagnostics(builder);
-    io.pockethive.control.StatusMetric payload = builder.toEnvelope();
-    sendControl(rk, payload, "status");
-  }
-
-  private boolean startupReady() {
-    return isInitialized() && lifecycle.isReadyForWork() && !lifecycle.hasPendingConfigUpdates();
-  }
-
-  private void maybeEmitStartupReadyStatusFull() {
-    if (startupReady() && startupReadyStatusEmitted.compareAndSet(false, true)) {
-      sendStatusFull();
-    }
-  }
-
-  private void refreshQueueMetricsForStatusFull() {
-    try {
-      lifecycle.snapshotQueueStats();
-    } catch (RuntimeException e) {
-      log.warn("Failed to refresh swarm queue metrics before status-full for swarm {}", swarmId, e);
-    }
-  }
-
-  private void sendStatusDelta() {
-    SwarmMetrics m = lifecycle.getMetrics();
-    String state = determineState(m);
-    maybeJournalHealthTransition(state, m);
-    WorkloadState status = lifecycle.getWorkloadState();
-    String health = determineHealth(status, m);
-    ConfirmationScope scope = ConfirmationScope.forInstance(swarmId, role, instanceId);
-    String rk = ControlPlaneRouting.event(StatusMetric.KIND, StatusMetric.STATUS_DELTA, scope);
-    StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-        .type(StatusMetric.STATUS_DELTA)
-        .role(role)
-        .instance(instanceId)
-        .origin(instanceId)
-        .swarmId(swarmId)
-        .workPlaneEnabled(false)
-        .enabledRequired(false)
-        .tpsEnabled(false)
-        .data("controllerState", controllerState(status))
-        .data("workloadState", status.name())
-        .data("health", health)
-        .data("startupReady", startupReady())
-        .data("watermarkAt", Instant.now())
-        .data("scenario", scenarioProgress());
-    builder.runtime(runtimeMetaSnapshot());
-    appendTrafficDiagnostics(builder);
-    io.pockethive.control.StatusMetric payload = builder.toEnvelope();
-    sendControl(rk, payload, "status");
-  }
-
-  private Map<String, Object> scenarioProgress() {
-    Map<String, Object> snapshot = lifecycle.scenarioProgress();
-    return snapshot != null ? snapshot : Map.of();
   }
 
   private Map<String, Object> buildBaseRuntimeMeta() {
@@ -1120,143 +880,6 @@ public class SwarmSignalListener {
     static ScenarioChange none() {
       return new ScenarioChange(false, null);
     }
-  }
-
-  private void appendTrafficDiagnostics(StatusEnvelopeBuilder builder) {
-    if (builder == null) {
-      return;
-    }
-    boolean guardActive = lifecycle.bufferGuardActive();
-    String guardProblem = lifecycle.bufferGuardProblem();
-    if (guardActive || guardProblem != null) {
-      Map<String, Object> guardDiag = new LinkedHashMap<>();
-      guardDiag.put("active", guardActive);
-      if (guardProblem != null && !guardProblem.isBlank()) {
-        guardDiag.put("problem", guardProblem);
-      }
-      builder.data("bufferGuard", guardDiag);
-    }
-  }
-
-  private Map<String, Object> statusConfigSnapshot() {
-    Map<String, Object> config = new LinkedHashMap<>();
-    TrafficPolicy policy = effectiveTrafficPolicy();
-    if (policy != null) {
-      config.put("trafficPolicy", policy);
-    }
-    List<BufferGuardSettings> guards = lifecycle.bufferGuards();
-    if (guards != null && !guards.isEmpty()) {
-      config.put("bufferGuards", List.copyOf(guards));
-    }
-    return Map.copyOf(config);
-  }
-
-  private void appendNetworkContext(StatusEnvelopeBuilder builder) {
-    if (builder == null) {
-      return;
-    }
-    String sutId = currentSutId();
-    if (sutId != null) {
-      builder.data("sutId", sutId);
-    }
-    builder.data("networkMode", networkMode.name());
-    if (networkProfileId != null) {
-      builder.data("networkProfileId", networkProfileId);
-    }
-  }
-
-  private boolean applyNetworkContextOverride(JsonNode dataNode) {
-    if (dataNode == null || !dataNode.isObject()) {
-      return false;
-    }
-    boolean changed = false;
-    String requestedSutId = trimToNull(textOrNull(dataNode.path("sutId")));
-    String currentSutId = currentSutId();
-    if (requestedSutId != null && currentSutId != null && !currentSutId.equals(requestedSutId)) {
-      throw new IllegalArgumentException("sutId override does not match configured swarm SUT");
-    }
-    if (dataNode.has("networkMode")) {
-      NetworkMode requestedMode = parseNetworkMode(textOrNull(dataNode.path("networkMode")));
-      if (networkMode != requestedMode) {
-        networkMode = requestedMode;
-        changed = true;
-      }
-    }
-    if (dataNode.has("networkProfileId")) {
-      String requestedProfileId = trimToNull(textOrNull(dataNode.path("networkProfileId")));
-      if (!java.util.Objects.equals(networkProfileId, requestedProfileId)) {
-        networkProfileId = requestedProfileId;
-        changed = true;
-      }
-    }
-    if (networkMode == NetworkMode.DIRECT && networkProfileId != null) {
-      networkProfileId = null;
-      changed = true;
-    }
-    return changed;
-  }
-
-  private boolean isControllerNetworkContextOnly(String targetRole, JsonNode dataNode) {
-    if (targetRole == null || !role.equalsIgnoreCase(targetRole) || dataNode == null || !dataNode.isObject()) {
-      return false;
-    }
-    java.util.Iterator<String> fieldNames = dataNode.fieldNames();
-    boolean sawNetworkField = false;
-    while (fieldNames.hasNext()) {
-      String field = fieldNames.next();
-      if ("sutId".equals(field) || "networkMode".equals(field) || "networkProfileId".equals(field)) {
-        sawNetworkField = true;
-        continue;
-      }
-      return false;
-    }
-    return sawNetworkField;
-  }
-
-  private String currentSutId() {
-    String runtimeSutId = trimToNull(lifecycle.sutId());
-    return runtimeSutId != null ? runtimeSutId : configuredSutId;
-  }
-
-  private TrafficPolicy effectiveTrafficPolicy() {
-    List<BufferGuardSettings> guards = lifecycle.bufferGuards();
-    if (guards != null && !guards.isEmpty()) {
-      BufferGuardSettings s = guards.get(0);
-      return trafficPolicyFromSettings(s);
-    }
-    return lifecycle.trafficPolicy();
-  }
-
-  private TrafficPolicy trafficPolicyFromSettings(BufferGuardSettings s) {
-    if (s == null) {
-      return null;
-    }
-    BufferGuardPolicy.Adjustment adjust = new BufferGuardPolicy.Adjustment(
-        s.adjust().maxIncreasePct(),
-        s.adjust().maxDecreasePct(),
-        s.adjust().minRatePerSec(),
-        s.adjust().maxRatePerSec());
-    BufferGuardPolicy.Prefill prefill = new BufferGuardPolicy.Prefill(
-        s.prefill().enabled(),
-        s.prefill().lookahead() != null ? s.prefill().lookahead().toString() : null,
-        s.prefill().liftPct());
-    BufferGuardPolicy.Backpressure backpressure = new BufferGuardPolicy.Backpressure(
-        s.backpressure().queueAlias(),
-        s.backpressure().highDepth(),
-        s.backpressure().recoveryDepth(),
-        s.backpressure().moderatorReductionPct());
-    BufferGuardPolicy policy = new BufferGuardPolicy(
-        Boolean.TRUE,
-        s.queueAlias(),
-        s.targetDepth(),
-        s.minDepth(),
-        s.maxDepth(),
-        s.samplePeriod() != null ? s.samplePeriod().toString() : null,
-        s.movingAverageWindow(),
-        adjust,
-        prefill,
-        backpressure);
-    return new TrafficPolicy(policy);
   }
 
   private BufferGuardSettings applyGuardOverride(BufferGuardSettings base, JsonNode guardNode) {
@@ -1340,157 +963,14 @@ public class SwarmSignalListener {
     return trimmed.isEmpty() ? null : trimmed;
   }
 
-  private static String trimToNull(String value) {
-    if (value == null) {
-      return null;
-    }
-    String trimmed = value.trim();
-    return trimmed.isEmpty() ? null : trimmed;
-  }
-
-  private static NetworkMode parseNetworkMode(String value) {
-    if (value == null || value.isBlank()) {
-      throw new IllegalArgumentException("POCKETHIVE_NETWORK_MODE/networkMode must be provided");
-    }
-    return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
-  }
-
   private static int intOr(JsonNode node, String field, int fallback) {
     if (node == null || !node.has(field)) {
       return fallback;
     }
     return node.path(field).isInt() ? node.path(field).asInt() : fallback;
   }
-
-
-  private String determineState(SwarmMetrics m) {
-    if (m.desired() > 0 && m.healthy() == 0) {
-      return "Unknown";
-    }
-    if (m.healthy() < m.desired()) {
-      return "Degraded";
-    }
-    return lifecycle.getWorkloadState().name();
-  }
-
-  private static String determineHealth(WorkloadState status, SwarmMetrics m) {
-    if (status == null || status == WorkloadState.UNKNOWN) {
-      return Health.FAILED.name();
-    }
-    if (m != null && m.desired() > 0 && m.healthy() < m.desired()) {
-      return Health.DEGRADED.name();
-    }
-    return Health.HEALTHY.name();
-  }
-
-  private String controllerState(WorkloadState status) {
-    if (status == null || status == WorkloadState.UNKNOWN) {
-      return ControllerState.FAILED.name();
-    }
-    return isInitialized() ? ControllerState.READY.name() : ControllerState.PROVISIONING.name();
-  }
-
-  private void maybeJournalHealthTransition(String state, SwarmMetrics metrics) {
-    // Journal health transitions only once the swarm is actually in a "workloads enabled" phase.
-    //
-    // Why: during initial boot / template apply, the controller knows the desired worker count
-    // (desired>0) but workers have not yet had time to publish their first status heartbeat.
-    // That makes the computed state look like Unknown/Degraded, which is expected and should not
-    // spam the journal with false-positive "health degraded" entries.
-    WorkloadState status = lifecycle.getWorkloadState();
-    boolean enabled = workloadsEnabled(status);
-    if (enabled && !healthWorkloadsEnabled) {
-      healthWorkloadsEnabled = true;
-      // On the edge of enabling workloads we expect a short period of 0 heartbeats / partial heartbeats.
-      // Suppress journaling for a short window (aligned with MAX_STALENESS_MS) so operators don't see
-      // a scary "Degraded" entry at the very start of a run.
-      suppressHealthJournal();
-    } else if (!enabled) {
-      // Once disabled, we stop treating degraded states as actionable. Next time workloads are enabled
-      // we'll re-arm the suppression window above.
-      healthWorkloadsEnabled = false;
-    }
-
-    // Best-effort suppression window: keep status payloads flowing (state may still show Unknown/Degraded),
-    // but avoid writing health-transition journal entries until the window elapses.
-    Instant suppressUntil = this.healthJournalSuppressUntil;
-    if (suppressUntil != null) {
-      if (Instant.now().isBefore(suppressUntil)) {
-        return;
-      }
-      this.healthJournalSuppressUntil = null;
-    }
-    String previous = this.lastHealthState;
-    this.lastHealthState = state;
-    if (previous == null) {
-      return;
-    }
-    if (previous.equals(state)) {
-      return;
-    }
-    boolean prevDegraded = "Degraded".equals(previous) || "Unknown".equals(previous);
-    boolean currDegraded = "Degraded".equals(state) || "Unknown".equals(state);
-    if (!prevDegraded && currDegraded) {
-      Map<String, Object> data = new LinkedHashMap<>();
-      data.put("previousState", previous);
-      data.put("currentState", state);
-      data.put("desiredWorkers", metrics.desired());
-      data.put("healthyWorkers", metrics.healthy());
-      data.put("runningWorkers", metrics.running());
-      data.put("enabledWorkers", metrics.enabled());
-      journal.append(SwarmJournalEntries.local(
-          swarmId,
-          // WARN (not ERROR): health transitions are operator-facing signals, not necessarily application errors.
-          "WARN",
-          "swarm-health-degraded",
-          instanceId,
-          ControlScope.forInstance(swarmId, role, instanceId),
-          Map.copyOf(data),
-          null));
-    } else if (prevDegraded && !currDegraded) {
-      Map<String, Object> data = new LinkedHashMap<>();
-      data.put("previousState", previous);
-      data.put("currentState", state);
-      data.put("desiredWorkers", metrics.desired());
-      data.put("healthyWorkers", metrics.healthy());
-      data.put("runningWorkers", metrics.running());
-      data.put("enabledWorkers", metrics.enabled());
-      journal.append(SwarmJournalEntries.local(
-          swarmId,
-          "INFO",
-          "swarm-health-recovered",
-          instanceId,
-          ControlScope.forInstance(swarmId, role, instanceId),
-          Map.copyOf(data),
-          null));
-    }
-  }
-
   private boolean workloadsEnabled(WorkloadState status) {
     return status == WorkloadState.RUNNING || status == WorkloadState.STARTING;
-  }
-
-  private void suppressHealthJournal() {
-    // Avoid false-positive "degraded/unknown" transitions immediately after workloads are enabled;
-    // at this point workers have not had time to report their first heartbeat yet.
-    this.healthJournalSuppressUntil = Instant.now().plusMillis(MAX_STALENESS_MS);
-    this.lastHealthState = null;
-  }
-
-  private void sendControl(String routingKey, io.pockethive.control.ControlPlaneEnvelope payload, String context) {
-    String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-    boolean statusLog = "status".equals(context);
-    if (statusLog) {
-      log.debug("[CTRL] {} rk={} inst={} type={}", label, routingKey, instanceId, payload.type());
-    } else {
-      log.info("[CTRL] {} rk={} inst={} type={} correlationId={}",
-          label, routingKey, instanceId, payload.type(), payload.correlationId());
-    }
-    if (payload instanceof io.pockethive.control.ControlSignal) {
-      controlPlane.publishSignal(new SignalMessage(routingKey, payload));
-    } else {
-      controlPlane.publishEvent(new EventMessage(routingKey, payload));
-    }
   }
 
   private static String snippet(String payload) {

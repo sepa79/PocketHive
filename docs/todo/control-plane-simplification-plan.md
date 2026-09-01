@@ -151,6 +151,46 @@ Progress on Swarm Controller `SwarmSignalListener`:
 - [x] Pass `./mvnw -pl :swarm-controller-service -am test`: all 12 reactor modules passed and the Swarm Controller
   module passed 112 tests. Repository search finds one active filesystem REMOVE workflow owner, and
   `git diff --check` passes.
+- [x] Extract worker error-counter observation to `SwarmWorkerErrorJournal`; remove its mutable counter baseline and
+  diagnostic journal construction from the listener. Focused tests preserve increase, unchanged-counter, reset, and
+  missing-counter behavior.
+- [x] Extract accepted worker-alert journaling and config-error evidence application to `SwarmWorkerAlertHandler`.
+  Keep envelope decoding, routing-scope checks, and pending-command terminalization at their existing boundary owners.
+- [x] Extract accepted worker-status application to `SwarmWorkerStatusHandler`. It preserves the existing update
+  order and applies heartbeat, full-snapshot freshness, read-only projections, error observation, enabled state, and
+  readiness through the existing lifecycle owner. The listener retains decoding and reacts only to the returned
+  startup-ready transition before evaluating its still-legacy publication/convergence workflows.
+- [x] Delete the obsolete swarm-wide `SwarmIoStateAggregator`. The active worker-level `data.ioState.work` projection
+  remains owned by `SwarmWorkersAggregator` and is still published in `data.context.workers[].ioState`; no controller
+  `ioState.work` aggregate is reintroduced.
+- [x] Pass `./mvnw -pl :swarm-controller-service -am test` after the complete observation extraction: all 12 reactor
+  modules passed and the Swarm Controller module passed 122 tests. Repository search finds one caller that applies
+  accepted worker status to lifecycle state and one owner of the three worker projections; `git diff --check` passes.
+- [x] Extract health-transition state and journal construction to `SwarmHealthJournal`. Preserve the initial
+  observation baseline, workload-enable suppression window, degraded/recovered edge semantics, severity, scope, and
+  metric evidence in focused component tests; remove the mutable health-journal state from the listener.
+- [x] Pass `./mvnw -pl :swarm-controller-service -am test` after the health-journal extraction: all 12 reactor modules
+  passed; the Swarm Controller module reported 124 tests with 0 failures/errors and 2 environment-skipped integration
+  tests. Repository search finds one health-transition journal owner and `git diff --check` passes.
+- [x] Extract full/delta controller status construction, worker/diagnostic projection, health derivation, and
+  control-route publication to `SwarmControllerStatusPublisher`. Keep mutable network configuration and publication
+  trigger state outside the publisher so it remains a projection/publication owner.
+- [x] Extract network-context ownership to `SwarmControllerNetworkContext`, guard-to-contract mapping to
+  `BufferGuardTrafficPolicyMapper`, and startup/post-lifecycle full-status triggers to `SwarmStatusFullCoordinator`.
+  The coordinator uses an injected clock and preserves fresh-snapshot, five-second timeout, replacement, and
+  startup-at-most-once behavior.
+- [x] Move status-shape characterization to focused publisher tests, including worker `ioState`, health states,
+  traffic policy, network context, queue-refresh failure, and the exact canonical controller-route list. Add focused
+  tests for network-context validation, guard projection, startup-ready emission, freshness waiting, timeout, and
+  pending-trigger replacement.
+- [x] Pass `./mvnw -pl :swarm-controller-service -am test` after status extraction: all 12 reactor modules passed; the
+  Swarm Controller module reported 128 tests with 0 failures/errors and 2 environment-skipped integration tests.
+  Repository search finds one controller status-envelope builder, one network-context owner, one delayed full-status
+  coordinator, and one guard-to-policy mapper; `git diff --check` passes.
+
+The remaining listener path is START/STOP convergence plus config command application and terminal-result
+construction. Extract those workflows without moving readiness, expected-worker state, or workload transitions out
+of `SwarmLifecycle`.
 
 For every confirmed sink:
 

@@ -14,10 +14,8 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.runtime.QueueStats;
-import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
-import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarmcontroller.SwarmMetrics;
@@ -34,7 +32,6 @@ import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.OptionalLong;
@@ -103,6 +100,10 @@ class SwarmSignalListenerTest {
         "run-1",
         startupArtifactLoader(),
         removeCommands,
+        new SwarmWorkerStatusHandler(lifecycle, mapper, mock(SwarmWorkerErrorJournal.class)),
+        new SwarmWorkerAlertHandler(lifecycle, journal, mapper, instanceId),
+        new SwarmHealthJournal(
+            lifecycle, journal, SwarmControllerTestProperties.defaults(), instanceId),
         codec);
     return listener;
   }
@@ -134,17 +135,6 @@ class SwarmSignalListenerTest {
   @BeforeEach
   void setup() {
     stubLifecycleDefaults();
-  }
-
-  @Test
-  void initialHealthObservationIsNotJournaledAsATransition() {
-    RecordingJournal journal = new RecordingJournal();
-
-    newListener(lifecycle, rabbit, "controller-1", mapper, journal, mock(SwarmRemoveCommandHandler.class));
-
-    assertThat(journal.entries).noneMatch(entry ->
-        "swarm-health-degraded".equals(entry.type())
-            || "swarm-health-recovered".equals(entry.type()));
   }
 
   private void markInitialized(SwarmSignalListener listener) {
@@ -607,6 +597,9 @@ class SwarmSignalListenerTest {
           "run-1",
           startupArtifactLoader(),
           mock(SwarmRemoveCommandHandler.class),
+          mock(SwarmWorkerStatusHandler.class),
+          mock(SwarmWorkerAlertHandler.class),
+          mock(SwarmHealthJournal.class),
           codec);
         markInitialized(listener);
 	    String body = configUpdateSignal("inst", "i4", "c4", Map.of("enabled", true));
@@ -632,6 +625,9 @@ class SwarmSignalListenerTest {
         "run-1",
         startupArtifactLoader(),
         mock(SwarmRemoveCommandHandler.class),
+        mock(SwarmWorkerStatusHandler.class),
+        mock(SwarmWorkerAlertHandler.class),
+        mock(SwarmHealthJournal.class),
         codec);
 
     assertThatCode(() -> listener.handle("{}", " "))
@@ -685,48 +681,6 @@ class SwarmSignalListenerTest {
     assertThat(node.path("data").path("enabled").isMissingNode()).isTrue();
     assertThat(node.path("data").path("tps").isMissingNode()).isTrue();
     assertThat(node.path("data").path("context").path("workloadState").asText()).isEqualTo("STOPPED");
-  }
-
-  @Test
-  void statusEventsIncludeTrafficPolicyWhenPresent() throws Exception {
-    BufferGuardPolicy guard = new BufferGuardPolicy(
-        true,
-        "gen-out",
-        200,
-        150,
-        260,
-        "5s",
-        3,
-        null,
-        null,
-        null);
-    TrafficPolicy policy = new TrafficPolicy(guard);
-    when(lifecycle.trafficPolicy()).thenReturn(policy);
-
-    newListener(lifecycle, rabbit, "inst", mapper);
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
-    JsonNode node = mapper.readTree(payload.getValue());
-    JsonNode bufferGuard = node.path("data").path("config").path("trafficPolicy").path("bufferGuard");
-    assertThat(bufferGuard.isMissingNode()).isFalse();
-    assertThat(bufferGuard.path("queueAlias").asText()).isEqualTo("gen-out");
-    assertThat(bufferGuard.path("targetDepth").asInt()).isEqualTo(200);
-  }
-
-  @Test
-  void statusOmitsNullNetworkProfileIdForDirectMode() throws Exception {
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-
-    newListener(lifecycle, rabbit, "inst", mapper);
-
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(statusEvent("status-full", "swarm-controller", "inst")), payload.capture());
-    JsonNode context = mapper.readTree(payload.getValue()).path("data").path("context");
-    assertThat(context.path("networkMode").asText()).isEqualTo("DIRECT");
-    assertThat(context.has("networkProfileId")).isFalse();
   }
 
   @Test
@@ -865,117 +819,6 @@ class SwarmSignalListenerTest {
     listener.handle("{}", "signal.scenario-part." + TEST_SWARM_ID);
     listener.handle("{}", "signal.scenario-start." + TEST_SWARM_ID);
     verifyNoInteractions(lifecycle, rabbit);
-  }
-
-  @Test
-  void statusIncludesMetrics() throws Exception {
-    SwarmMetrics metrics = new SwarmMetrics(2,2,2,2, java.time.Instant.parse("2025-09-12T12:34:55Z"));
-    when(lifecycle.getMetrics()).thenReturn(metrics);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    reset(rabbit);
-    listener.status();
-    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
-        payload.capture());
-    JsonNode node = mapper.readTree(payload.getValue());
-    JsonNode context = node.path("data").path("context");
-    assertThat(context.path("health").asText()).isEqualTo("HEALTHY");
-    assertThat(context.path("controllerState").asText()).isEqualTo("READY");
-    assertThat(context.path("workloadState").asText()).isEqualTo("RUNNING");
-    assertThatCode(() -> Instant.parse(context.path("watermarkAt").asText())).doesNotThrowAnyException();
-	  }
-
-  @Test
-  void degradedAndUnknownStates() throws Exception {
-    SwarmMetrics degraded = new SwarmMetrics(3,2,2,2, java.time.Instant.now());
-    when(lifecycle.getMetrics()).thenReturn(degraded);
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-    reset(rabbit);
-    listener.status();
-    ArgumentCaptor<String> degradedPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
-        degradedPayload.capture());
-    JsonNode degradedNode = mapper.readTree(degradedPayload.getValue());
-    assertThat(degradedNode.path("data").path("context").path("health").asText()).isEqualTo("DEGRADED");
-
-    reset(rabbit);
-    SwarmMetrics unknown = new SwarmMetrics(3,0,0,0, java.time.Instant.now());
-    when(lifecycle.getMetrics()).thenReturn(unknown);
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.UNKNOWN);
-    listener.status();
-    ArgumentCaptor<String> unknownPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith(statusEvent("status-delta", "swarm-controller", "inst")),
-        unknownPayload.capture());
-    JsonNode unknownNode = mapper.readTree(unknownPayload.getValue());
-    assertThat(unknownNode.path("data").path("context").path("health").asText()).isEqualTo("FAILED");
-  }
-
-  @Test
-  void statusMessagesAdvertiseConcreteSwarmControlRoutes() throws Exception {
-    SwarmMetrics metrics = new SwarmMetrics(1,1,1,1, java.time.Instant.now());
-    when(lifecycle.getMetrics()).thenReturn(metrics);
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-
-    SwarmSignalListener listener = newListener(lifecycle, rabbit, "inst", mapper);
-
-    ArgumentCaptor<String> fullPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(statusEvent("status-full", "swarm-controller", "inst")),
-        fullPayload.capture());
-    assertConcreteSwarmControlRoutes(fullPayload.getValue());
-
-    reset(rabbit);
-    listener.status();
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(statusEvent("status-delta", "swarm-controller", "inst")),
-        anyString());
-  }
-
-  @Test
-  void statusFullRefreshesQueueMetricsForGrafana() {
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-
-    newListener(lifecycle, rabbit, "inst", mapper);
-
-    verify(lifecycle).snapshotQueueStats();
-  }
-
-  @Test
-  void statusFullStillPublishesWhenQueueMetricsRefreshFails() {
-    when(lifecycle.getMetrics()).thenReturn(new SwarmMetrics(1,1,1,1, java.time.Instant.now()));
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
-    doThrow(new IllegalStateException("queue stats unavailable")).when(lifecycle).snapshotQueueStats();
-
-    newListener(lifecycle, rabbit, "inst", mapper);
-
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        eq(statusEvent("status-full", "swarm-controller", "inst")),
-        anyString());
-  }
-
-  private void assertConcreteSwarmControlRoutes(String payload) throws Exception {
-    JsonNode node = mapper.readTree(payload);
-    JsonNode routesNode = node.path("data").path("io").path("control").path("queues").path("routes");
-    assertThat(routesNode.isArray()).isTrue();
-
-    List<String> routes = new ArrayList<>();
-    routesNode.forEach(route -> routes.add(route.asText()));
-
-    assertThat(routes).contains(
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "inst"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "inst"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "inst"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", "ALL"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "swarm-controller", "inst"),
-        ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", "inst")
-    );
   }
 
   private boolean payloadContainsDefaultQueueStatsFull(String payload) {
