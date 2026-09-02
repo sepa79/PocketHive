@@ -20,8 +20,6 @@ class SwarmRuntimeStateTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("duplicate runtime worker role: generator");
 
-    assertThat(state.workersByInstance())
-        .containsOnlyKeys("gen-a");
     assertThat(state.instancesByRole())
         .containsEntry("generator", List.of("gen-a"));
   }
@@ -36,8 +34,6 @@ class SwarmRuntimeStateTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("duplicate runtime worker instance: gen-a");
 
-    assertThat(state.workersByInstance())
-        .containsOnlyKeys("gen-a");
     assertThat(state.instancesByRole())
         .containsEntry("generator", List.of("gen-a"))
         .doesNotContainKey("processor");
@@ -52,11 +48,10 @@ class SwarmRuntimeStateTest {
         .hasMessageContaining("role, instanceId, and containerId");
 
     assertThat(state.instancesByRole()).isEmpty();
-    assertThat(state.workersByInstance()).isEmpty();
   }
 
   private static SwarmRuntimeState newState() {
     return new SwarmRuntimeState(
-        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), List.of(), Set.of()));
+        new SwarmRuntimeContext(new SwarmPlan("swarm", List.of()), Set.of(), List.of()));
   }
 }

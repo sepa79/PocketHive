@@ -19,6 +19,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 
 @ExtendWith(MockitoExtension.class)
 class SwarmHealthJournalTest {
@@ -82,6 +83,23 @@ class SwarmHealthJournalTest {
     assertThat(recovered.data())
         .containsEntry("previousState", "Degraded")
         .containsEntry("currentState", WorkloadState.RUNNING.name());
+  }
+
+  @Test
+  void springSelectsTheProductionConstructor() {
+    try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+      context.registerBean(SwarmLifecycle.class, () -> lifecycle);
+      context.registerBean(SwarmJournal.class, () -> journal);
+      context.registerBean(
+          io.pockethive.swarmcontroller.config.SwarmControllerProperties.class,
+          () -> SwarmControllerTestProperties.defaults());
+      context.registerBean("instanceId", String.class, () -> "controller-1");
+      context.register(SwarmHealthJournal.class);
+
+      context.refresh();
+
+      assertThat(context.getBean(SwarmHealthJournal.class)).isNotNull();
+    }
   }
 
   private static SwarmMetrics metrics(int desired, int healthy) {

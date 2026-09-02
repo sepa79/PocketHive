@@ -10,6 +10,7 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
@@ -35,6 +36,7 @@ public class SwarmHealthJournal {
   private volatile Instant suppressUntil;
   private volatile boolean workloadsEnabled;
 
+  @Autowired
   public SwarmHealthJournal(
       SwarmLifecycle lifecycle,
       SwarmJournal journal,

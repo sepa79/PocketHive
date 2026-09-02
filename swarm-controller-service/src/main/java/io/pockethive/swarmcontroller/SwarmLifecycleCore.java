@@ -9,7 +9,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
-/** Required command, observation, and configuration capabilities owned by the Controller core. */
+/**
+ * Responsibility: Define the required command, observation, and configuration capabilities of the Controller core.
+ * Must not: Provide fallback behavior or expose transport-specific operations.
+ * Contract: Every implementation supplies one authoritative lifecycle and worker-observation state owner.
+ */
 public interface SwarmLifecycleCore {
 
   void prepare(String templateJson);
@@ -28,11 +32,13 @@ public interface SwarmLifecycleCore {
 
   void updateHeartbeat(String role, String instance);
 
-  void recordStatusSnapshot(String role, String instance, long timestamp);
+  void recordStatusSnapshot(String role, String instance, boolean enabled);
 
-  boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis);
+  long workerStatusObservationRevision();
 
-  List<Target> nonConvergedWorkersSince(long cutoffMillis, boolean expectedEnabled);
+  boolean hasWorkerStatusSnapshotsAfter(long observationRevision);
+
+  List<Target> nonConvergedWorkersAfter(long observationRevision, boolean expectedEnabled);
 
   void updateEnabled(String role, String instance, boolean enabled);
 

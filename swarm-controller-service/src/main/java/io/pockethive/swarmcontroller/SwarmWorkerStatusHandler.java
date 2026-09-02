@@ -38,19 +38,19 @@ public class SwarmWorkerStatusHandler {
   boolean observe(String role, String instance, StatusMetric status, boolean statusFull) {
     JsonNode envelope = mapper.valueToTree(Objects.requireNonNull(status, "status"));
     lifecycle.updateHeartbeat(role, instance);
-    if (statusFull) {
-      lifecycle.recordStatusSnapshot(role, instance, System.currentTimeMillis());
-    }
-    diagnostics.updateFromWorkerStatus(role, instance, envelope.path("data"));
-    workers.updateFromWorkerStatus(role, instance, envelope.path("data"), envelope.path("runtime"));
-    workerErrors.observe(role, instance, envelope);
-
     JsonNode enabledNode = envelope.path("data").get("enabled");
     if (enabledNode == null || !enabledNode.isBoolean()) {
       throw new IllegalArgumentException("worker status data.enabled must be a boolean");
     }
     boolean enabled = enabledNode.asBoolean();
-    lifecycle.updateEnabled(role, instance, enabled);
+    diagnostics.updateFromWorkerStatus(role, instance, envelope.path("data"));
+    workers.updateFromWorkerStatus(role, instance, envelope.path("data"), envelope.path("runtime"));
+    workerErrors.observe(role, instance, envelope);
+    if (statusFull) {
+      lifecycle.recordStatusSnapshot(role, instance, enabled);
+    } else {
+      lifecycle.updateEnabled(role, instance, enabled);
+    }
     return !enabled && lifecycle.markReady(role, instance);
   }
 

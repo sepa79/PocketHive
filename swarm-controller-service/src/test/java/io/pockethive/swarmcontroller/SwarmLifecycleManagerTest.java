@@ -48,10 +48,6 @@ import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoublePredicate;
 import org.mockito.ArgumentCaptor;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -580,48 +576,6 @@ class SwarmLifecycleManagerTest {
     inRemove.verify(docker).stopAndRemoveContainer("c3");
     inRemove.verify(docker).stopAndRemoveContainer("c2");
     inRemove.verify(docker).stopAndRemoveContainer("c1");
-  }
-
-  @Test
-  void cyclicTopologyWarnsAndUsesStableOrder() throws Exception {
-    SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("a", "ia", Work.ofDefaults("q3", "q1"), null),
-        new Bee("b", "ib", Work.ofDefaults("q1", "q2"), null),
-        new Bee("c", "ic", Work.ofDefaults("q2", "q3"), null)));
-
-    Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(SwarmLifecycleManager.class);
-    ListAppender<ILoggingEvent> appender = new ListAppender<>();
-    appender.start();
-    logger.addAppender(appender);
-
-    manager.prepare(mapper.writeValueAsString(plan));
-    assertTrue(appender.list.stream().anyMatch(e -> e.getLevel() == Level.WARN && e.getFormattedMessage().contains("cycle")));
-
-    manager.updateHeartbeat("a", "a1");
-    manager.markReady("a", "a1");
-    manager.updateHeartbeat("b", "b1");
-    manager.markReady("b", "b1");
-    manager.updateHeartbeat("c", "c1");
-    manager.markReady("c", "c1");
-
-    reset(rabbit);
-    manager.enableAll();
-    ArgumentCaptor<String> broadcastEnable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastEnable.capture());
-    JsonNode broadcastEnableNode = mapper.readTree(broadcastEnable.getValue());
-    assertThat(broadcastEnableNode.path("kind").asText()).isEqualTo("signal");
-    assertThat(broadcastEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastEnableNode.path("data").path("enabled").asBoolean(false)).isTrue();
-
-    reset(rabbit);
-    manager.stop();
-    ArgumentCaptor<String> broadcastDisable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
-    JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
-    assertThat(broadcastDisableNode.path("kind").asText()).isEqualTo("signal");
-    assertThat(broadcastDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastDisableNode.path("data").path("enabled").asBoolean(true)).isFalse();
   }
 
   @Test

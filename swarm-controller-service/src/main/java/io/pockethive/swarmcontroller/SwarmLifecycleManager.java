@@ -20,7 +20,10 @@ import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
+import io.pockethive.swarmcontroller.runtime.SwarmQueueStatsCollector;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
+import io.pockethive.swarmcontroller.runtime.SwarmRuntimeInfrastructure;
+import io.pockethive.swarmcontroller.runtime.SwarmWorkerSpecFactory;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -34,10 +37,9 @@ import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Spring wiring shell for {@link SwarmRuntimeCore}.
- * <p>
- * This class adapts Spring-managed infrastructure beans to the transport-agnostic
- * runtime core so tests and other runtimes can reuse the same lifecycle logic.
+ * Responsibility: Adapt Spring-managed infrastructure to the transport-agnostic {@link SwarmRuntimeCore}.
+ * Must not: Duplicate lifecycle, readiness, or worker-observation state owned by the runtime core.
+ * Contract: Delegate every {@link SwarmLifecycle} capability to one core instance.
  */
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
@@ -109,22 +111,31 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
             new io.pockethive.swarmcontroller.runtime.SwarmControlPlanePortAdapter(controlPublisher),
             properties.getSwarmId(),
             instanceId);
+    SwarmWorkerSpecFactory workerSpecFactory = new SwarmWorkerSpecFactory(
+        properties,
+        workerSettings,
+        rabbitProperties,
+        docker::resolveControlNetwork,
+        clickHouseSink,
+        runtimeFilesystemMount,
+        () -> requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
+    SwarmRuntimeInfrastructure runtimeInfrastructure = new SwarmRuntimeInfrastructure(
+        amqp, properties, topology, computeAdapter, queueMetrics);
+    SwarmQueueStatsCollector queueStatsCollector = new SwarmQueueStatsCollector(
+        properties, queueStatsPort, queueMetrics);
+    WorkerStatusRequestCallback statusRequests = new SwarmWorkerStatusRequestPublisher(
+        controlPublisher, properties.getSwarmId(), instanceId);
 
     this.core = new SwarmRuntimeCore(
-        amqp,
         mapper,
-        docker,
-        rabbitProperties,
         properties,
-        controlPublisher,
-        topology,
-        computeAdapter,
-        queueMetrics,
         configFanout,
         this.journal,
         instanceId,
-        clickHouseSink,
-        runtimeFilesystemMount);
+        workerSpecFactory,
+        runtimeInfrastructure,
+        queueStatsCollector,
+        statusRequests);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,
@@ -209,19 +220,24 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   }
 
   @Override
-  public void recordStatusSnapshot(String role, String instance, long timestamp) {
-    core.recordStatusSnapshot(role, instance, timestamp);
+  public void recordStatusSnapshot(String role, String instance, boolean enabled) {
+    core.recordStatusSnapshot(role, instance, enabled);
   }
 
   @Override
-  public boolean hasFreshWorkerStatusSnapshotsSince(long cutoffMillis) {
-    return core.hasFreshWorkerStatusSnapshotsSince(cutoffMillis);
+  public long workerStatusObservationRevision() {
+    return core.workerStatusObservationRevision();
   }
 
   @Override
-  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
-      long cutoffMillis, boolean expectedEnabled) {
-    return core.nonConvergedWorkersSince(cutoffMillis, expectedEnabled);
+  public boolean hasWorkerStatusSnapshotsAfter(long observationRevision) {
+    return core.hasWorkerStatusSnapshotsAfter(observationRevision);
+  }
+
+  @Override
+  public java.util.List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersAfter(
+      long observationRevision, boolean expectedEnabled) {
+    return core.nonConvergedWorkersAfter(observationRevision, expectedEnabled);
   }
 
   @Override

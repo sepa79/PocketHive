@@ -1,7 +1,15 @@
 # SwarmRuntimeCore Refactor (Swarm Controller Runtime)
 
-> Status: **critical / design**  
+> Status: **completed; evidence recorded in `control-plane-simplification-plan.md`**
 > Scope: break up `SwarmRuntimeCore` (1000+ LOC) into testable, single-purpose components.
+
+This document is design background, not a parallel work queue. The canonical extraction order, progress, and
+verification evidence live in `docs/todo/control-plane-simplification-plan.md`.
+
+The production refactor is complete. `SwarmRuntimeCore` was reduced from 1,299 to 376 lines and now remains the
+lifecycle coordinator and state owner. The final extractions moved status-request publication and scenario execution
+behind explicit boundaries without introducing another lifecycle-state owner. The E2E `SwarmLifecycleSteps` refactor
+is a separate, explicitly deferred test-system task.
 
 ## Problem
 
@@ -73,4 +81,3 @@ This milestone is intentionally separate because it changes behavior:
 
 - Fix “delta sends full config” and other status duplication issues.
 - Reduce or eliminate duplicated projections in UI/state stores (once payloads are corrected).
-

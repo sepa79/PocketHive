@@ -8,36 +8,31 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-  /**
-   * Tracks swarm-level readiness and basic worker metrics.
-   * <p>
-   * This component owns the bookkeeping for expected vs. ready workers, heartbeats,
-   * status-full snapshots, and enabled flags. It can request status on missing/stale
-   * heartbeats via a callback; snapshot freshness checks must remain side-effect free
-   * to avoid status-request storms.
-   */
-  public final class SwarmReadinessTracker {
-
-  public interface StatusRequestCallback {
-    void requestStatus(String role, String instance, String reason);
-  }
+/**
+ * Responsibility: Own swarm readiness, worker heartbeat, enablement, and status observation ordering.
+ * Must not: Decode messages, publish lifecycle outcomes, or infer observation order from wall-clock timestamps.
+ * Contract: Each accepted status-full advances one monotonic revision used by convergence checks.
+ */
+public final class SwarmReadinessTracker {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmReadinessTracker.class);
 
   private static final long STATUS_TTL_MS = 15_000L;
 
-  private final StatusRequestCallback statusRequestCallback;
+  private final WorkerStatusRequestCallback statusRequestCallback;
 
   private final Map<String, Integer> expectedReady = new HashMap<>();
   private final Map<String, List<String>> instancesByRole = new HashMap<>();
   private final ConcurrentMap<String, Long> lastSeen = new ConcurrentHashMap<>();
-  private final ConcurrentMap<String, Long> lastSnapshotSeen = new ConcurrentHashMap<>();
+  private final AtomicLong statusObservationRevision = new AtomicLong();
+  private final ConcurrentMap<String, WorkerSnapshotObservation> lastSnapshot = new ConcurrentHashMap<>();
   private final ConcurrentMap<String, Boolean> enabled = new ConcurrentHashMap<>();
 
-  public SwarmReadinessTracker(StatusRequestCallback statusRequestCallback) {
+  public SwarmReadinessTracker(WorkerStatusRequestCallback statusRequestCallback) {
     this.statusRequestCallback = Objects.requireNonNull(statusRequestCallback, "statusRequestCallback");
   }
 
@@ -45,7 +40,7 @@ import org.slf4j.LoggerFactory;
     expectedReady.clear();
     instancesByRole.clear();
     lastSeen.clear();
-    lastSnapshotSeen.clear();
+    lastSnapshot.clear();
     enabled.clear();
   }
 
@@ -63,11 +58,17 @@ import org.slf4j.LoggerFactory;
     lastSeen.put(key(role, instance), timestamp);
   }
 
-  public void recordStatusSnapshot(String role, String instance, long timestamp) {
+  public void recordStatusSnapshot(String role, String instance, boolean enabledFlag) {
     if (!hasText(role) || !hasText(instance)) {
       return;
     }
-    lastSnapshotSeen.put(key(role, instance), timestamp);
+    long revision = statusObservationRevision.incrementAndGet();
+    lastSnapshot.put(key(role, instance), new WorkerSnapshotObservation(revision, enabledFlag));
+    enabled.put(key(role, instance), enabledFlag);
+  }
+
+  public long statusObservationRevision() {
+    return statusObservationRevision.get();
   }
 
   public void recordEnabled(String role, String instance, boolean flag) {
@@ -97,11 +98,8 @@ import org.slf4j.LoggerFactory;
     return isFullyReady();
   }
 
-  public boolean hasFreshSnapshotsSince(long cutoffMillis) {
-    Map<String, List<String>> snapshot;
-    synchronized (this) {
-      snapshot = new HashMap<>(instancesByRole);
-    }
+  public boolean hasSnapshotsAfter(long observationRevision) {
+    Map<String, List<String>> snapshot = instancesSnapshot();
     if (snapshot.isEmpty()) {
       return true;
     }
@@ -109,8 +107,8 @@ import org.slf4j.LoggerFactory;
       String role = entry.getKey();
       for (String instance : entry.getValue()) {
         String key = key(role, instance);
-        Long ts = lastSnapshotSeen.get(key);
-        if (ts == null || ts < cutoffMillis) {
+        WorkerSnapshotObservation observation = lastSnapshot.get(key);
+        if (observation == null || observation.revision() <= observationRevision) {
           return false;
         }
       }
@@ -119,20 +117,15 @@ import org.slf4j.LoggerFactory;
   }
 
   /** Returns every expected worker lacking post-dispatch evidence for the requested enablement. */
-  public List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersSince(
-      long cutoffMillis, boolean expectedEnabled) {
-    Map<String, List<String>> snapshot;
-    synchronized (this) {
-      snapshot = new HashMap<>();
-      instancesByRole.forEach((role, instances) -> snapshot.put(role, List.copyOf(instances)));
-    }
+  public List<io.pockethive.swarm.model.lifecycle.Target> nonConvergedWorkersAfter(
+      long observationRevision, boolean expectedEnabled) {
+    Map<String, List<String>> snapshot = instancesSnapshot();
     List<io.pockethive.swarm.model.lifecycle.Target> result = new ArrayList<>();
     snapshot.forEach((role, instances) -> instances.forEach(instance -> {
       String workerKey = key(role, instance);
-      Long observedAt = lastSnapshotSeen.get(workerKey);
-      Boolean observedEnabled = enabled.get(workerKey);
-      if (observedAt == null || observedAt < cutoffMillis
-          || observedEnabled == null || observedEnabled != expectedEnabled) {
+      WorkerSnapshotObservation observation = lastSnapshot.get(workerKey);
+      if (observation == null || observation.revision() <= observationRevision
+          || observation.enabled() != expectedEnabled) {
         result.add(new io.pockethive.swarm.model.lifecycle.Target(role, instance));
       }
     }));
@@ -207,11 +200,20 @@ import org.slf4j.LoggerFactory;
     return !expectedReady.isEmpty();
   }
 
+  private synchronized Map<String, List<String>> instancesSnapshot() {
+    Map<String, List<String>> snapshot = new HashMap<>();
+    instancesByRole.forEach((role, instances) -> snapshot.put(role, List.copyOf(instances)));
+    return Map.copyOf(snapshot);
+  }
+
   private static boolean hasText(String value) {
     return value != null && !value.isBlank();
   }
 
   private static String key(String role, String instance) {
     return role + "." + instance;
+  }
+
+  private record WorkerSnapshotObservation(long revision, boolean enabled) {
   }
 }

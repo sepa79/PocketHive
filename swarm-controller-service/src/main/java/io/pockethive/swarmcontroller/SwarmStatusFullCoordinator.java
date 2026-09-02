@@ -1,10 +1,11 @@
 package io.pockethive.swarmcontroller;
 
-import java.time.Clock;
+import java.time.Duration;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BooleanSupplier;
+import java.util.function.LongSupplier;
 
 /**
  * Responsibility: Coordinate one-shot startup and post-lifecycle full-status publication triggers.
@@ -13,12 +14,12 @@ import java.util.function.BooleanSupplier;
  */
 final class SwarmStatusFullCoordinator {
 
-  private static final long POST_LIFECYCLE_TIMEOUT_MS = 5_000L;
+  private static final long POST_LIFECYCLE_TIMEOUT_NANOS = Duration.ofSeconds(5).toNanos();
 
   private final SwarmLifecycle lifecycle;
   private final SwarmControllerStatusPublisher publisher;
   private final BooleanSupplier initialized;
-  private final Clock clock;
+  private final LongSupplier nanoTime;
   private final AtomicBoolean startupReadyStatusEmitted = new AtomicBoolean(false);
   private final AtomicReference<PendingStatusFull> pendingStatusFull = new AtomicReference<>();
 
@@ -26,18 +27,18 @@ final class SwarmStatusFullCoordinator {
       SwarmLifecycle lifecycle,
       SwarmControllerStatusPublisher publisher,
       BooleanSupplier initialized) {
-    this(lifecycle, publisher, initialized, Clock.systemUTC());
+    this(lifecycle, publisher, initialized, System::nanoTime);
   }
 
   SwarmStatusFullCoordinator(
       SwarmLifecycle lifecycle,
       SwarmControllerStatusPublisher publisher,
       BooleanSupplier initialized,
-      Clock clock) {
+      LongSupplier nanoTime) {
     this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle");
     this.publisher = Objects.requireNonNull(publisher, "publisher");
     this.initialized = Objects.requireNonNull(initialized, "initialized");
-    this.clock = Objects.requireNonNull(clock, "clock");
+    this.nanoTime = Objects.requireNonNull(nanoTime, "nanoTime");
   }
 
   void maybePublishStartupReady() {
@@ -49,8 +50,8 @@ final class SwarmStatusFullCoordinator {
     }
   }
 
-  void queueAfterLifecycle(long freshnessCutoffMillis) {
-    pendingStatusFull.set(new PendingStatusFull(freshnessCutoffMillis, clock.millis()));
+  void queueAfterLifecycle(long observationRevision) {
+    pendingStatusFull.set(new PendingStatusFull(observationRevision, nanoTime.getAsLong()));
     maybePublishPending();
   }
 
@@ -59,13 +60,13 @@ final class SwarmStatusFullCoordinator {
     if (pending == null) {
       return;
     }
-    boolean fresh = lifecycle.hasFreshWorkerStatusSnapshotsSince(pending.freshnessCutoffMillis());
-    boolean timedOut = clock.millis() - pending.queuedAtMillis() >= POST_LIFECYCLE_TIMEOUT_MS;
+    boolean fresh = lifecycle.hasWorkerStatusSnapshotsAfter(pending.observationRevision());
+    boolean timedOut = nanoTime.getAsLong() - pending.queuedAtNanos() >= POST_LIFECYCLE_TIMEOUT_NANOS;
     if ((fresh || timedOut) && pendingStatusFull.compareAndSet(pending, null)) {
       publisher.publishFull();
     }
   }
 
-  private record PendingStatusFull(long freshnessCutoffMillis, long queuedAtMillis) {
+  private record PendingStatusFull(long observationRevision, long queuedAtNanos) {
   }
 }

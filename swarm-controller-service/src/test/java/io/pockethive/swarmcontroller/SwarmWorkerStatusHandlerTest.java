@@ -3,7 +3,6 @@ package io.pockethive.swarmcontroller;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_SWARM_ID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -57,11 +56,7 @@ class SwarmWorkerStatusHandlerTest {
     assertThat(startupReadyTransition).isTrue();
     InOrder lifecycleOrder = inOrder(lifecycle);
     lifecycleOrder.verify(lifecycle).updateHeartbeat(ROLE, INSTANCE);
-    lifecycleOrder.verify(lifecycle).recordStatusSnapshot(
-        org.mockito.ArgumentMatchers.eq(ROLE),
-        org.mockito.ArgumentMatchers.eq(INSTANCE),
-        anyLong());
-    lifecycleOrder.verify(lifecycle).updateEnabled(ROLE, INSTANCE, false);
+    lifecycleOrder.verify(lifecycle).recordStatusSnapshot(ROLE, INSTANCE, false);
     lifecycleOrder.verify(lifecycle).markReady(ROLE, INSTANCE);
     verify(workerErrors).observe(
         org.mockito.ArgumentMatchers.eq(ROLE),
@@ -90,21 +85,25 @@ class SwarmWorkerStatusHandlerTest {
     verify(lifecycle, never()).recordStatusSnapshot(
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.anyString(),
-        anyLong());
+        org.mockito.ArgumentMatchers.anyBoolean());
     verify(lifecycle, never()).markReady(
         org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
   }
 
   @Test
   void rejectsAStatusWithoutTheRequiredEnabledFlag() {
-    StatusMetric status = status(StatusMetric.STATUS_DELTA, Map.of("tps", 1));
+    StatusMetric status = status(StatusMetric.STATUS_FULL, Map.of("tps", 1));
 
-    assertThatThrownBy(() -> handler.observe(ROLE, INSTANCE, status, false))
+    assertThatThrownBy(() -> handler.observe(ROLE, INSTANCE, status, true))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessage("worker status data.enabled must be a boolean");
 
     verify(lifecycle).updateHeartbeat(ROLE, INSTANCE);
     verify(lifecycle, never()).updateEnabled(
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyString(),
+        org.mockito.ArgumentMatchers.anyBoolean());
+    verify(lifecycle, never()).recordStatusSnapshot(
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.anyString(),
         org.mockito.ArgumentMatchers.anyBoolean());
