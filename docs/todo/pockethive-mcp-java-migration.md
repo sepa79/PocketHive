@@ -3329,11 +3329,16 @@ The migration is complete only when all of the following are true:
 - Clients must support either native form elicitation or the explicit
   agent-mediated question/submit contract, plus binary upload tickets. These
   are declared modes, not a degraded or automatic fallback chain.
-- Remote use requires the explicit HTTPS ingress/host and Auth Service MCP
-  secrets declared by the HiveForge contract. Existing opaque PocketHive login
-  tokens are not silently reclassified as MCP OAuth access tokens. Live remote
-  deployment and approval remain governed HiveGate/HiveForge operations rather
-  than implementation evidence created by this branch.
+- Remote use requires the explicit HTTPS ingress/host. While Auth Service is in
+  Phase 1, the HiveForge adapter explicitly selects the `DEV` provider and owns
+  one fixed, known development credential pair shared by Auth Service and MCP;
+  it does not ask HiveForge to store or transport secrets. This temporary
+  contract cannot be used for a non-`DEV` provider. That transition requires an
+  approved HiveForge secret capability and a contract-first migration. Existing
+  opaque PocketHive login tokens are not silently reclassified as MCP OAuth
+  access tokens. Live remote deployment and approval remain governed
+  HiveGate/HiveForge operations rather than implementation evidence created by
+  this branch.
 - Multi Round-Trip Requests, header-routed stateless semantics, and protocol
   cache hints require a separately approved Java-SDK/client migration; Nginx
   will not bridge revisions or capabilities.

@@ -58,6 +58,10 @@ All notable changes to this project will be documented in this file.
 - Deployment: install the same hardened non-root, read-only Java MCP image through
   `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
   upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
+- HiveForge Phase 1 authentication: stop requiring unsupported secret runtime
+  inputs and explicitly use one fixed, known `DEV` credential pair until
+  HiveForge provides the approved secret capability required by non-`DEV`
+  deployments.
 - Verification: pass 22 Auth Service tests, 115 MCP tests, and 102 extension
   tests; kill 26/26 Auth, 576/576 MCP, and 1,825/1,825 extension mutants; pass
   clean npm audit, packaged-VSIX, public-ingress OAuth/MCP, responsive UI,

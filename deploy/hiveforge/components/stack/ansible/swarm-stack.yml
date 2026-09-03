@@ -38,6 +38,13 @@
         group: "10001"
   when: pockethive_profile == "swarm-full"
 
+- name: Select explicit Phase 1 DEV authentication
+  ansible.builtin.set_fact:
+    pockethive_phase_one_dev_auth:
+      provider: DEV
+      introspection_credential: pockethive-mcp-local-introspection-secret
+      service_credential: pockethive-mcp-local-service-secret
+
 - name: Require swarm HiveForge runtime environment
   ansible.builtin.assert:
     that:
@@ -77,7 +84,7 @@
       - pockethive_version | length > 0
     fail_msg: "POCKETHIVE_VERSION must be set in HiveForge runtime env."
 
-- name: Require explicit PocketHive MCP public identity and secrets
+- name: Require explicit PocketHive MCP public identity
   ansible.builtin.assert:
     that:
       - pockethive_public_ingress.startswith("https://")
@@ -85,9 +92,7 @@
       - pockethive_public_host | length > 0
       - "'://' not in pockethive_public_host"
       - "'/' not in pockethive_public_host"
-      - pockethive_mcp_introspection_secret | length >= 16
-      - pockethive_mcp_service_secret | length >= 16
-    fail_msg: "PocketHive MCP requires an explicit HTTPS ingress without a trailing slash, its exact Host value, and Auth Service secrets of at least 16 characters."
+    fail_msg: "PocketHive MCP requires an explicit HTTPS ingress without a trailing slash and its exact Host value."
 
 - name: Require swarm-full dedicated root environment
   ansible.builtin.assert:

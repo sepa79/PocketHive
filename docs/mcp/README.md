@@ -73,6 +73,15 @@ images through the governed workflow in `docs/HIVEFORGE.md`. Configure each
 agent or IDE profile with the public MCP URL; neither `build-hive.sh` nor the VS
 Code extension writes user MCP-client configuration.
 
+The current HiveForge adapter targets the Phase 1 Auth Service `DEV` provider
+and supplies a fixed, known development credential pair to Auth Service and MCP;
+operators do not provide those values through HiveForge runtime environment.
+They are not confidential credentials and must be replaced through an approved
+HiveForge secret capability before any non-`DEV` authentication deployment.
+The downstream credential follows the existing Orchestrator service-account
+pattern: Auth Service owns the named account and MCP receives the matching
+principal name and credential. MCP does not reuse Orchestrator's identity.
+
 Use the client's native Streamable HTTP configuration and OAuth support; an
 NPM proxy is neither required nor supported. For example, VS Code/Copilot uses
 `{"type":"http","url":"http://localhost:8088/mcp"}` inside its `servers`
