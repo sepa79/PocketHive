@@ -1,4 +1,5 @@
 package io.pockethive.mcp.config;
+import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -34,7 +35,7 @@ class PocketHiveMcpPropertiesTest {
     private static PocketHiveMcpProperties properties(URI ingress, URI owner, int totalSessions,
                                                        int sessionsPerPrincipal) {
         return new PocketHiveMcpProperties(
-            ingress, owner, PocketHiveMcpProperties.StateMode.MEMORY,
+            ingress, owner, McpStateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1),
             Duration.ofMinutes(5), totalSessions, sessionsPerPrincipal, 100, 10, 1_000_000,

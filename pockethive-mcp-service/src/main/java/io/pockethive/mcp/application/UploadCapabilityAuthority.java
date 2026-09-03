@@ -9,6 +9,12 @@ import java.util.HexFormat;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Issue and verify principal-bound, purpose-bound upload capabilities.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 /** Issues opaque upload-only credentials and verifies them without retaining their value. */
 @Component
 public final class UploadCapabilityAuthority {

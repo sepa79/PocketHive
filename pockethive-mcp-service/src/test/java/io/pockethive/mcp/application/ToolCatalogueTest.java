@@ -20,6 +20,12 @@ import static org.mockito.Mockito.mockStatic;
 
 class ToolCatalogueTest {
     @Test
+    void typedToolIdentifiersSerializeAsTheirStableExternalNames() throws Exception {
+        assertThat(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(McpToolId.SWARM_CREATE))
+            .isEqualTo("\"swarm_create\"");
+    }
+
+    @Test
     void everyPublishedToolHasOneCanonicalIdContractAndConnectedSkill() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
@@ -87,6 +93,16 @@ class ToolCatalogueTest {
     void highRiskAndBoundedInputsHaveExactMachineReadableConstraints() {
         ToolCatalogue catalogue = ToolCatalogue.canonical();
 
+        Map<String, Object> create = catalogue.requireTool("swarm_create").inputSchema();
+        assertThat(create.get("required")).isEqualTo(List.of(
+            "swarmId", "templateId", "autoPullImages", "sutId", "variablesProfileId",
+            "networkMode", "networkProfileId", "idempotencyKey"));
+        assertThat(property(create, "autoPullImages")).containsEntry("type", "boolean");
+        assertThat(property(create, "networkMode").get("enum")).isEqualTo(List.of("DIRECT", "PROXIED"));
+        assertThat(property(create, "sutId").get("type")).isEqualTo(List.of("string", "null"));
+        assertThat(property(create, "variablesProfileId").get("type")).isEqualTo(List.of("string", "null"));
+        assertThat(property(create, "networkProfileId").get("type")).isEqualTo(List.of("string", "null"));
+
         Map<String, Object> readiness = catalogue.requireTool("swarm_wait_ready").inputSchema();
         assertThat(readiness.get("required")).isEqualTo(List.of("swarmId"));
         Map<String, Object> readinessProperties = properties(readiness);
@@ -95,6 +111,13 @@ class ToolCatalogueTest {
         Map<String, Object> journal = catalogue.requireTool("debug_journal").inputSchema();
         assertThat(journal.get("required")).isEqualTo(List.of("swarmId"));
         assertThat(properties(journal)).containsKeys("swarmId", "runId", "limit", "severity");
+        assertThat(property(journal, "limit")).containsEntry("default", 50L);
+
+        Map<String, Object> hiveJournal = catalogue.requireTool("debug_hive_journal").inputSchema();
+        assertThat(property(hiveJournal, "limit")).containsEntry("default", 50L);
+
+        Map<String, Object> timeline = catalogue.requireTool("runtime_swarm_timeline").inputSchema();
+        assertThat(property(timeline, "limit")).containsEntry("default", 100L);
 
         Map<String, Object> tap = catalogue.requireTool("debug_tap").inputSchema();
         assertThat(tap.get("required"))
@@ -211,6 +234,19 @@ class ToolCatalogueTest {
         assertThatThrownBy(() -> ToolCatalogue.canonical().requireTool("unknown"))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Unknown tool: unknown");
+    }
+
+    @Test
+    void descriptorsExposeTheirExactSafetyAnnotations() {
+        ToolDescriptor list = ToolCatalogue.canonical().requireTool("swarm_list");
+        ToolDescriptor remove = ToolCatalogue.canonical().requireTool("swarm_remove");
+
+        assertThat(list.readOnly()).isTrue();
+        assertThat(list.destructive()).isFalse();
+        assertThat(list.idempotent()).isTrue();
+        assertThat(remove.readOnly()).isFalse();
+        assertThat(remove.destructive()).isTrue();
+        assertThat(remove.idempotent()).isTrue();
     }
 
     @Test

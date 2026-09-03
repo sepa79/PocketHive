@@ -7,6 +7,12 @@ import java.util.Arrays;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+/**
+ * Responsibility: Normalize the authenticated MCP transport identity into an immutable caller context.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record McpCaller(PrincipalKey principal, String principalLabel, String clientId, Set<String> scopes) {
     static final String ISSUER = "pockethive.issuer";
     static final String SUBJECT = "pockethive.subject";

@@ -1,5 +1,11 @@
 package io.pockethive.mcp.domain;
 
+/**
+ * Responsibility: Model the QaRequirementTopic MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public enum QaRequirementTopic {
     GOAL_AND_RISK,
     SUT_AND_ENDPOINTS,

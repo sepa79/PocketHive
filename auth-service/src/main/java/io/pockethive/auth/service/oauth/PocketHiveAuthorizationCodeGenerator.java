@@ -8,6 +8,12 @@ import org.springframework.security.oauth2.server.authorization.OAuth2Authorizat
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 
+/**
+ * Responsibility: Generate PocketHive authorization codes with the required token context.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 public final class PocketHiveAuthorizationCodeGenerator implements OAuth2TokenGenerator<OAuth2AuthorizationCode> {
     private final SecureRandom random = new SecureRandom();
 

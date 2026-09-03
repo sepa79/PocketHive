@@ -336,24 +336,55 @@ test('tool requests enforce exact JSON-RPC, SSE, status, and connected-session c
 test('tool results preserve structured owner data, explicit errors, and content fallback', async () => {
   const connected = await connectedClient([
     json({ jsonrpc: '2.0', id: 3, result: { structuredContent: { swarms: 2 }, content: ['ignored'] } }),
-    json({ jsonrpc: '2.0', id: 4, result: { content: [{ type: 'text', text: 'fallback' }] } }),
+    json({ jsonrpc: '2.0', id: 4, result: { content: [{ type: 'text', text: '"fallback"' }] } }),
     json({ jsonrpc: '2.0', id: 5, result: { isError: false, structuredContent: false, content: ['ignored'] } }),
     json({ jsonrpc: '2.0', id: 6, result: { isError: true, structuredContent: { code: 'DENIED' } } }),
     json({ jsonrpc: '2.0', id: 7, result: { isError: true, content: [{ text: 'failed' }] } }),
+    json({ jsonrpc: '2.0', id: 8, result: { content: [{ type: 'text', text: '[{"id":"one"}]' }] } }),
+    json({ jsonrpc: '2.0', id: 9, result: { content: [{ type: 'text', text: '"scenario yaml"' }] } }),
+    json({ jsonrpc: '2.0', id: 10, result: { content: [{ type: 'text', text: 'not-json' }] } }),
   ]);
   assert.deepEqual(await connected.client.callTool('one', { a: 1 }), { swarms: 2 });
-  assert.deepEqual(await connected.client.callTool('two'), [{ type: 'text', text: 'fallback' }]);
+  assert.equal(await connected.client.callTool('two'), 'fallback');
   assert.equal(await connected.client.callTool('three'), false);
   await rejectsContract(connected.client.callTool('four'), 'MCP_TOOL_FAILED',
     'MCP_TOOL_FAILED: {"code":"DENIED"}');
   await rejectsContract(connected.client.callTool('five'), 'MCP_TOOL_FAILED',
     'MCP_TOOL_FAILED: [{"text":"failed"}]');
+  assert.deepEqual(await connected.client.callTool('six'), [{ id: 'one' }]);
+  assert.equal(await connected.client.callTool('seven'), 'scenario yaml');
+  await rejectsContract(connected.client.callTool('eight'), 'MCP_TOOL_RESULT_INVALID',
+    'MCP_TOOL_RESULT_INVALID: text content was not valid JSON');
   assert.deepEqual(JSON.parse(String(connected.requests[3].init?.body)), {
     jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'one', arguments: { a: 1 } },
   });
   assert.deepEqual(JSON.parse(String(connected.requests[4].init?.body)), {
     jsonrpc: '2.0', id: 4, method: 'tools/call', params: { name: 'two', arguments: {} },
   });
+});
+
+test('tool results reject every malformed JSON text compatibility representation', async () => {
+  for (const content of [undefined, {}, [], [{ type: 'text', text: '[]' }, { type: 'text', text: '[]' }]]) {
+    const connected = await connectedClient([
+      json({ jsonrpc: '2.0', id: 3, result: { content } }),
+    ]);
+    await rejectsContract(connected.client.callTool('invalid'), 'MCP_TOOL_RESULT_INVALID',
+      'MCP_TOOL_RESULT_INVALID: expected exactly one content item');
+  }
+  for (const item of [
+    null,
+    1,
+    [],
+    { type: 'image', text: '[]' },
+    { type: 'text' },
+    { type: 'text', text: 1 },
+  ]) {
+    const connected = await connectedClient([
+      json({ jsonrpc: '2.0', id: 3, result: { content: [item] } }),
+    ]);
+    await rejectsContract(connected.client.callTool('invalid'), 'MCP_TOOL_RESULT_INVALID',
+      'MCP_TOOL_RESULT_INVALID: content item must contain JSON text');
+  }
 });
 
 test('archive uploads reject every URL adornment and preserve exact owner failures', async () => {

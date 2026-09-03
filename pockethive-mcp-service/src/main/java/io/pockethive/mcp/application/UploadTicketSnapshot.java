@@ -5,6 +5,12 @@ import io.pockethive.mcp.domain.PrincipalKey;
 import io.pockethive.mcp.domain.SourceMetadata;
 import java.time.Instant;
 
+/**
+ * Responsibility: Carry immutable upload ticket snapshot application data.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record UploadTicketSnapshot(
     UploadTicketPurpose purpose,
     String id,

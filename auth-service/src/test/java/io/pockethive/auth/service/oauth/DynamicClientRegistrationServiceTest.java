@@ -3,6 +3,8 @@ package io.pockethive.auth.service.oauth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
+
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import java.net.URI;
@@ -81,6 +83,18 @@ class DynamicClientRegistrationServiceTest {
         assertThat(clients.findByClientId(response.clientId()).getScopes())
             .containsExactlyInAnyOrderElementsOf(PocketHiveMcpScopes.COMPANION_ORDERED)
             .doesNotContain(PocketHiveMcpScopes.CLEANUP);
+    }
+
+    @Test
+    void substitutesPublicNoneWhenNativeClientAuthenticationMetadataIsOmitted() {
+        PocketHiveRegisteredClientRepository clients = repository(new MutableClock(NOW), 1);
+        DynamicClientRegistrationResponse response = new DynamicClientRegistrationService(
+            clients, TOKENS, Clock.fixed(NOW, ZoneOffset.UTC)).register(request(
+                "kiro", List.of("http://127.0.0.1:52000/oauth/callback"), grants(), codes(), null, null));
+
+        assertThat(response.tokenEndpointAuthMethod()).isEqualTo("none");
+        assertThat(clients.findByClientId(response.clientId()).getClientAuthenticationMethods())
+            .containsExactly(ClientAuthenticationMethod.NONE);
     }
 
     @Test
@@ -232,7 +246,7 @@ class DynamicClientRegistrationServiceTest {
     @Test
     void requiresDynamicClientInactivityLifetimeToExceedRefreshLifetime() {
         AuthServiceProperties properties = validOAuthProperties();
-        AuthServiceProperties.OAuthConfig oauth = properties.getOauth();
+        AuthServiceOAuthProperties oauth = properties.getOauth();
         oauth.setRefreshTokenTtl(TTL);
         oauth.setDynamicClientTtl(TTL);
 
@@ -247,7 +261,7 @@ class DynamicClientRegistrationServiceTest {
     @Test
     void requiresCanonicalPortlessIpLoopbackForVscodeRedirect() {
         AuthServiceProperties properties = validOAuthProperties();
-        AuthServiceProperties.OAuthConfig oauth = properties.getOauth();
+        AuthServiceOAuthProperties oauth = properties.getOauth();
 
         for (String redirect : List.of(
             "http://127.0.0.1:52000/callback",
@@ -271,7 +285,7 @@ class DynamicClientRegistrationServiceTest {
 
     @Test
     void defaultsDynamicClientInactivityLifetimeBeyondRefreshLifetime() {
-        AuthServiceProperties.OAuthConfig oauth = new AuthServiceProperties.OAuthConfig();
+        AuthServiceOAuthProperties oauth = new AuthServiceOAuthProperties();
 
         assertThat(oauth.getRefreshTokenTtl()).isEqualTo(Duration.ofDays(30));
         assertThat(oauth.getDynamicClientTtl()).isEqualTo(Duration.ofDays(31));
@@ -371,7 +385,7 @@ class DynamicClientRegistrationServiceTest {
 
     private static AuthServiceProperties validOAuthProperties() {
         AuthServiceProperties properties = new AuthServiceProperties();
-        AuthServiceProperties.OAuthConfig oauth = properties.getOauth();
+        AuthServiceOAuthProperties oauth = properties.getOauth();
         oauth.setIssuer(URI.create("http://127.0.0.1:8088/auth-service"));
         oauth.setResource(URI.create("http://127.0.0.1:8088/mcp"));
         oauth.setVscodeClientId("vscode-client");

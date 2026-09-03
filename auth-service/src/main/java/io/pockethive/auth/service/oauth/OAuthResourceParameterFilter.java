@@ -11,6 +11,12 @@ import java.util.Objects;
 import org.springframework.http.MediaType;
 import org.springframework.web.filter.OncePerRequestFilter;
 
+/**
+ * Responsibility: Enforce the exact OAuth protected-resource parameter at the HTTP boundary.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 public final class OAuthResourceParameterFilter extends OncePerRequestFilter {
     private final String expectedResource;
     private final ObjectMapper mapper = new ObjectMapper();

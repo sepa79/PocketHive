@@ -27,7 +27,11 @@ for (const required of [
   'package.json', 'README.md', 'LICENSE', 'media/companion.css',
   'resources/codicon.css', 'resources/codicon.ttf', 'resources/codicons.LICENSE',
   'resources/activity-mark.svg', 'resources/brand-tokens.css', 'resources/logo-mark.svg',
-  'out/extension.js', 'out/generated/callbackLogo.js', 'out/webview/eventFilters.js', 'out/webview/main.js',
+  'out/extension.js', 'out/generated/callbackLogo.js', 'out/webview/debugEvidence.js',
+  'out/webview/eventFilters.js', 'out/webview/main.js', 'out/webview/scenarioViews.js',
+  'out/webview/hiveViews.js', 'out/webview/debugViews.js', 'out/webview/eventViews.js',
+  'out/webview/environmentViews.js', 'out/webview/scriptManifest.js',
+  'out/webview/swarmWorkspaceService.js',
 ]) {
   assert.equal(files.includes(required), true, `Required VSIX file missing: ${required}`);
 }
@@ -37,5 +41,5 @@ for (const forbidden of [
   assert.equal(files.some(file => file.includes(forbidden)), false,
     `Forbidden VSIX content remains: ${forbidden}`);
 }
-assert.ok(files.length < 50, `VSIX file set is unexpectedly large: ${files.length}`);
+assert.ok(files.length <= 55, `VSIX file set is unexpectedly large: ${files.length}`);
 console.log(`PocketHive VSIX content checks passed (${files.length} files).`);

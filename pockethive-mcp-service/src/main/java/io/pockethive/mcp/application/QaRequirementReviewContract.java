@@ -12,6 +12,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
 
+/**
+ * Responsibility: Prepare and verify the canonical compact QA review contract.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 final class QaRequirementReviewContract {
     static final String REVIEW_ID = "compact-review/all-topics";
     private static final int MAX_ANSWER_LENGTH = 20_000;

@@ -1,4 +1,5 @@
 package io.pockethive.mcp.adapter.persistence;
+import io.pockethive.mcp.config.McpStateMode;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -264,7 +265,7 @@ class AtomicCoordinationStateRepositoryTest {
     private AtomicCoordinationStateRepository repository(Path state, long maxBytes,
                                                           int maxOpenSessions,
                                                           int maxPerPrincipal) {
-        return new AtomicCoordinationStateRepository(mapper, PocketHiveMcpProperties.StateMode.FILE,
+        return new AtomicCoordinationStateRepository(mapper, McpStateMode.FILE,
             state, maxBytes, maxOpenSessions, maxPerPrincipal);
     }
 

@@ -7,6 +7,12 @@ import java.util.Map;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Responsibility: Publish the canonical OAuth protected-resource metadata for the MCP ingress.
+ * Must not: Grant scopes, infer identities, or bypass the Auth Service token contract.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 @RestController
 public class ProtectedResourceMetadataController {
     private final PocketHiveMcpProperties properties;

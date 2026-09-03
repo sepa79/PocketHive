@@ -21,6 +21,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -116,6 +117,43 @@ class McpStreamableHttpIntegrationTest {
     }
 
     @Test
+    void publishesOnlyProtocolValidObjectRootOutputSchemas() throws Exception {
+        HttpResponse<String> initialized = post(initialize(REVISION), "qa-token", REVISION, null,
+            "http://127.0.0.1:" + port);
+        String sessionId = initialized.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow();
+
+        JsonNode tools = rpcResult(post(
+            "{\"jsonrpc\":\"2.0\",\"id\":71,\"method\":\"tools/list\",\"params\":{}}",
+            "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port)).path("tools");
+
+        assertThat(tools.isArray()).isTrue();
+        assertThat(tools).hasSize(59);
+        List<String> omittedSchemas = new ArrayList<>();
+        tools.forEach(tool -> {
+            JsonNode outputSchema = tool.path("outputSchema");
+            if (outputSchema.isMissingNode()) {
+                omittedSchemas.add(tool.path("name").asText());
+            } else {
+                assertThat(outputSchema.path("type").asText())
+                    .as("output schema root for %s", tool.path("name").asText())
+                    .isEqualTo("object");
+            }
+        });
+        assertThat(omittedSchemas).containsExactlyInAnyOrder(
+            "scenario_list",
+            "scenario_raw_read",
+            "scenario_schema_read",
+            "scenario_template_read",
+            "scenario_suts_list",
+            "scenario_capabilities_get",
+            "scenario_templates_catalog",
+            "swarm_list",
+            "debug_journal_runs");
+
+        delete("qa-token", REVISION, sessionId);
+    }
+
+    @Test
     void delegatesSupportedAndUnknownInitializationRevisionNegotiationToThePinnedSdk() throws Exception {
         HttpResponse<String> older = post(initialize("2025-06-18"), "qa-token", "2025-06-18", null,
             "http://127.0.0.1:" + port);
@@ -165,15 +203,19 @@ class McpStreamableHttpIntegrationTest {
         JsonNode all = rpcResult(post(toolCall(42, "scenario_capabilities_get", Map.of()),
             "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port));
         assertThat(all.path("isError").asBoolean()).isFalse();
-        assertThat(all.path("structuredContent").isArray()).isTrue();
-        assertThat(all.path("structuredContent").path(0).path("role").asText()).isEqualTo("generator");
+        assertThat(all.has("structuredContent")).isFalse();
+        JsonNode allContent = mapper.readTree(all.path("content").path(0).path("text").asText());
+        assertThat(allContent.isArray()).isTrue();
+        assertThat(allContent.path(0).path("role").asText()).isEqualTo("generator");
 
         JsonNode exact = rpcResult(post(toolCall(43, "scenario_capabilities_get",
                 Map.of("imageName", "generator")),
             "qa-token", REVISION, sessionId, "http://127.0.0.1:" + port));
         assertThat(exact.path("isError").asBoolean()).isFalse();
-        assertThat(exact.path("structuredContent").isObject()).isTrue();
-        assertThat(exact.path("structuredContent").path("role").asText()).isEqualTo("generator");
+        assertThat(exact.has("structuredContent")).isFalse();
+        JsonNode exactContent = mapper.readTree(exact.path("content").path(0).path("text").asText());
+        assertThat(exactContent.isObject()).isTrue();
+        assertThat(exactContent.path("role").asText()).isEqualTo("generator");
         delete("qa-token", REVISION, sessionId);
     }
 

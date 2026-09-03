@@ -6,6 +6,12 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.server.resource.authentication.BearerTokenAuthentication;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Resolve a validated principal key from the authenticated ingress identity.
+ * Must not: Grant scopes, infer identities, or bypass the Auth Service token contract.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
+
 @Component
 public final class AuthenticatedPrincipalResolver {
     public PrincipalKey resolve(Authentication authentication) {

@@ -5,6 +5,12 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * Responsibility: Migrate persisted coordination documents to the canonical schema version.
+ * Must not: Own domain transitions or expose persistence details through public contracts.
+ * Contract: docs/mcp/README.md.
+ */
+
 final class CoordinationStateSchema {
     static final int CURRENT_VERSION = 3;
     private static final int LEGACY_RECEIPT_VERSION = 1;

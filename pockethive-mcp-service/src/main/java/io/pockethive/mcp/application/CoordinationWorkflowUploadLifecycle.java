@@ -10,14 +10,22 @@ import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: Record validated and published bundle evidence on the owning QA workflow.
+ * Must not: Authorize workflow access, upload archives, or execute publication.
+ * Contract: docs/mcp/README.md.
+ */
 @Service
 public final class CoordinationWorkflowUploadLifecycle implements BundleUploadLifecycle {
     private final CoordinationStateRepository state;
     private final ObjectMapper mapper;
+    private final WorkflowAccess workflows;
 
-    public CoordinationWorkflowUploadLifecycle(CoordinationStateRepository state, ObjectMapper mapper) {
+    CoordinationWorkflowUploadLifecycle(CoordinationStateRepository state, ObjectMapper mapper,
+                                        WorkflowAccess workflows) {
         this.state = state;
         this.mapper = mapper;
+        this.workflows = workflows;
     }
 
     @Override
@@ -36,12 +44,7 @@ public final class CoordinationWorkflowUploadLifecycle implements BundleUploadLi
     }
 
     private ScenarioWorkflow workflow(PrincipalKey principal, String workflowId) {
-        ScenarioWorkflow workflow = state.findWorkflow(workflowId)
-            .orElseThrow(() -> new ToolExecutionException("SCENARIO_WORKFLOW_NOT_FOUND", workflowId));
-        if (!workflow.principal().equals(principal)) {
-            throw new ToolExecutionException("SCENARIO_WORKFLOW_NOT_FOUND", workflowId);
-        }
-        return workflow;
+        return workflows.requireWorkflow(workflowId, principal);
     }
 
     private String digest(PublicationAttempt attempt) {

@@ -3,6 +3,12 @@ package io.pockethive.mcp.application;
 import io.pockethive.mcp.domain.QaRequirementTopic;
 import java.util.Locale;
 
+/**
+ * Responsibility: Define the canonical QA answer-capture modes.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public enum QaAnswerCaptureMode {
     MCP_FORM("mcp-form"),
     AGENT_MEDIATED("agent-mediated"),

@@ -19,6 +19,12 @@ import java.util.Set;
 import org.apache.commons.compress.archivers.zip.ZipArchiveEntry;
 import org.apache.commons.compress.archivers.zip.ZipFile;
 
+/**
+ * Responsibility: Validate and inspect bounded Scenario Bundle archives before owner upload.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class ZipBundleInspector {
     private static final int UNIX_FILE_TYPE_MASK = 0170000;
     private static final int UNIX_REGULAR_FILE = 0100000;

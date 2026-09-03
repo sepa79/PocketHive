@@ -9,6 +9,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Map known application failures to redacted, stable MCP error payloads.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Component
 final class ToolFailureMapper {
     private static final Logger log = LoggerFactory.getLogger(ToolFailureMapper.class);

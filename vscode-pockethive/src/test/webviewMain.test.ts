@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 
+require('../webview/debugEvidence');
+require('../webview/scenarioViews');
+require('../webview/hiveViews');
+require('../webview/debugViews');
+require('../webview/eventViews');
+require('../webview/environmentViews');
+
 interface FakeMessageEvent {
   readonly data: unknown;
 }
@@ -1270,6 +1277,8 @@ test('create swarm form emits exact template selection and create commands', asy
             selectedTemplateId: 'mixed-smoke',
             selectedScenarioId: 'mixed-smoke',
             sutIds: ['wiremock-local'],
+            autoPullImages: true,
+            networkMode: 'DIRECT',
           },
           swarmOperations: { START: 'START', STOP: 'STOP', REMOVE: 'REMOVE' },
           swarmPrimaryActions: {},
@@ -1290,12 +1299,18 @@ test('create swarm form emits exact template selection and create commands', asy
     const swarmId = findFirst(app, element => element.tagName === 'input' && element.id === 'createSwarmId');
     const sut = findFirst(app, element => element.tagName === 'select' && element.id === 'createSwarmSut');
     const variables = findFirst(app, element => element.tagName === 'input' && element.id === 'createSwarmVariablesProfile');
+    const autoPullImages = findFirst(app, element => element.tagName === 'select' && element.id === 'createSwarmAutoPullImages');
+    const networkMode = findFirst(app, element => element.tagName === 'select' && element.id === 'createSwarmNetworkMode');
+    const networkProfile = findFirst(app, element => element.tagName === 'input' && element.id === 'createSwarmNetworkProfile');
     const create = findFirst(app, element => element.tagName === 'button' && element.textContent === 'Create swarm');
 
     assert.ok(template);
     assert.ok(swarmId);
     assert.ok(sut);
     assert.ok(variables);
+    assert.ok(autoPullImages);
+    assert.ok(networkMode);
+    assert.ok(networkProfile);
     assert.ok(create);
 
     template.value = 'mixed-smoke';
@@ -1312,6 +1327,12 @@ test('create swarm form emits exact template selection and create commands', asy
     sut.dispatch('change');
     variables.value = 'vars-smoke';
     variables.dispatch('input');
+    autoPullImages.value = 'true';
+    autoPullImages.dispatch('change');
+    networkMode.value = 'PROXIED';
+    networkMode.dispatch('change');
+    networkProfile.value = 'proxy-a';
+    networkProfile.dispatch('input');
     create.click();
 
     assert.deepEqual(postedMessages.at(-1), {
@@ -1321,6 +1342,9 @@ test('create swarm form emits exact template selection and create commands', asy
       scenarioId: 'mixed-smoke',
       sutId: 'wiremock-local',
       variablesProfileId: 'vars-smoke',
+      autoPullImages: true,
+      networkMode: 'PROXIED',
+      networkProfileId: 'proxy-a',
     });
   } finally {
     delete require.cache[modulePath];

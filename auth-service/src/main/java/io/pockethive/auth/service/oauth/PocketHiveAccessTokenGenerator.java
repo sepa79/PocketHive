@@ -19,6 +19,12 @@ import org.springframework.security.oauth2.server.authorization.OAuth2TokenType;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenContext;
 import org.springframework.security.oauth2.server.authorization.token.OAuth2TokenGenerator;
 
+/**
+ * Responsibility: Generate audience-bound PocketHive access tokens from canonical authorization state.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 public final class PocketHiveAccessTokenGenerator implements OAuth2TokenGenerator<OAuth2AccessToken> {
     private final AuthServiceProperties properties;
     private final InMemoryUserStore users;

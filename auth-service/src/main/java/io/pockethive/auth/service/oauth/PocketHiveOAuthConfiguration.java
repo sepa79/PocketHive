@@ -1,10 +1,11 @@
 package io.pockethive.auth.service.oauth;
 
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
+import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import io.pockethive.auth.service.service.InMemoryUserStore;
-import java.util.List;
 import java.time.Clock;
+import java.util.List;
 import org.springframework.boot.autoconfigure.security.SecurityProperties;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -35,13 +36,19 @@ import org.springframework.security.oauth2.core.OAuth2Token;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 
+/**
+ * Responsibility: Configure the PocketHive OAuth authorization server from validated canonical properties.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 @Configuration
 public class PocketHiveOAuthConfiguration {
     private static final String PKCE_S256 = "S256";
 
     @Bean
     TokenSettings oauthTokenSettings(AuthServiceProperties properties) {
-        AuthServiceProperties.OAuthConfig oauth = requireValid(properties);
+        AuthServiceOAuthProperties oauth = requireValid(properties);
         return TokenSettings.builder()
             .authorizationCodeTimeToLive(oauth.getAuthorizationCodeTtl())
             .accessTokenTimeToLive(oauth.getAccessTokenTtl())
@@ -60,7 +67,7 @@ public class PocketHiveOAuthConfiguration {
     PocketHiveRegisteredClientRepository registeredClients(AuthServiceProperties properties,
                                                             PasswordEncoder encoder,
                                                             TokenSettings tokens, Clock clock) {
-        AuthServiceProperties.OAuthConfig oauth = requireValid(properties);
+        AuthServiceOAuthProperties oauth = requireValid(properties);
         RegisteredClient vscode = RegisteredClient.withId("pockethive-vscode-public")
             .clientId(oauth.getVscodeClientId())
             .clientName("PocketHive VS Code")
@@ -217,8 +224,8 @@ public class PocketHiveOAuthConfiguration {
         return registration;
     }
 
-    static AuthServiceProperties.OAuthConfig requireValid(AuthServiceProperties properties) {
-        AuthServiceProperties.OAuthConfig oauth = properties.getOauth();
+    static AuthServiceOAuthProperties requireValid(AuthServiceProperties properties) {
+        AuthServiceOAuthProperties oauth = properties.getOauth();
         if (oauth == null || oauth.getIssuer() == null || oauth.getResource() == null
             || oauth.getVscodeRedirectUri() == null || blank(oauth.getVscodeClientId())
             || blank(oauth.getIntrospectionClientId()) || blank(oauth.getIntrospectionClientSecret())

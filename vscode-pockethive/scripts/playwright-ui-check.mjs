@@ -18,6 +18,7 @@ const {
 } = require('../out/webview/viewModelBoundary.js');
 const { EventPagePresentation } = require('../out/webview/eventPresentation.js');
 const { SIDEBAR_EVENT_LIMIT } = require('../out/webview/workspaceTool.js');
+const { WEBVIEW_SCRIPT_FILES } = require('../out/webview/scriptManifest.js');
 const root = path.resolve(import.meta.dirname, '..');
 const auditDirectory = path.resolve(root, 'reports', 'playwright-ui');
 const manifest = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
@@ -1298,8 +1299,19 @@ async function connectLocalMcp(browser) {
   const tools = Array.isArray(toolList?.tools) ? toolList.tools : [];
   const toolNames = new Set(tools.map(tool => tool?.name).filter(name => typeof name === 'string'));
   assert.equal(tools.length, 59, 'live MCP must expose the immutable complete tool catalogue');
-  assert.equal(tools.every(tool => tool?.outputSchema?.type || tool?.outputSchema?.oneOf), true,
-    'every live MCP tool must declare one explicit output root contract');
+  assert.equal(tools.every(tool => tool?.outputSchema === undefined || tool.outputSchema.type === 'object'), true,
+    'a published MCP output schema must have the protocol-required object root');
+  assert.deepEqual(tools.filter(tool => tool?.outputSchema === undefined).map(tool => tool.name).sort(), [
+    'debug_journal_runs',
+    'scenario_capabilities_get',
+    'scenario_list',
+    'scenario_raw_read',
+    'scenario_schema_read',
+    'scenario_suts_list',
+    'scenario_template_read',
+    'scenario_templates_catalog',
+    'swarm_list',
+  ], 'legacy non-object result shapes must omit the optional MCP output schema');
   for (const requiredTool of [
     'scenario_list',
     'scenario_templates_catalog',
@@ -1341,8 +1353,8 @@ async function connectLocalMcp(browser) {
   assert.deepEqual(Object.keys(scenarioCapabilitiesTool?.inputSchema?.properties ?? {}).sort(),
     ['all', 'imageDigest', 'imageName'],
     'scenario capabilities must expose only exact owner selectors');
-  assert.equal(Array.isArray(scenarioCapabilitiesTool?.outputSchema?.oneOf), true,
-    'scenario capabilities must declare the owner array-or-object result union');
+  assert.equal(scenarioCapabilitiesTool?.outputSchema, undefined,
+    'the array-or-object capability result must omit the optional MCP output schema');
   const allCapabilities = await client.callTool('scenario_capabilities_get');
   assert.equal(Array.isArray(allCapabilities), true,
     'the characterised complete capability read must remain an array');
@@ -1601,6 +1613,11 @@ async function probeDisposableRuntime(client, scenarios) {
       swarmId,
       templateId,
       idempotencyKey: key('create'),
+      autoPullImages: false,
+      sutId: null,
+      variablesProfileId: null,
+      networkMode: 'DIRECT',
+      networkProfileId: null,
     });
     created = true;
     const ready = await pollUntil('disposable swarm readiness',
@@ -1822,8 +1839,10 @@ async function startUiServer() {
     ['/resources/codicon.css', ['text/css', path.join(root, 'resources', 'codicon.css')]],
     ['/resources/codicon.ttf?9aab6318a6710999273bab9c78a9fd71', ['font/ttf', path.join(root, 'resources', 'codicon.ttf')]],
     ['/resources/logo-mark.svg', ['image/svg+xml', path.join(root, 'resources', 'logo-mark.svg')]],
-    ['/out/webview/eventFilters.js', ['text/javascript', path.join(root, 'out', 'webview', 'eventFilters.js')]],
-    ['/out/webview/main.js', ['text/javascript', path.join(root, 'out', 'webview', 'main.js')]],
+    ...WEBVIEW_SCRIPT_FILES.map(file => [
+      `/out/webview/${file}`,
+      ['text/javascript', path.join(root, 'out', 'webview', file)],
+    ]),
   ]);
   const http = createServer(async (request, response) => {
     if (request.url === '/') {
@@ -1848,8 +1867,8 @@ async function startUiServer() {
         <body class="vscode-dark"><main id="app" data-logo="/resources/logo-mark.svg"></main>
         <div id="announcer" class="sr-only" aria-live="polite"></div>
         <script>globalThis.__pockethiveMessages=[];globalThis.acquireVsCodeApi=()=>({postMessage(message){globalThis.__pockethiveMessages.push(message);}});</script>
-        <script src="/out/webview/eventFilters.js"></script>
-        <script src="/out/webview/main.js"></script></body></html>`);
+        ${WEBVIEW_SCRIPT_FILES.map(file => `<script src="/out/webview/${file}"></script>`).join('')}
+        </body></html>`);
       return;
     }
     const file = files.get(request.url ?? '');

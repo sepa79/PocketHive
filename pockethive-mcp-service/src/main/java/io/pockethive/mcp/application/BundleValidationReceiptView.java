@@ -4,6 +4,12 @@ import io.pockethive.mcp.domain.BundleFileManifest;
 import io.pockethive.mcp.domain.SourceMetadata;
 import java.time.Instant;
 
+/**
+ * Responsibility: Carry immutable bundle validation receipt view application data.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 /** Principal-safe client projection of a validation receipt. */
 public record BundleValidationReceiptView(
     String receiptId,

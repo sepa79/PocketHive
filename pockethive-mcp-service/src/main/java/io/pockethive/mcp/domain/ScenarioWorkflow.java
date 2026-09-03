@@ -6,6 +6,12 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.Objects;
 
+/**
+ * Responsibility: Model the ScenarioWorkflow MCP domain concept and enforce its local invariants.
+ * Must not: Access transport, configuration, or infrastructure adapters.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class ScenarioWorkflow {
     private final String id;
     private final String agentSessionId;

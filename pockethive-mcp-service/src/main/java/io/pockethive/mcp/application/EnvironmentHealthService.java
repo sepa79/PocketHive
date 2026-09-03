@@ -8,6 +8,12 @@ import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
+/**
+ * Responsibility: Aggregate canonical health probe results into the environment health projection.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class EnvironmentHealthService {
     private final URI publicIngress;
     private final List<EnvironmentHealthTarget> targets;

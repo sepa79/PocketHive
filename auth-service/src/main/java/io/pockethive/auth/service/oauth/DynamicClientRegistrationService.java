@@ -17,7 +17,12 @@ import org.springframework.security.oauth2.server.authorization.client.Registere
 import org.springframework.security.oauth2.server.authorization.settings.ClientSettings;
 import org.springframework.security.oauth2.server.authorization.settings.TokenSettings;
 
-/** Validates RFC 7591 public-client metadata and stores one exact normalized registration. */
+/**
+ * Responsibility: Validate and register bounded public OAuth clients with canonical scopes.
+ * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
+
 public final class DynamicClientRegistrationService {
     static final String REGISTRATION_PATH = "/oauth/register";
     private static final int MAX_CLIENT_NAME_LENGTH = 128;
@@ -54,9 +59,8 @@ public final class DynamicClientRegistrationService {
         List<String> redirectUris = redirectUris(request.redirectUris());
         List<String> grantTypes = grantTypes(request.grantTypes());
         responseTypes(request.responseTypes());
-        if (!TOKEN_AUTHENTICATION_NONE.equals(request.tokenEndpointAuthMethod())) {
-            throw invalidMetadata("Only public clients using token_endpoint_auth_method none are supported");
-        }
+        ClientAuthenticationMethod authenticationMethod =
+            clientAuthenticationMethod(request.tokenEndpointAuthMethod());
         List<String> scopes = scopes(request.scope());
         String clientId = newClientId();
         Instant issuedAt = clock.instant();
@@ -65,7 +69,7 @@ public final class DynamicClientRegistrationService {
             .clientId(clientId)
             .clientIdIssuedAt(issuedAt)
             .clientName(clientName)
-            .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
+            .clientAuthenticationMethod(authenticationMethod)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
             .clientSettings(ClientSettings.builder()
                 .requireProofKey(true)
@@ -85,7 +89,7 @@ public final class DynamicClientRegistrationService {
         }
         return new DynamicClientRegistrationResponse(
             clientId, issuedAt.getEpochSecond(), clientName, redirectUris, grantTypes,
-            List.of(RESPONSE_CODE), TOKEN_AUTHENTICATION_NONE, String.join(" ", scopes));
+            List.of(RESPONSE_CODE), authenticationMethod.getValue(), String.join(" ", scopes));
     }
 
     private String newClientId() {
@@ -164,6 +168,13 @@ public final class DynamicClientRegistrationService {
         if (values == null || !values.equals(List.of(RESPONSE_CODE))) {
             throw invalidMetadata("response_types must contain only code");
         }
+    }
+
+    private static ClientAuthenticationMethod clientAuthenticationMethod(String value) {
+        if (value != null && !TOKEN_AUTHENTICATION_NONE.equals(value)) {
+            throw invalidMetadata("Only public clients using token_endpoint_auth_method none are supported");
+        }
+        return ClientAuthenticationMethod.NONE;
     }
 
     private static List<String> scopes(String value) {

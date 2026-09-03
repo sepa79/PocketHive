@@ -12,12 +12,18 @@ import java.util.List;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * Responsibility: Bind and validate the canonical MCP owner, security, and capacity configuration.
+ * Must not: Own domain transitions or reconstruct configuration outside the canonical properties.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Validated
 @ConfigurationProperties("pockethive.mcp")
 public record PocketHiveMcpProperties(
     @NotNull URI pocketHiveIngress,
     @NotNull URI ownerApiBase,
-    @NotNull StateMode stateMode,
+    @NotNull McpStateMode stateMode,
     @NotNull Path statePath,
     @NotNull Path uploadSpoolPath,
     @NotNull Duration openSessionTtl,
@@ -48,11 +54,6 @@ public record PocketHiveMcpProperties(
     @NotBlank String downstreamServiceName,
     @NotBlank String downstreamServiceSecret
 ) {
-    public enum StateMode {
-        FILE,
-        MEMORY
-    }
-
     @AssertTrue(message = "production ingress and OAuth resource must use HTTPS; HTTP is loopback-only")
     public boolean hasSecureEndpoints() {
         return secureOrLoopback(pocketHiveIngress) && secureOrLoopback(oauthResource)

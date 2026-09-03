@@ -6,6 +6,12 @@ import io.pockethive.mcp.application.ToolExecutionException;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Responsibility: Validate tool results against their catalogue-declared output schemas.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 final class ToolOutputValidator {
     private ToolOutputValidator() {
     }

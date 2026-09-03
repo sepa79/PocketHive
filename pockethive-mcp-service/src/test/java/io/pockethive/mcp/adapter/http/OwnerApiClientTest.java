@@ -13,11 +13,15 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.mcp.application.ToolExecutionException;
 import io.pockethive.mcp.config.PocketHiveMcpProperties;
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
@@ -30,8 +34,8 @@ class OwnerApiClientTest {
     void sendsAnIsolatedServiceTokenAndRequiresStructuredJsonResponses() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        DownstreamTokenProvider tokens = mock(DownstreamTokenProvider.class);
-        when(tokens.bearerToken()).thenReturn("service-token");
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer service-token");
         OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
 
         server.expect(requestTo("http://owner.internal:8088/orchestrator/api/swarms"))
@@ -48,8 +52,8 @@ class OwnerApiClientTest {
     void preservesExplicitOwnerTextForPreviewReadTools() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        DownstreamTokenProvider tokens = mock(DownstreamTokenProvider.class);
-        when(tokens.bearerToken()).thenReturn("service-token");
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer service-token");
         OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
 
         server.expect(requestTo("http://owner.internal:8088/scenarios/scenario-a/raw"))
@@ -70,8 +74,8 @@ class OwnerApiClientTest {
     void mapsAnExplicitEmptyOwnerResponseButNeverFallsBackForMalformedJson() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        DownstreamTokenProvider tokens = mock(DownstreamTokenProvider.class);
-        when(tokens.bearerToken()).thenReturn("service-token");
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer service-token");
         OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
 
         server.expect(requestTo("http://owner.internal:8088/empty"))
@@ -92,8 +96,8 @@ class OwnerApiClientTest {
     void distinguishesDefinitiveRejectionReadFailureAndAmbiguousMutationWithoutRetry() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        DownstreamTokenProvider tokens = mock(DownstreamTokenProvider.class);
-        when(tokens.bearerToken()).thenReturn("service-token");
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer service-token");
         OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
 
         server.expect(requestTo("http://owner.internal:8088/rejected"))
@@ -109,6 +113,78 @@ class OwnerApiClientTest {
         assertCode("OWNER_UNAVAILABLE", () -> client.get("/unavailable"));
         assertCode("OWNER_RESULT_AMBIGUOUS", () -> client.post("/ambiguous", Map.of("intent", "exact")));
         assertCode("OWNER_RESULT_AMBIGUOUS", () -> client.delete("/disconnected"));
+        server.verify();
+    }
+
+    @Test
+    void refreshesTheCanonicalServiceTokenAndRepeatsTheExactRequestOnceAfterUnauthorized() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer stale-token");
+        when(tokens.refreshAuthorizationHeader()).thenReturn("Bearer fresh-token");
+        OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
+
+        server.expect(requestTo("http://owner.internal:8088/scenario-manager/api/capabilities"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer stale-token"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        server.expect(requestTo("http://owner.internal:8088/scenario-manager/api/capabilities"))
+            .andExpect(method(HttpMethod.GET))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer fresh-token"))
+            .andRespond(withSuccess("[{\"role\":\"generator\"}]", MediaType.APPLICATION_JSON));
+
+        JsonNode result = (JsonNode) client.get("/scenario-manager/api/capabilities");
+
+        assertThat(result.get(0).path("role").asText()).isEqualTo("generator");
+        org.mockito.Mockito.verify(tokens).refreshAuthorizationHeader();
+        server.verify();
+    }
+
+    @Test
+    void returnsTheSecondUnauthorizedWithoutAnotherRefreshOrIdentityFallback() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer stale-token");
+        when(tokens.refreshAuthorizationHeader()).thenReturn("Bearer fresh-token");
+        OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
+
+        server.expect(requestTo("http://owner.internal:8088/orchestrator/api/swarms"))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer stale-token"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        server.expect(requestTo("http://owner.internal:8088/orchestrator/api/swarms"))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer fresh-token"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+
+        assertCode("OWNER_REQUEST_REJECTED", () -> client.get("/orchestrator/api/swarms"));
+        org.mockito.Mockito.verify(tokens).refreshAuthorizationHeader();
+        server.verify();
+    }
+
+    @Test
+    void refreshesOnceForAnUnauthorizedArchiveUploadAndMapsTheFinalOwnerFailure(@TempDir Path directory)
+        throws Exception {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AuthServiceServiceTokenProvider tokens = mock(AuthServiceServiceTokenProvider.class);
+        when(tokens.getAuthorizationHeader()).thenReturn("Bearer stale-token");
+        when(tokens.refreshAuthorizationHeader()).thenReturn("Bearer fresh-token");
+        OwnerApiClient client = new OwnerApiClient(builder, properties(), tokens, new ObjectMapper());
+        Path archive = Files.write(directory.resolve("bundle.zip"), new byte[] {1, 2, 3});
+
+        server.expect(requestTo("http://owner.internal:8088/scenario-manager/api/bundles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer stale-token"))
+            .andRespond(withStatus(HttpStatus.UNAUTHORIZED));
+        server.expect(requestTo("http://owner.internal:8088/scenario-manager/api/bundles"))
+            .andExpect(method(HttpMethod.POST))
+            .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer fresh-token"))
+            .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertCode("OWNER_RESULT_AMBIGUOUS",
+            () -> client.postZip("/scenario-manager/api/bundles", archive));
+        org.mockito.Mockito.verify(tokens).refreshAuthorizationHeader();
         server.verify();
     }
 

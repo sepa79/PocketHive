@@ -1,4 +1,5 @@
 package io.pockethive.mcp.config;
+import io.pockethive.mcp.config.EnvironmentHealthTargetProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -50,13 +51,13 @@ class EnvironmentHealthPropertiesTest {
 
     private static EnvironmentHealthProperties properties(
         Duration timeout,
-        List<EnvironmentHealthProperties.Target> targets
+        List<EnvironmentHealthTargetProperties> targets
     ) {
         return new EnvironmentHealthProperties(timeout, targets);
     }
 
-    private static EnvironmentHealthProperties.Target target(String id, String endpointPath, String probePath) {
-        return new EnvironmentHealthProperties.Target(
+    private static EnvironmentHealthTargetProperties target(String id, String endpointPath, String probePath) {
+        return new EnvironmentHealthTargetProperties(
             id, "Owner", endpointPath, probePath, EnvironmentHealthContract.SPRING_UP);
     }
 }

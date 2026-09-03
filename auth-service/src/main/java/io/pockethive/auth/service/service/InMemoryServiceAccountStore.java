@@ -1,5 +1,6 @@
 package io.pockethive.auth.service.service;
 
+import io.pockethive.auth.service.config.AuthServiceAccountProperties;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import io.pockethive.auth.service.domain.StoredServiceAccount;
 import java.util.Comparator;
@@ -12,12 +13,17 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Responsibility: Store and query the configured Auth Service service-account projection in memory.
+ * Must not: Authenticate callers, issue tokens, or decide grant authorization.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md.
+ */
 @Service
 public class InMemoryServiceAccountStore {
     private final Map<String, StoredServiceAccount> accountsByName = new LinkedHashMap<>();
 
     public InMemoryServiceAccountStore(AuthServiceProperties properties) {
-        for (AuthServiceProperties.ServiceAccountConfig serviceAccount : properties.getServiceAccounts()) {
+        for (AuthServiceAccountProperties serviceAccount : properties.getServiceAccounts()) {
             StoredServiceAccount stored = toStoredServiceAccount(serviceAccount);
             accountsByName.put(stored.serviceName(), stored);
         }
@@ -43,7 +49,7 @@ public class InMemoryServiceAccountStore {
             .toList();
     }
 
-    private static StoredServiceAccount toStoredServiceAccount(AuthServiceProperties.ServiceAccountConfig config) {
+    private static StoredServiceAccount toStoredServiceAccount(AuthServiceAccountProperties config) {
         if (config.getId() == null) {
             throw new IllegalStateException("pockethive.auth-service.service-accounts[].id must not be null");
         }

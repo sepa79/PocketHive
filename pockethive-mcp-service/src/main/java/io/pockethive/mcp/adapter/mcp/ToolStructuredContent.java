@@ -4,6 +4,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.mcp.application.ToolExecutionException;
 import java.io.IOException;
 
+/**
+ * Responsibility: Normalize application results into MCP structured-content-safe values.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 final class ToolStructuredContent {
     private ToolStructuredContent() {
     }

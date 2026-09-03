@@ -87,7 +87,7 @@ export class McpHttpClient {
     if (result.isError === true) {
       throw new ConnectionContractError('MCP_TOOL_FAILED', JSON.stringify(result.structuredContent ?? result.content));
     }
-    return result.structuredContent ?? result.content;
+    return successfulToolOwnerResult(result);
   }
 
   async readResource(
@@ -266,6 +266,34 @@ function parseObject(value: string, code: string): Record<string, unknown> {
     return parsed as Record<string, unknown>;
   } catch (error) {
     throw new ConnectionContractError(code, `${code}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function successfulToolOwnerResult(result: Record<string, unknown>): unknown {
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  const content = result.content;
+  if (!Array.isArray(content) || content.length !== 1) {
+    throw new ConnectionContractError(
+      'MCP_TOOL_RESULT_INVALID',
+      'expected exactly one content item',
+    );
+  }
+  const item = content[0];
+  if (item === null || Array.isArray(item)
+      || (item as Record<string, unknown>).type !== 'text'
+      || typeof (item as Record<string, unknown>).text !== 'string') {
+    throw new ConnectionContractError(
+      'MCP_TOOL_RESULT_INVALID',
+      'content item must contain JSON text',
+    );
+  }
+  try {
+    return JSON.parse((item as Record<string, string>).text);
+  } catch {
+    throw new ConnectionContractError(
+      'MCP_TOOL_RESULT_INVALID',
+      'text content was not valid JSON',
+    );
   }
 }
 

@@ -9,6 +9,12 @@ import java.util.Optional;
 import java.time.Duration;
 import java.time.Instant;
 
+/**
+ * Responsibility: Define the closed coordination state repository application contract.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public interface CoordinationStateRepository {
     Optional<AgentSession> findSession(String sessionId);
 

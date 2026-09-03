@@ -26,6 +26,12 @@ import java.util.Map;
 import java.util.TreeMap;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Publish canonical PocketHive knowledge, capability, and environment resources over MCP.
+ * Must not: Own domain state transitions or reinterpret owner-service outcomes.
+ * Contract: docs/mcp/README.md.
+ */
+
 @Component
 public final class McpKnowledgeResources {
     private static final String JSON = "application/json";

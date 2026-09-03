@@ -1,4 +1,5 @@
 package io.pockethive.auth.service.oauth;
+import io.pockethive.auth.service.config.AuthServiceUserProperties;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -308,7 +309,7 @@ class PocketHivePublicSessionSecurityTest {
         AuthServiceProperties properties = new AuthServiceProperties();
         properties.getOauth().setIssuer(URI.create("http://localhost:8080/auth-service"));
         properties.getOauth().setResource(URI.create("http://localhost:8080/mcp"));
-        AuthServiceProperties.UserConfig user = new AuthServiceProperties.UserConfig();
+        AuthServiceUserProperties user = new AuthServiceUserProperties();
         user.setId(UUID.fromString("00000000-0000-0000-0000-000000000001"));
         user.setUsername(username);
         user.setDisplayName(username);

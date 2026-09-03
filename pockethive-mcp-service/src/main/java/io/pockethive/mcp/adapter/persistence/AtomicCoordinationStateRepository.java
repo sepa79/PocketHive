@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.mcp.application.CoordinationStateRepository;
 import io.pockethive.mcp.application.ToolExecutionException;
 import io.pockethive.mcp.application.UploadCoordinationSnapshot;
-import io.pockethive.mcp.config.PocketHiveMcpProperties;
+import io.pockethive.mcp.config.McpStateMode;
 import io.pockethive.mcp.domain.AgentSession;
 import io.pockethive.mcp.domain.AgentSessionSnapshot;
 import io.pockethive.mcp.domain.AgentSessionState;
@@ -31,23 +31,29 @@ import java.util.TreeMap;
 import java.time.Duration;
 import java.time.Instant;
 
+/**
+ * Responsibility: Persist coordination state atomically under an exclusive process lock.
+ * Must not: Own domain transitions or expose persistence details through public contracts.
+ * Contract: docs/mcp/README.md.
+ */
+
 public final class AtomicCoordinationStateRepository implements CoordinationStateRepository, AutoCloseable {
     private static final String STATE_FILE = "state.json";
     private static final String LOCK_FILE = "state.lock";
     private static final CoordinationStateSchema STATE_SCHEMA = new CoordinationStateSchema();
 
     private final ObjectMapper mapper;
-    private final PocketHiveMcpProperties.StateMode mode;
+    private final McpStateMode mode;
     private final Path stateDirectory;
     private final long maxStateBytes;
     private final int maxOpenSessions;
     private final int maxOpenSessionsPerPrincipal;
     private FileChannel lockChannel;
     private FileLock lock;
-    private StateDocument state;
+    private CoordinationStateDocument state;
 
     public AtomicCoordinationStateRepository(ObjectMapper mapper,
-                                              PocketHiveMcpProperties.StateMode mode,
+                                              McpStateMode mode,
                                               Path stateDirectory,
                                               long maxStateBytes,
                                               int maxOpenSessions,
@@ -62,8 +68,8 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         this.maxStateBytes = maxStateBytes;
         this.maxOpenSessions = maxOpenSessions;
         this.maxOpenSessionsPerPrincipal = maxOpenSessionsPerPrincipal;
-        this.state = StateDocument.empty();
-        if (mode == PocketHiveMcpProperties.StateMode.FILE) {
+        this.state = CoordinationStateDocument.empty();
+        if (mode == McpStateMode.FILE) {
             initialiseFileStore();
         }
     }
@@ -103,7 +109,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
         Map<String, AgentSessionSnapshot> sessions = new TreeMap<>(state.sessions());
         sessions.put(session.id(), session.snapshot());
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -112,7 +118,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         requirePresent(state.sessions(), session.id(), "AGENT_SESSION_NOT_FOUND");
         Map<String, AgentSessionSnapshot> sessions = new TreeMap<>(state.sessions());
         sessions.put(session.id(), session.snapshot());
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, state.workflows(), state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -130,7 +136,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         sessions.put(session.id(), session.snapshot());
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, state.generatedFiles(),
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -141,7 +147,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
         files.put(workflow.id(), copyFiles(generatedFiles));
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
             state.uploadCoordination()));
     }
 
@@ -150,7 +156,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         requirePresent(state.workflows(), workflow.id(), "SCENARIO_WORKFLOW_NOT_FOUND");
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, state.generatedFiles(),
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, state.generatedFiles(),
             state.uploadCoordination()));
     }
 
@@ -161,7 +167,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
         files.remove(workflow.id());
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, files,
             state.uploadCoordination()));
     }
 
@@ -177,7 +183,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
 
     @Override
     public synchronized void saveUploadCoordination(UploadCoordinationSnapshot uploadCoordination) {
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), state.workflows(), state.generatedFiles(),
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), state.workflows(), state.generatedFiles(),
             uploadCoordination));
     }
 
@@ -217,10 +223,10 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
                 }
             }
         });
-        replace(new StateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, files, state.uploadCoordination()));
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, files, state.uploadCoordination()));
     }
 
-    private void replace(StateDocument candidate) {
+    private void replace(CoordinationStateDocument candidate) {
         byte[] encoded;
         try {
             encoded = mapper.writeValueAsBytes(candidate);
@@ -230,7 +236,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         if (encoded.length > maxStateBytes) {
             throw new ToolExecutionException("MCP_STATE_CAPACITY_EXCEEDED", String.valueOf(maxStateBytes));
         }
-        if (mode == PocketHiveMcpProperties.StateMode.FILE) {
+        if (mode == McpStateMode.FILE) {
             writeAtomically(encoded);
         }
         state = candidate;
@@ -258,7 +264,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
                     throw new IllegalStateException("MCP_STATE_CAPACITY_EXCEEDED_AT_STARTUP");
                 }
                 CoordinationStateSchema.Migration migration = STATE_SCHEMA.migrate(mapper.readTree(bytes));
-                state = mapper.treeToValue(migration.encodedState(), StateDocument.class);
+                state = mapper.treeToValue(migration.encodedState(), CoordinationStateDocument.class);
                 validateLoadedState(state);
                 if (migration.migrated()) {
                     replace(state);
@@ -273,7 +279,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
     }
 
-    private void validateLoadedState(StateDocument loaded) {
+    private void validateLoadedState(CoordinationStateDocument loaded) {
         if (loaded.schemaVersion() != CoordinationStateSchema.CURRENT_VERSION || loaded.sessions() == null
             || loaded.workflows() == null || loaded.generatedFiles() == null
             || loaded.uploadCoordination() == null
@@ -317,7 +323,7 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
     }
 
-    private static long openSessionCount(StateDocument document, PrincipalKey principal) {
+    private static long openSessionCount(CoordinationStateDocument document, PrincipalKey principal) {
         return document.sessions().values().stream()
             .filter(session -> session.state() == AgentSessionState.OPEN)
             .filter(session -> principal == null || principal.equals(session.principal()))
@@ -377,22 +383,4 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
         }
     }
 
-    public record StateDocument(
-        int schemaVersion,
-        Map<String, AgentSessionSnapshot> sessions,
-        Map<String, ScenarioWorkflowSnapshot> workflows,
-        Map<String, List<Map<String, Object>>> generatedFiles,
-        UploadCoordinationSnapshot uploadCoordination
-    ) {
-        public StateDocument {
-            sessions = sessions == null ? null : Map.copyOf(new TreeMap<>(sessions));
-            workflows = workflows == null ? null : Map.copyOf(new TreeMap<>(workflows));
-            generatedFiles = generatedFiles == null ? null : Map.copyOf(new TreeMap<>(generatedFiles));
-        }
-
-        static StateDocument empty() {
-            return new StateDocument(CoordinationStateSchema.CURRENT_VERSION, Map.of(), Map.of(), Map.of(),
-                UploadCoordinationSnapshot.empty());
-        }
-    }
 }

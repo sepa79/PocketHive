@@ -427,6 +427,14 @@ This is the RFC 8414 discovery location for the configured issuer path
 `GET /.well-known/oauth-authorization-server` handler. Auth Service remains the
 single metadata owner; Nginx must not construct, cache, or replace the JSON.
 
+The public ingress also exposes the exact interoperability location
+`GET /.well-known/oauth-authorization-server`. Some native MCP clients resolve
+authorization-server discovery relative to the public origin even when the
+advertised issuer contains `/auth-service`. This location transparently proxies
+the same Auth Service handler and returns the same canonical metadata; it is not
+a second metadata owner, a client-specific response, or a fallback chain. The
+path-suffixed RFC 8414 location remains canonical.
+
 The response follows RFC 8414 and is generated only from configured canonical
 values. It contains:
 
@@ -479,13 +487,17 @@ pre-registered. It requires:
 - `grant_types` containing `authorization_code` and optionally
   `refresh_token`, with no other value;
 - `response_types=["code"]`;
-- `token_endpoint_auth_method="none"`; and
+- optional `token_endpoint_auth_method`. Auth Service accepts `"none"`. When
+  the field is omitted, Auth Service uses RFC 7591's permitted metadata
+  substitution to register the native MCP client explicitly as public
+  `"none"`; the registration response always states the accepted method. No
+  client secret is issued. Any supplied method other than `"none"` fails; and
 - optional space-separated `scope` metadata. When present it contains one or
   more values from the canonical interactive scope set: discover, read,
   operate, author, and publish. When omitted, Auth Service registers the client
   with that complete canonical interactive allow-list.
 
-The endpoint rejects blank scope metadata, cleanup, unknown scopes,
+The endpoint rejects blank scope metadata, cleanup, unknown scopes, supplied
 confidential-client methods, implicit grants, malformed metadata, duplicates,
 and untrusted redirect URIs.
 Successful registration returns a high-entropy `client_id`, issue time, and the

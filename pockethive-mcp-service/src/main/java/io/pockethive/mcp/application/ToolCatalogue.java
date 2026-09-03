@@ -12,15 +12,25 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
+/**
+ * Responsibility: Publish the canonical MCP tool and connected-skill catalogue and schemas.
+ * Must not: Execute tools, call owner services, or infer runtime configuration.
+ * Contract: docs/mcp/README.md.
+ */
 public final class ToolCatalogue {
     private static final ToolCatalogue CANONICAL = buildCanonical();
 
     private final List<ToolDescriptor> tools;
+    private final Map<McpToolId, ToolDescriptor> toolsById;
     private final Map<String, SkillDescriptor> skills;
 
     private ToolCatalogue(List<ToolDescriptor> tools, Map<String, SkillDescriptor> skills) {
         this.tools = List.copyOf(tools);
+        this.toolsById = tools.stream().collect(Collectors.toUnmodifiableMap(
+            ToolDescriptor::toolId, Function.identity()));
         this.skills = Map.copyOf(skills);
     }
 
@@ -37,110 +47,110 @@ public final class ToolCatalogue {
     }
 
     public ToolDescriptor requireTool(String id) {
-        return tools.stream().filter(tool -> tool.id().equals(id)).findFirst()
-            .orElseThrow(() -> new IllegalArgumentException("Unknown tool: " + id));
+        return toolsById.get(McpToolId.require(id));
     }
 
     private static ToolCatalogue buildCanonical() {
         Map<String, SkillDescriptor> skills = buildSkills();
         List<ToolDescriptor> tools = new ArrayList<>();
 
-        tools.add(read("scenario_list", "List deployed Scenario Bundles from Scenario Manager.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue"));
-        tools.add(read("scenario_get", "Read one deployed Scenario Bundle summary by exact scenario ID.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
-        tools.add(read("scenario_raw_read", "Read the deployed scenario YAML preview text; this is not a Git authoring path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
-        tools.add(read("scenario_schema_read", "Read one deployed Scenario Bundle schema as preview text.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
-        tools.add(read("scenario_template_read", "Read one deployed Scenario Bundle template as preview text.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "path"));
-        tools.add(read("scenario_bundle_tree_read", "Read one deployed Scenario Bundle file tree by exact bundle key.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "bundleKey"));
-        tools.add(read("scenario_bundle_file_read", "Read one deployed Scenario Bundle workspace file by exact bundle key and exact bundle-relative path.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "bundleKey", "path"));
-        tools.add(read("scenario_suts_list", "List exact bundle-local SUT ids for one deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId"));
-        tools.add(read("scenario_sut_get", "Read one exact bundle-local SUT descriptor for a deployed Scenario Bundle.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue", "scenarioId", "sutId"));
-        tools.add(read("scenario_contracts_get", "Read the canonical Scenario Manager authoring contract and fingerprint.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation"));
-        tools.add(read("scenario_capabilities_get", "Read live Scenario Manager authoring capabilities using one exact owner selector.", ToolOwner.SCENARIO_MANAGER, "pockethive-orientation", "all", "imageName", "imageDigest"));
-        tools.add(read("scenario_templates_catalog", "List canonical Scenario Manager template capabilities.", ToolOwner.SCENARIO_MANAGER, "scenario-catalogue"));
+        tools.add(read(McpToolId.SCENARIO_LIST, "List deployed Scenario Bundles from Scenario Manager.", "scenario-catalogue"));
+        tools.add(read(McpToolId.SCENARIO_GET, "Read one deployed Scenario Bundle summary by exact scenario ID.", "scenario-catalogue", "scenarioId"));
+        tools.add(read(McpToolId.SCENARIO_RAW_READ, "Read the deployed scenario YAML preview text; this is not a Git authoring path.", "scenario-catalogue", "scenarioId"));
+        tools.add(read(McpToolId.SCENARIO_SCHEMA_READ, "Read one deployed Scenario Bundle schema as preview text.", "scenario-catalogue", "scenarioId", "path"));
+        tools.add(read(McpToolId.SCENARIO_TEMPLATE_READ, "Read one deployed Scenario Bundle template as preview text.", "scenario-catalogue", "scenarioId", "path"));
+        tools.add(read(McpToolId.SCENARIO_BUNDLE_TREE_READ, "Read one deployed Scenario Bundle file tree by exact bundle key.", "scenario-catalogue", "bundleKey"));
+        tools.add(read(McpToolId.SCENARIO_BUNDLE_FILE_READ, "Read one deployed Scenario Bundle workspace file by exact bundle key and exact bundle-relative path.", "scenario-catalogue", "bundleKey", "path"));
+        tools.add(read(McpToolId.SCENARIO_SUTS_LIST, "List exact bundle-local SUT ids for one deployed Scenario Bundle.", "scenario-catalogue", "scenarioId"));
+        tools.add(read(McpToolId.SCENARIO_SUT_GET, "Read one exact bundle-local SUT descriptor for a deployed Scenario Bundle.", "scenario-catalogue", "scenarioId", "sutId"));
+        tools.add(read(McpToolId.SCENARIO_CONTRACTS_GET, "Read the canonical Scenario Manager authoring contract and fingerprint.", "pockethive-orientation"));
+        tools.add(read(McpToolId.SCENARIO_CAPABILITIES_GET, "Read live Scenario Manager authoring capabilities using one exact owner selector.", "pockethive-orientation", "all", "imageName", "imageDigest"));
+        tools.add(read(McpToolId.SCENARIO_TEMPLATES_CATALOG, "List canonical Scenario Manager template capabilities.", "scenario-catalogue"));
 
-        tools.add(read("swarm_list", "List live swarms from Orchestrator.", ToolOwner.ORCHESTRATOR, "swarm-lifecycle"));
-        tools.add(read("swarm_get", "Read one swarm's authoritative status by exact ID.", ToolOwner.ORCHESTRATOR, "swarm-lifecycle", "swarmId"));
-        tools.add(write("swarm_create", "Create one swarm from an already deployed Scenario Bundle.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "templateId", "sutId", "variablesProfileId", "idempotencyKey"));
-        tools.add(write("swarm_start", "Start one existing swarm.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
-        tools.add(read("swarm_wait_ready", "Observe readiness once through Orchestrator without blocking; call again under the client's explicit timeout policy.", ToolOwner.ORCHESTRATOR, "swarm-lifecycle", "swarmId"));
-        tools.add(write("swarm_stop", "Stop one swarm without removing it.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
-        tools.add(write("swarm_remove", "Remove one exact swarm through Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, true, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
+        tools.add(read(McpToolId.SWARM_LIST, "List live swarms from Orchestrator.", "swarm-lifecycle"));
+        tools.add(read(McpToolId.SWARM_GET, "Read one swarm's authoritative status by exact ID.", "swarm-lifecycle", "swarmId"));
+        tools.add(write(McpToolId.SWARM_CREATE, "Create one swarm from an already deployed Scenario Bundle.", PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "templateId", "autoPullImages", "sutId", "variablesProfileId", "networkMode", "networkProfileId", "idempotencyKey"));
+        tools.add(write(McpToolId.SWARM_START, "Start one existing swarm.", PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
+        tools.add(read(McpToolId.SWARM_WAIT_READY, "Observe readiness once through Orchestrator without blocking; call again under the client's explicit timeout policy.", "swarm-lifecycle", "swarmId"));
+        tools.add(write(McpToolId.SWARM_STOP, "Stop one swarm without removing it.", PocketHiveMcpScopes.OPERATE, false, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
+        tools.add(write(McpToolId.SWARM_REMOVE, "Remove one exact swarm through Orchestrator.", PocketHiveMcpScopes.OPERATE, true, true, "swarm-lifecycle", "swarmId", "idempotencyKey"));
 
-        tools.add(read("debug_journal", "Read a bounded journal page for one exact swarm and optional exact run.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId", "limit", "severity"));
-        tools.add(read("debug_journal_runs", "List authoritative journal run summaries for one exact swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
-        tools.add(read("debug_hive_journal", "Read a bounded hive-wide journal page.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "limit"));
-        tools.add(write("debug_tap", "Create a bounded temporary debug tap for one exact swarm and binding.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, false, "runtime-diagnostics", "swarmId", "role", "direction", "ioName", "maxItems", "ttlSeconds"));
-        tools.add(read("debug_tap_read", "Read bounded samples from one exact Orchestrator debug tap.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "tapId", "drain"));
-        tools.add(write("debug_tap_close", "Close one exact Orchestrator debug tap.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, true, true, "runtime-diagnostics", "tapId"));
-        tools.add(read("component_config_preview", "Preview a typed component configuration merge without sending it.", ToolOwner.ORCHESTRATOR, "live-configuration", "swarmId", "role", "instanceId", "patch"));
-        tools.add(write("component_config_update", "Apply an explicitly reviewed component configuration patch through Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.OPERATE, false, true, "live-configuration", "swarmId", "role", "instanceId", "patch", "idempotencyKey"));
+        tools.add(read(McpToolId.DEBUG_JOURNAL, "Read a bounded journal page for one exact swarm and optional exact run.", "runtime-diagnostics", "swarmId", "runId", "limit", "severity"));
+        tools.add(read(McpToolId.DEBUG_JOURNAL_RUNS, "List authoritative journal run summaries for one exact swarm.", "runtime-diagnostics", "swarmId"));
+        tools.add(read(McpToolId.DEBUG_HIVE_JOURNAL, "Read a bounded hive-wide journal page.", "runtime-diagnostics", "limit"));
+        tools.add(write(McpToolId.DEBUG_TAP, "Create a bounded temporary debug tap for one exact swarm and binding.", PocketHiveMcpScopes.OPERATE, false, false, "runtime-diagnostics", "swarmId", "role", "direction", "ioName", "maxItems", "ttlSeconds"));
+        tools.add(read(McpToolId.DEBUG_TAP_READ, "Read bounded samples from one exact Orchestrator debug tap.", "runtime-diagnostics", "tapId", "drain"));
+        tools.add(write(McpToolId.DEBUG_TAP_CLOSE, "Close one exact Orchestrator debug tap.", PocketHiveMcpScopes.OPERATE, true, true, "runtime-diagnostics", "tapId"));
+        tools.add(read(McpToolId.COMPONENT_CONFIG_PREVIEW, "Preview a typed component configuration merge without sending it.", "live-configuration", "swarmId", "role", "instanceId", "patch"));
+        tools.add(write(McpToolId.COMPONENT_CONFIG_UPDATE, "Apply an explicitly reviewed component configuration patch through Orchestrator.", PocketHiveMcpScopes.OPERATE, false, true, "live-configuration", "swarmId", "role", "instanceId", "patch", "idempotencyKey"));
 
-        tools.add(read("runtime_cleanup_plan", "Create a read-only, exact candidate cleanup plan through Orchestrator.", ToolOwner.ORCHESTRATOR, "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit"));
-        tools.add(read("runtime_tail_worker_logs", "Read bounded redacted logs for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId", "tailLines"));
-        tools.add(read("runtime_get_worker_version", "Read version metadata for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId"));
-        tools.add(read("runtime_list_workers", "List label-gated runtime resources for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
-        tools.add(read("runtime_inspect_worker", "Read a bounded inspect projection for one exact runtime target.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runtimeId"));
-        tools.add(read("runtime_assess_swarm", "Read the canonical Orchestrator-owned runtime assessment for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
-        tools.add(read("runtime_diff_swarm_runtime", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
-        tools.add(read("runtime_control_plane_status", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
-        tools.add(read("runtime_rabbit_topology_snapshot", "Read the exact Orchestrator-owned RabbitMQ topology projection for one swarm.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId"));
-        tools.add(read("runtime_swarm_timeline", "Build a bounded timeline from Orchestrator journal and status APIs.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "limit"));
-        tools.add(read("runtime_manifest_validate", "Compatibility view of the canonical Orchestrator runtime assessment.", ToolOwner.ORCHESTRATOR, "runtime-diagnostics", "swarmId", "runId"));
-        tools.add(write("runtime_cleanup_execute", "Execute only a current reviewed cleanup plan through HiveGate and Orchestrator.", ToolOwner.ORCHESTRATOR, PocketHiveMcpScopes.CLEANUP, true, true, "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit", "candidateSetHash", "candidateIds", "idempotencyKey", "reason", "actor"));
+        tools.add(read(McpToolId.RUNTIME_CLEANUP_PLAN, "Create a read-only, exact candidate cleanup plan through Orchestrator.", "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit"));
+        tools.add(read(McpToolId.RUNTIME_TAIL_WORKER_LOGS, "Read bounded redacted logs for one exact runtime target.", "runtime-diagnostics", "swarmId", "runtimeId", "tailLines"));
+        tools.add(read(McpToolId.RUNTIME_GET_WORKER_VERSION, "Read version metadata for one exact runtime target.", "runtime-diagnostics", "swarmId", "runtimeId"));
+        tools.add(read(McpToolId.RUNTIME_LIST_WORKERS, "List label-gated runtime resources for one swarm.", "runtime-diagnostics", "swarmId"));
+        tools.add(read(McpToolId.RUNTIME_INSPECT_WORKER, "Read a bounded inspect projection for one exact runtime target.", "runtime-diagnostics", "swarmId", "runtimeId"));
+        tools.add(read(McpToolId.RUNTIME_ASSESS_SWARM, "Read the canonical Orchestrator-owned runtime assessment for one swarm.", "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(read(McpToolId.RUNTIME_DIFF_SWARM_RUNTIME, "Compatibility view of the canonical Orchestrator runtime assessment.", "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(read(McpToolId.RUNTIME_CONTROL_PLANE_STATUS, "Compatibility view of the canonical Orchestrator runtime assessment.", "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(read(McpToolId.RUNTIME_RABBIT_TOPOLOGY_SNAPSHOT, "Read the exact Orchestrator-owned RabbitMQ topology projection for one swarm.", "runtime-diagnostics", "swarmId"));
+        tools.add(read(McpToolId.RUNTIME_SWARM_TIMELINE, "Build a bounded timeline from Orchestrator journal and status APIs.", "runtime-diagnostics", "swarmId", "limit"));
+        tools.add(read(McpToolId.RUNTIME_MANIFEST_VALIDATE, "Compatibility view of the canonical Orchestrator runtime assessment.", "runtime-diagnostics", "swarmId", "runId"));
+        tools.add(write(McpToolId.RUNTIME_CLEANUP_EXECUTE, "Execute only a current reviewed cleanup plan through HiveGate and Orchestrator.", PocketHiveMcpScopes.CLEANUP, true, true, "governed-cleanup", "swarmId", "runId", "includeRunning", "includeRabbit", "candidateSetHash", "candidateIds", "idempotencyKey", "reason", "actor"));
 
-        tools.add(write("agent_session_create", "Create a principal-bound authoring session that can contain multiple workflows.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "expectedClientCapabilities"));
-        tools.add(readMcp("agent_session_get", "Read one principal-bound authoring session.", "qa-no-inference", "agentSessionId"));
-        tools.add(readMcp("agent_session_list_workflows", "List workflow summaries inside one principal-bound session.", "qa-no-inference", "agentSessionId"));
-        tools.add(write("agent_session_close", "Close one authoring session at an expected revision.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, true, "qa-no-inference", "agentSessionId", "expectedRevision"));
-        tools.add(write("scenario_workflow_create", "Create one independent QA-led Scenario Bundle workflow in a session.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "agentSessionId", "expectedSessionRevision"));
-        tools.add(readMcp("scenario_workflow_list", "List the authenticated principal's workflows without exposing answers from another principal.", "qa-no-inference", "agentSessionId"));
-        tools.add(readMcp("scenario_workflow_get", "Read one workflow, unresolved QA topics, state, revision, and safe next actions.", "qa-no-inference", "workflowId"));
-        tools.add(write("scenario_workflow_answer", "Use native MCP form elicitation to record one explicit QA requirement disposition; never infer it.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic"));
-        tools.add(readMcp("scenario_workflow_question", "Read the canonical question and evidence required for one explicit agent-mediated QA answer.", "qa-no-inference", "workflowId", "topic"));
-        tools.add(write("scenario_workflow_answer_submit", "Record only the user's explicit answer to a previously presented canonical QA question.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic", "questionId", "requestedSchemaDigest", "disposition", "answer", "sourceName", "sourceDigest"));
-        tools.add(new ToolDescriptor("scenario_workflow_review_prepare",
+        tools.add(write(McpToolId.AGENT_SESSION_CREATE, "Create a principal-bound authoring session that can contain multiple workflows.", PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "expectedClientCapabilities"));
+        tools.add(readMcp(McpToolId.AGENT_SESSION_GET, "Read one principal-bound authoring session.", "qa-no-inference", "agentSessionId"));
+        tools.add(readMcp(McpToolId.AGENT_SESSION_LIST_WORKFLOWS, "List workflow summaries inside one principal-bound session.", "qa-no-inference", "agentSessionId"));
+        tools.add(write(McpToolId.AGENT_SESSION_CLOSE, "Close one authoring session at an expected revision.", PocketHiveMcpScopes.AUTHOR, false, true, "qa-no-inference", "agentSessionId", "expectedRevision"));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_CREATE, "Create one independent QA-led Scenario Bundle workflow in a session.", PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "agentSessionId", "expectedSessionRevision"));
+        tools.add(readMcp(McpToolId.SCENARIO_WORKFLOW_LIST, "List the authenticated principal's workflows without exposing answers from another principal.", "qa-no-inference", "agentSessionId"));
+        tools.add(readMcp(McpToolId.SCENARIO_WORKFLOW_GET, "Read one workflow, unresolved QA topics, state, revision, and safe next actions.", "qa-no-inference", "workflowId"));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_ANSWER, "Use native MCP form elicitation to record one explicit QA requirement disposition; never infer it.", PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic"));
+        tools.add(readMcp(McpToolId.SCENARIO_WORKFLOW_QUESTION, "Read the canonical question and evidence required for one explicit agent-mediated QA answer.", "qa-no-inference", "workflowId", "topic"));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_ANSWER_SUBMIT, "Record only the user's explicit answer to a previously presented canonical QA question.", PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference", "workflowId", "expectedRevision", "topic", "questionId", "requestedSchemaDigest", "disposition", "answer", "sourceName", "sourceDigest"));
+        tools.add(new ToolDescriptor(McpToolId.SCENARIO_WORKFLOW_REVIEW_PREPARE,
             "Validate and render one complete compact QA brief for explicit user review without mutating the workflow.",
-            schema("scenario_workflow_review_prepare", "workflowId", "expectedRevision", "answers", "sourceName", "sourceDigest"),
-            resultSchema("scenario_workflow_review_prepare"),
-            ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, true, false, true, List.of("qa-no-inference")));
-        tools.add(write("scenario_workflow_review_submit",
+            schema(McpToolId.SCENARIO_WORKFLOW_REVIEW_PREPARE,
+                "workflowId", "expectedRevision", "answers", "sourceName", "sourceDigest"),
+            resultSchema(McpToolId.SCENARIO_WORKFLOW_REVIEW_PREPARE),
+            PocketHiveMcpScopes.AUTHOR, true, false, true, List.of("qa-no-inference")));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_REVIEW_SUBMIT,
             "Atomically record every QA topic only after the user explicitly accepts the exact prepared compact review.",
-            ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference",
+            PocketHiveMcpScopes.AUTHOR, false, false, "qa-no-inference",
             "workflowId", "expectedRevision", "reviewId", "requestedSchemaDigest", "answerSetDigest",
             "answers", "sourceName", "sourceDigest"));
-        tools.add(write("scenario_workflow_generate", "Record and return a deterministic proposed mixed-file set after every requirement is resolved.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, true, "scenario-authoring", "workflowId", "expectedRevision", "files"));
-        tools.add(write("scenario_workflow_cancel", "Cancel one unpublished workflow at an expected revision.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, true, "qa-no-inference", "workflowId", "expectedRevision"));
-        tools.add(write("scenario_bundle_validation_prepare", "Prepare a principal-bound ticket for pre-owner verified Scenario Manager validation.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "git-publication", "workflowId", "expectedRevision", "source", "fileManifest"));
-        tools.add(write("scenario_bundle_direct_validation_prepare", "Prepare a principal-bound validation ticket without creating an authoring workflow.", ToolOwner.MCP, PocketHiveMcpScopes.AUTHOR, false, false, "git-publication", "source", "fileManifest"));
-        tools.add(readMcp("scenario_bundle_validation_receipt_get", "Read one validation receipt without returning bundle bytes.", "git-publication", "receiptId"));
-        tools.add(write("scenario_bundle_publication_prepare", "Prepare an explicit governed CREATE or REPLACE publication ticket for validated bytes.", ToolOwner.MCP, PocketHiveMcpScopes.PUBLISH, true, false, "git-publication", "validationReceiptId", "mode", "scenarioId", "source", "fileManifest", "archiveDigest", "bundleContentDigest"));
-        tools.add(readMcp("scenario_bundle_publication_attempt_get", "Read durable publication attempt state, including AMBIGUOUS.", "git-publication", "attemptId"));
-        tools.add(write("scenario_bundle_publication_reconcile", "Reconcile an ambiguous publication through Scenario Manager reads without replaying mutation.", ToolOwner.MCP, PocketHiveMcpScopes.PUBLISH, false, true, "git-publication", "attemptId"));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_GENERATE, "Record and return a deterministic proposed mixed-file set after every requirement is resolved.", PocketHiveMcpScopes.AUTHOR, false, true, "scenario-authoring", "workflowId", "expectedRevision", "files"));
+        tools.add(write(McpToolId.SCENARIO_WORKFLOW_CANCEL, "Cancel one unpublished workflow at an expected revision.", PocketHiveMcpScopes.AUTHOR, false, true, "qa-no-inference", "workflowId", "expectedRevision"));
+        tools.add(write(McpToolId.SCENARIO_BUNDLE_VALIDATION_PREPARE, "Prepare a principal-bound ticket for pre-owner verified Scenario Manager validation.", PocketHiveMcpScopes.AUTHOR, false, false, "git-publication", "workflowId", "expectedRevision", "source", "fileManifest"));
+        tools.add(write(McpToolId.SCENARIO_BUNDLE_DIRECT_VALIDATION_PREPARE, "Prepare a principal-bound validation ticket without creating an authoring workflow.", PocketHiveMcpScopes.AUTHOR, false, false, "git-publication", "source", "fileManifest"));
+        tools.add(readMcp(McpToolId.SCENARIO_BUNDLE_VALIDATION_RECEIPT_GET, "Read one validation receipt without returning bundle bytes.", "git-publication", "receiptId"));
+        tools.add(write(McpToolId.SCENARIO_BUNDLE_PUBLICATION_PREPARE, "Prepare an explicit governed CREATE or REPLACE publication ticket for validated bytes.", PocketHiveMcpScopes.PUBLISH, true, false, "git-publication", "validationReceiptId", "mode", "scenarioId", "source", "fileManifest", "archiveDigest", "bundleContentDigest"));
+        tools.add(readMcp(McpToolId.SCENARIO_BUNDLE_PUBLICATION_ATTEMPT_GET, "Read durable publication attempt state, including AMBIGUOUS.", "git-publication", "attemptId"));
+        tools.add(write(McpToolId.SCENARIO_BUNDLE_PUBLICATION_RECONCILE, "Reconcile an ambiguous publication through Scenario Manager reads without replaying mutation.", PocketHiveMcpScopes.PUBLISH, false, true, "git-publication", "attemptId"));
 
         return new ToolCatalogue(tools, skills);
     }
 
-    private static ToolDescriptor read(String id, String description, ToolOwner owner, String skill, String... fields) {
-        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id), owner,
+    private static ToolDescriptor read(McpToolId id, String description, String skill, String... fields) {
+        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id),
             PocketHiveMcpScopes.READ, true, false, true, List.of(skill));
     }
 
-    private static ToolDescriptor readMcp(String id, String description, String skill, String... fields) {
-        return read(id, description, ToolOwner.MCP, skill, fields);
+    private static ToolDescriptor readMcp(McpToolId id, String description, String skill, String... fields) {
+        return read(id, description, skill, fields);
     }
 
-    private static ToolDescriptor write(String id, String description, ToolOwner owner, String scope,
+    private static ToolDescriptor write(McpToolId id, String description, String scope,
                                         boolean destructive, boolean idempotent, String skill, String... fields) {
-        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id), owner, scope,
+        return new ToolDescriptor(id, description, schema(id, fields), resultSchema(id), scope,
             false, destructive, idempotent, List.of(skill));
     }
 
-    private static Map<String, Object> schema(String toolId, String... fields) {
+    private static Map<String, Object> schema(McpToolId toolId, String... fields) {
         Map<String, Object> properties = new LinkedHashMap<>();
         Set<String> optional = optionalFields(toolId);
         List<String> required = new ArrayList<>();
         for (String field : fields) {
-            properties.put(field, fieldSchema(field));
+            properties.put(field, fieldSchema(toolId, field));
             if (!optional.contains(field)) {
                 required.add(field);
             }
@@ -152,32 +162,32 @@ public final class ToolCatalogue {
             "additionalProperties", false);
     }
 
-    private static Set<String> optionalFields(String toolId) {
+    private static Set<String> optionalFields(McpToolId toolId) {
         return switch (toolId) {
-            case "scenario_capabilities_get" -> Set.of("imageName", "imageDigest", "all");
-            case "swarm_create" -> Set.of("sutId", "variablesProfileId");
-            case "debug_journal" -> Set.of("runId", "limit", "severity");
-            case "debug_hive_journal" -> Set.of("limit");
-            case "debug_tap_read" -> Set.of("drain");
-            case "runtime_swarm_timeline" -> Set.of("limit");
-            case "runtime_cleanup_plan", "runtime_cleanup_execute", "runtime_assess_swarm",
-                 "runtime_diff_swarm_runtime", "runtime_control_plane_status", "runtime_manifest_validate" ->
+            case SCENARIO_CAPABILITIES_GET -> Set.of("imageName", "imageDigest", "all");
+            case DEBUG_JOURNAL -> Set.of("runId", "limit", "severity");
+            case DEBUG_HIVE_JOURNAL -> Set.of("limit");
+            case DEBUG_TAP_READ -> Set.of("drain");
+            case RUNTIME_SWARM_TIMELINE -> Set.of("limit");
+            case RUNTIME_CLEANUP_PLAN, RUNTIME_CLEANUP_EXECUTE, RUNTIME_ASSESS_SWARM,
+                 RUNTIME_DIFF_SWARM_RUNTIME, RUNTIME_CONTROL_PLANE_STATUS, RUNTIME_MANIFEST_VALIDATE ->
                 Set.of("runId", "actor");
-            case "agent_session_create" -> Set.of("expectedClientCapabilities");
-            case "scenario_workflow_answer_submit" -> Set.of("sourceName", "sourceDigest");
-            case "scenario_workflow_review_prepare", "scenario_workflow_review_submit" ->
+            case AGENT_SESSION_CREATE -> Set.of("expectedClientCapabilities");
+            case SCENARIO_WORKFLOW_ANSWER_SUBMIT -> Set.of("sourceName", "sourceDigest");
+            case SCENARIO_WORKFLOW_REVIEW_PREPARE, SCENARIO_WORKFLOW_REVIEW_SUBMIT ->
                 Set.of("sourceName", "sourceDigest");
-            case "scenario_bundle_publication_prepare" -> Set.of("scenarioId");
+            case SCENARIO_BUNDLE_PUBLICATION_PREPARE -> Set.of("scenarioId");
             default -> Set.of();
         };
     }
 
-    private static Map<String, Object> fieldSchema(String field) {
+    private static Map<String, Object> fieldSchema(McpToolId toolId, String field) {
         return switch (field) {
-            case "all", "includeRunning", "includeRabbit" ->
+            case "all", "includeRunning", "includeRabbit", "autoPullImages" ->
                 Map.of("type", "boolean");
             case "drain" -> boundedInteger(0, 1000);
-            case "limit", "maxItems", "tailLines" -> boundedInteger(1, 1000);
+            case "limit" -> limitSchema(toolId);
+            case "maxItems", "tailLines" -> boundedInteger(1, 1000);
             case "ttlSeconds" -> boundedInteger(1, Integer.MAX_VALUE);
             case "expectedRevision", "expectedSessionRevision" -> boundedInteger(0, Long.MAX_VALUE);
             case "patch", "expectedClientCapabilities" -> Map.of(
@@ -198,6 +208,9 @@ public final class ToolCatalogue {
             case "source" -> sourceSchema();
             case "fileManifest" -> fileManifestSchema();
             case "mode" -> Map.of("type", "string", "enum", List.of("CREATE", "REPLACE"));
+            case "networkMode" -> Map.of("type", "string", "enum", List.of("DIRECT", "PROXIED"));
+            case "sutId", "variablesProfileId", "networkProfileId" -> Map.of(
+                "type", List.of("string", "null"), "minLength", 1, "maxLength", 512);
             case "topic" -> Map.of(
                 "type", "string",
                 "enum", Arrays.stream(QaRequirementTopic.values()).map(Enum::name).toList());
@@ -214,15 +227,24 @@ public final class ToolCatalogue {
         };
     }
 
-    private static Map<String, Object> resultSchema(String toolId) {
+    private static Map<String, Object> limitSchema(McpToolId toolId) {
+        Map<String, Object> schema = new LinkedHashMap<>(boundedInteger(1, 1000));
+        Long defaultLimit = McpToolDefaults.limitFor(toolId);
+        if (defaultLimit != null) {
+            schema.put("default", defaultLimit);
+        }
+        return Map.copyOf(schema);
+    }
+
+    private static Map<String, Object> resultSchema(McpToolId toolId) {
         return switch (toolId) {
-            case "scenario_raw_read", "scenario_schema_read", "scenario_template_read" ->
+            case SCENARIO_RAW_READ, SCENARIO_SCHEMA_READ, SCENARIO_TEMPLATE_READ ->
                 Map.of("type", "string");
-            case "scenario_capabilities_get" -> Map.of("oneOf", List.of(
+            case SCENARIO_CAPABILITIES_GET -> Map.of("oneOf", List.of(
                 Map.of("type", "array", "items", Map.of("type", "object")),
                 Map.of("type", "object")));
-            case "scenario_suts_list" -> Map.of("type", "array", "items", boundedString(1, 512));
-            case "scenario_list", "scenario_templates_catalog", "swarm_list", "debug_journal_runs" ->
+            case SCENARIO_SUTS_LIST -> Map.of("type", "array", "items", boundedString(1, 512));
+            case SCENARIO_LIST, SCENARIO_TEMPLATES_CATALOG, SWARM_LIST, DEBUG_JOURNAL_RUNS ->
                 Map.of("type", "array", "items", Map.of("type", "object"));
             default -> Map.of("type", "object", "additionalProperties", true);
         };

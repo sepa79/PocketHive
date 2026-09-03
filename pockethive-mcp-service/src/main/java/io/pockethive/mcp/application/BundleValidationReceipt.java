@@ -6,6 +6,12 @@ import io.pockethive.mcp.domain.SourceMetadata;
 import java.time.Instant;
 import java.util.Objects;
 
+/**
+ * Responsibility: Carry immutable bundle validation receipt application data.
+ * Must not: Depend on HTTP, MCP transport, or persistence implementations.
+ * Contract: docs/mcp/README.md.
+ */
+
 public record BundleValidationReceipt(
     String id,
     PrincipalKey principal,
