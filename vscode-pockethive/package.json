@@ -2,7 +2,7 @@
   "name": "pockethive-vscode",
   "displayName": "PocketHive",
   "description": "Connect to PocketHive MCP environments and operate swarms, scenarios, journals, and diagnostics.",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "publisher": "pockethive",
   "license": "GPL-3.0-only",
   "repository": {
