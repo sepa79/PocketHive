@@ -52,6 +52,8 @@ All notable changes to this project will be documented in this file.
   demand before expiry, validate a candidate MCP connection before switching,
   keep the authenticated workspace visible during renewal, and provide one
   clear Account menu for sign-in, retry, and revoking sign-out.
+- VS Code packaging: resolve the generated-logo script location from the module
+  URL so packaging remains portable across supported Node 20 releases.
 - OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
   logo, explicit client/resource/permission context, accessible form semantics,
   responsive styling, and no change to the authorization-code contract.
