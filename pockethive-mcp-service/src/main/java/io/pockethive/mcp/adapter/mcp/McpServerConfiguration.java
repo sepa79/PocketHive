@@ -30,6 +30,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class McpServerConfiguration {
     private static final String SERVER_NAME = "pockethive-mcp";
+    private static final String JSON_SCHEMA_TYPE = "type";
+    private static final String JSON_SCHEMA_OBJECT = "object";
 
     @Bean
     ToolCatalogue toolCatalogue() {
@@ -103,27 +105,31 @@ public class McpServerConfiguration {
             .idempotentHint(descriptor.idempotent())
             .openWorldHint(true)
             .build();
-        McpSchema.Tool tool = McpSchema.Tool.builder()
+        var toolBuilder = McpSchema.Tool.builder()
             .name(descriptor.id())
             .description(descriptor.description())
             .inputSchema(descriptor.inputSchema())
-            .outputSchema(descriptor.outputSchema())
             .annotations(annotations)
             .meta(Map.of(
                 "owner", descriptor.owner().name(),
                 "requiredScope", descriptor.requiredScope(),
-                "skills", descriptor.skillIds()))
-            .build();
+                "skills", descriptor.skillIds()));
+        if (hasObjectRoot(descriptor.outputSchema())) {
+            toolBuilder.outputSchema(descriptor.outputSchema());
+        }
+        McpSchema.Tool tool = toolBuilder.build();
         return new McpServerFeatures.SyncToolSpecification(tool, (exchange, request) -> {
             try {
                 Object result = executor.execute(descriptor, exchange, request.arguments());
                 Object structuredContent = ToolStructuredContent.normalize(mapper, result);
                 ToolOutputValidator.validate(descriptor, structuredContent);
-                return McpSchema.CallToolResult.builder()
+                var resultBuilder = McpSchema.CallToolResult.builder()
                     .addTextContent(json(mapper, structuredContent))
-                    .structuredContent(structuredContent)
-                    .isError(false)
-                    .build();
+                    .isError(false);
+                if (hasObjectRoot(descriptor.outputSchema())) {
+                    resultBuilder.structuredContent(structuredContent);
+                }
+                return resultBuilder.build();
             } catch (RuntimeException exception) {
                 KnownToolFailure failure = failureMapper.known(exception)
                     .orElseThrow(() -> failureMapper.unexpected(descriptor.id(), exception));
@@ -135,6 +141,10 @@ public class McpServerConfiguration {
                     .build();
             }
         });
+    }
+
+    private static boolean hasObjectRoot(Map<String, Object> schema) {
+        return JSON_SCHEMA_OBJECT.equals(schema.get(JSON_SCHEMA_TYPE));
     }
 
     private static String json(ObjectMapper mapper, Object value) {

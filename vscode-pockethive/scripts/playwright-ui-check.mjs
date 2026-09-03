@@ -1299,8 +1299,19 @@ async function connectLocalMcp(browser) {
   const tools = Array.isArray(toolList?.tools) ? toolList.tools : [];
   const toolNames = new Set(tools.map(tool => tool?.name).filter(name => typeof name === 'string'));
   assert.equal(tools.length, 59, 'live MCP must expose the immutable complete tool catalogue');
-  assert.equal(tools.every(tool => tool?.outputSchema?.type || tool?.outputSchema?.oneOf), true,
-    'every live MCP tool must declare one explicit output root contract');
+  assert.equal(tools.every(tool => tool?.outputSchema === undefined || tool.outputSchema.type === 'object'), true,
+    'a published MCP output schema must have the protocol-required object root');
+  assert.deepEqual(tools.filter(tool => tool?.outputSchema === undefined).map(tool => tool.name).sort(), [
+    'debug_journal_runs',
+    'scenario_capabilities_get',
+    'scenario_list',
+    'scenario_raw_read',
+    'scenario_schema_read',
+    'scenario_suts_list',
+    'scenario_template_read',
+    'scenario_templates_catalog',
+    'swarm_list',
+  ], 'legacy non-object result shapes must omit the optional MCP output schema');
   for (const requiredTool of [
     'scenario_list',
     'scenario_templates_catalog',
@@ -1342,8 +1353,8 @@ async function connectLocalMcp(browser) {
   assert.deepEqual(Object.keys(scenarioCapabilitiesTool?.inputSchema?.properties ?? {}).sort(),
     ['all', 'imageDigest', 'imageName'],
     'scenario capabilities must expose only exact owner selectors');
-  assert.equal(Array.isArray(scenarioCapabilitiesTool?.outputSchema?.oneOf), true,
-    'scenario capabilities must declare the owner array-or-object result union');
+  assert.equal(scenarioCapabilitiesTool?.outputSchema, undefined,
+    'the array-or-object capability result must omit the optional MCP output schema');
   const allCapabilities = await client.callTool('scenario_capabilities_get');
   assert.equal(Array.isArray(allCapabilities), true,
     'the characterised complete capability read must remain an array');

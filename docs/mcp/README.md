@@ -149,8 +149,17 @@ properties whose value may be `null`. `networkMode` is exactly `DIRECT` or
 network policy or image-pull policy for the caller.
 
 Each canonical tool descriptor owns both its closed input schema and its output
-schema. Successful Java values are converted once to JSON-native structured
-content and validated against that descriptor before the SDK returns them.
+schema. Successful Java values are converted once to a JSON-native owner result
+and validated against that descriptor before the SDK returns them.
+MCP `tools/list` publishes `outputSchema` only when that schema has the
+protocol-required object root. Such results are returned as both structured
+content and JSON text content. Characterised legacy array, string, and
+array-or-object results retain their existing successful result shape through
+one JSON text content item; the optional wire `outputSchema` and object-only
+`structuredContent` are omitted. Clients decode that exact JSON representation;
+the server does not silently wrap it in a new result envelope. The canonical
+descriptor remains the single owner of validation for all result shapes. A
+future result-envelope migration must be explicit and versioned.
 Known application, workflow, upload, and owner refusals return
 `CallToolResult(isError=true)` with a stable `code` and safe `message`.
 Unexpected failures remain protocol failures with a correlation ID and no
