@@ -78,9 +78,9 @@ The Orchestrator listener is the first sink. Its extraction order is based on de
 Each extraction must retain its existing focused tests. The affected Maven reactor is the per-extraction gate;
 `build-hive.sh` and official-ingress E2E are required when the complete sink reaches its transport-only boundary.
 
-- [ ] Record the complete responsibility inventory and the canonical owner expected after each extraction.
-- [ ] Order sinks by dependency and risk, starting with the smallest boundary that establishes the extraction pattern.
-- [ ] Define a characterization and verification gate for each sink before editing it.
+- [x] Record the complete responsibility inventory and the canonical owner expected after each extraction.
+- [x] Order sinks by dependency and risk, starting with the smallest boundary that establishes the extraction pattern.
+- [x] Define a characterization and verification gate for each sink before editing it.
 
 ## Phase 3 — eliminate sinks one at a time
 
@@ -390,12 +390,16 @@ For every confirmed sink:
 
 ## Phase 4 — review the simplified architecture
 
-- [ ] Repeat the repository-wide control-plane review against `AGENTS.md`, `docs/ENGINEERING_RULES.md`,
+- [x] Repeat the repository-wide control-plane review against `AGENTS.md`, `docs/ENGINEERING_RULES.md`,
   `docs/REVIEW_RULES.md`, and `docs/ai/REVIEW_CHECKLIST.md`.
-- [ ] Reassess former CP-01 through CP-06 against the new owners; do not assume they survived or were fixed.
-- [ ] Record only findings reproducible in the simplified tree.
-- [ ] Order remaining fixes by severity and dependency.
+- [x] Reassess former CP-01 through CP-06 against the new owners; do not assume they survived or were fixed.
+- [x] Record only findings reproducible in the simplified tree.
+- [x] Order remaining fixes by severity and dependency.
 - [ ] Run two consecutive complete official-ingress local-swarm E2E gates before final approval.
+
+The fresh findings and their repair order live in
+`docs/todo/control-plane-post-simplification-review.md`. They replace the abandoned numbered findings queue;
+they do not reopen completed behavior-preserving sink extractions.
 
 ## Completion criteria
 
