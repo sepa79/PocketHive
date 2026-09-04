@@ -3,6 +3,7 @@ package io.pockethive.capabilities.api;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.scenarios.BundleTemplateSummary;
 import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
@@ -41,7 +42,7 @@ public class CapabilityCatalogueController {
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<ScenarioService.BundleTemplateSummary> templates() {
+    public List<BundleTemplateSummary> templates() {
         AuthenticatedUserDto user = currentUser();
         return scenarioService.listBundleTemplates().stream()
                 .filter(summary -> isRunnableTemplate(user, summary))
@@ -49,9 +50,9 @@ public class CapabilityCatalogueController {
     }
 
     @GetMapping(value = "/templates/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleTemplateSummary template(@PathVariable("id") String id) {
+    public BundleTemplateSummary template(@PathVariable("id") String id) {
         AuthenticatedUserDto user = currentUser();
-        ScenarioService.BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
+        BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!isRunnableTemplate(user, summary)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.runDeniedMessage());
@@ -106,7 +107,7 @@ public class CapabilityCatalogueController {
                         view.source()));
     }
 
-    private ScenarioTemplateView buildScenarioTemplate(ScenarioService.BundleTemplateSummary summary) {
+    private ScenarioTemplateView buildScenarioTemplate(BundleTemplateSummary summary) {
         return new ScenarioTemplateView(
                 summary.bundleKey(),
                 summary.bundlePath(),
@@ -284,7 +285,7 @@ public class CapabilityCatalogueController {
             int actionCount,
             int panelCount) { }
 
-    private boolean isRunnableTemplate(AuthenticatedUserDto user, ScenarioService.BundleTemplateSummary summary) {
+    private boolean isRunnableTemplate(AuthenticatedUserDto user, BundleTemplateSummary summary) {
         if (user == null) {
             return true;
         }

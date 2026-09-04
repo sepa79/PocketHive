@@ -346,6 +346,36 @@ The production `SwarmRuntimeCore` kitchen-sink refactor is complete. The remaini
 it owns lifecycle state and tick permission and delegates infrastructure effects, projections, journaling, readiness,
 queue observation, worker specification, status-request publication, and scenario execution to focused components.
 
+After integrating the pending MCP hardening branch, the final production sink inventory also includes Scenario
+Manager `ScenarioService` (2,169 lines before extraction). It currently owns the discovered bundle catalogue and
+scenario index, descriptor CRUD, generic bundle-workspace editing, variables resolution, bundle-local SUT editing,
+ZIP import/replace/validation, and runtime-directory materialisation. It also contains public nested response and
+configuration types. Preserve the filesystem and REST contracts while extracting in dependency order:
+
+1. Move public nested contract/configuration types to one production type per file without changing their JSON shape.
+2. Extract generic bundle workspace and folder mutation; the catalogue remains the only owner of bundle identity and
+   is explicitly reloaded after successful mutation.
+3. Extract variables and bundle-local SUT workflows behind their existing canonical validator.
+4. Extract uploaded-ZIP validation/publication and runtime-directory materialisation without adding another bundle
+   validator, path resolver, or scenario index.
+5. Retain one filesystem-backed scenario catalogue/repository owner for discovery, duplicate/quarantine state,
+   availability, access projection, and descriptor lifecycle.
+
+Completed: public contract/configuration types are standalone, and focused owners now handle bundle-internal
+workspace operations, top-level folder/bundle organization, variables workflows, bundle-local SUT CRUD, raw
+scenario/template/schema authoring, ZIP publication/validation, and runtime materialisation. `ScenarioService` is the
+sole catalogue owner and is limited to discovery, duplicate/quarantine state, availability/access projections, and
+descriptor lifecycle. The production Scenario Manager sink is complete.
+The canonical `ScenarioBundleValidator` is a directly injected bean; the catalogue and extracted services share it
+without using `ScenarioService` as a service locator. Focused component tests now cover content authoring, workspace
+mutation, bundle organization, publication, bundle-local SUTs, variables, and runtime materialisation. The catalogue
+test no longer constructs those owners. The complete Scenario Manager dependency reactor passes with 175 tests in
+the module and 0 failures/errors/skips. Official-ingress E2E remains the environment gate before accepting the
+production-sink refactor.
+
+The remaining oversized HTTP/E2E fixture organization belongs to the deferred test-system refactor. The unchanged
+official-ingress E2E suite is the final production-sink gate.
+
 The E2E `SwarmLifecycleSteps` sink remains explicitly deferred. It will be handled last as a complete test-system
 refactor, not as incremental extractions interleaved with runtime work.
 

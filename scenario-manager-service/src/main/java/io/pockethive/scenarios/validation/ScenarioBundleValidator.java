@@ -10,7 +10,13 @@ import io.pockethive.capabilities.CapabilityConfigType;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.Scenario;
 import io.pockethive.scenarios.ScenarioBundleLayout;
-import io.pockethive.scenarios.ScenarioService;
+import io.pockethive.scenarios.ScenarioVariableDefinition;
+import io.pockethive.scenarios.ScenarioVariableScope;
+import io.pockethive.scenarios.ScenarioVariableType;
+import io.pockethive.scenarios.ScenarioVariableValues;
+import io.pockethive.scenarios.ScenarioVariablesProfile;
+import io.pockethive.scenarios.VariablesDocument;
+import io.pockethive.scenarios.VariablesValidationResult;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.OutcomeHeaders;
@@ -49,7 +55,16 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
+ * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
+ * Contract: docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
+ * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
+ */
+@Component
 public final class ScenarioBundleValidator {
     private enum StructuredFormat { JSON, YAML }
 
@@ -93,8 +108,11 @@ public final class ScenarioBundleValidator {
     private final String scenarioManagerVersion;
     private final PebbleTemplateRenderer templateSyntaxValidator = new PebbleTemplateRenderer();
 
-    public ScenarioBundleValidator(CapabilityCatalogueService capabilities, String defaultImageTag,
-                                   String scenarioManagerVersion) {
+    public ScenarioBundleValidator(
+        CapabilityCatalogueService capabilities,
+        @Value("${pockethive.images.default-tag:}") String defaultImageTag,
+        @Value("${pockethive.release.version}") String scenarioManagerVersion
+    ) {
         this.capabilities = capabilities;
         this.defaultImageTag = normalizeTag(defaultImageTag);
         this.scenarioManagerVersion = Objects.requireNonNull(scenarioManagerVersion, "scenarioManagerVersion");
@@ -508,13 +526,13 @@ public final class ScenarioBundleValidator {
         return found;
     }
 
-    public ScenarioService.VariablesDocument parseVariables(String raw) {
+    public VariablesDocument parseVariables(String raw) {
         if (raw == null || raw.isBlank()) {
             throw variablesFailure("%s must not be empty".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
-        ScenarioService.VariablesDocument doc;
+        VariablesDocument doc;
         try {
-            doc = strictYamlMapper.readValue(raw, ScenarioService.VariablesDocument.class);
+            doc = strictYamlMapper.readValue(raw, VariablesDocument.class);
         } catch (Exception e) {
             throw validationFailure(
                 ValidationIssue.VARIABLES_INVALID,
@@ -527,8 +545,8 @@ public final class ScenarioBundleValidator {
         return doc;
     }
 
-    public ScenarioService.VariablesValidationResult validateVariables(
-        ScenarioService.VariablesDocument doc,
+    public VariablesValidationResult validateVariables(
+        VariablesDocument doc,
         Collection<String> canonicalSutIds
     ) {
         Objects.requireNonNull(doc, "doc");
@@ -537,15 +555,15 @@ public final class ScenarioBundleValidator {
         if (doc.version() != 1) {
             throw variablesFailure("%s version must be 1".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
-        List<ScenarioService.VariablesDocument.VariableDefinition> definitions =
+        List<ScenarioVariableDefinition> definitions =
             doc.definitions() == null ? List.of() : doc.definitions();
         if (definitions.isEmpty()) {
             throw variablesFailure(
                 "%s must contain non-empty definitions[]".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
 
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName = new LinkedHashMap<>();
-        for (ScenarioService.VariablesDocument.VariableDefinition def : definitions) {
+        Map<String, ScenarioVariableDefinition> byName = new LinkedHashMap<>();
+        for (ScenarioVariableDefinition def : definitions) {
             if (def == null || def.name() == null || def.name().isBlank()) {
                 throw variablesFailure(
                     "%s definitions[].name must not be blank".formatted(ScenarioBundleLayout.VARIABLES_FILE));
@@ -554,20 +572,20 @@ public final class ScenarioBundleValidator {
             if (byName.put(name, def) != null) {
                 throw variablesFailure("Duplicate variable definition name '%s'".formatted(name));
             }
-            ScenarioService.VariablesDocument.Scope scope = def.scope();
+            ScenarioVariableScope scope = def.scope();
             if (scope == null) {
                 throw variablesFailure("Variable '%s' missing scope".formatted(name));
             }
-            ScenarioService.VariablesDocument.Type type = def.type();
+            ScenarioVariableType type = def.type();
             if (type == null) {
                 throw variablesFailure("Variable '%s' missing type".formatted(name));
             }
         }
 
-        List<ScenarioService.VariablesDocument.Profile> profiles =
+        List<ScenarioVariablesProfile> profiles =
             doc.profiles() == null ? List.of() : doc.profiles();
-        Map<String, ScenarioService.VariablesDocument.Profile> profilesById = new LinkedHashMap<>();
-        for (ScenarioService.VariablesDocument.Profile profile : profiles) {
+        Map<String, ScenarioVariablesProfile> profilesById = new LinkedHashMap<>();
+        for (ScenarioVariablesProfile profile : profiles) {
             if (profile == null || profile.id() == null || profile.id().isBlank()) {
                 throw variablesFailure(
                     "%s profiles[].id must not be blank".formatted(ScenarioBundleLayout.VARIABLES_FILE));
@@ -578,7 +596,7 @@ public final class ScenarioBundleValidator {
             }
         }
 
-        ScenarioService.VariablesDocument.Values values = doc.values();
+        ScenarioVariableValues values = doc.values();
         Map<String, Map<String, Object>> global =
             values == null || values.global() == null ? Map.of() : values.global();
         Map<String, Map<String, Map<String, Object>>> sut =
@@ -626,21 +644,21 @@ public final class ScenarioBundleValidator {
         }
 
         boolean hasGlobal = byName.values().stream()
-            .anyMatch(d -> d.scope() == ScenarioService.VariablesDocument.Scope.GLOBAL);
+            .anyMatch(d -> d.scope() == ScenarioVariableScope.GLOBAL);
         boolean hasSut = byName.values().stream()
-            .anyMatch(d -> d.scope() == ScenarioService.VariablesDocument.Scope.SUT);
+            .anyMatch(d -> d.scope() == ScenarioVariableScope.SUT);
         if ((hasGlobal || hasSut) && profilesById.isEmpty()) {
             throw variablesFailure(
                 "%s must declare profiles[] when definitions[] are present".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
 
         List<String> requiredGlobalVars = byName.values().stream()
-            .filter(def -> def.scope() == ScenarioService.VariablesDocument.Scope.GLOBAL)
+            .filter(def -> def.scope() == ScenarioVariableScope.GLOBAL)
             .filter(def -> Boolean.TRUE.equals(def.required()))
             .map(def -> def.name().trim())
             .toList();
         List<String> requiredSutVars = byName.values().stream()
-            .filter(def -> def.scope() == ScenarioService.VariablesDocument.Scope.SUT)
+            .filter(def -> def.scope() == ScenarioVariableScope.SUT)
             .filter(def -> Boolean.TRUE.equals(def.required()))
             .map(def -> def.name().trim())
             .toList();
@@ -673,7 +691,7 @@ public final class ScenarioBundleValidator {
             }
         }
 
-        return new ScenarioService.VariablesValidationResult(List.copyOf(warnings));
+        return new VariablesValidationResult(List.copyOf(warnings));
     }
 
     public List<String> listCanonicalBundleSutIds(Path bundle, String scenarioId) throws IOException {
@@ -1798,12 +1816,12 @@ public final class ScenarioBundleValidator {
 
         Set<String> defined;
         try {
-            ScenarioService.VariablesDocument doc = parseVariables(Files.readString(variablesFile));
+            VariablesDocument doc = parseVariables(Files.readString(variablesFile));
             defined = doc.definitions() == null
                 ? Set.of()
                 : doc.definitions().stream()
                     .filter(Objects::nonNull)
-                    .map(ScenarioService.VariablesDocument.VariableDefinition::name)
+                    .map(ScenarioVariableDefinition::name)
                     .filter(Objects::nonNull)
                     .map(String::trim)
                     .filter(name -> !name.isBlank())
@@ -1926,13 +1944,13 @@ public final class ScenarioBundleValidator {
         List<String> canonicalSutIds = listCanonicalBundleSutIds(bundleRoot, scenarioId);
         Path variables = ScenarioBundleLayout.variablesFile(bundleRoot);
         if (variables.startsWith(bundleRoot) && Files.isRegularFile(variables)) {
-            ScenarioService.VariablesDocument doc = parseVariables(Files.readString(variables));
+            VariablesDocument doc = parseVariables(Files.readString(variables));
             validateVariables(doc, canonicalSutIds);
         }
     }
 
     private void validateValueMaps(
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName,
+        Map<String, ScenarioVariableDefinition> byName,
         Map<String, Map<String, Object>> valuesByProfile,
         String label
     ) {
@@ -1945,7 +1963,7 @@ public final class ScenarioBundleValidator {
     }
 
     private void validateValueMap(
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName,
+        Map<String, ScenarioVariableDefinition> byName,
         Map<String, Object> values,
         String label
     ) {
@@ -1955,7 +1973,7 @@ public final class ScenarioBundleValidator {
             if (key == null || key.isBlank()) {
                 throw variablesFailure("%s contains blank variable name".formatted(label));
             }
-            ScenarioService.VariablesDocument.VariableDefinition def = byName.get(key);
+            ScenarioVariableDefinition def = byName.get(key);
             if (def == null) {
                 throw variablesFailure("%s contains unknown variable '%s'".formatted(label, key));
             }
@@ -1967,8 +1985,8 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private void requireType(ScenarioService.VariablesDocument.VariableDefinition def, Object value, String label) {
-        ScenarioService.VariablesDocument.Type type = def.type();
+    private void requireType(ScenarioVariableDefinition def, Object value, String label) {
+        ScenarioVariableType type = def.type();
         switch (type) {
             case STRING -> {
                 if (!(value instanceof String)) {
