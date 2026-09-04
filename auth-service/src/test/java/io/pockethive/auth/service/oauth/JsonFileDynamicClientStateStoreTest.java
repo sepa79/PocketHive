@@ -2,8 +2,15 @@ package io.pockethive.auth.service.oauth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
+import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.io.File;
+import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -83,6 +90,29 @@ class JsonFileDynamicClientStateStoreTest {
             assertThat(files.map(path -> path.getFileName().toString()).toList())
                 .containsExactly("state.json");
         }
+    }
+
+    @Test
+    void cleanupFailureDoesNotMaskTheAuthoritativeStateWriteFailure(@TempDir Path directory)
+        throws Exception {
+        ObjectMapper mapper = mock(ObjectMapper.class);
+        when(mapper.copy()).thenReturn(mapper);
+        when(mapper.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)).thenReturn(mapper);
+        doAnswer(invocation -> {
+            Path temporary = ((File) invocation.getArgument(0)).toPath();
+            Files.delete(temporary);
+            Files.createDirectory(temporary);
+            Files.writeString(temporary.resolve("blocked"), "blocked");
+            throw new IOException("write failed");
+        }).when(mapper).writeValue(any(File.class), any());
+        JsonFileDynamicClientStateStore store = new JsonFileDynamicClientStateStore(
+            mapper, directory.resolve("state.json"));
+
+        assertThatThrownBy(() -> store.replace(List.of(entry())))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_WRITE_FAILED")
+            .hasCauseInstanceOf(IOException.class)
+            .hasRootCauseMessage("write failed");
     }
 
     private static JsonFileDynamicClientStateStore store(Path path) {

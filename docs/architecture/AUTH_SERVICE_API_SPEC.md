@@ -91,8 +91,8 @@ The interoperability choices are explicit:
   MCP scope allow-list owned by `PocketHiveMcpScopes` so clients can negotiate
   their explicit requested scope during authorization;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
-- exact redirect URI matching; no wildcard, prefix, pattern, or alternate-port
-  matching;
+- exact redirect URI matching, except for the bounded native-client loopback
+  port rule below; no wildcard, prefix, or pattern matching;
 - the `resource` parameter is mandatory and identical in authorization and
   token requests;
 - opaque access tokens expire after the configured short lifetime;
@@ -131,10 +131,13 @@ registered loopback callback is exactly `http://127.0.0.1/callback`, without a
 port. For each interactive sign-in, the extension binds an available
 operating-system-assigned port before opening the browser and sends the exact
 runtime callback `http://127.0.0.1:<port>/callback`. Authorization permits only
-that port substitution for an explicitly registered IP-loopback redirect;
-scheme, host, path, query, and fragment rules remain exact. The authorization
-code remains bound to the complete runtime redirect URI and token exchange must
-repeat it exactly. A conforming external MCP client obtains its own opaque
+that port substitution for an explicitly registered HTTP loopback redirect.
+This includes the exact `localhost` host used by native clients whose callback
+listener receives a new operating-system-assigned port on a later session;
+scheme, exact host, path, and query remain equal, while user information and a
+fragment remain forbidden. The authorization code remains bound to the complete
+runtime redirect URI and token exchange must repeat it exactly. A conforming
+external MCP client obtains its own opaque
 client ID through dynamic registration. Dynamic
 registration is bounded, expires with the configured registration lifetime,
 and never grants cleanup. A registration is client metadata, not a user grant,
@@ -481,9 +484,9 @@ pre-registered. It requires:
 - one bounded, non-blank `client_name`;
 - one to eight exact registered `redirect_uris` with no fragment, user
   information, or wildcard; each URI is either HTTPS or HTTP on an explicit
-  loopback host. At authorization time, an IP-loopback URI may substitute only
-  its port with the exact runtime listener port; this is not a wildcard in
-  registered metadata;
+  loopback host. At authorization time, an HTTP IP-loopback or exact
+  `localhost` URI may substitute only its port with the exact runtime listener
+  port; this is not a wildcard in registered metadata;
 - `grant_types` containing `authorization_code` and optionally
   `refresh_token`, with no other value;
 - `response_types=["code"]`;
@@ -547,7 +550,8 @@ Required query parameters:
 - `response_type=code`;
 - registered `client_id`;
 - registered `redirect_uri`, matched exactly except that an explicitly
-  registered IP-loopback URI may use its runtime listener port;
+  registered HTTP IP-loopback or exact `localhost` URI may use its runtime
+  listener port;
 - non-empty `state`;
 - `code_challenge` and `code_challenge_method=S256`;
 - exact configured MCP `resource`; and

@@ -199,7 +199,8 @@ public class PocketHiveOAuthConfiguration {
                         new PocketHiveInteractiveAuthorizationRequestConverter(users)))
                     .authenticationProviders(providers -> providers.forEach(provider -> {
                         if (provider instanceof OAuth2AuthorizationCodeRequestAuthenticationProvider code) {
-                            code.setAuthenticationValidator(new McpScopeAuthorizationValidator(users));
+                            code.setAuthenticationValidator(new LocalhostLoopbackRedirectValidator(
+                                new McpScopeAuthorizationValidator(users)));
                         }
                     }))))
             .authorizeHttpRequests(authorize -> authorize
