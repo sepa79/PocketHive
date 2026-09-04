@@ -2,7 +2,7 @@
 
 > Status: active repair queue
 > Reviewed tree: `refactor/control-plane-critical-restart` after `50d456ee`
-> Source plan: `docs/todo/control-plane-simplification-plan.md`
+> Source plan: `docs/archive/control-plane-simplification-plan.md`
 
 ## Scope and method
 
@@ -109,15 +109,28 @@ workspace, variables, SUT, publication, and runtime endpoint families through te
 Repair direction: split the HTTP surface by those documented endpoint families without reintroducing business
 logic or changing routes.
 
+### CP-N09 — HIGH — executor wall-clock timestamps can invalidate lifecycle results
+
+`SwarmOperationTerminalHandler` uses the executor-owned `CommandResult.timestamp` as the completion time of the
+Orchestrator-owned operation. A local E2E replay observed the wall clock move backwards by about 1.7 seconds between
+operation creation and receipt of an otherwise valid STOP result. `SwarmOperation` correctly rejected the resulting
+chronology (`completedAt must not precede createdAt`), but the listener then dropped the only terminal evidence and
+the operation timed out even though the controller and all workers had reached `STOPPED`.
+
+Repair direction: stamp operation completion with the Orchestrator's coordination/receipt clock and retain the
+executor timestamp as external evidence. Do not weaken the `SwarmOperation` chronology invariant or add a clock-skew
+fallback.
+
 ## Order for the next repair plan
 
 1. CP-N01 because two active topology authorities are an SSOT blocker and the work overlaps future Work Plane
    broker abstraction.
 2. CP-N05 because broker-neutral Work Plane provisioning and cleanup depend on this boundary.
-3. CP-N02 and CP-N03 to finish message-listener/runtime separation.
-4. CP-N04 and CP-N08 to restore thin HTTP boundaries.
-5. CP-N06 contract-file separation alongside the owning workflow changes, not as a compatibility layer.
-6. CP-N07 as a journal-specific refactor independent of Work Plane migration.
+3. CP-N09 because lifecycle completion must not depend on an executor wall clock.
+4. CP-N02 and CP-N03 to finish message-listener/runtime separation.
+5. CP-N04 and CP-N08 to restore thin HTTP boundaries.
+6. CP-N06 contract-file separation alongside the owning workflow changes, not as a compatibility layer.
+7. CP-N07 as a journal-specific refactor independent of Work Plane migration.
 
 ## Verification evidence
 
@@ -128,6 +141,12 @@ logic or changing routes.
 - Repository searches found one production `ControlPlaneCodec`, one `OperationOutcomePublisher`, the terminal
   result construction sites listed above, the duplicate topology declarations, and the remaining nested
   production contracts.
+- One complete official-ingress run passed 39 of 39 scenarios, 463 of 463 steps, and 48 of 48 Maven tests. The next
+  complete run exposed a stale status-full snapshot in the history-policy scenario. An isolated replay confirmed the
+  expected policy values for all workers, then exposed CP-N09 during STOP; the orphaned test swarm was removed through
+  the supported Orchestrator API after the timed-out operation released it.
 
-The two consecutive complete official-ingress E2E runs remain the final simplification-plan gate after the
-last deferred `SwarmLifecycleSteps` extraction.
+`SwarmLifecycleSteps` is explicitly excluded from this work by human decision and remains unchanged. After the
+CP-N09 diagnostic resource was removed through the supported API, two consecutive complete official-ingress runs
+each passed 39 of 39 scenarios, 463 of 463 steps, and 48 of 48 Maven tests without a rebuild between them. The
+simplification plan's final gate is complete; this document remains the active repair queue.

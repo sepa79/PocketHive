@@ -1,7 +1,7 @@
 # Control-Plane Architecture Simplification Plan
 
-> Status: active
-> Direction: remove redundant test machinery, then eliminate mixed-responsibility control-plane and lifecycle implementation units before re-reviewing runtime findings
+> Status: completed
+> Delivered: redundant test machinery removed; in-scope production sinks separated; runtime findings re-reviewed
 
 ## Goal
 
@@ -19,8 +19,8 @@ refactors, then review the simplified architecture from scratch.
   repository-wide review after simplification and create findings from the resulting tree.
 - Structural passes do not change public contracts, routing, lifecycle postconditions, or runtime behavior.
 - Use no compatibility layer, fallback, parallel old/new execution path, or temporary second owner.
-- Refactor `SwarmRuntimeCore` after the two control-plane listeners. Defer `SwarmLifecycleSteps` until the end as a
-  separate, complete refactor of the E2E test system; do not incrementally split that test sink during runtime work.
+- Refactor `SwarmRuntimeCore` after the two control-plane listeners. `SwarmLifecycleSteps` is excluded from this plan
+  by explicit human decision and remains unchanged; it is not a completion dependency for the production refactor.
 
 ## Simplification rules
 
@@ -60,7 +60,7 @@ The inventory must classify responsibilities rather than use line count as the v
   terminal results, status projection, and journaling.
 - `SwarmRuntimeCore` — runtime state, provisioning, topology/work bindings, and projections.
 - E2E `SwarmLifecycleSteps` — unrelated API actions, scenario state, discovery, lifecycle assertions, traffic
-  assertions, and environment diagnostics.
+  assertions, and environment diagnostics. This test fixture was inventoried but is explicitly out of scope.
 
 Candidates requiring responsibility review include `WorkerControlPlaneRuntime`, Orchestrator `SwarmController`,
 and other control-plane/lifecycle files triggered by the engineering-rules size and collaborator thresholds.
@@ -373,20 +373,13 @@ test no longer constructs those owners. The complete Scenario Manager dependency
 the module and 0 failures/errors/skips. Official-ingress E2E remains the environment gate before accepting the
 production-sink refactor.
 
-The remaining oversized HTTP/E2E fixture organization belongs to the deferred test-system refactor. The unchanged
-official-ingress E2E suite is the final production-sink gate.
+The remaining oversized HTTP organization belongs to the post-simplification repair queue. The unchanged
+official-ingress E2E suite is the final production-sink gate. The E2E `SwarmLifecycleSteps` fixture was not modified
+and is explicitly excluded from this plan by human decision.
 
-The E2E `SwarmLifecycleSteps` sink remains explicitly deferred. It will be handled last as a complete test-system
-refactor, not as incremental extractions interleaved with runtime work.
-
-For every confirmed sink:
-
-- [ ] Write or identify focused characterization tests for the responsibility being extracted.
-- [ ] Extract one owner with an explicit `Responsibility`, `Must not`, and `Contract` header.
-- [ ] Delete the extracted behavior and obsolete helpers from the sink.
-- [ ] Verify that repository search finds one active owner for the moved responsibility.
-- [ ] Pass focused tests, affected reactor tests, `./build-hive.sh`, and the unchanged official-ingress E2E gate.
-- [ ] Review before starting the next extraction.
+Every in-scope production sink was handled through the same completed loop: focused characterization, one explicit
+owner with a responsibility header, deletion from the original sink, repository-wide owner search, affected-reactor
+verification, canonical rebuild/deploy, unchanged official-ingress E2E, and review before the next extraction.
 
 ## Phase 4 — review the simplified architecture
 
@@ -395,16 +388,24 @@ For every confirmed sink:
 - [x] Reassess former CP-01 through CP-06 against the new owners; do not assume they survived or were fixed.
 - [x] Record only findings reproducible in the simplified tree.
 - [x] Order remaining fixes by severity and dependency.
-- [ ] Run two consecutive complete official-ingress local-swarm E2E gates before final approval.
+- [x] Run two consecutive complete official-ingress local-swarm E2E gates before final approval.
 
 The fresh findings and their repair order live in
 `docs/todo/control-plane-post-simplification-review.md`. They replace the abandoned numbered findings queue;
 they do not reopen completed behavior-preserving sink extractions.
 
+Final gate evidence:
+
+- `./build-hive.sh` completed the canonical full rebuild/redeploy; all required local services became healthy.
+- Two consecutive `./start-e2e-tests.sh --target local-swarm` runs, without a rebuild between them, each passed
+  39 of 39 scenarios, 463 of 463 steps, and 48 of 48 Maven tests (completed at 18:01 and 18:12 BST on 2026-09-04).
+- An earlier attempted pair exposed CP-N09, now recorded in the post-simplification review. The qualifying pair was
+  run after the timed-out test resource was removed through the supported Orchestrator API.
+
 ## Completion criteria
 
 - The E2E-only parser/audit subsystem is deleted.
-- Every confirmed control-plane/lifecycle kitchen sink has one coherent responsibility or has been removed.
+- Every in-scope production control-plane/lifecycle kitchen sink has one coherent responsibility or has been removed.
 - No extraction introduced a second owner, compatibility path, fallback, or hidden behavior change.
 - The post-refactor review, not the abandoned findings plan, is the source of the remaining repair queue.
 - Decisions, verification evidence, and explicitly deferred risks are recorded in HiveMind.

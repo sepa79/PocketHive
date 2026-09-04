@@ -7,13 +7,11 @@ This directory contains work that is not yet delivered. Completed baselines live
 - `auth-service-followups.md`
 - `config-key-normalisation-plan.md`
 - `control-plane-contract-enforcement-followups.md`
-- `control-plane-simplification-plan.md`
 - `network-proxy-followups.md`
 - `pockethive-mcp-java-migration.md`
 - `scenario-plan-followups.md`
 - `sut-environments-followups.md`
 - `swarm-lifecycle-health-model-plan.md`
-- `swarm-runtime-core-refactor.md`
 - `workitem-transport-agnostic.md`
 
 ## UI and operator experience
