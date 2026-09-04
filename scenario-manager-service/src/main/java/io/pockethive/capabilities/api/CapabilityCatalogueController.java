@@ -26,6 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Responsibility: Map the capability catalogue HTTP surface to catalogue and scenario projections.
+ * Must not: Own capability discovery, scenario catalogue state, or authoring contract definitions.
+ * Contract: docs/architecture/workerCapabilities.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ */
 @RestController
 @RequestMapping("/api")
 public class CapabilityCatalogueController {
@@ -237,53 +242,6 @@ public class CapabilityCatalogueController {
             throw new IllegalStateException("SHA-256 digest is unavailable", e);
         }
     }
-
-    public record ScenarioTemplateView(String bundleKey,
-                                       String bundlePath,
-                                       String folderPath,
-                                       String id,
-                                       String name,
-                                       String description,
-                                       String controllerImage,
-                                       List<BeeImage> bees,
-                                       boolean defunct,
-                                       String defunctReason) { }
-
-    public record BeeImage(String role, String image) { }
-
-    public record AuthoringContractFingerprintView(
-            String contractVersion,
-            String fingerprint,
-            String source) { }
-
-    public record AuthoringContractView(
-            String contractVersion,
-            String fingerprint,
-            String source,
-            Map<String, String> endpoints,
-            Map<String, Object> scenario,
-            Map<String, Object> templatesContract,
-            Map<String, Object> variables,
-            Map<String, Object> sut,
-            Map<String, Object> auth,
-            Map<String, Object> trafficPolicy,
-            CapabilitiesContractView capabilities,
-            List<ScenarioTemplateView> templateCatalog,
-            Map<String, Boolean> cache) { }
-
-    public record CapabilitiesContractView(
-            int count,
-            List<String> roles,
-            List<CapabilitySummary> manifests) { }
-
-    public record CapabilitySummary(
-            String role,
-            String image,
-            String schemaVersion,
-            String capabilitiesVersion,
-            int configCount,
-            int actionCount,
-            int panelCount) { }
 
     private boolean isRunnableTemplate(AuthenticatedUserDto user, BundleTemplateSummary summary) {
         if (user == null) {

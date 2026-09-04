@@ -2706,10 +2706,6 @@ public final class ScenarioBundleValidator {
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
 
-    public record ValidationRun(BundleValidationResult result, Scenario scenario, Path bundleRoot) { }
-
-    public record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
-
     private record AuthRefUsage(String path, String profileId) { }
 
     private record AuthProfilesInfo(Set<String> profileIds) { }

@@ -916,30 +916,4 @@ public class ScenarioController {
         boolean isAllowed(AuthenticatedUserDto user, ScenarioAccessDescriptor access);
     }
 
-    public record RuntimeRequest(String swarmId) {
-    }
-
-    public record ScenarioRuntimeResponse(String scenarioId, String swarmId, String runtimeDir) {
-    }
-
-    public record VariablesWriteResponse(String status, List<String> warnings) {
-    }
-
-    public record VariablesResolveResponse(String profileId, String sutId, Map<String, Object> vars, List<String> warnings) {
-    }
-
-    public record FolderRequest(String path) {
-    }
-
-    public record BundleMoveRequest(String bundleKey, String path) {
-    }
-
-    public record BundleFileWriteRequest(String content, String expectedRevision) {
-    }
-
-    public record BundleFileCreateRequest(String path, String content) {
-    }
-
-    public record BundleEntryRenameRequest(String path, String name) {
-    }
 }

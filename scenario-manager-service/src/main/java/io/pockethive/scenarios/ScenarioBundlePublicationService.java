@@ -6,6 +6,7 @@ import io.pockethive.scenarios.validation.BundleValidationResult;
 import io.pockethive.scenarios.validation.BundleValidationSource;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.scenarios.validation.ValidationFinding;
+import io.pockethive.scenarios.validation.ValidationRun;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -41,7 +42,7 @@ public class ScenarioBundlePublicationService {
         synchronized (scenarios) {
             Path uploaded = unpackForPublication(zipBytes);
             try {
-                ScenarioBundleValidator.ValidationRun validation = validateUploaded(uploaded, null);
+                ValidationRun validation = validateUploaded(uploaded, null);
                 requireSuccessful(validation);
                 Scenario scenario = validatedScenario(validation);
                 if (scenarios.hasDiscoveredScenarioId(scenario.getId())) {
@@ -64,7 +65,7 @@ public class ScenarioBundlePublicationService {
         synchronized (scenarios) {
             Path uploaded = unpackForPublication(zipBytes);
             try {
-                ScenarioBundleValidator.ValidationRun validation = validateUploaded(uploaded, expectedScenarioId);
+                ValidationRun validation = validateUploaded(uploaded, expectedScenarioId);
                 requireSuccessful(validation);
                 Scenario scenario = validatedScenario(validation);
                 Path target = scenarios.bundleDirForExistingOrDefault(scenario.getId());
@@ -161,7 +162,7 @@ public class ScenarioBundlePublicationService {
         }
     }
 
-    private ScenarioBundleValidator.ValidationRun validateUploaded(Path uploaded, String expectedId)
+    private ValidationRun validateUploaded(Path uploaded, String expectedId)
         throws IOException {
         return validator.validateWithContext(new BundleValidationInput(
             BundleValidationSource.UPLOADED_ZIP,
@@ -173,13 +174,13 @@ public class ScenarioBundlePublicationService {
             expectedId));
     }
 
-    private void requireSuccessful(ScenarioBundleValidator.ValidationRun validation) {
+    private void requireSuccessful(ValidationRun validation) {
         if (!validation.result().ok()) {
             throw new BundleValidationException(validation.result());
         }
     }
 
-    private Scenario validatedScenario(ScenarioBundleValidator.ValidationRun validation) {
+    private Scenario validatedScenario(ValidationRun validation) {
         Scenario scenario = validation.scenario();
         if (scenario == null || scenario.getId() == null || scenario.getId().isBlank()) {
             throw new IllegalStateException("Canonical bundle validation returned ok without a scenario id");
@@ -187,7 +188,7 @@ public class ScenarioBundlePublicationService {
         return scenario;
     }
 
-    private Path validatedRoot(ScenarioBundleValidator.ValidationRun validation) {
+    private Path validatedRoot(ValidationRun validation) {
         Path root = validation.bundleRoot();
         if (root == null || !Files.isDirectory(root)) {
             throw new IllegalStateException("Canonical bundle validation returned ok without a bundle root");
