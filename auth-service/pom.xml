@@ -119,6 +119,8 @@
             <param>io.pockethive.auth.service.oauth.PocketHiveRefreshTokenGenerator</param>
             <param>io.pockethive.auth.service.oauth.PocketHiveInteractiveAuthorizationRequestConverter</param>
             <param>io.pockethive.auth.service.oauth.DynamicClientRegistrationService</param>
+            <param>io.pockethive.auth.service.oauth.JsonFileDynamicClientStateStore</param>
+            <param>io.pockethive.auth.service.oauth.OAuthBrowserAuthorizationFailureHandler</param>
             <param>io.pockethive.auth.service.oauth.PocketHiveRegisteredClientRepository</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationConverter</param>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionClientAuthenticationProvider</param>
@@ -126,6 +128,8 @@
           <targetTests>
             <param>io.pockethive.auth.service.oauth.PocketHivePublicSessionSecurityTest</param>
             <param>io.pockethive.auth.service.oauth.DynamicClientRegistrationServiceTest</param>
+            <param>io.pockethive.auth.service.oauth.JsonFileDynamicClientStateStoreTest</param>
+            <param>io.pockethive.auth.service.oauth.OAuthBrowserAuthorizationFailureHandlerTest</param>
           </targetTests>
         </configuration>
       </plugin>

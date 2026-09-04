@@ -306,7 +306,10 @@ services:
       POCKETHIVE_AUTH_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH: /var/lib/pockethive-auth/state/dynamic-clients.json
       POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/auth-service:/var/lib/pockethive-auth/state
     ports:
       - target: 8080
         published: 1083

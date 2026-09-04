@@ -29,7 +29,7 @@ public final class DynamicClientRegistrationService {
     private static final int MAX_REDIRECT_URIS = 8;
     private static final int MAX_REDIRECT_URI_LENGTH = 2048;
     private static final int MAX_CLIENT_ID_ATTEMPTS = 8;
-    private static final String CLIENT_ID_PREFIX = "phmcp_client_";
+    static final String CLIENT_ID_PREFIX = "phmcp_client_";
     private static final String TOKEN_AUTHENTICATION_NONE = ClientAuthenticationMethod.NONE.getValue();
     private static final String AUTHORIZATION_CODE = AuthorizationGrantType.AUTHORIZATION_CODE.getValue();
     private static final String REFRESH_TOKEN = AuthorizationGrantType.REFRESH_TOKEN.getValue();
@@ -59,17 +59,50 @@ public final class DynamicClientRegistrationService {
         List<String> redirectUris = redirectUris(request.redirectUris());
         List<String> grantTypes = grantTypes(request.grantTypes());
         responseTypes(request.responseTypes());
-        ClientAuthenticationMethod authenticationMethod =
-            clientAuthenticationMethod(request.tokenEndpointAuthMethod());
+        clientAuthenticationMethod(request.tokenEndpointAuthMethod());
         List<String> scopes = scopes(request.scope());
         String clientId = newClientId();
         Instant issuedAt = clock.instant();
 
-        RegisteredClient.Builder builder = RegisteredClient.withId("dynamic:" + clientId)
+        RegisteredClient registeredClient = registeredClient("dynamic:" + clientId, clientId, issuedAt,
+            clientName, redirectUris, grantTypes, scopes, tokenSettings);
+        try {
+            clients.save(registeredClient);
+        } catch (DynamicClientCapacityException exception) {
+            throw new DynamicClientRegistrationException("temporarily_unavailable", exception.getMessage(),
+                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS);
+        }
+        return new DynamicClientRegistrationResponse(
+            clientId, issuedAt.getEpochSecond(), clientName, redirectUris, grantTypes,
+            List.of(RESPONSE_CODE), TOKEN_AUTHENTICATION_NONE, String.join(" ", scopes));
+    }
+
+    static RegisteredClient restore(DynamicClientStateEntry entry, TokenSettings tokenSettings) {
+        if (entry == null || entry.clientIdIssuedAt() == null
+            || !expectedRegistrationId(entry.clientId()).equals(entry.registrationId())) {
+            throw invalidMetadata("Persisted client identifiers are invalid");
+        }
+        String clientName = clientName(entry.clientName());
+        List<String> redirectUris = redirectUris(entry.redirectUris());
+        List<String> grantTypes = grantTypes(entry.grantTypes());
+        List<String> scopes = scopes(entry.scopes() == null ? "" : String.join(" ", entry.scopes()));
+        return registeredClient(entry.registrationId(), entry.clientId(), entry.clientIdIssuedAt(),
+            clientName, redirectUris, grantTypes, scopes, tokenSettings);
+    }
+
+    private static RegisteredClient registeredClient(
+        String registrationId, String clientId, Instant issuedAt, String clientName,
+        List<String> redirectUris, List<String> grantTypes, List<String> scopes,
+        TokenSettings tokenSettings
+    ) {
+        if (!issuedClientId(clientId)) {
+            throw invalidMetadata("Persisted client identifier is invalid");
+        }
+        RegisteredClient.Builder builder = RegisteredClient.withId(registrationId)
             .clientId(clientId)
             .clientIdIssuedAt(issuedAt)
             .clientName(clientName)
-            .clientAuthenticationMethod(authenticationMethod)
+            .clientAuthenticationMethod(ClientAuthenticationMethod.NONE)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
             .clientSettings(ClientSettings.builder()
                 .requireProofKey(true)
@@ -81,15 +114,23 @@ public final class DynamicClientRegistrationService {
         }
         redirectUris.forEach(builder::redirectUri);
         scopes.forEach(builder::scope);
+        return builder.build();
+    }
+
+    private static String expectedRegistrationId(String clientId) {
+        return "dynamic:" + clientId;
+    }
+
+    private static boolean issuedClientId(String clientId) {
+        if (clientId == null || !clientId.startsWith(CLIENT_ID_PREFIX)
+            || clientId.length() != CLIENT_ID_PREFIX.length() + 43) return false;
+        String encoded = clientId.substring(CLIENT_ID_PREFIX.length());
         try {
-            clients.save(builder.build());
-        } catch (DynamicClientCapacityException exception) {
-            throw new DynamicClientRegistrationException("temporarily_unavailable", exception.getMessage(),
-                org.springframework.http.HttpStatus.TOO_MANY_REQUESTS);
+            byte[] decoded = Base64.getUrlDecoder().decode(encoded);
+            return Base64.getUrlEncoder().withoutPadding().encodeToString(decoded).equals(encoded);
+        } catch (IllegalArgumentException exception) {
+            return false;
         }
-        return new DynamicClientRegistrationResponse(
-            clientId, issuedAt.getEpochSecond(), clientName, redirectUris, grantTypes,
-            List.of(RESPONSE_CODE), authenticationMethod.getValue(), String.join(" ", scopes));
     }
 
     private String newClientId() {
@@ -170,11 +211,10 @@ public final class DynamicClientRegistrationService {
         }
     }
 
-    private static ClientAuthenticationMethod clientAuthenticationMethod(String value) {
+    private static void clientAuthenticationMethod(String value) {
         if (value != null && !TOKEN_AUTHENTICATION_NONE.equals(value)) {
             throw invalidMetadata("Only public clients using token_endpoint_auth_method none are supported");
         }
-        return ClientAuthenticationMethod.NONE;
     }
 
     private static List<String> scopes(String value) {

@@ -10,6 +10,7 @@
       - state/tcp-mock/data
       - state/tcp-mock/tls-data
       - state/haproxy/runtime
+      - state/auth-service
       - state/pockethive-mcp
     pockethive_swarm_owned_state_dirs:
       - path: state/grafana/data
@@ -28,6 +29,7 @@
       - state/tcp-mock/data
       - state/tcp-mock/tls-data
       - state/haproxy/runtime
+      - state/auth-service
       - state/pockethive-mcp
     pockethive_swarm_owned_state_dirs:
       - path: state/grafana/data

@@ -61,6 +61,20 @@ button, input { font: inherit; }
 .auth-intro h1 { margin: 4px 0 8px; font-size: clamp(1.65rem, 6vw, 2.15rem); line-height: 1.15; letter-spacing: -.025em; }
 .auth-intro p { margin: 0; color: var(--ph-muted); }
 .auth-eyebrow { color: var(--ph-accent) !important; font-size: .73rem; font-weight: 700; letter-spacing: .11em; text-transform: uppercase; }
+.auth-eyebrow--danger { color: var(--ph-danger) !important; }
+
+.auth-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 13px 14px;
+  border: 1px solid rgb(255 139 133 / 45%);
+  border-radius: 8px;
+  background: rgb(255 139 133 / 8%);
+}
+.auth-error span { color: var(--ph-muted); font-size: .78rem; }
+.auth-error code { color: var(--ph-danger); font-weight: 700; }
 
 .auth-form { display: grid; gap: 18px; }
 .auth-field { display: grid; gap: 7px; font-weight: 650; }

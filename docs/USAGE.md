@@ -116,6 +116,14 @@ configuration and authentication behaviour.
 - If authentication has expired or was declined, use the explicit **Sign in**
   action. Ordinary tab and swarm commands must not open a separate browser
   authorization flow.
+- If an agent client retained an OAuth registration across a local restart, it
+  can re-authorize with that same client ID. Do not clear or recreate the client
+  configuration merely because Auth Service restarted; active dynamic client
+  registrations are retained in the `pockethive-auth-state` volume.
+- The first upgrade from the earlier in-memory registry cannot reconstruct a
+  client ID that was issued before durable state existed. Remove and re-add that
+  MCP server once so the client performs dynamic registration; later Auth
+  Service restarts retain the replacement registration.
 
 Scenario Bundle source remains in Git. From the Scenarios tab select a committed
 bundle directory; the extension uploads the exact committed regular files for

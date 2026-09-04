@@ -31,6 +31,8 @@ import org.springframework.web.bind.annotation.RequestParam;
 
 @Controller
 public final class OAuthBrowserController {
+    static final String STYLESHEET_PATH = "/oauth/pockethive-auth.css";
+    static final String LOGO_PATH = "/oauth/logo.svg";
     private final AuthServiceProperties properties;
     private final InMemoryUserStore users;
     private final OAuthBrowserPageRenderer pages;
@@ -54,7 +56,7 @@ public final class OAuthBrowserController {
         response.setContentType(MediaType.TEXT_HTML_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
         response.getWriter().write(pages.login(action, csrf.getParameterName(), csrf.getToken(),
-            publicEndpoint("/oauth/pockethive-auth.css"), publicEndpoint("/oauth/logo.svg")));
+            publicEndpoint(STYLESHEET_PATH), publicEndpoint(LOGO_PATH)));
     }
 
     @PostMapping("/oauth/dev/login")
@@ -93,8 +95,8 @@ public final class OAuthBrowserController {
         response.getWriter().write(pages.consent(
             publicEndpoint("/oauth/authorize"), clientId, client.getClientName(),
             properties.getOauth().getResource().toString(), state,
-            csrf.getParameterName(), csrf.getToken(), scopes, publicEndpoint("/oauth/pockethive-auth.css"),
-            publicEndpoint("/oauth/logo.svg")));
+            csrf.getParameterName(), csrf.getToken(), scopes, publicEndpoint(STYLESHEET_PATH),
+            publicEndpoint(LOGO_PATH)));
     }
 
     private String publicEndpoint(String path) {

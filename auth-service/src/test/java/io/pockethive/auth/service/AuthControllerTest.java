@@ -15,7 +15,9 @@ import io.pockethive.auth.contract.AuthServicePermissionIds;
 import io.pockethive.auth.contract.AuthServiceResourceTypes;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
+import java.nio.file.Path;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,10 +25,21 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 class AuthControllerTest {
+    @TempDir
+    static Path dynamicClientStateDirectory;
+
+    @DynamicPropertySource
+    static void dynamicClientState(DynamicPropertyRegistry registry) {
+        registry.add("pockethive.auth-service.oauth.dynamic-client-state-path",
+            () -> dynamicClientStateDirectory.resolve("dynamic-clients.json").toString());
+    }
+
     @Autowired
     MockMvc mvc;
 

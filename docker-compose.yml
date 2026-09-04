@@ -252,7 +252,10 @@ services:
       POCKETHIVE_AUTH_OAUTH_RESOURCE: http://localhost:8088/mcp
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH: /var/lib/pockethive-auth/state/dynamic-clients.json
       POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: ${POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET:-pockethive-mcp-local-introspection-secret}
+    volumes:
+      - pockethive-auth-state:/var/lib/pockethive-auth/state
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 5s
@@ -456,6 +459,7 @@ volumes:
   tcp-mock-data:
   tcp-mock-tls-data:
   haproxy-runtime:
+  pockethive-auth-state:
   pockethive-mcp-state:
 
 networks:

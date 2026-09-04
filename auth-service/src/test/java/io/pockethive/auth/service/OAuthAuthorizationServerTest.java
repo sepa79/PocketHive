@@ -20,12 +20,14 @@ import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,6 +35,8 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @SpringBootTest
@@ -42,6 +46,15 @@ class OAuthAuthorizationServerTest {
     private static final String REDIRECT_URI = "http://127.0.0.1:38125/callback";
     private static final String RESOURCE = "http://localhost:8080/mcp";
     private static final String VERIFIER = "test-verifier-that-is-at-least-forty-three-characters-long";
+
+    @TempDir
+    static Path dynamicClientStateDirectory;
+
+    @DynamicPropertySource
+    static void dynamicClientState(DynamicPropertyRegistry registry) {
+        registry.add("pockethive.auth-service.oauth.dynamic-client-state-path",
+            () -> dynamicClientStateDirectory.resolve("dynamic-clients.json").toString());
+    }
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
@@ -239,6 +252,32 @@ class OAuthAuthorizationServerTest {
                 .param("username", "local-admin"))
             .andExpect(status().is3xxRedirection())
             .andExpect(redirectedUrl("/"));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
+    void unknownAuthorizationClientRendersBoundedPocketHiveFailure() throws Exception {
+        String untrustedClientId = "unknown-<script>alert(1)</script>";
+        String untrustedState = "state-<img src=x onerror=alert(1)>";
+
+        mvc.perform(get("/oauth/authorize")
+                .queryParam("response_type", "code")
+                .queryParam("client_id", untrustedClientId)
+                .queryParam("redirect_uri", "http://localhost:52000/oauth/callback")
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", PocketHiveMcpScopes.DISCOVER)
+                .queryParam("state", untrustedState)
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith("text/html"))
+            .andExpect(content().string(containsString("class=\"auth-shell\"")))
+            .andExpect(content().string(containsString("PocketHive")))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("invalid_request")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(untrustedClientId))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(untrustedState))));
     }
 
     @Test

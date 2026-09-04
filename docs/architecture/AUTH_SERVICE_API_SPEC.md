@@ -505,17 +505,28 @@ exact normalized metadata accepted by Auth Service; it returns no client
 secret. Exact redirect and scope values become the registered-client contract
 used by the authorization server.
 
-Dynamic registrations use one canonical in-memory registry shared with OAuth
-authorization. The registry has an explicit configured capacity and inactivity
-lifetime. A successful lookup of an active dynamic client renews that
-inactivity deadline; registrations that receive no successful lookup expire.
-The registry prunes expired registrations before reads and writes, and fails
-with a bounded OAuth registration error when capacity is exhausted. Auth
-Service restart invalidates dynamic registrations together with its other
-in-memory OAuth state. Dynamic registration does not authenticate a user, grant
-a permission, or imply client conformance. Client ID Metadata Document fetching
-is not implemented; accepting attacker-selected metadata URLs would add an
-unrelated outbound trust and SSRF boundary.
+Dynamic registrations use one canonical Auth Service registry shared with OAuth
+authorization. The registry has an explicit configured capacity, inactivity
+lifetime, and durable state file. A successful lookup of an active dynamic
+client renews that inactivity deadline; registrations that receive no
+successful lookup expire. The registry atomically replaces its versioned state
+file before publishing an in-memory mutation, prunes expired registrations
+before reads and writes, and fails explicitly when configured state cannot be
+read, validated, or written. A missing state file represents an empty
+first-start registry; malformed, duplicate, over-capacity, or unsupported state
+blocks Auth Service startup. The persisted projection contains public client
+metadata and expiry only. It contains no client secret, authorization code,
+access token, refresh token, consent, user identity, or permission grant.
+
+An Auth Service restart retains active dynamic registrations, allowing a native
+MCP client to reuse the client ID issued for the same configured issuer. Other
+OAuth authorization state remains in memory in this phase: restart invalidates
+authorization codes, access tokens, refresh tokens, and consent, so the client
+must re-authorize using its retained registration. Dynamic registration does
+not authenticate a user, grant a permission, or imply client conformance.
+Client ID Metadata Document fetching is not implemented; accepting
+attacker-selected metadata URLs would add an unrelated outbound trust and SSRF
+boundary.
 
 `POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY` is the required positive
 instance capacity and defaults to `256`. The required positive
@@ -523,7 +534,9 @@ instance capacity and defaults to `256`. The required positive
 strictly longer than the configured refresh-token lifetime, which defaults to
 `P30D`. The default one-day margin and lookup renewal keep an actively used
 refresh session's client registration available while still reclaiming inactive
-registrations.
+registrations. `POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH` is the required
+absolute path of the versioned registry state file. Deployment configuration
+must mount its parent directory as durable writable state owned by Auth Service.
 
 ### 6.10 OAuth authorization endpoint
 
@@ -546,7 +559,11 @@ and requested scopes. It posts only to Auth Service using the one-time bound
 authorization-request handle. User approval issues one authorization code and
 redirects with the unchanged client `state`. Decline redirects with
 `error=access_denied` and the unchanged `state`. Invalid requests return the
-OAuth error directly and do not redirect to an untrusted URI.
+OAuth error directly and do not redirect to an untrusted URI. Browser-facing
+authorization failures render a bounded PocketHive-themed HTML page with the
+canonical OAuth error code and safe recovery guidance. They never render the
+framework Whitelabel page or echo client IDs, redirect URIs, state, PKCE values,
+tokens, exception messages, or other request data.
 
 The DEV provider asks for one configured active username. A future LDAP or OIDC
 provider changes only the principal-authentication adapter; it does not change

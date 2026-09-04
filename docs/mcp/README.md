@@ -54,7 +54,15 @@ Dynamic client registration has one bounded inactivity lifetime. Successful
 use renews an active registration; inactive registrations expire after a
 duration configured to be strictly longer than refresh-token lifetime. This
 keeps long-running native MCP clients seamless without making abandoned client
-registrations permanent.
+registrations permanent. Active public-client registrations are stored in the
+Auth Service's configured durable state file, so a client such as Amazon Q may
+reuse its issuer-bound client ID after Auth Service restarts. Authorization
+codes, tokens, consent, and browser sessions remain transient and are never
+written to that file; after a restart the client re-authorizes with its retained
+registration. Invalid authorization requests render a bounded PocketHive page
+and never expose Spring's default error page or untrusted request values. The
+first upgrade cannot reconstruct registrations issued by the former in-memory
+registry; affected clients must remove and re-add the MCP server once.
 
 Both OAuth protected-resource discovery and authorization-server discovery
 publish that same interactive scope set. Governed cleanup is intentionally not

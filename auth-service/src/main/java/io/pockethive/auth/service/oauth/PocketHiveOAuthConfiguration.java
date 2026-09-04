@@ -1,5 +1,6 @@
 package io.pockethive.auth.service.oauth;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.service.config.AuthServiceProperties;
@@ -64,9 +65,15 @@ public class PocketHiveOAuthConfiguration {
     }
 
     @Bean
+    DynamicClientStateStore dynamicClientStateStore(AuthServiceProperties properties, ObjectMapper mapper) {
+        AuthServiceOAuthProperties oauth = requireValid(properties);
+        return new JsonFileDynamicClientStateStore(mapper, oauth.getDynamicClientStatePath());
+    }
+
+    @Bean
     PocketHiveRegisteredClientRepository registeredClients(AuthServiceProperties properties,
-                                                            PasswordEncoder encoder,
-                                                            TokenSettings tokens, Clock clock) {
+                                                            PasswordEncoder encoder, TokenSettings tokens,
+                                                            Clock clock, DynamicClientStateStore stateStore) {
         AuthServiceOAuthProperties oauth = requireValid(properties);
         RegisteredClient vscode = RegisteredClient.withId("pockethive-vscode-public")
             .clientId(oauth.getVscodeClientId())
@@ -91,7 +98,7 @@ public class PocketHiveOAuthConfiguration {
             .tokenSettings(tokens)
             .build();
         return new PocketHiveRegisteredClientRepository(List.of(vscode, introspection),
-            oauth.getDynamicClientCapacity(), oauth.getDynamicClientTtl(), clock);
+            oauth.getDynamicClientCapacity(), oauth.getDynamicClientTtl(), clock, stateStore, tokens);
     }
 
     @Bean
@@ -140,7 +147,9 @@ public class PocketHiveOAuthConfiguration {
     @Order(1)
     SecurityFilterChain oauthEndpoints(HttpSecurity http, AuthServiceProperties properties,
                                        InMemoryUserStore users, RegisteredClientRepository clients,
-                                       AuthorizationServerSettings settings) throws Exception {
+                                       AuthorizationServerSettings settings,
+                                       OAuthBrowserAuthorizationFailureHandler authorizationFailureHandler)
+        throws Exception {
         OAuth2AuthorizationServerConfigurer authorizationServer =
             OAuth2AuthorizationServerConfigurer.authorizationServer();
         http.securityMatcher(authorizationServer.getEndpointsMatcher())
@@ -185,6 +194,7 @@ public class PocketHiveOAuthConfiguration {
                         new PocketHivePublicSessionClientAuthenticationProvider(clients))))
                 .authorizationEndpoint(endpoint -> endpoint
                     .consentPage("/oauth/consent")
+                    .errorResponseHandler(authorizationFailureHandler)
                     .authorizationRequestConverters(converters -> converters.add(0,
                         new PocketHiveInteractiveAuthorizationRequestConverter(users)))
                     .authenticationProviders(providers -> providers.forEach(provider -> {
@@ -238,6 +248,8 @@ public class PocketHiveOAuthConfiguration {
             || oauth.getDynamicClientTtl().isZero()
             || oauth.getDynamicClientTtl().compareTo(oauth.getRefreshTokenTtl()) <= 0
             || oauth.getDynamicClientCapacity() < 1
+            || oauth.getDynamicClientStatePath() == null
+            || !oauth.getDynamicClientStatePath().isAbsolute()
             || !secureOrLoopback(oauth.getIssuer()) || !secureOrLoopback(oauth.getResource())
             || !vscodeRedirectBase(oauth.getVscodeRedirectUri())) {
             throw new IllegalStateException("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");

@@ -8,6 +8,7 @@ import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -17,6 +18,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -244,6 +246,154 @@ class DynamicClientRegistrationServiceTest {
     }
 
     @Test
+    void dynamicRegistrationSurvivesRepositoryReconstruction(@TempDir Path directory) {
+        MutableClock clock = new MutableClock(NOW);
+        Path statePath = directory.resolve("dynamic-clients.json");
+        DynamicClientStateStore firstStore = fileStore(statePath);
+        PocketHiveRegisteredClientRepository firstRepository =
+            repository(clock, 2, firstStore);
+        DynamicClientRegistrationResponse registration = new DynamicClientRegistrationService(
+            firstRepository, TOKENS, clock).register(validRequest());
+
+        PocketHiveRegisteredClientRepository reconstructed =
+            repository(clock, 2, fileStore(statePath));
+
+        RegisteredClient restored = reconstructed.findByClientId(registration.clientId());
+        assertThat(restored).isNotNull();
+        assertThat(restored.getId()).isEqualTo("dynamic:" + registration.clientId());
+        assertThat(restored.getClientIdIssuedAt()).isEqualTo(NOW);
+        assertThat(restored.getClientName()).isEqualTo("client");
+        assertThat(restored.getRedirectUris()).containsExactly("http://127.0.0.1:34123/callback");
+        assertThat(restored.getAuthorizationGrantTypes()).containsExactlyInAnyOrder(
+            AuthorizationGrantType.AUTHORIZATION_CODE, AuthorizationGrantType.REFRESH_TOKEN);
+        assertThat(restored.getScopes()).containsExactly(PocketHiveMcpScopes.DISCOVER);
+        assertThat(restored.getClientAuthenticationMethods()).containsExactly(ClientAuthenticationMethod.NONE);
+        assertThat(restored.getClientSettings().isRequireProofKey()).isTrue();
+        assertThat(restored.getClientSettings().isRequireAuthorizationConsent()).isTrue();
+        assertThat(restored.getTokenSettings()).isSameAs(TOKENS);
+    }
+
+    @Test
+    void renewedInactivityDeadlineSurvivesRepositoryReconstruction(@TempDir Path directory) {
+        MutableClock clock = new MutableClock(NOW);
+        Path statePath = directory.resolve("dynamic-clients.json");
+        PocketHiveRegisteredClientRepository first = repository(clock, 1, fileStore(statePath));
+        DynamicClientRegistrationResponse registration = new DynamicClientRegistrationService(
+            first, TOKENS, clock).register(validRequest());
+
+        clock.current = NOW.plus(TTL).minusSeconds(1);
+        assertThat(first.findByClientId(registration.clientId())).isNotNull();
+        clock.current = NOW.plus(TTL).plusSeconds(1);
+
+        assertThat(repository(clock, 1, fileStore(statePath)).findByClientId(registration.clientId()))
+            .isNotNull();
+    }
+
+    @Test
+    void renewalRetainsOtherClientsAndPersistenceUsesCanonicalOrder() {
+        MutableStateStore store = new MutableStateStore();
+        PocketHiveRegisteredClientRepository clients = repository(new MutableClock(NOW), 2, store);
+        clients.save(dynamic("two", "client-two"));
+        clients.save(dynamic("one", "client-one"));
+        assertThat(store.load()).extracting(DynamicClientStateEntry::registrationId)
+            .containsExactly("one", "two");
+
+        assertThat(clients.findById("one")).isNotNull();
+
+        assertThat(clients.findByClientId("client-two")).isNotNull();
+        assertThat(store.load()).extracting(DynamicClientStateEntry::registrationId)
+            .containsExactly("one", "two");
+    }
+
+    @Test
+    void startupPrunesExpiredDurableClients() {
+        MutableClock clock = new MutableClock(NOW);
+        MutableStateStore store = new MutableStateStore();
+        DynamicClientRegistrationResponse registration = new DynamicClientRegistrationService(
+            repository(clock, 1, store), TOKENS, clock).register(validRequest());
+        DynamicClientStateEntry active = store.load().getFirst();
+        store.replace(List.of(new DynamicClientStateEntry(
+            active.registrationId(), active.clientId(), active.clientIdIssuedAt(), active.clientName(),
+            active.redirectUris(), active.grantTypes(), active.scopes(), NOW)));
+
+        PocketHiveRegisteredClientRepository reconstructed = repository(clock, 1, store);
+
+        assertThat(store.load()).isEmpty();
+        assertThat(reconstructed.findByClientId(registration.clientId())).isNull();
+    }
+
+    @Test
+    void startupRejectsDuplicateAndInvalidDurableClientState() {
+        MutableClock clock = new MutableClock(NOW);
+        MutableStateStore source = new MutableStateStore();
+        new DynamicClientRegistrationService(repository(clock, 2, source), TOKENS, clock)
+            .register(validRequest());
+        DynamicClientStateEntry valid = source.load().getFirst();
+
+        for (List<DynamicClientStateEntry> invalid : List.of(
+            List.of(valid, valid),
+            List.of(new DynamicClientStateEntry(
+                "wrong-registration", valid.clientId(), valid.clientIdIssuedAt(), valid.clientName(),
+                valid.redirectUris(), valid.grantTypes(), valid.scopes(), valid.expiresAt())),
+            List.of(new DynamicClientStateEntry(
+                "dynamic:phmcp_client_" + "!".repeat(43), "phmcp_client_" + "!".repeat(43),
+                valid.clientIdIssuedAt(), valid.clientName(), valid.redirectUris(), valid.grantTypes(),
+                valid.scopes(), valid.expiresAt())),
+            List.of(new DynamicClientStateEntry(
+                "dynamic:phmcp_client_" + "A".repeat(42) + "B",
+                "phmcp_client_" + "A".repeat(42) + "B", valid.clientIdIssuedAt(), valid.clientName(),
+                valid.redirectUris(), valid.grantTypes(), valid.scopes(), valid.expiresAt())),
+            List.of(new DynamicClientStateEntry(
+                "dynamic:phmcp_client_short", "phmcp_client_short", valid.clientIdIssuedAt(),
+                valid.clientName(), valid.redirectUris(), valid.grantTypes(), valid.scopes(), valid.expiresAt())))) {
+            assertThatThrownBy(() -> repository(clock, 2, new MutableStateStore(invalid)))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_INVALID");
+        }
+    }
+
+    @Test
+    void startupRestoresMultipleDistinctDurableClients() {
+        MutableClock clock = new MutableClock(NOW);
+        MutableStateStore store = new MutableStateStore();
+        DynamicClientRegistrationService registration = new DynamicClientRegistrationService(
+            repository(clock, 2, store), TOKENS, clock);
+        DynamicClientRegistrationResponse first = registration.register(validRequest());
+        DynamicClientRegistrationResponse second = registration.register(validRequest());
+
+        assertThatThrownBy(() -> repository(clock, 1, new MutableStateStore(store.load())))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_INVALID");
+
+        PocketHiveRegisteredClientRepository reconstructed = repository(clock, 2, store);
+
+        assertThat(reconstructed.findByClientId(first.clientId())).isNotNull();
+        assertThat(reconstructed.findByClientId(second.clientId())).isNotNull();
+    }
+
+    @Test
+    void failedPersistenceDoesNotPublishDynamicRegistration() {
+        DynamicClientStateStore failingStore = new DynamicClientStateStore() {
+            @Override
+            public List<DynamicClientStateEntry> load() {
+                return List.of();
+            }
+
+            @Override
+            public void replace(List<DynamicClientStateEntry> clients) {
+                throw new IllegalStateException("OAUTH_DYNAMIC_CLIENT_STATE_WRITE_FAILED");
+            }
+        };
+        PocketHiveRegisteredClientRepository clients = repository(
+            new MutableClock(NOW), 1, failingStore);
+
+        assertThatThrownBy(() -> clients.save(dynamic("one", "client-one")))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_WRITE_FAILED");
+        assertThat(clients.findByClientId("client-one")).isNull();
+    }
+
+    @Test
     void requiresDynamicClientInactivityLifetimeToExceedRefreshLifetime() {
         AuthServiceProperties properties = validOAuthProperties();
         AuthServiceOAuthProperties oauth = properties.getOauth();
@@ -333,12 +483,20 @@ class DynamicClientRegistrationServiceTest {
         MutableClock clock = new MutableClock(NOW);
         RegisteredClient fixed = fixed();
         for (Runnable construction : List.<Runnable>of(
-            () -> new PocketHiveRegisteredClientRepository(null, 1, TTL, clock),
-            () -> new PocketHiveRegisteredClientRepository(List.of(), 1, TTL, clock),
-            () -> new PocketHiveRegisteredClientRepository(List.of(fixed), 0, TTL, clock),
-            () -> new PocketHiveRegisteredClientRepository(List.of(fixed), 1, Duration.ZERO, clock),
-            () -> new PocketHiveRegisteredClientRepository(List.of(fixed), 1, Duration.ofSeconds(-1), clock),
-            () -> new PocketHiveRegisteredClientRepository(List.of(fixed), 1, TTL, null))) {
+            () -> new PocketHiveRegisteredClientRepository(null, 1, TTL, clock, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(List.of(), 1, TTL, clock, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 0, TTL, clock, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 1, Duration.ZERO, clock, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 1, Duration.ofSeconds(-1), clock, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 1, TTL, null, stateStore(), TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 1, TTL, clock, null, TOKENS),
+            () -> new PocketHiveRegisteredClientRepository(
+                List.of(fixed), 1, TTL, clock, stateStore(), null))) {
             assertThatThrownBy(construction::run).isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("OAUTH_CLIENT_REGISTRY_CONFIGURATION_INVALID");
         }
@@ -346,7 +504,7 @@ class DynamicClientRegistrationServiceTest {
             List.of(fixed, dynamic("fixed", "other-client")),
             List.of(fixed, dynamic("other", "fixed-client")))) {
             assertThatThrownBy(() -> new PocketHiveRegisteredClientRepository(
-                duplicate, 1, TTL, clock))
+                duplicate, 1, TTL, clock, stateStore(), TOKENS))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("OAUTH_FIXED_CLIENT_IDENTIFIER_DUPLICATE");
         }
@@ -362,7 +520,23 @@ class DynamicClientRegistrationServiceTest {
     }
 
     private static PocketHiveRegisteredClientRepository repository(Clock clock, int capacity) {
-        return new PocketHiveRegisteredClientRepository(List.of(fixed()), capacity, TTL, clock);
+        return repository(clock, capacity, stateStore());
+    }
+
+    private static PocketHiveRegisteredClientRepository repository(
+        Clock clock, int capacity, DynamicClientStateStore stateStore
+    ) {
+        return new PocketHiveRegisteredClientRepository(
+            List.of(fixed()), capacity, TTL, clock, stateStore, TOKENS);
+    }
+
+    private static DynamicClientStateStore fileStore(Path statePath) {
+        return new JsonFileDynamicClientStateStore(
+            new com.fasterxml.jackson.databind.ObjectMapper().findAndRegisterModules(), statePath);
+    }
+
+    private static DynamicClientStateStore stateStore() {
+        return new MutableStateStore();
     }
 
     private static RegisteredClient fixed() {
@@ -392,6 +566,7 @@ class DynamicClientRegistrationServiceTest {
         oauth.setVscodeRedirectUri(URI.create("http://127.0.0.1/callback"));
         oauth.setIntrospectionClientId("introspection-client");
         oauth.setIntrospectionClientSecret("introspection-secret");
+        oauth.setDynamicClientStatePath(Path.of("/tmp/pockethive-auth-test/dynamic-clients.json"));
         return properties;
     }
 
@@ -457,6 +632,28 @@ class DynamicClientRegistrationServiceTest {
         public void nextBytes(byte[] bytes) {
             calls++;
             Arrays.fill(bytes, (byte) 0);
+        }
+    }
+
+    private static final class MutableStateStore implements DynamicClientStateStore {
+        private List<DynamicClientStateEntry> entries;
+
+        private MutableStateStore() {
+            this(List.of());
+        }
+
+        private MutableStateStore(List<DynamicClientStateEntry> entries) {
+            this.entries = List.copyOf(entries);
+        }
+
+        @Override
+        public List<DynamicClientStateEntry> load() {
+            return entries;
+        }
+
+        @Override
+        public void replace(List<DynamicClientStateEntry> clients) {
+            entries = List.copyOf(clients);
         }
     }
 }
