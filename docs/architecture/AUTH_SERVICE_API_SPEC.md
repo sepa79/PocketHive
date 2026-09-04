@@ -565,6 +565,14 @@ canonical OAuth error code and safe recovery guidance. They never render the
 framework Whitelabel page or echo client IDs, redirect URIs, state, PKCE values,
 tokens, exception messages, or other request data.
 
+This browser-failure contract also applies to the DEV sign-in and consent
+endpoints. An unauthenticated consent request enters the same DEV sign-in flow;
+an invalid or expired consent client, an unknown or inactive DEV user, a
+disabled DEV provider, or a rejected browser CSRF check returns the themed,
+non-cacheable failure page with the appropriate HTTP status. These paths must
+not dispatch to the framework `/error` page. Machine-facing registration and
+token errors retain their documented JSON OAuth responses.
+
 The DEV provider asks for one configured active username. A future LDAP or OIDC
 provider changes only the principal-authentication adapter; it does not change
 the OAuth request, consent, code, token, or client contracts.

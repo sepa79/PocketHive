@@ -28,6 +28,7 @@ import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -240,6 +241,8 @@ class OAuthAuthorizationServerTest {
 
         mvc.perform(get("/oauth/dev/login"))
             .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().encoding(StandardCharsets.UTF_8))
             .andExpect(content().string(containsString("class=\"auth-shell\"")))
             .andExpect(content().string(containsString("class=\"auth-brand__logo\"")))
             .andExpect(content().string(containsString("pockethive-auth.css")))
@@ -282,12 +285,71 @@ class OAuthAuthorizationServerTest {
 
     @Test
     @WithMockUser(username = "local-admin")
+    void unknownConsentClientRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(get("/oauth/consent")
+                .accept(MediaType.TEXT_HTML)
+                .param("client_id", "unknown-client")
+                .param("state", "untrusted-state")
+                .param("scope", PocketHiveMcpScopes.DISCOVER))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("invalid_request")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("unknown-client"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("untrusted-state"))));
+    }
+
+    @Test
+    void unauthenticatedConsentRequestUsesTheCanonicalLoginEntryPoint() throws Exception {
+        mvc.perform(get("/oauth/consent")
+                .accept(MediaType.TEXT_HTML)
+                .header("X-Forwarded-Host", "localhost:8080")
+                .header("X-Forwarded-Proto", "http")
+                .header("X-Forwarded-Prefix", "/auth-service")
+                .param("client_id", CLIENT_ID)
+                .param("state", "consent-state")
+                .param("scope", PocketHiveMcpScopes.DISCOVER))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("http://localhost:8080/auth-service/oauth/dev/login"));
+    }
+
+    @Test
+    void unknownDevUserRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(post("/oauth/dev/login")
+                .with(csrf())
+                .accept(MediaType.TEXT_HTML)
+                .param("username", "unknown-user"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("access_denied")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("unknown-user"))));
+    }
+
+    @Test
+    void rejectedDevLoginCsrfRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(post("/oauth/dev/login")
+                .accept(MediaType.TEXT_HTML)
+                .param("username", "local-admin"))
+            .andExpect(status().isForbidden())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("access_denied")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
     void consentFormBindsExplicitFieldsAndPostsToCanonicalIssuer() throws Exception {
         mvc.perform(get("/oauth/consent")
                 .param("client_id", CLIENT_ID)
                 .param("state", "consent-state")
                 .param("scope", PocketHiveMcpScopes.ALL_ORDERED.toArray(String[]::new)))
             .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().encoding(StandardCharsets.UTF_8))
             .andExpect(content().string(containsString("class=\"auth-shell\"")))
             .andExpect(content().string(containsString("<fieldset")))
             .andExpect(content().string(containsString("Requested permissions")))

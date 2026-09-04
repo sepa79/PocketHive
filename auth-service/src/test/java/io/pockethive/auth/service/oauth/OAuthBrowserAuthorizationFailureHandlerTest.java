@@ -6,8 +6,10 @@ import io.pockethive.auth.service.config.AuthServiceProperties;
 import java.net.URI;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
@@ -54,6 +56,42 @@ class OAuthBrowserAuthorizationFailureHandlerTest {
         assertThat(response.getContentAsString())
             .contains("authorization_error", "safely complete")
             .doesNotContain("untrusted-secret-detail");
+    }
+
+    @Test
+    void rendersSecurityAccessDeniedWithoutDispatchingToTheFrameworkErrorPage() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler().handle(new MockHttpServletRequest(), response,
+            new AccessDeniedException("untrusted-secret-detail"));
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.FORBIDDEN.value());
+        assertThat(response.getContentAsString())
+            .contains("access_denied", "PocketHive")
+            .doesNotContain("untrusted-secret-detail", "Whitelabel");
+    }
+
+    @Test
+    void writesExplicitControllerFailureStatusThroughTheCanonicalRenderer() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler().writeFailure(response, OAuth2ErrorCodes.INVALID_REQUEST, HttpStatus.UNAUTHORIZED);
+
+        assertThat(response.getStatus()).isEqualTo(HttpStatus.UNAUTHORIZED.value());
+        assertThat(response.getContentAsString())
+            .contains("invalid_request", "PocketHive")
+            .doesNotContain("Whitelabel");
+    }
+
+    @Test
+    void boundsCodesSuppliedByControllerAdapters() throws Exception {
+        MockHttpServletResponse response = new MockHttpServletResponse();
+
+        handler().writeFailure(response, "attacker-<script>", HttpStatus.BAD_REQUEST);
+
+        assertThat(response.getContentAsString())
+            .contains("authorization_error", "safely complete")
+            .doesNotContain("attacker-", "<script>");
     }
 
     private static OAuthBrowserAuthorizationFailureHandler handler() {

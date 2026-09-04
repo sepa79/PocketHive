@@ -213,13 +213,18 @@ public class PocketHiveOAuthConfiguration {
 
     @Bean
     @Order(2)
-    SecurityFilterChain applicationEndpoints(HttpSecurity http) throws Exception {
+    SecurityFilterChain applicationEndpoints(
+        HttpSecurity http, OAuthBrowserAuthorizationFailureHandler authorizationFailureHandler
+    ) throws Exception {
         return http
             .authorizeHttpRequests(authorize -> authorize
                 .requestMatchers("/.well-known/oauth-authorization-server", "/oauth/dev/login").permitAll()
                 .requestMatchers(DynamicClientRegistrationService.REGISTRATION_PATH).permitAll()
                 .requestMatchers("/oauth/consent").authenticated()
                 .anyRequest().permitAll())
+            .exceptionHandling(errors -> errors
+                .authenticationEntryPoint(new LoginUrlAuthenticationEntryPoint("/oauth/dev/login"))
+                .accessDeniedHandler(authorizationFailureHandler))
             .csrf(csrf -> csrf.ignoringRequestMatchers(
                 "/api/**", "/actuator/**", DynamicClientRegistrationService.REGISTRATION_PATH))
             .build();
