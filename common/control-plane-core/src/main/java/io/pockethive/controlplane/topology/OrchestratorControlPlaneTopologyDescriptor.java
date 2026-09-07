@@ -10,6 +10,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Responsibility: Own Orchestrator control and controller-status queue names and routing bindings.
+ * Must not: Declare broker resources or reconstruct service-local configuration.
+ * Contract: docs/ARCHITECTURE.md and docs/orchestrator/configuration.md.
+ */
 public final class OrchestratorControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
     private static final String ROLE = ControlPlaneRoles.ORCHESTRATOR;
@@ -42,13 +47,17 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
 
     @Override
     public Collection<QueueDescriptor> additionalQueues(String instanceId) {
+        return List.of(controllerStatusQueue(instanceId));
+    }
+
+    public QueueDescriptor controllerStatusQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
         String queueName = controlQueuePrefix + ".orchestrator-status." + id;
         Set<String> bindings = Set.of(
             controllerStatusPattern(ControlPlaneEventTypes.STATUS_FULL),
             controllerStatusPattern(ControlPlaneEventTypes.STATUS_DELTA)
         );
-        return List.of(new QueueDescriptor(queueName, bindings));
+        return new QueueDescriptor(queueName, bindings);
     }
 
     @Override

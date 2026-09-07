@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.infra.network;
 
+import io.pockethive.orchestrator.config.OrchestratorNetworkProxyManagerProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.NetworkProxyClient;
@@ -34,7 +35,7 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
                                      OrchestratorProperties properties,
                                      org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
-        OrchestratorProperties.NetworkProxyManager networkProxyManager = properties.getNetworkProxyManager();
+        OrchestratorNetworkProxyManagerProperties networkProxyManager = properties.getNetworkProxyManager();
         Objects.requireNonNull(networkProxyManager, "networkProxyManager");
         Duration httpConnectTimeout = resolveTimeout(
             networkProxyManager.getHttp().getConnectTimeout(), DEFAULT_CONNECT_TIMEOUT);

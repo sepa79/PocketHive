@@ -4,9 +4,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.payload.RoleContext;
-import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.app.OperationOutcomePublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -15,17 +13,13 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Responsibility: Compose Orchestrator control-plane publishers with process metadata.
+ * Must not: Resolve queue names or declare broker topology.
+ * Contract: docs/orchestrator/configuration.md and docs/ARCHITECTURE.md.
+ */
 @Configuration
 class OrchestratorControlPlaneConfig {
-
-    private final OrchestratorProperties properties;
-
-    OrchestratorControlPlaneConfig(
-        ControlPlaneProperties controlPlaneProperties,
-        OrchestratorProperties orchestratorProperties) {
-        Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
-        this.properties = Objects.requireNonNull(orchestratorProperties, "orchestratorProperties");
-    }
 
     @Bean
     ControlPlaneEmitter orchestratorControlPlaneEmitter(
@@ -44,30 +38,6 @@ class OrchestratorControlPlaneConfig {
         ControlPlanePublisher publisher,
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
         return new OperationOutcomePublisher(publisher, identity.instanceId());
-    }
-
-    @Bean(name = "managerControlQueueName")
-    String managerControlQueueName(@Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
-        Objects.requireNonNull(identity, "identity");
-        String prefix = properties.getControlQueuePrefix();
-        return queueName(prefix, identity.instanceId());
-    }
-
-    @Bean(name = "controllerStatusQueueName")
-    String controllerStatusQueueName(@Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
-        Objects.requireNonNull(identity, "identity");
-        String prefix = properties.getStatusQueuePrefix();
-        return queueName(prefix, identity.instanceId());
-    }
-
-    private static String queueName(String prefix, String instanceId) {
-        if (prefix == null || prefix.isBlank()) {
-            throw new IllegalStateException("Queue prefix must not be null or blank");
-        }
-        if (instanceId == null || instanceId.isBlank()) {
-            throw new IllegalStateException("Control-plane instance id must not be null or blank");
-        }
-        return prefix + "." + instanceId;
     }
 
     private static Map<String, Object> runtimeMeta() {

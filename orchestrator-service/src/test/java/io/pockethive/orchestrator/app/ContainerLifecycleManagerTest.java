@@ -1,5 +1,11 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.config.OrchestratorHttpProperties;
+import io.pockethive.orchestrator.config.OrchestratorNetworkProxyManagerProperties;
+import io.pockethive.orchestrator.config.OrchestratorScenarioManagerProperties;
+import io.pockethive.orchestrator.config.OrchestratorImageProperties;
+import io.pockethive.orchestrator.config.OrchestratorDockerProperties;
+import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
@@ -354,50 +360,41 @@ class ContainerLifecycleManagerTest {
 
     private static OrchestratorProperties defaultProperties() {
         return new OrchestratorProperties(
-            new OrchestratorProperties.Orchestrator(
-                "ph.control.orchestrator",
-                "ph.control.orchestrator-status",
                 defaultMetrics(),
-                new OrchestratorProperties.Docker("/var/run/docker.sock", null),
-                new OrchestratorProperties.Images(null),
-                new OrchestratorProperties.ScenarioManager(
+                new OrchestratorDockerProperties("/var/run/docker.sock", null),
+                new OrchestratorImageProperties(null),
+                new OrchestratorScenarioManagerProperties(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
-                new OrchestratorProperties.NetworkProxyManager(
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorNetworkProxyManagerProperties(
                     "http://network-proxy-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))));
     }
 
     private static OrchestratorProperties withDockerSocket(String socketPath) {
         return new OrchestratorProperties(
-            new OrchestratorProperties.Orchestrator(
-                "ph.control.orchestrator",
-                "ph.control.orchestrator-status",
                 defaultMetrics(),
-                new OrchestratorProperties.Docker(socketPath, null),
-                new OrchestratorProperties.Images(null),
-                new OrchestratorProperties.ScenarioManager(
+                new OrchestratorDockerProperties(socketPath, null),
+                new OrchestratorImageProperties(null),
+                new OrchestratorScenarioManagerProperties(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
-                new OrchestratorProperties.NetworkProxyManager(
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorNetworkProxyManagerProperties(
                     "http://network-proxy-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))));
     }
 
     private static OrchestratorProperties withRepositoryPrefix(String prefix) {
         return new OrchestratorProperties(
-            new OrchestratorProperties.Orchestrator(
-                "ph.control.orchestrator",
-                "ph.control.orchestrator-status",
                 defaultMetrics(),
-                new OrchestratorProperties.Docker("/var/run/docker.sock", null),
-                new OrchestratorProperties.Images(prefix),
-                new OrchestratorProperties.ScenarioManager(
+                new OrchestratorDockerProperties("/var/run/docker.sock", null),
+                new OrchestratorImageProperties(prefix),
+                new OrchestratorScenarioManagerProperties(
                     "http://scenario-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30))),
-                new OrchestratorProperties.NetworkProxyManager(
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))),
+                new OrchestratorNetworkProxyManagerProperties(
                     "http://network-proxy-manager:8080",
-                    new OrchestratorProperties.Http(Duration.ofSeconds(5), Duration.ofSeconds(30)))));
+                    new OrchestratorHttpProperties(Duration.ofSeconds(5), Duration.ofSeconds(30))));
     }
 
     private static ControlPlaneProperties controlPlaneProperties() {
@@ -411,8 +408,8 @@ class ContainerLifecycleManagerTest {
         return properties;
     }
 
-    private static OrchestratorProperties.Metrics defaultMetrics() {
-        return new OrchestratorProperties.Metrics(
+    private static OrchestratorMetricsProperties defaultMetrics() {
+        return new OrchestratorMetricsProperties(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             Duration.ofSeconds(10),
             clickHouseMetrics());

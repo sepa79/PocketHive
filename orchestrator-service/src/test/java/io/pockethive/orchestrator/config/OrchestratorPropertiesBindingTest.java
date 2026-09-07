@@ -6,21 +6,43 @@ import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.context.properties.ConfigurationPropertiesBindException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.boot.context.properties.bind.UnboundConfigurationPropertiesException;
 
 class OrchestratorPropertiesBindingTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
-        .withUserConfiguration(TestConfiguration.class);
+        .withUserConfiguration(TestConfiguration.class)
+        .withPropertyValues(
+            "pockethive.control-plane.orchestrator.metrics.adapter=DISABLED",
+            "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
+            "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
+            "pockethive.control-plane.orchestrator.images.repository-prefix=",
+            "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
+            "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
+            "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S",
+            "pockethive.control-plane.orchestrator.network-proxy-manager.url=http://network-proxy-manager:8080",
+            "pockethive.control-plane.orchestrator.network-proxy-manager.http.connect-timeout=PT5S",
+            "pockethive.control-plane.orchestrator.network-proxy-manager.http.read-timeout=PT30S");
+
+    @ParameterizedTest
+    @ValueSource(strings = {"control-queue-prefix", "status-queue-prefix"})
+    void rejectsRemovedQueuePrefixProperties(String key) {
+        contextRunner.withPropertyValues("pockethive.control-plane.orchestrator." + key + "=obsolete")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure())
+                    .hasRootCauseInstanceOf(UnboundConfigurationPropertiesException.class);
+            });
+    }
 
     @Test
     void bindsOrchestratorTreeFromControlPlanePrefix() {
         contextRunner
             .withPropertyValues(
-                "pockethive.control-plane.orchestrator.control-queue-prefix=ph.control.orchestrator",
-                "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
                 "pockethive.control-plane.orchestrator.metrics.adapter=DISABLED",
                 "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
                 "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
@@ -34,8 +56,6 @@ class OrchestratorPropertiesBindingTest {
             .run(context -> {
                 assertThat(context).hasNotFailed();
                 OrchestratorProperties properties = context.getBean(OrchestratorProperties.class);
-                assertThat(properties.getControlQueuePrefix()).isEqualTo("ph.control.orchestrator");
-                assertThat(properties.getStatusQueuePrefix()).isEqualTo("ph.control.orchestrator-status");
                 assertThat(properties.getMetrics().getAdapter())
                     .isEqualTo(PocketHiveMetricsAdapter.DISABLED);
                 assertThat(properties.getMetrics().getPublishInterval())
@@ -61,8 +81,6 @@ class OrchestratorPropertiesBindingTest {
     void bindsClickHouseMetricsFromNestedControlPlanePrefix() {
         contextRunner
             .withPropertyValues(
-                "pockethive.control-plane.orchestrator.control-queue-prefix=ph.control.orchestrator",
-                "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
                 "pockethive.control-plane.orchestrator.metrics.adapter=CLICKHOUSE",
                 "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
                 "pockethive.control-plane.orchestrator.metrics.clickhouse.endpoint=http://clickhouse:8123",
@@ -82,34 +100,6 @@ class OrchestratorPropertiesBindingTest {
                 assertThat(clickHouse.getEndpoint()).isEqualTo("http://clickhouse:8123");
                 assertThat(clickHouse.getTable()).isEqualTo(ClickHouseMetricsSinkProperties.DEFAULT_TABLE);
                 assertThat(clickHouse.getMaxBufferedSamples()).isEqualTo(50_000);
-            });
-    }
-
-    @Test
-    void failsWhenRequiredControlQueuePrefixMissing() {
-        contextRunner
-            .withPropertyValues(
-                "pockethive.control-plane.orchestrator.status-queue-prefix=ph.control.orchestrator-status",
-                "pockethive.control-plane.orchestrator.metrics.adapter=DISABLED",
-                "pockethive.control-plane.orchestrator.metrics.publish-interval=PT10S",
-                "pockethive.control-plane.orchestrator.docker.socket-path=/var/run/docker.sock",
-                "pockethive.control-plane.orchestrator.scenario-manager.url=http://scenario-manager:8080",
-                "pockethive.control-plane.orchestrator.scenario-manager.http.connect-timeout=PT5S",
-                "pockethive.control-plane.orchestrator.scenario-manager.http.read-timeout=PT30S",
-                "pockethive.control-plane.orchestrator.network-proxy-manager.url=http://network-proxy-manager:8080",
-                "pockethive.control-plane.orchestrator.network-proxy-manager.http.connect-timeout=PT5S",
-                "pockethive.control-plane.orchestrator.network-proxy-manager.http.read-timeout=PT30S")
-            .run(context -> {
-                assertThat(context).hasFailed();
-                Throwable failure = context.getStartupFailure();
-                assertThat(failure)
-                    .isInstanceOf(ConfigurationPropertiesBindException.class)
-                    .hasRootCauseInstanceOf(IllegalArgumentException.class);
-                Throwable root = failure;
-                while (root.getCause() != null) {
-                    root = root.getCause();
-                }
-                assertThat(root.getMessage()).contains("controlQueuePrefix");
             });
     }
 

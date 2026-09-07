@@ -575,6 +575,15 @@ Example (bindings with ports + optional selector hint):
 
 ## 5. Lifecycle, operations and ownership
 
+Orchestrator control topology has one declaration path:
+`OrchestratorControlPlaneTopologyDescriptor` owns both control and controller-status
+queues and bindings, and the shared manager auto-configuration materializes them
+through `ControlPlaneTopologyDeclarableFactory`. Listener names are derived from
+that same descriptor and shared `control-queue-prefix`; Orchestrator-specific
+queue-prefix settings and independent Rabbit declarations are not supported.
+See `docs/orchestrator/configuration.md` for settings and
+the separate ownership of temporary Work Plane debug taps.
+
 PocketHive has no single authoritative "swarm state". A swarm is described by independent facts with one writer per fact. UI badges may collapse these facts into a friendly label, but that label is a projection and must never drive domain behaviour.
 
 ### 5.1 Canonical axes and writers

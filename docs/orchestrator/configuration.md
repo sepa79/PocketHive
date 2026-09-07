@@ -21,12 +21,28 @@ legacy defaults.
 ## Orchestrator control-plane bindings
 
 ```
-pockethive.control-plane.orchestrator.control-queue-prefix  # Prefix for the orchestrator control queue (suffixes with instance id)
-pockethive.control-plane.orchestrator.status-queue-prefix   # Prefix for the orchestrator status queue (suffixes with instance id)
+pockethive.control-plane.control-queue-prefix  # Shared topology prefix; env: POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX
 ```
 
-The orchestrator composes queue names using these prefixes and the runtime
-instance id.
+`OrchestratorControlPlaneTopologyDescriptor` is the sole owner of the Orchestrator
+control and controller-status queue names and bindings. Given prefix `P` and
+instance `I`, it defines `P.orchestrator.I` and `P.orchestrator-status.I`.
+`ManagerControlPlaneAutoConfiguration` declares those resources through
+`ControlPlaneTopologyDeclarableFactory`. Orchestrator listener queue names are
+read-only projections of that same descriptor; services must not reconstruct
+names or declare the same queues/bindings independently.
+
+The former `pockethive.control-plane.orchestrator.control-queue-prefix` and
+`pockethive.control-plane.orchestrator.status-queue-prefix` settings are removed,
+including their `POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_*_QUEUE_PREFIX` environment
+forms. Remove both overrides and configure the shared prefix instead. Unknown
+Orchestrator settings fail binding; there is no alias or compatibility resolver.
+
+Topology declaration follows the shared `pockethive.control-plane.declare-topology`
+and `pockethive.control-plane.manager.declare-topology` switches. Disabling either
+leaves listener names intact and requires external provisioning; no service-local
+declaration path may bypass the switches. Temporary Work Plane debug-tap queues
+are separate resources owned by `DebugTapService`.
 
 ## RabbitMQ
 

@@ -12,6 +12,7 @@ This directory contains work that is not yet delivered. Completed baselines live
 - `scenario-plan-followups.md`
 - `sut-environments-followups.md`
 - `swarm-lifecycle-health-model-plan.md`
+- `work-plane-artemis.md`
 - `workitem-transport-agnostic.md`
 
 ## UI and operator experience

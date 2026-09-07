@@ -68,7 +68,7 @@ public class ControllerStatusListener {
             this.hiveJournal, ControlPlaneRoles.ORCHESTRATOR, "controller-status-listener");
     }
 
-    @RabbitListener(queues = "#{controllerStatusQueue.name}")
+    @RabbitListener(queues = "#{controllerStatusQueueName}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         // Controller status messages are control-plane traffic: never requeue on failures (avoid storms).
         try {

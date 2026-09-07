@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
@@ -244,7 +245,7 @@ public class ContainerLifecycleManager {
         return swarm;
     }
 
-    private static MetricsSettings metricsSettings(OrchestratorProperties.Metrics metrics) {
+    private static MetricsSettings metricsSettings(OrchestratorMetricsProperties metrics) {
         return new MetricsSettings(
             metrics.getAdapter(),
             metrics.getPublishInterval(),

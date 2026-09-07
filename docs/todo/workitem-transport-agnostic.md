@@ -46,7 +46,9 @@ Notes:
    - Ignore transport headers for WorkItem data.
 5) Update runtime/services/tests to rely on WorkItem JSON only.
    - Remove any header fallbacks or transport-specific assumptions.
-6) Update docs, e2e tests, and scenario tooling to reflect the new envelope.
+6) Update docs and scenario tooling to reflect the new envelope.
+   - Do not adapt or incrementally refactor the current E2E system; it will be replaced as a separate project.
+   - New adapter and 3DS verification must be purpose-built outside that legacy E2E system.
 7) SDK refactor to align WorkItem semantics with the envelope.
    - Introduce canonical DTO/envelope classes in `common/worker-sdk` for on-wire format.
    - `WorkItem.Builder.build()` no longer auto-seeds step 0; first step must be explicit.

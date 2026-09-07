@@ -32,17 +32,55 @@ queue. They are not implicit extensions of the behavior-preserving simplificatio
 
 ## Findings
 
-### CP-N01 — CRITICAL — Orchestrator control topology has two active owners
+### CP-N01 — RESOLVED — Orchestrator control topology has one owner
 
-`ManagerControlPlaneAutoConfiguration` declares topology from
-`OrchestratorControlPlaneTopologyDescriptor`, while Orchestrator `RabbitConfig` independently declares the
-same queues and bindings with raw routing strings. `OrchestratorControlPlaneConfig` also reconstructs the
-queue names from a second pair of prefixes. The defaults currently agree, but configuration can make the
-two authorities diverge.
+Resolved in the working tree on 2026-09-07; changes are not committed. The user
+explicitly requested this fix, including the previously described removal of the
+service-specific configuration surface.
 
-Repair direction: select one topology descriptor and declarable factory as SSOT, derive listener queue names
-from that descriptor, and remove the duplicate Rabbit declarations and queue-prefix resolver. This changes
-the public runtime configuration surface and therefore requires the protected-config approval before editing.
+`OrchestratorControlPlaneTopologyDescriptor` owns both queue names and all five
+bindings. Its named `controllerStatusQueue` projection is also used by
+`additionalQueues`, so declaration and listener lookup cannot maintain separate
+status-queue definitions. `ManagerControlPlaneAutoConfiguration` and
+`ControlPlaneTopologyDeclarableFactory` remain the only declaration path.
+
+Orchestrator `RabbitConfig` and the service-local queue-name resolver are deleted.
+`OrchestratorControlQueueConfiguration` exposes only descriptor-derived names;
+`ControllerStatusListener` consumes the status name directly. Both independent
+Orchestrator queue-prefix properties are removed. Strict application-property
+binding rejects the removed property keys, and
+`RemovedOrchestratorQueueEnvironmentGuard` rejects their former environment
+variables, including empty values. Configuration types were extracted to separate
+files while removing topology settings; other settings retain their behavior.
+
+Regression gates:
+
+- `OrchestratorControlTopologyTest` combines the production queue-name configuration
+  and shared auto-configuration. It checks default and non-default prefixes,
+  resolves the actual listener annotations, counts both queues and every binding,
+  and checks both declaration-disable switches and invalid prefixes.
+- `ControlTopologyOwnershipTest` scans compiled Orchestrator production classes
+  and blocks local AMQP declarables/builders, declarable-factory dependencies, and
+  alternative descriptor implementations. The only separate declaration owner is
+  `DebugTapService`, for temporary Work Plane tap queues. A deliberately reintroduced
+  queue-bean fixture must trigger the rule.
+- Configuration binding and environment-guard tests reject the removed settings.
+
+Verification: the Orchestrator Maven reactor passed; a subsequent canonical
+`build-hive.sh` clean package passed all 17 reactor modules, including 193
+Orchestrator tests, 70 Control Plane Core tests and 19 Control Plane Spring tests,
+with zero failures/errors/skips in those modules. The docs/UI build initially
+caught a link to a repo-only document; after correcting the reference, the
+canonical targeted rebuild/redeploy completed. No Java behavior changed between
+that clean test gate and deployment.
+
+The official-ingress acceptance check at `http://localhost:8088` completed
+CREATE, START, STOP and REMOVE for `cpn01-1788783840516`, polling each canonical
+operation to `SUCCEEDED`. Controller observations were fresh and `READY` with
+workload `STOPPED`, `RUNNING`, then `STOPPED`. The final swarm list confirmed removal.
+This is a focused lifecycle acceptance check, not a rerun of the entire E2E pack.
+Repository-wide owner searches and `git diff --check` passed. Other findings below
+remain open.
 
 ### CP-N02 — HIGH — `ControllerStatusListener` still mutates the swarm projection
 
@@ -123,14 +161,14 @@ fallback.
 
 ## Order for the next repair plan
 
-1. CP-N01 because two active topology authorities are an SSOT blocker and the work overlaps future Work Plane
-   broker abstraction.
-2. CP-N05 because broker-neutral Work Plane provisioning and cleanup depend on this boundary.
-3. CP-N09 because lifecycle completion must not depend on an executor wall clock.
-4. CP-N02 and CP-N03 to finish message-listener/runtime separation.
-5. CP-N04 and CP-N08 to restore thin HTTP boundaries.
-6. CP-N06 contract-file separation alongside the owning workflow changes, not as a compatibility layer.
-7. CP-N07 as a journal-specific refactor independent of Work Plane migration.
+CP-N01 is resolved above. The remaining queue is:
+
+1. CP-N05 because broker-neutral Work Plane provisioning and cleanup depend on this boundary.
+2. CP-N09 because lifecycle completion must not depend on an executor wall clock.
+3. CP-N02 and CP-N03 to finish message-listener/runtime separation.
+4. CP-N04 and CP-N08 to restore thin HTTP boundaries.
+5. CP-N06 contract-file separation alongside the owning workflow changes, not as a compatibility layer.
+6. CP-N07 as a journal-specific refactor independent of Work Plane migration.
 
 ## Verification evidence
 
