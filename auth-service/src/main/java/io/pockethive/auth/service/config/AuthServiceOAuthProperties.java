@@ -13,7 +13,7 @@ public final class AuthServiceOAuthProperties {
     private URI issuer;
     private URI resource;
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
-    private Duration accessTokenTtl = Duration.ofMinutes(15);
+    private Duration accessTokenTtl = Duration.ofHours(8);
     private Duration refreshTokenTtl = Duration.ofDays(30);
     private Duration dynamicClientTtl = Duration.ofDays(31);
     private int dynamicClientCapacity = 256;

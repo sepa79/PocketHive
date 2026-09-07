@@ -45,10 +45,11 @@ Interactive clients use one consented, renewable environment session rather
 than a browser grant per tool. They declare a bounded subset of discover, read,
 operate, author, and publish; Auth Service limits the granted token to the
 principal's existing PocketHive permissions and never includes cleanup. Access
-tokens remain short-lived, refresh tokens rotate, and commands do not initiate
-browser auth. Registration alone is neither authentication nor a support
-claim; the client still completes browser authorization and the relevant
-capability conformance checks.
+tokens have a bounded eight-hour default lifetime, refresh tokens rotate, and
+commands do not initiate browser auth. Deployments may explicitly shorten the
+access-token lifetime through the canonical Auth Service property. Registration
+alone is neither authentication nor a support claim; the client still completes
+browser authorization and the relevant capability conformance checks.
 
 Dynamic client registration has one bounded inactivity lifetime. Successful
 use renews an active registration; inactive registrations expire after a

@@ -28,6 +28,11 @@ All notable changes to this project will be documented in this file.
   validation, opaque-token introspection, replay rejection, and a rotating
   refresh token limited to the base VS Code companion session; privileged
   scoped sessions remain short-lived and non-renewable.
+- MCP OAuth interoperability: align the default opaque access-token lifetime
+  with the eight-hour browser session as a bounded Phase 1 mitigation for native
+  clients that refresh only when their MCP connection is reinitialized; retain
+  expiry enforcement, audience/scope validation, and rotating 30-day refresh
+  tokens.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.

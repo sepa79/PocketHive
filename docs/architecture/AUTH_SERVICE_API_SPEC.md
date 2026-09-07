@@ -95,10 +95,13 @@ The interoperability choices are explicit:
   port rule below; no wildcard, prefix, or pattern matching;
 - the `resource` parameter is mandatory and identical in authorization and
   token requests;
-- opaque access tokens expire after the configured short lifetime;
-- the default access-token lifetime is 15 minutes and the default rotating
+- opaque access tokens expire after the configured bounded lifetime;
+- the default access-token lifetime is eight hours and the default rotating
   companion refresh-token lifetime is 30 days; deployments may shorten either
-  through the canonical Auth Service properties;
+  through the canonical Auth Service properties. The eight-hour default is a
+  Phase 1 interoperability mitigation for native MCP clients that refresh only
+  when their MCP connection is reinitialized; it does not permit expired-token
+  grace or remove refresh-token rotation;
 - an interactive MCP client requests its declared non-cleanup intent once:
   `pockethive:mcp:discover`, `pockethive:mcp:read`,
   `pockethive:mcp:operate`, `pockethive:mcp:author`, and
@@ -602,7 +605,7 @@ Success returns:
   "access_token": "phmcp_opaque_value",
   "refresh_token": "phrfr_opaque_value",
   "token_type": "Bearer",
-  "expires_in": 900,
+  "expires_in": 28800,
   "scope": "pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate pockethive:mcp:author"
 }
 ```

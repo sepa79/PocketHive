@@ -3133,8 +3133,18 @@ Qualification evidence:
 The current Codex host stored a refresh token but did not send a refresh grant
 after access-token expiry. PocketHive's standards-based renewal passed through
 the same public ingress, so this remains a client-host interoperability issue.
-PocketHive does not add expired-token grace, a client-specific OAuth branch, a
-long-lived-token workaround, or a protocol fallback.
+At that point PocketHive did not add expired-token grace, a client-specific
+OAuth branch, a long-lived-token workaround, or a protocol fallback.
+
+Follow-up evidence on 2026-09-04 showed the same lifecycle gap in Amazon Q
+Developer 2.7.0: refreshing its MCP servers successfully invokes the existing
+refresh grant, but an already-open transport continues using its original
+bearer token. As an explicit Phase 1 mitigation, the default bounded access-token
+lifetime is aligned with the existing eight-hour browser session. Expiry,
+audience and scope validation, refresh-token rotation, and explicit rejection
+of expired tokens remain unchanged. The client-side refresh defect remains the
+proper long-term fix; this mitigation introduces no Amazon-Q-specific server
+branch.
 
 ## Compact QA review implementation and RST evidence — 2026-08-24
 

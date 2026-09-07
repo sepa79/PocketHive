@@ -442,6 +442,11 @@ class DynamicClientRegistrationServiceTest {
     }
 
     @Test
+    void defaultsAccessTokenLifetimeToEightHours() {
+        assertThat(new AuthServiceOAuthProperties().getAccessTokenTtl()).isEqualTo(Duration.ofHours(8));
+    }
+
+    @Test
     void registryRejectsEveryDynamicIdentifierCollision() {
         PocketHiveRegisteredClientRepository clients = repository(new MutableClock(NOW), 3);
         clients.save(dynamic("one", "client-one"));

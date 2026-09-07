@@ -160,6 +160,9 @@ class OAuthAuthorizationServerTest {
                 .param("code_verifier", VERIFIER))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")))
+            .andExpect(jsonPath("$.expires_in").value(org.hamcrest.Matchers.allOf(
+                org.hamcrest.Matchers.greaterThanOrEqualTo(28_799),
+                org.hamcrest.Matchers.lessThanOrEqualTo(28_800))))
             .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")))
             .andExpect(jsonPath("$.scope").isNotEmpty())
             .andDo(result -> assertThat(Set.copyOf(List.of(
