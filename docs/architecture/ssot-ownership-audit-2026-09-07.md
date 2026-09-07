@@ -224,7 +224,7 @@ may map that contract into its own domain model after decoding.
   §5.1.1 specifically prohibits null-to-DIRECT and invalid-value recovery.
 - [runtimeConfigGuard.ts](../../ui-v2/src/lib/runtimeConfigGuard.ts), line 11,
   trims and uppercases workload state instead of using the strict
-  [generated lifecycle parser](../../packages/swarm-lifecycle-contract/index.cjs).
+  generated lifecycle parser (`packages/swarm-lifecycle-contract/index.cjs`).
 
 These are active paths: `ProxyPage` lines 184–186 and `HivePage` line 705 normalize
 bindings; `HivePage` line 869 uses the workload predicate when gating Redis list changes.
@@ -336,7 +336,7 @@ This is line provenance, not proof of the precise first commit where every pair 
 conflict. It is enough to reject attributing all these problems to the last week of edits.
 It does not identify a stable rollback point or establish that the refactor achieved SSOT.
 
-The [archived simplification plan](../archive/control-plane-simplification-plan.md),
+The archived simplification plan (`docs/archive/control-plane-simplification-plan.md`),
 Decisions, explicitly deferred existing agreeing duplicates by human decision and said
 they were **not resolved** and required later reassessment. Thus structural completion
 of that queue was never evidence that repository SSOT had been achieved. The behavioral

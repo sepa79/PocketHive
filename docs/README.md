@@ -3,9 +3,14 @@
 Welcome to the PocketHive documentation hub. Use these resources to understand the system, explore individual services, and contribute effectively.
 
 ## Architecture
+
+Current implementation direction: `docs/inProgress/work-plane-module-boundaries.md`.
+Work Plane module boundaries come first, followed by Control Plane and remaining sinks.
+Older sequencing/design proposals are indexed in `docs/archive/pre-boundary-reset/README.md`;
+living contracts below continue to describe the supported system.
+
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
-- [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy follow-ups](todo/network-proxy-followups.md)
 - [Documentation index](index.md)
 

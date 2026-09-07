@@ -42,7 +42,7 @@ The old producers, consumers, validators, and topology usage were checked togeth
 
 `SwarmReadinessTracker` did receive a separate semantic change in `d634f750`: full-status
 convergence now uses monotonic observation revisions with captured enablement instead of
-wall-clock cutoffs. The [simplification log](../archive/control-plane-simplification-plan.md)
+wall-clock cutoffs. The simplification log (`docs/archive/control-plane-simplification-plan.md`)
 records the triggering convergence failure and its verification. This prevents claiming
 the whole tracker is unchanged, but it did not introduce the heartbeat-age duplication
 reported as SSOT-07. This provenance check does not independently certify every aspect of

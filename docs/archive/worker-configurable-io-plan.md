@@ -1,7 +1,7 @@
 # Worker Configurable IO — Plan
 
 > Status: **implemented baseline / archived**.  
-> Config-driven IO types are implemented; remaining work is tracked in `docs/todo/worker-configurable-io-followups.md`.
+> Config-driven IO types are implemented; remaining work is tracked in `docs/archive/pre-boundary-reset/todo/worker-configurable-io-followups.md`.
 
 Make worker input/output selectable by configuration (scenario/capabilities/env)
 instead of being hardcoded in `@PocketHiveWorker`. Workers should declare

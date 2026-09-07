@@ -1,6 +1,8 @@
 # Review Checklist
 
 - [ ] Reviewed `docs/ENGINEERING_RULES.md` and `docs/REVIEW_RULES.md`
+- [ ] Recorded all six required review passes from `docs/REVIEW_RULES.md`: plan outcome, style, conciseness, security, library necessity, and readability/maintainability
+- [ ] Plan acceptance conditions are observable; inherited debt, introduced regressions, and explicitly excluded scope are distinguished
 - [ ] One Java production type per file, except the narrow private nested-type exception; one TypeScript/React module concern per file; no public nested contract bags
 - [ ] One clear responsibility per file; no kitchen-sink class was introduced or expanded
 - [ ] New/materially changed runtime and boundary types have accurate responsibility headers

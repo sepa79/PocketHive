@@ -391,7 +391,7 @@ verification, canonical rebuild/deploy, unchanged official-ingress E2E, and revi
 - [x] Run two consecutive complete official-ingress local-swarm E2E gates before final approval.
 
 The fresh findings and their repair order live in
-`docs/todo/control-plane-post-simplification-review.md`. They replace the abandoned numbered findings queue;
+`docs/archive/pre-boundary-reset/todo/control-plane-post-simplification-review.md`. They replace the abandoned numbered findings queue;
 they do not reopen completed behavior-preserving sink extractions.
 
 Final gate evidence:

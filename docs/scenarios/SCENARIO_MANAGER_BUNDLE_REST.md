@@ -15,7 +15,7 @@ Related docs:
 - Scenario YAML contract: `docs/scenarios/SCENARIO_CONTRACT.md`
 - Scenario Variables contract: `docs/scenarios/SCENARIO_VARIABLES.md`
 - Bundle diagnostics contract: `docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md`
-- PocketHive MCP migration: `docs/todo/pockethive-mcp-java-migration.md`
+- PocketHive MCP migration: `docs/archive/pre-boundary-reset/todo/pockethive-mcp-java-migration.md`
 
 ---
 

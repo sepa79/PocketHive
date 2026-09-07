@@ -16,6 +16,38 @@ A violation of a hard project invariant is blocking. A review-rule violation is
 also blocking when it creates ambiguous ownership, hidden behavior, or a new
 kitchen sink.
 
+## Required review passes
+
+Run the plan pass before implementation and revisit it when scope changes. Run
+all six passes before accepting a non-trivial change; the sections below provide
+the detailed criteria. Record findings or a concise pass/not-applicable result
+with evidence. A successful pass is not a waiver of another pass or an invariant.
+
+1. **Plan review:** Will the plan produce the requested outcome? Identify owners,
+   dependencies, migration/deletion steps, and observable acceptance conditions.
+   Check that it removes the cause rather than moving it, and that excluded work
+   is not silently needed for success. Distinguish inherited debt from regressions.
+2. **Style-guide check:** Does the change follow AGENTS.md, ENGINEERING_RULES.md,
+   and the applicable Java/UI guidelines? Check file responsibilities, boundaries,
+   naming, contract types, and accurate responsibility headers, not formatting alone.
+3. **Conciseness check:** Can the same behavior be expressed with fewer concepts,
+   branches, layers, duplicated rules, or dependencies? Prefer a simpler design;
+   do not remove validation, verified postconditions, diagnostics, or failure cases
+   merely to shorten code. Line count is not the objective.
+4. **Security check:** Does the affected flow follow the project's security and
+   authorization contracts? Check trust boundaries, least privilege, scope and
+   tenant isolation, path/input handling, and secret exposure where applicable.
+   Explain any relevant unverified boundary; do not infer approval from old memory.
+5. **Library check:** Can existing project or standard-library facilities solve
+   this clearly without a new dependency? Justify additions by benefit, maintenance,
+   licensing, and security implications. Do not replace a suitable maintained
+   library with bespoke cryptography, protocol machinery, or duplicated utilities
+   simply to reduce the dependency count.
+6. **Readability / maintainability check:** Can another contributor understand
+   ownership, data flow, failure behavior, and how to change this safely? Prefer
+   explicit types, names, and straightforward control flow; allow more lines when
+   they make these clearer. Reconcile this with the conciseness pass explicitly.
+
 ## 1. Scope and durable direction
 
 Check:

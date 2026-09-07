@@ -38,9 +38,8 @@ by the UI under `/docs/...` as part of the runtime image.
   observability, templating hooks).
 - `docs/archive/worker-configurable-io-plan.md` – historical delivery plan for
   config-driven IO types.
-- `docs/todo/worker-configurable-io-followups.md` – remaining explicit IO work.
-- `docs/todo/config-key-normalisation-plan.md` (Status: future / design) –
-  key naming conventions backlog.
+- IO/configuration ownership changes follow `docs/inProgress/work-plane-module-boundaries.md`;
+  older IO and normalization proposals are historical, not parallel implementation plans.
 
 ## Control Plane, Manager, Orchestrator
 
@@ -61,6 +60,11 @@ by the UI under `/docs/...` as part of the runtime image.
   and isolation work.
 
 ## Plans and history
+
+- `docs/inProgress/work-plane-module-boundaries.md` — the active Work Plane-first
+  architecture execution plan; old IO/broker/sink sequences do not run in parallel.
+- `docs/archive/pre-boundary-reset/README.md` — why conflicting or completed
+  plans were archived and where their unfinished concerns are tracked.
 
 - `docs/inProgress/README.md` – actively delivered work only.
 - `docs/toBeReviewed/README.md` – bounded review queue.
