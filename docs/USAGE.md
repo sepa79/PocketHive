@@ -116,6 +116,13 @@ configuration and authentication behaviour.
 - If authentication has expired or was declined, use the explicit **Sign in**
   action. Ordinary tab and swarm commands must not open a separate browser
   authorization flow.
+- In Amazon Q Developer, if an MCP access token expires while the existing
+  connection remains open, use **Refresh MCP servers**. Amazon Q then
+  reinitialises the connection and silently exchanges its cached rotating
+  refresh token. If Auth Service restarted after the token was issued, its
+  transient token state is no longer available and one interactive sign-in is
+  expected; do not delete the retained client registration unless dynamic
+  registration itself fails.
 - If an agent client retained an OAuth registration across a local restart, it
   can re-authorize with that same client ID. Do not clear or recreate the client
   configuration merely because Auth Service restarted; active dynamic client
