@@ -1,0 +1,303 @@
+{
+  "base_revision": "e0d378711b6447f8bb3e0f8bbf787f9b06c2b5bb",
+  "after_state": "uncommitted working tree; independent review pending",
+  "runtime": {
+    "command": "./mvnw -B -ntp -pl generator-service,moderator-service,processor-service,postprocessor-service,request-builder-service,http-sequence-service,clearing-export-service,db-query-service,trigger-service,scenario-manager-service,swarm-controller-service,orchestrator-service -am clean test",
+    "result": "BUILD SUCCESS",
+    "module_totals": [
+      {
+        "module": "swarm-model",
+        "tests": 41,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "topology-core",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "observability-core",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "control-plane-core",
+        "tests": 67,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "work-api",
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "sink-clickhouse",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "observability",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "control-plane-spring",
+        "tests": 22,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "templating",
+        "tests": 7,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "auth-client",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "control-plane-filesystem",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "worker-sdk",
+        "tests": 205,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      {
+        "module": "docker-client",
+        "tests": 14,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "generator-service",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "moderator-service",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "scenario-manager-service",
+        "tests": 175,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "orchestrator-service",
+        "tests": 193,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "postprocessor-service",
+        "tests": 10,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "clearing-export-service",
+        "tests": 60,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "processor-service",
+        "tests": 38,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "swarm-controller-service",
+        "tests": 161,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "trigger-service",
+        "tests": 11,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "request-builder-service",
+        "tests": 20,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "http-sequence-service",
+        "tests": 60,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "db-query-service",
+        "tests": 6,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "totals": {
+      "tests": 1197,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "local_log": "/tmp/b01-final-tests.log",
+    "log_sha256": "05c6a4ca5a62513030b1bdefb7dfcbf7212ed27a245aebaba3f5c391894bf68f"
+  },
+  "api_after_dependency_metadata_change": {
+    "command": "./mvnw -B -ntp -pl common/work-api -am test",
+    "result": "BUILD SUCCESS",
+    "module_totals": [
+      {
+        "module": "swarm-model",
+        "tests": 41,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "topology-core",
+        "tests": 9,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "observability-core",
+        "tests": 18,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "control-plane-core",
+        "tests": 67,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      {
+        "module": "work-api",
+        "tests": 24,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      }
+    ],
+    "totals": {
+      "tests": 159,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "local_log": "/tmp/b01-final-api.log",
+    "log_sha256": "2465c904966ad9730c923c3b66146e0b97a678426969f852e3d88685d68b9901"
+  },
+  "all_consumers": {
+    "command": "./mvnw -B -ntp -DskipTests package",
+    "result": "BUILD SUCCESS",
+    "module_totals": [],
+    "totals": {
+      "tests": 0,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "local_log": "/tmp/b01-final-package.log",
+    "log_sha256": "a7e7d4cd88fed1c1dc2dd3f09e3ceaff242cf49be87355bc6d7f7b0bed0cae7f"
+  },
+  "dependency_trees": {
+    "command": "./mvnw -B -ntp -DskipTests package dependency:tree -Dscope=compile -DoutputFile=target/b01-compile-dependencies.txt",
+    "result": "BUILD SUCCESS",
+    "module_totals": [],
+    "totals": {
+      "tests": 0,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "local_log": "/tmp/b01-all-consumers.log",
+    "log_sha256": "20be540ca8b9e4074ae2323d662f93b930b7fd8e9cea7d0945ed3f0dbebf8a50"
+  },
+  "review_performed": false,
+  "commit_created": false,
+  "deployed_ingress_acceptance": false,
+  "checks": [
+    {
+      "command": "python3 -m unittest discover -s tools/tests -p test_work_boundaries.py",
+      "result": "PASS",
+      "log_sha256": "8a84cca40249ca139ddbe7f9c649b2aad29b06ec111c6f47db6664f4eaaed348",
+      "local_log": "/tmp/b01-negative-gates.log"
+    },
+    {
+      "command": "python3 -m unittest discover -s docs/inProgress/boundary-design -p test_inventory.py",
+      "result": "PASS",
+      "log_sha256": "0f5e9da0a69e31a0446f26e79dd5327bd4c2856231e255f68db8121cb684b51b",
+      "local_log": "/tmp/b01-design-gate.log"
+    },
+    {
+      "command": "npm --prefix docs-site run build",
+      "result": "PASS",
+      "log_sha256": "a48f954c0dc799622e5d5528c787cff0b7534e034b94dcc9c197a23bc8ae2a77",
+      "local_log": "/tmp/b01-docs-build.log"
+    },
+    {
+      "command": "python3 tools/check-work-boundaries.py",
+      "result": "PASS"
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    }
+  ],
+  "source_fingerprint_sha256": "0b9365f0b9f60f6e2fd4b540b214dad8e3ca81a739e91e042ae2c9ecf4d265cc",
+  "remaining_skip": "RedisSequenceGeneratorTest.demonstrateIntegrationTestPlaceholder (pre-existing EnabledIfSystemProperty guard; no new skipped tests)",
+  "dependency_tree_note": "work-api tree refreshed after its direct Jackson dependency/test ordering change; other core trees unchanged. No infrastructure client coordinates are present.",
+  "changed_files_manifest": "files-sha256.json"
+}

@@ -3,8 +3,8 @@ package io.pockethive.worker.sdk.runtime;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import java.time.Instant;
 import java.util.List;
 import java.util.Objects;
@@ -14,6 +14,10 @@ import org.springframework.core.Ordered;
 /**
  * Populates MDC and propagates observability context during worker execution.
  * Enabled by the Stage 3 observability work outlined in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: propagate observability context and record the invocation hop.
+ * Must not: own workload enablement, configure exporters or reconstruct a second context format.
+ * Contract: RESP-OBS-CONTEXT — docs/architecture/runtime-responsibilities.md#resp-obs-context.
  */
 public final class WorkerObservabilityInterceptor implements WorkerInvocationInterceptor, Ordered {
 

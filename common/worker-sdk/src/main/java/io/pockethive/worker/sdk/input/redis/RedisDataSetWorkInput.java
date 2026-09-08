@@ -6,9 +6,9 @@ import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -33,6 +33,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Work input that pops items from a Redis list at a configured rate and feeds them to the worker runtime.
+ * <p>
+ * Responsibility: read Redis dataset entries and coordinate cursor, exhaustion and intake.
+ * Must not: refresh auth tokens, generate sequences or declare Rabbit resources.
+ * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
 public final class RedisDataSetWorkInput implements WorkInput {
 

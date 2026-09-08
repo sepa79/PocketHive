@@ -5,6 +5,9 @@ This directory contains only work that is actively being implemented or is waiti
 ## Current plans
 
 - `docs/inProgress/work-plane-module-boundaries.md` — primary architecture stream: documentation/memory preparation, then enforced Work Plane boundaries, Control Plane, and remaining production sinks.
+  Concrete design: `docs/architecture/work-plane-boundaries.md`; design and review evidence: `docs/inProgress/boundary-design/`.
+  B01 R1/R2 are accepted; custom scanner approach withdrawn by user. Removal and mandatory review rules: `docs/inProgress/boundary-design/b01/scanner-removal.md`.
+  Current responsibility/header adoption: 157 B01 production files linked to 51 current records. [Separate correction review](boundary-design/b01/rv2-correction-review.md) accepts RV2 and B01; RV1's wiring-test requirement remains superseded by the human boundary policy. Next: B02 settings and authoring, not started.
 
 - `docs/inProgress/processor-iso8583-v1-v2-plan.md` — active ISO8583 processor delivery and remaining V2 work.
 - `docs/inProgress/runtime-debug-mcp-cleanup-spec.md` — implementation exists; production HiveGate registration remains.

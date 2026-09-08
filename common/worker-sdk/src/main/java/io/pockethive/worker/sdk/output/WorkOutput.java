@@ -1,10 +1,14 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 
 /**
  * Strategy interface for publishing worker results to downstream transports.
+ * <p>
+ * Responsibility: define publication and lifecycle operations of a selected Work output.
+ * Must not: choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
+ * Contract: RESP-WORK-ADAPTER-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-adapter-selection.
  */
 public interface WorkOutput {
 

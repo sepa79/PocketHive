@@ -9,18 +9,14 @@ import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
-import io.pockethive.controlplane.topology.QueueDescriptor;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.ExchangeBuilder;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,10 +24,13 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.env.ConfigurableEnvironment;
 
 /**
  * Auto-configuration that wires control-plane infrastructure for worker services.
+ * <p>
+ * Responsibility: compose worker Control Plane identity, listener and declarations.
+ * Must not: read Work settings or declare Work resources.
+ * Contract: RESP-CP-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-cp-composition.
  */
 @Configuration(proxyBeanMethods = false)
 @ConditionalOnClass(WorkerControlPlane.class)
@@ -40,12 +39,9 @@ import org.springframework.core.env.ConfigurableEnvironment;
 public class WorkerControlPlaneAutoConfiguration {
 
     private final WorkerControlPlaneProperties properties;
-    private final Binder binder;
 
-    WorkerControlPlaneAutoConfiguration(WorkerControlPlaneProperties properties,
-                                        ConfigurableEnvironment environment) {
+    WorkerControlPlaneAutoConfiguration(WorkerControlPlaneProperties properties) {
         this.properties = Objects.requireNonNull(properties, "properties");
-        this.binder = Binder.get(environment);
     }
 
     @Bean(name = "workerControlPlaneTopologyDescriptor")
@@ -75,11 +71,7 @@ public class WorkerControlPlaneAutoConfiguration {
         if (!properties.isDeclareTopology() || !properties.getWorker().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        TopicExchange trafficExchange = ExchangeBuilder
-            .topicExchange(resolveTrafficExchange())
-            .durable(true)
-            .build();
-        return factory.create(descriptor, identity, controlPlaneExchange, trafficExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange);
     }
 
     @Bean
@@ -163,21 +155,7 @@ public class WorkerControlPlaneAutoConfiguration {
         String swarmId = requireText(properties.getSwarmId(), "pockethive.control-plane.swarm-id");
         String controlQueuePrefix = requireText(properties.getControlQueuePrefix(),
             "pockethive.control-plane.control-queue-prefix");
-        Map<String, QueueDescriptor> trafficQueues = new LinkedHashMap<>();
-        String queue = resolveRabbitInputQueue();
-        if (queue != null) {
-            trafficQueues.put(role, new QueueDescriptor(queue, Set.of()));
-        }
-        return new ControlPlaneTopologySettings(swarmId, controlQueuePrefix, trafficQueues);
+        return new ControlPlaneTopologySettings(swarmId, controlQueuePrefix, Map.of());
     }
 
-    private String resolveRabbitInputQueue() {
-        return binder.bind("pockethive.inputs.rabbit.queue", String.class).orElse(null);
-    }
-
-    private String resolveTrafficExchange() {
-        return binder.bind("pockethive.outputs.rabbit.exchange", String.class)
-            .orElseThrow(() -> new IllegalStateException(
-                "pockethive.outputs.rabbit.exchange must be configured to declare worker queues"));
-    }
 }

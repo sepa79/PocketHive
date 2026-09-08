@@ -46,7 +46,7 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
-      <artifactId>worker-sdk</artifactId>
+      <artifactId>auth-contracts</artifactId>
       <version>${project.version}</version>
     </dependency>
   </dependencies>

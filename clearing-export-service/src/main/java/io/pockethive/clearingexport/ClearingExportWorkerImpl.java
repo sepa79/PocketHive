@@ -3,18 +3,18 @@ package io.pockethive.clearingexport;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.JournalEvent;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkStep;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import jakarta.annotation.PostConstruct;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.ArrayList;
 import java.time.Clock;
 import java.time.Instant;
@@ -39,6 +39,11 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = ClearingExportWorkerConfig.class
 )
+/**
+ * Responsibility: coordinate clearing record batches and their existing writer.
+ * Must not: make rendering helpers persist files or create a second template evaluator.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 class ClearingExportWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final Logger log = LoggerFactory.getLogger(ClearingExportWorkerImpl.class);

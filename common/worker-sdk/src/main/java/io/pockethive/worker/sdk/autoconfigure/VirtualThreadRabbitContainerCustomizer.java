@@ -15,18 +15,27 @@ import org.springframework.beans.factory.config.BeanPostProcessor;
  *
  * The customisation is applied only when a {@link SimpleRabbitListenerContainerFactory}
  * named {@code rabbitListenerContainerFactory} is present.
+ * <p>
+ * Responsibility: own and install the Work listener executor.
+ * Must not: change Control Plane factories or close their executors.
+ * Contract: RESP-WORK-RABBIT-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-policy.
  */
-final class VirtualThreadRabbitContainerCustomizer implements BeanPostProcessor {
+final class VirtualThreadRabbitContainerCustomizer implements BeanPostProcessor, org.springframework.beans.factory.DisposableBean {
 
     private static final Logger log = LoggerFactory.getLogger(VirtualThreadRabbitContainerCustomizer.class);
+
+    private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
     @Override
     public Object postProcessAfterInitialization(Object bean, String beanName) throws BeansException {
         if (bean instanceof SimpleRabbitListenerContainerFactory factory && "rabbitListenerContainerFactory".equals(beanName)) {
-            ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
             factory.setTaskExecutor(executor);
             log.info("Configured Rabbit listener container factory '{}' to use virtual threads", beanName);
         }
         return bean;
+    }
+    @Override
+    public void destroy() {
+        executor.shutdownNow();
     }
 }

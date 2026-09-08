@@ -7,7 +7,7 @@ import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
@@ -55,7 +55,8 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(noopDefinition, rabbitDefinition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
-            "pockethive.outputs.rabbit.routing-key", "custom.out"
+            "pockethive.outputs.rabbit.routing-key", "custom.out",
+            "pockethive.outputs.rabbit.exchange", "exchange"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
         RabbitTemplate rabbitTemplate = new RabbitTemplate();
@@ -77,7 +78,7 @@ class WorkOutputRegistryInitializerTest {
     }
 
     @Test
-    void prefersHighestPriorityOutputFactory() {
+    void rejectsDuplicateFactoriesRegardlessOfPriority() {
         WorkerDefinition definition = new WorkerDefinition(
             "priorityWorker",
             Object.class,
@@ -109,9 +110,10 @@ class WorkOutputRegistryInitializerTest {
             binder,
             List.of(fallback, preferred)
         );
-        initializer.afterSingletonsInstantiated();
+        org.assertj.core.api.Assertions.assertThatThrownBy(initializer::afterSingletonsInstantiated)
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Multiple WorkOutputFactory");
 
-        assertThat(outputRegistry.get("priorityWorker")).isSameAs(preferredOutput);
     }
 
     @Test

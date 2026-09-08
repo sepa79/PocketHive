@@ -62,6 +62,8 @@ living contracts below continue to describe the supported system.
 - [Contributor Guide](../CONTRIBUTING.md)
 - [Engineering Rules](ENGINEERING_RULES.md)
 - [Review Rules](REVIEW_RULES.md)
+- [Responsibility and SSOT Workflow](ai/RESPONSIBILITY_WORKFLOW.md)
+- [Current B01 Responsibility Records](architecture/runtime-responsibilities.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
 

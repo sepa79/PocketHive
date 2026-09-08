@@ -6,6 +6,7 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
     <properties>
+    <work.boundary.enforcer.skip>true</work.boundary.enforcer.skip>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
     <revision>0.15.35</revision>
     <tomcat.version>10.1.55</tomcat.version>
@@ -22,6 +23,10 @@
     <maven.compiler.encoding>${project.build.sourceEncoding}</maven.compiler.encoding>
   </properties>
   <modules>
+    <module>common/templating-api</module>
+    <module>common/observability-core</module>
+    <module>common/work-api</module>
+    <module>common/work-test-fixtures</module>
     <module>observability</module>
     <module>common/topology-core</module>
     <module>common/auth-contracts</module>
@@ -228,6 +233,30 @@
 	        <artifactId>maven-enforcer-plugin</artifactId>
 	        <version>3.4.1</version>
 	        <executions>
+          <execution>
+            <!-- Canonical artifact dependency restriction; maintained here, not generated. -->
+            <id>work-core-no-infrastructure</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+            <configuration><skip>${work.boundary.enforcer.skip}</skip><rules><bannedDependencies>
+              <searchTransitive>true</searchTransitive>
+              <excludes>
+                <exclude>org.springframework*:*</exclude>
+                <exclude>io.lettuce*:*</exclude>
+                <exclude>com.rabbitmq*:*</exclude>
+                <exclude>com.clickhouse*:*</exclude>
+                <exclude>com.github.docker-java*:*</exclude>
+                <exclude>redis.clients*:*</exclude>
+                <exclude>io.pockethive:worker-sdk</exclude>
+                <exclude>io.pockethive:observability</exclude>
+                <exclude>io.pockethive:control-plane-spring</exclude>
+                <exclude>io.pockethive:work-test-fixtures</exclude>
+                <exclude>io.pockethive:sink-clickhouse</exclude>
+                <exclude>io.pockethive:docker-client</exclude>
+                <exclude>io.pockethive:templating</exclude>
+                <exclude>io.pockethive:*-adapter*</exclude>
+              </excludes>
+              <includes><include>*:*:*:*:test</include></includes>
+            </bannedDependencies></rules></configuration>
+          </execution>
           <execution>
             <id>enforce-java</id>
             <goals>

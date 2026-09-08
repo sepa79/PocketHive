@@ -25,6 +25,11 @@
   <dependencies>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>observability-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>topology-core</artifactId>
       <version>${project.version}</version>
     </dependency>

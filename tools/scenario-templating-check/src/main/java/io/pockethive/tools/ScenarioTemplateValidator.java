@@ -1,16 +1,18 @@
 package io.pockethive.tools;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -35,6 +37,10 @@ import org.yaml.snakeyaml.Yaml;
  * </pre>
  * The context file is optional; when provided it should be JSON with optional {@code payload} and
  * {@code headers} fields. Defaults are an empty JSON payload and an empty header map.
+ * <p>
+ * Responsibility: run offline template rendering diagnostics using the shared renderer with sequences disabled.
+ * Must not: execute sequence effects during syntax checks or claim diagnostic success is bundle acceptance.
+ * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  */
 public final class ScenarioTemplateValidator {
 
@@ -50,7 +56,7 @@ public final class ScenarioTemplateValidator {
             System.exit(1);
         }
 
-        TemplateRenderer renderer = new PebbleTemplateRenderer();
+        TemplateRenderer renderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
 
         try {
             switch (parsed.mode()) {

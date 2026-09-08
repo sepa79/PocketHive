@@ -1,24 +1,29 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.work.api.HttpRequest;
+import io.pockethive.work.api.Iso8583Request;
+import io.pockethive.work.api.IsoSchemaRef;
+import io.pockethive.work.api.TcpRequest;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkStep;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.Iso8583RequestEnvelope;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.TcpRequestEnvelope;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
@@ -39,6 +44,11 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = RequestBuilderWorkerConfig.class
 )
+/**
+ * Responsibility: construct protocol request payloads using templates, auth and selected schema data.
+ * Must not: execute the target transaction or create another shared Work envelope codec.
+ * Contract: RESP-REQUEST-BUILD — docs/architecture/runtime-responsibilities.md#resp-request-build.
+ */
 class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
@@ -58,7 +68,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private volatile long lastErrorCountSnapshot = 0L;
 
   @Autowired
-  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, 
+  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
                           TemplateRenderer templateRenderer,
                           RedisSequenceProperties redisProperties) {
     this(properties, templateRenderer, new TemplateLoader(), redisProperties);
@@ -126,7 +136,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         }
 
         envelope = TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest(
+            new TcpRequest(
                 tcpDef.behavior(),
                 body,
                 headers,
@@ -161,7 +171,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         boolean isJson = contentType.contains("application/json") ||
                         (contentType.isEmpty() && looksLikeJson(rendered.body()));
         envelope = HttpRequestEnvelope.of(
-            new HttpRequestEnvelope.HttpRequest(
+            new HttpRequest(
                 method,
                 authRequest.path(),
                 headers,
@@ -319,7 +329,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     String wireProfileId = requireNonBlank(isoDef.wireProfileId(), "wireProfileId");
 
     if ("RAW_HEX".equals(payloadAdapter)) {
-      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+      return Iso8583RequestEnvelope.of(new Iso8583Request(
           wireProfileId,
           "RAW_HEX",
           requireNonBlank(rendered.body(), "payload"),
@@ -334,7 +344,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       if (templateSchema == null) {
         throw new IllegalArgumentException("schemaRef must not be null for FIELD_LIST_XML");
       }
-      Iso8583RequestEnvelope.IsoSchemaRef schemaRef = new Iso8583RequestEnvelope.IsoSchemaRef(
+      IsoSchemaRef schemaRef = new IsoSchemaRef(
           templateSchema.schemaRegistryRoot(),
           templateSchema.schemaId(),
           templateSchema.schemaVersion(),
@@ -343,7 +353,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       );
       byte[] encoded = fieldListXmlCodec.encodePayload(rendered.body(), schemaRef);
       String hexPayload = HexFormat.of().withUpperCase().formatHex(encoded);
-      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+      return Iso8583RequestEnvelope.of(new Iso8583Request(
           wireProfileId,
           "RAW_HEX",
           hexPayload,

@@ -1,17 +1,21 @@
 package io.pockethive.generator;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
+import io.pockethive.work.api.MutableStatus;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -38,7 +42,7 @@ class GeneratorTest {
   @BeforeEach
   void setUp() {
     properties = new GeneratorWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
-    templateRenderer = new PebbleTemplateRenderer();
+    templateRenderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
     Map<String, Object> message = new LinkedHashMap<>();
     message.put("bodyType", "HTTP");
     message.put("path", "/default");

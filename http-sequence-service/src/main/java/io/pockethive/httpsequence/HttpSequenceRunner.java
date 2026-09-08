@@ -6,15 +6,15 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
 import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.worker.sdk.templating.TemplatingRenderException;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -27,6 +27,11 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.LongAdder;
 
+/**
+ * Responsibility: execute configured HTTP steps with current template, auth and diagnostic capture integration.
+ * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
+ */
 final class HttpSequenceRunner {
 
   private final ObjectMapper mapper;

@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.List;

@@ -1,38 +1,20 @@
 package io.pockethive.templating;
 
+import io.pockethive.templating.api.SequenceAccess;
+
 import java.lang.reflect.Method;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-
-import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
-import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.Base64;
-import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ThreadLocalRandom;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
-import java.nio.charset.StandardCharsets;
 
 import org.springframework.expression.ExpressionParser;
 import org.springframework.expression.TypeLocator;
-import org.springframework.expression.PropertyAccessor;
-import org.springframework.expression.EvaluationContext;
-import org.springframework.expression.TypedValue;
-import org.springframework.expression.spel.SpelEvaluationException;
-import org.springframework.expression.spel.SpelMessage;
 import org.springframework.expression.spel.standard.SpelExpressionParser;
 import org.springframework.expression.spel.support.StandardEvaluationContext;
-import org.springframework.expression.spel.support.StandardTypeLocator;
 import org.springframework.util.ReflectionUtils;
 
 /**
@@ -61,10 +43,13 @@ import org.springframework.util.ReflectionUtils;
  *   <li>{@code #date_format(instant, pattern)} – formats the provided {@link Instant} (or now if null)</li>
  *   <li>{@code #sequence(key, mode, format)} – generates unique sequences from Redis (mode: alpha/numeric/alphanum/binary/hex)</li>
  * </ul>
+ * <p>
+ * Responsibility: evaluate constrained template expressions against explicit functions.
+ * Must not: look up clients or configuration from global state.
+ * Contract: RESP-TEMPLATE-RENDER — docs/architecture/runtime-responsibilities.md#resp-template-render.
  */
 final class SpelTemplateEvaluator {
 
-  private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final ExpressionParser PARSER = new SpelExpressionParser();
   private static final TypeLocator BLOCKING_TYPE_LOCATOR = new BlockingTypeLocator();
 
@@ -104,15 +89,22 @@ final class SpelTemplateEvaluator {
   private static final Method DATE_FORMAT_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "dateFormat", Object.class, String.class),
     "dateFormat method missing");
-  private static final Method SEQUENCE_METHOD = Objects.requireNonNull(
-    ReflectionUtils.findMethod(SpelFunctions.class, "sequence", String.class, String.class, String.class),
-    "sequence method missing");
-  private static final Method SEQUENCE_WITH_METHOD = Objects.requireNonNull(
-    ReflectionUtils.findMethod(SpelFunctions.class, "sequence", String.class, String.class, String.class, Long.class, Long.class),
-    "sequence with options method missing");
-  private static final Method RESET_SEQUENCE_METHOD = Objects.requireNonNull(
-    ReflectionUtils.findMethod(SpelFunctions.class, "resetSequence", String.class),
-    "resetSequence method missing");
+  private final java.lang.invoke.MethodHandle sequenceMethod;
+  private final java.lang.invoke.MethodHandle sequenceWithMethod;
+  private final java.lang.invoke.MethodHandle resetSequenceMethod;
+
+  SpelTemplateEvaluator(SequenceAccess sequences) {
+    SequenceFunctions functions = new SequenceFunctions(sequences);
+    try {
+      var lookup = java.lang.invoke.MethodHandles.lookup();
+      sequenceMethod = lookup.unreflect(SequenceFunctions.class.getMethod("sequence", String.class, String.class, String.class)).bindTo(functions);
+      sequenceWithMethod = lookup.unreflect(SequenceFunctions.class.getMethod("sequence", String.class, String.class, String.class, Long.class, Long.class)).bindTo(functions);
+      resetSequenceMethod = lookup.unreflect(SequenceFunctions.class.getMethod("resetSequence", String.class)).bindTo(functions);
+    } catch (ReflectiveOperationException ex) {
+      throw new IllegalStateException("Sequence function binding failed", ex);
+    }
+  }
+
   private static final Method DATETIME_OFFSET_METHOD = Objects.requireNonNull(
     ReflectionUtils.findMethod(SpelFunctions.class, "datetimeOffset", String.class, String.class),
     "datetimeOffset method missing");
@@ -140,9 +132,9 @@ final class SpelTemplateEvaluator {
     context.registerFunction("regex_extract", REGEX_EXTRACT_METHOD);
     context.registerFunction("json_path", JSON_PATH_METHOD);
     context.registerFunction("date_format", DATE_FORMAT_METHOD);
-    context.registerFunction("sequence", SEQUENCE_METHOD);
-    context.registerFunction("sequenceWith", SEQUENCE_WITH_METHOD);
-    context.registerFunction("resetSequence", RESET_SEQUENCE_METHOD);
+    context.registerFunction("sequence", sequenceMethod);
+    context.registerFunction("sequenceWith", sequenceWithMethod);
+    context.registerFunction("resetSequence", resetSequenceMethod);
     context.registerFunction("datetime_offset", DATETIME_OFFSET_METHOD);
 
     return PARSER.parseExpression(expression).getValue(context);
@@ -154,220 +146,4 @@ final class SpelTemplateEvaluator {
     }
   }
 
-  private static final class BlockingTypeLocator extends StandardTypeLocator {
-    @Override
-    public Class<?> findType(String typeName) {
-      throw new SpelEvaluationException(SpelMessage.TYPE_NOT_FOUND, typeName);
-    }
-  }
-
-  private static final class MapEntryAccessor implements PropertyAccessor {
-    @Override
-    public Class<?>[] getSpecificTargetClasses() {
-      return new Class[]{Map.class};
-    }
-
-    @Override
-    public boolean canRead(EvaluationContext context, Object target, String name) {
-      return target instanceof Map<?, ?>;
-    }
-
-    @Override
-    public TypedValue read(EvaluationContext context, Object target, String name) {
-      Map<?, ?> map = (Map<?, ?>) target;
-      Object value = map.get(name);
-      return new TypedValue(value);
-    }
-
-    @Override
-    public boolean canWrite(EvaluationContext context, Object target, String name) {
-      return false;
-    }
-
-    @Override
-    public void write(EvaluationContext context, Object target, String name, Object newValue) {
-      throw new UnsupportedOperationException("read-only map accessor");
-    }
-  }
-
-  private static final class SpelFunctions {
-    private SpelFunctions() {
-    }
-
-    static int randInt(int min, int max) {
-      long span = (long) max - (long) min + 1;
-      if (span <= 0) {
-        throw new IllegalArgumentException("max must be >= min");
-      }
-      // inclusive upper bound without overflow
-      long offset = ThreadLocalRandom.current().nextLong(span);
-      return (int) (min + offset);
-    }
-
-    static long randLong(String minInclusive, String maxInclusive) {
-      Objects.requireNonNull(minInclusive, "minInclusive");
-      Objects.requireNonNull(maxInclusive, "maxInclusive");
-      long min = parseLong(minInclusive, "minInclusive");
-      long max = parseLong(maxInclusive, "maxInclusive");
-      if (max < min) {
-        throw new IllegalArgumentException("max must be >= min");
-      }
-      long span = max - min + 1;
-      long offset = span == Long.MIN_VALUE ? 0 : ThreadLocalRandom.current().nextLong(span);
-      return min + offset;
-    }
-
-    static String uuid() {
-      return UUID.randomUUID().toString();
-    }
-
-    static String md5Hex(String value) {
-      Objects.requireNonNull(value, "value");
-      return digestHex("MD5", value);
-    }
-
-    static String sha256Hex(String value) {
-      Objects.requireNonNull(value, "value");
-      return digestHex("SHA-256", value);
-    }
-
-    static String base64Encode(String value) {
-      Objects.requireNonNull(value, "value");
-      return Base64.getEncoder().encodeToString(value.getBytes(StandardCharsets.UTF_8));
-    }
-
-    static String base64Decode(String value) {
-      Objects.requireNonNull(value, "value");
-      return new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8);
-    }
-
-    static String hmacSha256Hex(String key, String value) {
-      Objects.requireNonNull(key, "key");
-      Objects.requireNonNull(value, "value");
-      try {
-        Mac mac = Mac.getInstance("HmacSHA256");
-        mac.init(new SecretKeySpec(key.getBytes(StandardCharsets.UTF_8), "HmacSHA256"));
-        return HexFormat.of().formatHex(mac.doFinal(value.getBytes(StandardCharsets.UTF_8)));
-      } catch (Exception e) {
-        throw new IllegalStateException("Failed to compute HMAC-SHA256", e);
-      }
-    }
-
-    static boolean regexMatch(String input, String pattern) {
-      if (input == null || pattern == null) {
-        return false;
-      }
-      return Pattern.compile(pattern, Pattern.DOTALL).matcher(input).find();
-    }
-
-    static String regexExtract(String input, String pattern, int group) {
-      if (input == null || pattern == null) {
-        return "";
-      }
-      Matcher matcher = Pattern.compile(pattern, Pattern.DOTALL).matcher(input);
-      if (!matcher.find()) {
-        return "";
-      }
-      if (group < 0 || group > matcher.groupCount()) {
-        return "";
-      }
-      String result = matcher.group(group);
-      return result == null ? "" : result;
-    }
-
-    static String jsonPath(Object payload, String path) {
-      if (payload == null || path == null || path.isBlank()) {
-        return "";
-      }
-      try {
-        JsonNode node;
-        if (payload instanceof String str) {
-          node = MAPPER.readTree(str);
-        } else {
-          node = MAPPER.valueToTree(payload);
-        }
-        JsonNode target = node.at(path);
-        if (target.isMissingNode() || target.isNull()) {
-          return "";
-        }
-        return target.isValueNode() ? target.asText("") : target.toString();
-      } catch (Exception e) {
-        return "";
-      }
-    }
-
-    static String dateFormat(Object instant, String pattern) {
-      Objects.requireNonNull(pattern, "pattern");
-      Instant base = (instant instanceof Instant inst) ? inst : Instant.now();
-      DateTimeFormatter formatter = DateTimeFormatter.ofPattern(pattern);
-      return formatter.format(OffsetDateTime.ofInstant(base, ZoneOffset.UTC));
-    }
-
-    private static String digestHex(String algorithm, String value) {
-      try {
-        var digest = java.security.MessageDigest.getInstance(algorithm);
-        byte[] hash = digest.digest(value.getBytes(StandardCharsets.UTF_8));
-        return HexFormat.of().formatHex(hash);
-      } catch (NoSuchAlgorithmException e) {
-        throw new IllegalStateException(algorithm + " algorithm not available", e);
-      }
-    }
-
-    private static long parseLong(String value, String label) {
-      try {
-        return Long.parseLong(value);
-      } catch (NumberFormatException ex) {
-        throw new IllegalArgumentException(label + " is not a valid long", ex);
-      }
-    }
-
-    static String sequence(String key, String mode, String format) {
-      if (key == null || key.isBlank()) throw new IllegalArgumentException("key required");
-      if (mode == null || mode.isBlank()) throw new IllegalArgumentException("mode required");
-      if (format == null || format.isBlank()) throw new IllegalArgumentException("format required");
-      return RedisSequenceGenerator.getDefaultInstance().next(key, mode, format, 1, -1);
-    }
-
-    static String sequence(String key, String mode, String format, Long startOffset, Long maxSequence) {
-      if (key == null || key.isBlank()) throw new IllegalArgumentException("key required");
-      if (mode == null || mode.isBlank()) throw new IllegalArgumentException("mode required");
-      if (format == null || format.isBlank()) throw new IllegalArgumentException("format required");
-      long start = startOffset != null ? startOffset : 1;
-      long max = maxSequence != null ? maxSequence : -1;
-      if (start < 1) throw new IllegalArgumentException("startOffset must be >= 1");
-      return RedisSequenceGenerator.getDefaultInstance().next(key, mode, format, start, max);
-    }
-
-    static boolean resetSequence(String key) {
-      if (key == null || key.isBlank()) throw new IllegalArgumentException("key required");
-      return RedisSequenceGenerator.getDefaultInstance().reset(key);
-    }
-
-    static String datetimeOffset(String offset, String pattern) {
-      Objects.requireNonNull(offset, "offset");
-      Objects.requireNonNull(pattern, "pattern");
-      OffsetDateTime base = OffsetDateTime.now(ZoneOffset.UTC);
-      Matcher m = Pattern.compile("^([+-]?)(\\d+)\\s*(s|sec|seconds?|m|min|minutes?|h|hours?|d|days?|w|weeks?|M|months?|y|years?)$")
-          .matcher(offset.trim());
-      if (!m.matches()) {
-        throw new IllegalArgumentException("Invalid offset: '" + offset + "'. Use e.g. '+2d', '-1month', '3h'");
-      }
-      int sign = "-".equals(m.group(1)) ? -1 : 1;
-      long amount = Long.parseLong(m.group(2)) * sign;
-      String unit = m.group(3);
-      OffsetDateTime target = switch (unit.charAt(0)) {
-        case 's' -> base.plusSeconds(amount);
-        case 'h' -> base.plusHours(amount);
-        case 'd' -> base.plusDays(amount);
-        case 'w' -> base.plusWeeks(amount);
-        case 'y' -> base.plusYears(amount);
-        case 'M' -> base.plusMonths(amount);
-        default -> unit.startsWith("mo") || unit.equals("M")
-            ? base.plusMonths(amount)
-            : base.plusMinutes(amount);
-      };
-      return DateTimeFormatter.ofPattern(pattern).format(target);
-    }
-
-  }
 }

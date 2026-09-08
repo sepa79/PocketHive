@@ -6,9 +6,14 @@ import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import org.springframework.core.Ordered;
 
+/**
+ * Responsibility: construct the selected Redis output with its configured dependencies.
+ * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
+ * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
+ */
 public final class RedisWorkOutputFactory implements WorkOutputFactory, Ordered {
 
     private final WorkerControlPlaneRuntime controlPlaneRuntime;

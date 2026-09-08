@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import java.util.HashMap;
 import java.util.List;
@@ -11,6 +11,10 @@ import java.util.function.Function;
 /**
  * Default runtime implementation used by Stage 1.
  * Integration notes and examples live in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: select worker invocations and route their results to the selected output registry.
+ * Must not: reimplement service business logic or introduce a second output publication for the same result.
+ * Contract: RESP-WORK-INVOCATION — docs/architecture/runtime-responsibilities.md#resp-work-invocation.
  */
 public final class DefaultWorkerRuntime implements WorkerRuntime {
 

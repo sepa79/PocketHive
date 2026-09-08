@@ -1,11 +1,11 @@
 package io.pockethive.dbquery;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -14,6 +14,11 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = DbQueryWorkerConfig.class
 )
+/**
+ * Responsibility: delegate a Work invocation to configured DB query execution.
+ * Must not: implement a second JDBC executor or declare Work/CP topology.
+ * Contract: RESP-DB-QUERY-WORK — docs/architecture/runtime-responsibilities.md#resp-db-query-work.
+ */
 class DbQueryWorkerImpl implements PocketHiveWorkerFunction {
 
   private final DbQueryRunner runner;

@@ -1,15 +1,18 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.work.api.WorkItemBuilder;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkerInputType;
@@ -40,7 +43,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void routesByHeaderPattern() throws Exception {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -78,7 +81,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void usesTargetListTemplateWhenNoRouteMatches() throws Exception {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -110,7 +113,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void acceptsExplicitStringEnabledFlag() throws Exception {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -139,7 +142,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void rejectsMalformedEnabledFlagInsteadOfDisablingUploader() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -170,7 +173,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void rejectsEnabledConfigWithNoTarget() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -202,7 +205,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void rejectsEnabledConfigWithoutExplicitPushDirection() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -234,7 +237,7 @@ class RedisUploaderInterceptorTest {
     @Test
     void rejectsMalformedRouteInsteadOfFallingThroughToDefaultList() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         Map<String, Object> rawConfig = Map.of(
             "interceptors", Map.of(
@@ -278,7 +281,7 @@ class RedisUploaderInterceptorTest {
 
     private static void assertInvalidUploaderScalar(Map<String, Object> patch, String field) {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer());
+        RedisUploaderInterceptor interceptor = new RedisUploaderInterceptor(writerFactory, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
         java.util.LinkedHashMap<String, Object> uploader = new java.util.LinkedHashMap<>(Map.of(
             "enabled", true,
             "host", "redis",
@@ -313,7 +316,7 @@ class RedisUploaderInterceptorTest {
 
     private static WorkItem message(String payload, Map<String, Object> headers) {
         WorkerInfo info = new WorkerInfo("test-role", "swarm-1", "inst-1", "in", "out");
-        WorkItem.Builder builder = WorkItem.text(info, payload);
+        WorkItemBuilder builder = WorkItem.text(info, payload);
         headers.forEach(builder::header);
         return builder.build();
     }

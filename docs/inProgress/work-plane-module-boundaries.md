@@ -1,9 +1,11 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; step 1 documentation prepared, memory cleanup partially blocked by missing lifecycle tools.
-Plan review: four planning gaps addressed on 2026-09-07; concrete design review in step 2 remains required.
+Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. Next: B02 settings and authoring, not started. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
+Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
+Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
 Checkpoint: `19d56091` (2026-09-07), committed before this plan and documentation cleanup.
+Preparation commit: `e0d37871` (2026-09-07), committed before the first design goal.
 
 ## Outcome and scope
 
@@ -49,12 +51,12 @@ their canonical adapter contract without leaking client library types into consu
 
 The compile dependency direction is core -> contracts/ports <- adapter, with startup
 depending on the selected components. Audit transitive dependencies as well as direct
-POM entries. A core build must fail when code imports a forbidden client. Architecture
-tests must additionally reject forbidden module edges, implementation references,
-service-local provisioning, and newly exposed infrastructure capabilities.
+POM entries. A core build must fail when code imports a forbidden client. Standard
+dependency checks reject forbidden edges; separate source review checks implementation
+references, service-local provisioning and exposed infrastructure capabilities.
 
 Build isolation and runtime composition isolation are separate acceptance conditions.
-The mandatory composition checks below must prove that adapters cannot change another
+The boundary review and relevant behavioral evidence below must establish that adapters cannot change another
 plane's effective configuration or delivery policy through global Spring customizers,
 bean discovery, shared mutable factories, or implicit default selection.
 
@@ -62,6 +64,25 @@ Separate repositories are optional packaging after these boundaries are proven. 
 consumers depend on versioned artifacts; they must not need coordinated source edits for
 an ordinary consumer change. Package names alone are not enforcement. These are build
 and review constraints, not a security sandbox against code that can modify the build itself.
+
+## Goal execution and separate review
+
+Human decision (2026-09-07): design and implementation goals contain the work, required
+tests/checks and evidence collection. They do not contain a self-review pass or an
+automatic review/fix/review loop. Apply this separation to all goals in this plan.
+
+- A goal ends with a concrete result, validation evidence and stated limitations, handed
+  off as **do review** (awaiting review). Finishing execution does not approve the slice
+  or satisfy its acceptance gate. Incomplete work or missing required checks stay explicit.
+- Review is a separate task on the finished result, using `docs/REVIEW_RULES.md` and the
+  slice's acceptance conditions. Run the six review passes there, not again inside the
+  implementation goal. The goal does not automatically launch a review task.
+- A correction task addresses the reported findings and runs the relevant verification.
+  It returns the changes and evidence for review without automatically repeating a full
+  self-review. Any follow-up review is a separate task.
+- Keep test execution, negative architecture checks, before/after evidence and existing
+  contract/approval requirements in the work. Only a separate review can record acceptance;
+  dependent slices remain subject to the acceptance gates below.
 
 ## Execution steps
 
@@ -109,6 +130,32 @@ and verified current memory or an explicit list of remaining stale records/tool 
 Do not report all memory clean while known stale active learning records remain retrievable.
 
 ### 2. Review the concrete Work Plane boundary design
+
+Design: [Work Plane boundaries](../architecture/work-plane-boundaries.md).
+Design and review evidence (former scan outputs are archived):
+`docs/inProgress/boundary-design/`. B01–B07 and C01–C03 in that design are the concrete
+slices for the execution steps here; V01–V12 are their acceptance obligations.
+
+Step 2 evidence (2026-09-07): the design assigns artifacts/namespaces, exact port owners,
+all nine worker-core dependencies, shared prerequisites, B01–B07/C01–C03 deletion and
+consumer groups, and V01–V12 checks. The corrected generated inventory assigns 212 current source
+files and records their reference candidates plus 117 additional candidates across 1,861
+source/config files. The 46-artifact target graph is acyclic; target core/client and
+worker/admin-capability reachability checks passed. All four input and three output
+variants map to concrete slices/checks, with 12 pair acceptance cases in the design.
+Source/consumer paths and slice/check references were verified; docs-site build passed.
+The earlier self-review in `docs/inProgress/boundary-design/README.md` is historical and
+does not establish acceptance. Corrections to the three separate-review findings are now
+prepared: full V03 prerequisites move to B01; queue statistics, availability and manager
+projection are specified for B04; the graph gate rejects service adapters, with permanent
+direct/transitive negative fixtures. The correction evidence is in that same evidence file.
+Separate review accepted R1–R3; the remaining LOW evidence wording was corrected.
+B01 execution is delivered for independent review: [implementation and evidence](boundary-design/b01/README.md).
+The clean reactor passed 1197 tests (one pre-existing skip); the isolated API/core check
+and all-consumer packaging also passed. Work/CP composition and architecture negative
+fixtures are part of that evidence, not a self-review. Next task: separate B01 review.
+B01 may start only after design acceptance, its before-state evidence and applicable
+contract/approval gates; no B/C migration slice is marked complete.
 
 - Inventory every current publisher, consumer, config binder/patch parser, topology writer,
   name resolver, queue observer, cleanup executor, and diagnostic consumer across the repo.
@@ -203,27 +250,27 @@ dependency of completing the production work. Any later change of that scope is 
 This matrix tracks migration acceptance, not a second runtime capability catalogue.
 The current input/output enum owners are `common/worker-sdk/.../config/WorkerInputType.java`
 and `WorkerOutputType.java`; contract changes update their authoritative definitions first.
-All rows below are pending concrete design and implementation. Step 2 must replace the
-responsibility-level owners with exact artifacts/types and add slice IDs, consumer lists,
-commands/test IDs and evidence links. Extend the inventory for additional active paths
+The matrix below references the concrete owners/slices and V-checks in the design; all
+implementation evidence remains pending. The design owns the port/artifact definitions,
+consumer/deletion ledger and commands. Extend the inventory for additional active paths
 found by repository-wide searches; do not treat this initial list as exhaustive discovery.
 
 | Variant / responsibility | Planned owner | Required stage | Minimum acceptance evidence |
 |---|---|---|---|
-| Worker identity, config/status/lifecycle integration | Canonical integration contracts; Control adapter implements its side | 3, prerequisite | No transitive infrastructure types in Work cores; existing config/status flow works with CP present |
-| Input `RABBITMQ` | Rabbit Work consumer adapter; Work runtime owns execution policy | 3–4 | Effective listener settings, delivery/acknowledgement, errors/redelivery, shutdown and reconfiguration |
-| Input `REDIS_DATASET` | Redis dataset adapter; canonical dataset settings | 3–4 | Dataset source validation, ordering/exhaustion, configured rate and explicit failure; no Rabbit Work settings required |
-| Input `CSV_DATASET` | CSV/filesystem input adapter; canonical dataset/path settings | 3–4 | Parsing, ordering/exhaustion, configured rate, invalid data/path failure and lifecycle |
-| Input `SCHEDULER` | Scheduler input adapter; Work runtime owns execution | 3–4 | Configured triggering, stop/reconfigure behavior and no post-stop work beyond the declared shutdown contract |
-| Output `RABBITMQ` | Rabbit Work publisher adapter | 3–4 | Destination, persistence, supported confirmation/timeout semantics and explicit publish failure |
-| Output `REDIS` | Redis output adapter; canonical sink contract | 3–4 | Target/list semantics, serialization, failure and close behavior; include `RedisPushSupport` consumers |
-| Output `NONE` | Explicit no-output implementation | 3–4 | No downstream publish or output-only connection/settings requirement; worker execution/status still work |
-| Redis sequences used by templating | Sequence capability owner and Redis sequence adapter | 3–4 | Existing sequence/concurrency semantics and explicit connection configuration; no Lettuce leak through templating |
-| Redis auth token storage used by workers | Auth token-store capability owner and its Redis adapter | 3–4 boundary extraction; broader auth policy in 5 | Preserve token scope, expiry and atomic operations where contracted; no client leak into Work/auth consumer cores |
-| Redis debug capture in HTTP sequence workers | Diagnostic capture owner and Redis capture adapter | 3–4 | Capture scope, configured retention and explicit failure semantics; HTTP runner does not own a Redis client |
-| Work topology, naming, observation, diagnostics and removal | Work topology owner, scoped adapters and owner-derived projections | 3–4 | Provision/listen/status/tap/remove agree for non-default names; verify removal rather than attempted deletion |
-| Work settings authoring, patches, UI and tools | Canonical Work/adapter validators; generated or owner-derived consumers | 3–4 | Authoring/runtime decisions agree; no copied normalization/defaults; invalid patches have canonical outcomes |
-| Remaining CP, compute, journal/database, network proxy and auth policies | Their canonical domain owners and scoped infrastructure adapters | 5 | Complete service-core isolation and corresponding state/postcondition checks; enumerate concrete slices in step 2 |
+| Worker identity, config/status/lifecycle integration | `WorkerStateCoordinator`, `work-runtime-spi`, `worker-control-adapter` | B01/B03, step 3 prerequisite | V01/V02/V03/V06: infrastructure-free API and one accepted state owner |
+| Input `RABBITMQ` | `work-rabbit-adapter`; `DefaultWorkerRuntime` owns execution | B02/B03/B05 | V03/V06/V09: actual settings, settlement, errors and drain |
+| Input `REDIS_DATASET` | `redis-adapter`; `WorkConfigurationParser` | B02/B03/B06 | V03/V04/V10: source/order/exhaustion/rate, no Rabbit Work settings |
+| Input `CSV_DATASET` | `work-local-adapters`; `WorkConfigurationParser` | B02/B03/B07 | V03/V04/V11: parsing, paths, rate and lifecycle |
+| Input `SCHEDULER` | `work-local-adapters`; explicit `ScheduledInvocationPolicy` | B01/B02/B03/B07 | B01 V03: exact selection and trigger policy parity; V06/V11: rate/reset/stop and role independence |
+| Output `RABBITMQ` | `work-rabbit-adapter` implementing `WorkOutput` | B02/B03/B05 | V06/V09: one publish, destination/persistence and confirmation receipts |
+| Output `REDIS` | `redis-adapter` implementing `WorkOutput`/`RedisUpload` | B02/B03/B06 | V04/V06/V10: one target resolver/writer including uploader consumers |
+| Output `NONE` | Explicit no-output implementation in `work-runtime` | B03/B07 | V03/V06/V11: no downstream publish or output connection requirement |
+| Redis sequences used by templating | `SequenceAccess` in `templating-api`; `redis-adapter` implementation | B01/B06 | V01/V10: sequence semantics and explicit configuration without client leakage |
+| Redis auth token storage used by workers | `TokenStore` in `auth-contracts`; `redis-adapter` implementation | B01/B06; broader auth policy C03 | V01/V10: token scope/expiry/atomicity and no client leak |
+| Redis debug capture in HTTP sequence workers | `DebugCaptureStore` in `work-api`; `redis-adapter` implementation | B06/B07 | V10/V12: scope/retention/failure; no Redis client in HTTP sequence core |
+| Work topology, naming, observation, diagnostics and removal | `WorkTopologyResolver`, resource ports and `work-rabbit-adapter`; Controller QueueStatsPort/gauge projections | B04 | V07/V08/V12: same effective resources, measured statistics and explicit unavailability, guard/gauge behavior, verified absence |
+| Work settings authoring, patches, UI and tools | `WorkConfigurationParser`, `WorkPatchPolicy`, `RequestTemplateParser` | B02/B04 | V04/V05/V07: shared decisions, canonical patches and projections |
+| Remaining CP, compute, journal/database, network proxy and auth policies | Canonical domain owners and C-slice deletion ledger in design | C01/C02/C03, step 5 | CP/SSOT reproductions, generated-client checks and ingress evidence |
 
 Test all supported input/output combinations used by current workers/scenarios and contract
 boundaries affected by the slice. Record unsupported combinations and their canonical
@@ -234,16 +281,25 @@ Removal of a supported variant requires an explicit contract/scope decision, not
 from tests. Any proposed deferral must state the retained behavior, owner and destination
 slice and prove it is not required by an earlier gate; required Work rows block step 4.
 
-## Mandatory runtime composition checks
+## Composition ownership review and behavioral evidence
 
-Run the relevant checks for each affected slice with Work and Control adapters loaded
-together in the actual application composition. Isolated adapter mocks alone do not prove
-composition isolation. Use focused Spring composition tests for effective wiring and
-official-ingress acceptance for externally observable delivery/lifecycle behavior.
+For each affected slice, enforce imports/dependencies and review the actual application
+composition against its architecture/header contracts. Follow
+[the boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value).
+Each extraction delivers the class/adapter with unit tests of its owned behavior;
+move or adapt existing tests with it. Port contracts are exercised through their
+implementations. Add component tests where real collaboration has meaningful behavior.
+The eight retained B01 cases are a scoped cleanup result, not a limit on future behavior
+coverage. Boundary verification uses documentation/header alignment, the single import
+test and review rules with source evidence; do not grow tests around temporary wiring.
+Do not add tests that mirror bootstrap code, inspect private factory identity or assert
+that a module/bean is used. Wiring changes alone do not require tests or deployment.
+Use relevant behavior tests for concrete failure cases and official-ingress acceptance
+where the slice requires externally observable delivery/lifecycle evidence.
 
-- Give Work and Control deliberately different valid listener/delivery settings. Inspect
-  the effective factories/containers/templates and exercise relevant failure behavior.
-  Change Work settings and prove Control policy is unchanged; repeat in the other direction.
+- Trace Work and Control listener/delivery settings to their owners and consumers.
+  Review both directions for cross-plane mutation; test concrete failure behavior
+  when affected, rather than factory field values or registration identity.
 - Verify explicit ownership/scope of customizers and mutable client resources. In particular,
   `ControlPlaneRabbitPoisonMessageCustomizer` must not install CP error policy on Work
   factories. Sharing a low-level driver is allowed only with proven policy isolation.
@@ -253,9 +309,10 @@ official-ingress acceptance for externally observable delivery/lifecycle behavio
 - Verify missing/ambiguous required adapter wiring fails explicitly, without automatic
   alternative selection. Publish-only consumers must not receive provisioning/deletion
   capabilities, including through auto-configuration or service-locator access.
-- Exercise startup, shutdown and reconfiguration for the affected capabilities. Assert
-  observable policy/effects, not only bean existence or invocation counts. A failing
-  composition case blocks the slice even when dependency and architecture checks pass.
+- Exercise startup, shutdown and reconfiguration when their behavior is affected.
+  Record observable policy/effects and concrete regression evidence. Missing ownership
+  review or a failing required behavioral case blocks the slice; absence of a
+  module/bean-selection test does not.
 
 ## Inherited findings register
 
@@ -291,7 +348,8 @@ for this architecture stream. Archived code examples and acceptance claims are h
 
 ## Review and verification
 
-Apply the six review passes in `docs/REVIEW_RULES.md` before accepting each slice. Include
+Apply the six review passes in `docs/REVIEW_RULES.md` in the separate review task before
+accepting each slice, following "Goal execution and separate review" above. Include
 negative cases from the audits: duplicate Redis sources, incomplete template fields,
 unknown network modes, non-default/colliding prefixes, cross-swarm paths, delete attempts
 with resources still present, and operation chronology across clock changes.
@@ -336,9 +394,9 @@ It does not require a production baseline run for this documentation-only amendm
 
 | Review gap | Plan correction | Implementation status |
 |---|---|---|
-| Work gate depended on CP separation scheduled later | Step 2 identifies transitive prerequisites; step 3 extracts canonical integration contracts and isolates composition before affected Work slices | Pending design/migration |
-| Import checks could pass while Spring changes another plane's policy | Mandatory joint-composition acceptance, effective-policy checks and non-Rabbit Work startup case | Pending tests/migration |
-| One Work flow could stand in for all variants | Coverage matrix, all supported variant/combination dispositions and row-specific evidence required by step 4 | Pending concrete slice assignments |
+| Work gate depended on CP separation scheduled later | B01 includes full V03 prerequisites: CP/Work factory isolation, no CP Work binding and exact adapter selection with trigger policy; B03 consumes migrated state ports and B05 preserves isolation | Design accepted; B01 execution delivered for independent review |
+| Import checks could pass while Spring changes another plane's policy | Source review of customizer/resource scope plus relevant behavior evidence, including non-Rabbit Work startup; no bean-selection tests | Pending review/migration |
+| One Work flow could stand in for all variants | Concrete B-slices/V-checks plus 12-pair acceptance matrix in the design | Designed; implementation evidence pending |
 | No repeatable before/after comparison per slice | Exact revisions/configurations, intended-delta list, preserved results and finding-specific closure protocol | Required before each migration |
 
 Amendment review: plan outcome covers all four findings while keeping step 2 design review
@@ -347,3 +405,69 @@ in this plan instead of another execution document; security requires scoped cap
 and redacted evidence without changing authorization contracts; no libraries are added;
 maintainability gains traceable row/slice/finding evidence. These corrections close planning
 gaps only. They do not close inherited production findings or prove the runtime boundaries.
+
+### B01 correction handoff — 2026-09-08
+
+Separate review found three HIGH issues, recorded in
+`docs/inProgress/boundary-design/b01/review.md`. The requested corrections and test
+evidence are delivered in `docs/inProgress/boundary-design/b01/fixes.md` and
+`fixes-evidence.json`. Next: separate review of these corrections. No B01 acceptance,
+commit or B02 start follows from execution tests alone.
+
+### B01 correction review — 2026-09-08 (historical; automation remedy withdrawn below)
+
+`docs/inProgress/boundary-design/b01/correction-review.md` accepts R1/R2 and retains
+R3 as HIGH: ZipFile(String) and Scanner(Path) passed both guards. Its then-proposed
+JDK-policy expansion was subsequently withdrawn by the user decision below. B01 was not accepted;
+B02 does not start. This review did not implement further fixes.
+
+### User decision — standard tools, no custom heuristic scanners — 2026-09-08
+
+The user explicitly requested complete removal of the custom scanner and confirmed
+that off-the-shelf tooling may remain. The source/POM scanner, regex-based design
+inventory generator, their tests, shared catch-all JSON policy and catch-all ArchUnit
+test were deleted. Former generated snapshots are archived; do not recreate them as
+an active semantic/ownership validation workflow. Maven Enforcer and existing focused
+architecture/behavior tests remain. Root POM dependency bans are maintained directly.
+
+R3's requested scanner/blacklist expansion is superseded by this decision, not fixed
+or evidence that all IO is now mechanically blocked. Its underlying ownership/IO
+requirement is a hard separate-review obligation in `docs/REVIEW_RULES.md`.
+Next: separate review of the removal and boundary acceptance under those rules.
+No B01 acceptance, commit or B02 start is implied. Evidence:
+`docs/inProgress/boundary-design/b01/scanner-removal.md`.
+
+Final human clarification (2026-09-08): use one simple import scanner across all
+Java modules, rather than retaining a ControlPlane-only behavior scanner.
+`RepositoryImportBoundaryTest` replaces `ControlPlaneBoundaryArchitectureTest`;
+the two non-scanning envelope assertions remain in `ControlPlaneEnvelopeContractTest`.
+One inline module/import regex table owns source restrictions. No method-call
+classification, parser, generated inventory or additional scanning framework is
+authorized. Scope, current migration allowances and limitations are owned by
+`docs/REVIEW_RULES.md#sole-source-scanning-test-exception`.
+
+Responsibility/header follow-up (2026-09-08): apply
+`docs/ai/RESPONSIBILITY_WORKFLOW.md` to subsequent ownership/boundary work and its
+separate review. Architecture owns stable responsibility records; headers reference
+them and describe actual code. Review supplies per-responsibility evidence. This
+instruction does not claim that the full repository responsibility map or existing
+headers have already been migrated, and does not accept B01 or start B02.
+
+Applied to current B01 scope (2026-09-08):
+`docs/architecture/runtime-responsibilities.md` now owns 51 current records, referenced
+by all 157 production files in the adoption scope. The change is documentation/headers
+only and preserves current behavior; remaining migration gaps are explicit. Evidence
+and the separate-review handoff are in
+`docs/inProgress/boundary-design/b01/responsibility-adoption.md`. Subsequent work uses
+the development workflow and review evidence requirements already linked above.
+
+
+### B01 acceptance — 2026-09-08
+
+The [separate RV2 correction review](boundary-design/b01/rv2-correction-review.md)
+accepts the three corrected responsibility records and four headers. The 157-file
+production comparison reproduces the earlier review fingerprint after restoring only
+five JavaDoc lines. Current source evidence also confirms the former RV1 composition
+paths under the human boundary-verification policy. B01 is accepted in its staged
+scope; B02 settings/authoring is next and has not started. Earlier verdicts above are
+historical. No commit, deployment or acceptance of later slices is implied.

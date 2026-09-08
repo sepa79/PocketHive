@@ -39,13 +39,28 @@ ownership header:
 /**
  * Responsibility: <one concern owned by this type>.
  * Must not: <adjacent concerns owned elsewhere>.
- * Contract: <closest durable contract document or schema>.
+ * Contract: <responsibility ID> — <architecture path>#<section>; <schema/API contract if applicable>.
  */
 ```
 
-The header is a local ownership contract. It must describe the implementation,
-not excuse it. If new behavior does not fit without broadening the header,
-extract another type and update the durable contract first when necessary.
+The header is a concise local description derived from the
+[architecture responsibility record](ARCHITECTURE.md#responsibility-records).
+`Contract` contains its stable ID and repo-relative path with a section anchor;
+a bare architecture filename or schema link alone does not identify an owner.
+Describe this type's actual role and adjacent forbidden responsibilities without
+copying the full service/library restriction list.
+
+A change to the owner, responsibility scope or forbidden behavior requires updating
+the owning architecture record, affected implementation and headers in the same
+change set. Conversely, an architecture ownership change requires updating affected
+headers and code. Wording-only edits need no artificial architecture diff. A header
+correction to an already documented contract must cite that unchanged record and
+explain the correction; it cannot disguise a behavior or ownership change.
+
+Do not write target responsibilities into headers before code implements them. If new
+behavior does not fit, extract the responsibility and update its architecture record.
+Apply this to new/materially changed types; untouched missing references remain debt,
+not permission to add more. Follow the [responsibility workflow](ai/RESPONSIBILITY_WORKFLOW.md).
 
 ### Java: one type per file
 

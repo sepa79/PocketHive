@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.work.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -14,6 +14,10 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Tracks per-worker state for the runtime. Exposed indirectly via
  * {@link WorkerControlPlaneRuntime.WorkerStateSnapshot}.
+ * <p>
+ * Responsibility: store accepted worker configuration plus separately updated counters and status contributions.
+ * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  */
 public final class WorkerState {
 

@@ -36,6 +36,17 @@
   <dependencies>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>work-test-fixtures</artifactId>
+      <version>${project.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>work-api</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>templating</artifactId>
       <version>${project.version}</version>
     </dependency>
@@ -100,11 +111,6 @@
       <optional>true</optional>
     </dependency>
     <dependency>
-      <groupId>com.networknt</groupId>
-      <artifactId>json-schema-validator</artifactId>
-      <version>1.0.87</version>
-    </dependency>
-    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter-test</artifactId>
       <scope>test</scope>
@@ -125,13 +131,6 @@
     <resources>
       <resource>
         <directory>src/main/resources</directory>
-      </resource>
-      <resource>
-        <directory>../../docs/spec</directory>
-        <includes>
-          <include>workitem-envelope.schema.json</include>
-        </includes>
-        <targetPath>io/pockethive/worker/sdk/schema</targetPath>
       </resource>
     </resources>
     <plugins>

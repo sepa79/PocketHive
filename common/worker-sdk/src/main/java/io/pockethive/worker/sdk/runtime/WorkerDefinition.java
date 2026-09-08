@@ -1,10 +1,10 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.Objects;
@@ -15,6 +15,10 @@ import java.util.stream.Collectors;
  * Captures metadata extracted from {@link PocketHiveWorker} annotations plus control-plane configuration
  * (the worker role is resolved from {@code WorkerControlPlaneProperties}). Refer to
  * {@code docs/sdk/worker-sdk-quickstart.md} for how definitions drive runtime discovery.
+ * <p>
+ * Responsibility: carry the discovered worker function, capability and selected IO metadata.
+ * Must not: construct transport clients, declare topology or choose an adapter by role-name heuristics.
+ * Contract: RESP-WORK-CAPABILITY — docs/architecture/runtime-responsibilities.md#resp-work-capability.
  */
 public record WorkerDefinition(
     String beanName,

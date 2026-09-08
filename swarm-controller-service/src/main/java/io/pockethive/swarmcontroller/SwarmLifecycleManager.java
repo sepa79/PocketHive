@@ -3,7 +3,7 @@ package io.pockethive.swarmcontroller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.DockerClient;
 import io.micrometer.core.instrument.MeterRegistry;
-import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
@@ -39,7 +39,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Adapt Spring-managed infrastructure to the transport-agnostic {@link SwarmRuntimeCore}.
  * Must not: Duplicate lifecycle, readiness, or worker-observation state owned by the runtime core.
- * Contract: Delegate every {@link SwarmLifecycle} capability to one core instance.
+ * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control.
+ * Delegate every {@link SwarmLifecycle} capability to one core instance.
  */
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {

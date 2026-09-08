@@ -1,16 +1,18 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -252,7 +254,7 @@ class HttpSequenceRunnerTest {
     HttpSequenceRunner runner = new HttpSequenceRunner(
         new ObjectMapper().findAndRegisterModules(),
         Clock.systemUTC(),
-        new io.pockethive.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
         new TemplateLoader(),
         executor,
         new DefaultHttpSequenceTargetResolver(),

@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,6 +11,10 @@ import org.slf4j.LoggerFactory;
  * {@link WorkerInvocationInterceptor} that appends payloads to Redis lists. Configuration lives
  * under {@code interceptors.redisUploader} and the interceptor stays dormant unless
  * {@code enabled=true}.
+ * <p>
+ * Responsibility: apply diagnostic capture policy around a worker invocation through Redis push support.
+ * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
+ * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  */
 public final class RedisUploaderInterceptor implements WorkerInvocationInterceptor {
 
@@ -39,7 +43,7 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
     }
 
     RedisUploaderInterceptor(RedisPushSupport.RedisWriterFactory writerFactory) {
-        this(new RedisPushSupport(writerFactory, new PebbleTemplateRenderer()));
+        this(new RedisPushSupport(writerFactory, new PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess())));
     }
 
     public RedisUploaderInterceptor(TemplateRenderer templateRenderer) {

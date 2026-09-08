@@ -1,6 +1,6 @@
 package io.pockethive.controlplane.spring;
 
-import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import org.springframework.amqp.core.ExchangeBuilder;
@@ -21,7 +21,12 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Shared auto-configuration that exposes reusable beans for control-plane components.
+ * <p>
+ * Responsibility: compose shared Control Plane infrastructure.
+ * Must not: configure Work listeners or declare Work resources.
+ * Contract: RESP-CP-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-cp-composition.
  */
+@org.springframework.context.annotation.Import(ControlPlaneRabbitListenerConfiguration.class)
 @Configuration(proxyBeanMethods = false)
 @AutoConfigureAfter(RabbitAutoConfiguration.class)
 @ConditionalOnClass({TopicExchange.class, RabbitTemplate.class})

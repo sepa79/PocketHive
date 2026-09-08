@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
 import java.util.Objects;
@@ -8,6 +8,10 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Registry of {@link WorkOutput} implementations keyed by worker bean name.
+ * <p>
+ * Responsibility: retain selected Work outputs and delegate publication to the registered instance.
+ * Must not: choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
+ * Contract: RESP-WORK-ADAPTER-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-adapter-selection.
  */
 public final class WorkOutputRegistry {
 

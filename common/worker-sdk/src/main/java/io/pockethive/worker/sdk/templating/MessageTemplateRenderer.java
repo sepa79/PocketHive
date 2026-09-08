@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.templating;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -10,6 +10,10 @@ import java.util.Objects;
 
 /**
  * Renders message templates into concrete field values using the shared {@link TemplateRenderer}.
+ * <p>
+ * Responsibility: map MessageTemplate body/path/method/headers through the injected TemplateRenderer.
+ * Must not: open transport connections or implement a second Pebble/SpEL evaluator.
+ * Contract: RESP-WORK-MESSAGE-TEMPLATE — docs/architecture/runtime-responsibilities.md#resp-work-message-template.
  */
 public final class MessageTemplateRenderer {
 

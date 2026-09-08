@@ -1,0 +1,189 @@
+{
+  "project_dependencies": {
+    "auth-contracts": [],
+    "clearing-export-adapters": [
+      "clearing-export-core"
+    ],
+    "clearing-export-core": [
+      "work-api",
+      "templating-api"
+    ],
+    "control-plane-core": [
+      "topology-core",
+      "swarm-model",
+      "observability-core"
+    ],
+    "control-plane-spring": [
+      "control-plane-core",
+      "observability",
+      "sink-clickhouse",
+      "rabbit-config"
+    ],
+    "db-query-adapters": [
+      "db-query-core"
+    ],
+    "db-query-core": [
+      "work-api",
+      "swarm-model"
+    ],
+    "generator-core": [
+      "work-api",
+      "templating-api"
+    ],
+    "http-sequence-adapters": [
+      "http-sequence-core"
+    ],
+    "http-sequence-core": [
+      "work-api",
+      "templating-api",
+      "request-templates",
+      "auth-contracts"
+    ],
+    "manager-sdk": [
+      "control-plane-core",
+      "topology-core"
+    ],
+    "moderator-core": [
+      "work-api"
+    ],
+    "observability": [
+      "observability-core",
+      "sink-clickhouse"
+    ],
+    "observability-core": [
+      "topology-core"
+    ],
+    "orchestrator-work-core": [
+      "work-resource-api",
+      "work-config",
+      "swarm-model"
+    ],
+    "postprocessor-adapters": [
+      "postprocessor-core",
+      "sink-clickhouse"
+    ],
+    "postprocessor-core": [
+      "work-api",
+      "swarm-model"
+    ],
+    "processor-adapters": [
+      "processor-core"
+    ],
+    "processor-core": [
+      "work-api",
+      "templating-api",
+      "auth-contracts",
+      "swarm-model"
+    ],
+    "rabbit-config": [],
+    "redis-adapter": [
+      "work-runtime-spi",
+      "work-config",
+      "templating-api",
+      "auth-contracts"
+    ],
+    "request-builder-core": [
+      "work-api",
+      "templating-api",
+      "request-templates",
+      "auth-contracts"
+    ],
+    "request-template-files": [
+      "request-templates"
+    ],
+    "request-templates": [
+      "auth-contracts",
+      "swarm-model"
+    ],
+    "scenario-validation-contracts": [
+      "work-config"
+    ],
+    "sink-clickhouse": [],
+    "swarm-controller-work-core": [
+      "work-resource-api",
+      "work-config",
+      "swarm-model",
+      "manager-sdk"
+    ],
+    "swarm-model": [],
+    "templating": [
+      "templating-api"
+    ],
+    "templating-api": [],
+    "topology-core": [
+      "swarm-model"
+    ],
+    "trigger-adapters": [
+      "trigger-core"
+    ],
+    "trigger-core": [
+      "work-api"
+    ],
+    "work-api": [
+      "observability-core",
+      "swarm-model",
+      "auth-contracts"
+    ],
+    "work-config": [
+      "swarm-model",
+      "rabbit-config"
+    ],
+    "work-local-adapters": [
+      "work-runtime-spi",
+      "work-config"
+    ],
+    "work-rabbit-adapter": [
+      "work-runtime-spi",
+      "work-resource-api",
+      "work-config"
+    ],
+    "work-resource-api": [
+      "work-config",
+      "swarm-model"
+    ],
+    "work-runtime": [
+      "work-api",
+      "work-config",
+      "work-runtime-spi",
+      "templating-api"
+    ],
+    "work-runtime-spi": [
+      "work-api",
+      "work-config"
+    ],
+    "work-test-fixtures": [
+      "work-api",
+      "control-plane-core"
+    ],
+    "work-topology-core": [
+      "work-resource-api",
+      "work-config",
+      "swarm-model"
+    ],
+    "worker-auth-adapter": [
+      "auth-contracts"
+    ],
+    "worker-auth-core": [
+      "auth-contracts",
+      "templating-api"
+    ],
+    "worker-control-adapter": [
+      "work-runtime-spi",
+      "control-plane-core",
+      "observability-core"
+    ],
+    "worker-sdk": [
+      "work-runtime",
+      "work-rabbit-adapter",
+      "work-local-adapters",
+      "redis-adapter",
+      "worker-control-adapter",
+      "control-plane-spring",
+      "observability",
+      "templating",
+      "worker-auth-core",
+      "worker-auth-adapter"
+    ]
+  },
+  "source": "docs/architecture/work-plane-boundaries.md section 2 (generated projection)"
+}

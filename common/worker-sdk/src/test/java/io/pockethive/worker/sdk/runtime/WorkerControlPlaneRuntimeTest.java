@@ -11,15 +11,15 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.observability.StatusEnvelopeBuilder;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
 import java.util.Optional;
@@ -42,7 +42,7 @@ import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class WorkerControlPlaneRuntimeTest {
-	
+
 	    private static final ObjectMapper MAPPER = new ObjectMapper()
 	        .findAndRegisterModules()
 	        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
@@ -52,7 +52,7 @@ class WorkerControlPlaneRuntimeTest {
 	    private static final Map<String, Object> RUNTIME_META = Map.of("templateId", "tpl-1", "runId", "run-1");
 	    private static final WorkerControlPlaneProperties PROPERTIES =
 	        ControlPlaneTestFixtures.workerProperties(SWARM_ID, "generator", "inst-1");
-	
+
 	    private WorkerStateStore stateStore;
 	    private WorkerDefinition definition;
     private WorkerControlPlane controlPlane;

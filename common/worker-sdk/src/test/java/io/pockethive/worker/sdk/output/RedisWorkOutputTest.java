@@ -1,10 +1,13 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.work.api.WorkItemBuilder;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
@@ -38,7 +41,7 @@ class RedisWorkOutputTest {
     @Test
     void publishesUsingDefaultListFromProperties() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -60,7 +63,7 @@ class RedisWorkOutputTest {
     @Test
     void updatesRoutingFromRawConfig() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -97,7 +100,7 @@ class RedisWorkOutputTest {
     @Test
     void failsWhenTargetListCannotBeResolved() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
@@ -171,14 +174,14 @@ class RedisWorkOutputTest {
 
     private static WorkItem message(String payload, Map<String, Object> headers) {
         WorkerInfo info = new WorkerInfo("processor", "swarm-1", "inst-1", "in", "out");
-        WorkItem.Builder builder = WorkItem.text(info, payload);
+        WorkItemBuilder builder = WorkItem.text(info, payload);
         headers.forEach(builder::header);
         return builder.build();
     }
 
     private static void assertMalformedRawUpdateKeepsDefaultList(Map<String, Object> invalidPatch) {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
-        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer());
+        RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
         RedisOutputProperties properties = new RedisOutputProperties();
         properties.setHost("redis");
         properties.setPort(6379);

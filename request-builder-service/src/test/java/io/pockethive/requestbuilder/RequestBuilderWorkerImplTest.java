@@ -1,5 +1,7 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -9,16 +11,14 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
-import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -38,7 +38,7 @@ class RequestBuilderWorkerImplTest {
   @BeforeEach
   void setUp() {
     properties = new RequestBuilderWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
-    templateRenderer = new PebbleTemplateRenderer();
+    templateRenderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
   }
 
   @Test

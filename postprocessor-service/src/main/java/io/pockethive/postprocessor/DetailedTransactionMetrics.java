@@ -4,7 +4,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.MultiGauge;
 import io.micrometer.core.instrument.Tags;
 import io.pockethive.observability.Hop;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkerContext;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -12,6 +12,11 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Responsibility: retain and expose a bounded metrics projection of observed transaction timings/results.
+ * Must not: treat metrics as domain state or infer a successful upstream transaction from sink publication.
+ * Contract: RESP-POSTPROCESSOR-WORK — docs/architecture/runtime-responsibilities.md#resp-postprocessor-work.
+ */
 final class DetailedTransactionMetrics {
 
   private static final int DEFAULT_HISTORY_SIZE = 50;

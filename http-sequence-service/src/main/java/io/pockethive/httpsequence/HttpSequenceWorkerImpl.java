@@ -2,13 +2,13 @@ package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Clock;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
@@ -21,6 +21,11 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = HttpSequenceWorkerConfig.class
 )
+/**
+ * Responsibility: delegate a Work invocation to the configured HTTP sequence.
+ * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
+ */
 class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final int GLOBAL_MAX_CONNECTIONS = 200;

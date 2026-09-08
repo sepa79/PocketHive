@@ -1,5 +1,10 @@
 package io.pockethive.processor;
 
+import io.pockethive.work.api.HttpRequest;
+import io.pockethive.work.api.Iso8583Request;
+
+import io.pockethive.work.api.MutableStatus;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -12,19 +17,19 @@ import io.pockethive.processor.transport.TcpRequest;
 import io.pockethive.processor.transport.TcpResponse;
 import io.pockethive.processor.transport.TcpTransport;
 import io.pockethive.swarm.model.ResultRules;
-import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
-import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.Iso8583RequestEnvelope;
+import io.pockethive.work.api.TcpRequestEnvelope;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
@@ -192,7 +197,7 @@ class ProcessorTest {
 
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, HttpRequestEnvelope.of(
-            new HttpRequestEnvelope.HttpRequest(
+            new HttpRequest(
                 "post",
                 "/api",
                 Map.of("X-Customer-Segment", "retail"),
@@ -438,7 +443,7 @@ class ProcessorTest {
                 "endpoints", Map.of("certs", Map.of("baseUrl", "/certs"))))));
         TestWorkerContext context = new TestWorkerContext(config);
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(new TcpRequestEnvelope.TcpRequest(
+        WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(new io.pockethive.work.api.TcpRequest(
             "request_response",
             "ping",
             Map.of("X-Test", "true"),
@@ -533,7 +538,7 @@ class ProcessorTest {
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://iso.example:5000");
         TestWorkerContext context = new TestWorkerContext(config);
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        WorkItem inbound = WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+        WorkItem inbound = WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583Request(
             "MC_2BYTE_LEN_BIN_BITMAP",
             "RAW_HEX",
             "0200A1B2C3D4",
@@ -579,7 +584,7 @@ class ProcessorTest {
             );
 
             WorkItem inbound = WorkItem.json(context.info(), Iso8583RequestEnvelope.of(
-                new Iso8583RequestEnvelope.Iso8583Request(
+                new Iso8583Request(
                     "MC_2BYTE_LEN_BIN_BITMAP",
                     "RAW_HEX",
                     "0200A1B2C3D4",
@@ -631,7 +636,7 @@ class ProcessorTest {
 
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest(
+            new io.pockethive.work.api.TcpRequest(
                 "request_response",
                 "ping",
                 Map.of("X-Segment", "retail"),
@@ -676,7 +681,7 @@ class ProcessorTest {
 
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of(), null, 1024),
+            new io.pockethive.work.api.TcpRequest("request_response", "ping", Map.of(), null, 1024),
             rules
         )).build();
 
@@ -713,7 +718,7 @@ class ProcessorTest {
 
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of("X-Segment", "retail"), null, 1024),
+            new io.pockethive.work.api.TcpRequest("request_response", "ping", Map.of("X-Segment", "retail"), null, 1024),
             rules
         )).build();
 
@@ -752,7 +757,7 @@ class ProcessorTest {
 
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
         WorkItem inbound = WorkItem.json(info, TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest("request_response", "ping", Map.of(), null, 1024),
+            new io.pockethive.work.api.TcpRequest("request_response", "ping", Map.of(), null, 1024),
             rules
         )).build();
 
@@ -968,7 +973,7 @@ class ProcessorTest {
 
     private static WorkItem inboundItem(Map<String, Object> payload) {
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        return WorkItem.json(info, HttpRequestEnvelope.of(new HttpRequestEnvelope.HttpRequest(
+        return WorkItem.json(info, HttpRequestEnvelope.of(new HttpRequest(
             payload.containsKey("method") ? String.valueOf(payload.get("method")) : "GET",
             payload.containsKey("path") ? String.valueOf(payload.get("path")) : "/",
             headersMap(payload.get("headers")),
@@ -976,10 +981,9 @@ class ProcessorTest {
         ))).build();
     }
 
-
     private static WorkItem inboundTcpItem(String behavior, String body) {
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        return WorkItem.json(info, TcpRequestEnvelope.of(new TcpRequestEnvelope.TcpRequest(
+        return WorkItem.json(info, TcpRequestEnvelope.of(new io.pockethive.work.api.TcpRequest(
             behavior,
             body,
             Map.of(),
@@ -997,7 +1001,7 @@ class ProcessorTest {
                                            String payload,
                                            Map<String, String> headers) {
         WorkerInfo info = new WorkerInfo("ingress", "swarm", "ingress-instance", null, null);
-        return WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+        return WorkItem.json(info, Iso8583RequestEnvelope.of(new Iso8583Request(
             wireProfileId,
             payloadAdapter,
             payload,

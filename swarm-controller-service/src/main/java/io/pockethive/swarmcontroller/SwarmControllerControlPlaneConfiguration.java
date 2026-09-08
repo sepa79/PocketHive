@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
-import io.pockethive.controlplane.messaging.AmqpControlPlanePublisher;
+import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.observability.ControlPlaneJson;
@@ -21,7 +21,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Responsibility: Compose the Swarm Controller control-plane collaborators from their canonical owners.
  * Must not: Consume messages, execute commands, own runtime state, or provide fallback configuration.
- * Contract: Expose one journaled publisher and one instance of every listener workflow owner.
+ * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control.
+ * Expose one journaled publisher and one instance of every listener workflow owner.
  */
 @Configuration(proxyBeanMethods = false)
 class SwarmControllerControlPlaneConfiguration {

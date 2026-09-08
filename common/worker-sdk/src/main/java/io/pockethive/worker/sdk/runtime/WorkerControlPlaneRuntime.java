@@ -13,15 +13,15 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.swarm.model.BeeConfigKeys;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.WorkerInputType;
 import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.config.ConfigKeyCanonicalizer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -44,6 +44,10 @@ import org.slf4j.LoggerFactory;
  * Integrates the worker runtime with the control-plane helper so configuration updates, status
  * requests, and confirmation events are handled consistently across worker services. Usage guidance
  * lives in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: apply worker control updates and assemble current configuration/status projections.
+ * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  */
 public final class WorkerControlPlaneRuntime {
 

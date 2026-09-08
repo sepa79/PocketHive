@@ -2,14 +2,18 @@ package io.pockethive.worker.sdk.runtime;
 
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import java.util.Objects;
 import org.springframework.core.Ordered;
 
 /**
  * Records per-worker invocation timings using Micrometer.
  * Enabled as part of the Stage 3 observability work described in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: project invocation timing and results into Micrometer measurements.
+ * Must not: change accepted worker configuration or decide domain outcomes from metric samples.
+ * Contract: RESP-WORK-METRICS — docs/architecture/runtime-responsibilities.md#resp-work-metrics.
  */
 public final class WorkerMetricsInterceptor implements WorkerInvocationInterceptor, Ordered {
 

@@ -1,10 +1,16 @@
 package io.pockethive.worker.sdk.templating;
 
+import io.pockethive.work.api.WorkItem;
+
 import java.util.Map;
 import java.util.Objects;
 
 /**
- * Immutable template definition for rendering messages from a {@link io.pockethive.worker.sdk.api.WorkItem}.
+ * Immutable template definition for rendering messages from a {@link WorkItem}.
+ * <p>
+ * Responsibility: describe body, path, method and header templates for one rendered message.
+ * Must not: open transport connections or implement a second Pebble/SpEL evaluator.
+ * Contract: RESP-WORK-MESSAGE-TEMPLATE — docs/architecture/runtime-responsibilities.md#resp-work-message-template.
  */
 public record MessageTemplate(
     MessageBodyType bodyType,

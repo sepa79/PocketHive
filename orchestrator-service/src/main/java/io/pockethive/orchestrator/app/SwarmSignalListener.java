@@ -26,7 +26,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Decode Orchestrator control-plane ingress and dispatch each supported envelope by kind.
  * Must not: Own domain state transitions, lifecycle convergence, persistence policy, or terminal outcome construction.
- * Contract: Decode once with parsed routing context; journal and drop invalid ingress without a fallback path.
+ * Contract: RESP-ORCHESTRATOR-INGRESS — docs/architecture/runtime-responsibilities.md#resp-orchestrator-ingress.
+ * Decode once with parsed routing context; journal and drop invalid ingress without a fallback path.
  */
 @Component
 public class SwarmSignalListener {
@@ -55,7 +56,7 @@ public class SwarmSignalListener {
     this.journalErrors = new ControlPlaneJournalErrors(hiveJournal, ROLE, "swarm-signal-listener");
   }
 
-  @RabbitListener(queues = "#{managerControlQueueName}")
+  @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{managerControlQueueName}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     try {
       RoutingKey key = requireEventKey(routingKey);

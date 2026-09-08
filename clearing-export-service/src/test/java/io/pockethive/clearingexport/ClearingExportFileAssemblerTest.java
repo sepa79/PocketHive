@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
 import java.time.Clock;
 import java.time.Instant;
@@ -20,7 +22,7 @@ class ClearingExportFileAssemblerTest {
   void assemblesHeaderRecordsAndFooterUsingTemplates() {
     Clock fixed = Clock.fixed(Instant.parse("2026-02-18T10:15:30Z"), ZoneOffset.UTC);
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter(), fixed);
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), new XmlOutputFormatter(), fixed);
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
@@ -70,7 +72,7 @@ class ClearingExportFileAssemblerTest {
       }
     };
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), formatter, fixed);
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), formatter, fixed);
 
     assertThatThrownBy(() -> assembler.assembleStructured(
         structuredConfig(),

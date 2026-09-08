@@ -6,6 +6,11 @@
 > **Scope:** Universal runtime (Docker Compose or Kubernetes).  
 > **Compatibility:** The lifecycle/operation model is a deliberate breaking cut-over. No legacy state or outcome compatibility layer is permitted; this file is the single source of truth.
 
+The [Work Plane boundary design](architecture/work-plane-boundaries.md) specifies the
+target module/port ownership and migration acceptance. Its artifacts and explicit behavior
+deltas are planned, not deployed behavior; the runtime contracts below remain effective
+until each corresponding contract-first migration is implemented and verified.
+
 ---
 
 ## 1. Overview
@@ -26,6 +31,35 @@ PocketHive orchestrates message-driven swarms of components (generators, process
 - **No false cleanup success:** remove succeeds only after every targeted worker runtime and RabbitMQ resource is confirmed removed. Partial cleanup is a failed operation with an explicit remaining-resource list.
 
 ---
+
+### Responsibility records
+
+The owning section here or in a linked `docs/architecture/` design is the authority
+for each service/library responsibility. Assign a stable `RESP-<AREA>-<CONCERN>` ID
+and a linkable section. Keep the ID when its implementation moves; do not reuse it
+for a different responsibility. Service/library summaries link to these records.
+
+For each responsibility being introduced or materially changed, record:
+
+- owned behavior/fact and precise scope, with the current module and implementation symbol;
+- allowed consumers/ports and forbidden actions; name read-only projections explicitly;
+- canonical contracts and observable success conditions, linking existing owners
+  instead of copying schemas or algorithms;
+- implemented/current versus target ownership and any remaining migration slice.
+
+One responsibility has one current authority. Migration notes may record violations
+but cannot authorize competing active owners. Populate the affected records before
+changing implementation; this convention does not claim that all existing services
+have already been inventoried or verified.
+
+Headers reference these records under the
+[engineering rules](ENGINEERING_RULES.md#responsibility-header). Use the
+[responsibility workflow](ai/RESPONSIBILITY_WORKFLOW.md) for changes and review evidence.
+
+The [current B01 responsibility records](architecture/runtime-responsibilities.md)
+cover the shared contracts, SDK integration and service consumers touched by the
+current boundary migration. Their current owners and remaining gaps must not be
+confused with the target module layout; adoption is awaiting separate review.
 
 ## 2. Roles (Managers vs. Workers)
 
@@ -54,6 +88,13 @@ PocketHive splits the control plane into **managers** (orchestrator + swarm cont
 - Treats AMQP `event.metric.status-{delta|full}` as the **sole heartbeat source**; if a component goes silent it issues `signal.status-request.{swarmId}.ALL.ALL` and marks the component stale if no response arrives.
 - May propagate workload enablement via `signal.config-update.{swarmId}.ALL.ALL` while keeping the control plane responsive.
 - Control plane stays enabled even when workloads are paused; start/stop/remove/status/config are always honored.
+
+B01 establishes the first implemented module boundaries: `work-api`, `observability-core`,
+`auth-contracts` and `templating-api` own shared contracts; `control-plane-core` has no
+Spring AMQP implementation. CP listeners use a dedicated factory and CP worker topology
+no longer reads Work settings. See the [SDK composition rules](sdk/worker-sdk-quickstart.md)
+and the execution record at `docs/inProgress/boundary-design/b01/README.md`. The full Work/Control
+migration remains governed by the [boundary design](architecture/work-plane-boundaries.md).
 
 ### 2.2 Workers (Bees)
 - Declare their own control queues on startup using the `ph.control.<swarmId>.<role>.<instance>` naming pattern (instance ids embed the swarm prefix) and bind to `signal.config-update.{swarmId}.{role}.ALL`, `signal.config-update.{swarmId}.{role}.{instance}`, `signal.config-update.{swarmId}.ALL.ALL`, plus the corresponding status-request bindings (`signal.status-request.{swarmId}.{role}.ALL`, `signal.status-request.{swarmId}.{role}.{instance}`, `signal.status-request.{swarmId}.ALL.ALL`).

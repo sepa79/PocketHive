@@ -1,6 +1,7 @@
 # AI Contribution Guidelines
 
 - Work within the requested scope and respect service boundaries.
+- For responsibility, ownership or boundary changes, follow the [responsibility and SSOT workflow](RESPONSIBILITY_WORKFLOW.md); align architecture, headers and implementation and hand off concrete evidence for separate review.
 - Treat `docs/ENGINEERING_RULES.md` as mandatory: one Java production type per file by default, one TypeScript/React module concern per file, one responsibility per file, responsibility headers on materially changed runtime/boundary types, and no kitchen sinks or public contract bags.
 - Favour domain logic over framework code; keep domains free of technical noise.
 - All changes require tests and documentation when applicable.

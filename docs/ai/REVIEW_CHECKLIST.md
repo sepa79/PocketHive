@@ -6,10 +6,14 @@
 - [ ] One Java production type per file, except the narrow private nested-type exception; one TypeScript/React module concern per file; no public nested contract bags
 - [ ] One clear responsibility per file; no kitchen-sink class was introduced or expanded
 - [ ] New/materially changed runtime and boundary types have accurate responsibility headers
+- [ ] Architecture responsibility IDs/sections, headers and actual code agree; review includes the per-responsibility evidence required by [the workflow](RESPONSIBILITY_WORKFLOW.md#separate-review-task)
 - [ ] Listeners/controllers remain thin boundaries and delegate domain behavior
 - [ ] Repository-wide SSOT search found no competing parser, resolver, mapper, state writer, topology owner, or outcome calculator
+- [ ] Applied the mandatory boundary review in docs/REVIEW_RULES.md: actual owners, effectful constructors/overloads, selected composition, update ordering, and explicit evidence/limits
+- [ ] No custom source preparser, heuristic architecture validator, or generic method-name blacklist introduced or recreated; only the existing named test in [the sole source-scanning exception](../REVIEW_RULES.md#sole-source-scanning-test-exception) is permitted, within its documented scope
 - [ ] Conventional Commit message
 - [ ] Tests cover new behaviour
+- [ ] Each added/retained test in the changed scope checks a concrete contract, behavior or reproduced defect; no module/bean-selection tests required for ownership (see [boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value))
 - [ ] Static analysis and other automated checks pass
 - [ ] Documentation updated
 - [ ] No secrets or sensitive data

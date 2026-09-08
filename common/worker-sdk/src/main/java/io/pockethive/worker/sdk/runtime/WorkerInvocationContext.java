@@ -1,13 +1,17 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
 
 /**
  * Mutable invocation state shared across worker interceptors.
+ * <p>
+ * Responsibility: carry one invocation's item, worker metadata and context through interceptors.
+ * Must not: reimplement service business logic or introduce a second output publication for the same result.
+ * Contract: RESP-WORK-INVOCATION — docs/architecture/runtime-responsibilities.md#resp-work-invocation.
  */
 public final class WorkerInvocationContext {
 

@@ -18,27 +18,27 @@ import org.springframework.amqp.core.TopicExchange;
 
 /**
  * Factory that converts control-plane topology descriptors into AMQP declarables.
+ * <p>
+ * Responsibility: translate Control Plane descriptors into AMQP declarations.
+ * Must not: declare worker traffic queues or Work exchanges.
+ * Contract: RESP-CP-DECLARATIONS — docs/architecture/runtime-responsibilities.md#resp-cp-declarations.
  */
 public final class ControlPlaneTopologyDeclarableFactory {
 
     public Declarables create(ControlPlaneTopologyDescriptor descriptor,
                               ControlPlaneIdentity identity,
-                              TopicExchange controlExchange,
-                              TopicExchange trafficExchange) {
+                              TopicExchange controlExchange) {
         Objects.requireNonNull(descriptor, "descriptor");
         Objects.requireNonNull(identity, "identity");
         Objects.requireNonNull(controlExchange, "controlExchange");
-        Objects.requireNonNull(trafficExchange, "trafficExchange");
         String instanceId = requireText(identity.instanceId(), "identity.instanceId");
         List<Declarable> declarables = new ArrayList<>();
         descriptor.controlQueue(instanceId).ifPresent(queueDescriptor ->
             declarables.addAll(createControlQueue(queueDescriptor, controlExchange)));
         Collection<QueueDescriptor> additionalQueues = descriptor.additionalQueues(instanceId);
         if (!additionalQueues.isEmpty() && shouldDeclareAdditionalQueues(descriptor)) {
-            TopicExchange additionalExchange = resolveAdditionalQueueExchange(descriptor, controlExchange,
-                trafficExchange);
             for (QueueDescriptor queueDescriptor : additionalQueues) {
-                declarables.addAll(createQueue(queueDescriptor, additionalExchange));
+                declarables.addAll(createQueue(queueDescriptor, controlExchange));
             }
         }
         return new Declarables(declarables);
@@ -72,15 +72,6 @@ public final class ControlPlaneTopologyDeclarableFactory {
             }
         }
         return declarables;
-    }
-
-    private TopicExchange resolveAdditionalQueueExchange(ControlPlaneTopologyDescriptor descriptor,
-                                                         TopicExchange controlExchange,
-                                                         TopicExchange trafficExchange) {
-        if (ControlPlaneTopologyDescriptorFactory.isWorkerRole(descriptor.role())) {
-            return trafficExchange;
-        }
-        return controlExchange;
     }
 
     private static boolean isText(String value) {

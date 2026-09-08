@@ -52,3 +52,6 @@ tools/mcp-orchestrator-debug/session-log.jsonl
 # --- PocketHive runtime ---
 scenarios-runtime/
 **/scenarios-runtime/
+
+# Python architecture tools
+__pycache__/

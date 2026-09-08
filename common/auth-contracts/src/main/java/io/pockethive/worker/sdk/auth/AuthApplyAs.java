@@ -2,6 +2,11 @@ package io.pockethive.worker.sdk.auth;
 
 import java.util.Locale;
 
+/**
+ * Responsibility: define the AuthApplyAs contract.
+ * Must not: configure transport clients or own adapter lifecycle.
+ * Contract: RESP-AUTH-VALUES — docs/architecture/runtime-responsibilities.md#resp-auth-values.
+ */
 public enum AuthApplyAs {
     HTTP_AUTHORIZATION_BEARER,
     HTTP_HEADER,

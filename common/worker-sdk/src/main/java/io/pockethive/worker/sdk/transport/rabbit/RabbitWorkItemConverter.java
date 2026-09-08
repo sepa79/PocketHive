@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.transport.rabbit;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkItemJsonCodec;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkItemJsonCodec;
 import java.nio.charset.StandardCharsets;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageDeliveryMode;
@@ -9,6 +9,10 @@ import org.springframework.amqp.core.MessageProperties;
 
 /**
  * Utility for converting between {@link WorkItem} instances and Spring AMQP {@link Message} objects.
+ * <p>
+ * Responsibility: map Spring AMQP messages through the canonical WorkItemJsonCodec.
+ * Must not: create another Work envelope codec, declare CP resources or mutate a captured output destination.
+ * Contract: RESP-WORK-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-transport.
  */
 public final class RabbitWorkItemConverter {
 

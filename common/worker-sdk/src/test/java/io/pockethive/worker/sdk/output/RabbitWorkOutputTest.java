@@ -6,8 +6,8 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
@@ -26,6 +26,11 @@ class RabbitWorkOutputTest {
         properties.setExchange("ex");
         properties.setRoutingKey("rk");
         RabbitWorkOutput output = new RabbitWorkOutput(template, properties);
+
+        // Later mutations of the source settings/template cannot redirect this output instance.
+        properties.setExchange("changed");
+        properties.setRoutingKey("changed");
+        template.setExchange("control-default");
 
         WorkerInfo info = new WorkerInfo("processor", "swarm", "instance", null, null);
         WorkItem outbound = WorkItem.json(info, Map.of("status", 200))

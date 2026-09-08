@@ -1,12 +1,14 @@
 package io.pockethive.worker.sdk.input.csv;
 
+import io.pockethive.work.api.WorkItemBuilder;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -30,6 +32,11 @@ import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * Responsibility: read CSV dataset records and coordinate their current intake lifecycle.
+ * Must not: declare broker resources or own accepted worker configuration.
+ * Contract: RESP-WORK-CSV-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-csv-input.
+ */
 public final class CsvDataSetWorkInput implements WorkInput {
 
     private static final Logger defaultLog = LoggerFactory.getLogger(CsvDataSetWorkInput.class);
@@ -158,7 +165,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
             workerDefinition.io().inboundQueue(),
             workerDefinition.io().outboundQueue()
         );
-        WorkItem.Builder builder = WorkItem.text(info, json)
+        WorkItemBuilder builder = WorkItem.text(info, json)
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
             .header("x-ph-csv-file", properties.getFilePath())

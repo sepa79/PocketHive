@@ -1,5 +1,10 @@
 package io.pockethive.processor.handler;
 
+import io.pockethive.work.api.HttpMetrics;
+import io.pockethive.work.api.HttpOutcome;
+import io.pockethive.work.api.HttpRequest;
+import io.pockethive.work.api.HttpRequestInfo;
+
 import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
@@ -11,10 +16,10 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectReader;
-import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
-import io.pockethive.worker.sdk.api.HttpResultEnvelope;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.HttpResultEnvelope;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
@@ -32,6 +37,11 @@ import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.EntityUtils;
 import org.slf4j.Logger;
 
+/**
+ * Responsibility: execute HTTP requests and construct HTTP result observations.
+ * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ */
 public class HttpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
@@ -76,7 +86,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "http"));
     }
-    HttpRequestEnvelope.HttpRequest requestInfo = requestEnvelope.request();
+    HttpRequest requestInfo = requestEnvelope.request();
     String method = requestInfo.method();
     String path = requestInfo.path();
     String baseUrl = config.baseUrl();
@@ -136,15 +146,15 @@ public class HttpProtocolHandler implements ProtocolHandler {
 
       CallOutcome outcome = client.execute(apacheRequest, handler);
       HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
-          mapper.convertValue(requestMeta, HttpResultEnvelope.HttpRequestInfo.class),
-          new HttpResultEnvelope.HttpOutcome(
+          mapper.convertValue(requestMeta, HttpRequestInfo.class),
+          new HttpOutcome(
               HttpResultEnvelope.OUTCOME_HTTP_RESPONSE,
               outcome.statusCode(),
               outcome.headers(),
               outcome.body(),
               null
           ),
-          new HttpResultEnvelope.HttpMetrics(outcome.metrics().durationMs(), outcome.metrics().connectionLatencyMs())
+          new HttpMetrics(outcome.metrics().durationMs(), outcome.metrics().connectionLatencyMs())
       );
       ObjectNode result = mapper.valueToTree(resultEnvelope);
 

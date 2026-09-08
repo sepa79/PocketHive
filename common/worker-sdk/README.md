@@ -8,7 +8,10 @@ To understand the evolution of the SDK, consult the simplification roadmap and t
 
 * `io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration` exposes the canonical control-plane beans for worker and manager roles.
 * `io.pockethive.worker.sdk.runtime` provides the Stage 1–3 runtime (`WorkerRuntime`, `WorkerControlPlaneRuntime`, interceptors, and state store) that discovers worker beans and drives invocation.
-* `io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures` provides pre-configured descriptors, identities, and property builders that make unit tests easier to wire.
+* `work-api` owns worker contracts in `io.pockethive.work.api`; it does not depend on the SDK or Spring.
+* `observability-core` owns context/status/identity utilities; `observability` retains exporters and Spring startup.
+* `auth-contracts` owns token values and `TokenStore`; `templating-api` owns rendering, syntax validation and sequence ports.
+* `io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures` lives in the separate `work-test-fixtures` artifact, consumed with Maven `test` scope only.
 
 Add the dependency to a worker service to automatically register the control-plane beans and runtime:
 
@@ -18,6 +21,51 @@ Add the dependency to a worker service to automatically register the control-pla
   <artifactId>worker-sdk</artifactId>
 </dependency>
 ```
+
+## Composition boundaries
+
+Workers import `io.pockethive.work.api` for `WorkItem`, `WorkerContext`,
+`PocketHiveWorkerFunction`, `PocketHiveWorker` and `WorkerCapability`. Public nested
+Work DTOs/builders now have top-level names such as `HttpRequest`, `HttpOutcome`,
+`WorkItemBuilder` and `MutableStatus`. `AuthProfileStorage` and `AuthProfileRefresh`
+live beside `AuthProfile` in `auth-contracts`. There are no old-package aliases.
+
+IO selection/settings come exclusively from `pockethive.inputs.*` and
+`pockethive.outputs.*`; worker annotations cannot override input/output config types.
+Only selected factories are activated, and each worker requires exactly one matching
+input and output factory. Missing or duplicate matches fail application startup.
+
+CP listeners use `controlPlaneRabbitListenerContainerFactory`; the Work listener
+factory retains its own error policy and owned virtual-thread executor. CP declarations
+read no Work queue/exchange settings. Scheduler, CSV and Redis dataset inputs with
+`NONE` output therefore start with CP enabled and no dummy Rabbit Work exchange.
+Rabbit output captures its destination when created, so subsequent properties/template
+mutations cannot redirect an existing instance.
+
+The scheduler receives `ScheduledInvocationPolicy` explicitly. Trigger boot supplies
+`TriggerSchedulePolicy`; generic scheduling uses `RateSchedulePolicy`. A policy receives
+monotonic milliseconds and a read-only `SchedulingState` projection, without CP/client
+access. The current CP state owner and settings parsers remain until B02/B03.
+
+Rendering consumers depend on `io.pockethive.templating.api.TemplateRenderer`.
+`PebbleTemplateRenderer` requires explicit `SequenceAccess`; syntax-only compositions
+use `DisabledSequenceAccess.INSTANCE`, which rejects effects. The SDK supplies the
+existing configured Redis sequence owner through its port. Moving that implementation
+and removing its global configuration is B06 work.
+
+```xml
+<dependency>
+  <groupId>io.pockethive</groupId>
+  <artifactId>work-test-fixtures</artifactId>
+  <version>${project.version}</version>
+  <scope>test</scope>
+</dependency>
+```
+
+Artifact dependency bans are maintained in the root Maven Enforcer configuration.
+Concrete behavior/composition tests support the mandatory separate boundary review in
+`docs/REVIEW_RULES.md`. No heuristic source scanner or generic IO blacklist establishes
+ownership or isolation.
 
 ## Runtime APIs
 

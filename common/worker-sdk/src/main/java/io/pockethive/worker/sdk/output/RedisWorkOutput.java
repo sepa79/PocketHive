@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -17,6 +17,10 @@ import org.slf4j.LoggerFactory;
  * Native Redis output transport. Configuration can come from both startup properties
  * ({@code pockethive.outputs.redis.*}) and control-plane config updates under
  * {@code outputs.redis}.
+ * <p>
+ * Responsibility: apply configured business-output policy through shared Redis push support.
+ * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
+ * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  */
 public final class RedisWorkOutput implements WorkOutput {
 

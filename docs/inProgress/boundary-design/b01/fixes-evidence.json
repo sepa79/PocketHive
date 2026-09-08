@@ -1,0 +1,188 @@
+{
+  "date": "2026-09-08",
+  "status": "execution-delivered-for-separate-review",
+  "base_revision": "e0d378711b6447f8bb3e0f8bbf787f9b06c2b5bb",
+  "original_execution_manifest_sha256": "64033849197f02ba2818ae32b57f3b4aa101668c2818a760b7b345da090f5911",
+  "original_review_sha256": "aa9a7719f2f928af031bbd27aefe57f85c3b358929b611e9423683fb8a31ae58",
+  "scope": [
+    "B01-R1",
+    "B01-R2",
+    "B01-R3"
+  ],
+  "tests": {
+    "focused_java": {
+      "tests": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "full_runtime": {
+      "tests": 1202,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 1
+    },
+    "source_negative_tests": 13,
+    "design_tests": 4,
+    "design_negative_fixtures": 13
+  },
+  "before": {
+    "source_gate_missed_rejections": 6,
+    "compiled_test_failures": 1,
+    "downstream_before_tests": "Skipped after work-api failure; original R1/R2 reproductions remain in review.md."
+  },
+  "commands": [
+    "./mvnw -B -ntp -pl trigger-service -am -Dtest=WorkControlCompositionTest,WorkControlFactoryPolicyTest,TriggerSchedulePolicyTest,TriggerSchedulerIntegrationTest,RateSchedulePolicyTest,SequencePortRenderingTest,CompiledWorkBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false test",
+    "python3 tools/check-work-boundaries.py",
+    "python3 -m unittest discover -s tools/tests -p test_work_boundaries.py",
+    "python3 docs/inProgress/boundary-design/inventory.py",
+    "python3 -m unittest discover -s docs/inProgress/boundary-design -p test_inventory.py",
+    "./mvnw -B -ntp -pl generator-service,moderator-service,processor-service,postprocessor-service,request-builder-service,http-sequence-service,clearing-export-service,db-query-service,trigger-service,scenario-manager-service,swarm-controller-service,orchestrator-service -am clean test",
+    "./mvnw -B -ntp -DskipTests package",
+    "npm --prefix docs-site run build",
+    "git diff --check"
+  ],
+  "logs": {
+    "before_compiled_gate": {
+      "path": "/tmp/b01-fixes-before.log",
+      "sha256": "b54aaa78404cd20b3ce1ceeaf4c5175aeaa521a7fb9a4f2b4c7c693f53b2c13f"
+    },
+    "before_source_gate": {
+      "path": "/tmp/b01-fixes-python-before.log",
+      "sha256": "ccc3c01f5179841beadd02a8b1a052000047a43927d3f57de73204f9216e6d59"
+    },
+    "focused_tests": {
+      "path": "/tmp/b01-fixes-focused.log",
+      "sha256": "1d598281ed228b3dbf7b10669d7b73a1246f65745b0ea3af57663eb2cff02fff"
+    },
+    "negative_tests": {
+      "path": "/tmp/b01-fixes-python-after.log",
+      "sha256": "a78417fb8b612766218d6ba11027fabb339ae3d43b534a365ddfb234f02b63cb"
+    },
+    "full_tests": {
+      "path": "/tmp/b01-fixes-full-tests.log",
+      "sha256": "6cfcc87e803ba1b92e071647f25f47cfdc8633a191285e959e4642848d4b1380"
+    },
+    "package": {
+      "path": "/tmp/b01-fixes-package.log",
+      "sha256": "73d11735f82420d62264ba0a792c110ae97c625a6e922d19341ca46c06b2b5d5"
+    },
+    "docs": {
+      "path": "/tmp/b01-fixes-docs.log",
+      "sha256": "fb139270eb254dc2e3ff330d022fb1e2d28bc9d6a268265c75a8088d19f56bfd"
+    }
+  },
+  "changed_files": [
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/ScheduledInvocationPolicy.java",
+      "before_sha256": "939b4b0fed2a08fe70c057e29abffe2292c749224f0b90ab121732e3d3e4dc32",
+      "after_sha256": "58867c829d2165d01540a93aebafc4d2abfb1bf0101f1acdac3c383e115b87b9"
+    },
+    {
+      "path": "common/work-api/src/test/java/io/pockethive/work/boundaries/CompiledWorkBoundaryTest.java",
+      "before_sha256": "5c96f60b3666b43e6a171477ca3c06d203668a1ad0acf272ec5d2f1cebdf86ee",
+      "after_sha256": "231a9ce6f907da0120f824006aeec0cdc27586d789d83a0fdbffe4d3d4ab1fda"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfiguration.java",
+      "before_sha256": "2352d545cd0878ac47a46a5a7399e5c94a56cd642d2551f4eae4e317df239084",
+      "after_sha256": "9a3e955d64f39fecad6d5d2485c2f590327801ef459b14fd2025f4a1f5172e18"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/RateSchedulePolicy.java",
+      "before_sha256": "476a7b2a2c13ba9bc8e7e6280bd8dae6393ccc06f16eb7e6425ff9b1626194f0",
+      "after_sha256": "7c12d16eed95432c601b837432e92f6a1e2cf7f594c09016772000d51789477f"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerWorkInput.java",
+      "before_sha256": "22d4ed516eb5b4502b6898c9e7dcfea3d9dda97d047a4007f7d15fa8ac225bf5",
+      "after_sha256": "3c2479301153f71733768131635d10fb736721325705bea9a7b1fdeb4684705c"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/autoconfigure/WorkControlCompositionTest.java",
+      "before_sha256": "84690326823abd47510f5588ad3c11e33f55b8d53c7d49c1463d4503f56d2473",
+      "after_sha256": "8605f5e403e02275534a042a7deb3bc20140eab59175f62ac6a49beda8635001"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/input/RateSchedulePolicyTest.java",
+      "before_sha256": "0272e9a955ae031117c4dd052b7605534d9507a4b24fe63ab45c1d966936cbe6",
+      "after_sha256": "3181b1f32d2c5f393579f6db460a4a4c34a2b48a31328868581fb5f157586b44"
+    },
+    {
+      "path": "docs/architecture/work-plane-boundaries.md",
+      "before_sha256": "11d03bba42e5ef5911615cceaf75031ff17b37e0c7b8f0a21178c06d75d96126",
+      "after_sha256": "362614e562acdc51ddb84f831dea3517065abca99bb77f1d16851d078a5acbc8"
+    },
+    {
+      "path": "docs/inProgress/README.md",
+      "before_sha256": "2d13e6fa3ca3594d1aa38aa700e6a1c5c5da708b73aed452b6329967f1025d2b",
+      "after_sha256": "1866819c378637792b90f65fd9005283114ca4d35018e799d18fec3a3f6629e4"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/README.md",
+      "before_sha256": "1750acf7cadc0e47fadd14b345228ba2acb88b1883148d4294a02c58fcfe621b",
+      "after_sha256": "9aac9b892979982679fc6aefd1b3e794fc074f923e1964e25698ec157a069752"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/source-inventory.json",
+      "before_sha256": "12b62655e2e816425104691cb39224ebc6d19136ba77c9acf60affdda135b1de",
+      "after_sha256": "aa66997869f55560f6a97236c5257b21645187754b186a9656ada8f9b693f543"
+    },
+    {
+      "path": "docs/inProgress/work-plane-module-boundaries.md",
+      "before_sha256": "36ad2b8f099e00b93c7eb7903ae4163c12d3b1223e28b12687a3685f8716f535",
+      "after_sha256": "32847bd2d5d8af082878d7e062186253a83c1a6d8eefb13e799504988613b5d4"
+    },
+    {
+      "path": "docs/sdk/worker-sdk-quickstart.md",
+      "before_sha256": "b56747130a7bb1cdef7b3653a81661c79f8b62b6044b65697baed917ee214826",
+      "after_sha256": "a0b3efe7c05dfef4b946ebecdc6ad534d1f48013fba8dbfbcdccacbff6241faf"
+    },
+    {
+      "path": "tools/check-work-boundaries.py",
+      "before_sha256": "ee0b94ebb21c664167d5c482a2086529c54c9d3bf01de82fb3642e65ea9d5847",
+      "after_sha256": "89937a88cb647b1412095431aba6d31b9b6c1b4fe43c6d7d31352414ed48f54a"
+    },
+    {
+      "path": "tools/tests/test_work_boundaries.py",
+      "before_sha256": "f48671bda36239be9b6bd1a4170f5c37ffdd9afdf4a39361a7fe3b6ad8c9aa52",
+      "after_sha256": "3400753ae7697ee41c268dd733129deaf828ce62b881dca95ea9cfa8fad298ce"
+    },
+    {
+      "path": "tools/work-boundaries.json",
+      "before_sha256": "a991632ab1e0c3672cf4abf38a18626ededba91628636580e3bbb142cf953cbb",
+      "after_sha256": "9b165035773da1fa1033d578117c04e98ae001bef261959dd729039713a65d65"
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerSchedulePolicy.java",
+      "before_sha256": "56d9dcc13d26a77411067448ce451b4ef9440189826204770126c8ea63a013fb",
+      "after_sha256": "88d33639cd2e12515c0b3b3f6b1a7bd02dfe1f3fa70f72a89ad970d7c800897c"
+    },
+    {
+      "path": "trigger-service/src/test/java/io/pockethive/trigger/TriggerSchedulePolicyTest.java",
+      "before_sha256": "13b5a8a1dc674f084fdd527c2b07f9f912c4ea36d230d78a00a610526af928f6",
+      "after_sha256": "139ff9f19a1ce61ad1b2662ac68c66f0fbba23c8ee64533fa34bf685229de19a"
+    },
+    {
+      "path": "trigger-service/src/test/java/io/pockethive/trigger/TriggerSchedulerIntegrationTest.java",
+      "before_sha256": null,
+      "after_sha256": "2afdebf025957ab93daecb30e668ae4d2451de957cd0b55a8bedc4af2dceee8b"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/fixes.md",
+      "before_sha256": null,
+      "after_sha256": "ebd715eb96f457b58abeb7edbb718267ae55782c823c4601f15ee89e2601d947"
+    }
+  ],
+  "independent_review": false,
+  "commit": false,
+  "push": false,
+  "deployment": false,
+  "limitations": [
+    "Existing Redis placeholder remains skipped.",
+    "Packaging compiles all test consumers but does not execute suites outside the runtime reactor.",
+    "No deployed-stack/official-ingress acceptance.",
+    "Original B02/B03/B06 deferred work is unchanged."
+  ],
+  "manifest_note": "File deltas are relative to the original B01 execution manifest, not HEAD; this evidence file excludes itself."
+}

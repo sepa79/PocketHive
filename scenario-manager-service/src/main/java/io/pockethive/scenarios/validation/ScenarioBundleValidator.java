@@ -1,5 +1,8 @@
 package io.pockethive.scenarios.validation;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.templating.api.TemplateSyntaxValidator;
+
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -30,7 +33,7 @@ import io.pockethive.worker.sdk.auth.AuthStorageMode;
 import io.pockethive.worker.sdk.auth.AuthTokenKeys;
 import io.pockethive.worker.sdk.auth.AuthType;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderingException;
+import io.pockethive.templating.api.TemplateRenderingException;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -61,7 +64,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
- * Contract: docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
+ * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
+ * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
  * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
  */
 @Component
@@ -106,7 +110,7 @@ public final class ScenarioBundleValidator {
     private final CapabilityCatalogueService capabilities;
     private final String defaultImageTag;
     private final String scenarioManagerVersion;
-    private final PebbleTemplateRenderer templateSyntaxValidator = new PebbleTemplateRenderer();
+    private final TemplateSyntaxValidator templateSyntaxValidator = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
 
     public ScenarioBundleValidator(
         CapabilityCatalogueService capabilities,

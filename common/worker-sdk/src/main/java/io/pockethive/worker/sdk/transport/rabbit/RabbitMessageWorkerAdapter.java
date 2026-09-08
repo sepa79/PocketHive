@@ -2,8 +2,8 @@ package io.pockethive.worker.sdk.transport.rabbit;
 
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.observability.ObservabilityContextUtil;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.MaxInFlightConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -53,6 +53,10 @@ import org.springframework.context.event.ContextRefreshedEvent;
  * The helper is intentionally stateless aside from the desired listener state toggle which is derived
  * from the control plane. This keeps the adapter safe to reuse across different runtime adapters while
  * still exposing extension points for service specific logging or result handling.
+ * <p>
+ * Responsibility: coordinate current Rabbit intake, dispatch callbacks and listener/executor lifecycle.
+ * Must not: create another Work envelope codec, declare CP resources or mutate a captured output destination.
+ * Contract: RESP-WORK-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-transport.
  */
 public final class RabbitMessageWorkerAdapter implements ApplicationListener<ContextRefreshedEvent> {
 

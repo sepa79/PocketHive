@@ -1,9 +1,10 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.work.api.IsoSchemaRef;
+
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.MessageFactory;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import java.io.StringReader;
 import java.math.BigDecimal;
 import java.util.ArrayList;
@@ -19,6 +20,11 @@ import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 import org.xml.sax.InputSource;
 
+/**
+ * Responsibility: encode configured ISO field definitions as j8583 field-list XML.
+ * Must not: execute the target transaction or create another shared Work envelope codec.
+ * Contract: RESP-REQUEST-BUILD — docs/architecture/runtime-responsibilities.md#resp-request-build.
+ */
 final class J8583FieldListXmlCodec {
 
   private final Iso8583SchemaPackRegistry schemaPackRegistry;
@@ -27,7 +33,7 @@ final class J8583FieldListXmlCodec {
     this.schemaPackRegistry = schemaPackRegistry;
   }
 
-  byte[] encodePayload(String xmlPayload, Iso8583RequestEnvelope.IsoSchemaRef schemaRef) {
+  byte[] encodePayload(String xmlPayload, IsoSchemaRef schemaRef) {
     if (schemaRef == null) {
       throw new IllegalArgumentException("schemaRef must not be null for FIELD_LIST_XML");
     }

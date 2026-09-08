@@ -12,6 +12,10 @@ import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 
 /**
+ * Responsibility: receive worker Control Plane messages through the dedicated CP listener factory.
+ * Must not: select Work delivery policy or own worker state transitions.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ * <p>
  * Centralises consumption of the worker control-plane queue so individual services no longer need
  * to duplicate the listener wiring. The component is only created when the worker control-plane
  * runtime is available in the application context.
@@ -26,7 +30,7 @@ public class WorkerControlQueueListener {
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
     }
 
-    @RabbitListener(queues = "#{@workerControlQueueName}")
+    @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{@workerControlQueueName}")
     public void onControl(String payload,
                           @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
                           @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {

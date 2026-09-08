@@ -9,9 +9,9 @@
   </parent>
   <artifactId>control-plane-core</artifactId>
   <properties>
+    <work.boundary.enforcer.skip>false</work.boundary.enforcer.skip>
     <java.version>21</java.version>
     <jackson.version>2.21.3</jackson.version>
-    <spring.amqp.version>3.2.10</spring.amqp.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
   <build>
@@ -29,6 +29,16 @@
       </resource>
     </resources>
     <plugins>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <pockethive.repositoryRoot>${maven.multiModuleProjectDirectory}</pockethive.repositoryRoot>
+          </systemPropertyVariables>
+        </configuration>
+      </plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><executions><execution><id>test-fixtures</id><phase>process-test-classes</phase><goals><goal>test-jar</goal></goals></execution></executions></plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -52,13 +62,8 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
-      <artifactId>observability</artifactId>
+      <artifactId>observability-core</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.amqp</groupId>
-      <artifactId>spring-rabbit</artifactId>
-      <version>${spring.amqp.version}</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>

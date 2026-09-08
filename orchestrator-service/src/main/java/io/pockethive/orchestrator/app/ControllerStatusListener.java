@@ -35,7 +35,8 @@ import io.pockethive.swarm.model.lifecycle.WorkloadState;
 /**
  * Responsibility: Consume controller status events, update the swarm projection, and dispatch observations.
  * Must not: Own lifecycle operations, construct terminal outcomes, or publish Orchestrator status.
- * Contract: Ignore unregistered swarms and apply deltas only after a canonical full-status baseline exists.
+ * Contract: RESP-ORCHESTRATOR-INGRESS — docs/architecture/runtime-responsibilities.md#resp-orchestrator-ingress.
+ * Ignore unregistered swarms and apply deltas only after a canonical full-status baseline exists.
  */
 @Component
 @EnableScheduling
@@ -68,7 +69,7 @@ public class ControllerStatusListener {
             this.hiveJournal, ControlPlaneRoles.ORCHESTRATOR, "controller-status-listener");
     }
 
-    @RabbitListener(queues = "#{controllerStatusQueueName}")
+    @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{controllerStatusQueueName}")
     public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
         // Controller status messages are control-plane traffic: never requeue on failures (avoid storms).
         try {

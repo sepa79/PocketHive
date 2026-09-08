@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -34,6 +34,11 @@ import java.util.concurrent.ConcurrentMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
+/**
+ * Responsibility: load worker auth profiles and coordinate credential application, HTTP refresh and token storage.
+ * Must not: own product auth-service identity/authorization or duplicate token storage/claim behavior.
+ * Contract: RESP-WORK-AUTH-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-work-auth-runtime.
+ */
 public final class AuthRuntime {
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()

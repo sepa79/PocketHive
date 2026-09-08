@@ -31,7 +31,8 @@ import java.util.Objects;
 /**
  * Responsibility: Receive control-plane AMQP messages, establish diagnostic context, and dispatch transport triggers.
  * Must not: Own lifecycle transitions, config application, observation state, projections, or terminal outcomes.
- * Contract: Decode each accepted envelope once and delegate it to the single owner of its responsibility.
+ * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control.
+ * Decode each accepted envelope once and delegate it to the single owner of its responsibility.
  */
 @Component
 public class SwarmSignalListener {
@@ -83,7 +84,7 @@ public class SwarmSignalListener {
     this.configUpdates = Objects.requireNonNull(configUpdates, "configUpdates");
   }
 
-  @RabbitListener(queues = "#{swarmControllerControlQueueName}")
+  @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{swarmControllerControlQueueName}")
   public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
     // Control-plane messages must never be requeued on failures: ACK (drop) always to avoid storms.
     try {

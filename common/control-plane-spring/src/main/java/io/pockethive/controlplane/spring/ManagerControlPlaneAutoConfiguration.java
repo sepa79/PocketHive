@@ -1,6 +1,5 @@
 package io.pockethive.controlplane.spring;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.consumer.SelfFilter;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
@@ -23,6 +22,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
+ * Responsibility: compose manager Control Plane identity, messaging and declarations.
+ * Must not: declare Work resources or implement workload lifecycle decisions.
+ * Contract: RESP-CP-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-cp-composition.
+ * <p>
  * Auto-configuration that exposes manager-facing control-plane beans.
  */
 @Configuration(proxyBeanMethods = false)
@@ -64,7 +67,7 @@ public class ManagerControlPlaneAutoConfiguration {
         if (!properties.isDeclareTopology() || !properties.getManager().isDeclareTopology()) {
             return new Declarables(List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange, controlPlaneExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange);
     }
 
     @Bean

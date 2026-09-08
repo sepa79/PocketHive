@@ -1,11 +1,18 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.work.api.MutableStatus;
+
+import io.pockethive.work.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Consumer;
 
+/**
+ * Responsibility: update worker-provided status contributions in the shared worker state.
+ * Must not: publish control envelopes directly or treat contributed metrics as authoritative lifecycle state.
+ * Contract: RESP-WORK-STATUS — docs/architecture/runtime-responsibilities.md#resp-work-status.
+ */
 final class WorkerStatusPublisher implements StatusPublisher {
 
     private final WorkerState state;

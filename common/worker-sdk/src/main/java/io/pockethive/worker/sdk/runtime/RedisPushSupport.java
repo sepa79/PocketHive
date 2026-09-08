@@ -1,13 +1,15 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.api.WorkStep;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -22,6 +24,10 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Shared Redis push utility used by both output transports and side-output interceptors.
+ * <p>
+ * Responsibility: resolve configured payload/list routes and perform shared Redis push operations.
+ * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
+ * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  */
 public final class RedisPushSupport {
 
@@ -33,7 +39,7 @@ public final class RedisPushSupport {
     private final Map<ConnectionConfig, RedisWriter> writers = new ConcurrentHashMap<>();
 
     public RedisPushSupport() {
-        this(new LettuceRedisWriterFactory(), new PebbleTemplateRenderer());
+        this(new LettuceRedisWriterFactory(), new PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()));
     }
 
     public RedisPushSupport(TemplateRenderer templateRenderer) {
@@ -110,7 +116,7 @@ public final class RedisPushSupport {
     }
 
     private static String firstPayload(WorkItem item) {
-        java.util.Iterator<io.pockethive.worker.sdk.api.WorkStep> iterator = item.steps().iterator();
+        java.util.Iterator<WorkStep> iterator = item.steps().iterator();
         if (!iterator.hasNext()) {
             return null;
         }

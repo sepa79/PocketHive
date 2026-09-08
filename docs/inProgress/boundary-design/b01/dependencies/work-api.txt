@@ -1,0 +1,18 @@
+io.pockethive:work-api:jar:0.15.35
++- io.pockethive:observability-core:jar:0.15.35:compile
+|  +- io.pockethive:topology-core:jar:0.15.35:compile
+|  +- com.fasterxml.jackson.datatype:jackson-datatype-jsr310:jar:2.21.5:compile
+|  \- org.slf4j:slf4j-api:jar:2.0.13:compile
++- io.pockethive:swarm-model:jar:0.15.35:compile
+|  +- jakarta.validation:jakarta.validation-api:jar:3.0.2:compile
+|  \- com.fasterxml.jackson.core:jackson-annotations:jar:2.21:compile
++- io.pockethive:auth-contracts:jar:0.15.35:compile
++- io.micrometer:micrometer-core:jar:1.15.12:compile
+|  \- io.micrometer:micrometer-commons:jar:1.15.12:compile
++- io.micrometer:micrometer-observation:jar:1.15.12:compile
++- com.networknt:json-schema-validator:jar:1.0.87:compile
+|  +- com.ethlo.time:itu:jar:1.7.0:compile
+|  \- com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:jar:2.15.2:compile
+|     \- org.yaml:snakeyaml:jar:2.0:compile
+\- com.fasterxml.jackson.core:jackson-databind:jar:2.21.5:compile
+   \- com.fasterxml.jackson.core:jackson-core:jar:2.21.5:compile

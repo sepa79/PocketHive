@@ -1,10 +1,11 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.work.api.IsoSchemaRef;
+
 import com.solab.iso8583.IsoMessage;
 import com.solab.iso8583.IsoType;
 import com.solab.iso8583.MessageFactory;
 import com.solab.iso8583.parse.ConfigParser;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.charset.StandardCharsets;
@@ -22,11 +23,16 @@ import org.w3c.dom.Element;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
 
+/**
+ * Responsibility: load and cache the selected ISO8583 schema packs for request construction.
+ * Must not: execute the target transaction or create another shared Work envelope codec.
+ * Contract: RESP-REQUEST-BUILD — docs/architecture/runtime-responsibilities.md#resp-request-build.
+ */
 final class Iso8583SchemaPackRegistry {
   private final Map<String, ThreadLocal<MessageFactory<IsoMessage>>> factoryCache = new ConcurrentHashMap<>();
   private final Map<String, IsoSchemaDefinition> schemaCache = new ConcurrentHashMap<>();
 
-  ResolvedSchema resolve(Iso8583RequestEnvelope.IsoSchemaRef schemaRef) {
+  ResolvedSchema resolve(IsoSchemaRef schemaRef) {
     Objects.requireNonNull(schemaRef, "schemaRef");
     if (!"J8583_XML".equals(schemaRef.schemaAdapter())) {
       throw new IllegalArgumentException("Unsupported ISO8583 schemaAdapter: " + schemaRef.schemaAdapter());
@@ -45,7 +51,7 @@ final class Iso8583SchemaPackRegistry {
     return new ResolvedSchema(holder.get(), schemaDefinition);
   }
 
-  private Path resolveSchemaPath(Iso8583RequestEnvelope.IsoSchemaRef schemaRef) {
+  private Path resolveSchemaPath(IsoSchemaRef schemaRef) {
     Path root = Path.of(schemaRef.schemaRegistryRoot()).toAbsolutePath().normalize();
     Path base = root.resolve(schemaRef.schemaId()).resolve(schemaRef.schemaVersion()).normalize();
     Path schemaPath = base.resolve(schemaRef.schemaFile()).normalize();
@@ -58,7 +64,7 @@ final class Iso8583SchemaPackRegistry {
     return schemaPath;
   }
 
-  private String cacheKey(Iso8583RequestEnvelope.IsoSchemaRef schemaRef) {
+  private String cacheKey(IsoSchemaRef schemaRef) {
     return schemaRef.schemaRegistryRoot()
         + ":"
         + schemaRef.schemaId()
