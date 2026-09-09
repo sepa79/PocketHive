@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.output;
 
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerOutputType;
 import org.springframework.core.Ordered;
 
 public final class NoopWorkOutputFactory implements WorkOutputFactory, Ordered {

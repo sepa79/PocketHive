@@ -64,7 +64,9 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
+ * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
+ * Redis route diagnostics delegate to RESP-WORK-REDIS-ROUTES; remaining IO validation is B02 debt.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
  * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
  */
@@ -97,9 +99,15 @@ public final class ScenarioBundleValidator {
     private static final String REDIS_OUTPUT_ROUTES_PATH = REDIS_OUTPUT_CONFIG_PATH + ".routes";
     private static final String REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH = REDIS_OUTPUT_CONFIG_PATH + ".targetListTemplate";
     private static final String REDIS_OUTPUT_DEFAULT_LIST_PATH = REDIS_OUTPUT_CONFIG_PATH + ".defaultList";
+    private static final String REDIS_OUTPUT_SOURCE_STEP_PATH = REDIS_OUTPUT_CONFIG_PATH + ".sourceStep";
+    private static final String REDIS_OUTPUT_PUSH_DIRECTION_PATH = REDIS_OUTPUT_CONFIG_PATH + ".pushDirection";
+    private static final String REDIS_OUTPUT_MAX_LEN_PATH = REDIS_OUTPUT_CONFIG_PATH + ".maxLen";
+    private static final Set<String> REDIS_WRITE_SETTING_PATHS = Set.of(
+        REDIS_OUTPUT_SOURCE_STEP_PATH, REDIS_OUTPUT_PUSH_DIRECTION_PATH, REDIS_OUTPUT_MAX_LEN_PATH);
     private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
     private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
-    private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
+    private final WorkConfigurationFindings workConfigurationFindings = new WorkConfigurationFindings();
+    private final RequestTemplateFindings requestTemplateFindings = new RequestTemplateFindings();
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -1095,7 +1103,7 @@ public final class ScenarioBundleValidator {
                 if (requiredPath == null || requiredPath.isBlank()) {
                     return;
                 }
-                if (ioSelectorSpecificFindingWillCover(config, requiredPath)) {
+                if (ioSelectorSpecificFindingWillCover(config, requiredPath) || isSharedRedisConfigurationField(config, requiredPath)) {
                     return;
                 }
                 if (hasConfigValue(config, requiredPath, Boolean.TRUE.equals(entry.allowBlank()))) {
@@ -1139,6 +1147,17 @@ public final class ScenarioBundleValidator {
                 if (fieldPath == null || expectedType == null || !containsConfigPath(config, fieldPath)) {
                     return;
                 }
+                if (isSharedRedisConfigurationField(config, fieldPath)) {
+                    return;
+                }
+                if (((REDIS_OUTPUT_ROUTES_PATH.equals(fieldPath) || REDIS_OUTPUT_DEFAULT_LIST_PATH.equals(fieldPath)
+                    || REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH.equals(fieldPath))
+                    && REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH))))
+                    || ((REDIS_DATASET_SOURCES_PATH.equals(fieldPath) || REDIS_DATASET_LIST_NAME_PATH.equals(fieldPath))
+                    && REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH))))) {
+                    // Selected Work fields and symbolic constraints belong to work-config.
+                    return;
+                }
                 Object rawValue = configValue(config, fieldPath);
                 if (!hasCapabilityConfigTypeMismatch(rawValue, expectedType)) {
                     return;
@@ -1165,7 +1184,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedRedisConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Set<String> allowedValues = optionValues(entry.options());
@@ -1198,7 +1217,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedRedisConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Object rawValue = configValue(config, fieldPath);
@@ -1230,6 +1249,29 @@ public final class ScenarioBundleValidator {
                     findings.add(numericRangeFinding(configPath, fieldPath, actualValue, ref.owner(), min, max));
                 }
             });
+    }
+
+    private boolean isSharedRedisConfigurationField(Map<String, Object> config, String path) {
+        if (path == null) return false;
+        if (REDIS_WRITE_SETTING_PATHS.contains(path) && hasSelectedRedisBlock(config, REDIS_OUTPUT_CONFIG_PATH)) {
+            return true;
+        }
+        for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
+            if (path.startsWith(root + ".") && hasSelectedRedisBlock(config, root)
+                && io.pockethive.work.config.WorkConfigurationParser.REDIS_CONNECTION_FIELDS.contains(path.substring(root.length() + 1))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasSelectedRedisBlock(Map<String, Object> config, String root) {
+        if (!containsConfigPath(config, root)) return false;
+        return switch (root) {
+            case REDIS_OUTPUT_CONFIG_PATH -> REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)));
+            case REDIS_DATASET_CONFIG_PATH -> REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)));
+            default -> false;
+        };
     }
 
     private ValidationFinding numericRangeFinding(
@@ -1264,13 +1306,18 @@ public final class ScenarioBundleValidator {
         String configPath,
         List<ValidationFinding> findings
     ) {
+        for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
+            if (hasSelectedRedisBlock(config, root)) {
+                workConfigurationFindings.redisConnection(configValue(config, root), configPath + "." + root, findings);
+            }
+        }
         if (REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)))
             && containsConfigPath(config, REDIS_DATASET_CONFIG_PATH)) {
             validateRedisDatasetSourceContract(config, configPath, findings);
         }
         if (REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)))
             && containsConfigPath(config, REDIS_OUTPUT_CONFIG_PATH)) {
-            validateRedisOutputTargetContract(config, configPath, findings);
+            validateRedisOutputSettings(config, configPath, findings);
         }
     }
 
@@ -1280,200 +1327,23 @@ public final class ScenarioBundleValidator {
         List<ValidationFinding> findings
     ) {
         Object listName = configValue(config, REDIS_DATASET_LIST_NAME_PATH);
-        Object sources = configValue(config, REDIS_DATASET_SOURCES_PATH);
-        boolean hasListName = isNonBlankString(listName);
-        boolean hasSources = hasConfiguredJsonCollection(sources);
-        if (hasListName == hasSources) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_DATASET_CONFIG_PATH,
-                "Redis dataset input requires exactly one source mode: non-blank '"
-                    + REDIS_DATASET_LIST_NAME_PATH + "' or non-empty '" + REDIS_DATASET_SOURCES_PATH + "'.",
-                "Set either config." + REDIS_DATASET_LIST_NAME_PATH + " or config."
-                    + REDIS_DATASET_SOURCES_PATH + " with at least one source, but not both."));
-        }
-        validateRedisDatasetSources(sources, configPath, findings);
+        Object declarations = containsConfigPath(config, REDIS_DATASET_SOURCES_PATH)
+            ? configValue(config, REDIS_DATASET_SOURCES_PATH) : List.of();
+        workConfigurationFindings.redisDatasetSelection(listName, declarations,
+            configPath + "." + REDIS_DATASET_CONFIG_PATH, findings);
     }
 
-    private void validateRedisDatasetSources(
-        Object sources,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (sources != null
-            && !(sources instanceof Collection<?>)
-            && !(sources instanceof String text && containsTemplateExpression(text.trim()))) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_DATASET_SOURCES_PATH,
-                "Redis dataset sources must be a list.",
-                "Set config." + REDIS_DATASET_SOURCES_PATH + " to an array of source objects."));
-            return;
-        }
-        if (!(sources instanceof Collection<?> sourceEntries)) {
-            return;
-        }
-        Set<String> seenLists = new LinkedHashSet<>();
-        int index = 0;
-        for (Object source : sourceEntries) {
-            String sourcePath = REDIS_DATASET_SOURCES_PATH + "[" + index + "]";
-            if (!(source instanceof Map<?, ?> sourceMap)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath,
-                    "Redis dataset source entry must be an object.",
-                    "Set config." + sourcePath + " to an object with listName and weight."));
-                index++;
-                continue;
-            }
-            String listName = scalarText(sourceMap.get("listName"));
-            if (listName == null || listName.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".listName",
-                    "Redis dataset source listName must not be blank.",
-                    "Set config." + sourcePath + ".listName to the Redis list name."));
-            } else if (!containsTemplateExpression(listName) && !seenLists.add(listName)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".listName",
-                    "Redis dataset sources must not contain duplicate listName '" + listName + "'.",
-                    "Remove the duplicate source or use a distinct Redis list name."));
-            }
-            Object weightValue = sourceMap.get("weight");
-            if (weightValue == null) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".weight",
-                    "Redis dataset source weight must be configured.",
-                    "Set config." + sourcePath + ".weight to a number greater than 0."));
-            } else {
-                Double weight = configNumericValue(weightValue);
-                if (weight != null && (!Double.isFinite(weight) || weight <= 0.0)) {
-                    findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                        ValidationSeverity.ERROR,
-                        configPath + "." + sourcePath + ".weight",
-                        "Redis dataset source weight must be > 0.",
-                        "Set config." + sourcePath + ".weight to a number greater than 0."));
-                }
-            }
-            index++;
-        }
-    }
-
-    private void validateRedisOutputTargetContract(
+    private void validateRedisOutputSettings(
         Map<String, Object> config,
         String configPath,
         List<ValidationFinding> findings
     ) {
-        Object routes = configValue(config, REDIS_OUTPUT_ROUTES_PATH);
-        boolean hasRoutes = hasConfiguredJsonCollection(routes);
-        boolean hasTargetListTemplate = isNonBlankString(configValue(config, REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH));
-        boolean hasDefaultList = isNonBlankString(configValue(config, REDIS_OUTPUT_DEFAULT_LIST_PATH));
-        if (!hasRoutes && !hasTargetListTemplate && !hasDefaultList) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_OUTPUT_CONFIG_PATH,
-                "Redis output requires at least one target: non-empty '" + REDIS_OUTPUT_ROUTES_PATH
-                    + "', non-blank '" + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + "', or non-blank '"
-                    + REDIS_OUTPUT_DEFAULT_LIST_PATH + "'.",
-                "Set config." + REDIS_OUTPUT_ROUTES_PATH + ", config."
-                    + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + ", or config." + REDIS_OUTPUT_DEFAULT_LIST_PATH + "."));
-        }
-        validateRedisOutputRoutes(routes, configPath, findings);
-    }
-
-    private void validateRedisOutputRoutes(
-        Object routes,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (routes != null
-            && !(routes instanceof Collection<?>)
-            && !(routes instanceof String text && containsTemplateExpression(text.trim()))) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_OUTPUT_ROUTES_PATH,
-                "Redis output routes must be a list.",
-                "Set config." + REDIS_OUTPUT_ROUTES_PATH + " to an array of route objects."));
-            return;
-        }
-        if (!(routes instanceof Collection<?> routeEntries)) {
-            return;
-        }
-        int index = 0;
-        for (Object route : routeEntries) {
-            String routePath = REDIS_OUTPUT_ROUTES_PATH + "[" + index + "]";
-            if (!(route instanceof Map<?, ?> routeMap)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath,
-                    "Redis output route entry must be an object.",
-                    "Set config." + routePath + " to an object with list plus match and/or header."));
-                index++;
-                continue;
-            }
-            String match = scalarText(routeMap.get("match"));
-            String header = scalarText(routeMap.get("header"));
-            String headerMatch = scalarText(routeMap.get("headerMatch"));
-            String list = scalarText(routeMap.get("list"));
-            if (list == null || list.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath + ".list",
-                    "Redis output route list must not be blank.",
-                    "Set config." + routePath + ".list to the target Redis list."));
-            }
-            validateRegex(match, configPath, routePath + ".match", "Redis output route match", findings);
-            validateRegex(headerMatch, configPath, routePath + ".headerMatch", "Redis output route headerMatch", findings);
-            if (isBlank(match) && isBlank(header)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath,
-                    "Redis output route requires match and/or header.",
-                    "Set config." + routePath + ".match or config." + routePath + ".header."));
-            }
-            if (!isBlank(header) && isBlank(headerMatch)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath + ".headerMatch",
-                    "Redis output route headerMatch must be configured when header is set.",
-                    "Set config." + routePath + ".headerMatch to a regex for the header value."));
-            }
-            index++;
-        }
-    }
-
-    private void validateRegex(
-        String value,
-        String configPath,
-        String fieldPath,
-        String label,
-        List<ValidationFinding> findings
-    ) {
-        if (isBlank(value) || containsTemplateExpression(value)) {
-            return;
-        }
-        try {
-            Pattern.compile(value);
-        } catch (Exception ex) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + fieldPath,
-                label + " regex is invalid: " + ex.getMessage(),
-                "Set config." + fieldPath + " to a valid regular expression."));
-        }
-    }
-
-    private boolean hasConfiguredJsonCollection(Object value) {
-        if (value instanceof String text && containsTemplateExpression(text.trim())) {
-            return true;
-        }
-        return value instanceof Collection<?> collection && !collection.isEmpty();
-    }
-
-    private boolean isNonBlankString(Object value) {
-        return value instanceof String text && !text.isBlank();
+        workConfigurationFindings.redisWriteSettings(configValue(config, REDIS_OUTPUT_SOURCE_STEP_PATH),
+            configValue(config, REDIS_OUTPUT_PUSH_DIRECTION_PATH), configValue(config, REDIS_OUTPUT_MAX_LEN_PATH),
+            configPath + "." + REDIS_OUTPUT_CONFIG_PATH, findings);
+        workConfigurationFindings.redisOutputTargets(configValue(config, REDIS_OUTPUT_ROUTES_PATH),
+            configValue(config, REDIS_OUTPUT_DEFAULT_LIST_PATH), configValue(config, REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH),
+            configPath + "." + REDIS_OUTPUT_CONFIG_PATH, findings);
     }
 
     private boolean isBlank(String value) {
@@ -1732,68 +1602,18 @@ public final class ScenarioBundleValidator {
             if (!isUnderRelativeRoot(source.relativePath(), relativeRoot)) {
                 continue;
             }
-            validateRequestTemplateShape(source, findings, shapeReports);
-            String callId = stringValue(source.document().get(CALL_ID_CONFIG_KEY));
-            if (callId == null || callId.isBlank()) {
+            var definition = requestTemplateFindings.parse(source.document(), source.relativePath(),
+                shapeReports.add(source.relativePath()) ? findings : new ArrayList<>());
+            if (definition == null) {
                 continue;
             }
-            String serviceId = stringValue(source.document().get(SERVICE_ID_CONFIG_KEY));
-            if (serviceId == null || serviceId.isBlank()) {
-                continue;
-            }
+            String callId = definition.callId();
+            String serviceId = definition.serviceId();
             visible
                 .computeIfAbsent(templateKey(serviceId, callId), ignored -> new ArrayList<>())
                 .add(source);
         }
         return visible;
-    }
-
-    private void validateRequestTemplateShape(
-        TemplateSource source,
-        List<ValidationFinding> findings,
-        Set<String> shapeReports
-    ) {
-        if (!shapeReports.add(source.relativePath())) {
-            return;
-        }
-        Map<?, ?> doc = source.document();
-        for (String field : List.of("protocol", SERVICE_ID_CONFIG_KEY, CALL_ID_CONFIG_KEY)) {
-            Object value = doc.get(field);
-            if (!(value instanceof String text) || text.isBlank()) {
-                findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
-                    ValidationSeverity.ERROR,
-                    source.relativePath() + ":" + field,
-                    "Request template is missing required field '" + field + "'.",
-                    "Add '" + field + "' to the request template."));
-            }
-        }
-
-        String protocol = stringValue(doc.get("protocol"));
-        if (protocol == null || protocol.isBlank()) {
-            return;
-        }
-        String normalizedProtocol = protocol.toUpperCase(Locale.ROOT);
-        if (!REQUEST_TEMPLATE_PROTOCOLS.contains(normalizedProtocol)) {
-            findings.add(ValidationIssue.TEMPLATE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                source.relativePath() + ":protocol",
-                "Request template declares unsupported protocol '" + protocol + "'.",
-                "Use one of HTTP, TCP, or ISO8583."));
-            return;
-        }
-        if (!"HTTP".equals(normalizedProtocol)) {
-            return;
-        }
-        for (String field : List.of("method", "pathTemplate")) {
-            Object value = doc.get(field);
-            if (!(value instanceof String text) || text.isBlank()) {
-                findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
-                    ValidationSeverity.ERROR,
-                    source.relativePath() + ":" + field,
-                    "HTTP request template is missing required field '" + field + "'.",
-                    "Add '" + field + "' to the HTTP request template."));
-            }
-        }
     }
 
     private List<ValidationFinding> validateVariableReferences(Path bundleRoot) throws IOException {
@@ -1884,25 +1704,9 @@ public final class ScenarioBundleValidator {
             } catch (Exception e) {
                 continue;
             }
-            boolean hasInlineAuth = doc.containsKey("auth");
-            boolean hasAuthRef = doc.containsKey("authRef");
-            if (hasInlineAuth) {
-                findings.add(ValidationIssue.AUTH_REF_INLINE_NOT_ALLOWED.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":auth",
-                    "Template uses inline auth, but bundle auth must use authRef.",
-                    "Replace auth with authRef and declare the profile in %s.".formatted(
-                        ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-            }
-            if (hasInlineAuth && hasAuthRef) {
-                findings.add(ValidationIssue.AUTH_REF_INLINE_NOT_ALLOWED.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":authRef",
-                    "Template declares both auth and authRef.",
-                    "Keep authRef only and remove inline auth."));
-            }
-            if (hasAuthRef) {
-                refs.add(authRefUsage(relativePath, doc.get("authRef"), findings));
+            var authRef = requestTemplateFindings.authReference(doc, relativePath, findings);
+            if (authRef != null) {
+                refs.add(new AuthRefUsage(relativePath, authRef.profileId()));
             }
         }
 
@@ -2043,37 +1847,6 @@ public final class ScenarioBundleValidator {
                 && normalized.compareTo(java.math.BigDecimal.valueOf(Integer.MAX_VALUE)) <= 0;
         }
         return false;
-    }
-
-    private AuthRefUsage authRefUsage(String relativePath, Object value, List<ValidationFinding> findings) {
-        if (!(value instanceof Map<?, ?> map)) {
-            findings.add(ValidationIssue.AUTH_REF_PROFILE_MISSING.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef",
-                "authRef must be an object with profileId and applyAs.",
-                "Use authRef.profileId and authRef.applyAs."));
-            return null;
-        }
-        String profileId = stringValue(map.get("profileId"));
-        String applyAs = stringValue(map.get("applyAs"));
-        if (profileId == null || profileId.isBlank()) {
-            findings.add(ValidationIssue.AUTH_REF_PROFILE_MISSING.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.profileId",
-                "authRef.profileId must not be blank.",
-                "Set authRef.profileId to a profile declared in %s.".formatted(
-                    ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-        }
-        try {
-            AuthApplyAs.parse(applyAs);
-        } catch (IllegalArgumentException e) {
-            findings.add(ValidationIssue.AUTH_REF_APPLY_AS_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.applyAs",
-                "authRef.applyAs '%s' is not supported.".formatted(nullToBlank(applyAs)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthApplyAsValues()))));
-        }
-        return new AuthRefUsage(relativePath, profileId);
     }
 
     private AuthProfilesInfo readAuthProfiles(Path authProfiles, Path bundleRoot, List<ValidationFinding> findings) {
@@ -2570,9 +2343,7 @@ public final class ScenarioBundleValidator {
     }
 
     private String templateKey(String serviceId, String callId) {
-        String normalizedServiceId = serviceId == null ? "" : serviceId.trim();
-        String normalizedCallId = callId == null ? "" : callId.trim();
-        return normalizedServiceId + "::" + normalizedCallId;
+        return io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, callId);
     }
 
     private Set<String> extractCallIds(Object value) {

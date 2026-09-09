@@ -1,11 +1,14 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. Next: B02 settings and authoring, not started. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
+Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented, with individual review status in [B02 evidence](boundary-design/b02/README.md). Remaining settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
 Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
 Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
 Checkpoint: `19d56091` (2026-09-07), committed before this plan and documentation cleanup.
 Preparation commit: `e0d37871` (2026-09-07), committed before the first design goal.
+
+Known issue: [SEL-R1](boundary-design/b02/known-issues.md) remains open; the user explicitly
+deferred the runtime list-change fix and authorized continuing B02 on 2026-09-08.
 
 ## Outcome and scope
 
@@ -354,6 +357,12 @@ negative cases from the audits: duplicate Redis sources, incomplete template fie
 unknown network modes, non-default/colliding prefixes, cross-swarm paths, delete attempts
 with resources still present, and operation chronology across clock changes.
 
+Human decision, 2026-09-09: keep implementation/review evidence concise while this
+refactor is active. After final acceptance, delete its working evidence, scan reports,
+fingerprints and verification logs instead of moving them to Archive. Keep the current
+architecture/contracts, development/review rules and useful tests; move unresolved known
+issues into the normal backlog before removing their temporary records.
+
 Use current producer contracts and canonical parsers in tests. No replacement E2E parser,
 parallel migration shim, or direct service-port acceptance shortcut. Tests must demonstrate
 the effect required by the owner; invocation counts and green happy paths are insufficient.
@@ -471,3 +480,39 @@ five JavaDoc lines. Current source evidence also confirms the former RV1 composi
 paths under the human boundary-verification policy. B01 is accepted in its staged
 scope; B02 settings/authoring is next and has not started. Earlier verdicts above are
 historical. No commit, deployment or acceptance of later slices is implied.
+
+
+### B02 first transfers — 2026-09-08
+
+B01 is committed as `eb681ee7`. `work-config` now owns selected IO values and
+WorkPatchPolicy, including the capability mutability catalogue. RequestTemplateParser
+owns decoded request-template shape/auth/protocol semantics; request-template-files
+owns file loading. SDK, Scenario Manager, Request Builder, HTTP Sequence and offline
+diagnostics have migrated to those owners. Existing behavior tests moved with them.
+See [B02 evidence](boundary-design/b02/README.md). B02 remains incomplete until typed
+IO/connection/execution settings, full candidate validation, Redis parser consolidation,
+Rabbit environment encoding and all corresponding producers are migrated.
+
+### B02 Rabbit connection export — 2026-09-08
+
+The existing five-field connection contract and environment encoder now live in
+`rabbit-config`, without Spring/client dependencies. Both launching services receive
+immutable settings from the shared bootstrap decoder; the CP environment factory
+delegates encoding. The previous validator/encoder and service RabbitProperties
+consumers were removed. [Execution evidence](boundary-design/b02/rabbit-connection-transfer.md)
+records tests and limits. The next transfer remains WorkConfigurationParser and its
+coupled settings/candidate/producer migration. Full B02 and separate review stay open.
+
+### B02 Rabbit review corrections and Redis routes — 2026-09-08
+
+RB-R1 now distinguishes validated base Rabbit export from the still-open validation
+after `bee.env` composition. RB-R2 gives container lifecycle and worker planning their
+own current-owner records and primary header references. The inherited final-environment
+defect remains a required B02 gate.
+
+WorkConfigurationParser now owns Redis route declarations/validation, with a compiled
+read-only route projection for runtime selection. Startup properties, native Redis output,
+uploader capture and Scenario Manager delegate to it; old route implementations were
+deleted. [Execution evidence](boundary-design/b02/redis-routes-transfer.md) covers the
+bounded transfer and its tests. Complete IO/settings/candidate parsing and producer
+migration remain open; this does not accept B02 or start B03.

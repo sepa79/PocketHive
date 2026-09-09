@@ -4,9 +4,11 @@ Status: B01 adoption accepted in separate review, 2026-09-08.
 RV2 descriptions/headers agree with the inspected source. Current review evidence:
 `docs/inProgress/boundary-design/b01/rv2-correction-review.md`.
 RV1's wiring-test requirement remains superseded by the human boundary-verification
-policy in `docs/REVIEW_RULES.md`. B02–B07 ownership changes remain pending.
+policy in `docs/REVIEW_RULES.md`. Implemented B02 transfers and their individual review
+status are tracked in `docs/inProgress/boundary-design/b02/README.md`;
+remaining B02–B07 work is still open.
 This is the canonical current-owner record for the 157 production files in the B01
-adoption scope. The [boundary design](work-plane-boundaries.md) owns target module
+adoption scope and the B02 transfers recorded below. The [boundary design](work-plane-boundaries.md) owns target module
 placement and migration gates; it is not evidence that later slices are implemented.
 Other services/responsibilities are outside this adoption and retain their existing
 architecture sections. This is not a complete repository SSOT certification.
@@ -362,13 +364,296 @@ Dedicated binders and registries supply values/selection. Spring compatibility/d
 
 **Migration status:** Current composition. Configuration consolidation B02 and bootstrap extraction B07 remain.
 
+## RESP-RABBIT-CONNECTION
+
+**Current module(s):** `common/rabbit-config` owns the immutable
+`RabbitConnectionSettings` contract and `RabbitConnectionEnvironment` encoding.
+The contract covers the existing container connection fields: host, port, username,
+password and virtualHost. All are required; port is 1–65535. Values, including
+credentials, are preserved exactly. The settings' text representation hides credentials.
+
+`RabbitConnectionConfiguration` in control-plane-spring is a Spring bootstrap decoder
+explicitly imported by Orchestrator and Controller. It binds the shared record from
+`spring.rabbitmq` without constructing a defaulted RabbitProperties object. Validation
+belongs to the record; the decoder does not reimplement it. Spring still owns client
+construction and its other transport options. This transfer covers the existing five-field
+container export, not TLS/address-list propagation or Work delivery policy.
+
+ContainerLifecycleManager and SwarmLifecycleManager/SwarmWorkerSpecFactory receive the
+immutable settings. ControlPlaneContainerEnvironmentFactory composes the shared encoder's
+result with participant settings; it no longer validates or encodes Rabbit fields.
+
+**Forbidden:** Spring or Rabbit client imports in rabbit-config; service-local connection
+validation/environment encoding; credentials in settings text; topology or delivery policy
+in this connection contract.
+
+**Implemented effect:** Base connection settings reject missing/blank fields and
+out-of-range ports at construction. The shared encoder preserves those validated values
+in the participant environment before later composition. Parsing/export opens no connection.
+
+**Remaining B02 gate:** SwarmWorkerSpecFactory currently overlays `bee.env` after this
+export, so final worker settings can differ and have not been validated. The canonical
+WorkConfigurationParser and bootstrap environment decoder must validate the final candidate,
+including the environment overlay, before a worker spec is submitted for launch. Rabbit
+field constraints still belong to RabbitConnectionSettings; the worker planner must not
+implement a second validator or silently replace an invalid override with the base value.
+
+**Verification entrypoints:** `RabbitConnectionSettingsTest`,
+`RabbitConnectionEnvironmentTest`, `RabbitConnectionConfigurationTest`, existing
+`ControlPlaneContainerEnvironmentFactoryTest`, `ContainerLifecycleManagerTest`,
+`SwarmLifecycleManagerTest`, `SwarmWorkerSpecFactoryTest` and the single import test.
+
+**Migration status:** B02 connection export implemented and behaviorally verified, pending
+separate review. Complete Work settings/candidate parsing,
+upstream sample defaults and other Spring transport options remain outside this transfer.
+
+## RESP-WORK-REDIS-ROUTES
+
+**Implemented transfer (B02), pending separate review:** `common/work-config` owns decoded Redis route declarations
+and their parsing/validation through WorkConfigurationParser. RedisRouteDefinition is the
+single decoded shape with original Object field values retained until validation;
+RedisRoute is its immutable compiled projection. Neither
+opens Redis or selects a target for a message. RedisPushSupport retains ordered runtime
+matching and destination selection, consuming those compiled routes.
+
+Startup RedisOutputProperties binds declarations without a service-local route DTO or
+normalizer. Its Object-valued declaration fields prevent Spring's implicit number-to-string
+conversion from erasing invalid route types. Business output and RedisUploaderInterceptor call the same parser. Scenario
+Manager consumes its AUTHORING validation report through WorkConfigurationFindings; it
+does not implement regex or cross-field route rules.
+
+WorkConfigBindHandler rejects unrepresentable descendants during Work decoding; it
+does not decide route field types, regexes or co-constraints. Spring's standard YAML
+loader, source selection and precedence remain in use.
+
+**Open B02 decoding gap:** Spring flattens an empty optional YAML object away and an
+empty list to blank text before binding. Thus `header: {}` and `header: []` can still
+lose their original types. The target Work-config decoder must retain those types before
+canonical validation. The global SDK YAML-loader replacement was withdrawn by human
+decision; do not reintroduce it as a local route fix. Full startup/raw parity is not accepted.
+
+The route contract allows exactly match/header/headerMatch/list. List is required text;
+match or header must be nonblank; header requires headerMatch. Patterns must compile as
+Java regexes. Absent routes mean an empty list; destination-presence and target-text
+requirements belong to RESP-WORK-REDIS-TARGETS. Non-string fields and unknown keys
+fail. Nonblank text is preserved, including significant regex whitespace.
+
+AUTHORING uses the existing `{{ ... }}` / `{% ... %}` configuration-expression markers:
+constraints for symbolic fields/whole route arrays are reported as deferred, not accepted
+runtime values. Syntax validation/rendering stays with templating. RESOLVED rejects such
+unrendered values. All concrete route constraints run through the same code in both modes.
+WorkConfigurationFindings projects each deferred path as the canonical
+`WORK_CONFIGURATION_DEFERRED` warning; only resolved validation can accept runtime values.
+
+RedisRoutesValidation is the parser's read-only result: a complete compiled list only
+when all constraints have passed, canonical problems and deferred paths otherwise.
+Its isEmpty result means a known empty/absent route list, never an invalid or deferred
+one. Scenario Manager derives target presence from this result and delegates the selected
+Redis routes field's type check to the parser; generic capability type/expression checks
+do not revalidate that field. Required-field presence remains catalogue metadata.
+
+Co-constraints involving symbolic fields defer when rendering can make them valid.
+In particular, a symbolic header with a payload matcher may render blank and therefore
+does not yet require headerMatch. With no payload matcher and no headerMatch, the route
+is certainly invalid regardless of how the header renders. Concrete invalid values keep
+their errors even when another field is deferred. No rendering runs inside the parser.
+
+**Forbidden:** duplicate route shape/co-constraint/regex validation or normalization in
+properties, adapters or authoring; silently coerce a number/object into route text; leak
+partially validated compiled routes to runtime.
+
+**Required effect:** Startup, runtime output/capture and resolved authoring agree for the
+same route declarations. A runtime parse either yields the complete ordered immutable
+list or fails with canonical path/message problems. Deferred authoring requires later
+resolved validation. No network/filesystem effects occur in the parser.
+
+**Verification entrypoints:** WorkConfigurationParserTest, WorkConfigurationFindingsTest,
+WorkIOConfigBinderTest, RedisWorkOutputTest, RedisUploaderInterceptorTest and ScenarioControllerTest.
+
+**Migration status:** Route responsibility is the first implemented WorkConfigurationParser transfer;
+`docs/inProgress/boundary-design/b02/redis-routes-transfer.md` records behavior tests and limits.
+IO/connection/execution records, output target/connection constraints,
+full candidate validation and all producer migration remain required before full B02
+acceptance. This sub-transfer does not certify the whole configuration contract.
+
+## RESP-REDIS-CONNECTION-SETTINGS
+
+WorkConfigurationParser in work-config owns decoded Redis connection validation and
+partial-update merging; RedisConnectionSettings is its immutable resolved value.
+Host is required nonblank trimmed text; port is an exact integer from 1 to 65535;
+SSL is required boolean (true/false property text is decoded here). Username is optional
+trimmed text; password is optional text preserved byte-for-byte, including whitespace
+and an explicitly empty password. A configured username requires an explicit password.
+No invalid value is clamped, converted to text or replaced by the previous/default value.
+An absent patch field retains its current value; explicit null is validated as supplied.
+AUTHORING defers expressions; RESOLVED rejects them. Errors do not echo credentials.
+
+RedisSequenceConfiguration delegates candidate resolution to the parser before applying
+the resolved value. WorkerControlPlaneRuntime prepares typed/private configuration first,
+then validates/applies the Redis connection before writing accepted configuration, enablement or
+resetting seeded template selections. A rejected Redis candidate leaves these values
+and the sequence connection unchanged; subsequent commands use the last accepted config.
+
+RedisConnectionProperties is the shared SDK bootstrap carrier; dataset/output/sequence
+properties delegate to it. Dataset, output, uploader, sequence and token consumers use
+the resolved contract. Scenario Manager projects the same rules for selected Work IO;
+full token/sequence/capture authoring remains open. Redis client/URI construction stays in the existing
+adapters pending B06. Existing sequence bootstrap defaults, global sequence ownership,
+token/sequence scope composition and producer migration remain open B02/B06 work.
+
+**Forbidden:** independent host/port/credential/SSL parsing or default substitution in
+consumers; credential values in validation errors or settings toString.
+**Verification:** shared connection unit tests and existing binder, Redis adapter,
+authoring and auth/sequence behavior tests. Full B02 and deployed acceptance remain open.
+
+## RESP-WORK-REDIS-WRITE-SETTINGS
+
+WorkConfigurationParser owns sourceStep, pushDirection and maxLen for Redis output
+and enabled diagnostic capture. RedisPayloadSource (FIRST/LAST) and RedisPushDirection
+(LPUSH/RPUSH) replace the enums inside RedisPushSupport. RedisWriteSettings is the
+immutable resolved value consumed by the push request; RedisWriteSettingsValidation
+reports problems/deferred paths and exposes settings only after complete validation.
+
+All three fields are required. Enum text is trimmed and case-insensitive; already
+typed enum values remain valid. maxLen is an exact integer in [-1, Integer.MAX_VALUE];
+numeric property text is decoded at this boundary. -1 and 0 preserve the existing
+unbounded-write behavior; positive values preserve the current trim operation.
+AUTHORING defers symbolic fields; RESOLVED rejects unrendered values. No field gains
+a default. Startup retains original bound types and delegates to this parser.
+
+RedisOutputProperties, RedisWorkOutput (startup and merged updates), enabled
+RedisUploaderInterceptor and selected Redis-output authoring consume this contract.
+Scenario Manager delegates required/type/option/range checks for these three fields;
+the capability catalogue remains UI metadata. Capture enablement and BEFORE/AFTER
+phase remain the interceptor's distinct concern. The uploader's full authoring block
+and connection fields remain in the unfinished settings/producer migration.
+
+**Forbidden:** local enum conversion or maxLen validation for these settings in the
+properties, output, capture or scenario validator; parse raw settings in RedisPushSupport.
+The push adapter selects a payload and executes LPUSH/RPUSH/LTRIM using resolved settings.
+**Remaining B02:** connection bootstrap defaults/scope composition, full typed IO/candidate acceptance, producer
+migration and original empty-YAML shape preservation. SEL-R1 stays user-deferred.
+**Verification:** RedisWriteSettingsTest, WorkIOConfigBinderTest, RedisWorkOutputTest,
+RedisUploaderInterceptorTest and RedisConfigurationValidationComponentTest.
+Implementation evidence: `docs/inProgress/boundary-design/b02/redis-write-settings-transfer.md`.
+Separate `redis-write-settings-review-2026-09-08.md` in that directory supports this
+scoped transfer; full B02 remains open.
+
+## RESP-WORK-REDIS-TARGETS
+
+WorkConfigurationParser owns decoded Redis output destination settings: validated routes,
+optional textual defaultList and targetListTemplate, with at least one configured target.
+It delegates route semantics to RESP-WORK-REDIS-ROUTES. RedisOutputTargetsValidation
+exposes immutable normalized values only when errors/deferred constraints are absent.
+Already compiled RedisRoute values are immutable parser products and can be reused
+when a raw update leaves the route list unchanged.
+
+Startup properties, RedisWorkOutput, enabled RedisUploaderInterceptor and Scenario
+Manager consume this validation. Startup retains raw target field types until validation;
+numbers/objects are rejected, optional null/blank text is absent, and nonblank target
+text is trimmed once by this owner. Updates merge target fields with the current request
+and validate before replacing it; a patch cannot leave a destination-less request active.
+
+AUTHORING defers symbolic routes and defaultList values through the existing expression
+handling. RESOLVED requires those fields to be rendered. targetListTemplate is deliberately
+a per-message template: its nonblank text is valid in both modes and remains unrendered
+until RedisPushSupport receives a WorkItem. No template parser or renderer is added to
+work-config. Matching route, rendered template and explicit default precedence, and the
+possibility of no destination for an individual message, remain RESP-WORK-REDIS-PUSH.
+
+**Forbidden:** duplicate target-presence/type/normalization rules in startup, output,
+capture or authoring; perform Redis IO/rendering during configuration validation;
+interpret authoring deferral as an accepted runtime request.
+**Remaining B02:** connection bootstrap defaults/scope composition, full candidate validation before
+Control Plane state/ack, producer migration and original empty YAML shape preservation.
+**Verification:** RedisOutputTargetsTest, WorkIOConfigBinderTest, RedisWorkOutputTest,
+RedisUploaderInterceptorTest and RedisConfigurationValidationComponentTest.
+Implementation is followed by separate review under the active workflow.
+
+## RESP-WORK-REDIS-SOURCES
+
+**B02 transfer:** `common/work-config` owns Redis dataset source entries and collection
+validation. RedisDatasetSource replaces the SDK's nested mutable Source type. Its
+constructor receives original field values, trims listName and requires the normalized
+text to be nonblank, and requires a finite positive numeric weight
+(numeric property text is decoded here). WorkConfigurationParser owns collection shape,
+unknown fields, duplicate normalized list names and AUTHORING/RESOLVED validation.
+Explicit null sources are invalid in both parser modes. A missing sources field is
+represented as an empty list by the caller; runtime updates without that field leave
+the existing sources unchanged. Source-mode acceptance remains separate.
+It uses the same expression classification as routes; authoring defers symbolic fields
+or the whole list, while resolved parsing rejects unrendered expressions.
+
+RedisSourcesValidation exposes an immutable validated list only when no errors or
+deferred paths remain. Scenario Manager projects the report and delegates the selected
+sources field's generic type check to it. Source-mode co-constraints, including
+deferred choices, belong to RESP-WORK-REDIS-SELECTION. RedisDataSetInputProperties and runtime raw
+source updates consume the same parser. Input/output binders share WorkConfigBindHandler
+for unrepresentable nested fields and unknown properties. No global YAML loader is added.
+
+**Forbidden:** local source-entry, weight, duplicate-name or source-list shape validators
+in properties, the Redis adapter or Scenario Manager; partially validated runtime lists.
+
+**Required effect:** resolved decoded sources receive the same constraints in startup,
+raw updates and authoring. Existing source order, weighted selection and destructive reads
+remain owned by RedisDataSetWorkInput. RedisDatasetPickStrategy is the shared enum;
+it does not perform selection or IO.
+
+**Remaining B02:** connection bootstrap defaults/scope composition and rate settings,
+full candidate validation and original empty-YAML shape preservation are not transferred
+by this source-list change. Their existing duplicate decisions remain open debt.
+
+**Verification:** RedisSourcesParsingTest, WorkIOConfigBinderTest,
+RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
+Implementation evidence: `docs/inProgress/boundary-design/b02/redis-sources-transfer.md`;
+the separate `redis-selection-review-2026-09-08.md` in the same evidence directory
+accepts RS-R1/RS-R2. The subsequent selection transfer has its own open SEL-R1 finding.
+
+## RESP-WORK-REDIS-SELECTION
+
+WorkConfigurationParser owns the dataset choice: exactly one nonblank textual listName
+or nonempty validated sources list. Single names use the shared scalar decoder in RedisDatasetSource;
+numeric/object names and unrendered resolved expressions fail. RedisDatasetSelectionValidation
+exposes SINGLE/MULTIPLE only for a valid concrete choice, otherwise UNRESOLVED with
+problems/deferred paths. Symbolic choices defer only constraints that rendering can change;
+a literal conflict between listName and a nonempty list remains an error even if weights
+are symbolic. The parser delegates entry/duplicate rules to RESP-WORK-REDIS-SOURCES.
+
+Startup properties, RedisDataSetWorkInput and Scenario Manager delegate this choice to
+the parser. Startup listName binding retains Object values until validation to prevent
+implicit numeric-to-text coercion, then retains the canonical name. Each input tick uses
+an immutable, read-only selection projection from that parser; properties remain the
+configuration holder during this stage. WorkPatchPolicy consumes the same result when restricting disabled-only
+single-list updates; it retains its existing requirement that patch text is already
+normalized. Catalogue required-field checks remain metadata, not mode decisions.
+
+Raw input updates merge declared selection fields with current settings and validate
+that complete selection before any property mutation. An omitted field is unchanged;
+explicit null sources fail. Neither branch silently clears the other mode. A transition
+must explicitly clear the previous mode and supply the new one; WorkPatchPolicy still
+requires rematerialization for mode changes after bootstrap. An empty candidate with
+neither source is rejected. Redis reads and selection order remain in the input adapter.
+
+**Forbidden:** independent mode predicates/normalizers in properties, input or authoring;
+automatic source-mode switching; interpreting deferred authoring as runtime acceptance.
+**Remaining B02:** complete IO/candidate validation before accepted Control Plane state,
+connection bootstrap defaults/scope composition, rate settings and empty-YAML shape preservation. This adapter-side selection
+gate does not certify the full candidate or change Control Plane acknowledgement order.
+**Verification:** RedisDatasetSelectionTest, WorkPatchPolicyTest, WorkIOConfigBinderTest,
+RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
+**Review status:** SEL-R1 HIGH remains open and is deferred by the user; it does not
+block plan continuation. See `docs/inProgress/boundary-design/b02/known-issues.md`.
+
 ## RESP-WORK-IO-CONFIG
 
 **Current module(s):** `common/worker-sdk`.
 
-PocketHiveWorkerProperties holds bound worker settings; WorkOutputConfig is the selected output settings contract. Existing WorkInputConfigBinder/WorkOutputConfigBinder perform startup binding.
+PocketHiveWorkerProperties holds bound worker settings; WorkOutputConfig is the selected output settings contract. Existing WorkInputConfigBinder/WorkOutputConfigBinder perform startup binding using selection keys from work-config.
 
-Discovery and adapter factories consume bound settings. Runtime raw patches still have separate paths in WorkerControlPlaneRuntime and IO adapters.
+WorkConfigBindHandler rejects unknown/unrepresentable fields for both directions;
+type-specific settings validation remains with the owning parser/properties during B02.
+
+Discovery and adapter factories consume bound settings. WorkerControlPlaneRuntime delegates IO mutability decisions to WorkPatchPolicy. Complete runtime candidate parsing and IO adapter parsing still have separate paths pending the rest of B02.
 
 **Forbidden:** make settings objects open connections or infer successful publication from configuration.
 
@@ -401,6 +686,10 @@ SDK composition supplies available factories and bound definitions. NONE is an e
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+
+For Redis connection updates, candidate validation under RESP-REDIS-CONNECTION-SETTINGS
+precedes accepted-state writes and reseeding; rejection preserves the previous state
+also exposed to listeners. Complete Work candidate validation remains B02 work.
 
 **Forbidden:** let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
 
@@ -600,7 +889,12 @@ Both consumers delegate the push operation; RedisWorkOutputFactory wires the sel
 
 **Verification entrypoints:** `RedisWorkOutputTest`, `RedisUploaderInterceptorTest`.
 
-**Migration status:** Existing parsing/configuration and nested contracts remain mixed; B02/B06 must separate them. This is not proof of consolidated Redis settings.
+**Migration status:** Write settings and their enum decoding now belong to
+RESP-WORK-REDIS-WRITE-SETTINGS; destination validation belongs to RESP-WORK-REDIS-TARGETS.
+RedisPushSupport consumes their resolved products and RESP-REDIS-CONNECTION-SETTINGS.
+Its nested ConnectionConfig was removed. Connection defaults, scope composition and
+remaining nested writer/request contracts remain B02/B06 work; complete Redis settings
+are not yet consolidated.
 
 ## RESP-WORK-NONE-OUTPUT
 
@@ -778,6 +1072,52 @@ Scheduling quota comes from TriggerSchedulePolicy through SchedulerWorkInput; HT
 
 **Migration status:** Current action/policy separation; client packaging remains B07.
 
+## RESP-ORCHESTRATOR-CONTAINER-LIFECYCLE
+
+**Current module(s):** `orchestrator-service`.
+
+ContainerLifecycleManager prepares controller container settings, invokes the configured
+compute adapter, records the resulting Swarm runtime identity and ownership manifest,
+pre-pulls requested images and removes controller compute/control queues. It consumes
+RESP-RABBIT-CONNECTION through the participant environment factory, plus the existing
+runtime filesystem mount, metrics and compute contracts. Swarm operation handlers invoke
+these infrastructure operations; public operation terminalization remains with its owner.
+
+**Forbidden:** independently validate/encode Rabbit connections, redefine control routing
+or terminalize the public swarm operation based only on an attempted infrastructure action.
+
+**Required effect:** Explicit launch settings reach compute; actual runtime identity and
+ownership artifacts are recorded, and removal reports its concrete results to the caller.
+
+**Verification entrypoints:** `ContainerLifecycleManagerTest`.
+
+**Migration status:** This records current mixed lifecycle/environment/image/manifest/cleanup
+code, not accepted isolation. Work naming moves in B04; CP-N05/C02 must separate remaining
+infrastructure and absence ownership. The Rabbit base export dependency is already extracted.
+
+## RESP-CONTROLLER-WORKER-PLAN
+
+**Current module(s):** `swarm-controller-service`.
+
+SwarmWorkerSpecFactory maps a scenario Bee and SUT environment into PlannedSwarmWorker:
+worker identity, container environment/volumes and bootstrap configuration. It consumes
+the shared participant environment factory, RESP-RABBIT-CONNECTION and runtime filesystem
+mount; current Work settings export, queue naming and SUT enrichment are still local.
+SwarmRuntimeCore consumes the plan and owns lifecycle/state; compute executes the spec.
+
+**Forbidden:** provision a worker, publish bootstrap configuration, mutate the source Bee
+or runtime state, or independently validate/encode the shared Rabbit connection contract.
+
+**Required effect:** Planning returns the worker spec and its corresponding bootstrap
+configuration without performing compute or broker operations. Explicit bee.env overrides
+are currently applied after base export; their final validation remains the B02 gate above.
+
+**Verification entrypoints:** `SwarmWorkerSpecFactoryTest`, `SwarmLifecycleManagerTest`.
+
+**Migration status:** Current planning owner; complete Work configuration parsing/export and
+final-candidate validation are B02, canonical Work naming B04. This record does not accept
+those outstanding responsibilities as isolated or certify final environment validity.
+
 ## RESP-ORCHESTRATOR-INGRESS
 
 **Current module(s):** `orchestrator-service`.
@@ -818,6 +1158,11 @@ ScenarioBundleValidator owns bundle acceptance checks; ScenarioTemplateValidator
 
 Both use the canonical template API with DisabledSequenceAccess; diagnostic rendering must not decide persisted scenario validity.
 
+Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
+RequestTemplateFindings projects its problems into bundle findings; profile existence and
+bundle visibility stay here. The offline diagnostic delegates file loading to
+request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
+
 **Forbidden:** execute sequence effects during syntax checks or claim diagnostic success is bundle acceptance.
 
 **Required effect:** Bundle acceptance uses its validator; syntax/diagnostic rendering executes no sequence effects and does not become a second acceptance path.
@@ -841,3 +1186,72 @@ Consumers depend on work-test-fixtures with test scope only.
 **Verification entrypoints:** `RepositoryImportBoundaryTest`, `WorkControlCompositionTest`.
 
 **Migration status:** Current B01 fixture extraction; Maven Enforcer excludes test-scope dependencies explicitly.
+
+## RESP-WORK-PATCH-POLICY
+
+**Current module:** `common/work-config`, `io.pockethive.work.config`.
+
+WorkPatchPolicy owns the live mutable/disabled-only IO field catalogue and validation
+of proposed IO updates/reset against prior configuration and current enablement.
+WorkerInputType and WorkerOutputType are the shared selection values. The policy uses
+those values and a worker name for diagnostics; it does not depend on SDK WorkerDefinition.
+
+WorkerControlPlaneRuntime delegates before merging/publishing accepted configuration.
+CapabilityCatalogueService reads the same field classifications for authoring metadata.
+LiveIoConfigUpdateGuard and LiveIoConfigMutability have been removed; neither
+SDK nor scenario-validation-contracts retains another implementation of these decisions.
+
+**Forbidden:** mutate worker state, apply configuration to infrastructure, select clients,
+read Spring/environment state, or claim full candidate validation from patch classification.
+
+**Required effect:** Endpoint/adapter changes require rematerialization; operational fields
+keep their existing value constraints. Redis single-source listName changes require a
+disabled worker already in that mode. Rejected updates cannot reach the SDK merge path.
+
+**Verification entrypoints:** migrated WorkPatchPolicyTest; existing capability and SDK
+runtime tests. Boundary ownership is checked through the import test and separate review.
+
+**Migration status:** Patch-policy transfer implemented, pending separate review. Complete settings/candidate parsing remains
+the subsequent WorkConfigurationParser transfer; this policy does not replace that gate.
+
+## RESP-REQUEST-TEMPLATE-PARSE
+
+**Current modules:** `common/request-templates` owns RequestTemplateParser and
+request-template definitions; `common/request-template-files` owns TemplateLoader and
+LoadedTemplate file provenance.
+
+RequestTemplateParser accepts an already decoded document and owns required fields,
+protocol selection, legacy-auth rejection, canonical AuthRef conversion and typed
+request-template construction. HTTP/TCP/ISO8583 share the existing public template
+contract: explicit protocol, serviceId and callId; HTTP also requires method/pathTemplate.
+The parser owns key construction. It performs no filesystem reads or template evaluation.
+
+TemplateLoader enumerates and decodes files once, delegates parsing and rejects missing
+roots and duplicate keys explicitly. Runtime workers and offline diagnostics use that
+adapter. Scenario Manager delegates template semantics to the parser and retains bundle
+file visibility, duplicate/reference findings and auth-profile existence checks.
+
+The file adapter maps the parser's INLINE_AUTH category to the existing
+AuthFailureException configuration contract for runtime callers, retaining the parser
+failure as its cause. It does not inspect the document to repeat auth validation.
+Request Builder and HTTP Sequence retain their existing first-failure/repeated-failure
+handling. Other template failures retain their parsing/IO classification.
+
+**Forbidden:** parser filesystem/network access; runtime/authoring copies of template
+shape/auth/protocol decisions; silent missing-root, serviceId or duplicate-key fallback.
+
+**Required effect:** The same decoded template receives the same semantic decision in
+runtime loading and authoring. Validation failures carry field/category evidence for
+Scenario Manager; auth reference values retain their owner in AuthRef.
+
+**Verification entrypoints:** request parser unit tests, migrated TemplateLoaderTest
+component tests, existing ScenarioRepositoryValidationTest and worker behavior suites.
+
+**Migration status:** Parser/file transfer implemented, pending separate review. The existing diagnostics contract already
+requires explicit serviceId/callId; runtime loading is tightened to the same rule.
+
+
+The HTTP/TCP `schemaRef` authoring hint remains supported as defined in
+`docs/scenarios/SCENARIO_CONTRACT.md#optional-authoring-helpers`; the parser explicitly
+allows that metadata without adding it to the runtime request definition. Unknown
+runtime fields are rejected. ISO8583 schemaRef remains its distinct typed schema reference.

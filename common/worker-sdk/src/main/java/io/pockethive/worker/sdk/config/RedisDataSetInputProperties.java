@@ -1,31 +1,24 @@
 package io.pockethive.worker.sdk.config;
 
-import java.util.ArrayList;
+import io.pockethive.work.config.RedisDatasetPickStrategy;
+import io.pockethive.work.config.RedisDatasetSource;
+import io.pockethive.work.config.WorkConfigurationParser;
 import java.util.List;
 
 /**
- * Redis-backed dataset input configuration bound from {@code pockethive.inputs.redis.*}.
+ * Responsibility: bind startup Redis dataset settings and delegate source-list and selection validation to work-config.
+ * Must not: infer source mode, duplicate source-entry validation or open Redis clients.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
+ * Consumes RESP-WORK-REDIS-SOURCES, RESP-WORK-REDIS-SELECTION and RESP-REDIS-CONNECTION-SETTINGS; scheduling remains B02 debt.
  */
-public class RedisDataSetInputProperties implements WorkInputConfig {
+public class RedisDataSetInputProperties extends RedisConnectionProperties implements WorkInputConfig {
 
-    private static final int MIN_PORT = 1;
-    private static final int MAX_PORT = 65_535;
     private static final double MIN_RATE_PER_SEC = 0.0;
 
-    public enum PickStrategy {
-        ROUND_ROBIN,
-        WEIGHTED_RANDOM
-    }
-
     private boolean enabled = false;
-    private String host;
-    private Integer port;
-    private String username;
-    private String password;
-    private Boolean ssl;
-    private String listName;
-    private List<Source> sources;
-    private PickStrategy pickStrategy;
+    private Object listName;
+    private List<RedisDatasetSource> sources;
+    private RedisDatasetPickStrategy pickStrategy;
     private Double ratePerSec;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
@@ -38,84 +31,27 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
         this.enabled = enabled;
     }
 
-    public String getHost() {
-        return host;
-    }
-
-    public void setHost(String host) {
-        this.host = normalise(host);
-    }
-
-    public int getPort() {
-        return requirePresent(port, "port");
-    }
-
-    public void setPort(int port) {
-        this.port = port;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = normalise(username);
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = normalise(password);
-    }
-
-    public boolean isSsl() {
-        return requirePresent(ssl, "ssl");
-    }
-
-    public void setSsl(boolean ssl) {
-        this.ssl = ssl;
-    }
-
-    public String getListName() {
+    public Object getListName() {
         return listName;
     }
 
-    public void setListName(String listName) {
-        this.listName = normalise(listName);
+    public void setListName(Object listName) {
+        this.listName = listName;
     }
 
-    public List<Source> getSources() {
+    public List<RedisDatasetSource> getSources() {
         return sources == null ? List.of() : sources;
     }
 
-    public void setSources(List<Source> sources) {
-        if (sources == null || sources.isEmpty()) {
-            this.sources = List.of();
-            return;
-        }
-        List<Source> normalised = new ArrayList<>(sources.size());
-        int index = 0;
-        for (Source source : sources) {
-            if (source == null) {
-                throw new IllegalArgumentException("sources[" + index + "] must be an object");
-            }
-            validateSource(source, "sources[" + index + "]");
-            Source copy = new Source();
-            copy.setListName(source.getListName());
-            copy.setWeight(source.getWeight());
-            normalised.add(copy);
-            index++;
-        }
-        this.sources = List.copyOf(normalised);
+    public void setSources(List<RedisDatasetSource> sources) {
+        this.sources = new WorkConfigurationParser().parseRedisSources(sources, "inputs.redis.sources");
     }
 
-    public PickStrategy getPickStrategy() {
+    public RedisDatasetPickStrategy getPickStrategy() {
         return pickStrategy;
     }
 
-    public void setPickStrategy(PickStrategy pickStrategy) {
+    public void setPickStrategy(RedisDatasetPickStrategy pickStrategy) {
         this.pickStrategy = pickStrategy;
     }
 
@@ -145,35 +81,12 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
 
     @Override
     public void validateConfigured(String prefix) {
-        requireNonBlank(host, prefix + ".host");
-        requirePort(port, prefix + ".port");
-        requirePresent(ssl, prefix + ".ssl");
+        var connection = connectionSettings(prefix);
         requirePresent(pickStrategy, prefix + ".pickStrategy");
         requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
-        boolean hasListName = listName != null;
-        boolean hasSources = !getSources().isEmpty();
-        if (hasListName == hasSources) {
-            throw new IllegalStateException(
-                prefix + " must configure exactly one source mode: listName or sources");
-        }
-        for (int i = 0; i < getSources().size(); i++) {
-            validateSource(getSources().get(i), prefix + ".sources[" + i + "]");
-        }
-    }
-
-    private static String normalise(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private static String requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
+        var selection = new WorkConfigurationParser().parseRedisDatasetSelection(listName, getSources(), prefix);
+        applyConnection(connection);
+        listName = selection.listName();
     }
 
     private static <T> T requirePresent(T value, String name) {
@@ -181,14 +94,6 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
             throw new IllegalStateException(name + " must be configured");
         }
         return value;
-    }
-
-    private static int requirePort(Integer value, String name) {
-        int port = requirePresent(value, name);
-        if (port < MIN_PORT || port > MAX_PORT) {
-            throw new IllegalStateException(name + " must be between " + MIN_PORT + " and " + MAX_PORT);
-        }
-        return port;
     }
 
     private static double requireRatePerSec(Double value, String name) {
@@ -199,49 +104,4 @@ public class RedisDataSetInputProperties implements WorkInputConfig {
         return rate;
     }
 
-    private static void validateSource(Source source, String prefix) {
-        requireNonBlank(source.getListName(), prefix + ".listName");
-        double weight = requirePresent(source.weight, prefix + ".weight");
-        if (!Double.isFinite(weight) || weight <= 0.0) {
-            throw new IllegalStateException(prefix + ".weight must be > 0");
-        }
-    }
-
-    public static final class Source {
-        private String listName;
-        private Double weight;
-
-        public String getListName() {
-            return listName;
-        }
-
-        public void setListName(String listName) {
-            this.listName = normalise(listName);
-        }
-
-        public double getWeight() {
-            return requirePresent(weight, "weight");
-        }
-
-        public void setWeight(double weight) {
-            this.weight = weight;
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            if (this == other) {
-                return true;
-            }
-            if (!(other instanceof Source source)) {
-                return false;
-            }
-            return java.util.Objects.equals(weight, source.weight)
-                && java.util.Objects.equals(listName, source.listName);
-        }
-
-        @Override
-        public int hashCode() {
-            return java.util.Objects.hash(listName, weight);
-        }
-    }
 }

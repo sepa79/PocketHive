@@ -11,8 +11,9 @@ import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
+import io.pockethive.work.config.RedisPushDirection;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -54,10 +55,21 @@ class RedisWorkOutputTest {
         properties.setMaxLen(-1);
 
         RedisWorkOutput output = new RedisWorkOutput(DEFINITION, properties, pushSupport);
-        output.publish(message("{\"AccountNumber\":\"8601\"}", Map.of("x-ph-flow", "TOP")), DEFINITION);
+        WorkItem item = message("original", Map.of("x-ph-flow", "TOP")).addStepPayload("processed");
+        output.publish(item, DEFINITION);
 
         assertThat(writerFactory.pushes).hasSize(1);
         assertThat(writerFactory.pushes.get(0).list()).isEqualTo("webauth.RED.custA");
+        assertThat(writerFactory.pushes.getFirst().payload()).isEqualTo("original");
+        assertThat(writerFactory.pushes.getFirst().direction()).isEqualTo(RedisPushDirection.RPUSH);
+        assertThat(writerFactory.pushes.getFirst().maxLen()).isEqualTo(-1);
+
+        output.applyRawConfig(Map.of("outputs", Map.of("redis", Map.of(
+            "sourceStep", "LAST", "pushDirection", "LPUSH", "maxLen", "2"))));
+        output.publish(item, DEFINITION);
+        assertThat(writerFactory.pushes.getLast().payload()).isEqualTo("processed");
+        assertThat(writerFactory.pushes.getLast().direction()).isEqualTo(RedisPushDirection.LPUSH);
+        assertThat(writerFactory.pushes.getLast().maxLen()).isEqualTo(2);
     }
 
     @Test
@@ -91,6 +103,7 @@ class RedisWorkOutputTest {
             )
         ));
 
+        output.applyRawConfig(Map.of("outputs", Map.of("redis", Map.of("maxLen", 10))));
         output.publish(message("{\"AccountNumber\":\"8601\"}", Map.of("x-ph-flow", "TOP")), DEFINITION);
 
         assertThat(writerFactory.pushes).hasSize(1);
@@ -98,7 +111,7 @@ class RedisWorkOutputTest {
     }
 
     @Test
-    void failsWhenTargetListCannotBeResolved() {
+    void rejectsMissingTargetsAndFailsWhenMessageTemplateResolvesEmpty() {
         RecordingWriterFactory writerFactory = new RecordingWriterFactory();
         RedisPushSupport pushSupport = new RedisPushSupport(writerFactory, new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
@@ -111,35 +124,17 @@ class RedisWorkOutputTest {
         properties.setRoutes(List.of());
         properties.setMaxLen(-1);
 
+        assertThatThrownBy(() -> new RedisWorkOutput(DEFINITION, properties, pushSupport))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("at least one target");
+        properties.setTargetListTemplate("{{ headers.target }}");
         RedisWorkOutput output = new RedisWorkOutput(DEFINITION, properties, pushSupport);
 
-        assertThatThrownBy(() -> output.publish(message("{}", Map.of()), DEFINITION))
+        assertThatThrownBy(() -> output.publish(message("{}", Map.of("target", "")), DEFINITION))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("could not resolve target list");
-    }
-
-    @Test
-    void rejectsInvalidRedisPushEnumsInsteadOfDefaulting() {
-        RedisPushSupport.ConnectionConfig connection =
-            new RedisPushSupport.ConnectionConfig("redis", 6379, null, null, false);
-
-        assertThatThrownBy(() -> RedisPushSupport.SourceStep.fromString("MIDDLE"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("sourceStep");
-        assertThatThrownBy(() -> RedisPushSupport.PushDirection.fromString("PUSH"))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("pushDirection");
-        assertThatThrownBy(() -> new RedisPushSupport.PushRequest(
-            connection,
-            null,
-            RedisPushSupport.PushDirection.RPUSH,
-            List.of(),
-            "list",
-            null,
-            -1
-        ))
-            .isInstanceOf(NullPointerException.class)
-            .hasMessageContaining("sourceStep");
+        output.publish(message("{}", Map.of("target", "selected")), DEFINITION);
+        assertThat(writerFactory.pushes).extracting(Push::list).containsExactly("selected");
     }
 
     @Test
@@ -152,6 +147,11 @@ class RedisWorkOutputTest {
         assertMalformedRawUpdateKeepsDefaultList(Map.of("maxLen", "many"));
         assertMalformedRawUpdateKeepsDefaultList(Map.of("maxLen", 1.5));
         assertMalformedRawUpdateKeepsDefaultList(Map.of("maxLen", "-2"));
+        assertMalformedRawUpdateKeepsDefaultList(Map.of("sourceStep", "MIDDLE"));
+        assertMalformedRawUpdateKeepsDefaultList(Map.of("pushDirection", "PUSH"));
+        assertMalformedRawUpdateKeepsDefaultList(Map.of("defaultList", 7));
+        assertMalformedRawUpdateKeepsDefaultList(Map.of("targetListTemplate", Map.of("nested", "out")));
+        assertMalformedRawUpdateKeepsDefaultList(Map.of("defaultList", " "));
     }
 
     @Test
@@ -164,7 +164,7 @@ class RedisWorkOutputTest {
     @Test
     void rejectsNullRouteEntryInsteadOfDroppingIt() {
         RedisOutputProperties properties = new RedisOutputProperties();
-        List<RedisOutputProperties.Route> routes = new ArrayList<>();
+        List<io.pockethive.work.config.RedisRouteDefinition> routes = new ArrayList<>();
         routes.add(null);
 
         assertThatThrownBy(() -> properties.setRoutes(routes))
@@ -194,7 +194,7 @@ class RedisWorkOutputTest {
         RedisWorkOutput output = new RedisWorkOutput(DEFINITION, properties, pushSupport);
 
         java.util.LinkedHashMap<String, Object> update = new java.util.LinkedHashMap<>(invalidPatch);
-        update.put("defaultList", "ph:dataset:updated");
+        update.putIfAbsent("defaultList", "ph:dataset:updated");
         output.applyRawConfig(Map.of("outputs", Map.of("redis", update)));
 
         output.publish(message("{}", Map.of()), DEFINITION);
@@ -208,11 +208,11 @@ class RedisWorkOutputTest {
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(RedisPushSupport.ConnectionConfig config) {
-            return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload));
+        public RedisPushSupport.RedisWriter create(io.pockethive.work.config.RedisConnectionSettings config) {
+            return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload, direction, maxLen));
         }
     }
 
-    private record Push(String list, String payload) {
+    private record Push(String list, String payload, RedisPushDirection direction, int maxLen) {
     }
 }

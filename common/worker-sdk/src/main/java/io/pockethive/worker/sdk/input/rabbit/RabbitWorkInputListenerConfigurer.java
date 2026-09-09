@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.input.rabbit;
 
-import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;

@@ -164,7 +164,8 @@ can defer unresolved values, but must delegate the rules for resolved literal va
 - [ScenarioBundleValidator](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java),
   `validateRequestTemplateShape`, lines 1747–1795, independently requires protocol,
   serviceId, callId, and HTTP method/pathTemplate.
-- [TemplateLoader](../../common/request-templates/src/main/java/io/pockethive/requesttemplates/TemplateLoader.java),
+- `common/request-templates/src/main/java/io/pockethive/requesttemplates/TemplateLoader.java`
+  (historical path at the audited revision; moved to `request-template-files` in B02),
   `parseTemplate`, lines 76–119, substitutes its supplied `defaultServiceId` for absent
   serviceId and constructs an HTTP definition with absent method/pathTemplate.
 

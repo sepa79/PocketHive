@@ -36,7 +36,7 @@ import org.springframework.amqp.core.Queue;
 import org.springframework.amqp.core.TopicExchange;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -402,30 +402,6 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS")).isEqualTo("2");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_TICKINTERVALMS")).isEqualTo("250");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_ENABLED")).isEqualTo("true");
-  }
-
-  @Test
-  void prepareFailsWhenRabbitHostMissing() throws Exception {
-    SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
-    RabbitProperties rabbitProperties = new RabbitProperties();
-    rabbitProperties.setHost("");
-    rabbitProperties.setPort(5672);
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    try {
-      SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, dockerClient, docker, rabbit,
-          io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
-          rabbitProperties, "inst", properties, registry,
-          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
-          runtimeMount());
-      SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
-
-      assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
-          .isInstanceOf(IllegalStateException.class)
-          .hasMessageContaining("spring.rabbitmq.host");
-    } finally {
-      registry.close();
-    }
   }
 
   @Test
@@ -988,12 +964,7 @@ class SwarmLifecycleManagerTest {
   }
 
   private SwarmLifecycleManager newManager(boolean bufferGuardEnabled) {
-    RabbitProperties rabbitProperties = new RabbitProperties();
-    rabbitProperties.setHost("rabbitmq");
-    rabbitProperties.setPort(5672);
-    rabbitProperties.setUsername("guest");
-    rabbitProperties.setPassword("guest");
-    rabbitProperties.setVirtualHost("/");
+    RabbitConnectionSettings rabbitConnection = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     meterRegistry = new SimpleMeterRegistry();
     return new SwarmLifecycleManager(
         amqp,
@@ -1002,7 +973,7 @@ class SwarmLifecycleManagerTest {
         docker,
         rabbit,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
-        rabbitProperties,
+        rabbitConnection,
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),
         meterRegistry,

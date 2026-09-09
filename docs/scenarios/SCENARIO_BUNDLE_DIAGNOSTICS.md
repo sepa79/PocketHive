@@ -132,6 +132,27 @@ Validation endpoints return findings in a machine-readable shape:
 Clients must key automation on `code` and `path`, not on the human-readable
 `message` text.
 
+Redis route/source/destination and native-output write-settings authoring uses the shared
+Work configuration parser. Concrete errors retain `SCENARIO_DESCRIPTOR_INVALID`.
+A symbolic route field, route array, defaultList, sourceStep, pushDirection or maxLen
+produces `WORK_CONFIGURATION_DEFERRED` with severity `warning` at that field's path:
+the expression must be rendered and its resolved value validated before runtime use.
+This warning permits saving the authored bundle; it is not runtime acceptance.
+targetListTemplate is a per-message template: it remains valid template text until a worker
+renders it with the WorkItem. It is not rejected as an unresolved bootstrap value.
+Wrong target field types and missing output destinations use the same parser in startup,
+native output, diagnostic capture and authoring. Other Work constraints remain tracked in B02.
+See [target ownership](../architecture/runtime-responsibilities.md#resp-work-redis-targets).
+sourceStep and pushDirection require supported enum values; maxLen requires an exact
+32-bit integer of -1 or greater. These three settings share validation across startup,
+native output, enabled diagnostic capture and native-output authoring. Their concrete
+errors use canonical field paths without additional catalogue type/option/range findings.
+See [write-settings ownership](../architecture/runtime-responsibilities.md#resp-work-redis-write-settings).
+Selected Redis input/output connection fields also use the shared parser: host, port,
+username, password and SSL. Credentials are not echoed in errors. Password whitespace
+is preserved; a username requires an explicit password. Symbolic fields defer authoring
+validation. Full sequence/token/capture authoring remains part of B02.
+
 ---
 
 ## Dry-run validation endpoints
@@ -296,3 +317,14 @@ The reason is simple:
 - adding edit routes on `scenario.id` for those cases would reintroduce an inconsistent contract
 
 Future repair editing, if needed, must also be bundle-addressed rather than id-addressed.
+
+
+### Shared request-template validation
+
+Request-template shape, protocol and auth-reference decisions are owned by
+`common/request-templates` (`RequestTemplateParser`). Scenario Manager projects its
+field failures and retains bundle file/reference/profile-existence checks. Runtime
+file loading uses `common/request-template-files` (`TemplateLoader`) and the same parser.
+Templates must explicitly provide serviceId/callId/protocol; HTTP requires method and
+pathTemplate. Missing loader roots and duplicate template keys fail explicitly.
+The documented schemaRef authoring hint remains supported.

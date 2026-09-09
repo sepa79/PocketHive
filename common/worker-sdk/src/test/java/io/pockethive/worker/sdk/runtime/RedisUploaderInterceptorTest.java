@@ -15,8 +15,8 @@ import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import java.util.ArrayList;
 import java.util.List;
@@ -196,8 +196,8 @@ class RedisUploaderInterceptorTest {
         );
 
         assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("requires routes, targetListTemplate, or defaultList");
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("at least one target");
 
         assertThat(writerFactory.pushes).isEmpty();
     }
@@ -228,8 +228,8 @@ class RedisUploaderInterceptorTest {
         );
 
         assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("requires field 'pushDirection'");
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("interceptors.redisUploader.pushDirection");
 
         assertThat(writerFactory.pushes).isEmpty();
     }
@@ -277,6 +277,10 @@ class RedisUploaderInterceptorTest {
         assertInvalidUploaderScalar(Map.of("port", 70_000), "port");
         assertInvalidUploaderScalar(Map.of("maxLen", 1.5), "maxLen");
         assertInvalidUploaderScalar(Map.of("maxLen", -2), "maxLen");
+        assertInvalidUploaderScalar(Map.of("sourceStep", "MIDDLE"), "sourceStep");
+        assertInvalidUploaderScalar(Map.of("pushDirection", "PUSH"), "pushDirection");
+        assertInvalidUploaderScalar(Map.of("defaultList", 7), "defaultList");
+        assertInvalidUploaderScalar(Map.of("targetListTemplate", Map.of("nested", "out")), "targetListTemplate");
     }
 
     private static void assertInvalidUploaderScalar(Map<String, Object> patch, String field) {
@@ -301,7 +305,7 @@ class RedisUploaderInterceptorTest {
         );
 
         assertThatThrownBy(() -> interceptor.intercept(context, ctx -> ctx.message()))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOfAny(IllegalStateException.class, io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining(field);
 
         assertThat(writerFactory.pushes).isEmpty();
@@ -375,7 +379,7 @@ class RedisUploaderInterceptorTest {
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(RedisPushSupport.ConnectionConfig config) {
+        public RedisPushSupport.RedisWriter create(io.pockethive.work.config.RedisConnectionSettings config) {
             return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload));
         }
     }

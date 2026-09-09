@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.output;
 
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;

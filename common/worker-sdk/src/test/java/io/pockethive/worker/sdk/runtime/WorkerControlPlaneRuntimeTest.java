@@ -16,9 +16,10 @@ import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.work.api.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
+import io.pockethive.templating.RedisSequenceGenerator;
 import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import java.util.Map;
@@ -273,6 +274,49 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(ctx.phase()).isEqualTo("apply");
         assertThat(ctx.result().context()).containsEntry("requestedEnabled", true);
+    }
+
+    @Test
+    void configUpdateRejectsInvalidRedisBeforeChangingWorkerState() throws Exception {
+        var originalConnection = RedisSequenceGenerator.currentConfig();
+        try {
+            TemplateRenderer renderer = mock(TemplateRenderer.class);
+            WorkerControlPlaneRuntime target = new WorkerControlPlaneRuntime(
+                controlPlane, stateStore, MAPPER, emitter, IDENTITY, PROPERTIES.getControlPlane(), renderer);
+            applyConfigUpdate(target, Map.of("enabled", false, "ratePerSec", 1.0,
+                "redis", Map.of("host", "redis", "port", 6379, "ssl", false)));
+            var acceptedConfig = target.workerRawConfig(definition.beanName());
+            var acceptedConnection = RedisSequenceGenerator.currentConfig();
+            var observed = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
+            target.registerStateListener(definition.beanName(), observed::set);
+            reset(emitter);
+
+            applyConfigUpdate(target, Map.of("enabled", true, "ratePerSec", 99.0,
+                "redis", Map.of("port", 0), "privateConfig", Map.of("attempt", "rejected"),
+                "templating", Map.of("reseed", true)));
+
+            var failure = ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+            verify(emitter).emitFailure(failure.capture());
+            assertThat(failure.getValue().message()).contains("redis.port");
+            verify(emitter, times(0)).emitResult(any());
+            assertThat(target.workerEnabled(definition.beanName())).isFalse();
+            assertThat(target.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(false, 1.0));
+            assertThat(target.workerRawConfig(definition.beanName())).isEqualTo(acceptedConfig);
+            assertThat(stateStore.getOrCreate(definition).privateConfig()).isEmpty();
+            assertThat(observed.get().rawConfig()).isEqualTo(acceptedConfig);
+            assertThat(RedisSequenceGenerator.currentConfig()).isEqualTo(acceptedConnection);
+            verify(renderer, times(0)).resetSeededSelections();
+
+            reset(emitter);
+            applyConfigUpdate(target, Map.of("ratePerSec", 4.0));
+            verify(emitter).emitResult(any());
+            verify(emitter, times(0)).emitFailure(any());
+            assertThat(target.workerConfig(definition.beanName(), TestConfig.class)).contains(new TestConfig(false, 4.0));
+            assertThat(target.workerRawConfig(definition.beanName())).containsEntry("redis", acceptedConfig.get("redis"));
+            assertThat(RedisSequenceGenerator.currentConfig()).isEqualTo(acceptedConnection);
+        } finally {
+            RedisSequenceGenerator.configure(originalConnection);
+        }
     }
 
     @Test

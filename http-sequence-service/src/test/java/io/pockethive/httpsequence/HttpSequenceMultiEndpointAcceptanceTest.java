@@ -8,7 +8,7 @@ import com.sun.net.httpserver.HttpServer;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
@@ -165,6 +165,7 @@ class HttpSequenceMultiEndpointAcceptanceTest {
   private void writeTemplate(String callId, String path) throws Exception {
     Files.writeString(templates.resolve(callId + ".yaml"), """
         protocol: HTTP
+        serviceId: default
         callId: %s
         method: GET
         pathTemplate: %s

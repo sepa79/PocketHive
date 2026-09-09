@@ -4,6 +4,8 @@ import static org.mockito.Mockito.*;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.config.*;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.SchedulerWorkInput;
 import io.pockethive.worker.sdk.runtime.*;
 import java.util.Map;

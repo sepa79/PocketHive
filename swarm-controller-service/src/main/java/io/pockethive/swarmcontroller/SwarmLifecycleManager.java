@@ -33,7 +33,7 @@ import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 import org.springframework.stereotype.Component;
 
 /**
@@ -41,6 +41,7 @@ import org.springframework.stereotype.Component;
  * Must not: Duplicate lifecycle, readiness, or worker-observation state owned by the runtime core.
  * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control.
  * Delegate every {@link SwarmLifecycle} capability to one core instance.
+ * Connection settings: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
  */
 @Component
 public class SwarmLifecycleManager implements SwarmLifecycle {
@@ -59,14 +60,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                DockerContainerClient docker,
                                RabbitTemplate rabbit,
                                ControlPlaneCodec controlPlaneCodec,
-                               RabbitProperties rabbitProperties,
+                               RabbitConnectionSettings rabbitConnection,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                                ClickHouseSinkProperties clickHouseSink,
                                io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
-    this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitProperties, instanceId, properties, meterRegistry,
+    this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
         clickHouseSink,
@@ -79,7 +80,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         DockerContainerClient docker,
                         RabbitTemplate rabbit,
                         ControlPlaneCodec controlPlaneCodec,
-                        RabbitProperties rabbitProperties,
+                        RabbitConnectionSettings rabbitConnection,
                         String instanceId,
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
@@ -115,7 +116,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     SwarmWorkerSpecFactory workerSpecFactory = new SwarmWorkerSpecFactory(
         properties,
         workerSettings,
-        rabbitProperties,
+        rabbitConnection,
         docker::resolveControlNetwork,
         clickHouseSink,
         runtimeFilesystemMount,

@@ -37,6 +37,7 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Responsibility: load worker auth profiles and coordinate credential application, HTTP refresh and token storage.
  * Must not: own product auth-service identity/authorization or duplicate token storage/claim behavior.
+ * Consumes RESP-REDIS-CONNECTION-SETTINGS for validated token-store connection values.
  * Contract: RESP-WORK-AUTH-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-work-auth-runtime.
  */
 public final class AuthRuntime {
@@ -264,11 +265,7 @@ public final class AuthRuntime {
             TokenStore store = resolved.values().stream().anyMatch(p -> p.getStorage().getMode() == AuthStorageMode.REDIS)
                 ? new RedisTokenStore(
                     context.info().swarmId(),
-                    redisProperties.getHost(),
-                    redisProperties.getPort(),
-                    redisProperties.getUsername(),
-                    redisProperties.getPassword(),
-                    redisProperties.isSsl())
+                    redisProperties.connectionSettings(RedisSequenceProperties.PREFIX))
                 : null;
             return new AuthRuntime(resolved, fingerprints, store, renderer);
         } catch (IOException ex) {

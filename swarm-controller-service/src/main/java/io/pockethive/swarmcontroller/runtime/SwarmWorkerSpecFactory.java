@@ -20,12 +20,14 @@ import java.util.Objects;
 import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 
 /**
  * Responsibility: Resolve one scenario bee into its effective config, environment, identity, and worker spec.
  * Must not: Register runtime state, publish bootstrap config, provision workers, or mutate the scenario plan.
- * Contract: Build one immutable worker plan from explicit runtime settings and canonical queue/network resolvers.
+ * Contract: RESP-CONTROLLER-WORKER-PLAN — docs/architecture/runtime-responsibilities.md#resp-controller-worker-plan.
+ * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
+ * Build one worker plan using the shared connection export; existing Work settings/naming remain B02/B04 debt.
  */
 public final class SwarmWorkerSpecFactory {
 
@@ -33,7 +35,7 @@ public final class SwarmWorkerSpecFactory {
 
   private final SwarmControllerProperties properties;
   private final WorkerSettings workerSettings;
-  private final RabbitProperties rabbitProperties;
+  private final RabbitConnectionSettings rabbitConnection;
   private final Supplier<String> controlNetwork;
   private final Supplier<String> templateId;
   private final ClickHouseSinkProperties clickHouseSink;
@@ -42,14 +44,14 @@ public final class SwarmWorkerSpecFactory {
   public SwarmWorkerSpecFactory(
       SwarmControllerProperties properties,
       WorkerSettings workerSettings,
-      RabbitProperties rabbitProperties,
+      RabbitConnectionSettings rabbitConnection,
       Supplier<String> controlNetwork,
       ClickHouseSinkProperties clickHouseSink,
       RuntimeFilesystemMount runtimeFilesystemMount,
       Supplier<String> templateId) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
-    this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+    this.rabbitConnection = Objects.requireNonNull(rabbitConnection, "rabbitConnection");
     this.controlNetwork = Objects.requireNonNull(controlNetwork, "controlNetwork");
     this.templateId = Objects.requireNonNull(templateId, "templateId");
     this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
@@ -61,7 +63,7 @@ public final class SwarmWorkerSpecFactory {
     String beeName = BeeNameGenerator.generate(bee.role(), properties.getSwarmId());
     Map<String, String> environment = new LinkedHashMap<>(
         ControlPlaneContainerEnvironmentFactory.workerEnvironment(
-            beeName, bee.role(), workerSettings, rabbitProperties));
+            beeName, bee.role(), workerSettings, rabbitConnection));
     environment.put("POCKETHIVE_JOURNAL_RUN_ID", workerSettings.runId());
     environment.put("POCKETHIVE_TEMPLATE_ID", requireText(templateId.get(), "templateId"));
     if (hasText(bee.image())) {

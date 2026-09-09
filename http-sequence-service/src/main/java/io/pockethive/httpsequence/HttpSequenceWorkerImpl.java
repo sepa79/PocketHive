@@ -1,7 +1,7 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.PocketHiveWorkerFunction;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;

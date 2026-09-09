@@ -18,7 +18,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 
 class SwarmWorkerSpecFactoryTest {
 
@@ -143,12 +143,7 @@ class SwarmWorkerSpecFactoryTest {
             PocketHiveMetricsAdapter.DISABLED,
             Duration.ofSeconds(10),
             ClickHouseMetricsSinkProperties.disabled()));
-    RabbitProperties rabbit = new RabbitProperties();
-    rabbit.setHost("rabbitmq");
-    rabbit.setPort(5672);
-    rabbit.setUsername("guest");
-    rabbit.setPassword("guest");
-    rabbit.setVirtualHost("/");
+    RabbitConnectionSettings rabbit = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     return new SwarmWorkerSpecFactory(
         properties,
         workerSettings,

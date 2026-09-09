@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
@@ -256,6 +256,29 @@ class RequestBuilderWorkerImplTest {
     assertThatThrownBy(() -> worker.onMessage(seed, context))
         .isInstanceOf(AuthFailureException.class)
         .hasMessageContaining("HTTP_QUERY_PARAM auth requires");
+    assertThat(worker.onMessage(seed, context)).isNull();
+  }
+
+  @Test
+  void inlineAuthTemplateFailuresThrowOnceThenDropRepeatedFailures() throws Exception {
+    Path dir = Files.createTempDirectory("templates-inline-auth-failure");
+    Files.writeString(dir.resolve("call.yaml"), """
+        serviceId: default
+        callId: call
+        protocol: HTTP
+        method: GET
+        pathTemplate: /should-not-send
+        auth: {}
+        """);
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    WorkerContext context = new TestWorkerContext(new RequestBuilderWorkerConfig(
+        dir.toString(), "default", false, Map.of()));
+    WorkItem seed = WorkItem.text(SEED_INFO, "{}").header("x-ph-call-id", "call").build();
+
+    assertThatThrownBy(() -> worker.onMessage(seed, context))
+        .isInstanceOf(AuthFailureException.class)
+        .hasMessageContaining("inline auth");
     assertThat(worker.onMessage(seed, context)).isNull();
   }
 

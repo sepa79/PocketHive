@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.output;
 
 import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.core.Ordered;

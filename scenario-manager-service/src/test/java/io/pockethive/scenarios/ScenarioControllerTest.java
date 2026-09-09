@@ -1842,7 +1842,7 @@ class ScenarioControllerTest {
                         "scenario.yaml:template.bees[0].config.outputs.redis.routes[0].list",
                         "scenario.yaml:template.bees[0].config.outputs.redis.routes[0]")))
                 .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
-                        org.hamcrest.Matchers.containsString("source listName must not be blank"),
+                        org.hamcrest.Matchers.containsString("source listName must be nonblank text"),
                         org.hamcrest.Matchers.containsString("source weight must be > 0"),
                         org.hamcrest.Matchers.containsString("source entry must be an object"),
                         org.hamcrest.Matchers.containsString("route list must not be blank"),
@@ -1971,9 +1971,9 @@ class ScenarioControllerTest {
                         "scenario.yaml:template.bees[0].config.outputs.redis.port",
                         "scenario.yaml:template.bees[0].config.outputs.redis.maxLen")))
                 .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
-                        org.hamcrest.Matchers.containsString("expected between 1 and 65535"),
+                        org.hamcrest.Matchers.containsString("Port must be between 1 and 65535."),
                         org.hamcrest.Matchers.containsString("expected >= 0"),
-                        org.hamcrest.Matchers.containsString("expected >= -1"))));
+                        org.hamcrest.Matchers.containsString("Must be -1 or greater."))));
     }
 
     @Test

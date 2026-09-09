@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.config.WorkConfigurationParser;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
 import java.util.Map;
@@ -15,19 +16,13 @@ import org.slf4j.LoggerFactory;
  * Responsibility: apply diagnostic capture policy around a worker invocation through Redis push support.
  * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
+ * Consumes RESP-WORK-REDIS-TARGETS, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
  */
 public final class RedisUploaderInterceptor implements WorkerInvocationInterceptor {
 
+    private static final WorkConfigurationParser CONFIGURATION = new WorkConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisUploaderInterceptor.class);
-    private static final int MIN_PORT = 1;
-    private static final int MAX_PORT = 65_535;
-    private static final int MIN_MAX_LEN = -1;
     private static final String FIELD_ENABLED = "enabled";
-    private static final String FIELD_HOST = "host";
-    private static final String FIELD_PORT = "port";
-    private static final String FIELD_USERNAME = "username";
-    private static final String FIELD_PASSWORD = "password";
-    private static final String FIELD_SSL = "ssl";
     private static final String FIELD_PHASE = "phase";
     private static final String FIELD_SOURCE_STEP = "sourceStep";
     private static final String FIELD_PUSH_DIRECTION = "pushDirection";
@@ -107,41 +102,19 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
             return null;
         }
 
-        String host = requireNonBlank(uploaderMap, FIELD_HOST);
-        int port = requireInt(uploaderMap, FIELD_PORT);
-        validatePort(port);
-        boolean ssl = requireBoolean(uploaderMap, FIELD_SSL);
+        var connection = CONFIGURATION.parseRedisConnection(uploaderMap, "interceptors.redisUploader");
         Phase phase = requireEnum(uploaderMap, FIELD_PHASE, Phase.class);
-        RedisPushSupport.SourceStep sourceStep =
-            requireEnum(uploaderMap, FIELD_SOURCE_STEP, RedisPushSupport.SourceStep.class);
-        RedisPushSupport.PushDirection pushDirection =
-            requireEnum(uploaderMap, FIELD_PUSH_DIRECTION, RedisPushSupport.PushDirection.class);
-        int maxLen = requireInt(uploaderMap, FIELD_MAX_LEN);
-        validateMaxLen(maxLen);
-        var routes = RedisPushSupport.parseRoutes(uploaderMap.get(FIELD_ROUTES), log, "redisUploader");
-        String defaultList = RedisPushSupport.asText(uploaderMap.get(FIELD_DEFAULT_LIST));
-        String targetListTemplate = RedisPushSupport.asText(uploaderMap.get(FIELD_TARGET_LIST_TEMPLATE));
-        if (routes.isEmpty() && isBlank(defaultList) && isBlank(targetListTemplate)) {
-            throw new IllegalStateException(
-                "Redis uploader config requires routes, targetListTemplate, or defaultList when enabled.");
-        }
-
-        RedisPushSupport.ConnectionConfig connection = new RedisPushSupport.ConnectionConfig(
-            host,
-            port,
-            RedisPushSupport.asText(uploaderMap.get(FIELD_USERNAME)),
-            RedisPushSupport.asText(uploaderMap.get(FIELD_PASSWORD)),
-            ssl
-        );
+        var settings = CONFIGURATION.parseRedisWriteSettings(uploaderMap.get(FIELD_SOURCE_STEP),
+            uploaderMap.get(FIELD_PUSH_DIRECTION), uploaderMap.get(FIELD_MAX_LEN), "interceptors.redisUploader");
+        var targets = CONFIGURATION.parseRedisOutputTargets(uploaderMap.get(FIELD_ROUTES),
+            uploaderMap.get(FIELD_DEFAULT_LIST), uploaderMap.get(FIELD_TARGET_LIST_TEMPLATE), "interceptors.redisUploader");
 
         RedisPushSupport.PushRequest request = new RedisPushSupport.PushRequest(
             connection,
-            sourceStep,
-            pushDirection,
-            routes,
-            defaultList,
-            targetListTemplate,
-            maxLen
+            settings,
+            targets.routes(),
+            targets.defaultList(),
+            targets.targetListTemplate()
         );
 
         return new ResolvedConfig(true, phase, request);
@@ -154,28 +127,6 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
             throw invalidField(field, "must not be blank");
         }
         return value;
-    }
-
-    private static int requireInt(Map<?, ?> map, String field) {
-        Object raw = requirePresent(map, field);
-        if (raw instanceof Number number) {
-            double numeric = number.doubleValue();
-            if (!Double.isFinite(numeric)
-                || numeric != Math.rint(numeric)
-                || numeric < Integer.MIN_VALUE
-                || numeric > Integer.MAX_VALUE) {
-                throw invalidField(field, "must be an integer");
-            }
-            return number.intValue();
-        }
-        if (raw instanceof String text) {
-            try {
-                return Integer.parseInt(text.trim());
-            } catch (NumberFormatException ex) {
-                throw invalidField(field, "must be an integer", ex);
-            }
-        }
-        throw invalidField(field, "must be an integer");
     }
 
     private static boolean requireBoolean(Map<?, ?> map, String field) {
@@ -201,18 +152,6 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         return requireBoolean(map, FIELD_ENABLED);
     }
 
-    private static void validatePort(int port) {
-        if (port < MIN_PORT || port > MAX_PORT) {
-            throw invalidField(FIELD_PORT, "must be between " + MIN_PORT + " and " + MAX_PORT);
-        }
-    }
-
-    private static void validateMaxLen(int maxLen) {
-        if (maxLen < MIN_MAX_LEN) {
-            throw invalidField(FIELD_MAX_LEN, "must be " + MIN_MAX_LEN + " or greater");
-        }
-    }
-
     private static <E extends Enum<E>> E requireEnum(Map<?, ?> map, String field, Class<E> enumType) {
         String value = requireNonBlank(map, field);
         for (E constant : enumType.getEnumConstants()) {
@@ -230,16 +169,8 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         return map.get(field);
     }
 
-    private static boolean isBlank(String value) {
-        return value == null || value.isBlank();
-    }
-
     private static IllegalStateException invalidField(String field, String reason) {
         return new IllegalStateException("Redis uploader config field '" + field + "' " + reason + ".");
-    }
-
-    private static IllegalStateException invalidField(String field, String reason, Throwable cause) {
-        return new IllegalStateException("Redis uploader config field '" + field + "' " + reason + ".", cause);
     }
 
     enum Phase {

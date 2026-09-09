@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.work.config.WorkerInputType;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;

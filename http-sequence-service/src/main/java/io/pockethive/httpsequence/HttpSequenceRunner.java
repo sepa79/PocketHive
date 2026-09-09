@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Responsibility: execute configured HTTP steps with current template, auth and diagnostic capture integration.
  * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Debug capture consumes RESP-REDIS-CONNECTION-SETTINGS for connection validation.
  * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
  */
 final class HttpSequenceRunner {
@@ -103,7 +104,7 @@ final class HttpSequenceRunner {
         }
 
         String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
-        String key = TemplateLoader.key(serviceId, step.callId());
+        String key = io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, step.callId());
         TemplateDefinition definition = templates.get(key);
         if (!(definition instanceof HttpTemplateDefinition httpDef)) {
           throw new IllegalArgumentException("Missing HTTP template for " + key);
@@ -521,7 +522,7 @@ final class HttpSequenceRunner {
     String key = config.templateRoot() + "::" + config.serviceId();
     Map<String, TemplateDefinition> current = templates;
     if (current == null || !key.equals(lastTemplateConfigKey)) {
-      Map<String, TemplateDefinition> loaded = templateLoader.load(config.templateRoot(), config.serviceId());
+      Map<String, TemplateDefinition> loaded = templateLoader.load(config.templateRoot());
       templates = loaded;
       lastTemplateConfigKey = key;
     }
@@ -629,9 +630,7 @@ final class HttpSequenceRunner {
     RedisDebugCaptureStore(ObjectMapper mapper, RedisSequenceProperties properties) {
       this.mapper = Objects.requireNonNull(mapper, "mapper");
       boolean canEnable = properties != null
-          && properties.isEnabled()
-          && properties.getHost() != null
-          && !properties.getHost().isBlank();
+          && properties.isEnabled();
       this.enabled = canEnable;
 
       if (!canEnable) {
@@ -640,14 +639,15 @@ final class HttpSequenceRunner {
         return;
       }
 
+      var settings = properties.connectionSettings(RedisSequenceProperties.PREFIX);
       io.lettuce.core.RedisURI.Builder builder = io.lettuce.core.RedisURI.builder()
-          .withHost(properties.getHost())
-          .withPort(properties.getPort())
-          .withSsl(properties.isSsl());
-      if (properties.getUsername() != null && properties.getPassword() != null) {
-        builder.withAuthentication(properties.getUsername(), properties.getPassword().toCharArray());
-      } else if (properties.getPassword() != null) {
-        builder.withPassword(properties.getPassword().toCharArray());
+          .withHost(settings.host())
+          .withPort(settings.port())
+          .withSsl(settings.ssl());
+      if (settings.username() != null && settings.password() != null) {
+        builder.withAuthentication(settings.username(), settings.password().toCharArray());
+      } else if (settings.password() != null) {
+        builder.withPassword(settings.password().toCharArray());
       }
       this.client = io.lettuce.core.RedisClient.create(builder.build());
       this.commands = ThreadLocal.withInitial(() -> client.connect().sync());

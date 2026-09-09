@@ -1,94 +1,35 @@
 package io.pockethive.worker.sdk.config;
 
 import io.pockethive.templating.RedisSequenceGenerator;
+import io.pockethive.work.config.WorkConfigurationParser;
+import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Configuration;
 
+/**
+ * Responsibility: apply validated worker Redis connection settings to the existing sequence owner.
+ * Must not: decode/clamp connection values or silently ignore invalid updates.
+ * Contract: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
+ * Global sequence ownership remains RESP-TEMPLATE-SEQUENCE pending B06.
+ */
 @Configuration
 @EnableConfigurationProperties(RedisSequenceProperties.class)
-@ConditionalOnProperty(prefix = "pockethive.worker.config.redis", name = "enabled", havingValue = "true", matchIfMissing = true)
+@ConditionalOnProperty(prefix = RedisSequenceProperties.PREFIX, name = "enabled", havingValue = "true", matchIfMissing = true)
 public class RedisSequenceConfiguration {
-
     RedisSequenceConfiguration(RedisSequenceProperties properties) {
-        if (!properties.isEnabled()) {
-            return;
+        if (properties.isEnabled()) {
+            RedisSequenceGenerator.configure(properties.connectionSettings(RedisSequenceProperties.PREFIX));
         }
-        RedisSequenceGenerator.configure(
-            properties.getHost(),
-            properties.getPort(),
-            properties.getUsername(),
-            properties.getPassword(),
-            properties.isSsl()
-        );
     }
 
-    public static void configureFromWorkerConfig(java.util.Map<String, Object> config) {
-        if (config == null) {
-            return;
+    public static void configureFromWorkerConfig(Map<String, Object> config) {
+        if (config == null || !config.containsKey("redis")) return;
+        if (!(config.get("redis") instanceof Map<?, ?> values)) {
+            throw new IllegalArgumentException("redis must be an object");
         }
-
-        Object redisObj = config.get("redis");
-        if (!(redisObj instanceof java.util.Map<?, ?> redisMap)) {
-            return;
-        }
-
-        RedisSequenceGenerator.ConnectionConfig current = RedisSequenceGenerator.currentConfig();
-        boolean hasHost = redisMap.containsKey("host");
-        boolean hasPort = redisMap.containsKey("port");
-        boolean hasUsername = redisMap.containsKey("username");
-        boolean hasPassword = redisMap.containsKey("password");
-        boolean hasSsl = redisMap.containsKey("ssl");
-
-        String host = hasHost ? normalise(redisMap.get("host")) : current.host();
-        if (host == null || host.isBlank()) {
-            host = current.host();
-        }
-
-        int port = current.port();
-        if (hasPort) {
-            Object portObj = redisMap.get("port");
-            Integer parsed = parsePort(portObj);
-            if (parsed != null) {
-                port = parsed;
-            }
-        }
-
-        String username = hasUsername ? normalise(redisMap.get("username")) : current.username();
-        String password = hasPassword ? normalise(redisMap.get("password")) : current.password();
-        boolean ssl = current.ssl();
-        if (hasSsl) {
-            Object sslObj = redisMap.get("ssl");
-            ssl = sslObj instanceof Boolean
-                ? (Boolean) sslObj
-                : sslObj != null && Boolean.parseBoolean(sslObj.toString());
-        }
-
-        RedisSequenceGenerator.configure(host, port, username, password, ssl);
-    }
-
-    private static Integer parsePort(Object portObj) {
-        if (portObj instanceof Number number) {
-            return clampPort(number.intValue());
-        }
-        if (portObj != null) {
-            try {
-                return clampPort(Integer.parseInt(portObj.toString()));
-            } catch (NumberFormatException ignored) {
-            }
-        }
-        return null;
-    }
-
-    private static int clampPort(int port) {
-        return Math.max(1, Math.min(65535, port));
-    }
-
-    private static String normalise(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.toString().trim();
-        return trimmed.isEmpty() ? null : trimmed;
+        var settings = new WorkConfigurationParser().mergeRedisConnection(
+            RedisSequenceGenerator.currentConfig(), values, "redis");
+        RedisSequenceGenerator.configure(settings);
     }
 }

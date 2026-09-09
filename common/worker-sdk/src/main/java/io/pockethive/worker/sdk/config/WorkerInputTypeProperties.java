@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.WorkerInputType;
+
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**

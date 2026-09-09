@@ -1,64 +1,59 @@
-package io.pockethive.worker.sdk.runtime;
+package io.pockethive.work.config;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import org.junit.jupiter.api.Test;
 
-class LiveIoConfigUpdateGuardTest {
+class WorkPatchPolicyTest {
 
     @Test
     void allowsBootstrapIoConfigWhenPreviousRawConfigIsEmpty() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, Map.of(), redisIoConfig(), false))
+        assertThatCode(() -> policy.validate(Map.of(), redisIoConfig(), false))
             .doesNotThrowAnyException();
     }
 
     @Test
     void allowsSafeRedisDatasetRateUpdate() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("ratePerSec", 2500.5)));
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatCode(() -> policy.validate(previous, update, false))
             .doesNotThrowAnyException();
     }
 
     @Test
     void allowsFullRedisDatasetFormWhenOnlySafeFieldChanges() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = redisInputConfig(2.5);
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatCode(() -> policy.validate(previous, update, false))
             .doesNotThrowAnyException();
     }
 
     @Test
     void allowsRedisDatasetListNameUpdateWhenWorkerIsDisabledInSingleSourceMode() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatCode(() -> policy.validate(previous, update, false))
             .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsRedisDatasetListNameUpdateWhenWorkerIsEnabled() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
 
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, true))
+        assertThatThrownBy(() -> policy.validate(previous, update, true))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("inputs.redis.listName")
             .hasMessageContaining("enabled worker")
@@ -67,17 +62,17 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void allowsUnchangedRedisDatasetListNameInFullFormWhileWorkerIsEnabled() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
         Map<String, Object> update = redisInputConfig(2.5);
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, true))
+        assertThatCode(() -> policy.validate(previous, update, true))
             .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsRedisDatasetListNameUpdateInMultiSourceMode() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = Map.of(
             "inputs", Map.of(
                 "type", "REDIS_DATASET",
@@ -94,7 +89,7 @@ class LiveIoConfigUpdateGuardTest {
         );
         Map<String, Object> update = Map.of("inputs", Map.of("redis", Map.of("listName", "ph:other")));
 
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatThrownBy(() -> policy.validate(previous, update, false))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("inputs.redis.listName")
             .hasMessageContaining("single-source listName mode");
@@ -102,17 +97,22 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void rejectsInvalidRedisDatasetListNameUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
 
+        for (Object invalidName : List.of(7, "{{ 'red' }}")) {
+            assertInvalid(policy, previous, Map.of("inputs", Map.of("redis", Map.of("listName", invalidName))),
+                "inputs.redis.listName");
+        }
+
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("redis", Map.of("listName", " "))),
             "inputs.redis.listName"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("redis", Map.of("listName", " ph:other "))),
             "inputs.redis.listName"
@@ -121,21 +121,20 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void rejectsUnsafeRedisDatasetEndpointUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
 
-        assertUnsafe(definition, previous, Map.of("inputs", Map.of("redis", Map.of("port", 6380))), "inputs.redis.port");
+        assertUnsafe(policy, previous, Map.of("inputs", Map.of("redis", Map.of("port", 6380))), "inputs.redis.port");
     }
 
     @Test
     void rejectsInvalidRedisDatasetOperationalRateUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = redisInputConfig(1.0);
 
-        assertInvalid(definition, previous, Map.of("inputs", Map.of("redis", Map.of("ratePerSec", "fast"))), "inputs.redis.ratePerSec");
-        assertInvalid(definition, previous, Map.of("inputs", Map.of("redis", Map.of("ratePerSec", -0.1))), "inputs.redis.ratePerSec");
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(
-            definition,
+        assertInvalid(policy, previous, Map.of("inputs", Map.of("redis", Map.of("ratePerSec", "fast"))), "inputs.redis.ratePerSec");
+        assertInvalid(policy, previous, Map.of("inputs", Map.of("redis", Map.of("ratePerSec", -0.1))), "inputs.redis.ratePerSec");
+        assertThatCode(() -> policy.validate(
             Map.of(),
             Map.of("inputs", Map.of("redis", Map.of("ratePerSec", 2500.5))),
             false
@@ -144,7 +143,7 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void rejectsUnsafeCsvDatasetSourceUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.CSV_DATASET, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.CSV_DATASET, WorkerOutputType.NONE);
         Map<String, Object> previous = Map.of(
             "inputs", Map.of(
                 "type", "CSV_DATASET",
@@ -162,25 +161,24 @@ class LiveIoConfigUpdateGuardTest {
         );
 
         assertUnsafe(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("csv", Map.of("filePath", "/app/scenario/other.csv"))),
             "inputs.csv.filePath"
         );
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(
-            definition,
+        assertThatCode(() -> policy.validate(
             previous,
             Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2500.5))),
             false
         )).doesNotThrowAnyException();
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("csv", Map.of("ratePerSec", "3.0"))),
             "inputs.csv.ratePerSec"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("csv", Map.of("ratePerSec", -0.1))),
             "inputs.csv.ratePerSec"
@@ -189,17 +187,17 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void rejectsUnsafeRedisOutputUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.RABBITMQ, WorkerOutputType.REDIS);
+        WorkPatchPolicy policy = policy(WorkerInputType.RABBITMQ, WorkerOutputType.REDIS);
         Map<String, Object> previous = redisOutputConfig();
 
         assertUnsafe(
-            definition,
+            policy,
             previous,
             Map.of("outputs", Map.of("redis", Map.of("port", 6380))),
             "outputs.redis.port"
         );
         assertUnsafe(
-            definition,
+            policy,
             previous,
             Map.of("outputs", Map.of("redis", Map.of("routes", List.of(Map.of(
                 "header", "x-ph-flow",
@@ -212,9 +210,9 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void rejectsLiveResetWhenPreviousConfigContainsIoBlocks() {
-        WorkerDefinition definition = definition(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
+        WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
 
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validateReset(definition, redisIoConfig()))
+        assertThatThrownBy(() -> policy.validateReset(redisIoConfig()))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("inputs")
             .hasMessageContaining("cannot change unsafe IO field");
@@ -222,7 +220,7 @@ class LiveIoConfigUpdateGuardTest {
 
     @Test
     void allowsSafeSchedulerOperationalUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.SCHEDULER, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.SCHEDULER, WorkerOutputType.NONE);
         Map<String, Object> previous = Map.of(
             "inputs", Map.of(
                 "type", "SCHEDULER",
@@ -233,13 +231,13 @@ class LiveIoConfigUpdateGuardTest {
             "inputs", Map.of("scheduler", Map.of("ratePerSec", 2500.5, "maxMessages", 250000, "reset", true))
         );
 
-        assertThatCode(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatCode(() -> policy.validate(previous, update, false))
             .doesNotThrowAnyException();
     }
 
     @Test
     void rejectsInvalidSchedulerOperationalUpdates() {
-        WorkerDefinition definition = definition(WorkerInputType.SCHEDULER, WorkerOutputType.NONE);
+        WorkPatchPolicy policy = policy(WorkerInputType.SCHEDULER, WorkerOutputType.NONE);
         Map<String, Object> previous = Map.of(
             "inputs", Map.of(
                 "type", "SCHEDULER",
@@ -248,31 +246,31 @@ class LiveIoConfigUpdateGuardTest {
         );
 
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("scheduler", Map.of("ratePerSec", Double.POSITIVE_INFINITY))),
             "inputs.scheduler.ratePerSec"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("scheduler", Map.of("ratePerSec", -0.1))),
             "inputs.scheduler.ratePerSec"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("scheduler", Map.of("maxMessages", -1))),
             "inputs.scheduler.maxMessages"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("scheduler", Map.of("maxMessages", 1.5))),
             "inputs.scheduler.maxMessages"
         );
         assertInvalid(
-            definition,
+            policy,
             previous,
             Map.of("inputs", Map.of("scheduler", Map.of("reset", "true"))),
             "inputs.scheduler.reset"
@@ -280,24 +278,24 @@ class LiveIoConfigUpdateGuardTest {
     }
 
     private static void assertUnsafe(
-        WorkerDefinition definition,
+        WorkPatchPolicy policy,
         Map<String, Object> previous,
         Map<String, Object> update,
         String field
     ) {
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatThrownBy(() -> policy.validate(previous, update, false))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining(field)
             .hasMessageContaining("cannot change unsafe IO field");
     }
 
     private static void assertInvalid(
-        WorkerDefinition definition,
+        WorkPatchPolicy policy,
         Map<String, Object> previous,
         Map<String, Object> update,
         String field
     ) {
-        assertThatThrownBy(() -> LiveIoConfigUpdateGuard.validate(definition, previous, update, false))
+        assertThatThrownBy(() -> policy.validate(previous, update, false))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining(field)
             .hasMessageContaining("invalid operational IO field");
@@ -345,19 +343,7 @@ class LiveIoConfigUpdateGuardTest {
         );
     }
 
-    private static WorkerDefinition definition(WorkerInputType input, WorkerOutputType output) {
-        return new WorkerDefinition(
-            "testWorker",
-            Object.class,
-            input,
-            "test-role",
-            WorkIoBindings.none(),
-            Void.class,
-            WorkInputConfig.class,
-            WorkOutputConfig.class,
-            output,
-            "test worker",
-            Set.of()
-        );
+    private static WorkPatchPolicy policy(WorkerInputType input, WorkerOutputType output) {
+        return new WorkPatchPolicy("testWorker", input, output);
     }
 }

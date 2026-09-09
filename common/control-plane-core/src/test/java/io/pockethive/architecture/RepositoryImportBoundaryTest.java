@@ -25,12 +25,14 @@ class RepositoryImportBoundaryTest {
   // Current owners, not the final migration layout. Narrow these module scopes with each slice.
   private static final List<Rule> RULES = List.of(
       rule("core-no-infrastructure",
-          "common/(work-api|templating-api|observability-core|auth-contracts|control-plane-core"
+          "common/(work-api|work-config|rabbit-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
               + "|topology-core|swarm-model|scenario-validation-contracts)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),
       rule("control-core-no-work", "common/control-plane-core",
           "io\\.pockethive\\.(work|worker)\\..*"),
+      rule("rabbit-spring-config-owner", outside("common/control-plane-spring"),
+          "org\\.springframework\\.boot\\.autoconfigure\\.amqp\\..*"),
       rule("redis-client-owner", outside("common/(worker-sdk|templating)|e2e-tests"),
           "(io\\.lettuce|redis\\.clients)\\..*"),
       rule("rabbit-client-owner",

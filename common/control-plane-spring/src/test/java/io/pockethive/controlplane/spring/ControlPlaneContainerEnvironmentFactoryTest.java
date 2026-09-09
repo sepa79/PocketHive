@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 
 class ControlPlaneContainerEnvironmentFactoryTest {
 
@@ -30,7 +30,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "/var/run/docker.sock",
                 "ph.swarm-1",
                 "ph.swarm-1.hive");
-        RabbitProperties rabbitProperties = rabbitProperties();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
             "swarm-1",
@@ -38,7 +38,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "swarm-controller",
             controlPlaneProperties,
             settings,
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "controller-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1");
@@ -77,13 +77,13 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.swarm-1.hive",
                 metrics);
-        RabbitProperties rabbitProperties = rabbitProperties();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
             "processor",
             settings,
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", "processor");
@@ -106,7 +106,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void clickHouseMetricsSettingsPropagateToControllerAndWorker() {
         ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(10));
-        RabbitProperties rabbitProperties = rabbitProperties();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
         controlPlaneProperties.setControlQueuePrefix("ph.control");
@@ -122,7 +122,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "/var/run/docker.sock",
                 "ph.swarm-1",
                 "ph.swarm-1.hive"),
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
@@ -142,7 +142,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.swarm-1.hive",
                 metrics),
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(workerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(workerEnv).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
@@ -158,28 +158,6 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             ClickHouseMetricsSinkProperties.disabled()))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("endpoint/table");
-    }
-
-    @Test
-    void workerEnvironmentFailsForBlankRabbitHost() {
-        ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
-                "swarm-1",
-                "run-1",
-                "ph.control",
-                "ph.control",
-                "ph.swarm-1.hive",
-                disabledMetrics(Duration.ofSeconds(30)));
-        RabbitProperties rabbitProperties = new RabbitProperties();
-        rabbitProperties.setHost("");
-
-        assertThatThrownBy(() -> ControlPlaneContainerEnvironmentFactory.workerEnvironment(
-            "bee-a",
-            "processor",
-            settings,
-            rabbitProperties))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("spring.rabbitmq.host");
     }
 
     @Test
@@ -200,13 +178,8 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             .hasMessageContaining("traffic queue suffix");
     }
 
-    private static RabbitProperties rabbitProperties() {
-        RabbitProperties properties = new RabbitProperties();
-        properties.setHost("rabbitmq");
-        properties.setPort(5672);
-        properties.setUsername("guest");
-        properties.setPassword("guest");
-        properties.setVirtualHost("/");
+    private static RabbitConnectionSettings rabbitConnection() {
+        RabbitConnectionSettings properties = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
         return properties;
     }
 

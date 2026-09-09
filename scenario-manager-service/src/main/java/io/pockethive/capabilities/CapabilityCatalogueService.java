@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.pockethive.scenarios.validation.LiveIoConfigMutability;
+import io.pockethive.work.config.WorkPatchPolicy;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -222,11 +222,11 @@ public class CapabilityCatalogueService {
             return;
         }
         if (Boolean.TRUE.equals(entry.liveMutable())
-            && LiveIoConfigMutability.isIoPath(entryName)
-            && !LiveIoConfigMutability.isLiveMutableIoPath(entryName)) {
+            && WorkPatchPolicy.isIoPath(entryName)
+            && !WorkPatchPolicy.isLiveMutableIoPath(entryName)) {
             errors.add("config[].liveMutable for unsafe IO field '" + entryName
                 + "' must be false; runtime-editable IO fields are: "
-                + LiveIoConfigMutability.liveMutableIoPaths());
+                + WorkPatchPolicy.liveMutableIoPaths());
         }
     }
 

@@ -28,7 +28,7 @@ import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -104,7 +104,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     try {
       reloadTemplatesIfNeeded(config);
       TemplateDefinition definition =
-          templates.get(TemplateLoader.key(serviceId, callId));
+          templates.get(io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, callId));
       if (definition == null) {
         context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
         return handleMissing(config, seed, context);
@@ -236,7 +236,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private void reloadTemplates(RequestBuilderWorkerConfig config) {
     Map<String, TemplateDefinition> loaded =
-        templateLoader.load(config.templateRoot(), config.serviceId());
+        templateLoader.load(config.templateRoot());
     this.templates = loaded;
     this.lastTemplateConfigKey = config.templateRoot() + "::" + config.serviceId();
   }
@@ -340,7 +340,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     }
 
     if ("FIELD_LIST_XML".equals(payloadAdapter)) {
-      Iso8583TemplateDefinition.IsoSchemaRef templateSchema = isoDef.schemaRef();
+      io.pockethive.requesttemplates.IsoTemplateSchemaRef templateSchema = isoDef.schemaRef();
       if (templateSchema == null) {
         throw new IllegalArgumentException("schemaRef must not be null for FIELD_LIST_XML");
       }

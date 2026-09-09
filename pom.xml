@@ -26,6 +26,8 @@
     <module>common/templating-api</module>
     <module>common/observability-core</module>
     <module>common/work-api</module>
+    <module>common/work-config</module>
+    <module>common/rabbit-config</module>
     <module>common/work-test-fixtures</module>
     <module>observability</module>
     <module>common/topology-core</module>
@@ -39,6 +41,7 @@
     <module>common/manager-sdk</module>
     <module>common/worker-sdk</module>
     <module>common/request-templates</module>
+    <module>common/request-template-files</module>
     <module>common/sink-clickhouse</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
@@ -249,6 +252,7 @@
                 <exclude>io.pockethive:observability</exclude>
                 <exclude>io.pockethive:control-plane-spring</exclude>
                 <exclude>io.pockethive:work-test-fixtures</exclude>
+                <exclude>io.pockethive:request-template-files</exclude>
                 <exclude>io.pockethive:sink-clickhouse</exclude>
                 <exclude>io.pockethive:docker-client</exclude>
                 <exclude>io.pockethive:templating</exclude>

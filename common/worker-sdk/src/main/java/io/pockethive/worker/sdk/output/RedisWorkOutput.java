@@ -5,8 +5,7 @@ import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import java.util.ArrayList;
-import java.util.List;
+import io.pockethive.work.config.WorkConfigurationParser;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -21,13 +20,12 @@ import org.slf4j.LoggerFactory;
  * Responsibility: apply configured business-output policy through shared Redis push support.
  * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
+ * Consumes RESP-WORK-REDIS-TARGETS, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
  */
 public final class RedisWorkOutput implements WorkOutput {
 
+    private static final WorkConfigurationParser CONFIGURATION = new WorkConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisWorkOutput.class);
-    private static final int MIN_PORT = 1;
-    private static final int MAX_PORT = 65_535;
-    private static final int MIN_MAX_LEN = -1;
 
     private final WorkerDefinition definition;
     private final RedisPushSupport pushSupport;
@@ -100,27 +98,18 @@ public final class RedisWorkOutput implements WorkOutput {
     }
 
     private RedisPushSupport.PushRequest fromProperties(RedisOutputProperties properties) {
-        int port = properties.getPort();
-        validatePort(port, "outputs.redis.port");
-        int maxLen = properties.getMaxLen();
-        validateMaxLen(maxLen, "outputs.redis.maxLen");
-
-        RedisPushSupport.ConnectionConfig connection = new RedisPushSupport.ConnectionConfig(
-            properties.getHost(),
-            port,
-            properties.getUsername(),
-            properties.getPassword(),
-            properties.isSsl()
-        );
+        var connection = properties.connectionSettings("outputs.redis");
+        var settings = CONFIGURATION.parseRedisWriteSettings(properties.getSourceStep(), properties.getPushDirection(),
+            properties.getMaxLen(), "outputs.redis");
+        var targets = CONFIGURATION.parseRedisOutputTargets(properties.getRoutes(), properties.getDefaultList(),
+            properties.getTargetListTemplate(), "outputs.redis");
 
         return new RedisPushSupport.PushRequest(
             connection,
-            RedisPushSupport.SourceStep.fromString(properties.getSourceStep()),
-            RedisPushSupport.PushDirection.fromString(properties.getPushDirection()),
-            parseRoutes(properties.getRoutes(), "outputs.redis(properties)"),
-            properties.getDefaultList(),
-            properties.getTargetListTemplate(),
-            maxLen
+            settings,
+            targets.routes(),
+            targets.defaultList(),
+            targets.targetListTemplate()
         );
     }
 
@@ -128,135 +117,26 @@ public final class RedisWorkOutput implements WorkOutput {
         RedisPushSupport.PushRequest base,
         Map<?, ?> redisMap
     ) {
-        RedisPushSupport.ConnectionConfig currentConnection = base.connection();
+        var connection = CONFIGURATION.mergeRedisConnection(base.connection(), redisMap, "outputs.redis");
 
-        String host = redisMap.containsKey("host")
-            ? RedisPushSupport.asText(redisMap.get("host"))
-            : currentConnection.host();
-        int port = redisMap.containsKey("port")
-            ? requireInt(redisMap.get("port"), "outputs.redis.port")
-            : currentConnection.port();
-        validatePort(port, "outputs.redis.port");
-        String username = redisMap.containsKey("username")
-            ? RedisPushSupport.asText(redisMap.get("username"))
-            : currentConnection.username();
-        String password = redisMap.containsKey("password")
-            ? RedisPushSupport.asText(redisMap.get("password"))
-            : currentConnection.password();
-        boolean ssl = redisMap.containsKey("ssl")
-            ? requireBoolean(redisMap.get("ssl"), "outputs.redis.ssl")
-            : currentConnection.ssl();
+        var settings = CONFIGURATION.parseRedisWriteSettings(
+            redisMap.containsKey("sourceStep") ? redisMap.get("sourceStep") : base.settings().sourceStep(),
+            redisMap.containsKey("pushDirection") ? redisMap.get("pushDirection") : base.settings().pushDirection(),
+            redisMap.containsKey("maxLen") ? redisMap.get("maxLen") : base.settings().maxLen(), "outputs.redis");
 
-        RedisPushSupport.SourceStep sourceStep = redisMap.containsKey("sourceStep")
-            ? RedisPushSupport.SourceStep.fromString(RedisPushSupport.asText(redisMap.get("sourceStep")))
-            : base.sourceStep();
-
-        RedisPushSupport.PushDirection pushDirection = redisMap.containsKey("pushDirection")
-            ? RedisPushSupport.PushDirection.fromString(RedisPushSupport.asText(redisMap.get("pushDirection")))
-            : base.pushDirection();
-
-        List<RedisPushSupport.Route> routes = redisMap.containsKey("routes")
-            ? RedisPushSupport.parseRoutes(redisMap.get("routes"), log, "outputs.redis")
-            : base.routes();
-
-        String defaultList = redisMap.containsKey("defaultList")
-            ? RedisPushSupport.asText(redisMap.get("defaultList"))
-            : base.defaultList();
-
-        String targetListTemplate = redisMap.containsKey("targetListTemplate")
-            ? RedisPushSupport.asText(redisMap.get("targetListTemplate"))
-            : base.targetListTemplate();
-
-        int maxLen = redisMap.containsKey("maxLen")
-            ? requireInt(redisMap.get("maxLen"), "outputs.redis.maxLen")
-            : base.maxLen();
-        validateMaxLen(maxLen, "outputs.redis.maxLen");
+        var targets = CONFIGURATION.parseRedisOutputTargets(
+            redisMap.containsKey("routes") ? redisMap.get("routes") : base.routes(),
+            redisMap.containsKey("defaultList") ? redisMap.get("defaultList") : base.defaultList(),
+            redisMap.containsKey("targetListTemplate") ? redisMap.get("targetListTemplate") : base.targetListTemplate(),
+            "outputs.redis");
 
         return new RedisPushSupport.PushRequest(
-            new RedisPushSupport.ConnectionConfig(host, port, username, password, ssl),
-            sourceStep,
-            pushDirection,
-            routes,
-            defaultList,
-            targetListTemplate,
-            maxLen
+            connection,
+            settings,
+            targets.routes(),
+            targets.defaultList(),
+            targets.targetListTemplate()
         );
     }
 
-    private static List<RedisPushSupport.Route> parseRoutes(List<RedisOutputProperties.Route> routes, String owner) {
-        if (routes == null || routes.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, Object>> raw = new ArrayList<>();
-        int index = 0;
-        for (RedisOutputProperties.Route route : routes) {
-            if (route == null) {
-                throw new IllegalArgumentException(owner + " routes[" + index + "] must be an object");
-            }
-            Map<String, Object> routeMap = new java.util.LinkedHashMap<>();
-            if (route.getMatch() != null) {
-                routeMap.put("match", route.getMatch());
-            }
-            if (route.getHeader() != null) {
-                routeMap.put("header", route.getHeader());
-            }
-            if (route.getHeaderMatch() != null) {
-                routeMap.put("headerMatch", route.getHeaderMatch());
-            }
-            if (route.getList() != null) {
-                routeMap.put("list", route.getList());
-            }
-            raw.add(routeMap);
-            index++;
-        }
-        return RedisPushSupport.parseRoutes(raw, log, owner);
-    }
-
-    private static int requireInt(Object raw, String field) {
-        if (raw instanceof Number number) {
-            double numeric = number.doubleValue();
-            if (!Double.isFinite(numeric)
-                || numeric != Math.rint(numeric)
-                || numeric < Integer.MIN_VALUE
-                || numeric > Integer.MAX_VALUE) {
-                throw new IllegalArgumentException(field + " must be an integer");
-            }
-            return number.intValue();
-        }
-        if (raw instanceof String text) {
-            try {
-                return Integer.parseInt(text.trim());
-            } catch (NumberFormatException ex) {
-                throw new IllegalArgumentException(field + " must be an integer", ex);
-            }
-        }
-        throw new IllegalArgumentException(field + " must be an integer");
-    }
-
-    private static boolean requireBoolean(Object raw, String field) {
-        if (raw instanceof Boolean value) {
-            return value;
-        }
-        if (raw instanceof String text) {
-            if ("true".equalsIgnoreCase(text.trim())) {
-                return true;
-            }
-            if ("false".equalsIgnoreCase(text.trim())) {
-                return false;
-            }
-        }
-        throw new IllegalArgumentException(field + " must be true or false");
-    }
-
-    private static void validatePort(int port, String field) {
-        if (port < MIN_PORT || port > MAX_PORT) {
-            throw new IllegalArgumentException(field + " must be between " + MIN_PORT + " and " + MAX_PORT);
-        }
-    }
-
-    private static void validateMaxLen(int maxLen, String field) {
-        if (maxLen < MIN_MAX_LEN) {
-            throw new IllegalArgumentException(field + " must be " + MIN_MAX_LEN + " or greater");
-        }
-    }
 }

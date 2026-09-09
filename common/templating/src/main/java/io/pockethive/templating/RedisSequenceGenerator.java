@@ -2,6 +2,8 @@ package io.pockethive.templating;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
+import io.pockethive.work.config.RedisConnectionSettings;
+import io.pockethive.work.config.WorkConfigurationParser;
 import io.lettuce.core.api.sync.RedisCommands;
 
 import java.util.Objects;
@@ -10,11 +12,15 @@ import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Redis-backed sequence generator for unique alphanumeric/binary sequences.
+ * Responsibility: generate Redis-backed sequences through the existing configured connection.
+ * Must not: parse/validate raw connection fields or substitute settings after validation failure.
+ * Contract: RESP-TEMPLATE-SEQUENCE — docs/architecture/runtime-responsibilities.md#resp-template-sequence.
+ * Consumes RESP-REDIS-CONNECTION-SETTINGS; existing global default/composition remains B02/B06 debt.
  * Uses printf-style format strings (e.g., "%4S%2d") to generate deterministic sequences.
  */
 public final class RedisSequenceGenerator {
 
-    private static final ConcurrentHashMap<String, RedisSequenceGenerator> INSTANCES = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<RedisConnectionSettings, RedisSequenceGenerator> INSTANCES = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, Long> MAX_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, ParsedFormat> FORMAT_CACHE = new ConcurrentHashMap<>();
     private static final ConcurrentHashMap<String, SequenceMode> MODE_CACHE = new ConcurrentHashMap<>();
@@ -24,30 +30,16 @@ public final class RedisSequenceGenerator {
         10000000000000000L,100000000000000000L,1000000000000000000L};
     private static final long[] POW26 = precompute(26, 13);
     private static final long[] POW36 = precompute(36, 12);
-    private static final AtomicReference<ConnectionConfig> CONFIG = new AtomicReference<>();
+    private static final AtomicReference<RedisConnectionSettings> CONFIG = new AtomicReference<>();
 
     static {
-        CONFIG.set(new ConnectionConfig(
-            "redis",
-            6379,
-            null,
-            null,
-            false
-        ));
-    }
-
-    public record ConnectionConfig(String host, int port, String username, String password, boolean ssl) {
-        String cacheKey() {
-            String hostValue = host == null ? "" : host;
-            int authHash = Objects.hash(username, password);
-            return hostValue + ":" + port + "|ssl=" + ssl + "|auth=" + Integer.toHexString(authHash);
-        }
+        CONFIG.set(new WorkConfigurationParser().parseRedisConnection("redis", 6379, null, null, false, "redis"));
     }
 
     private final RedisClient client;
     private final ThreadLocal<RedisCommands<String, String>> commandsThreadLocal;
 
-    private RedisSequenceGenerator(ConnectionConfig config) {
+    private RedisSequenceGenerator(RedisConnectionSettings config) {
         RedisURI.Builder builder = RedisURI.builder()
             .withHost(config.host())
             .withPort(config.port())
@@ -62,29 +54,20 @@ public final class RedisSequenceGenerator {
         this.commandsThreadLocal = ThreadLocal.withInitial(() -> client.connect().sync());
     }
 
-    public static RedisSequenceGenerator getInstance(String host, int port) {
-        return getInstance(new ConnectionConfig(host, port, null, null, false));
-    }
-
-    public static RedisSequenceGenerator getInstance(ConnectionConfig config) {
-        return INSTANCES.computeIfAbsent(config.cacheKey(), k -> new RedisSequenceGenerator(config));
+    public static RedisSequenceGenerator getInstance(RedisConnectionSettings config) {
+        return INSTANCES.computeIfAbsent(Objects.requireNonNull(config, "config"), RedisSequenceGenerator::new);
     }
 
     public static RedisSequenceGenerator getDefaultInstance() {
         return getInstance(CONFIG.get());
     }
 
-    public static ConnectionConfig currentConfig() {
+    public static RedisConnectionSettings currentConfig() {
         return CONFIG.get();
     }
 
-    public static void configure(String host, int port) {
-        ConnectionConfig current = CONFIG.get();
-        configure(host, port, current.username(), current.password(), current.ssl());
-    }
-
-    public static void configure(String host, int port, String username, String password, boolean ssl) {
-        CONFIG.set(new ConnectionConfig(host, port, username, password, ssl));
+    public static void configure(RedisConnectionSettings settings) {
+        CONFIG.set(Objects.requireNonNull(settings, "settings"));
     }
 
     public String next(String key, String mode, String format, long startOffset, long maxSequence) {

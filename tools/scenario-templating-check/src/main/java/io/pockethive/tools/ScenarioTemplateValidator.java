@@ -4,8 +4,8 @@ import io.pockethive.templating.api.DisabledSequenceAccess;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
+import io.pockethive.requesttemplates.files.LoadedTemplate;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.templating.PebbleTemplateRenderer;
@@ -45,8 +45,6 @@ import org.yaml.snakeyaml.Yaml;
 public final class ScenarioTemplateValidator {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
-    private static final ObjectMapper JSON_MAPPER = new ObjectMapper();
-    private static final ObjectMapper YAML_MAPPER = new ObjectMapper(new YAMLFactory());
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
     public static void main(String[] args) throws Exception {
@@ -139,7 +137,7 @@ public final class ScenarioTemplateValidator {
 
     private static void listHttpTemplates(Path templateRoot) {
         Map<String, LoadedTemplate> templates =
-            loadHttpTemplates(templateRoot, "default");
+            loadHttpTemplates(templateRoot);
 
         if (templates.isEmpty()) {
             System.out.println("No HTTP templates found under " + templateRoot);
@@ -148,7 +146,7 @@ public final class ScenarioTemplateValidator {
 
         System.out.println("HTTP templates under " + templateRoot + ":");
         templates.forEach((key, loaded) -> {
-            HttpTemplateDefinition def = loaded.definition();
+            HttpTemplateDefinition def = (HttpTemplateDefinition) loaded.definition();
             System.out.printf(
                 "  serviceId=%s, callId=%s, method=%s, path=%s, source=%s%n",
                 def.serviceId(),
@@ -164,7 +162,7 @@ public final class ScenarioTemplateValidator {
                                               Path templateRoot,
                                               Map<String, Object> scenario) {
         Map<String, LoadedTemplate> templates =
-            loadHttpTemplates(templateRoot, "default");
+            loadHttpTemplates(templateRoot);
 
         if (templates.isEmpty()) {
             throw new IllegalStateException("No HTTP templates found under " + templateRoot);
@@ -173,7 +171,7 @@ public final class ScenarioTemplateValidator {
         // 1) Collect defined callIds.
         Set<String> definedCallIds = new HashSet<>();
         for (LoadedTemplate loaded : templates.values()) {
-            HttpTemplateDefinition def = loaded.definition();
+            HttpTemplateDefinition def = (HttpTemplateDefinition) loaded.definition();
             if (def.callId() != null && !def.callId().isBlank()) {
                 definedCallIds.add(def.callId().trim());
             }
@@ -200,7 +198,7 @@ public final class ScenarioTemplateValidator {
         Map<String, String> renderFailures = new HashMap<>();
 
         templates.forEach((key, loaded) -> {
-            HttpTemplateDefinition def = loaded.definition();
+            HttpTemplateDefinition def = (HttpTemplateDefinition) loaded.definition();
             MessageTemplate template = MessageTemplate.builder()
                 .bodyType(MessageBodyType.HTTP)
                 .pathTemplate(def.pathTemplate())
@@ -351,61 +349,17 @@ public final class ScenarioTemplateValidator {
         }
     }
 
-    private static Map<String, LoadedTemplate> loadHttpTemplates(Path root, String defaultServiceId) {
-        if (root == null || !Files.isDirectory(root)) {
-            return Map.of();
-        }
-        try {
-            Map<String, LoadedTemplate> templates = new LinkedHashMap<>();
-            Files.walk(root)
-                .filter(Files::isRegularFile)
-                .filter(p -> {
-                    String name = p.getFileName().toString().toLowerCase();
-                    return name.endsWith(".json") || name.endsWith(".yaml") || name.endsWith(".yml");
-                })
-                .forEach(path -> {
-                    HttpTemplateDefinition def = parseHttpTemplate(path, defaultServiceId);
-                    if (def.callId() != null && !def.callId().isBlank()) {
-                        String key = (def.serviceId() == null ? "" : def.serviceId().trim())
-                            + "::"
-                            + def.callId().trim();
-                        templates.put(key, new LoadedTemplate(def, path.toAbsolutePath().normalize()));
-                    }
-                });
-            return Map.copyOf(templates);
-        } catch (IOException ex) {
-            throw new IllegalStateException("Failed to scan HTTP templates under " + root, ex);
-        }
+    private static Map<String, LoadedTemplate> loadHttpTemplates(Path root) {
+        Map<String, LoadedTemplate> templates = new LinkedHashMap<>();
+        new io.pockethive.requesttemplates.files.TemplateLoader().loadWithSources(root.toString())
+            .forEach((key, loaded) -> {
+                if (loaded.definition() instanceof HttpTemplateDefinition) {
+                    templates.put(key, loaded);
+                }
+            });
+        return Map.copyOf(templates);
     }
 
-    private static HttpTemplateDefinition parseHttpTemplate(Path path, String defaultServiceId) {
-        try {
-            String name = path.getFileName().toString().toLowerCase();
-            ObjectMapper mapper = (name.endsWith(".yaml") || name.endsWith(".yml"))
-                ? YAML_MAPPER
-                : JSON_MAPPER;
-            HttpTemplateDefinition raw = mapper.readValue(path.toFile(), HttpTemplateDefinition.class);
-            String serviceId = (raw.serviceId() == null || raw.serviceId().isBlank())
-                ? defaultServiceId
-                : raw.serviceId().trim();
-            return new HttpTemplateDefinition(
-                serviceId,
-                raw.callId(),
-                raw.protocol(),
-                raw.method(),
-                raw.pathTemplate(),
-                raw.bodyTemplate(),
-                raw.headersTemplate(),
-                raw.authRef(),
-                raw.resultRules()
-            );
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to parse HTTP template " + path, ex);
-        }
-    }
-
-    private record LoadedTemplate(HttpTemplateDefinition definition, Path sourcePath) {
-    }
 
     private enum Mode {
         GENERATOR,

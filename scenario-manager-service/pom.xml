@@ -24,6 +24,12 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>request-templates</artifactId><version>${project.version}</version></dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>work-config</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>templating</artifactId>

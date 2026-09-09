@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
-import java.util.Locale;
+import io.pockethive.work.config.WorkerInputType;
+
 import java.util.Objects;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -8,6 +9,9 @@ import org.springframework.boot.context.properties.bind.Binder;
 /**
  * Utility that binds {@code pockethive.inputs.<type>} properties to the {@link WorkInputConfig} type
  * requested by a worker definition.
+ * Responsibility: decode startup input properties and reject fields not representable by the selected settings type.
+ * Must not: own IO patch mutability or select transport clients.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 public final class WorkInputConfigBinder {
 
@@ -24,7 +28,7 @@ public final class WorkInputConfigBinder {
             return null;
         }
         String prefix = prefix(inputType);
-        C config = binder.bind(prefix, Bindable.of(configType))
+        C config = binder.bind(prefix, Bindable.of(configType), new WorkConfigBindHandler())
             .orElseThrow(() -> new IllegalStateException("Work input config is required at " + prefix));
         config.validateConfigured(prefix);
         return config;
@@ -32,13 +36,7 @@ public final class WorkInputConfigBinder {
 
     public String prefix(WorkerInputType inputType) {
         Objects.requireNonNull(inputType, "inputType");
-        String suffix = switch (inputType) {
-            case RABBITMQ -> "rabbit";
-            case REDIS_DATASET -> "redis";
-            case CSV_DATASET -> "csv";
-            default -> inputType.name().toLowerCase(Locale.ROOT);
-        };
-        return "pockethive.inputs." + suffix;
+        return "pockethive.inputs." + inputType.settingsKey();
     }
 
 }

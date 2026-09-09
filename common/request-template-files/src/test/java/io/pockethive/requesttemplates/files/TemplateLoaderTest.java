@@ -1,4 +1,4 @@
-package io.pockethive.requestbuilder;
+package io.pockethive.requesttemplates.files;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -7,11 +7,13 @@ import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class TemplateLoaderTest {
 
@@ -50,7 +52,7 @@ class TemplateLoaderTest {
 	        """);
 
     TemplateLoader loader = new TemplateLoader();
-    Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
+    Map<String, TemplateDefinition> templates = loader.load(dir.toString());
 
     assertThat(templates).hasSize(1);
     TemplateDefinition def = templates.values().iterator().next();
@@ -85,7 +87,7 @@ class TemplateLoaderTest {
         """);
 
     TemplateLoader loader = new TemplateLoader();
-    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+    assertThatThrownBy(() -> loader.load(dir.toString()))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("Failed to parse template");
   }
@@ -121,7 +123,7 @@ class TemplateLoaderTest {
 	        """);
 
     TemplateLoader loader = new TemplateLoader();
-    Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
+    Map<String, TemplateDefinition> templates = loader.load(dir.toString());
 
     assertThat(templates).hasSize(1);
     TemplateDefinition def = templates.values().iterator().next();
@@ -165,7 +167,7 @@ class TemplateLoaderTest {
         """);
 
     TemplateLoader loader = new TemplateLoader();
-    Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
+    Map<String, TemplateDefinition> templates = loader.load(dir.toString());
 
     assertThat(templates).hasSize(1);
     TemplateDefinition def = templates.values().iterator().next();
@@ -183,8 +185,9 @@ class TemplateLoaderTest {
     assertThat(isoDef.schemaRef().schemaFile()).isEqualTo("ctap.xml");
   }
 
-  @Test
-  void rejectsLegacyInlineAuth() throws Exception {
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void rejectsLegacyInlineAuth(boolean alsoHasAuthRef) throws Exception {
     Path dir = Files.createTempDirectory("legacy-auth-template");
     Files.writeString(dir.resolve("call.yaml"), """
         serviceId: svc
@@ -196,13 +199,18 @@ class TemplateLoaderTest {
         auth:
           type: STATIC_TOKEN
           token: bad
-        """);
+        """ + (alsoHasAuthRef ? "authRef: {profileId: token, applyAs: HTTP_HEADER}\n" : ""));
 
     TemplateLoader loader = new TemplateLoader();
 
-    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+    assertThatThrownBy(() -> loader.load(dir.toString()))
         .isInstanceOf(IllegalStateException.class)
-        .satisfies(ex -> assertThat(ex.getCause()).hasMessageContaining("legacy auth"));
+        .satisfies(ex -> {
+          assertThat(ex.getCause()).isInstanceOf(AuthFailureException.class)
+              .hasMessageContaining("inline auth");
+          assertThat(AuthFailureException.find(ex)).hasValueSatisfying(failure ->
+              assertThat(failure.stage()).isEqualTo("configuration"));
+        });
   }
 
   @Test
@@ -220,7 +228,7 @@ class TemplateLoaderTest {
 
     TemplateLoader loader = new TemplateLoader();
 
-    assertThatThrownBy(() -> loader.load(dir.toString(), "default"))
+    assertThatThrownBy(() -> loader.load(dir.toString()))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("Failed to parse template");
   }
@@ -247,9 +255,26 @@ class TemplateLoaderTest {
         """);
 
     TemplateLoader loader = new TemplateLoader();
-    Map<String, TemplateDefinition> templates = loader.load(dir.toString(), "default");
+    Map<String, TemplateDefinition> templates = loader.load(dir.toString());
 
     assertThat(templates).hasSize(1);
     assertThat(templates).containsKey("svc::CallA");
   }
+  @Test
+  void rejectsMissingRoot() throws Exception {
+    Path root = Files.createTempDirectory("template-root").resolve("missing");
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("existing directory");
+  }
+
+  @Test
+  void rejectsDuplicateTemplateKeys() throws Exception {
+    Path root = Files.createTempDirectory("duplicate-templates");
+    String template = "protocol: HTTP\nserviceId: svc\ncallId: call\nmethod: GET\npathTemplate: /\n";
+    Files.writeString(root.resolve("one.yaml"), template);
+    Files.writeString(root.resolve("two.yaml"), template);
+    assertThatThrownBy(() -> new TemplateLoader().load(root.toString()))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Duplicate request template svc::call");
+  }
+
 }

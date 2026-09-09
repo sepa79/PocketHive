@@ -35,9 +35,16 @@ import org.slf4j.LoggerFactory;
 import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: adapt swarm container lifecycle operations to the configured runtime infrastructure.
+ * Must not: resolve Rabbit connection fields or duplicate their container environment encoding.
+ * Contract: RESP-ORCHESTRATOR-CONTAINER-LIFECYCLE — docs/architecture/runtime-responsibilities.md#resp-orchestrator-container-lifecycle.
+ * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
+ * Existing compute, manifest and resource cleanup concerns remain CP-N05/C02 debt.
+ */
 @Service
 public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
@@ -49,7 +56,7 @@ public class ContainerLifecycleManager {
     private final AmqpAdmin amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
-    private final RabbitProperties rabbitProperties;
+    private final RabbitConnectionSettings rabbitConnection;
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
@@ -73,7 +80,7 @@ public class ContainerLifecycleManager {
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties,
+        RabbitConnectionSettings rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         RuntimeOwnershipManifestStore manifestStore,
@@ -84,7 +91,7 @@ public class ContainerLifecycleManager {
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
-        this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        this.rabbitConnection = Objects.requireNonNull(rabbitConnection, "rabbitConnection");
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
@@ -99,7 +106,7 @@ public class ContainerLifecycleManager {
         AmqpAdmin amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties,
+        RabbitConnectionSettings rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
@@ -110,7 +117,7 @@ public class ContainerLifecycleManager {
             amqp,
             properties,
             controlPlaneProperties,
-            rabbitProperties,
+            rabbitConnection,
             runMetadataWriter,
             clickHouseSink,
             new RuntimeOwnershipManifestStore() {
@@ -163,7 +170,7 @@ public class ContainerLifecycleManager {
                 SWARM_CONTROLLER_ROLE,
                 controlPlaneProperties,
                 controllerSettings,
-                rabbitProperties));
+                rabbitConnection));
         applyClickHouseSinkEnv(env);
         env.put(
             io.pockethive.swarm.model.RuntimeFilesystemContract.HOST_ROOT_ENV,

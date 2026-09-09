@@ -9,11 +9,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
 
 /**
  * Builds environment maps for control-plane participants so services share a consistent
  * contract when the orchestrator launches controller and worker containers.
+ * Responsibility: compose participant environment values with the canonical connection export.
+ * Must not: validate or encode Rabbit connection fields independently.
+ * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
+ * Existing metrics and Work naming responsibilities remain pending their planned extractions.
  */
 public final class ControlPlaneContainerEnvironmentFactory {
 
@@ -25,7 +30,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                                             String managerRole,
                                                             ControlPlaneProperties controlPlaneProperties,
                                                             ControllerSettings settings,
-                                                            RabbitProperties rabbitProperties) {
+                                                            RabbitConnectionSettings rabbitConnection) {
         String resolvedSwarmId = requireArgument(swarmId, "swarmId");
         String resolvedInstance = requireArgument(instanceId, "controller instance");
         Objects.requireNonNull(settings, "settings");
@@ -36,7 +41,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
             requireSetting(controlPlaneProperties.getExchange(), "pockethive.control-plane.exchange"));
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", resolvedSwarmId);
-        populateRabbitEnv(env, rabbitProperties);
+        env.putAll(RabbitConnectionEnvironment.encode(rabbitConnection));
         env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED",
             Boolean.toString(controlPlaneProperties.getWorker().isEnabled()));
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
@@ -69,7 +74,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public static Map<String, String> workerEnvironment(String instanceId,
                                                         String role,
                                                         WorkerSettings settings,
-                                                        RabbitProperties rabbitProperties) {
+                                                        RabbitConnectionSettings rabbitConnection) {
         String resolvedInstance = requireArgument(instanceId, "worker instance");
         String resolvedRole = requireArgument(role, "worker role");
         Objects.requireNonNull(settings, "settings");
@@ -80,7 +85,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
             requireSetting(settings.controlExchange(), "pockethive.control-plane.exchange"));
-        populateRabbitEnv(env, rabbitProperties);
+        env.putAll(RabbitConnectionEnvironment.encode(rabbitConnection));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(settings.controlQueuePrefix(), "pockethive.control-plane.control-queue-prefix"));
@@ -111,32 +116,11 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return List.copyOf(names);
     }
 
-    private static void populateRabbitEnv(Map<String, String> env, RabbitProperties rabbitProperties) {
-        Objects.requireNonNull(rabbitProperties, "rabbitProperties");
-        env.put("SPRING_RABBITMQ_HOST",
-            requireSetting(rabbitProperties.getHost(), "spring.rabbitmq.host"));
-        env.put("SPRING_RABBITMQ_PORT", requireRabbitPort(rabbitProperties));
-        env.put("SPRING_RABBITMQ_USERNAME",
-            requireSetting(rabbitProperties.getUsername(), "spring.rabbitmq.username"));
-        env.put("SPRING_RABBITMQ_PASSWORD",
-            requireSetting(rabbitProperties.getPassword(), "spring.rabbitmq.password"));
-        env.put("SPRING_RABBITMQ_VIRTUAL_HOST",
-            requireSetting(rabbitProperties.getVirtualHost(), "spring.rabbitmq.virtual-host"));
-    }
-
     private static String requireSetting(String value, String propertyName) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(propertyName + " must not be null or blank");
         }
         return value;
-    }
-
-    private static String requireRabbitPort(RabbitProperties properties) {
-        Integer port = properties.getPort();
-        if (port == null || port <= 0) {
-            throw new IllegalStateException("spring.rabbitmq.port must be a positive integer");
-        }
-        return Integer.toString(port);
     }
 
     private static void applyControlPlaneMetricsSettings(

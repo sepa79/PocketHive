@@ -1,0 +1,32 @@
+B02 Rabbit connection transfer verification — 2026-09-08
+
+/tmp/b02-rabbit-before.log
+[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.082 s -- in io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactoryTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.059 s -- in io.pockethive.orchestrator.app.ContainerLifecycleManagerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.133 s -- in io.pockethive.swarmcontroller.runtime.SwarmWorkerSpecFactoryTest
+[INFO] Tests run: 25, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.272 s -- in io.pockethive.swarmcontroller.SwarmLifecycleManagerTest
+[INFO] BUILD SUCCESS
+[INFO] Finished at: 2026-09-08T17:03:15+01:00
+
+/tmp/b02-rabbit-after.log
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.053 s -- in io.pockethive.rabbit.config.RabbitConnectionEnvironmentTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.052 s -- in io.pockethive.rabbit.config.RabbitConnectionSettingsTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.136 s -- in io.pockethive.architecture.RepositoryImportBoundaryTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.223 s -- in io.pockethive.controlplane.spring.RabbitConnectionConfigurationTest
+[INFO] Tests run: 5, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.016 s -- in io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactoryTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.053 s -- in io.pockethive.orchestrator.app.ContainerLifecycleManagerTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.136 s -- in io.pockethive.swarmcontroller.runtime.SwarmWorkerSpecFactoryTest
+[INFO] Tests run: 24, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 2.308 s -- in io.pockethive.swarmcontroller.SwarmLifecycleManagerTest
+[INFO] BUILD SUCCESS
+[INFO] Finished at: 2026-09-08T17:07:59+01:00
+
+./mvnw -B -ntp -DskipTests package
+/tmp/b02-rabbit-package.log
+[INFO] BUILD SUCCESS
+[INFO] Finished at: 2026-09-08T17:08:34+01:00
+
+npm --prefix docs-site run build
+/tmp/b02-rabbit-docs.log
+[SUCCESS] Generated static files in "build".
+
+git diff --check: passed

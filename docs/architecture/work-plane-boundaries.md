@@ -1,6 +1,6 @@
 # Work Plane boundaries — implementation design
 
-Status: target design; B01 accepted in separate review on 2026-09-08. B02 is next, not started.
+Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
 Acceptance evidence: `docs/inProgress/boundary-design/b01/rv2-correction-review.md`.
 Source revision: `e0d37871`, branch `refactor/control-plane-critical-restart`.
 Execution order and scope are owned by `docs/inProgress/work-plane-module-boundaries.md`.
@@ -99,9 +99,11 @@ No public `RedisClientProvider`, `execute(command)` or client callback is permit
 Shared Rabbit connection configuration is in `rabbit-config`, not in Work configuration
 or a Control service: CP and Work adapters can use the same canonical connection contract
 without either plane importing the other's configuration behavior. Connection and plane
-delivery policies remain distinct responsibilities. Existing RabbitProperties environment
-export in ControlPlaneContainerEnvironmentFactory moves to that shared encoder in B02;
-service Work use cases receive resolved values, not Spring RabbitProperties.
+delivery policies remain distinct responsibilities. The B02 transfer moved the existing
+five-field RabbitProperties environment export from ControlPlaneContainerEnvironmentFactory
+to that shared encoder; both launch paths now receive immutable RabbitConnectionSettings.
+See [RESP-RABBIT-CONNECTION](runtime-responsibilities.md#resp-rabbit-connection) for its
+implemented scope and remaining configuration limits. Other B02 settings work stays open.
 
 Jackson/schema validation, SLF4J and Micrometer API types may remain in their current
 public roles. Pebble/SpEL remain in the existing template implementation. No new framework
@@ -304,8 +306,9 @@ generic rate-policy implementation beside the existing scheduler until B07 moves
 
 `WorkConfigurationParser` in `work-config` owns input/output selection, settings parsing,
 normalization and complete candidate validation. `WorkPatchPolicy` owns mutable-field
-classification and patch validation. Move `LiveIoConfigMutability` and
-`LiveIoConfigUpdateGuard` there and delete their previous definitions/semantic copies.
+classification and patch validation. The first B02 transfer consolidated `LiveIoConfigMutability` and
+`LiveIoConfigUpdateGuard` there and deleted both previous definitions. Complete candidate
+validation remains a separate required WorkConfigurationParser responsibility.
 `WorkInputConfigBinder`/`WorkOutputConfigBinder` become one bootstrap decoder of raw
 environment properties; they delegate decisions to the parser. Remove repeated validation
 from Redis properties, `RedisWorkOutput.applyRawConfig`, dataset source parsing,
