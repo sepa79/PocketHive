@@ -5,7 +5,7 @@ import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
@@ -24,7 +24,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class RedisWorkOutput implements WorkOutput {
 
-    private static final WorkConfigurationParser CONFIGURATION = new WorkConfigurationParser();
+    private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisWorkOutput.class);
 
     private final WorkerDefinition definition;

@@ -13,7 +13,7 @@ import io.pockethive.worker.sdk.config.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
-import io.pockethive.work.config.RedisPushDirection;
+import io.pockethive.work.config.redis.RedisPushDirection;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -164,7 +164,7 @@ class RedisWorkOutputTest {
     @Test
     void rejectsNullRouteEntryInsteadOfDroppingIt() {
         RedisOutputProperties properties = new RedisOutputProperties();
-        List<io.pockethive.work.config.RedisRouteDefinition> routes = new ArrayList<>();
+        List<io.pockethive.work.config.redis.RedisRouteDefinition> routes = new ArrayList<>();
         routes.add(null);
 
         assertThatThrownBy(() -> properties.setRoutes(routes))
@@ -208,7 +208,7 @@ class RedisWorkOutputTest {
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(io.pockethive.work.config.RedisConnectionSettings config) {
+        public RedisPushSupport.RedisWriter create(io.pockethive.work.config.redis.RedisConnectionSettings config) {
             return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload, direction, maxLen));
         }
     }

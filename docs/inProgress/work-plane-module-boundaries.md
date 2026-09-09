@@ -1,6 +1,6 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented, with individual review status in [B02 evidence](boundary-design/b02/README.md). Remaining settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
+Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). Remaining settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
 Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
 Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
@@ -510,9 +510,41 @@ after `bee.env` composition. RB-R2 gives container lifecycle and worker planning
 own current-owner records and primary header references. The inherited final-environment
 defect remains a required B02 gate.
 
-WorkConfigurationParser now owns Redis route declarations/validation, with a compiled
+RedisConfigurationParser now owns Redis route declarations/validation, with a compiled
 read-only route projection for runtime selection. Startup properties, native Redis output,
 uploader capture and Scenario Manager delegate to it; old route implementations were
 deleted. [Execution evidence](boundary-design/b02/redis-routes-transfer.md) covers the
 bounded transfer and its tests. Complete IO/settings/candidate parsing and producer
 migration remain open; this does not accept B02 or start B03.
+
+### B02 configuration namespaces — 2026-09-09
+
+The existing work-config artifact now separates `.config.redis` (Redis parsing and
+settings), `.config.environment` (environment encoders) and `.config.policy` (patch
+policy); shared IO selection and validation reports remain in `.config`.
+The Redis-only WorkConfigurationParser was renamed RedisConfigurationParser, and
+RedisConnectionEnvironment became RedisConnectionEnvironmentEncoder. All consumers and
+existing tests moved to the new names. Full Work candidate parsing remains a separate
+B02 obligation and must consume the Redis owner. These namespace moves do not implement
+the B03–B07 runtime/adapter artifacts. See [B02 evidence](boundary-design/b02/README.md).
+
+### B02 final connection composition — 2026-09-09
+
+WorkConnectionEnvironmentResolver now validates Rabbit/Redis IO connections after bee.env,
+delegating field rules to the existing owners. RedisConnectionEnvironmentEncoder becomes
+RedisConnectionEnvironmentCodec: accepted values are projected into both container
+environment and bootstrap so bootstrap cannot restore the old connection. Standard Spring
+property lookup stays in Controller bootstrap; work-config remains free of Spring/clients.
+179 selected implementation tests and the full package build passed. Separate review
+blocks this slice on FENV-R1 (lookup/binding disagreement) and FENV-R2 (environment-only
+Redis passwords exposed in status/logs); see the latest B02 evidence.
+Full IO/settings/execution candidates and remaining producer migration are next B02 work.
+This does not start B03 or change the deferred SEL-R1 decision.
+
+### B02 final connection review corrections — 2026-09-09
+
+FENV-R1 now uses Spring Binder name/placeholder resolution during worker planning.
+FENV-R2 adds one diagnostic password projection consumed by worker status and the
+extracted configuration logger; raw adapter state and applied-config digests are preserved.
+133 selected tests and the root package build passed. See the latest B02 evidence;
+separate review of the corrections remains pending. Full B02 and SEL-R1 remain open.

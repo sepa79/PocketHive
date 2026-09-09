@@ -1,9 +1,9 @@
 package io.pockethive.scenarios.validation;
 
-import io.pockethive.work.config.RedisOutputTargetsValidation;
-import io.pockethive.work.config.RedisDatasetSelectionValidation;
+import io.pockethive.work.config.redis.RedisOutputTargetsValidation;
+import io.pockethive.work.config.redis.RedisDatasetSelectionValidation;
 import io.pockethive.work.config.WorkConfigurationMode;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.work.config.WorkConfigurationProblem;
 import java.util.List;
 
@@ -18,7 +18,7 @@ import java.util.List;
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
-    private final WorkConfigurationParser parser = new WorkConfigurationParser();
+    private final RedisConfigurationParser parser = new RedisConfigurationParser();
 
     void redisConnection(Object values, String path, List<ValidationFinding> findings) {
         var result = parser.validateRedisConnection(values, path, WorkConfigurationMode.AUTHORING);

@@ -10,6 +10,7 @@ import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.swarmcontroller.config.SpringConnectionEnvironment;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -21,12 +22,15 @@ import java.util.function.Supplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
 
 /**
  * Responsibility: Resolve one scenario bee into its effective config, environment, identity, and worker spec.
  * Must not: Register runtime state, publish bootstrap config, provision workers, or mutate the scenario plan.
  * Contract: RESP-CONTROLLER-WORKER-PLAN — docs/architecture/runtime-responsibilities.md#resp-controller-worker-plan.
  * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
+ * Consumes RESP-REDIS-CONNECTION-SETTINGS for declared Work connections and their shared export.
+ * Consumes RESP-WORK-CONNECTION-ENVIRONMENT for final connection settings after bee.env overrides.
  * Build one worker plan using the shared connection export; existing Work settings/naming remain B02/B04 debt.
  */
 public final class SwarmWorkerSpecFactory {
@@ -81,6 +85,9 @@ public final class SwarmWorkerSpecFactory {
     environment.putAll(bee.env());
 
     Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnvironment);
+    var connections = new WorkConnectionEnvironmentResolver().resolve(effectiveConfig, environment,
+        SpringConnectionEnvironment.raw(environment), SpringConnectionEnvironment::resolved);
+    effectiveConfig = connections.bootstrapConfig();
     List<String> configuredVolumes = resolveVolumes(effectiveConfig);
     List<String> volumes = new ArrayList<>(configuredVolumes.size() + 1);
     volumes.add(runtimeFilesystemMount.volume());
@@ -90,7 +97,7 @@ public final class SwarmWorkerSpecFactory {
         beeName,
         bee.role(),
         bee.image(),
-        Map.copyOf(environment),
+        connections.environment(),
         List.copyOf(volumes));
     return new PlannedSwarmWorker(spec, effectiveConfig);
   }
@@ -133,11 +140,6 @@ public final class SwarmWorkerSpecFactory {
 
     Object redis = inputsMap.get("redis");
     if (redis instanceof Map<?, ?> redisMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_HOST", redisMap.get("host"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_PORT", redisMap.get("port"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_USERNAME", redisMap.get("username"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_PASSWORD", redisMap.get("password"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_SSL", redisMap.get("ssl"));
       putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
       putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", redisMap.get("pickStrategy"));
       putIndexedEnvIfPresent(
@@ -174,11 +176,6 @@ public final class SwarmWorkerSpecFactory {
     putUppercaseType(environment, "POCKETHIVE_OUTPUTS_TYPE", outputsMap.get("type"));
     Object redis = outputsMap.get("redis");
     if (redis instanceof Map<?, ?> redisMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_HOST", redisMap.get("host"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_PORT", redisMap.get("port"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_USERNAME", redisMap.get("username"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", redisMap.get("password"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_SSL", redisMap.get("ssl"));
       putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", redisMap.get("sourceStep"));
       putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
       putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));

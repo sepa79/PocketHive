@@ -2,8 +2,8 @@ package io.pockethive.templating;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
-import io.pockethive.work.config.RedisConnectionSettings;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConnectionSettings;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.lettuce.core.api.sync.RedisCommands;
 
 import java.util.Objects;
@@ -33,7 +33,7 @@ public final class RedisSequenceGenerator {
     private static final AtomicReference<RedisConnectionSettings> CONFIG = new AtomicReference<>();
 
     static {
-        CONFIG.set(new WorkConfigurationParser().parseRedisConnection("redis", 6379, null, null, false, "redis"));
+        CONFIG.set(new RedisConfigurationParser().parseRedisConnection("redis", 6379, null, null, false, "redis"));
     }
 
     private final RedisClient client;

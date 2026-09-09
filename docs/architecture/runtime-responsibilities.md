@@ -391,12 +391,14 @@ in this connection contract.
 out-of-range ports at construction. The shared encoder preserves those validated values
 in the participant environment before later composition. Parsing/export opens no connection.
 
-**Remaining B02 gate:** SwarmWorkerSpecFactory currently overlays `bee.env` after this
-export, so final worker settings can differ and have not been validated. The canonical
-WorkConfigurationParser and bootstrap environment decoder must validate the final candidate,
-including the environment overlay, before a worker spec is submitted for launch. Rabbit
-field constraints still belong to RabbitConnectionSettings; the worker planner must not
-implement a second validator or silently replace an invalid override with the base value.
+SwarmWorkerSpecFactory validates the five final connection fields after `bee.env`
+composition through RESP-WORK-CONNECTION-ENVIRONMENT. RabbitConnectionEnvironment
+decodes property text and delegates constraints to RabbitConnectionSettings. Final
+environment validation leaves the checked snapshot unchanged; encoding remains the
+base-container projection. The worker planner must not implement a second validator
+or silently replace an invalid override with the base value. Other Rabbit transport
+options, full Work candidate validation and configuration sources beyond bee.env
+remain B02 work; this five-field contract does not cover TLS or address-list settings.
 
 **Verification entrypoints:** `RabbitConnectionSettingsTest`,
 `RabbitConnectionEnvironmentTest`, `RabbitConnectionConfigurationTest`, existing
@@ -410,7 +412,7 @@ upstream sample defaults and other Spring transport options remain outside this 
 ## RESP-WORK-REDIS-ROUTES
 
 **Implemented transfer (B02), pending separate review:** `common/work-config` owns decoded Redis route declarations
-and their parsing/validation through WorkConfigurationParser. RedisRouteDefinition is the
+and their parsing/validation through RedisConfigurationParser. RedisRouteDefinition is the
 single decoded shape with original Object field values retained until validation;
 RedisRoute is its immutable compiled projection. Neither
 opens Redis or selects a target for a message. RedisPushSupport retains ordered runtime
@@ -467,10 +469,10 @@ same route declarations. A runtime parse either yields the complete ordered immu
 list or fails with canonical path/message problems. Deferred authoring requires later
 resolved validation. No network/filesystem effects occur in the parser.
 
-**Verification entrypoints:** WorkConfigurationParserTest, WorkConfigurationFindingsTest,
+**Verification entrypoints:** RedisConfigurationParserTest, WorkConfigurationFindingsTest,
 WorkIOConfigBinderTest, RedisWorkOutputTest, RedisUploaderInterceptorTest and ScenarioControllerTest.
 
-**Migration status:** Route responsibility is the first implemented WorkConfigurationParser transfer;
+**Migration status:** Route responsibility is the first implemented RedisConfigurationParser transfer;
 `docs/inProgress/boundary-design/b02/redis-routes-transfer.md` records behavior tests and limits.
 IO/connection/execution records, output target/connection constraints,
 full candidate validation and all producer migration remain required before full B02
@@ -478,7 +480,7 @@ acceptance. This sub-transfer does not certify the whole configuration contract.
 
 ## RESP-REDIS-CONNECTION-SETTINGS
 
-WorkConfigurationParser in work-config owns decoded Redis connection validation and
+RedisConfigurationParser in `io.pockethive.work.config.redis` owns decoded Redis connection validation and
 partial-update merging; RedisConnectionSettings is its immutable resolved value.
 Host is required nonblank trimmed text; port is an exact integer from 1 to 65535;
 SSL is required boolean (true/false property text is decoded here). Username is optional
@@ -501,14 +503,25 @@ full token/sequence/capture authoring remains open. Redis client/URI constructio
 adapters pending B06. Existing sequence bootstrap defaults, global sequence ownership,
 token/sequence scope composition and producer migration remain open B02/B06 work.
 
+RedisConnectionEnvironmentCodec in `io.pockethive.work.config.environment` owns encoding connection candidates for
+`POCKETHIVE_INPUTS_REDIS_*` and `POCKETHIVE_OUTPUTS_REDIS_*`. It preserves password
+text exactly, including empty strings, and omits absent fields. Numeric values use plain
+decimal text with insignificant trailing zeros removed; strings remain unchanged until
+binding and canonical validation. Raw declaration types are retained for validation;
+exporting a value must not make an invalid typed declaration valid. The codec also reads
+explicit connection overrides without expanding placeholders and projects accepted values
+into bootstrap fields. RESP-WORK-CONNECTION-ENVIRONMENT owns composition and validation.
+Other Work fields, selection and token/sequence/capture scope export remain B02 work.
+
 **Forbidden:** independent host/port/credential/SSL parsing or default substitution in
-consumers; credential values in validation errors or settings toString.
+consumers; credential values in validation errors or settings toString; trimming credentials
+or duplicating the Redis connection environment mapping in a launching service.
 **Verification:** shared connection unit tests and existing binder, Redis adapter,
 authoring and auth/sequence behavior tests. Full B02 and deployed acceptance remain open.
 
 ## RESP-WORK-REDIS-WRITE-SETTINGS
 
-WorkConfigurationParser owns sourceStep, pushDirection and maxLen for Redis output
+RedisConfigurationParser owns sourceStep, pushDirection and maxLen for Redis output
 and enabled diagnostic capture. RedisPayloadSource (FIRST/LAST) and RedisPushDirection
 (LPUSH/RPUSH) replace the enums inside RedisPushSupport. RedisWriteSettings is the
 immutable resolved value consumed by the push request; RedisWriteSettingsValidation
@@ -541,7 +554,7 @@ scoped transfer; full B02 remains open.
 
 ## RESP-WORK-REDIS-TARGETS
 
-WorkConfigurationParser owns decoded Redis output destination settings: validated routes,
+RedisConfigurationParser owns decoded Redis output destination settings: validated routes,
 optional textual defaultList and targetListTemplate, with at least one configured target.
 It delegates route semantics to RESP-WORK-REDIS-ROUTES. RedisOutputTargetsValidation
 exposes immutable normalized values only when errors/deferred constraints are absent.
@@ -576,7 +589,7 @@ Implementation is followed by separate review under the active workflow.
 validation. RedisDatasetSource replaces the SDK's nested mutable Source type. Its
 constructor receives original field values, trims listName and requires the normalized
 text to be nonblank, and requires a finite positive numeric weight
-(numeric property text is decoded here). WorkConfigurationParser owns collection shape,
+(numeric property text is decoded here). RedisConfigurationParser owns collection shape,
 unknown fields, duplicate normalized list names and AUTHORING/RESOLVED validation.
 Explicit null sources are invalid in both parser modes. A missing sources field is
 represented as an empty list by the caller; runtime updates without that field leave
@@ -611,7 +624,7 @@ accepts RS-R1/RS-R2. The subsequent selection transfer has its own open SEL-R1 f
 
 ## RESP-WORK-REDIS-SELECTION
 
-WorkConfigurationParser owns the dataset choice: exactly one nonblank textual listName
+RedisConfigurationParser owns the dataset choice: exactly one nonblank textual listName
 or nonempty validated sources list. Single names use the shared scalar decoder in RedisDatasetSource;
 numeric/object names and unrendered resolved expressions fail. RedisDatasetSelectionValidation
 exposes SINGLE/MULTIPLE only for a valid concrete choice, otherwise UNRESOLVED with
@@ -686,6 +699,9 @@ SDK composition supplies available factories and bound definitions. NONE is an e
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+ControlPlaneNotifier derives results and applied configuration digests from accepted raw
+state. Configuration logs and external status views consume RESP-WORK-CONFIGURATION-DIAGNOSTICS;
+redaction must not change the state, adapter view or digest.
 
 For Redis connection updates, candidate validation under RESP-REDIS-CONNECTION-SETTINGS
 precedes accepted-state writes and reseeding; rejection preserves the previous state
@@ -1101,22 +1117,83 @@ infrastructure and absence ownership. The Rabbit base export dependency is alrea
 
 SwarmWorkerSpecFactory maps a scenario Bee and SUT environment into PlannedSwarmWorker:
 worker identity, container environment/volumes and bootstrap configuration. It consumes
-the shared participant environment factory, RESP-RABBIT-CONNECTION and runtime filesystem
-mount; current Work settings export, queue naming and SUT enrichment are still local.
+the shared participant environment factory, RESP-RABBIT-CONNECTION,
+RESP-REDIS-CONNECTION-SETTINGS and runtime filesystem mount; remaining Work settings
+export, queue naming and SUT enrichment are still local.
 SwarmRuntimeCore consumes the plan and owns lifecycle/state; compute executes the spec.
 
 **Forbidden:** provision a worker, publish bootstrap configuration, mutate the source Bee
-or runtime state, or independently validate/encode the shared Rabbit connection contract.
+or runtime state, or independently validate/encode the shared Rabbit/Redis connection contracts.
 
 **Required effect:** Planning returns the worker spec and its corresponding bootstrap
-configuration without performing compute or broker operations. Explicit bee.env overrides
-are currently applied after base export; their final validation remains the B02 gate above.
+configuration without performing compute or broker operations. After applying bee.env,
+it delegates Rabbit/Redis connection resolution to RESP-WORK-CONNECTION-ENVIRONMENT.
+Final validation of other settings remains B02 work.
 
 **Verification entrypoints:** `SwarmWorkerSpecFactoryTest`, `SwarmLifecycleManagerTest`.
 
 **Migration status:** Current planning owner; complete Work configuration parsing/export and
 final-candidate validation are B02, canonical Work naming B04. This record does not accept
 those outstanding responsibilities as isolated or certify final environment validity.
+
+## RESP-WORK-CONNECTION-ENVIRONMENT
+
+**Current module:** `common/work-config`, `io.pockethive.work.config.environment`.
+
+WorkConnectionEnvironmentResolver produces ResolvedWorkConnectionEnvironment from the
+raw bootstrap configuration, composed container environment, unexpanded override lookup
+and a factory for the final property lookup. The human-approved FENV-R1 correction composes
+both Redis directions first, freezes the complete environment and only then expands/binds
+and validates connections. SwarmWorkerSpecFactory delegates Spring lookup to
+SpringConnectionEnvironment: raw lookup uses Binder without placeholder expansion; final
+lookup uses Binder with strict Spring placeholder resolution over the supplied snapshot.
+Names/precedence and successful expansion follow worker binding. Missing/cyclic references
+fail planning with a property name, without exposing the input or exception cause.
+No process properties are consulted, and no custom placeholder parser or retry loop exists.
+The resolver validates the five Rabbit connection fields through RabbitConnectionEnvironment
+and RabbitConnectionSettings. For each declared Redis IO block, selected Redis IO direction,
+or direction with connection overrides, explicit unexpanded environment values replace
+corresponding declared fields before encoding. Final text comes from the complete snapshot;
+non-text declaration types stay intact for RedisConfigurationParser to validate.
+Missing overrides retain declared fields; empty text is an explicit value, and invalid
+overrides fail. A valid override may supply a missing field or correct an invalid base field.
+
+The returned environment is exactly the frozen candidate checked by final binding; its
+strings/placeholders are not rewritten after validation. Bootstrap projects the accepted
+Redis values and must not restore the pre-override connection. Unrelated config fields and
+environment entries are retained, and source maps are not mutated. Rejection yields no
+worker spec; RESP-CONTROLLER-CONTROL validates all specs before infrastructure/state effects.
+
+**Forbidden:** duplicate connection constraints, read process environment, construct clients,
+choose adapters, mutate accepted runtime state or present this slice as full Work validation.
+
+**Verification:** resolver/codec and SpringConnectionEnvironment unit tests, worker
+environment binding and SwarmWorkerSpecFactory/SwarmLifecycleManager behavioral tests.
+
+**Migration status:** B02 connection composition only. Other IO/execution settings,
+additional Rabbit transport options, other Redis scopes and later property sources remain open.
+
+## RESP-WORK-CONFIGURATION-DIAGNOSTICS
+
+WorkConfigurationRedactor in `common/work-config`, `.config.projection`, owns the
+read-only diagnostic projection of decoded Work configuration. It replaces values of
+the exact `password` field with `[redacted]` throughout maps/lists, including per-worker
+status and config-diff wrappers. It preserves other fields and never mutates its input.
+This rule covers Redis IO passwords; it is not a heuristic classifier of arbitrary
+secret names or values. Other private material retains its existing privateConfig policy.
+
+WorkerConfigurationLog in worker-sdk owns configuration logging extracted from
+ControlPlaneNotifier. Both this logger and WorkerControlPlaneRuntime's status projections
+consume the shared redactor. Raw connection settings, adapter/state-listener views and
+the canonical appliedConfigSha256 calculation retain the full accepted values.
+
+**Forbidden:** raw configuration/passwords in configuration logs or status projections;
+redacted values used for validation, adapter application, accepted state or outcome digests;
+local copies of the redaction rule in status/log consumers.
+
+**Verification:** redactor unit tests cover nested worker/diff wrappers; existing runtime
+tests exercise config-update, INFO/DEBUG logs, status, unchanged raw adapter configuration
+and the applied configuration digest.
 
 ## RESP-ORCHESTRATOR-INGRESS
 
@@ -1141,6 +1218,15 @@ ControlPlaneCodec decodes and the dedicated CP listener factory supplies transpo
 SwarmControllerControlPlaneConfiguration wires controller collaborators; SwarmSignalListener dispatches to the named lifecycle/config/remove/observation handlers; SwarmLifecycleManager composes infrastructure and delegates local lifecycle to SwarmRuntimeCore.
 
 SwarmRuntimeCore owns local runtime state; SwarmLifecycleCommandHandler, SwarmConfigUpdateHandler and SwarmRemoveCommandHandler own their command workflows. QueueStatsPort reads observations; SwarmQueueMetrics is only a Micrometer projection.
+
+For preparation, SwarmRuntimeCore first builds all PlannedSwarmWorker candidates through
+RESP-CONTROLLER-WORKER-PLAN and validates their identities in a local SwarmRuntimeState.
+Only after that succeeds may it replace the accepted template/context/traffic policy,
+reset readiness, declare topology, register bootstrap configuration and provision workers.
+A worker planning or identity error must propagate while preserving the previously
+accepted state and issuing no topology/provisioning/bootstrap changes. A corrected start
+after an initial rejection must perform preparation. This ordering does not provide
+rollback for infrastructure failures after validation.
 
 **Forbidden:** write Orchestrator desired intent or publish its public terminal operation outcome.
 
@@ -1189,11 +1275,11 @@ Consumers depend on work-test-fixtures with test scope only.
 
 ## RESP-WORK-PATCH-POLICY
 
-**Current module:** `common/work-config`, `io.pockethive.work.config`.
+**Current module:** `common/work-config`, `io.pockethive.work.config.policy`.
 
 WorkPatchPolicy owns the live mutable/disabled-only IO field catalogue and validation
 of proposed IO updates/reset against prior configuration and current enablement.
-WorkerInputType and WorkerOutputType are the shared selection values. The policy uses
+WorkerInputType and WorkerOutputType remain shared selection values in `io.pockethive.work.config`. The policy uses
 those values and a worker name for diagnostics; it does not depend on SDK WorkerDefinition.
 
 WorkerControlPlaneRuntime delegates before merging/publishing accepted configuration.

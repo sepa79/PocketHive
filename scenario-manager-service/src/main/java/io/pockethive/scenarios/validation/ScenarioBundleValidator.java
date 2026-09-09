@@ -1258,7 +1258,7 @@ public final class ScenarioBundleValidator {
         }
         for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
             if (path.startsWith(root + ".") && hasSelectedRedisBlock(config, root)
-                && io.pockethive.work.config.WorkConfigurationParser.REDIS_CONNECTION_FIELDS.contains(path.substring(root.length() + 1))) {
+                && io.pockethive.work.config.redis.RedisConfigurationParser.REDIS_CONNECTION_FIELDS.contains(path.substring(root.length() + 1))) {
                 return true;
             }
         }

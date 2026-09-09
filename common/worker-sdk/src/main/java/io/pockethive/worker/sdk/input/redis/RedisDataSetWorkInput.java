@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.input.redis;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
-import io.pockethive.work.config.RedisConnectionSettings;
+import io.pockethive.work.config.redis.RedisConnectionSettings;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -10,11 +10,11 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.work.config.RedisDatasetPickStrategy;
-import io.pockethive.work.config.RedisDatasetSource;
-import io.pockethive.work.config.RedisDatasetSourceMode;
-import io.pockethive.work.config.RedisDatasetSelectionValidation;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
+import io.pockethive.work.config.redis.RedisDatasetSource;
+import io.pockethive.work.config.redis.RedisDatasetSourceMode;
+import io.pockethive.work.config.redis.RedisDatasetSelectionValidation;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -46,7 +46,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class RedisDataSetWorkInput implements WorkInput {
 
-    private static final WorkConfigurationParser CONFIGURATION = new WorkConfigurationParser();
+    private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger defaultLog = LoggerFactory.getLogger(RedisDataSetWorkInput.class);
     private static final double MIN_RATE_PER_SEC = 0.0;
 

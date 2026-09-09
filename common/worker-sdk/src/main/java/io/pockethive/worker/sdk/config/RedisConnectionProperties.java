@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.RedisConnectionSettings;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConnectionSettings;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 
 /**
  * Responsibility: bind raw Redis connection fields and delegate resolution to work-config.
@@ -27,7 +27,7 @@ public class RedisConnectionProperties {
     public void setSsl(Object ssl) { this.ssl = ssl; }
 
     public RedisConnectionSettings connectionSettings(String path) {
-        return new WorkConfigurationParser().parseRedisConnection(host, port, username, password, ssl, path);
+        return new RedisConfigurationParser().parseRedisConnection(host, port, username, password, ssl, path);
     }
 
     public void applyConnection(RedisConnectionSettings settings) {

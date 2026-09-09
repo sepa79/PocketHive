@@ -2,6 +2,7 @@ package io.pockethive.swarmcontroller;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
@@ -24,6 +25,7 @@ import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.work.config.WorkConfigurationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -226,6 +228,67 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void rejectedRedisPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
+            Map.of("enabled", false)),
+        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(),
+            Map.of("outputs", Map.of("type", "REDIS", "redis", Map.of(
+                "host", "redis", "port", 0, "ssl", false,
+                "sourceStep", "LAST", "pushDirection", "RPUSH", "maxLen", -1,
+                "defaultList", "out"))))), null, "accepted-sut"));
+    ObjectNode redis = (ObjectNode) plan.path("bees").get(1)
+        .path("config").path("outputs").path("redis");
+
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class)
+        .hasMessageContaining("outputs.redis.port");
+    assertThat(manager.expectedWorkers()).isEmpty();
+    assertThat(manager.getMetrics().desired()).isZero();
+    assertThat(manager.sutId()).isNull();
+    assertFalse(manager.hasPendingConfigUpdates());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+
+    redis.put("port", 6379);
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        .thenReturn("c1", "c2");
+    manager.start(plan.toString());
+
+    ArgumentCaptor<Map<String, String>> environment = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(2)).createAndStartContainer(
+        anyString(), environment.capture(), anyString(), any(), anyMap());
+    assertThat(environment.getAllValues().get(1)).containsEntry("POCKETHIVE_OUTPUTS_REDIS_PORT", "6379");
+    assertThat(manager.expectedWorkers()).hasSize(2);
+    assertThat(manager.getMetrics().desired()).isEqualTo(2);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.hasPendingConfigUpdates());
+    var acceptedWorkers = manager.expectedWorkers();
+    acceptedWorkers.forEach(worker -> {
+      manager.updateHeartbeat(worker.role(), worker.instance());
+      manager.markReady(worker.role(), worker.instance());
+    });
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    clearInvocations(amqp, docker, rabbit);
+
+    redis.put("port", 0);
+    plan.put("sutId", "rejected-sut");
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class);
+    assertThat(manager.expectedWorkers()).isEqualTo(acceptedWorkers);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+  }
+
+  @Test
   void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
@@ -276,6 +339,7 @@ class SwarmLifecycleManagerTest {
                     "redis", Map.of(
                         "host", "redis",
                         "port", 6379,
+                        "ssl", false,
                         "sourceStep", "FIRST",
                         "pushDirection", "RPUSH",
                         "routes", List.of(
@@ -329,6 +393,7 @@ class SwarmLifecycleManagerTest {
                     "redis", Map.of(
                         "host", "redis",
                         "port", 6379,
+                        "ssl", false,
                         "pickStrategy", "WEIGHTED_RANDOM",
                         "sources", List.of(
                             Map.of("listName", "webauth.RED.custA", "weight", 40),

@@ -2,6 +2,12 @@ package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import ch.qos.logback.classic.Level;
+import ch.qos.logback.classic.Logger;
+import ch.qos.logback.classic.spi.ILoggingEvent;
+import ch.qos.logback.core.read.ListAppender;
+import io.pockethive.controlplane.CanonicalPayloadDigest;
+import org.slf4j.LoggerFactory;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.AlertMessage;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -115,6 +121,44 @@ class WorkerControlPlaneRuntimeTest {
 	            .containsEntry("ratePerSec", 7.5)
 	            .containsEntry("enabled", true);
 	    }
+
+    @Test
+    void redisPasswordsStayInAdapterStateButNotConfigLogsOrStatus() throws Exception {
+        var logger = (Logger) LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
+        var previousLevel = logger.getLevel();
+        var logs = new ListAppender<ILoggingEvent>();
+        logs.start();
+        logger.addAppender(logs);
+        logger.setLevel(Level.DEBUG);
+        try {
+            Map<String, Object> config = Map.of("outputs", Map.of("redis", Map.of(
+                "host", "redis", "port", 6379, "ssl", false, "password", "synthetic-env-secret")));
+            var adapterSnapshot = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
+            runtime.registerStateListener(definition.beanName(), adapterSnapshot::set);
+            applyConfigUpdate(runtime, config);
+            assertThat(adapterSnapshot.get().rawConfig()).isEqualTo(config);
+            assertThat(runtime.workerRawConfig(definition.beanName())).isEqualTo(config);
+            var result = ArgumentCaptor.forClass(ControlPlaneEmitter.ResultContext.class);
+            verify(emitter).emitResult(result.capture());
+            assertThat(result.getValue().result().context())
+                .containsEntry("appliedConfigSha256", CanonicalPayloadDigest.sha256(MAPPER, config));
+
+            reset(emitter);
+            runtime.emitStatusSnapshot();
+            var status = ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
+            verify(emitter).emitStatusSnapshot(status.capture());
+            assertThat(buildEnvelopeJson(status.getValue(), "status-full"))
+                .contains("redis", "[redacted]").doesNotContain("synthetic-env-secret");
+            assertThat(logs.list).anySatisfy(event -> assertThat(event.getFormattedMessage())
+                .contains("Applied config update", "[redacted]"));
+            assertThat(logs.list).allSatisfy(event -> assertThat(event.getFormattedMessage())
+                .doesNotContain("synthetic-env-secret"));
+        } finally {
+            logger.detachAppender(logs);
+            logger.setLevel(previousLevel);
+            logs.stop();
+        }
+    }
 
     @Test
     void configUpdateCanonicalisesKebabCaseKeys() throws Exception {

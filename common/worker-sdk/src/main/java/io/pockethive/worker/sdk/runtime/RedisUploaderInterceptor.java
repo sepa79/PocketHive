@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
 import java.util.Map;
@@ -20,7 +20,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class RedisUploaderInterceptor implements WorkerInvocationInterceptor {
 
-    private static final WorkConfigurationParser CONFIGURATION = new WorkConfigurationParser();
+    private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisUploaderInterceptor.class);
     private static final String FIELD_ENABLED = "enabled";
     private static final String FIELD_PHASE = "phase";

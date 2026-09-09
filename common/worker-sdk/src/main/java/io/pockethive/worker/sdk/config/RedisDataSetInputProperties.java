@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.RedisDatasetPickStrategy;
-import io.pockethive.work.config.RedisDatasetSource;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
+import io.pockethive.work.config.redis.RedisDatasetSource;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import java.util.List;
 
 /**
@@ -44,7 +44,7 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
     }
 
     public void setSources(List<RedisDatasetSource> sources) {
-        this.sources = new WorkConfigurationParser().parseRedisSources(sources, "inputs.redis.sources");
+        this.sources = new RedisConfigurationParser().parseRedisSources(sources, "inputs.redis.sources");
     }
 
     public RedisDatasetPickStrategy getPickStrategy() {
@@ -84,7 +84,7 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
         var connection = connectionSettings(prefix);
         requirePresent(pickStrategy, prefix + ".pickStrategy");
         requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
-        var selection = new WorkConfigurationParser().parseRedisDatasetSelection(listName, getSources(), prefix);
+        var selection = new RedisConfigurationParser().parseRedisDatasetSelection(listName, getSources(), prefix);
         applyConnection(connection);
         listName = selection.listName();
     }

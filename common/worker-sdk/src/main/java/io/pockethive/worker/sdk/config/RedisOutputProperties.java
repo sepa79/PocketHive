@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.RedisRouteDefinition;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisRouteDefinition;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import java.util.List;
 
 /**
@@ -43,7 +43,7 @@ public class RedisOutputProperties extends RedisConnectionProperties implements 
     }
 
     public void setRoutes(List<RedisRouteDefinition> routes) {
-        new WorkConfigurationParser().parseRedisRoutes(routes, "outputs.redis.routes");
+        new RedisConfigurationParser().parseRedisRoutes(routes, "outputs.redis.routes");
         this.routes = routes == null ? List.of() : List.copyOf(routes);
     }
 
@@ -74,8 +74,8 @@ public class RedisOutputProperties extends RedisConnectionProperties implements 
     @Override
     public void validateConfigured(String prefix) {
         var connection = connectionSettings(prefix);
-        var settings = new WorkConfigurationParser().parseRedisWriteSettings(sourceStep, pushDirection, maxLen, prefix);
-        var targets = new WorkConfigurationParser().parseRedisOutputTargets(getRoutes(), defaultList, targetListTemplate, prefix);
+        var settings = new RedisConfigurationParser().parseRedisWriteSettings(sourceStep, pushDirection, maxLen, prefix);
+        var targets = new RedisConfigurationParser().parseRedisOutputTargets(getRoutes(), defaultList, targetListTemplate, prefix);
         applyConnection(connection);
         sourceStep = settings.sourceStep();
         pushDirection = settings.pushDirection();

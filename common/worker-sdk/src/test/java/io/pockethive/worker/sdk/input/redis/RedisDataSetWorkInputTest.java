@@ -8,8 +8,8 @@ import static org.mockito.Mockito.mock;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.work.config.RedisDatasetPickStrategy;
-import io.pockethive.work.config.RedisDatasetSource;
+import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
+import io.pockethive.work.config.redis.RedisDatasetSource;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
@@ -399,7 +399,7 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.work.config.RedisConnectionSettings settings) {
+        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.work.config.redis.RedisConnectionSettings settings) {
             return new QueueRedisListClient(queue);
         }
     }
@@ -432,7 +432,7 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.work.config.RedisConnectionSettings settings) {
+        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.work.config.redis.RedisConnectionSettings settings) {
             return new MultiQueueRedisListClient(queues);
         }
     }

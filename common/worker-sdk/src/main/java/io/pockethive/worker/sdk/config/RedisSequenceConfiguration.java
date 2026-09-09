@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 import io.pockethive.templating.RedisSequenceGenerator;
-import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -28,7 +28,7 @@ public class RedisSequenceConfiguration {
         if (!(config.get("redis") instanceof Map<?, ?> values)) {
             throw new IllegalArgumentException("redis must be an object");
         }
-        var settings = new WorkConfigurationParser().mergeRedisConnection(
+        var settings = new RedisConfigurationParser().mergeRedisConnection(
             RedisSequenceGenerator.currentConfig(), values, "redis");
         RedisSequenceGenerator.configure(settings);
     }

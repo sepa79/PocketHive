@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.work.config.WorkPatchPolicy;
+import io.pockethive.work.config.policy.WorkPatchPolicy;
+import io.pockethive.work.config.projection.WorkConfigurationRedactor;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
@@ -51,6 +52,7 @@ import org.slf4j.LoggerFactory;
  * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
  * Validates typed/private and Redis connection candidates before accepted-state writes or reseeding.
  * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ * Consumes RESP-WORK-CONFIGURATION-DIAGNOSTICS for config logs and status projections only.
  */
 public final class WorkerControlPlaneRuntime {
 
@@ -67,6 +69,7 @@ public final class WorkerControlPlaneRuntime {
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
     private final ControlPlaneNotifier notifier;
+    private final WorkerConfigurationLog configurationLog;
     private final TemplateRenderer templateRenderer;
 
     /**
@@ -140,8 +143,8 @@ public final class WorkerControlPlaneRuntime {
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
+        this.configurationLog = new WorkerConfigurationLog(log, this.objectMapper);
         this.notifier = new ControlPlaneNotifier(
-            log,
             this.objectMapper,
             emitter,
             identity.role(),
@@ -433,14 +436,7 @@ public final class WorkerControlPlaneRuntime {
                     patch.resetRequested()
                 );
                 Boolean enabled = command.enabled();
-                if (log.isDebugEnabled()) {
-                    log.debug("Applying config-update for worker={} role={} previousEnabled={} requestedEnabled={} data={}",
-                        state.definition().beanName(),
-                        state.definition().role(),
-                        previousEnabled,
-                        enabled,
-                        canonicalUpdate);
-                }
+                configurationLog.applying(state, enabled, canonicalUpdate);
                 Map<String, Object> candidatePrivateConfig = state.privateConfig();
                 if (patch.resetRequested()) {
                     candidatePrivateConfig = Map.of();
@@ -488,7 +484,7 @@ public final class WorkerControlPlaneRuntime {
                     previousEnabled,
                     finalEnabled
                 )) {
-                    notifier.logConfigUpdate(
+                    configurationLog.applied(
                         signal,
                         state,
                         mergeResult.diff(),
@@ -830,7 +826,7 @@ public final class WorkerControlPlaneRuntime {
             builder.data("intervalSeconds", intervalSeconds);
             if (snapshot) {
                 builder.data("startedAt", startedAt);
-                builder.config(configSnapshot);
+                builder.config(WorkConfigurationRedactor.redact(configSnapshot));
             }
             workerStatusData.forEach(builder::data);
         };
@@ -1122,7 +1118,7 @@ public final class WorkerControlPlaneRuntime {
                     augmented.put("outputs", outputsBlock);
                 }
 
-                workerEntry.put("config", augmented);
+                workerEntry.put("config", WorkConfigurationRedactor.redact(augmented));
             }
             Map<String, Object> statusData = state.statusData();
             if (!statusData.isEmpty()) {

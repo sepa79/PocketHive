@@ -3,22 +3,32 @@ package io.pockethive.worker.sdk.config;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.work.config.RedisDatasetPickStrategy;
+import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
+import io.pockethive.work.config.environment.RedisConnectionEnvironmentCodec;
+import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
+import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetInputProperties;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
 import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.boot.env.YamlPropertySourceLoader;
 import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
+import org.springframework.mock.env.MockEnvironment;
 
 class WorkIOConfigBinderTest {
 
@@ -546,14 +556,61 @@ class WorkIOConfigBinderTest {
     }
 
     @Test
-    void preservesPasswordWhitespaceThroughStartupBinding() {
-        var source = redisOutputSource(Map.of(
-            "pockethive.outputs.redis.username", " user ",
-            "pockethive.outputs.redis.password", " secret "));
-        var settings = new WorkOutputConfigBinder(new Binder(source))
-            .bind(WorkerOutputType.REDIS, RedisOutputProperties.class).connectionSettings("outputs.redis");
-        assertThat(settings.username()).isEqualTo("user");
-        assertThat(settings.password()).isEqualTo(" secret ");
+    void preservesExportedRedisConnectionsThroughEnvironmentBinding() {
+        for (String password : List.of(" secret ", "")) {
+            var settings = new RedisConfigurationParser().parseRedisConnection(
+                " redis ", 6380.0, " user ", password, "TRUE", "redis");
+            Map<String, Object> environment = new LinkedHashMap<>(RabbitConnectionEnvironment.encode(
+                new RabbitConnectionSettings("rabbit", 5672, "user", "secret", "/")));
+            environment.putAll(Map.of(
+                "POCKETHIVE_INPUTS_REDIS_LISTNAME", "dataset",
+                "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", "ROUND_ROBIN",
+                "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", "1",
+                "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", "LAST",
+                "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "RPUSH",
+                "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", "out",
+                "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "-1"));
+            environment.putAll(Map.of("POCKETHIVE_INPUTS_REDIS_PORT", "6381",
+                "pockethive.inputs.redis.ssl", "false", "POCKETHIVE_OUTPUTS_REDIS_PORT", "6382",
+                "POCKETHIVE_OUTPUTS_REDIS_USERNAME", "", "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "",
+                "spring.rabbitmq.port", "5673"));
+            var source = new SystemEnvironmentPropertySource("systemEnvironment", environment);
+            var rawBinder = new Binder(ConfigurationPropertySources.from(source));
+            Map<String, String> composed = new LinkedHashMap<>();
+            environment.forEach((name, value) -> composed.put(name, (String) value));
+            var resolved = new WorkConnectionEnvironmentResolver().resolve(Map.of(
+                "inputs", Map.of("redis", RedisConnectionEnvironmentCodec.configuration(settings)),
+                "outputs", Map.of("redis", RedisConnectionEnvironmentCodec.configuration(settings))),
+                composed, name -> rawBinder.bind(name, String.class).orElse(null), snapshot -> {
+                    var planningEnvironment = new MockEnvironment();
+                    planningEnvironment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
+                        "systemEnvironment", new LinkedHashMap<>(snapshot)));
+                    var planningBinder = Binder.get(planningEnvironment);
+                    return name -> planningBinder.bind(name, String.class).orElse(null);
+                });
+            var boundSource = new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(resolved.environment()));
+            var workerEnvironment = new MockEnvironment();
+            workerEnvironment.getPropertySources().addFirst(boundSource);
+            var binder = Binder.get(workerEnvironment);
+            var input = new WorkInputConfigBinder(binder).bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class);
+            var output = new WorkOutputConfigBinder(binder).bind(WorkerOutputType.REDIS, RedisOutputProperties.class);
+            var inputConnection = input.connectionSettings("inputs.redis");
+            var outputConnection = output.connectionSettings("outputs.redis");
+            assertThat(inputConnection.port()).isEqualTo(6381);
+            assertThat(inputConnection.ssl()).isFalse();
+            assertThat(inputConnection.password()).isEqualTo(password);
+            assertThat(outputConnection.port()).isEqualTo(6382);
+            assertThat(outputConnection.username()).isNull();
+            assertThat(outputConnection.password()).isEmpty();
+            var parser = new RedisConfigurationParser();
+            assertThat(inputConnection).isEqualTo(parser.parseRedisConnection(
+                (Map<?, ?>) ((Map<?, ?>) resolved.bootstrapConfig().get("inputs")).get("redis"), "inputs.redis"));
+            assertThat(outputConnection).isEqualTo(parser.parseRedisConnection(
+                (Map<?, ?>) ((Map<?, ?>) resolved.bootstrapConfig().get("outputs")).get("redis"), "outputs.redis"));
+            // Spring gives the uppercase environment entry precedence over the competing dotted entry.
+            assertThat(binder.bind("spring.rabbitmq", Bindable.of(RabbitConnectionSettings.class)).get().port()).isEqualTo(5672);
+            assertThat(resolved.environment()).containsEntry("SPRING_RABBITMQ_PORT", "5672");
+        }
     }
 
     @ParameterizedTest

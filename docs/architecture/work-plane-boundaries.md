@@ -65,7 +65,7 @@ Retained infrastructure artifacts with other names remain explicitly classified 
 | Artifact | Namespace / contents | Allowed project dependencies |
 |---|---|---|
 | `work-api` | `io.pockethive.work.api`: WorkItem, wire envelopes/codec/schema, worker function/context/info, history, diagnostic/capture and status contribution API | `observability-core`, `swarm-model`, `auth-contracts` |
-| `work-config` | `io.pockethive.work.config`: selected IO types, immutable settings, parsers, validation, patch/mutability policy | `swarm-model`, `rabbit-config` |
+| `work-config` | `io.pockethive.work.config`: shared IO selection and validation reports; `.redis`: Redis settings/parser; `.environment`: connection composition and environment/bootstrap mapping; `.policy`: patch/mutability policy; `.projection`: redacted configuration diagnostics | `swarm-model`, `rabbit-config` |
 | `rabbit-config` | `io.pockethive.rabbit.config`: shared connection settings/parser and environment encoding; no Spring/client types or plane topology | None |
 | `work-runtime-spi` | `io.pockethive.work.spi`: dispatch, input lifecycle, output, state views, commands and effects; no resource administration | `work-api`, `work-config` |
 | `work-resource-api` | `io.pockethive.work.resource`: immutable resource plans/observations and scoped provisioning/observation/removal/tap ports | `work-config`, `swarm-model` |
@@ -304,11 +304,25 @@ generic rate-policy implementation beside the existing scheduler until B07 moves
 
 ## 4. Configuration and topology SSOT
 
-`WorkConfigurationParser` in `work-config` owns input/output selection, settings parsing,
+The target `WorkConfigurationParser` in `work-config` owns input/output selection, settings parsing,
 normalization and complete candidate validation. `WorkPatchPolicy` owns mutable-field
 classification and patch validation. The first B02 transfer consolidated `LiveIoConfigMutability` and
 `LiveIoConfigUpdateGuard` there and deleted both previous definitions. Complete candidate
 validation remains a separate required WorkConfigurationParser responsibility.
+The current B02 parser only handles Redis settings and is named
+`io.pockethive.work.config.redis.RedisConfigurationParser`. It stays with the Redis
+values so validated-value constructors remain package-private. The future complete
+Work candidate parser must delegate Redis rules to this owner. There is no active
+WorkConfigurationParser facade or compatibility alias. WorkPatchPolicy lives in
+`.config.policy`; `.config.environment` contains RedisConnectionEnvironmentCodec and
+WorkConnectionEnvironmentResolver. The resolver applies final `bee.env` connection
+overrides, delegates validation to RedisConfigurationParser and the shared Rabbit contract,
+then produces matching environment/bootstrap values. Spring property lookup is supplied
+by Controller bootstrap; no custom environment-name parser is introduced. See
+[RESP-WORK-CONNECTION-ENVIRONMENT](runtime-responsibilities.md#resp-work-connection-environment)
+for the implemented five-field Rabbit / Redis IO connection scope and remaining gaps.
+These packages share the existing work-config artifact, which depends on rabbit-config
+but has no Spring or infrastructure client dependency.
 `WorkInputConfigBinder`/`WorkOutputConfigBinder` become one bootstrap decoder of raw
 environment properties; they delegate decisions to the parser. Remove repeated validation
 from Redis properties, `RedisWorkOutput.applyRawConfig`, dataset source parsing,

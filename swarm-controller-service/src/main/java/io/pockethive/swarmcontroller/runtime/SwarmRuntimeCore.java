@@ -28,7 +28,8 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: Coordinate the Swarm lifecycle using explicit runtime collaborators.
  * Must not: Consume transport messages, directly execute infrastructure operations, or duplicate readiness state.
- * Contract: Own one runtime lifecycle state machine and delegate infrastructure effects and projections.
+ * Contract: RESP-CONTROLLER-CONTROL — docs/architecture/runtime-responsibilities.md#resp-controller-control;
+ * validate all worker candidates before changing accepted state or requesting infrastructure effects.
  */
 public final class SwarmRuntimeCore implements SwarmLifecycleCore {
 
@@ -114,29 +115,34 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
   public void prepare(String templateJson) {
     log.info("Preparing swarm {}", swarmId);
     try {
-      this.template = templateJson;
       SwarmPlan plan = mapper.readValue(templateJson, SwarmPlan.class);
-      this.trafficPolicy = plan.trafficPolicy();
-
-      readinessTracker.reset();
       SwarmRuntimeContext analyzedContext = SwarmRuntimePlanAnalyzer.analyze(plan);
-      for (Bee bee : plan.bees()) {
-        readinessTracker.registerExpected(bee.role());
-      }
-      infrastructure.declareWorkTopology(analyzedContext.queueSuffixes());
-
-      runtimeContext = analyzedContext;
-      runtimeState = new SwarmRuntimeState(runtimeContext);
-
+      SwarmRuntimeState plannedState = new SwarmRuntimeState(analyzedContext);
+      List<PlannedSwarmWorker> plannedWorkers = new ArrayList<>();
       List<WorkerSpec> workerSpecs = new ArrayList<>();
       SutEnvironment sutEnv = plan.sutEnvironment();
       Set<String> roles = new LinkedHashSet<>();
       for (Bee bee : analyzedContext.runnableBees()) {
         PlannedSwarmWorker plannedWorker = workerSpecFactory.plan(bee, sutEnv);
+        plannedWorkers.add(plannedWorker);
         WorkerSpec workerSpec = plannedWorker.spec();
         workerSpecs.add(workerSpec);
         roles.add(workerSpec.role());
-        runtimeState.registerWorker(workerSpec.role(), workerSpec.id(), workerSpec.id());
+        plannedState.registerWorker(workerSpec.role(), workerSpec.id(), workerSpec.id());
+      }
+
+      this.template = templateJson;
+      this.trafficPolicy = plan.trafficPolicy();
+      readinessTracker.reset();
+      for (Bee bee : plan.bees()) {
+        readinessTracker.registerExpected(bee.role());
+      }
+      infrastructure.declareWorkTopology(analyzedContext.queueSuffixes());
+      runtimeContext = analyzedContext;
+      runtimeState = plannedState;
+
+      for (PlannedSwarmWorker plannedWorker : plannedWorkers) {
+        WorkerSpec workerSpec = plannedWorker.spec();
         if (!plannedWorker.bootstrapConfig().isEmpty()) {
           configFanout.registerBootstrapConfig(
               workerSpec.id(), workerSpec.role(), plannedWorker.bootstrapConfig());

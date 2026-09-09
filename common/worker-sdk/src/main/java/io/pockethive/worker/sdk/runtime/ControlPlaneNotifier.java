@@ -1,6 +1,5 @@
 package io.pockethive.worker.sdk.runtime;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
@@ -11,62 +10,29 @@ import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import org.slf4j.Logger;
 
+/**
+ * Responsibility: publish control results derived from accepted worker configuration or its rejection.
+ * Must not: apply configuration, log raw configuration or replace accepted values with diagnostic projections.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ */
 final class ControlPlaneNotifier {
 
-    private final Logger log;
     private final ObjectMapper objectMapper;
     private final ControlPlaneEmitter emitter;
     private final String role;
     private final String instanceId;
 
     ControlPlaneNotifier(
-        Logger log,
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         String role,
         String instanceId
     ) {
-        this.log = Objects.requireNonNull(log, "log");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
         this.emitter = Objects.requireNonNull(emitter, "emitter");
         this.role = Objects.requireNonNull(role, "role");
         this.instanceId = Objects.requireNonNull(instanceId, "instanceId");
-    }
-
-    void logInitialConfig(WorkerState state, Map<String, Object> config, Boolean enabled) {
-        String prettyConfig = prettyPrint(config.isEmpty() ? Map.of() : config);
-        log.info(
-            "Initial config for worker {} (role={} instance={}):\n  enabled: {}\n  config:\n{}",
-            state.definition().beanName(),
-            role,
-            instanceId,
-            formatEnabledValue(enabled),
-            prettyConfig
-        );
-    }
-
-    void logConfigUpdate(
-        ControlSignal signal,
-        WorkerState state,
-        Map<String, Object> diff,
-        Map<String, Object> finalConfig,
-        Boolean previousEnabled,
-        Boolean finalEnabled
-    ) {
-        String prettyChanges = prettyPrint(diff);
-        String prettyFinal = prettyPrint(finalConfig.isEmpty() ? Map.of() : finalConfig);
-        log.info(
-            "Applied config update for worker {} (signal={} role={} instance={}):\n  enabled: {}\n  changes:\n{}\n  finalConfig:\n{}",
-            state.definition().beanName(),
-            signal.type(),
-            signal.scope() != null ? signal.scope().role() : null,
-            signal.scope() != null ? signal.scope().instance() : null,
-            formatEnabledChange(previousEnabled, finalEnabled),
-            prettyChanges,
-            prettyFinal
-        );
     }
 
     void emitConfigReady(
@@ -125,26 +91,4 @@ final class ControlPlaneNotifier {
         throw new IllegalArgumentException("config-update enabled must be boolean");
     }
 
-    private String prettyPrint(Object value) {
-        if (value == null) {
-            return "null";
-        }
-        try {
-            return objectMapper.writerWithDefaultPrettyPrinter().writeValueAsString(value);
-        } catch (JsonProcessingException ex) {
-            log.warn("Unable to pretty print config value", ex);
-            return String.valueOf(value);
-        }
-    }
-
-    private String formatEnabledChange(Boolean previousEnabled, Boolean finalEnabled) {
-        if (Objects.equals(previousEnabled, finalEnabled)) {
-            return formatEnabledValue(finalEnabled) + " (unchanged)";
-        }
-        return formatEnabledValue(finalEnabled) + " (was " + formatEnabledValue(previousEnabled) + ")";
-    }
-
-    private String formatEnabledValue(Boolean value) {
-        return value == null ? "unspecified" : value.toString();
-    }
 }
