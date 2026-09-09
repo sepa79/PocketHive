@@ -1,15 +1,22 @@
 package io.pockethive.worker.sdk.input.csv;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 
+/**
+ * Responsibility: bind CSV startup settings and delegate rate validation to work-config.
+ * Must not: implement input-rate constraints or read dataset files.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
+ * Consumes RESP-WORK-INPUT-RATE; remaining CSV settings are B02 debt.
+ */
 public final class CsvDataSetInputProperties implements WorkInputConfig {
 
-    private static final double MIN_RATE_PER_SEC = 0.0;
     private static final long MIN_STARTUP_DELAY_SECONDS = 0L;
     private static final long MIN_TICK_INTERVAL_MS = 100L;
 
     private String filePath;
-    private Double ratePerSec;
+    private Object ratePerSec;
     private Boolean rotate;
     private Boolean skipHeader;
     private String delimiter;
@@ -26,12 +33,16 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
         this.filePath = filePath;
     }
 
-    public double getRatePerSec() {
-        return requireRatePerSec(ratePerSec, "ratePerSec");
+    public Object getRatePerSec() {
+        return ratePerSec;
     }
 
-    public void setRatePerSec(double ratePerSec) {
+    public void setRatePerSec(Object ratePerSec) {
         this.ratePerSec = ratePerSec;
+    }
+
+    public double ratePerSec() {
+        return new InputRateParser().parse(ratePerSec, InputRateParser.CSV_PATH);
     }
 
     public boolean isRotate() {
@@ -97,7 +108,7 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
     @Override
     public void validateConfigured(String prefix) {
         requireNonBlank(filePath, prefix + ".filePath");
-        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
+        new InputRateParser().parse(ratePerSec, prefix + "." + InputRateParser.FIELD);
         requirePresent(rotate, prefix + ".rotate");
         requirePresent(skipHeader, prefix + ".skipHeader");
         requireNonBlank(delimiter, prefix + ".delimiter");
@@ -118,14 +129,6 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
             throw new IllegalStateException(name + " must be configured");
         }
         return value;
-    }
-
-    private static double requireRatePerSec(Double value, String name) {
-        double rate = requirePresent(value, name);
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
-        }
-        return rate;
     }
 
     private static long requireStartupDelaySeconds(Long value, String name) {

@@ -1,6 +1,6 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). Remaining settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
+Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). The reviewed checkpoint is committed as `7ac51535` on human request. The separate RATE-R1 correction review closes Controller BufferGuard’s competing rate decoder/fallback and accepts the scoped input-rate transfer; 52 tests and five active-guard transition checks passed. Remaining B02 settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
 Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
 Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
@@ -548,3 +548,17 @@ FENV-R2 adds one diagnostic password projection consumed by worker status and th
 extracted configuration logger; raw adapter state and applied-config digests are preserved.
 133 selected tests and the root package build passed. See the latest B02 evidence;
 separate review of the corrections remains pending. Full B02 and SEL-R1 remain open.
+
+### B02 common input rate — 2026-09-09
+
+Checkpoint `7ac51535` commits the reviewed namespaces, connection environment and diagnostic
+corrections. Continued B02 with RESP-WORK-INPUT-RATE: `work-config.input.InputRateParser`
+replaces local scheduler/CSV/Redis input-rate validation in properties, runtime, patch
+policy and authoring. SchedulingState projects accepted rates. Concrete startup, runtime
+and authoring values share one rule; symbolic authoring remains deferred.
+
+Implementation verification and limits: [B02 input-rate evidence](boundary-design/b02/README.md#common-input-rate--2026-09-09).
+The [separate RATE-R1 correction review](boundary-design/b02/README.md#separate-rate-r1-correction-review--2026-09-09)
+closes the missed BufferGuard consumer and accepts the scoped input-rate transfer: 52 tests
+and five active-guard transition checks passed. Full settings/candidate acceptance, timing and limits,
+other B02 work and deferred SEL-R1 remain open. B03 has not started.

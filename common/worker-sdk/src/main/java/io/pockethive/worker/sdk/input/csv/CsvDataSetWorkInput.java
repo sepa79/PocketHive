@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.input.csv;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.work.api.WorkItemBuilder;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,6 +37,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: read CSV dataset records and coordinate their current intake lifecycle.
  * Must not: declare broker resources or own accepted worker configuration.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-CSV-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-csv-input.
  */
 public final class CsvDataSetWorkInput implements WorkInput {
@@ -192,7 +195,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = properties.getRatePerSec() * tickIntervalMs / 1_000.0;
+        double perTickRate = properties.ratePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -283,12 +286,15 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     @SuppressWarnings("unchecked")
-    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
+    void applyRawConfigOverrides(Map<String, Object> rawConfig) {
         if (rawConfig == null) return;
         var inputsMap = (Map<String, Object>) rawConfig.get("inputs");
         if (inputsMap == null) return;
         var csvMap = (Map<String, Object>) inputsMap.get("csv");
         if (csvMap == null) return;
+        Double parsedRate = csvMap.containsKey(InputRateParser.FIELD)
+            ? new InputRateParser().parse(csvMap.get(InputRateParser.FIELD), InputRateParser.CSV_PATH) : null;
+
 
         Object filePathObj = csvMap.get("filePath");
         if (filePathObj instanceof String filePath && !filePath.isBlank()) {
@@ -310,17 +316,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
             log.info("{} csv rotate: {}", workerDefinition.beanName(), rotate);
         }
 
-        Object rateObj = csvMap.get("ratePerSec");
-        if (rateObj != null) {
-            if (!(rateObj instanceof Number number)) {
-                throw new IllegalArgumentException("inputs.csv.ratePerSec must be a number");
-            }
-            double rate = number.doubleValue();
-            if (!Double.isFinite(rate) || rate < 0.0) {
-                throw new IllegalArgumentException("inputs.csv.ratePerSec must be a finite number >= 0");
-            }
-            properties.setRatePerSec(rate);
-            log.info("{} csv ratePerSec: {}", workerDefinition.beanName(), rate);
+        if (parsedRate != null) {
+            properties.setRatePerSec(parsedRate);
+            log.info("{} csv ratePerSec: {}", workerDefinition.beanName(), parsedRate);
         }
     }
 
@@ -349,7 +347,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
             schedulerExecutor.scheduleAtFixedRate(this::safeTick, initialDelay, tickIntervalMs, TimeUnit.MILLISECONDS);
             enabled = true;
             log.info("{} csv dataset input initialized (file={}, rows={}, rate={}/sec)",
-                workerDefinition.beanName(), properties.getFilePath(), csvRows.size(), properties.getRatePerSec());
+                workerDefinition.beanName(), properties.getFilePath(), csvRows.size(), properties.ratePerSec());
         } catch (Exception ex) {
             log.error("{} csv dataset initialization failed", workerDefinition.beanName(), ex);
             enabled = false;
@@ -367,7 +365,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         publisher.update(status -> {
             Map<String, Object> data = new java.util.LinkedHashMap<>();
             data.put("filePath", properties.getFilePath());
-            data.put("ratePerSec", properties.getRatePerSec());
+            data.put("ratePerSec", properties.ratePerSec());
             data.put("rotate", properties.isRotate());
             data.put("totalRows", csvRows.size());
             data.put("currentRow", currentRow);

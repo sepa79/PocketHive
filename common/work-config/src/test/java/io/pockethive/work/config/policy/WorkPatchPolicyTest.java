@@ -12,6 +12,19 @@ import org.junit.jupiter.api.Test;
 class WorkPatchPolicyTest {
 
     @Test
+    void rejectsExplicitNullRatesForEveryRateDrivenInput() {
+        for (var type : List.of(WorkerInputType.SCHEDULER, WorkerInputType.REDIS_DATASET, WorkerInputType.CSV_DATASET)) {
+            var previous = Map.<String, Object>of("inputs", Map.of("type", type.name(),
+                type.settingsKey(), Map.of("ratePerSec", 1.0)), "outputs", Map.of("type", "NONE"));
+            var fields = new java.util.LinkedHashMap<String, Object>();
+            fields.put("ratePerSec", null);
+            var patch = Map.<String, Object>of("inputs", Map.of(type.settingsKey(), fields));
+            assertThatThrownBy(() -> policy(type, WorkerOutputType.NONE).validate(previous, patch, false))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("finite number >= 0.0");
+        }
+    }
+
+    @Test
     void allowsBootstrapIoConfigWhenPreviousRawConfigIsEmpty() {
         WorkPatchPolicy policy = policy(WorkerInputType.REDIS_DATASET, WorkerOutputType.REDIS);
 
@@ -173,12 +186,9 @@ class WorkPatchPolicyTest {
             Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2500.5))),
             false
         )).doesNotThrowAnyException();
-        assertInvalid(
-            policy,
-            previous,
-            Map.of("inputs", Map.of("csv", Map.of("ratePerSec", "3.0"))),
-            "inputs.csv.ratePerSec"
-        );
+        assertThatCode(() -> policy.validate(previous,
+            Map.of("inputs", Map.of("csv", Map.of("ratePerSec", "3.0"))), false))
+            .doesNotThrowAnyException();
         assertInvalid(
             policy,
             previous,

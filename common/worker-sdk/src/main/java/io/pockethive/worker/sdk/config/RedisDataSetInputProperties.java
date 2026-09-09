@@ -1,25 +1,25 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
 import io.pockethive.work.config.redis.RedisDatasetSource;
 import io.pockethive.work.config.redis.RedisConfigurationParser;
 import java.util.List;
 
 /**
- * Responsibility: bind startup Redis dataset settings and delegate source-list and selection validation to work-config.
+ * Responsibility: bind startup Redis dataset settings and delegate source-list selection and rate validation to work-config.
  * Must not: infer source mode, duplicate source-entry validation or open Redis clients.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
- * Consumes RESP-WORK-REDIS-SOURCES, RESP-WORK-REDIS-SELECTION and RESP-REDIS-CONNECTION-SETTINGS; scheduling remains B02 debt.
+ * Consumes RESP-WORK-REDIS-SOURCES, RESP-WORK-REDIS-SELECTION and RESP-REDIS-CONNECTION-SETTINGS; RESP-WORK-INPUT-RATE owns rates; timing remains B02 debt.
  */
 public class RedisDataSetInputProperties extends RedisConnectionProperties implements WorkInputConfig {
-
-    private static final double MIN_RATE_PER_SEC = 0.0;
 
     private boolean enabled = false;
     private Object listName;
     private List<RedisDatasetSource> sources;
     private RedisDatasetPickStrategy pickStrategy;
-    private Double ratePerSec;
+    private Object ratePerSec;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
 
@@ -55,12 +55,16 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
         this.pickStrategy = pickStrategy;
     }
 
-    public double getRatePerSec() {
-        return requireRatePerSec(ratePerSec, "ratePerSec");
+    public Object getRatePerSec() {
+        return ratePerSec;
     }
 
-    public void setRatePerSec(double ratePerSec) {
+    public void setRatePerSec(Object ratePerSec) {
         this.ratePerSec = ratePerSec;
+    }
+
+    public double ratePerSec() {
+        return new InputRateParser().parse(ratePerSec, InputRateParser.REDIS_PATH);
     }
 
     public long getInitialDelayMs() {
@@ -83,7 +87,7 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
     public void validateConfigured(String prefix) {
         var connection = connectionSettings(prefix);
         requirePresent(pickStrategy, prefix + ".pickStrategy");
-        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
+        new InputRateParser().parse(ratePerSec, prefix + "." + InputRateParser.FIELD);
         var selection = new RedisConfigurationParser().parseRedisDatasetSelection(listName, getSources(), prefix);
         applyConnection(connection);
         listName = selection.listName();
@@ -94,14 +98,6 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
             throw new IllegalStateException(name + " must be configured");
         }
         return value;
-    }
-
-    private static double requireRatePerSec(Double value, String name) {
-        double rate = requirePresent(value, name);
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
-        }
-        return rate;
     }
 
 }

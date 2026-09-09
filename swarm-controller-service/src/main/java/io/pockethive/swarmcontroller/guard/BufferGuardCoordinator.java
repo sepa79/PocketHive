@@ -17,6 +17,8 @@ import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.input.InputRateParser;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -25,26 +27,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.OptionalDouble;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Optional coordinator that wires the buffer guard on top of a running swarm.
- * <p>
- * The runtime core does not depend on this class; {@code SwarmLifecycleManager}
- * is responsible for invoking it during prepare/start/stop/remove when the
- * feature is enabled.
+ * Responsibility: integrate swarm-plan guard settings and lifecycle with the Manager SDK and Control Plane.
+ * Must not: parse or repair source input rates, sample Rabbit directly or implement the feedback algorithm.
+ * Contract: RESP-CONTROLLER-BUFFER-GUARD — docs/architecture/runtime-responsibilities.md#resp-controller-buffer-guard.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  */
 public final class BufferGuardCoordinator {
 
   private static final Logger log = LoggerFactory.getLogger(BufferGuardCoordinator.class);
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
-
-  private enum InputKind {
-    SCHEDULER,
-    REDIS_DATASET
-  }
 
   private final SwarmControllerProperties properties;
   private final String swarmId;
@@ -53,7 +48,7 @@ public final class BufferGuardCoordinator {
   private final ObjectMapper mapper;
 
   private final io.pockethive.manager.guard.BufferGuardCoordinator coordinator;
-  private final Map<String, InputKind> inputKindByRole = new HashMap<>();
+  private final Map<String, WorkerInputType> inputKindByRole = new HashMap<>();
   private volatile boolean active;
   private volatile String lastProblem;
 
@@ -81,6 +76,7 @@ public final class BufferGuardCoordinator {
   public void configureFromTemplate(String templateJson) {
     this.active = false;
     this.lastProblem = null;
+    inputKindByRole.clear();
     if (!properties.getFeatures().bufferGuardEnabled()) {
       coordinator.configure(List.of());
       return;
@@ -129,27 +125,14 @@ public final class BufferGuardCoordinator {
   }
 
   private void sendRateUpdate(String targetRole, double rate) {
-    InputKind kind = inputKindByRole.get(normalizeRole(targetRole));
+    WorkerInputType kind = inputKindByRole.get(normalizeRole(targetRole));
     if (kind == null) {
       log.warn("Buffer guard attempted to update rate for role {} but no input mapping is configured; ignoring", targetRole);
       return;
     }
     var patch = mapper.createObjectNode();
     var inputs = patch.putObject("inputs");
-    switch (kind) {
-      case SCHEDULER -> {
-        var scheduler = inputs.putObject("scheduler");
-        scheduler.put("ratePerSec", rate);
-      }
-      case REDIS_DATASET -> {
-        var redis = inputs.putObject("redis");
-        redis.put("ratePerSec", rate);
-      }
-      default -> {
-        log.warn("Unsupported input kind {} for role {}; ignoring rate update", kind, targetRole);
-        return;
-      }
-    }
+    inputs.putObject(kind.settingsKey()).put(InputRateParser.FIELD, rate);
     try {
       var targetScope = io.pockethive.control.ControlScope.forRole(swarmId, targetRole);
       Map<String, Object> patchData = mapper.convertValue(patch, MAP_TYPE);
@@ -230,7 +213,7 @@ public final class BufferGuardCoordinator {
       return Optional.empty();
     }
 
-    InputKind inputKind = resolveInputKind(targetBee.config());
+    WorkerInputType inputKind = resolveInputKind(targetBee.config());
     if (inputKind != null) {
       inputKindByRole.put(normalizeRole(targetRole), inputKind);
     } else {
@@ -280,7 +263,9 @@ public final class BufferGuardCoordinator {
         recoveryDepth,
         defaultInt(bpPolicy != null ? bpPolicy.moderatorReductionPct() : null, 15));
 
-    double initialRate = extractRatePerSec(targetBee.config(), inputKind).orElse(adjustment.minRatePerSec());
+    double initialRate = inputKind == null
+        ? adjustment.minRatePerSec()
+        : configuredInputRate(targetBee.config(), inputKind);
     initialRate = clampRate(initialRate, adjustment);
 
     return Optional.of(new BufferGuardSettings(
@@ -298,62 +283,16 @@ public final class BufferGuardCoordinator {
         backpressure));
   }
 
-  private OptionalDouble extractRatePerSec(Map<?, ?> source, InputKind kind) {
-    if (source == null || source.isEmpty()) {
-      return OptionalDouble.empty();
-    }
-    if (kind == null) {
-      return OptionalDouble.empty();
-    }
-    Object inputsObj = source.get("inputs");
-    if (!(inputsObj instanceof Map<?, ?> inputsMap)) {
-      return OptionalDouble.empty();
-    }
-    Object value = switch (kind) {
-      case SCHEDULER -> {
-        Object schedulerObj = inputsMap.get("scheduler");
-        if (schedulerObj instanceof Map<?, ?> schedulerMap) {
-          yield schedulerMap.get("ratePerSec");
-        }
-        yield null;
-      }
-      case REDIS_DATASET -> {
-        Object redisObj = inputsMap.get("redis");
-        if (redisObj instanceof Map<?, ?> redisMap) {
-          yield redisMap.get("ratePerSec");
-        }
-        yield null;
-      }
-      default -> null;
-    };
-    if (value == null) {
-      return OptionalDouble.empty();
-    }
-    if (value instanceof Number number) {
-      return OptionalDouble.of(number.doubleValue());
-    }
-    if (value instanceof String text) {
-      String trimmed = text.trim();
-      if (trimmed.isEmpty()) {
-        return OptionalDouble.empty();
-      }
-      try {
-        return OptionalDouble.of(Double.parseDouble(trimmed));
-      } catch (NumberFormatException ex) {
-        log.warn("Ignoring non-numeric ratePerSec value '{}' in buffer guard config", text);
-        return OptionalDouble.empty();
-      }
-    }
-    log.warn("Ignoring non-numeric ratePerSec value of type {} in buffer guard config", value.getClass().getName());
-    return OptionalDouble.empty();
+  private double configuredInputRate(Map<String, Object> config, WorkerInputType kind) {
+    Object inputs = config.get("inputs");
+    Object settings = inputs instanceof Map<?, ?> values ? values.get(kind.settingsKey()) : null;
+    Object rate = settings instanceof Map<?, ?> values ? values.get(InputRateParser.FIELD) : null;
+    return new InputRateParser().parse(rate, InputRateParser.PATHS_BY_INPUT.get(kind.name()));
   }
 
   private static double clampRate(double candidate, BufferGuardSettings.Adjustment adjustment) {
     double min = Math.max(0d, adjustment.minRatePerSec());
     double max = Math.max(min, adjustment.maxRatePerSec());
-    if (!Double.isFinite(candidate)) {
-      return min;
-    }
     return Math.max(min, Math.min(max, candidate));
   }
 
@@ -381,7 +320,7 @@ public final class BufferGuardCoordinator {
     return value == null ? "" : value.trim().toLowerCase(Locale.ROOT);
   }
 
-  private static InputKind resolveInputKind(Map<String, Object> config) {
+  private static WorkerInputType resolveInputKind(Map<String, Object> config) {
     if (config == null || config.isEmpty()) {
       return null;
     }
@@ -394,11 +333,12 @@ public final class BufferGuardCoordinator {
       return null;
     }
     String normalized = rawType.trim().toUpperCase(Locale.ROOT);
-    return switch (normalized) {
-      case "SCHEDULER" -> InputKind.SCHEDULER;
-      case "REDIS_DATASET" -> InputKind.REDIS_DATASET;
-      default -> null;
-    };
+    for (WorkerInputType kind : List.of(WorkerInputType.SCHEDULER, WorkerInputType.REDIS_DATASET)) {
+      if (kind.name().equals(normalized)) {
+        return kind;
+      }
+    }
+    return null;
   }
 
   private static Duration parseDuration(String candidate, Duration fallback) {

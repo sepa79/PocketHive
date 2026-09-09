@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.input.redis;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.pockethive.work.config.redis.RedisConnectionSettings;
@@ -42,13 +44,13 @@ import org.slf4j.LoggerFactory;
  * Must not: validate dataset source entries, refresh auth tokens or declare Rabbit resources.
  * Consumes: RESP-WORK-REDIS-SOURCES and RESP-WORK-REDIS-SELECTION for validated source choices.
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for startup and merged connection values.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
 public final class RedisDataSetWorkInput implements WorkInput {
 
     private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger defaultLog = LoggerFactory.getLogger(RedisDataSetWorkInput.class);
-    private static final double MIN_RATE_PER_SEC = 0.0;
 
     private final WorkerDefinition workerDefinition;
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
@@ -292,7 +294,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = properties.getRatePerSec() * tickIntervalMs / 1_000.0;
+        double perTickRate = properties.ratePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -345,12 +347,8 @@ public final class RedisDataSetWorkInput implements WorkInput {
             : null;
         var connection = CONFIGURATION.mergeRedisConnection(
             properties.connectionSettings("inputs.redis"), redisMap, "inputs.redis");
-        Double parsedRate = redisMap.containsKey("ratePerSec")
-            ? requireDouble(redisMap.get("ratePerSec"), "inputs.redis.ratePerSec")
-            : null;
-        if (parsedRate != null) {
-            validateRatePerSec(parsedRate, "inputs.redis.ratePerSec");
-        }
+        Double parsedRate = redisMap.containsKey(InputRateParser.FIELD)
+            ? new InputRateParser().parse(redisMap.get(InputRateParser.FIELD), InputRateParser.REDIS_PATH) : null;
 
         if (selection != null && (!Objects.equals(selection.listName(), properties.getListName())
             || !selection.sources().equals(properties.getSources()))) {
@@ -369,7 +367,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             }
         }
         properties.applyConnection(connection);
-        if (redisMap.containsKey("ratePerSec") && parsedRate != properties.getRatePerSec()) {
+        if (redisMap.containsKey(InputRateParser.FIELD) && parsedRate != properties.ratePerSec()) {
             properties.setRatePerSec(parsedRate);
             if (log.isInfoEnabled()) {
                 log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), parsedRate);
@@ -379,20 +377,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
 
     private static String asText(Object value) {
         return value == null ? null : value.toString();
-    }
-
-    private static Double requireDouble(Object value, String field) {
-        if (value instanceof Number number) {
-            return number.doubleValue();
-        }
-        if (value instanceof String text) {
-            try {
-                return Double.parseDouble(text.trim());
-            } catch (NumberFormatException ex) {
-                throw new IllegalArgumentException(field + " must be a number", ex);
-            }
-        }
-        throw new IllegalArgumentException(field + " must be a number");
     }
 
     private static String requireNonBlankText(Object value, String field) {
@@ -451,7 +435,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             if (!properties.getSources().isEmpty()) {
                 data.put("sources", properties.getSources().stream().map(RedisDatasetSource::getListName).toList());
             }
-            data.put("ratePerSec", properties.getRatePerSec());
+            data.put("ratePerSec", properties.ratePerSec());
             data.put("dispatched", dispatched);
             if (lastPopListName != null && !lastPopListName.isBlank()) {
                 data.put("lastPopList", lastPopListName);
@@ -477,7 +461,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (properties.getPickStrategy() == null) {
             throw new IllegalStateException("Redis dataset input pickStrategy must be configured");
         }
-        validateRatePerSec(properties.getRatePerSec(), "Redis dataset input ratePerSec");
+        properties.ratePerSec();
         return CONFIGURATION.parseRedisDatasetSelection(properties.getListName(), properties.getSources(), "inputs.redis");
     }
 
@@ -555,12 +539,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
             resource.close();
         } catch (Exception ignored) {
             // ignored
-        }
-    }
-
-    private static void validateRatePerSec(double rate, String field) {
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalArgumentException(field + " must be >= " + MIN_RATE_PER_SEC);
         }
     }
 

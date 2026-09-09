@@ -1,5 +1,7 @@
 package io.pockethive.work.config.redis;
 
+import static io.pockethive.work.config.WorkConfigurationExpressions.symbolic;
+
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkConfigurationProblem;
@@ -429,20 +431,6 @@ public final class RedisConfigurationParser {
             problems.add(new WorkConfigurationProblem(path, "Redis output route regex is invalid: " + e.getDescription()));
             return null;
         }
-    }
-
-    private boolean symbolic(Object value, String path, WorkConfigurationMode mode,
-                             List<WorkConfigurationProblem> problems, List<String> deferred) {
-        if (!(value instanceof String text)
-            || !((text.contains("{{") && text.contains("}}")) || (text.contains("{%") && text.contains("%}")))) {
-            return false;
-        }
-        if (mode == WorkConfigurationMode.AUTHORING) {
-            deferred.add(path);
-        } else {
-            problems.add(new WorkConfigurationProblem(path, "Configuration expression must be rendered before runtime parsing."));
-        }
-        return true;
     }
 
 }

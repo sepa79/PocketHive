@@ -1,18 +1,22 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 /**
- * Scheduler-specific tuning parameters that can be scoped per worker role.
+ * Responsibility: bind scheduler startup settings and delegate rate validation to work-config.
+ * Must not: implement input-rate constraints or schedule work.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
+ * Consumes RESP-WORK-INPUT-RATE; timing and limit settings remain B02 debt.
  */
 public class SchedulerInputProperties implements WorkInputConfig {
 
-    private static final double MIN_RATE_PER_SEC = 0.0;
     private static final long MIN_MAX_MESSAGES = 0L;
 
     private boolean enabled = false;
     private long initialDelayMs = 0L;
     private long tickIntervalMs = 1_000L;
     private int maxPendingTicks = 1;
-    private Double ratePerSec;
+    private Object ratePerSec;
     /**
      * Optional upper bound on the total number of messages the scheduler will
      * dispatch for the current configuration. A value of {@code 0} means
@@ -52,12 +56,16 @@ public class SchedulerInputProperties implements WorkInputConfig {
         this.maxPendingTicks = Math.max(1, maxPendingTicks);
     }
 
-    public double getRatePerSec() {
-        return requireRatePerSec(ratePerSec, "ratePerSec");
+    public Object getRatePerSec() {
+        return ratePerSec;
     }
 
-    public void setRatePerSec(double ratePerSec) {
+    public void setRatePerSec(Object ratePerSec) {
         this.ratePerSec = ratePerSec;
+    }
+
+    public double ratePerSec() {
+        return new InputRateParser().parse(ratePerSec, InputRateParser.SCHEDULER_PATH);
     }
 
     public long getMaxMessages() {
@@ -70,15 +78,8 @@ public class SchedulerInputProperties implements WorkInputConfig {
 
     @Override
     public void validateConfigured(String prefix) {
-        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
+        new InputRateParser().parse(ratePerSec, prefix + "." + InputRateParser.FIELD);
         requireMaxMessages(maxMessages, prefix + ".maxMessages");
-    }
-
-    private static double requirePresent(Double value, String name) {
-        if (value == null) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
     }
 
     private static long requirePresent(Long value, String name) {
@@ -86,14 +87,6 @@ public class SchedulerInputProperties implements WorkInputConfig {
             throw new IllegalStateException(name + " must be configured");
         }
         return value;
-    }
-
-    private static double requireRatePerSec(Double value, String name) {
-        double rate = requirePresent(value, name);
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
-        }
-        return rate;
     }
 
     private static long requireMaxMessages(Long value, String name) {

@@ -252,7 +252,7 @@ class RedisDataSetWorkInputTest {
         assertThat(properties.getPort()).isEqualTo(6380);
         assertThat(properties.getSsl()).isEqualTo(true);
         assertThat(properties.getPickStrategy()).isEqualTo(RedisDatasetPickStrategy.WEIGHTED_RANDOM);
-        assertThat(properties.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(properties.ratePerSec()).isEqualTo(2500.5);
     }
 
     @Test
@@ -283,7 +283,7 @@ class RedisDataSetWorkInputTest {
             .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inputs.redis.sources");
         assertThat(properties.getSources()).containsExactlyElementsOf(sources);
         assertThat(properties.getListName()).isNull();
-        assertThat(properties.getRatePerSec()).isEqualTo(1.0);
+        assertThat(properties.ratePerSec()).isEqualTo(1.0);
         properties.validateConfigured("inputs.redis");
     }
 
@@ -318,7 +318,7 @@ class RedisDataSetWorkInputTest {
             "sources", List.of(), "ratePerSec", 3)))))
             .hasMessageContaining("exactly one source mode");
         assertThat(properties.getSources()).containsExactly(source("red", 1));
-        assertThat(properties.getRatePerSec()).isEqualTo(1);
+        assertThat(properties.ratePerSec()).isEqualTo(1);
     }
 
     private static WorkerDefinition definition() {

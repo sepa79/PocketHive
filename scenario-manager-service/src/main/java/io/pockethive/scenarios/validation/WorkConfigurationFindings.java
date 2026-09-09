@@ -6,6 +6,7 @@ import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.work.config.WorkConfigurationProblem;
 import java.util.List;
+import io.pockethive.work.config.input.InputRateParser;
 
 /**
  * Responsibility: project shared Work configuration validation into scenario diagnostics.
@@ -15,10 +16,16 @@ import java.util.List;
  * Consumes: RESP-WORK-REDIS-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-redis-selection.
  * Consumes: RESP-WORK-REDIS-SOURCES — docs/architecture/runtime-responsibilities.md#resp-work-redis-sources.
  * Consumes: RESP-WORK-REDIS-WRITE-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-redis-write-settings.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
     private final RedisConfigurationParser parser = new RedisConfigurationParser();
+
+    void inputRate(Object value, String path, List<ValidationFinding> findings) {
+        var result = new InputRateParser().validate(value, path, WorkConfigurationMode.AUTHORING);
+        project(result.problems(), result.deferredPaths(), findings);
+    }
 
     void redisConnection(Object values, String path, List<ValidationFinding> findings) {
         var result = parser.validateRedisConnection(values, path, WorkConfigurationMode.AUTHORING);

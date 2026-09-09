@@ -1,5 +1,7 @@
 package io.pockethive.scenarios.validation;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pockethive.templating.api.TemplateSyntaxValidator;
 
@@ -1103,7 +1105,7 @@ public final class ScenarioBundleValidator {
                 if (requiredPath == null || requiredPath.isBlank()) {
                     return;
                 }
-                if (ioSelectorSpecificFindingWillCover(config, requiredPath) || isSharedRedisConfigurationField(config, requiredPath)) {
+                if (ioSelectorSpecificFindingWillCover(config, requiredPath) || isSharedWorkConfigurationField(config, requiredPath)) {
                     return;
                 }
                 if (hasConfigValue(config, requiredPath, Boolean.TRUE.equals(entry.allowBlank()))) {
@@ -1147,7 +1149,7 @@ public final class ScenarioBundleValidator {
                 if (fieldPath == null || expectedType == null || !containsConfigPath(config, fieldPath)) {
                     return;
                 }
-                if (isSharedRedisConfigurationField(config, fieldPath)) {
+                if (isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 if (((REDIS_OUTPUT_ROUTES_PATH.equals(fieldPath) || REDIS_OUTPUT_DEFAULT_LIST_PATH.equals(fieldPath)
@@ -1184,7 +1186,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedRedisConfigurationField(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Set<String> allowedValues = optionValues(entry.options());
@@ -1217,7 +1219,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedRedisConfigurationField(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Object rawValue = configValue(config, fieldPath);
@@ -1251,8 +1253,12 @@ public final class ScenarioBundleValidator {
             });
     }
 
-    private boolean isSharedRedisConfigurationField(Map<String, Object> config, String path) {
+    private boolean isSharedWorkConfigurationField(Map<String, Object> config, String path) {
         if (path == null) return false;
+        String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
+        if (inputType != null && path.equals(InputRateParser.PATHS_BY_INPUT.get(inputType))) {
+            return true;
+        }
         if (REDIS_WRITE_SETTING_PATHS.contains(path) && hasSelectedRedisBlock(config, REDIS_OUTPUT_CONFIG_PATH)) {
             return true;
         }
@@ -1306,6 +1312,11 @@ public final class ScenarioBundleValidator {
         String configPath,
         List<ValidationFinding> findings
     ) {
+        String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
+        String ratePath = inputType == null ? null : InputRateParser.PATHS_BY_INPUT.get(inputType);
+        if (ratePath != null) {
+            workConfigurationFindings.inputRate(configValue(config, ratePath), configPath + "." + ratePath, findings);
+        }
         for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
             if (hasSelectedRedisBlock(config, root)) {
                 workConfigurationFindings.redisConnection(configValue(config, root), configPath + "." + root, findings);

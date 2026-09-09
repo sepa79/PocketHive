@@ -1,5 +1,7 @@
 package io.pockethive.work.config.policy;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
@@ -13,6 +15,7 @@ import java.util.Set;
  * Responsibility: own IO patch mutability and validate changes against accepted settings and enablement.
  * Must not: write accepted state, apply adapters, read environment or replace complete candidate validation.
  * Consumes: RESP-WORK-REDIS-SELECTION for the requested list name and prior source mode.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public final class WorkPatchPolicy {
@@ -20,16 +23,15 @@ public final class WorkPatchPolicy {
     private static final String INPUTS_ROOT = "inputs";
     private static final String OUTPUTS_ROOT = "outputs";
     private static final String TYPE_FIELD = "type";
-    private static final double MIN_RATE_PER_SEC = 0.0;
 
     public static final String LIVE_MUTABLE_FIELD = "liveMutable";
-    public static final String SCHEDULER_RATE_PER_SEC = "inputs.scheduler.ratePerSec";
+    public static final String SCHEDULER_RATE_PER_SEC = InputRateParser.SCHEDULER_PATH;
     public static final String SCHEDULER_MAX_MESSAGES = "inputs.scheduler.maxMessages";
     public static final String SCHEDULER_RESET = "inputs.scheduler.reset";
-    public static final String REDIS_DATASET_RATE_PER_SEC = "inputs.redis.ratePerSec";
+    public static final String REDIS_DATASET_RATE_PER_SEC = InputRateParser.REDIS_PATH;
     public static final String REDIS_DATASET_LIST_NAME = "inputs.redis.listName";
     public static final String REDIS_DATASET_SOURCES = "inputs.redis.sources";
-    public static final String CSV_DATASET_RATE_PER_SEC = "inputs.csv.ratePerSec";
+    public static final String CSV_DATASET_RATE_PER_SEC = InputRateParser.CSV_PATH;
 
     private static final String INPUTS_PREFIX = "inputs.";
     private static final String OUTPUTS_PREFIX = "outputs.";
@@ -247,14 +249,11 @@ public final class WorkPatchPolicy {
     }
 
     private double requireRatePerSec(String dottedPath, Object value) {
-        double rate = requireNumber(dottedPath, value);
-        if (rate < MIN_RATE_PER_SEC) {
-            throw invalidOperationalValue(
-                dottedPath,
-                "must be >= " + formatNumber(MIN_RATE_PER_SEC)
-            );
+        var result = new InputRateParser().validate(value, dottedPath, WorkConfigurationMode.RESOLVED);
+        if (!result.problems().isEmpty()) {
+            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
         }
-        return rate;
+        return result.ratePerSec();
     }
 
     private long requireNonNegativeInteger(String dottedPath, Object value) {
@@ -270,17 +269,6 @@ public final class WorkPatchPolicy {
             throw invalidOperationalValue(dottedPath, "must be >= 0");
         }
         return integer;
-    }
-
-    private double requireNumber(String dottedPath, Object value) {
-        if (!(value instanceof Number number)) {
-            throw invalidOperationalValue(dottedPath, "must be a number");
-        }
-        double numeric = number.doubleValue();
-        if (!Double.isFinite(numeric)) {
-            throw invalidOperationalValue(dottedPath, "must be a finite number");
-        }
-        return numeric;
     }
 
     private boolean requireBoolean(String dottedPath, Object value) {
@@ -330,10 +318,4 @@ public final class WorkPatchPolicy {
         );
     }
 
-    private String formatNumber(double value) {
-        if (Double.isFinite(value) && value == Math.rint(value)) {
-            return Long.toString((long) value);
-        }
-        return Double.toString(value);
-    }
 }

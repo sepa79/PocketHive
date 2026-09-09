@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.input.csv;
 
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
@@ -18,6 +19,23 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.LoggerFactory;
 
 class CsvDataSetWorkInputTest {
+
+    @Test
+    void invalidRateRejectsCsvOverridesBeforeChangingTheFile() {
+        var properties = baseProperties();
+        var input = inputFor(properties);
+        var fields = new java.util.LinkedHashMap<String, Object>();
+        fields.put("filePath", "/other.csv");
+        fields.put("ratePerSec", null);
+        assertThatThrownBy(() -> input.applyRawConfigOverrides(java.util.Map.of("inputs", java.util.Map.of("csv", fields))))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inputs.csv.ratePerSec");
+        assertThat(properties.getFilePath()).isEqualTo("/app/scenario/users.csv");
+        assertThat(properties.ratePerSec()).isEqualTo(1.0);
+        fields.put("ratePerSec", "3.0");
+        input.applyRawConfigOverrides(java.util.Map.of("inputs", java.util.Map.of("csv", fields)));
+        assertThat(properties.getFilePath()).isEqualTo("/other.csv");
+        assertThat(properties.ratePerSec()).isEqualTo(3.0);
+    }
 
     @Test
     void validatesDirectRuntimeConfigWithHighRateAndNoBusinessUpperBound() {
@@ -38,7 +56,7 @@ class CsvDataSetWorkInputTest {
         CsvDataSetWorkInput input = inputFor(properties);
 
         assertThatThrownBy(input::validateConfiguration)
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("inputs.csv.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }

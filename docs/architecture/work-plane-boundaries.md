@@ -498,6 +498,10 @@ responsibility; they must consume migrated contracts, never retain old definitio
 | C02 — operations/cleanup/files | Orchestrator operation/absence owners, shared run-path resolver; scoped compute/filesystem adapters | CP-N09 chronology misuse, cleanup success reconstruction, FileJournal reader path reconstruction and lifecycle sink infra calls | Before/after audit reproductions + official-ingress lifecycle/cleanup; SSOT-01/02, CP-N05/09 |
 | C03 — service/client projections | Scenario service contract owner; Controller observation freshness; auth owner-derived capability projection | Scenario wire copies, UI normalization/freshness/grant-policy replicas; remaining CP-N02–08 responsibilities | SSOT-05–08 reproductions, generated-client drift checks, focused service/UI tests and ingress |
 
+B02 input-rate transfer: see [RESP-WORK-INPUT-RATE](runtime-responsibilities.md#resp-work-input-rate).
+This slice removes local rate parsing from startup, patch policy, input adapters and
+authoring; it does not close the complete-settings or accepted-candidate gate.
+
 B01→B02→B03→B04→B05→B06→B07 is the execution order. C01–C03 follow completed Work
 acceptance. CP/Work factory isolation and removal of CP-owned Work bindings are B01
 prerequisites (RAB-03), not B05 work. State integration is B03; Rabbit delivery is B05;

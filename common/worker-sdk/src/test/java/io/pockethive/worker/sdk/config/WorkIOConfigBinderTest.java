@@ -241,7 +241,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.redis.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }
@@ -254,7 +254,26 @@ class WorkIOConfigBinderTest {
 
         RedisDataSetInputProperties config = binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
+    }
+
+    @Test
+    void rejectsBooleanInputRatesWithoutSpringCoercion() {
+        var redis = redisInputSource(Map.of());
+        var scheduler = schedulerInputSource(Map.of());
+        var csv = csvInputSource(Map.of());
+        redis.put("pockethive.inputs.redis.rate-per-sec", true);
+        scheduler.put("pockethive.inputs.scheduler.rate-per-sec", true);
+        csv.put("pockethive.inputs.csv.rate-per-sec", true);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(redis))
+            .bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(scheduler))
+            .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(csv))
+            .bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
     }
 
     @Test
@@ -266,7 +285,7 @@ class WorkIOConfigBinderTest {
 
         SchedulerInputProperties config = binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
         assertThat(config.getMaxMessages()).isEqualTo(250000L);
     }
 
@@ -277,7 +296,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.scheduler.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }
@@ -302,7 +321,7 @@ class WorkIOConfigBinderTest {
 
         CsvDataSetInputProperties config = binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
     }
 
     @Test
@@ -312,7 +331,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }

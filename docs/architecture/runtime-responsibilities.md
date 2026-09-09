@@ -650,12 +650,52 @@ neither source is rejected. Redis reads and selection order remain in the input 
 **Forbidden:** independent mode predicates/normalizers in properties, input or authoring;
 automatic source-mode switching; interpreting deferred authoring as runtime acceptance.
 **Remaining B02:** complete IO/candidate validation before accepted Control Plane state,
-connection bootstrap defaults/scope composition, rate settings and empty-YAML shape preservation. This adapter-side selection
+connection bootstrap defaults/scope composition, timing settings and empty-YAML shape preservation. This adapter-side selection
 gate does not certify the full candidate or change Control Plane acknowledgement order.
 **Verification:** RedisDatasetSelectionTest, WorkPatchPolicyTest, WorkIOConfigBinderTest,
 RedisDataSetWorkInputTest and RedisConfigurationValidationComponentTest.
 **Review status:** SEL-R1 HIGH remains open and is deferred by the user; it does not
 block plan continuation. See `docs/inProgress/boundary-design/b02/known-issues.md`.
+
+## RESP-WORK-INPUT-RATE
+
+**B02 transfer:** `common/work-config`, `io.pockethive.work.config.input.InputRateParser`
+owns parsing and validation of `ratePerSec` for SCHEDULER, CSV_DATASET and REDIS_DATASET.
+The required value accepts a Number or numeric property text, is finite and >= 0,
+with no upper limit. Zero pauses rate-driven dispatch. Missing, null, blank, boolean,
+non-numeric, negative and non-finite values fail; errors contain the field path, not
+raw input. Numeric text uses Java double parsing, identically at all consuming boundaries.
+An absent patch field leaves the current setting unchanged; explicit null is invalid.
+
+AUTHORING defers configuration expressions; RESOLVED rejects unrendered expressions.
+WorkConfigurationExpressions owns the existing Work-field deferral marker check,
+extracted unchanged from RedisConfigurationParser. It does not validate template syntax
+or render values. InputRateValidation exposes a value only for a fully valid result.
+
+Startup property holders retain the decoded Object for the canonical parser; their
+`ratePerSec()` accessor exposes the validated double. Scheduler, CSV and Redis inputs,
+WorkPatchPolicy and Scenario Manager consume the same rule. Catalogue type/range/required
+checks delegate for these selected fields; catalogue descriptors remain presentation
+metadata. SchedulingState carries an accepted rate as a read-only projection and does
+not independently validate its range. Moderator's mode.ratePerSec/SINE settings describe a separate work-processing
+limiter, not input intake; their existing validation is outside this transfer.
+
+Controller BufferGuardCoordinator also consumes InputRateParser for the source rates of
+its supported SCHEDULER/REDIS_DATASET targets. It must validate before applying guard
+adjustment bounds. Invalid or absent selected rates invalidate guard configuration:
+active=false, currentSettings empty and lastProblem populated. Reconfiguration must
+clear previous guard settings on failure. The existing bounds-only mode for targets
+without a supported rate-controlled input remains separate; it does not read a source
+rate or publish rate updates to that input.
+
+**Forbidden:** local input-rate parsers/range validators, coercing arbitrary objects to
+text, silent defaults or interpreting symbolic authoring as accepted runtime settings.
+**Verification:** InputRateParserTest, WorkPatchPolicyTest, WorkIOConfigBinderTest and
+scenario component validation plus existing input behavior tests.
+**Scope:** rate only. Timing, limits, input enablement, complete candidate acceptance and
+other B02 settings remain open. SEL-R1 stays explicitly deferred. The input-rate transfer
+passed separate review on 2026-09-09 after RATE-R1 correction; see
+[review evidence](../inProgress/boundary-design/b02/README.md#separate-rate-r1-correction-review--2026-09-09).
 
 ## RESP-WORK-IO-CONFIG
 
@@ -768,6 +808,8 @@ TemplatingInterceptor separately applies an invocation body template directly th
 **Current module(s):** `common/work-api`.
 
 ScheduledInvocationPolicy owns the update/plan scheduling contract; SchedulingState is a read-only input projection with revision and explicit configured state.
+Its rate is supplied from RESP-WORK-INPUT-RATE accepted settings; the projection does not
+revalidate that setting.
 
 SchedulerWorkInput delivers updates; RateSchedulePolicy and TriggerSchedulePolicy implement distinct rate versus trigger policies.
 
@@ -1110,6 +1152,27 @@ ownership artifacts are recorded, and removal reports its concrete results to th
 **Migration status:** This records current mixed lifecycle/environment/image/manifest/cleanup
 code, not accepted isolation. Work naming moves in B04; CP-N05/C02 must separate remaining
 infrastructure and absence ownership. The Rabbit base export dependency is already extracted.
+
+## RESP-CONTROLLER-BUFFER-GUARD
+
+**Current module:** `swarm-controller-service`, guard.BufferGuardCoordinator.
+It integrates swarm plans with the Manager SDK guard lifecycle: selects eligible queue
+producers, maps traffic-policy settings and forwards computed rates through Control Plane.
+Queue sampling/adjustment remains in Manager SDK; source input-rate decoding belongs to
+RESP-WORK-INPUT-RATE. Only SCHEDULER and REDIS_DATASET are currently rate-update targets.
+Other input selections retain the existing bounds-only mode and receive no rate publication.
+
+**RATE-R1 transfer:** canonical input-rate validation precedes guard-specific clamping.
+A malformed selected source rate invalidates the entire guard configuration, empties
+current settings and exposes a problem; it cannot become an active guard at minimum rate.
+Valid rates still obey adjustment.minRatePerSec/maxRatePerSec. Input-to-role mapping is
+rebuilt for each plan so a previous rate-controlled target cannot receive updates after
+reconfiguration to bounds-only mode. No source-rate default or validator remains here.
+
+**Forbidden:** parse or repair source input rates locally, read Rabbit directly, or
+implement the Manager SDK feedback algorithm. Existing traffic-policy default/duration
+mapping and broader plan/transport separation remain debt outside RATE-R1.
+**Verification:** BufferGuardCoordinatorTest and existing SwarmLifecycleManagerTest guard behavior.
 
 ## RESP-CONTROLLER-WORKER-PLAN
 

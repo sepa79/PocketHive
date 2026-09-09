@@ -12,7 +12,11 @@ used at its recorded revision; current ownership is documented in architecture.
 The separate correction review accepts FENV-R2 diagnostic masking within scope.
 The follow-up FENV-R1 correction composes and freezes the complete environment before
 binding. Its separate review below accepts the correction within the connection-composition
-scope; remaining B02 settings/candidate parsing is still open.
+scope; committed on human request as `7ac51535` on 2026-09-09.
+Separate review found RATE-R1 in the subsequent input-rate transfer: the Controller
+BufferGuard decoder was omitted. The separate correction review below closes RATE-R1
+and accepts the input-rate transfer within its stated scope; remaining B02
+settings/candidate parsing is still open.
 
 Separate [review on 2026-09-08](review-2026-09-08.md) found HIGH R1: template loading
 lost the auth failure classification used by worker error handling. The
@@ -649,3 +653,156 @@ conciseness uses one composition and frozen result; security errors omit values/
 existing diagnostic masking passes; libraries use existing Spring/JDK; readability exposes
 raw versus final binding and keeps Spring outside work-config. No deployed check performed.
 FENV-R2 remains accepted in its reviewed scope; SEL-R1 remains explicitly deferred.
+
+#### Common input rate — 2026-09-09
+
+Base: clean `7ac51535`, committed on human request after the separate connection reviews.
+[RESP-WORK-INPUT-RATE](../../../architecture/runtime-responsibilities.md#resp-work-input-rate)
+was documented before implementation. InputRateParser/InputRateValidation in `work-config.input`
+own the shared setting. WorkConfigurationExpressions extracts the existing Redis deferral
+check unchanged, with both parsers consuming it. No new library, scanner or template parser.
+
+Removed rate constraints from three startup properties, three runtime inputs, WorkPatchPolicy
+and SchedulingState. Properties preserve decoded Object values for canonical parsing;
+`ratePerSec()` is the typed accessor, and all callers were migrated. ScenarioBundleValidator
+maps the selected field to WorkConfigurationFindings and skips its generic required/type/range
+checks for that field. SchedulingState remains a projection, with shape consistency only.
+
+Observable changes: all three inputs accept numeric text and reject explicit null; absent
+patch fields remain unchanged. CSV validates the rate before applying file/other overrides.
+Errors carry a field path without raw input/cause. Authoring reports exactly one error or
+one deferred warning per selected rate, retaining resolved-only acceptance of expressions.
+
+133 selected tests passed: parser valid/invalid/deferred behavior, patch null rejection,
+startup binding (including raw booleans), runtime CSV rejection without partial file changes,
+existing Redis/scheduler/trigger behavior, real-catalogue scenario validation for all three
+inputs, Redis expression regressions and the single import test. Full root package and
+`git diff --check` passed. Logs: `/tmp/b02-input-rate-tests.log`,
+`/tmp/b02-input-rate-package.log`. The additional ScenarioServiceTest suite passed
+12 tests (`/tmp/b02-input-rate-scenario-service.log`): 145 tests in total.
+Owner/consumer searches:
+`/tmp/b02-input-rate-owners.txt`, `/tmp/b02-input-rate-all-consumers.txt`; repository-wide Java
+searches for rate paths, numeric conversions, range checks and accessor callers.
+Moderator's mode/SINE rate controls processing rather than input intake and remains outside
+this transfer. Catalogue descriptors are presentation metadata, not the selected rate validator.
+
+Implementation handoff only, no automatic review or deployment. Full startup/raw shape parity,
+complete candidate acceptance, timing/limits, other B02 settings and SEL-R1 remain open.
+
+#### Separate input-rate review — 2026-09-09
+
+Scope: `7ac51535` plus the uncommitted input-rate transfer, including new/untracked files.
+**RATE-R1 CRITICAL — incomplete SSOT transfer.** BufferGuardCoordinator in Controller still
+parses the same `inputs.scheduler.ratePerSec` / `inputs.redis.ratePerSec` through
+extractRatePerSec (301–348), substitutes missing/invalid values with adjustment.minRatePerSec
+(283), and repairs non-finite/negative values through clampRate (351–357). This competes
+with InputRateParser's required finite/nonnegative contract. BufferGuard's adjustment bounds
+are its own domain behavior; decoding/accepting the source input rate is not.
+
+Reproduction through public configureFromTemplate with production JSON decoding, guard
+resolution and currentSettings: for both selected inputs, -1, "fast", "NaN" and null are
+rejected by InputRateParser but result in active=true, initialRate=1.0, lastProblem=null
+in BufferGuard. "3.0" is accepted as 3.0 by both. Temporary executable and output:
+`/tmp/b02-input-rate-review/BufferGuardRateProbe.java`,
+`/tmp/b02-input-rate-review/buffer-guard.txt`. No network/client effect is exercised.
+BufferGuard source is unchanged from `7ac51535`; this is inherited duplication omitted
+from the current migration, not a newly introduced fallback regression.
+
+Required correction: remove BufferGuard's rate decoder and consume the shared resolved
+rate validation before applying the guard's own adjustment bounds. Invalid selected input
+rates must not become an active guard with a substituted minimum. Keep any explicitly
+supported non-rate input behavior separate. Update the responsibility record/header and
+verify this actual configuration effect. Do not accept this transfer until RATE-R1 is fixed.
+
+| Responsibility | Independently inspected evidence / verdict |
+|---|---|
+| RESP-WORK-INPUT-RATE | Parser/report headers and architecture agree for the migrated callers. WorkInputRegistryInitializer → WorkInputConfigBinder → selected properties validate; runtime inputs and WorkPatchPolicy delegate. ScenarioBundleValidator → WorkConfigurationFindings projects canonical errors/deferred paths, bypassing generic catalogue rate checks. **Violated globally by the Controller alternative owner above.** |
+| Work expression deferral | WorkConfigurationExpressions is extracted unchanged from RedisConfigurationParser; both parsers delegate. It neither renders nor validates template syntax. Existing Redis tests and new input AUTHORING/RESOLVED negatives pass. |
+| RESP-WORK-SCHEDULE-CONTRACT | Only production SchedulingState constructors are SchedulerWorkInput bootstrap and update projection, both consuming the validated accessor. Removed numeric validation has no production bypass found; configured-state shape checks remain. |
+
+Repository searches: `rg -n 'ratePerSec|rate-per-sec|rate_per_sec|ratePerSecond'` over all
+Java production modules (`/tmp/b02-input-rate-review-consumers.txt`), plus TS/TSX/MJS
+consumers, numeric helper/conversion searches, input-property callers and all SchedulingState
+constructors. Inspected candidates include BufferGuard, worker property/runtime paths,
+ScenarioBundleValidator generic validators, SwarmWorkerSpecFactory environment mapping,
+and Moderator/Processor processing limits (distinct settings, outside this input contract).
+Remaining full producer/candidate and empty-YAML shape work stays B02 debt, not certified here.
+
+**145 selected tests passed again**, including the single repository import test;
+log `/tmp/b02-input-rate-review-tests.log`. `git diff --check` passes. The previous full
+package result remains implementation evidence; this review did not rerun packaging or
+deploy the stack. Temporary behavioral probe adds the contradiction not covered by that suite.
+
+Six passes: plan/SSOT acceptance blocked by RATE-R1; changed type headers and file separation
+supported; extracting common parsing removes local copies but misses one consumer; canonical
+errors omit raw values/causes, while the inherited guard still logs malformed text; existing
+JDK/Spring libraries suffice; call paths are readable but the all-consumer claim is incomplete.
+No other finding established in this scope. SEL-R1 remains explicitly deferred; full B02
+and the current rate transfer remain unaccepted. Review changes only documentation/evidence.
+
+#### RATE-R1 correction — 2026-09-09
+
+Human-requested correction on `7ac51535` plus the uncommitted input-rate transfer.
+Architecture updated first: RESP-WORK-INPUT-RATE names BufferGuard as a consumer;
+RESP-CONTROLLER-BUFFER-GUARD records current integration and remaining traffic-policy debt.
+The Coordinator header matches those records. Source-rate parsing/validation moves to the
+existing InputRateParser; its prior numeric decoder, OptionalDouble fallback and non-finite
+repair are removed. Guard-specific adjustment bounds remain separate. The local input enum
+is replaced with WorkerInputType, including its settings keys in emitted patches. Role/input
+mapping is cleared on reconfiguration to avoid retaining a previous controlled input.
+Production correction: one file, 26 additions / 86 deletions; no new runtime type/dependency.
+
+Before: BufferGuardCoordinatorTest failed its two selected-input rejection cases because
+invalid configuration left the guard active. After: **52 tests passed**, including that
+suite, canonical parser/patch policy, the single import test, SwarmLifecycleManagerTest
+and the traffic-policy projection test. Invalid/null/non-finite/symbolic/missing rates now
+leave active=false, empty settings and a reported WorkConfigurationException, also after
+a valid prior configuration. Numeric text is accepted; zero/high valid values still obey
+guard bounds. Existing bounds-only behavior for non-controlled inputs remains separate.
+Logs: `/tmp/b02-rate-r1-before.log`, `/tmp/b02-rate-r1-tests.log`.
+Repository-wide consumer search: `/tmp/b02-rate-r1-consumers.txt`; Controller no longer has
+extractRatePerSec, Double.parseDouble/doubleValue conversion or source-rate finite checks.
+`git diff --check` passes. The affected Maven reactor compiled production and test sources;
+no broader root package rerun or deployed check was needed for this consumer correction.
+
+Implementation handoff: correction awaits separate review; full B02 and deferred SEL-R1
+remain open. No automatic review/fix loop, commit or deployment.
+
+#### Separate RATE-R1 correction review — 2026-09-09
+
+Scope: `7ac51535` plus the uncommitted input-rate transfer; this follow-up independently
+reviews the Controller correction and its new behavioral test. **No findings in this
+correction. RATE-R1 is closed; the scoped input-rate transfer is accepted.** The original
+145-test review above remains evidence for the unchanged extraction consumers.
+
+| Responsibility | Source evidence and verdict |
+|---|---|
+| RESP-WORK-INPUT-RATE | BufferGuardCoordinator.configuredInputRate delegates raw selected settings to InputRateParser before guard bounds. The local decoder/default/non-finite repair is gone. Parser, consuming header and architecture agree. Repository-wide production Java search for `ratePerSec\|rate-per-sec\|rate_per_sec\|ratePerSecond` is recorded in `/tmp/b02-rate-r1-review-owners.txt`; inspected SDK inputs, policy, authoring, Controller and Manager SDK candidates. Moderator/Processor processing limits and guard adjustment bounds are distinct settings. No competing source-rate decoder found. |
+| RESP-CONTROLLER-BUFFER-GUARD | SwarmLifecycleManager.prepare → Controller coordinator → shared parser → Manager SDK configuration. Manager SDK owns running guards and feedback state; QueueStatsPort supplies samples; Controller sends computed updates through ControlPlanePublisher with shared routing/signals. Invalid configuration clears Manager SDK settings and reports failure. Role mapping is rebuilt; WorkerInputType supplies patch keys. Runtime traffic-policy overrides preserve the accepted initial rate. No new direct infrastructure access. |
+
+**52 tests passed again**: BufferGuardCoordinatorTest, SwarmLifecycleManagerTest,
+BufferGuardTrafficPolicyMapperTest, InputRateParserTest, WorkPatchPolicyTest and the
+single RepositoryImportBoundaryTest. Command:
+`./mvnw -B -ntp -pl swarm-controller-service -am -Dtest=BufferGuardCoordinatorTest,SwarmLifecycleManagerTest,BufferGuardTrafficPolicyMapperTest,InputRateParserTest,WorkPatchPolicyTest,RepositoryImportBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-rate-r1-review-tests.log`.
+
+A temporary public-API probe uses real Controller/Manager SDK coordinators and metrics,
+with queue statistics and CP publication replaced at their ports. Its immediate ticks
+verify Scheduler → invalid → Redis → Rabbit transitions: correct rate patches, stopped
+guard/removed metrics after rejection, no restart on disable/re-enable until valid
+configuration, and no stale rate patch in bounds-only mode. A second invalid guard
+rejects the entire replacement without starting the first. All five check groups
+passed; `/tmp/b02-rate-r1-review/BufferGuardTransitionProbe.java` and `transitions.txt`.
+No permanent test/scanner was added during review.
+
+Six passes: plan closes the missed consumer; style/header ownership agrees; conciseness
+removes the duplicate decoder and local enum; security rejects malformed rates without
+logging their raw value; libraries reuse existing contracts/JDK; maintainability keeps
+source validation separate from guard bounds. Remaining traffic-policy parsing and
+broader Controller separation are inherited debt, not certified by this correction.
+
+`git diff --check` passes. No deployed broker/worker check or full package rerun in this
+review; port-level assertions do not establish delivered CP updates. The transition probe
+does not simulate an already in-flight queue read during stop. Full B02, timing/limits,
+complete candidate acceptance and explicitly deferred SEL-R1 remain open. Review changes
+only documentation/evidence; no production fix, commit or deployment.

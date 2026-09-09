@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.input;
 
+import io.pockethive.work.config.input.InputRateParser;
+
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.work.api.SchedulingState;
 import io.pockethive.work.api.SchedulingConfigState;
@@ -34,6 +36,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Responsibility: coordinate scheduled intake using its invocation policy and runtime.
  * Must not: implement trigger semantics or access Rabbit/Redis clients.
+ * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-SCHEDULE-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-schedule-input.
  */
 public final class SchedulerWorkInput<C> implements WorkInput {
@@ -71,7 +74,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.identity = builder.identity;
         this.schedulerState = builder.schedulerState;
         this.scheduling = builder.scheduling;
-        this.schedulingState = new SchedulingState<>(false, 0, SchedulingConfigState.UNCONFIGURED, null, scheduling.getRatePerSec());
+        this.schedulingState = new SchedulingState<>(false, 0, SchedulingConfigState.UNCONFIGURED, null, scheduling.ratePerSec());
         this.schedulerState.update(this.schedulingState);
         this.seedFactory = builder.seedFactory;
         this.resultHandler = builder.resultHandler;
@@ -202,7 +205,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             C configuration = snapshot.config(schedulerState.configurationType()).orElse(null);
             SchedulingState<C> next = new SchedulingState<>(snapshot.enabled(), ++projectionRevision,
                 configuration == null ? SchedulingConfigState.UNCONFIGURED : SchedulingConfigState.CONFIGURED,
-                configuration, scheduling.getRatePerSec());
+                configuration, scheduling.ratePerSec());
             schedulerState.update(next);
             schedulingState = next;
             boolean currentlyEnabled = next.enabled();
@@ -232,16 +235,9 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
 
         // Rate per second override
-        Object rateObj = schedulerMap.get("ratePerSec");
-        if (rateObj != null) {
-            if (!(rateObj instanceof Number number)) {
-                throw new IllegalArgumentException("inputs.scheduler.ratePerSec must be a number");
-            }
-            double rate = number.doubleValue();
-            if (!Double.isFinite(rate) || rate < 0.0) {
-                throw new IllegalArgumentException("inputs.scheduler.ratePerSec must be a finite number >= 0");
-            }
-            if (rate != scheduling.getRatePerSec()) {
+        if (schedulerMap.containsKey(InputRateParser.FIELD)) {
+            double rate = new InputRateParser().parse(schedulerMap.get(InputRateParser.FIELD), InputRateParser.SCHEDULER_PATH);
+            if (rate != scheduling.ratePerSec()) {
                 scheduling.setRatePerSec(rate);
                 if (log.isInfoEnabled()) {
                     log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
@@ -330,7 +326,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         long dispatched = dispatchedCount.get();
         long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
         boolean exhausted = limit > 0L && remaining == 0L;
-        double rate = scheduling.getRatePerSec();
+        double rate = scheduling.ratePerSec();
         publisher.update(status -> {
             Map<String, Object> data = new java.util.LinkedHashMap<>();
             data.put("ratePerSec", rate);
