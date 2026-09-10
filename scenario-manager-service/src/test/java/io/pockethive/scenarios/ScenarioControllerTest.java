@@ -2120,16 +2120,14 @@ class ScenarioControllerTest {
                         .accept(MediaType.APPLICATION_JSON))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.ok").value(false))
-                .andExpect(jsonPath("$.findings", hasSize(4)))
+                .andExpect(jsonPath("$.findings", hasSize(3)))
                 .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
-                        "scenario.yaml:template.bees[0].config.inputs.scheduler.ratePerSec",
                         "scenario.yaml:template.bees[0].config.inputs.scheduler.maxMessages",
                         "scenario.yaml:template.bees[0].config.inputs.scheduler.reset",
                         "scenario.yaml:template.bees[0].config.message.body")))
                 .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
                         org.hamcrest.Matchers.containsString("must be string"),
-                        org.hamcrest.Matchers.containsString("must be number"),
-                        org.hamcrest.Matchers.containsString("must be integer"),
+                        org.hamcrest.Matchers.containsString("must be an integer"),
                         org.hamcrest.Matchers.containsString("must be boolean"))));
     }
 

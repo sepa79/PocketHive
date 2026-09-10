@@ -1,6 +1,9 @@
 package io.pockethive.worker.sdk.input;
 
 import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.work.config.input.SchedulerResetParser;
 
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.work.api.SchedulingState;
@@ -34,9 +37,11 @@ import org.slf4j.LoggerFactory;
  *
  * @param <C> configuration type managed by the associated scheduler state
  * <p>
- * Responsibility: coordinate scheduled intake using its invocation policy and runtime.
+ * Responsibility: coordinate scheduled intake and its accepted runtime limit using its invocation policy and runtime.
  * Must not: implement trigger semantics or access Rabbit/Redis clients.
+ * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
+ * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Contract: RESP-WORK-SCHEDULE-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-schedule-input.
  */
 public final class SchedulerWorkInput<C> implements WorkInput {
@@ -56,6 +61,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final Logger log;
     private final long initialDelayMs;
     private final long tickIntervalMs;
+    private volatile long maxMessages;
 
     private final java.util.concurrent.atomic.AtomicLong dispatchedCount = new java.util.concurrent.atomic.AtomicLong();
 
@@ -80,8 +86,9 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.resultHandler = builder.resultHandler;
         this.dispatchErrorHandler = builder.dispatchErrorHandler;
         this.log = builder.log;
-        this.initialDelayMs = builder.initialDelayMs;
-        this.tickIntervalMs = builder.tickIntervalMs;
+        this.initialDelayMs = scheduling.initialDelayMs();
+        this.tickIntervalMs = scheduling.tickIntervalMs();
+        this.maxMessages = scheduling.maxMessages();
     }
 
     /**
@@ -104,7 +111,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
             return;
         }
-        long limit = scheduling.getMaxMessages();
+        long limit = maxMessages;
         if (limit > 0L) {
             long remaining = Math.max(0L, limit - dispatchedCount.get());
             if (remaining <= 0L) {
@@ -125,10 +132,10 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         }
         for (int i = 0; i < quota; i++) {
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
-            long maxMessages = scheduling.getMaxMessages();
+            long messageLimit = maxMessages;
             long after = dispatchedCount.incrementAndGet();
-            if (maxMessages > 0L) {
-                long remainingAfter = Math.max(0L, maxMessages - after);
+            if (messageLimit > 0L) {
+                long remainingAfter = Math.max(0L, messageLimit - after);
                 seed = seed.toBuilder()
                     .header("x-ph-scheduler-remaining", remainingAfter)
                     .build();
@@ -234,50 +241,28 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             return;
         }
 
-        // Rate per second override
-        if (schedulerMap.containsKey(InputRateParser.FIELD)) {
-            double rate = new InputRateParser().parse(schedulerMap.get(InputRateParser.FIELD), InputRateParser.SCHEDULER_PATH);
-            if (rate != scheduling.ratePerSec()) {
-                scheduling.setRatePerSec(rate);
-                if (log.isInfoEnabled()) {
-                    log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
-                }
-            }
-        }
+        double rate = schedulerMap.containsKey(InputRateParser.FIELD)
+            ? new InputRateParser().parse(schedulerMap.get(InputRateParser.FIELD), InputRateParser.SCHEDULER_PATH)
+            : scheduling.ratePerSec();
+        long currentMax = maxMessages;
+        long newMax = schedulerMap.containsKey(InputScheduleField.MAX_MESSAGES.key())
+            ? new InputScheduleParser().parse(schedulerMap.get(InputScheduleField.MAX_MESSAGES.key()),
+                InputScheduleField.MAX_MESSAGES, InputScheduleParser.SCHEDULER_MAX_MESSAGES_PATH)
+            : currentMax;
+        boolean explicitReset = schedulerMap.containsKey(SchedulerResetParser.FIELD)
+            && new SchedulerResetParser().parse(schedulerMap.get(SchedulerResetParser.FIELD), SchedulerResetParser.PATH);
 
-        // Finite-run configuration: maxMessages + optional reset flag
-        boolean resetRequested = false;
-        Object maxObj = schedulerMap.get("maxMessages");
-        if (maxObj != null) {
-            if (!(maxObj instanceof Number maxNumber)) {
-                throw new IllegalArgumentException("inputs.scheduler.maxMessages must be an integer >= 0");
-            }
-            double numeric = maxNumber.doubleValue();
-            if (!Double.isFinite(numeric) || numeric != Math.rint(numeric) || numeric < 0.0) {
-                throw new IllegalArgumentException("inputs.scheduler.maxMessages must be an integer >= 0");
-            }
-            long newMax = maxNumber.longValue();
-            long currentMax = scheduling.getMaxMessages();
-            if (newMax != currentMax) {
-                scheduling.setMaxMessages(newMax);
-                resetRequested = true;
-                if (log.isInfoEnabled()) {
-                    log.info(
-                        "{} scheduler maxMessages updated via config: {} (previous={})",
-                        workerDefinition.beanName(), newMax, currentMax);
-                }
-            }
+        // Validate all requested scheduler controls before changing settings or counters.
+        if (rate != scheduling.ratePerSec()) {
+            scheduling.setRatePerSec(rate);
+            log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
         }
-        Object resetObj = schedulerMap.get("reset");
-        if (resetObj instanceof Boolean b && b) {
-            resetRequested = true;
-        } else if (resetObj instanceof String s) {
-            String normalized = s.trim().toLowerCase(java.util.Locale.ROOT);
-            if ("true".equals(normalized)) {
-                resetRequested = true;
-            }
+        if (newMax != currentMax) {
+            maxMessages = newMax;
+            log.info("{} scheduler maxMessages updated via config: {} (previous={})",
+                workerDefinition.beanName(), newMax, currentMax);
         }
-        if (resetRequested) {
+        if (newMax != currentMax || explicitReset) {
             long before = dispatchedCount.getAndSet(0L);
             if (log.isInfoEnabled()) {
                 log.info(

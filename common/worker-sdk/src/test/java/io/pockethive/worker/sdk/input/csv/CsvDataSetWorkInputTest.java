@@ -69,7 +69,7 @@ class CsvDataSetWorkInputTest {
         CsvDataSetWorkInput input = inputFor(properties);
 
         assertThatThrownBy(input::validateConfiguration)
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("inputs.csv.tickIntervalMs")
             .hasMessageContaining(">= 100");
     }

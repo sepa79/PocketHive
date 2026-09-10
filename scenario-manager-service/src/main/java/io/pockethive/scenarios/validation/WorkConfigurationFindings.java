@@ -7,6 +7,11 @@ import io.pockethive.work.config.redis.RedisConfigurationParser;
 import io.pockethive.work.config.WorkConfigurationProblem;
 import java.util.List;
 import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.work.config.input.SchedulerResetParser;
+import io.pockethive.work.config.WorkerInputType;
+import java.util.Map;
 
 /**
  * Responsibility: project shared Work configuration validation into scenario diagnostics.
@@ -17,6 +22,8 @@ import io.pockethive.work.config.input.InputRateParser;
  * Consumes: RESP-WORK-REDIS-SOURCES — docs/architecture/runtime-responsibilities.md#resp-work-redis-sources.
  * Consumes: RESP-WORK-REDIS-WRITE-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-redis-write-settings.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
+ * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
+ * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
@@ -25,6 +32,21 @@ final class WorkConfigurationFindings {
     void inputRate(Object value, String path, List<ValidationFinding> findings) {
         var result = new InputRateParser().validate(value, path, WorkConfigurationMode.AUTHORING);
         project(result.problems(), result.deferredPaths(), findings);
+    }
+
+    void inputSchedule(WorkerInputType type, Object settings, String path, List<ValidationFinding> findings) {
+        Map<?, ?> fields = settings instanceof Map<?, ?> map ? map : Map.of();
+        var schedule = new InputScheduleParser();
+        for (var field : InputScheduleField.forInput(type)) {
+            var result = schedule.validate(InputScheduleParser.declaredValue(fields, type, field), field,
+                path + "." + field.key(), WorkConfigurationMode.AUTHORING);
+            project(result.problems(), result.deferredPaths(), findings);
+        }
+        if (type == WorkerInputType.SCHEDULER && fields.containsKey(SchedulerResetParser.FIELD)) {
+            var reset = new SchedulerResetParser().validate(fields.get(SchedulerResetParser.FIELD),
+                path + "." + SchedulerResetParser.FIELD, WorkConfigurationMode.AUTHORING);
+            project(reset.problems(), reset.deferredPaths(), findings);
+        }
     }
 
     void redisConnection(Object values, String path, List<ValidationFinding> findings) {

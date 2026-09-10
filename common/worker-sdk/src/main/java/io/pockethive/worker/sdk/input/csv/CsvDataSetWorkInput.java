@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: read CSV dataset records and coordinate their current intake lifecycle.
  * Must not: declare broker resources or own accepted worker configuration.
+ * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-CSV-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-csv-input.
  */
@@ -330,7 +331,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         try {
             validateConfiguration();
             loadCsvFile();
-            tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
+            tickIntervalMs = properties.tickIntervalMs();
             try {
                 this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
             } catch (Exception ex) {

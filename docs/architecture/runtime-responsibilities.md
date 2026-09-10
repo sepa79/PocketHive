@@ -697,6 +697,72 @@ other B02 settings remain open. SEL-R1 stays explicitly deferred. The input-rate
 passed separate review on 2026-09-09 after RATE-R1 correction; see
 [review evidence](../inProgress/boundary-design/b02/README.md#separate-rate-r1-correction-review--2026-09-09).
 
+## RESP-WORK-INPUT-SCHEDULE
+
+**B02 transfer accepted within scope on 2026-09-10 after TIM-R1 correction:** `common/work-config`, `input.InputScheduleField` defines
+the timing/limit fields and `InputScheduleParser` owns their exact integer parsing and
+range validation. Startup properties, input adapters, WorkPatchPolicy and Scenario
+Manager consume that owner. Full B02 candidate/settings acceptance remains open.
+
+| Field | Inputs | Accepted range / meaning |
+|---|---|---|
+| initialDelayMs | Scheduler, Redis | 0..floor(Long.MAX_VALUE / 1,000,000) milliseconds |
+| tickIntervalMs | Scheduler, Redis, CSV | 100..floor(Long.MAX_VALUE / 1,000,000) milliseconds |
+| maxPendingTicks | Scheduler | 1..Integer.MAX_VALUE; currently a bound property without an execution consumer |
+| maxMessages | Scheduler | 0..Long.MAX_VALUE; 0 is unlimited, changing the limit resets the dispatched counter |
+| startupDelaySeconds | CSV | 0..floor(Long.MAX_VALUE / 1,000,000,000); conversion to milliseconds belongs to the parser |
+
+Numbers and numeric property text must represent an exact integer within the field's
+range. Fractions, overflow, null, blank, boolean, non-finite and structured values fail;
+no truncation, saturation or clamping is allowed. Errors expose the field path, not raw
+input. AUTHORING defers expressions using WorkConfigurationExpressions; RESOLVED rejects
+unrendered expressions. InputScheduleValidation exposes only fully valid values.
+Duration bounds prevent both CSV seconds-to-milliseconds overflow and silent saturation
+when ScheduledExecutorService converts milliseconds to its nanosecond clock.
+
+Omitted Scheduler/Redis timing fields keep the existing defaults: initialDelayMs=0,
+tickIntervalMs=1000; omitted Scheduler maxPendingTicks=1. InputScheduleParser.initialValue
+is their sole definition; declaredValue distinguishes omission from explicit null.
+These are configuration defaults, never repairs for a declared invalid value. CSV timings
+and scheduler maxMessages remain required. Startup and authoring consume the same omission
+policy; omitted patch fields preserve accepted values. No new runtime effect is added for the unused maxPendingTicks knob;
+execution/state ownership is B03. Existing live-mutability classification stays with
+WorkPatchPolicy: only maxMessages is live-mutable among these fields.
+
+TIM-R1 correction: SchedulerWorkInput resolves its initial maxMessages from startup
+properties once, then owns the accepted runtime long. Valid updates replace that value
+only after both mutable settings pass canonical validation; they do not rewrite the
+startup limit declaration. Ticks and diagnostics consume the accepted value without
+parsing configuration. This corrects the existing consumer, without adding a state layer.
+
+**Forbidden:** local timing/limit decoders or range repair, accepting a rejected setting,
+or presenting metadata validation as an implemented scheduling/backlog effect.
+**Verification:** parser boundary/error tests, startup binding, scenario diagnostics and
+finite-run scheduling behavior. Full candidate acceptance and other IO settings remain B02.
+
+## RESP-WORK-SCHEDULER-RESET
+
+**B02 transfer accepted within scope on 2026-09-10:** `common/work-config`, `input.SchedulerResetParser` owns
+the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerWorkInput and
+Scenario Manager consume it; the runtime's separate string decoder is removed.
+
+A declared value must be a boolean: true requests a finite-run counter reset, false
+does not. Omission requests no reset; explicit null, numbers, text (including "true"
+and "false") and structures fail. AUTHORING defers expressions through the existing
+WorkConfigurationExpressions contract; RESOLVED rejects them. Diagnostics expose paths,
+not raw values. Scheduler validates reset with rate/limit before mutating any of them.
+Changing maxMessages continues to reset the counter independently of this flag.
+
+The flag belongs to raw scheduler configuration commands, not startup scheduling
+properties. Bootstrap input binding does not add a reset environment property. Counter
+execution and delivery/replay semantics remain with the current scheduler and future
+B03 state work; this parsing transfer does not claim an exactly-once command protocol.
+
+**Forbidden:** local reset boolean/string decoders, ignoring invalid declared reset
+values, or partial rate/limit mutation before reset validation succeeds.
+**Verification:** parser boundary tests, patch-policy tests, finite-run behavior and
+scenario diagnostics. Full candidate acceptance remains B02 work.
+
 ## RESP-WORK-IO-CONFIG
 
 **Current module(s):** `common/worker-sdk`.
@@ -705,6 +771,9 @@ PocketHiveWorkerProperties holds bound worker settings; WorkOutputConfig is the 
 
 WorkConfigBindHandler rejects unknown/unrepresentable fields for both directions;
 type-specific settings validation remains with the owning parser/properties during B02.
+Input rates delegate to RESP-WORK-INPUT-RATE; scheduled input timing/limits delegate to
+RESP-WORK-INPUT-SCHEDULE. Their property holders retain raw bound values so numeric
+coercion cannot bypass the canonical parser; runtime accessors expose validated numbers.
 
 Discovery and adapter factories consume bound settings. WorkerControlPlaneRuntime delegates IO mutability decisions to WorkPatchPolicy. Complete runtime candidate parsing and IO adapter parsing still have separate paths pending the rest of B02.
 
@@ -828,12 +897,18 @@ SchedulerWorkInput delivers updates; RateSchedulePolicy and TriggerSchedulePolic
 SchedulerWorkInput owns timed intake, finite-run count and dispatch; its factory/builder wire the selected policy and callbacks.
 
 It projects WorkerControlPlaneRuntime snapshots, delivers each revision to the policy, and dispatches the returned quota through WorkerRuntime.
+Source rates and timing/limits come from RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
+Rate, maxMessages and declared reset flags are parsed before any setting is changed; a valid
+changed maxMessages resets the finite-run counter. Its builder consumes validated timing
+without local defaults or clamping. SchedulerWorkInput owns the accepted runtime limit
+as a long initialized from startup properties; ticks never reparse its declaration.
+Reset flags consume RESP-WORK-SCHEDULER-RESET; explicit true resets the existing counter.
 
 **Forbidden:** reimplement trigger interval/single-request rules or select a policy by worker role.
 
 **Required effect:** Each state revision reaches the policy before a subsequent tick; finite-run intake dispatches through WorkerRuntime.
 
-**Verification entrypoints:** `WorkControlCompositionTest`, `TriggerSchedulerIntegrationTest`.
+**Verification entrypoints:** `WorkControlCompositionTest`, `TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
 
 **Migration status:** Current input still applies raw scheduling overrides; B02 owns that parsing migration, B03/B07 lifecycle/packaging.
 
@@ -908,6 +983,8 @@ RabbitWorkInputFactory dispatches through WorkerRuntime and explicitly installs 
 CsvDataSetWorkInput owns file-backed dataset iteration and intake lifecycle in the current SDK.
 
 It consumes selected CSV settings, observes worker state and dispatches records through WorkerRuntime.
+Timing/rate validation and the seconds-to-milliseconds conversion delegate to
+RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE; intake does not repair invalid timing.
 
 **Forbidden:** declare broker resources or own accepted worker configuration.
 
@@ -924,6 +1001,8 @@ It consumes selected CSV settings, observes worker state and dispatches records 
 RedisDataSetWorkInput owns Redis dataset reads, cursor/exhaustion handling and current intake lifecycle.
 
 Selected Redis settings and worker state drive reads; records dispatch through WorkerRuntime.
+Input rates/timing consume RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE; timing is
+validated before start registers callbacks or creates an executor.
 
 **Forbidden:** refresh auth tokens, generate sequences or declare Rabbit resources.
 
@@ -1311,6 +1390,9 @@ Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
 RequestTemplateFindings projects its problems into bundle findings; profile existence and
 bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
+WorkConfigurationFindings projects canonical input rate/timing/limit errors and deferred
+paths; ScenarioBundleValidator bypasses catalogue type/range/required validation for those
+selected fields. Catalogue descriptions remain presentation metadata.
 
 **Forbidden:** execute sequence effects during syntax checks or claim diagnostic success is bundle acceptance.
 

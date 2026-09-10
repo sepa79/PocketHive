@@ -1,6 +1,6 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). The reviewed checkpoint is committed as `7ac51535` on human request. The separate RATE-R1 correction review closes Controller BufferGuard’s competing rate decoder/fallback and accepts the scoped input-rate transfer; 52 tests and five active-guard transition checks passed. Remaining B02 settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
+Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). The reviewed checkpoint is committed as `7ac51535` on human request. The separate RATE-R1 correction review closes Controller BufferGuard’s competing rate decoder/fallback and accepts the scoped input-rate transfer; 52 tests and five active-guard transition checks passed. Checkpoint `e17dee90` commits the accepted rate transfer. Input timing/limit parsing has 143 passing tests and a passing root package build; separate review found MEDIUM TIM-R1 (per-message limit parsing). Separate review on 2026-09-10 closes TIM-R1 and accepts the timing/limit and reset transfers within scope: 130 tests and a fresh scheduler transition/allocation probe passed. A distinct simplification task follows each completed phase. Remaining B02 settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
 Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
 Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
@@ -88,6 +88,24 @@ automatic review/fix/review loop. Apply this separation to all goals in this pla
   dependent slices remain subject to the acceptance gates below.
 
 ## Execution steps
+
+### Separate simplification after each phase
+
+Human decision (2026-09-09): after completing and separately accepting each implementation
+phase (B02, B03, etc., then C01–C03), run a distinct simplification task before starting
+the next phase. This works on the completed phase as a whole, not after every small
+transfer. It does not replace implementation or acceptance review.
+
+Remove obsolete code, repeated delegation and unnecessary intermediate types; simplify
+data flow and public surfaces while preserving canonical owners, explicit failure,
+port boundaries, observability and accepted behavior. Adjust existing behavioral tests
+with the code; do not add wiring tests, scanners, fallback paths or dependencies merely
+for cleanup. Line count is evidence, not a target that overrides clarity or correctness.
+Record the concrete deletions/simplifications and relevant verification, then hand off
+for separate review under the same rules. Do not reopen deferred issues implicitly.
+
+First scheduled simplification: after full B02 acceptance. TIM-R1 correction and reset
+parsing passed scoped review on 2026-09-10; full B02 remains open.
 
 ### 1. Prepare documentation, review gates, and project memory
 
@@ -562,3 +580,42 @@ The [separate RATE-R1 correction review](boundary-design/b02/README.md#separate-
 closes the missed BufferGuard consumer and accepts the scoped input-rate transfer: 52 tests
 and five active-guard transition checks passed. Full settings/candidate acceptance, timing and limits,
 other B02 work and deferred SEL-R1 remain open. B03 has not started.
+
+### B02 input timing and limits — 2026-09-09
+
+Human accepted the next step and checkpoint: `e17dee90` commits the reviewed input-rate
+transfer and RATE-R1 correction. Continue with RESP-WORK-INPUT-SCHEDULE: one owner for
+integer timing/limit parsing across startup properties, input consumers, patch policy
+and Scenario Manager, including exact long range and CSV seconds conversion. Remove
+local validators/clamping; preserve finite-run behavior and live-mutability policy.
+Before-state selected suite: 120 tests passed (`/tmp/b02-input-timing-before.log`).
+The existing maxPendingTicks property has no execution consumer; do not invent a queue
+or backlog implementation in this configuration slice. Tests/evidence hand off to a
+human-triggered separate review; full B02 and SEL-R1 remain open.
+
+Execution delivered: [timing/limit evidence](boundary-design/b02/README.md#input-timing-and-limits--2026-09-09).
+143 selected tests and the full root package build passed. Existing omission defaults
+are now defined centrally; invalid values fail instead of being clamped. Exact long
+limits and scheduler-representable durations are enforced. Separate review reran all 143
+tests and found MEDIUM TIM-R1: Scheduler reparses maxMessages for every dispatched
+message. Keep decoding at configuration boundaries and consume the accepted typed limit.
+This slice remains unaccepted; see [review evidence](boundary-design/b02/README.md#separate-input-timinglimit-review--2026-09-09).
+
+TIM-R1 correction implemented: Scheduler owns one accepted runtime long; startup/update
+boundaries retain canonical parsing. 90 selected tests passed; an isolated scheduler-loop
+probe measures 112.112 allocation bytes/message before and 0 after. Await separate review;
+see [correction evidence](boundary-design/b02/README.md#tim-r1-correction--2026-09-09).
+
+### B02 scheduler reset contract — 2026-09-09
+
+The next complete parsing responsibility moves to SchedulerResetParser in work-config.
+SDK runtime, patch policy and Scenario Manager share strict boolean validation and
+symbolic-authoring handling. Remove local decoders; reject invalid reset before any
+rate/limit/counter mutation. 92 tests pass; see [handoff evidence](boundary-design/b02/README.md#scheduler-reset-contract--2026-09-09).
+This transfer and TIM-R1 correction await separate review; full B02 remains open.
+The human-requested simplification task follows full phase acceptance as recorded above.
+
+Separate review on 2026-09-10 accepts TIM-R1 correction and reset parsing within scope:
+no findings, 130 tests passed, fresh scheduler transition/allocation probe passed.
+TIM-R1 is closed; full B02 and deferred SEL-R1 remain open.
+See [review evidence](boundary-design/b02/README.md#separate-tim-r1-and-reset-review--2026-09-10).

@@ -15,7 +15,7 @@ import org.slf4j.Logger;
 
 /**
  * Responsibility: construct one explicitly configured scheduler input.
- * Must not: select a business policy or own worker state.
+ * Must not: select a business policy, repair settings or own worker state.
  * Contract: RESP-WORK-SCHEDULE-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-schedule-input.
  */
 public final class SchedulerWorkInputBuilder<C> {
@@ -30,8 +30,6 @@ public final class SchedulerWorkInputBuilder<C> {
     Consumer<Exception> dispatchErrorHandler = ex -> SchedulerWorkInput.defaultLog.warn("Scheduler worker invocation failed", ex);
     Logger log = SchedulerWorkInput.defaultLog;
     SchedulerInputProperties scheduling;
-    long initialDelayMs = 0L;
-    long tickIntervalMs = 1_000L;
 
     SchedulerWorkInputBuilder() {
     }
@@ -77,8 +75,6 @@ public final class SchedulerWorkInputBuilder<C> {
 
     public SchedulerWorkInputBuilder<C> scheduling(SchedulerInputProperties properties) {
         this.scheduling = Objects.requireNonNull(properties, "properties");
-        this.initialDelayMs = Math.max(0L, scheduling.getInitialDelayMs());
-        this.tickIntervalMs = Math.max(100L, scheduling.getTickIntervalMs());
         return this;
     }
 
@@ -103,6 +99,7 @@ public final class SchedulerWorkInputBuilder<C> {
         Objects.requireNonNull(dispatchErrorHandler, "dispatchErrorHandler");
         Objects.requireNonNull(log, "log");
         Objects.requireNonNull(scheduling, "scheduling");
+        scheduling.validateConfigured("inputs.scheduler");
         return new SchedulerWorkInput<>(this);
     }
 }

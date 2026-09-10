@@ -44,6 +44,7 @@ import org.slf4j.LoggerFactory;
  * Must not: validate dataset source entries, refresh auth tokens or declare Rabbit resources.
  * Consumes: RESP-WORK-REDIS-SOURCES and RESP-WORK-REDIS-SELECTION for validated source choices.
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for startup and merged connection values.
+ * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
@@ -144,8 +145,9 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (running) {
             return;
         }
+        long initialDelayMs = properties.initialDelayMs();
+        tickIntervalMs = properties.tickIntervalMs();
         enabled = properties.isEnabled();
-        tickIntervalMs = Math.max(100L, properties.getTickIntervalMs());
         registerStateListener();
         try {
             this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
@@ -160,7 +162,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             thread.setDaemon(true);
             return thread;
         });
-        schedulerExecutor.scheduleAtFixedRate(this::safeTick, properties.getInitialDelayMs(), tickIntervalMs, TimeUnit.MILLISECONDS);
+        schedulerExecutor.scheduleAtFixedRate(this::safeTick, initialDelayMs, tickIntervalMs, TimeUnit.MILLISECONDS);
         running = true;
         if (log.isInfoEnabled()) {
             log.info(

@@ -257,6 +257,14 @@ class WorkPatchPolicyTest {
             )
         );
 
+        assertThatCode(() -> policy.validate(previous,
+            Map.of("inputs", Map.of("scheduler", Map.of("maxMessages", "9223372036854775807"))), false))
+            .doesNotThrowAnyException();
+        for (Object overflow : List.of(new java.math.BigInteger("18446744073709551616"), "9223372036854775808")) {
+            assertInvalid(policy, previous, Map.of("inputs", Map.of("scheduler", Map.of("maxMessages", overflow))),
+                "inputs.scheduler.maxMessages");
+        }
+
         assertInvalid(
             policy,
             previous,
@@ -281,12 +289,12 @@ class WorkPatchPolicyTest {
             Map.of("inputs", Map.of("scheduler", Map.of("maxMessages", 1.5))),
             "inputs.scheduler.maxMessages"
         );
-        assertInvalid(
-            policy,
-            previous,
-            Map.of("inputs", Map.of("scheduler", Map.of("reset", "true"))),
-            "inputs.scheduler.reset"
-        );
+        for (Object invalidReset : new Object[]{null, "true", "false", 0, 1, Map.of(), "{{ true }}"}) {
+            var scheduler = new java.util.LinkedHashMap<String, Object>();
+            scheduler.put("reset", invalidReset);
+            assertInvalid(policy, previous, Map.of("inputs", Map.of("scheduler", scheduler)),
+                "inputs.scheduler.reset");
+        }
     }
 
     private static void assertUnsafe(

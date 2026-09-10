@@ -17,6 +17,12 @@ Separate review found RATE-R1 in the subsequent input-rate transfer: the Control
 BufferGuard decoder was omitted. The separate correction review below closes RATE-R1
 and accepts the input-rate transfer within its stated scope; remaining B02
 settings/candidate parsing is still open.
+Checkpoint `e17dee90` commits that reviewed transfer on human approval. The following
+input timing/limit transfer's TIM-R1 correction and the subsequent scheduler-reset
+transfer passed separate review on 2026-09-10: no new findings, 130 tests passed.
+TIM-R1 is closed; timing/limit and reset parsing are accepted within their stated scope.
+Full B02 remains open. After full B02 acceptance, the execution plan requires
+a separate simplification task across the completed phase before B03.
 
 Separate [review on 2026-09-08](review-2026-09-08.md) found HIGH R1: template loading
 lost the auth failure classification used by worker error handling. The
@@ -806,3 +812,200 @@ review; port-level assertions do not establish delivered CP updates. The transit
 does not simulate an already in-flight queue read during stop. Full B02, timing/limits,
 complete candidate acceptance and explicitly deferred SEL-R1 remain open. Review changes
 only documentation/evidence; no production fix, commit or deployment.
+
+#### Input timing and limits — 2026-09-09
+
+Baseline: `e17dee90`, committing the accepted input-rate transfer on human approval.
+RESP-WORK-INPUT-SCHEDULE now owns integer timing/limit declarations in work-config:
+InputScheduleField defines fields/ranges; InputScheduleParser validates exact integer
+values and InputScheduleValidation carries accepted values or errors/deferred paths.
+It uses JDK BigDecimal.longValueExact, with no new dependency or expression parser.
+
+Consumers migrated together: Scheduler/Redis/CSV startup properties preserve raw values
+until canonical validation; SchedulerWorkInputBuilder and dataset inputs consume validated
+timing without local clamping; SchedulerWorkInput and WorkPatchPolicy delegate maxMessages;
+WorkConfigurationFindings projects authoring results and ScenarioBundleValidator bypasses
+generic catalogue checks for those selected fields. Rate and limit updates are parsed
+before either setting is changed. Remaining counter/quota arithmetic is execution behavior.
+
+The existing omission defaults are retained centrally (implementation assumption after
+the optional preference question received no answer): Scheduler/Redis delay=0ms and
+tick=1000ms, Scheduler maxPendingTicks=1. Explicit null/invalid declarations are rejected;
+CSV timing and scheduler maxMessages remain required. Numeric text and Number values
+share exact integer rules; maxMessages retains the full long range. Duration bounds cover
+both seconds conversion and the scheduler's nanosecond clock, without silent overflow or
+saturation. The existing maxPendingTicks setting still has no execution consumer; this
+slice does not claim to implement a backlog limit.
+
+Before: **120 tests passed**, log `/tmp/b02-input-timing-before.log`. A temporary public
+WorkInputConfigBinder probe compiled the prior SchedulerInputProperties from `e17dee90`
+and compared it with current code: initialDelayMs=-1, tickIntervalMs=99 and maxPendingTicks=0
+were all accepted before and all rejected afterward. Probe/output:
+`/tmp/b02-input-timing-probe/TimingProbe.java`, `/tmp/b02-input-timing-probe/results.txt`.
+
+After: **143 tests passed**, including canonical integer/expression/default boundaries,
+real startup binding, finite-run limit reset and rejection without partial rate changes,
+scenario diagnostics, existing CSV/Redis/Trigger/runtime behavior and the single import
+test. InputRateValidationComponentTest was renamed/extended to
+InputNumericSettingsValidationComponentTest to reuse its real bundle fixture.
+Command: `./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service,trigger-service -am -Dtest=InputScheduleParserTest,WorkIOConfigBinderTest,WorkPatchPolicyTest,InputNumericSettingsValidationComponentTest,SchedulerWorkInputTest,CsvDataSetWorkInputTest,RedisDataSetWorkInputTest,RateSchedulePolicyTest,TriggerSchedulePolicyTest,TriggerSchedulerIntegrationTest,WorkerControlPlaneRuntimeTest,RepositoryImportBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-input-timing-tests.log`. Full root `./mvnw -B -ntp -DskipTests package`
+passed after the final duration bounds; log `/tmp/b02-input-timing-package.log`.
+
+Owner searches cover production Java and non-Java callers/environment spellings;
+`/tmp/b02-input-timing-owners-before.txt`, `/tmp/b02-input-timing-owners-after.txt` and
+`/tmp/b02-input-timing-accessors.txt`. SwarmWorkerSpecFactory still exports raw settings;
+it does not contain a competing timing/limit decoder. Complete producer/candidate
+validation, other settings/defaults, reset decoding and input enablement remain B02 work.
+No full startup-shape/bee.env acceptance or deployed-stack delivery claim follows here.
+`git diff --check` passes. No additional scanner, wiring tests, automatic review, deployment
+or second commit. Hand off this uncommitted transfer for separate review; B02 and SEL-R1
+remain open, and B03 has not started.
+
+#### Separate input timing/limit review — 2026-09-09
+
+Scope: uncommitted timing/limit transfer on `e17dee90`. **MEDIUM TIM-R1 — not accepted:**
+SchedulerWorkInput.tick calls SchedulerInputProperties.maxMessages inside its dispatch
+loop. The accessor now runs InputScheduleParser on every message, constructing a
+BigDecimal and validation result from configuration already validated at startup/update.
+Previously getMaxMessages read the accepted long. This moves boundary parsing onto the
+per-message execution path, contrary to AGENTS.md's normalize-once rule, and adds avoidable
+allocation/GC pressure. Keep the canonical parser at binding/update boundaries and let
+execution read the accepted typed limit; no new parser or generic caching framework is needed.
+
+A temporary public-API probe binds the same Long.MAX_VALUE text through the real
+WorkInputConfigBinder before/after, then measures the limit accessor with ThreadMXBean
+after 100,000 warm-up calls. Observed allocation: **0 versus about 352 bytes per call**
+over 100,000 measured calls. This is an isolated accessor measurement, not a throughput
+benchmark. Evidence: `/tmp/b02-input-timing-review/TimingBoundaryProbe.java` and
+`/tmp/b02-input-timing-review/boundaries.txt`; prior properties compiled from `e17dee90`.
+
+| Responsibility | Source evidence and verdict |
+|---|---|
+| RESP-WORK-INPUT-SCHEDULE | InputScheduleField/Parser/Validation own ranges, omission policy and exact numeric decoding. Repository-wide timing/limit spelling search (`/tmp/b02-input-timing-review-owners.txt`) followed SDK, policy, Scenario Manager and raw environment producers; no competing schedule decoder found. Separate journal/guard timers are different settings. TIM-R1 concerns repeated use of that owner, not duplicate implementations. |
+| RESP-WORK-IO-CONFIG | WorkInputConfigBinder retains raw values through Spring and delegates configured validation. Scheduler/Redis/CSV property headers agree with architecture, but Scheduler's typed accessor reparses instead of retaining its accepted value. |
+| RESP-WORK-PATCH-POLICY | WorkPatchPolicy delegates live maxMessages checks to the canonical parser; Scheduler parses rate and limit before applying either. Existing live-mutability rules, counter reset and exact long limits are preserved in behavioral tests. |
+| RESP-SCENARIO-VALIDATE | ScenarioBundleValidator bypasses generic catalogue checks for the selected canonical fields; WorkConfigurationFindings only projects errors/deferred paths from their owner. No separate numeric rule is introduced. |
+
+**143 tests passed again**, using the implementation command above; log
+`/tmp/b02-input-timing-review-tests.log`. No new permanent test or scanner was added.
+The same temporary probe also uses YamlPropertySourceLoader and the real binder:
+null, lists and 99ms are rejected now; omitted tick keeps the documented default.
+An empty YAML map (`tick-interval-ms: {}`) is accepted both before and after because
+flattening drops it. This is inherited startup-shape debt within the already-open full
+candidate/producer work, not a new regression or evidence of complete shape validation.
+
+Six passes: plan/SSOT ownership is aligned within this slice; style and conciseness find
+TIM-R1's repeated parsing; security finds no new raw-value exposure in canonical errors
+(full producer/candidate acceptance remains unverified); standard JDK/Spring libraries
+suffice; readability/maintainability requires keeping accepted typed state separate from
+boundary decoding without introducing a framework. Headers, imports, constructors and
+consuming paths add no infrastructure owner or IO effect. No further finding established.
+The prior full package pass remains implementation evidence; no deployment was performed.
+Review changes only documentation/memory. TIM-R1, full B02 and deferred SEL-R1 stay open.
+
+#### TIM-R1 correction — 2026-09-09
+
+Human-requested correction on `e17dee90` plus the uncommitted timing transfer.
+SchedulerWorkInput now owns one accepted runtime `volatile long maxMessages`, initialized
+from startup properties. The existing update boundary parses rate and limit before
+replacing that value and resetting the counter. Ticks read the long; the raw startup
+declaration is no longer rewritten on live updates. Canonical parsing remains in
+InputScheduleParser. Architecture and the consuming header describe this ownership.
+Production correction is confined to SchedulerWorkInput; no new class or dependency.
+Repository consumer search: `/tmp/b02-tim-r1-fix/limit-consumers.txt`.
+
+**90 tests passed**, covering parser, binding, patch policy, Scheduler and Trigger.
+The existing finite-run test now checks dispatch count and remaining-message headers,
+including limit changes, rejection of null/fractions/overflow without partial rate
+changes, omitted-limit updates, exact Long.MAX_VALUE and unlimited runs. No new test class.
+Command: `./mvnw -B -ntp -pl common/worker-sdk,trigger-service -am -Dtest=InputScheduleParserTest,WorkIOConfigBinderTest,WorkPatchPolicyTest,SchedulerWorkInputTest,RateSchedulePolicyTest,TriggerSchedulePolicyTest,TriggerSchedulerIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-tim-r1-fix-tests.log`.
+
+A temporary public-API allocation probe compares the saved pre-correction input with
+current code, using unlimited maxMessages="0", a fixed seed, a counting WorkerRuntime
+and a fixed-quota policy. After 1,000,000 warm-up dispatches, another 1,000,000 dispatches
+allocate **112.112 bytes/message before, 0 after** in the measured calling thread.
+This isolates the scheduler loop; it is not a whole-worker throughput claim. Probe and
+results: `/tmp/b02-tim-r1-fix/RuntimeAllocationProbe.java`, `allocations.txt`.
+`git diff --check` passes. The correction awaits separate review; full B02 and deferred
+SEL-R1 remain open. No self-review loop, full package rerun, deployment or commit.
+
+#### Scheduler reset contract — 2026-09-09
+
+Continue B02 on `e17dee90` plus the uncommitted timing/TIM-R1 correction, whose separate
+review remains pending. RESP-WORK-SCHEDULER-RESET assigns one strict boolean parser to
+work-config. WorkPatchPolicy and SchedulerWorkInput consume it; Scenario Manager projects
+its authoring diagnostics and bypasses the selected reset field's generic catalogue check.
+The runtime string decoder and policy's local boolean check are removed. All requested
+scheduler controls are parsed before rate, limit or counter mutation. Missing reset means
+no request; false preserves the counter, true resets it. Null/text/number/structure errors
+are explicit; AUTHORING defers expressions, RESOLVED rejects them. No startup reset
+property or change to command replay/lifecycle semantics is introduced.
+
+Owner/consumer searches: `/tmp/b02-scheduler-reset-owners-before.txt` and
+`/tmp/b02-scheduler-reset-owners-after.txt`. Controller `scenario.reset`, CP's empty-config
+reset and the TCP mock reset response have separate responsibilities. Existing capability
+metadata already declares reset boolean; no valid producer needed migration.
+
+Before: **86 selected tests passed**, `/tmp/b02-reset-before.log`. A separately selected
+REST test already failed (expected four findings, received three): the accepted input-rate
+contract allows numeric text, while its old assertion still rejected "1.0". The test now
+expects the remaining maxMessages/reset/body failures and canonical integer wording.
+Before log: `/tmp/b02-reset-controller-before.log`.
+
+After: **92 tests passed**: the new parser's two behavioral tests; existing policy,
+scheduler, binding, Trigger integration, the selected REST case and the single import
+test; seven real-bundle component cases. The numeric component fixture was renamed to
+InputSettingsValidationComponentTest and extended, preserving its rate/timing coverage.
+Scheduler tests now include null/text/symbolic invalid reset alongside new rate/limit:
+rejection retains prior dispatch behavior; false/omission preserve exhaustion, true
+restarts the accepted finite run, and long/unlimited limits still work.
+Command: `./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service,trigger-service -am '-Dtest=SchedulerResetParserTest,WorkPatchPolicyTest,SchedulerWorkInputTest,InputSettingsValidationComponentTest,WorkIOConfigBinderTest,TriggerSchedulerIntegrationTest,ScenarioControllerTest#bundleValidationRejectsSelectedIoConfigTypeMismatches,RepositoryImportBoundaryTest' -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-reset-tests.log`; `git diff --check` passes. No new scanner, wiring test,
+library, self-review, root package rerun, deployment or commit. This transfer and TIM-R1
+await separate review. Remaining B02 includes complete typed settings/candidate validation,
+producer/startup-shape parity and input-local enablement removal; SEL-R1 remains deferred.
+
+#### Separate TIM-R1 and reset review — 2026-09-10
+
+Scope: `e17dee90` plus the uncommitted TIM-R1 correction and scheduler-reset transfer.
+**No findings in this scope. TIM-R1 is closed; scoped timing/limit and reset transfers
+are accepted.** Prior timing review evidence remains applicable to the unchanged parser;
+this review checks the correction and subsequent reset integration independently.
+
+| Responsibility | Source evidence and verdict |
+|---|---|
+| RESP-WORK-INPUT-SCHEDULE / RESP-WORK-SCHEDULE-INPUT | SchedulerWorkInput initializes the accepted volatile long once; tick, per-message headers and diagnostics read that value. Live limit changes are decoded before assignment/reset. The only production maxMessages accessor call is construction; no live setter caller remains. TIM-R1 is corrected without a parallel mutable startup limit. |
+| RESP-WORK-SCHEDULER-RESET | SchedulerResetParser owns bool acceptance and uses WorkConfigurationExpressions for authoring/resolved modes; validation results expose no accepted flag on error/defer. Runtime invokes it only for a declared field, before changing rate/limit/count. Boolean false and omission do not request a reset. |
+| RESP-WORK-PATCH-POLICY | Selected operational fields delegate to the canonical reset/limit parsers before CP configuration merge/state writes. The allowlist and bootstrap limitations retain their documented scope; no local boolean decoder remains. |
+| RESP-SCENARIO-VALIDATE | Selected reset/timing fields bypass generic catalogue semantic checks; WorkConfigurationFindings projects canonical errors/deferred paths. Capability metadata already specifies boolean. The REST assertion correction follows accepted numeric-text behavior and does not weaken reset validation. |
+
+Repository-wide reset/limit consumer search across Java and non-Java sources:
+`/tmp/b02-reset-review-owners.txt`. Inspected parser, policy, SDK builder/input/properties,
+CP update-to-listener path, Scenario Manager projector/catalogue and their tests.
+Controller scenario reset, CP empty-config reset and TCP mock response resets have
+different ownership. No competing reset parser or new infrastructure effect found.
+
+**130 tests passed**, including the handoff suites plus InputScheduleParserTest and
+WorkerControlPlaneRuntimeTest. Command:
+`./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service,trigger-service -am '-Dtest=SchedulerResetParserTest,InputScheduleParserTest,WorkPatchPolicyTest,SchedulerWorkInputTest,InputSettingsValidationComponentTest,WorkIOConfigBinderTest,TriggerSchedulerIntegrationTest,WorkerControlPlaneRuntimeTest,ScenarioControllerTest#bundleValidationRejectsSelectedIoConfigTypeMismatches,RepositoryImportBoundaryTest' -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-reset-review-tests.log`.
+
+A fresh temporary public-API probe uses real SchedulerWorkInput/RateSchedulePolicy with
+CP snapshots supplied through the registered listener and a counting WorkerRuntime.
+Limit changes, stop/start, disable/re-enable, false/true/omitted reset and rejection
+without changing the exhausted count pass. A fixed-seed unlimited loop allocates
+**0 bytes/message** across 1,000,000 dispatches after the same warm-up count in the
+measured calling thread. Source/result: `/tmp/b02-reset-review/SchedulerReviewProbe.java`,
+`result.txt`. This is not whole-worker throughput or deployed acceptance. Prior /tmp
+probe files are no longer present; their historical baseline was not rerun.
+
+Six passes: plan outcomes and owner deletion supported; headers/file responsibilities
+aligned; no new library or fallback; errors omit raw values; accepted state replaces
+per-message decoding. Parser/report repetition may be considered in the separately
+scheduled phase simplification, without removing validation or separate ownership.
+`git diff --check` passes. No permanent test/scanner, production edit, commit or deployment.
+Full candidate/startup-shape validation and input-local enablement remain B02 work;
+existing reset replay/concurrency behavior is not certified by this parsing transfer.
+Full B02 and user-deferred SEL-R1 remain open; simplification follows full phase acceptance.

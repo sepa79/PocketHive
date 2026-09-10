@@ -1,19 +1,20 @@
 package io.pockethive.worker.sdk.input.csv;
 
 import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.work.config.WorkerInputType;
 
 import io.pockethive.worker.sdk.config.WorkInputConfig;
 
 /**
- * Responsibility: bind CSV startup settings and delegate rate validation to work-config.
- * Must not: implement input-rate constraints or read dataset files.
+ * Responsibility: bind CSV startup settings and delegate rate/timing/limit validation to work-config.
+ * Must not: implement rate/timing/limit constraints or read dataset files.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
- * Consumes RESP-WORK-INPUT-RATE; remaining CSV settings are B02 debt.
+ * Consumes RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE:
+ * docs/architecture/runtime-responsibilities.md#resp-work-input-schedule. Remaining CSV settings are B02 debt.
  */
 public final class CsvDataSetInputProperties implements WorkInputConfig {
-
-    private static final long MIN_STARTUP_DELAY_SECONDS = 0L;
-    private static final long MIN_TICK_INTERVAL_MS = 100L;
 
     private String filePath;
     private Object ratePerSec;
@@ -21,8 +22,8 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
     private Boolean skipHeader;
     private String delimiter;
     private String charset;
-    private Long startupDelaySeconds;
-    private Long tickIntervalMs;
+    private Object startupDelaySeconds;
+    private Object tickIntervalMs;
     private boolean enabled = true;
 
     public String getFilePath() {
@@ -77,20 +78,30 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
         this.charset = charset;
     }
 
-    public long getStartupDelaySeconds() {
-        return requireStartupDelaySeconds(startupDelaySeconds, "startupDelaySeconds");
+    public Object getStartupDelaySeconds() {
+        return startupDelaySeconds;
     }
 
-    public void setStartupDelaySeconds(long startupDelaySeconds) {
+    public void setStartupDelaySeconds(Object startupDelaySeconds) {
         this.startupDelaySeconds = startupDelaySeconds;
     }
 
-    public long getTickIntervalMs() {
-        return requireTickIntervalMs(tickIntervalMs, "tickIntervalMs");
+    public long startupDelaySeconds() {
+        return new InputScheduleParser().parse(startupDelaySeconds, InputScheduleField.STARTUP_DELAY_SECONDS,
+            InputScheduleField.STARTUP_DELAY_SECONDS.path(WorkerInputType.CSV_DATASET));
     }
 
-    public void setTickIntervalMs(long tickIntervalMs) {
+    public Object getTickIntervalMs() {
+        return tickIntervalMs;
+    }
+
+    public void setTickIntervalMs(Object tickIntervalMs) {
         this.tickIntervalMs = tickIntervalMs;
+    }
+
+    public long tickIntervalMs() {
+        return new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
+            InputScheduleField.TICK_INTERVAL_MS.path(WorkerInputType.CSV_DATASET));
     }
 
     public boolean isEnabled() {
@@ -102,7 +113,8 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
     }
 
     public long getInitialDelayMs() {
-        return getStartupDelaySeconds() * 1000L;
+        return new InputScheduleParser().startupDelayMillis(startupDelaySeconds,
+            InputScheduleField.STARTUP_DELAY_SECONDS.path(WorkerInputType.CSV_DATASET));
     }
 
     @Override
@@ -113,8 +125,10 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
         requirePresent(skipHeader, prefix + ".skipHeader");
         requireNonBlank(delimiter, prefix + ".delimiter");
         requireNonBlank(charset, prefix + ".charset");
-        requireStartupDelaySeconds(startupDelaySeconds, prefix + ".startupDelaySeconds");
-        requireTickIntervalMs(tickIntervalMs, prefix + ".tickIntervalMs");
+        new InputScheduleParser().parse(startupDelaySeconds, InputScheduleField.STARTUP_DELAY_SECONDS,
+            prefix + "." + InputScheduleField.STARTUP_DELAY_SECONDS.key());
+        new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
+            prefix + "." + InputScheduleField.TICK_INTERVAL_MS.key());
     }
 
     private static String requireNonBlank(String value, String name) {
@@ -131,19 +145,4 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
         return value;
     }
 
-    private static long requireStartupDelaySeconds(Long value, String name) {
-        long delay = requirePresent(value, name);
-        if (delay < MIN_STARTUP_DELAY_SECONDS) {
-            throw new IllegalStateException(name + " must be >= " + MIN_STARTUP_DELAY_SECONDS);
-        }
-        return delay;
-    }
-
-    private static long requireTickIntervalMs(Long value, String name) {
-        long interval = requirePresent(value, name);
-        if (interval < MIN_TICK_INTERVAL_MS) {
-            throw new IllegalStateException(name + " must be >= " + MIN_TICK_INTERVAL_MS);
-        }
-        return interval;
-    }
 }

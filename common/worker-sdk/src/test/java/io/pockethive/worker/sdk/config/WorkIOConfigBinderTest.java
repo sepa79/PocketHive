@@ -20,6 +20,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
@@ -31,6 +32,42 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.mock.env.MockEnvironment;
 
 class WorkIOConfigBinderTest {
+
+    @ParameterizedTest
+    @CsvSource({"SCHEDULER,initial-delay-ms", "SCHEDULER,tick-interval-ms", "SCHEDULER,max-pending-ticks",
+        "SCHEDULER,max-messages", "REDIS_DATASET,initial-delay-ms", "REDIS_DATASET,tick-interval-ms",
+        "CSV_DATASET,startup-delay-seconds", "CSV_DATASET,tick-interval-ms"})
+    void rejectsInvalidScheduleIntegersBeforeStartupCoercion(WorkerInputType type, String field) {
+        MapConfigurationPropertySource source = switch (type) {
+            case SCHEDULER -> schedulerInputSource(Map.of());
+            case REDIS_DATASET -> redisInputSource(Map.of());
+            case CSV_DATASET -> csvInputSource(Map.of());
+            default -> throw new IllegalArgumentException();
+        };
+        Class<? extends WorkInputConfig> configType = switch (type) {
+            case SCHEDULER -> SchedulerInputProperties.class;
+            case REDIS_DATASET -> RedisDataSetInputProperties.class;
+            case CSV_DATASET -> CsvDataSetInputProperties.class;
+            default -> throw new IllegalArgumentException();
+        };
+        for (Object bad : new Object[]{-1, 100.5, "100.5", true, "", "NaN", "9223372036854775808"}) {
+            source.put("pockethive.inputs." + type.settingsKey() + "." + field, bad);
+            var binder = new WorkInputConfigBinder(new Binder(source));
+            assertThatThrownBy(() -> binder.bind(type, configType))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining("must be an integer");
+        }
+    }
+
+    @Test
+    void preservesExactLongLimitAndExistingOmittedTimingDefaults() {
+        var source = schedulerInputSource(Map.of("pockethive.inputs.scheduler.max-messages", "9223372036854775807"));
+        var config = new WorkInputConfigBinder(new Binder(source)).bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class);
+        assertThat(config.maxMessages()).isEqualTo(Long.MAX_VALUE);
+        assertThat(config.initialDelayMs()).isZero();
+        assertThat(config.tickIntervalMs()).isEqualTo(1000L);
+        assertThat(config.maxPendingTicks()).isEqualTo(1);
+    }
 
     @Test
     void bindsRabbitInputConfigFromEnvironment() {
@@ -286,7 +323,7 @@ class WorkIOConfigBinderTest {
         SchedulerInputProperties config = binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class);
 
         assertThat(config.ratePerSec()).isEqualTo(2500.5);
-        assertThat(config.getMaxMessages()).isEqualTo(250000L);
+        assertThat(config.maxMessages()).isEqualTo(250000L);
     }
 
     @Test
@@ -308,7 +345,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.scheduler.maxMessages")
             .hasMessageContaining(">= 0");
     }
@@ -343,7 +380,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.startupDelaySeconds")
             .hasMessageContaining(">= 0");
     }
@@ -355,7 +392,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.tickIntervalMs")
             .hasMessageContaining(">= 100");
     }

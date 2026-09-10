@@ -1,6 +1,9 @@
 package io.pockethive.scenarios.validation;
 
 import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.SchedulerResetParser;
+import io.pockethive.work.config.WorkerInputType;
 
 import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pockethive.templating.api.TemplateSyntaxValidator;
@@ -67,6 +70,8 @@ import org.springframework.stereotype.Component;
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
  * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
+ * Input numeric settings delegate to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
+ * Scheduler reset declarations delegate to RESP-WORK-SCHEDULER-RESET.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * Redis route diagnostics delegate to RESP-WORK-REDIS-ROUTES; remaining IO validation is B02 debt.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
@@ -1256,8 +1261,17 @@ public final class ScenarioBundleValidator {
     private boolean isSharedWorkConfigurationField(Map<String, Object> config, String path) {
         if (path == null) return false;
         String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
+        if (WorkerInputType.SCHEDULER.name().equals(inputType) && SchedulerResetParser.PATH.equals(path)) {
+            return true;
+        }
         if (inputType != null && path.equals(InputRateParser.PATHS_BY_INPUT.get(inputType))) {
             return true;
+        }
+        for (WorkerInputType type : WorkerInputType.values()) {
+            if (type.name().equals(inputType)
+                && InputScheduleField.forInput(type).stream().anyMatch(field -> field.path(type).equals(path))) {
+                return true;
+            }
         }
         if (REDIS_WRITE_SETTING_PATHS.contains(path) && hasSelectedRedisBlock(config, REDIS_OUTPUT_CONFIG_PATH)) {
             return true;
@@ -1316,6 +1330,12 @@ public final class ScenarioBundleValidator {
         String ratePath = inputType == null ? null : InputRateParser.PATHS_BY_INPUT.get(inputType);
         if (ratePath != null) {
             workConfigurationFindings.inputRate(configValue(config, ratePath), configPath + "." + ratePath, findings);
+        }
+        for (WorkerInputType type : WorkerInputType.values()) {
+            if (type.name().equals(inputType)) {
+                String root = "inputs." + type.settingsKey();
+                workConfigurationFindings.inputSchedule(type, configValue(config, root), configPath + "." + root, findings);
+            }
         }
         for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
             if (hasSelectedRedisBlock(config, root)) {

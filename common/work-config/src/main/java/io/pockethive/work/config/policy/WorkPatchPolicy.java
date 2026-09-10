@@ -1,6 +1,9 @@
 package io.pockethive.work.config.policy;
 
 import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.work.config.input.SchedulerResetParser;
 
 import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkerInputType;
@@ -15,7 +18,9 @@ import java.util.Set;
  * Responsibility: own IO patch mutability and validate changes against accepted settings and enablement.
  * Must not: write accepted state, apply adapters, read environment or replace complete candidate validation.
  * Consumes: RESP-WORK-REDIS-SELECTION for the requested list name and prior source mode.
+ * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
+ * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public final class WorkPatchPolicy {
@@ -26,8 +31,8 @@ public final class WorkPatchPolicy {
 
     public static final String LIVE_MUTABLE_FIELD = "liveMutable";
     public static final String SCHEDULER_RATE_PER_SEC = InputRateParser.SCHEDULER_PATH;
-    public static final String SCHEDULER_MAX_MESSAGES = "inputs.scheduler.maxMessages";
-    public static final String SCHEDULER_RESET = "inputs.scheduler.reset";
+    public static final String SCHEDULER_MAX_MESSAGES = InputScheduleParser.SCHEDULER_MAX_MESSAGES_PATH;
+    public static final String SCHEDULER_RESET = SchedulerResetParser.PATH;
     public static final String REDIS_DATASET_RATE_PER_SEC = InputRateParser.REDIS_PATH;
     public static final String REDIS_DATASET_LIST_NAME = "inputs.redis.listName";
     public static final String REDIS_DATASET_SOURCES = "inputs.redis.sources";
@@ -199,8 +204,8 @@ public final class WorkPatchPolicy {
                  REDIS_DATASET_RATE_PER_SEC,
                  CSV_DATASET_RATE_PER_SEC ->
                 requireRatePerSec(dottedPath, value);
-            case SCHEDULER_MAX_MESSAGES -> requireNonNegativeInteger(dottedPath, value);
-            case SCHEDULER_RESET -> requireBoolean(dottedPath, value);
+            case SCHEDULER_MAX_MESSAGES -> requireMaxMessages(dottedPath, value);
+            case SCHEDULER_RESET -> requireSchedulerReset(dottedPath, value);
             default -> throw unsafeUpdate(dottedPath);
         }
     }
@@ -256,26 +261,19 @@ public final class WorkPatchPolicy {
         return result.ratePerSec();
     }
 
-    private long requireNonNegativeInteger(String dottedPath, Object value) {
-        if (!(value instanceof Number number)) {
-            throw invalidOperationalValue(dottedPath, "must be an integer");
+    private void requireMaxMessages(String dottedPath, Object value) {
+        var result = new InputScheduleParser().validate(value, InputScheduleField.MAX_MESSAGES, dottedPath,
+            WorkConfigurationMode.RESOLVED);
+        if (!result.problems().isEmpty()) {
+            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
         }
-        double numeric = number.doubleValue();
-        if (!Double.isFinite(numeric) || numeric != Math.rint(numeric)) {
-            throw invalidOperationalValue(dottedPath, "must be an integer");
-        }
-        long integer = number.longValue();
-        if (integer < 0L) {
-            throw invalidOperationalValue(dottedPath, "must be >= 0");
-        }
-        return integer;
     }
 
-    private boolean requireBoolean(String dottedPath, Object value) {
-        if (value instanceof Boolean bool) {
-            return bool;
+    private void requireSchedulerReset(String dottedPath, Object value) {
+        var result = new SchedulerResetParser().validate(value, dottedPath, WorkConfigurationMode.RESOLVED);
+        if (!result.problems().isEmpty()) {
+            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
         }
-        throw invalidOperationalValue(dottedPath, "must be true or false");
     }
 
     private void rejectIfChanged(

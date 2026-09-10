@@ -242,6 +242,17 @@ versioned by `scenario-manager-service/capabilities/http-sequence.latest.yaml`.
 
 ### IO configuration examples
 
+Scheduled input timing and integer-limit semantics, including omission defaults and
+technical duration bounds, are defined by
+[RESP-WORK-INPUT-SCHEDULE](../architecture/runtime-responsibilities.md#resp-work-input-schedule).
+Startup, runtime updates and authoring use that shared parser. Invalid declared values
+are rejected rather than clamped; symbolic authoring constraints remain deferred until
+rendering. This does not make timing fields live-mutable.
+
+The optional `inputs.scheduler.reset` command accepts only boolean `true`/`false`;
+explicit null and text are invalid. Its parser and authoring-expression rules belong to
+[RESP-WORK-SCHEDULER-RESET](../architecture/runtime-responsibilities.md#resp-work-scheduler-reset).
+
 **Scheduler generator (ticks only):**
 
 ```yaml
