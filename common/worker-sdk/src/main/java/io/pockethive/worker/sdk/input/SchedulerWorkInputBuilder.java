@@ -99,7 +99,6 @@ public final class SchedulerWorkInputBuilder<C> {
         Objects.requireNonNull(dispatchErrorHandler, "dispatchErrorHandler");
         Objects.requireNonNull(log, "log");
         Objects.requireNonNull(scheduling, "scheduling");
-        scheduling.validateConfigured("inputs.scheduler");
         return new SchedulerWorkInput<>(this);
     }
 }

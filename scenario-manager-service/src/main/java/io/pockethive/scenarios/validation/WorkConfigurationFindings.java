@@ -1,5 +1,7 @@
 package io.pockethive.scenarios.validation;
 
+import java.util.Map;
+import io.pockethive.work.config.scheduler.SchedulerSettingsParser;
 import io.pockethive.work.config.redis.RedisOutputTargetsValidation;
 import io.pockethive.work.config.redis.RedisDatasetSelectionValidation;
 import io.pockethive.work.config.WorkConfigurationMode;
@@ -9,11 +11,9 @@ import java.util.List;
 import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
-import io.pockethive.work.config.input.SchedulerResetParser;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.policy.InputLifecyclePolicy;
 import io.pockethive.work.config.csv.CsvDatasetParser;
-import java.util.Map;
 
 /**
  * Responsibility: project shared Work configuration validation into scenario diagnostics.
@@ -27,11 +27,18 @@ import java.util.Map;
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for unsupported input controls.
+ * Consumes: RESP-WORK-SCHEDULER-SETTINGS for complete scheduler authoring validation.
  * Consumes: RESP-WORK-CSV-SETTINGS for complete CSV authoring validation.
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
     private final RedisConfigurationParser parser = new RedisConfigurationParser();
+
+    void schedulerSettings(Object settings, String path, List<ValidationFinding> findings) {
+        var result = new SchedulerSettingsParser()
+            .validate(settings, path, WorkConfigurationMode.AUTHORING);
+        project(result.problems(), result.deferredPaths(), findings);
+    }
 
     void csvSettings(Object settings, String path, List<ValidationFinding> findings) {
         var result = new CsvDatasetParser().validate(settings, path, WorkConfigurationMode.AUTHORING);
@@ -57,11 +64,7 @@ final class WorkConfigurationFindings {
                 path + "." + field.key(), WorkConfigurationMode.AUTHORING);
             project(result.problems(), result.deferredPaths(), findings);
         }
-        if (type == WorkerInputType.SCHEDULER && fields.containsKey(SchedulerResetParser.FIELD)) {
-            var reset = new SchedulerResetParser().validate(fields.get(SchedulerResetParser.FIELD),
-                path + "." + SchedulerResetParser.FIELD, WorkConfigurationMode.AUTHORING);
-            project(reset.problems(), reset.deferredPaths(), findings);
-        }
+
     }
 
     void redisConnection(Object values, String path, List<ValidationFinding> findings) {

@@ -1,5 +1,9 @@
 package io.pockethive.worker.sdk.config;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+import io.pockethive.work.config.scheduler.SchedulerSettings;
+import io.pockethive.work.config.scheduler.SchedulerSettingsParser;
 import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
@@ -8,6 +12,7 @@ import io.pockethive.work.config.WorkerInputType;
 /**
  * Responsibility: bind scheduler startup settings and delegate rate/timing/limit validation to work-config.
  * Must not: implement rate/timing/limit constraints or schedule work.
+ * Consumes RESP-WORK-SCHEDULER-SETTINGS for complete startup validation.
  * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  * Consumes RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE:
@@ -94,17 +99,22 @@ public class SchedulerInputProperties implements WorkInputConfig {
             InputScheduleField.MAX_MESSAGES.path(WorkerInputType.SCHEDULER));
     }
 
-    @Override
-    public void validateConfigured(String prefix) {
-        new InputRateParser().parse(ratePerSec, prefix + "." + InputRateParser.FIELD);
-        new InputScheduleParser().parse(initialDelayMs, InputScheduleField.INITIAL_DELAY_MS,
-            prefix + "." + InputScheduleField.INITIAL_DELAY_MS.key());
-        new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
-            prefix + "." + InputScheduleField.TICK_INTERVAL_MS.key());
-        new InputScheduleParser().parse(maxPendingTicks, InputScheduleField.MAX_PENDING_TICKS,
-            prefix + "." + InputScheduleField.MAX_PENDING_TICKS.key());
-        new InputScheduleParser().parse(maxMessages, InputScheduleField.MAX_MESSAGES,
-            prefix + "." + InputScheduleField.MAX_MESSAGES.key());
+    public SchedulerSettings settings() {
+        return new SchedulerSettingsParser().parse(rawSettings(), "inputs.scheduler");
     }
 
+    @Override
+    public void validateConfigured(String prefix) {
+        new SchedulerSettingsParser().parse(rawSettings(), prefix);
+    }
+
+    private Map<String, Object> rawSettings() {
+        var values = new LinkedHashMap<String, Object>();
+        values.put(InputRateParser.FIELD, ratePerSec);
+        values.put(InputScheduleField.INITIAL_DELAY_MS.key(), initialDelayMs);
+        values.put(InputScheduleField.TICK_INTERVAL_MS.key(), tickIntervalMs);
+        values.put(InputScheduleField.MAX_PENDING_TICKS.key(), maxPendingTicks);
+        values.put(InputScheduleField.MAX_MESSAGES.key(), maxMessages);
+        return values;
+    }
 }

@@ -105,6 +105,17 @@ class SchedulerWorkInputTest {
             assertThat(dispatched).hasSize(23);
             assertThat(dispatched.subList(13, 23))
                 .allSatisfy(item -> assertThat(item.headers()).doesNotContainKey("x-ph-scheduler-remaining"));
+            listener.get().accept(snapshot(Map.of("ratePerSec", 2)));
+            input.tick(10_000);
+            assertThat(dispatched).hasSize(25);
+            assertThat(settings.ratePerSec()).isEqualTo(5.0);
+            var invalidUpdate = new LinkedHashMap<String, Object>();
+            invalidUpdate.put("ratePerSec", 99);
+            invalidUpdate.put("maxMessages", null);
+            assertThatThrownBy(() -> listener.get().accept(snapshot(invalidUpdate)))
+                .hasMessageContaining("inputs.scheduler.maxMessages");
+            input.tick(11_000);
+            assertThat(dispatched).hasSize(27);
         } finally {
             input.stop();
         }

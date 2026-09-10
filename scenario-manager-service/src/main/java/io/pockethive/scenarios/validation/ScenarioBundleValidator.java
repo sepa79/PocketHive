@@ -74,6 +74,7 @@ import org.springframework.stereotype.Component;
  * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
  * Input numeric settings delegate to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
  * Scheduler reset declarations delegate to RESP-WORK-SCHEDULER-RESET.
+ * Scheduler settings delegate to RESP-WORK-SCHEDULER-SETTINGS.
  * CSV settings delegate to RESP-WORK-CSV-SETTINGS.
  * Removed input controls delegate to RESP-WORK-INPUT-LIFECYCLE-POLICY.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
@@ -1267,7 +1268,7 @@ public final class ScenarioBundleValidator {
         String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
         if (WorkerInputType.CSV_DATASET.name().equals(inputType)
             && path.startsWith(CsvDatasetParser.PATH + ".")) return true;
-        if (WorkerInputType.SCHEDULER.name().equals(inputType) && SchedulerResetParser.PATH.equals(path)) {
+        if (WorkerInputType.SCHEDULER.name().equals(inputType) && path.startsWith("inputs.scheduler.")) {
             return true;
         }
         if (inputType != null && path.equals(InputRateParser.PATHS_BY_INPUT.get(inputType))) {
@@ -1338,11 +1339,14 @@ public final class ScenarioBundleValidator {
         if (WorkerInputType.CSV_DATASET.name().equals(inputType)) {
             workConfigurationFindings.csvSettings(configValue(config, CsvDatasetParser.PATH),
                 configPath + "." + CsvDatasetParser.PATH, findings);
+        } else if (WorkerInputType.SCHEDULER.name().equals(inputType)) {
+            workConfigurationFindings.schedulerSettings(configValue(config, "inputs.scheduler"),
+                configPath + ".inputs.scheduler", findings);
         } else if (ratePath != null) {
             workConfigurationFindings.inputRate(configValue(config, ratePath), configPath + "." + ratePath, findings);
         }
         for (WorkerInputType type : WorkerInputType.values()) {
-            if (type != WorkerInputType.CSV_DATASET && type.name().equals(inputType)) {
+            if (type != WorkerInputType.CSV_DATASET && type != WorkerInputType.SCHEDULER && type.name().equals(inputType)) {
                 String root = "inputs." + type.settingsKey();
                 workConfigurationFindings.inputSchedule(type, configValue(config, root), configPath + "." + root, findings);
             }

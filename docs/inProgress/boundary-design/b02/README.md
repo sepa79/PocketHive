@@ -1,8 +1,8 @@
 # B02 settings and authoring execution
 
-Current checkpoint: `f166ce38` commits the separately reviewed input-enablement transfer
-and ENBL-R1 correction. Complete CSV settings transfer is implemented below and awaits
-separate review. Remaining B02 candidate/settings work stays open.
+Current checkpoint: `68677fd2` commits the CSV transfer and CSV-R1 correction on
+explicit human request. The correction has not had a separate acceptance review.
+Scheduler settings transfer below is the next implementation handoff; B02 remains open.
 
 Status: implementation started, not accepted. B01 was committed as `eb681ee7` on
 2026-09-08 after separate review. This task does not run an automatic acceptance review.
@@ -1251,3 +1251,48 @@ The before reproduction remains `/tmp/b02-csv-review-patch-probe.txt`.
 compilation (`/tmp/csv-r1-package.log`). `git diff --check` passes. No new scanner,
 dependency, commit, deployment or self-review. CSV-R1 stays pending separate correction
 review; the remaining B02 scope and deferred issues are unchanged.
+
+
+#### Scheduler settings transfer — 2026-09-10
+
+Implementation after `68677fd2`; awaiting separate review. Contract:
+[RESP-WORK-SCHEDULER-SETTINGS](../../../architecture/runtime-responsibilities.md#resp-work-scheduler-settings).
+SchedulerSettingsParser composes all five startup settings through the existing rate,
+timing/default and reset parsers. It rejects unknown fields and malformed root shapes,
+preserves explicit null, and exposes either immutable resolved settings or AUTHORING
+errors/deferred paths. Reset remains a command and is not stored in the settings value.
+SDK properties delegate complete validation; SchedulerWorkInput takes one resolved startup
+snapshot and no longer mutates the Spring carrier during runtime rate changes. Its live
+rate/max/reset field validation, finite-run counters and scheduling policy retain their
+existing owners. Scenario Manager projects the complete parser's findings and no longer
+assembles separate scheduler field/reset checks or applies catalogue constraints to those
+fields. The generic schedule diagnostic path remains for Redis timing.
+
+Repository search for SchedulerInputProperties, schedulerSettings and scheduler omission
+initialization: `/tmp/b02-scheduler-settings-owners.txt`. Inspected SDK properties,
+builder/factory/runtime and Scenario validation consumers. InputScheduleParser retains
+omission defaults; InputRateParser and SchedulerResetParser retain field semantics.
+No new libraries, scanner or bean-selection tests. Each new production type has its own
+file and responsibility header. Existing numeric accessors serve current in-repository callers and delegate canonical
+field parsers; runtime no longer
+uses them for repeated property decoding.
+
+Verification command:
+
+```bash
+./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service -am \
+  -Dtest=SchedulerSettingsParserTest,WorkIOConfigBinderTest,SchedulerWorkInputTest,InputSettingsValidationComponentTest,WorkPatchPolicyTest,RepositoryImportBoundaryTest \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+**107 tests passed.** Log: `/tmp/b02-scheduler-settings-tests.log`. Parser tests cover exact integer bounds,
+omission versus null, invalid roots/unknown fields and deferred reset/rate/limit values.
+Existing binder/authoring/policy tests retain numeric and reset rejection. The scheduler
+behavior test additionally checks a live rate change affects dispatch count while startup
+properties stay unchanged, and an invalid combined update preserves the active rate.
+Full reactor package compilation: `/tmp/b02-scheduler-settings-package.log`.
+
+This is not full B02 acceptance. Controller scheduler startup export, full Work candidate
+validation, startup shape and bee.env authoring parity remain open. SEL-R1 is still deferred;
+CSV-R1 correction review remains pending despite its explicitly requested checkpoint.
+Separate simplification follows full phase acceptance. No self-review or deployment.

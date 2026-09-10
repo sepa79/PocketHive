@@ -13,7 +13,6 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.SchedulerInputProperties;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -42,6 +41,7 @@ import org.slf4j.LoggerFactory;
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
+ * Consumes RESP-WORK-SCHEDULER-SETTINGS for immutable startup settings; runtime controls remain projections.
  * Contract: RESP-WORK-SCHEDULE-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-schedule-input.
  */
 public final class SchedulerWorkInput<C> implements WorkInput {
@@ -54,7 +54,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final ScheduledInvocationPolicy<C> schedulerState;
-    private final SchedulerInputProperties scheduling;
+    private volatile double ratePerSec;
     private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
     private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
@@ -79,7 +79,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.workerRuntime = builder.workerRuntime;
         this.identity = builder.identity;
         this.schedulerState = builder.schedulerState;
-        this.scheduling = builder.scheduling;
+        var scheduling = builder.scheduling.settings();
+        this.ratePerSec = scheduling.ratePerSec();
         this.schedulingState = new SchedulingState<>(false, 0, SchedulingConfigState.UNCONFIGURED, null, scheduling.ratePerSec());
         this.schedulerState.update(this.schedulingState);
         this.seedFactory = builder.seedFactory;
@@ -212,7 +213,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             C configuration = snapshot.config(schedulerState.configurationType()).orElse(null);
             SchedulingState<C> next = new SchedulingState<>(snapshot.enabled(), ++projectionRevision,
                 configuration == null ? SchedulingConfigState.UNCONFIGURED : SchedulingConfigState.CONFIGURED,
-                configuration, scheduling.ratePerSec());
+                configuration, ratePerSec);
             schedulerState.update(next);
             schedulingState = next;
             boolean currentlyEnabled = next.enabled();
@@ -243,7 +244,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
 
         double rate = schedulerMap.containsKey(InputRateParser.FIELD)
             ? new InputRateParser().parse(schedulerMap.get(InputRateParser.FIELD), InputRateParser.SCHEDULER_PATH)
-            : scheduling.ratePerSec();
+            : ratePerSec;
         long currentMax = maxMessages;
         long newMax = schedulerMap.containsKey(InputScheduleField.MAX_MESSAGES.key())
             ? new InputScheduleParser().parse(schedulerMap.get(InputScheduleField.MAX_MESSAGES.key()),
@@ -253,8 +254,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             && new SchedulerResetParser().parse(schedulerMap.get(SchedulerResetParser.FIELD), SchedulerResetParser.PATH);
 
         // Validate all requested scheduler controls before changing settings or counters.
-        if (rate != scheduling.ratePerSec()) {
-            scheduling.setRatePerSec(rate);
+        if (rate != ratePerSec) {
+            ratePerSec = rate;
             log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
         }
         if (newMax != currentMax) {
@@ -311,7 +312,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         long dispatched = dispatchedCount.get();
         long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
         boolean exhausted = limit > 0L && remaining == 0L;
-        double rate = scheduling.ratePerSec();
+        double rate = ratePerSec;
         publisher.update(status -> {
             Map<String, Object> data = new java.util.LinkedHashMap<>();
             data.put("ratePerSec", rate);

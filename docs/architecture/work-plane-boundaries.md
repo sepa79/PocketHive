@@ -1,6 +1,6 @@
 # Work Plane boundaries — implementation design
 
-Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Input enablement is separately accepted and committed as `f166ce38`; complete CSV settings are implemented and await separate review. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
+Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Input enablement is separately accepted and committed as `f166ce38`; complete CSV settings and CSV-R1 correction are committed as `68677fd2` on human request, with correction review still pending. Scheduler settings are implemented and await separate review. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
 Acceptance evidence: `docs/inProgress/boundary-design/b01/rv2-correction-review.md`.
 Source revision: `e0d37871`, branch `refactor/control-plane-critical-restart`.
 Execution order and scope are owned by `docs/inProgress/work-plane-module-boundaries.md`.
@@ -309,10 +309,11 @@ normalization and complete candidate validation. `WorkPatchPolicy` owns mutable-
 classification and patch validation. The first B02 transfer consolidated `LiveIoConfigMutability` and
 `LiveIoConfigUpdateGuard` there and deleted both previous definitions. Complete candidate
 validation remains a separate required WorkConfigurationParser responsibility.
-The current B02 parser only handles Redis settings and is named
-`io.pockethive.work.config.redis.RedisConfigurationParser`. It stays with the Redis
-values so validated-value constructors remain package-private. The future complete
-Work candidate parser must delegate Redis rules to this owner. There is no active
+Current typed settings parsers are `redis.RedisConfigurationParser`,
+`csv.CsvDatasetParser` and `scheduler.SchedulerSettingsParser` under
+`io.pockethive.work.config`. They stay with their validated values so constructors
+remain package-private. The future complete Work candidate parser must delegate
+field semantics to these owners. There is no active
 WorkConfigurationParser facade or compatibility alias. WorkPatchPolicy lives in
 `.config.policy`; `.config.environment` contains RedisConnectionEnvironmentCodec and
 WorkConnectionEnvironmentResolver. The resolver applies final `bee.env` connection

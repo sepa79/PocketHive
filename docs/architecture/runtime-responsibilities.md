@@ -929,6 +929,24 @@ SchedulerWorkInput delivers updates; RateSchedulePolicy and TriggerSchedulePolic
 
 **Migration status:** Current B01 port; updates and planning serialize in each policy.
 
+## RESP-WORK-SCHEDULER-SETTINGS
+
+**B02 implemented; awaiting separate review:** `work-config.scheduler.SchedulerSettingsParser` owns the
+complete five-field scheduler settings contract. It delegates rate and integer constraints
+and omission defaults to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE. Required
+ratePerSec/maxMessages and explicit null rejection remain unchanged. Unknown fields fail.
+The optional reset command delegates RESP-WORK-SCHEDULER-RESET and is never retained in
+the immutable settings value. AUTHORING defers expressions; RESOLVED requires valid values.
+SDK raw properties and Scenario Manager consume this parser; scheduler construction takes
+one immutable startup snapshot. Runtime rate/max/reset controls continue using their
+canonical field parsers and the existing scheduling/counter policy, without mutating the
+Spring property carrier. Complete Work candidate validation and Controller scheduler
+startup export remain subsequent B02 work, not acceptance claims of this transfer.
+
+**Forbidden:** duplicate numeric/default/reset rules, schedule work or own worker state.
+**Verification:** parser behavior tests, existing Spring binder, authoring and scheduler
+runtime tests; no new boundary scanner or wiring tests.
+
 ## RESP-WORK-SCHEDULE-INPUT
 
 **Current module(s):** `common/worker-sdk`.

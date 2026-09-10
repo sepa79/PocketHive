@@ -30,6 +30,15 @@ class InputSettingsValidationComponentTest {
         }
     }
 
+    @Test
+    void schedulerRejectsUnknownFieldsThroughTheSharedContract() throws Exception {
+        assertThat(validate(WorkerInputType.SCHEDULER, "ratePerSec: 1", "surprise", "123").findings())
+            .singleElement().satisfies(finding -> {
+                assertThat(finding.path()).endsWith(".inputs.scheduler.surprise");
+                assertThat(finding.message()).contains("Unsupported scheduler setting");
+            });
+    }
+
     @BeforeEach
     void loadCatalogue() throws Exception {
         var catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
