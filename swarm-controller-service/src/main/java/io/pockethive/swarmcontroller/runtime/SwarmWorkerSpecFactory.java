@@ -25,6 +25,7 @@ import io.pockethive.rabbit.config.RabbitConnectionSettings;
 import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.policy.InputLifecyclePolicy;
+import io.pockethive.work.config.csv.CsvDatasetEnvironment;
 
 /**
  * Responsibility: Resolve one scenario bee into its effective config, environment, identity, and worker spec.
@@ -34,6 +35,7 @@ import io.pockethive.work.config.policy.InputLifecyclePolicy;
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for declared Work connections and their shared export.
  * Consumes RESP-WORK-CONNECTION-ENVIRONMENT for final connection settings after bee.env overrides.
  * Consumes RESP-WORK-INPUT-LIFECYCLE-POLICY to reject input controls before provisioning.
+ * Consumes RESP-WORK-CSV-SETTINGS for CSV environment export and validated bootstrap projection.
  * Build one worker plan using the shared connection export; existing Work settings/naming remain B02/B04 debt.
  */
 public final class SwarmWorkerSpecFactory {
@@ -91,6 +93,9 @@ public final class SwarmWorkerSpecFactory {
       environment.put("CONTROL_NETWORK", network);
     }
     environment.putAll(bee.env());
+    var csvEnvironment = new CsvDatasetEnvironment();
+    var csvCandidate = csvEnvironment.candidate(bee.config().get("inputs"), SpringConnectionEnvironment.raw(bee.env()));
+    environment.putAll(csvEnvironment.encode(csvCandidate));
     var rawEnvironment = SpringConnectionEnvironment.raw(environment);
     unsupported = inputControls.propertyProblems(path -> rawEnvironment.apply(path) != null);
     if (!unsupported.isEmpty()) {
@@ -100,7 +105,8 @@ public final class SwarmWorkerSpecFactory {
     Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnvironment);
     var connections = new WorkConnectionEnvironmentResolver().resolve(effectiveConfig, environment,
         rawEnvironment, SpringConnectionEnvironment::resolved);
-    effectiveConfig = connections.bootstrapConfig();
+    effectiveConfig = csvEnvironment.resolve(connections.bootstrapConfig(), csvCandidate,
+        SpringConnectionEnvironment.resolved(connections.environment()));
     List<String> configuredVolumes = resolveVolumes(effectiveConfig);
     List<String> volumes = new ArrayList<>(configuredVolumes.size() + 1);
     volumes.add(runtimeFilesystemMount.volume());
@@ -165,20 +171,6 @@ public final class SwarmWorkerSpecFactory {
       putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
     }
 
-    Object csv = inputsMap.get("csv");
-    if (csv instanceof Map<?, ?> csvMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_FILEPATH", csvMap.get("filePath"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_RATEPERSEC", csvMap.get("ratePerSec"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_ROTATE", csvMap.get("rotate"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_SKIPHEADER", csvMap.get("skipHeader"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_DELIMITER", csvMap.get("delimiter"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_CHARSET", csvMap.get("charset"));
-      putEnvIfPresent(
-          environment,
-          "POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS",
-          csvMap.get("startupDelaySeconds"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_TICKINTERVALMS", csvMap.get("tickIntervalMs"));
-    }
   }
 
   private static void applyOutputEnvironment(Object outputs, Map<String, String> environment) {

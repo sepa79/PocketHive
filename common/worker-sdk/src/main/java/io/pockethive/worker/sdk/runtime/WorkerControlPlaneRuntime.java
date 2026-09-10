@@ -53,6 +53,7 @@ import org.slf4j.LoggerFactory;
  * Validates typed/private and Redis connection candidates before accepted-state writes or reseeding.
  * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  * Consumes RESP-WORK-CONFIGURATION-DIAGNOSTICS for config logs and status projections only.
+ * Consumes RESP-WORK-CSV-SETTINGS for the immutable startup baseline used by patch validation.
  */
 public final class WorkerControlPlaneRuntime {
 
@@ -325,6 +326,16 @@ public final class WorkerControlPlaneRuntime {
         return text.isEmpty() ? null : text;
     }
 
+    /** Registers validated CSV startup configuration before control commands or intake. */
+    public void initializeCsvStartup(String workerBeanName,
+                                     io.pockethive.work.config.csv.CsvDatasetSettings settings) {
+        WorkerState state = stateStore.find(workerBeanName).orElseThrow();
+        if (state.definition().input() != io.pockethive.work.config.WorkerInputType.CSV_DATASET) {
+            throw new IllegalStateException("CSV startup settings require a CSV input");
+        }
+        state.initializeCsvStartup(Objects.requireNonNull(settings, "settings"));
+    }
+
     /**
      * Registers a listener that will be invoked whenever the specified worker's state changes. The listener is
      * invoked immediately with the current snapshot if the worker is known.
@@ -419,7 +430,7 @@ public final class WorkerControlPlaneRuntime {
             boolean previousEnabled = state.enabled();
             try {
                 WorkPatchPolicy patchPolicy = new WorkPatchPolicy(state.definition().beanName(),
-                    state.definition().input(), state.definition().outputType());
+                    state.definition().input(), state.definition().outputType(), state.csvStartup());
                 if (patch.resetRequested()) {
                     patchPolicy.validateReset(state.rawConfig());
                 } else {

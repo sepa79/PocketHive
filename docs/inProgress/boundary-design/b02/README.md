@@ -1,5 +1,9 @@
 # B02 settings and authoring execution
 
+Current checkpoint: `f166ce38` commits the separately reviewed input-enablement transfer
+and ENBL-R1 correction. Complete CSV settings transfer is implemented below and awaits
+separate review. Remaining B02 candidate/settings work stays open.
+
 Status: implementation started, not accepted. B01 was committed as `eb681ee7` on
 2026-09-08 after separate review. This task does not run an automatic acceptance review.
 Transfers through Redis connection parsing and CONN-R1 were committed on human request
@@ -1128,3 +1132,122 @@ rejects nonempty structures and cyclic placeholders (`/tmp/b02-enbl-r1-review-pr
 Repository propertyProblems/InputLifecyclePropertyCheck search confirms the two consumers.
 `git diff --check` passes. Empty-object YAML erasure, full B02 and deferred SEL-R1 remain
 open. This review does not claim full candidate or deployed acceptance.
+
+
+#### Complete CSV settings transfer — 2026-09-10
+
+Implementation after `f166ce38`; **awaiting separate review**. Ownership and semantics:
+[RESP-WORK-CSV-SETTINGS](../../../architecture/runtime-responsibilities.md#resp-work-csv-settings).
+CsvDatasetParser owns all eight fields, complete validation, canonical projection and
+patch merging. Existing rate/timing parsers retain their constraints and conversion.
+CsvDatasetEnvironment owns startup export and bootstrap projection using the frozen
+Spring-resolved environment. SDK properties carry raw values; CsvDataSetWorkInput holds
+one immutable snapshot and owns file access/intake only. Scenario Manager projects shared
+AUTHORING findings; WorkPatchPolicy validates supplied CSV candidates before state writes.
+Controller applies explicit bee.env overrides before connection-environment freezing.
+
+Removed SDK local format/presence checks, boolean coercion in raw updates, per-tick
+property parsing and Controller's eight-field CSV export. Complete invalid updates cannot
+partially mutate adapter settings. Preserved regex delimiter behavior, file text, trailing
+empty columns, header skipping, rotation and worker-level enablement. No new library,
+scanner or wiring-only test. One production type per new file; matching responsibility
+headers and architecture updated together.
+
+Repository search: `rg -n 'CsvDataSet|inputs\.csv|CSV_DATASET|skipHeader|startupDelaySeconds'`
+across production, tests, configuration and active docs; candidates recorded in
+`/tmp/b02-csv-owners.txt`. SDK settings/runtime, policy, Scenario validator/findings and
+Controller planner were migrated. Capability descriptions remain metadata. The active
+capability-controls-io-matrix CSV scenario already supplies all eight fields. Filesystem
+loading stays in the input adapter, and Spring stays responsible for property aliases and
+placeholder expansion; neither duplicates the CSV constraints.
+
+**Verification: 186 tests passed**, including the existing two import-test cases:
+
+```bash
+./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service,swarm-controller-service -am \
+  -Dtest=CsvDatasetParserTest,CsvDatasetEnvironmentTest,WorkIOConfigBinderTest,WorkPatchPolicyTest,CsvDataSetWorkInputTest,InputSettingsValidationComponentTest,SwarmLifecycleManagerTest,SwarmWorkerSpecFactoryTest,WorkerControlPlaneRuntimeTest,RepositoryImportBoundaryTest \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+Log: `/tmp/b02-csv-tests.log`. Behavior covers required/null/type/regex/charset validation,
+AUTHORING deferral, patch rejection without mutation, real Spring export/binding parity,
+CSV file/header/rotation and disable/re-enable behavior, immutable source fields, and
+Controller overrides/cross-connection placeholders reaching bootstrap. Existing CP state
+and Controller lifecycle suites remain green. Preceding accepted checkpoint passed its
+173-test selection; it did not cover the new complete CSV contract.
+
+Full reactor package with tests skipped verifies compilation of downstream production
+and test consumers (`./mvnw -B -ntp -DskipTests package`, `/tmp/b02-csv-package.log`).
+No deployed acceptance is claimed. Complete Work candidate/startup-shape validation and
+bee.env authoring parity remain B02 work; empty YAML object erasure and SEL-R1 remain
+open. Separate review comes next; simplification follows acceptance of the whole phase.
+
+
+#### Separate complete CSV settings review — 2026-09-10
+
+Scope: uncommitted CSV transfer after `f166ce38`. **MEDIUM CSV-R1; not accepted.**
+WorkPatchPolicy constructs the complete CSV candidate only from previousRaw and patch.
+WorkerState starts with empty rawConfig, and only accepted CP commands populate it;
+valid bound startup settings are held separately by the input adapter. Therefore a
+CSV worker configured at startup cannot accept a first rate-only update, or one following
+only unrelated config updates: the new gate reports the other seven fields missing.
+The previous policy accepts the same commands. Complete Controller bootstrap avoids this
+case, but it is not a prerequisite of the existing SDK startup/control contract.
+Validate against the actual effective startup/accepted settings through an explicit shared
+baseline; do not require callers to resend immutable settings or weaken null rejection.
+
+Temporary public API probe `/tmp/CsvPatchReviewProbe.java` confirms valid startup settings
+and successful canonical merge to rate=2, then rejection by the current policy with empty
+or unrelated previousRaw; complete prior CSV accepts. The policy compiled from `f166ce38`
+accepts all three. Results: `/tmp/b02-csv-review-patch-probe.txt`. No production or permanent
+test changes made during review.
+
+| Responsibility | Source evidence and verdict |
+|---|---|
+| RESP-WORK-CSV-SETTINGS | CsvDatasetParser owns eight-field constraints and delegates rate/timing; immutable settings hold compiled regex/charset and derived delay. Environment maps names and freezes/projections through Spring; no filesystem effects in parser (Path.of validates syntax). Full settings behavior supported, but CP candidate baseline violates partial-update behavior (CSV-R1). |
+| RESP-WORK-IO-CONFIG / RESP-WORK-CSV-INPUT | Raw properties delegate validation; selected SDK factory constructs the input with validated settings. Input merges through the canonical parser before snapshot replacement. File loading, row formatting, timer and enablement projection remain adapter effects. These settings never seed WorkerState.rawConfig, which exposes CSV-R1. |
+| RESP-WORK-PATCH-POLICY / RESP-WORK-STATE | Actual WorkerControlPlaneRuntime calls policy before ConfigMerger and state writes. WorkerState initializes rawConfig to an empty map; its only production update caller is CP runtime. State remains intact on rejection, but valid rate changes can be blocked by missing baseline. |
+| RESP-SCENARIO-VALIDATE | ScenarioBundleValidator skips catalogue field semantics for selected CSV and projects shared AUTHORING results through WorkConfigurationFindings. Catalogue remains presentation metadata. Complete bee.env authoring remains explicitly deferred. |
+| RESP-CONTROLLER-WORKER-PLAN / RESP-WORK-CONNECTION-ENVIRONMENT | Planner exports CSV after explicit overrides, then freezes connections, resolves final CSV and projects bootstrap without environment mutation. Spring owns aliases/placeholders; planner owns no CSV constraints. This complete bootstrap path passes but does not cover standalone startup plus partial CP updates. |
+
+Fresh repository search for CsvDataSet, inputs.csv, CSV_DATASET, skipHeader and
+startupDelaySeconds across Java/configuration/docs: `/tmp/b02-csv-review-owners.txt`.
+Inspected SDK properties/input/factory, CP policy/state/consumer, Controller export and
+connection resolver, and Scenario validator. No additional active field-constraint owner
+found in this scope. CSV row-to-JSON conversion, capability metadata and Redis/Scheduler
+settings are distinct responsibilities.
+
+**186 tests passed** using the implementation handoff's exact selection;
+`/tmp/b02-csv-review-tests.log`. `git diff --check` passes. Six passes: plan outcome blocked
+by CSV-R1; style and headers align with the declared ownership; conciseness/readability
+benefit from a typed snapshot but the two baseline paths must converge; no additional
+library; security inspection found no new credential/network effect, and filesystem access
+remains the existing input responsibility. Regex delimiter and existing file/intake lifecycle
+limitations are preserved, not claimed fixed. No deployed acceptance or full B02 acceptance.
+SEL-R1 and empty-YAML shape debt remain deferred and distinct from this regression.
+
+
+#### CSV-R1 correction — 2026-09-10
+
+Implemented; awaiting separate review. CSV input construction registers its already
+validated startup settings once through WorkerControlPlaneRuntime into WorkerState.
+The immutable baseline is separate from the accepted CP patch journal. It does not
+change on disable/re-enable or adapter restart; duplicate registration fails explicitly.
+The selected policy receives that baseline and validates startup + accepted CP CSV fields
++ patch in order. Missing keys preserve the preceding value; explicit null remains null
+and fails canonical validation. No environment re-read, defaults, callback validator or
+additional state machine is introduced. Existing startup registration creates WorkerState
+before input construction; constructors and headers link RESP-WORK-CSV-SETTINGS.
+
+The existing WorkerControlPlaneRuntimeTest now exercises rate-only commands through its
+real control ingress with a complete startup baseline and no full CP bootstrap, both as
+the first update and after unrelated configuration. A subsequent rate change succeeds;
+null rate/filePath/rotate updates preserve the accepted state. Startup settings remain
+unchanged. This covers the actual policy/state-writing path missed by the earlier tests.
+The before reproduction remains `/tmp/b02-csv-review-patch-probe.txt`.
+
+**188 tests pass**, using the complete CSV handoff selection above;
+`/tmp/csv-r1-tests.log`. Full reactor package with tests skipped checks downstream
+compilation (`/tmp/csv-r1-package.log`). `git diff --check` passes. No new scanner,
+dependency, commit, deployment or self-review. CSV-R1 stays pending separate correction
+review; the remaining B02 scope and deferred issues are unchanged.

@@ -4,6 +4,7 @@ import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
 import io.pockethive.work.config.input.SchedulerResetParser;
+import io.pockethive.work.config.csv.CsvDatasetParser;
 
 import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkConfigurationException;
@@ -23,6 +24,7 @@ import java.util.Set;
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for removed input controls, including bootstrap.
+ * Consumes: RESP-WORK-CSV-SETTINGS for startup plus accepted-field plus patch candidates before acceptance.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public final class WorkPatchPolicy {
@@ -55,8 +57,15 @@ public final class WorkPatchPolicy {
     private final String workerName;
     private final WorkerInputType inputType;
     private final WorkerOutputType outputType;
+    private final Map<String, Object> csvStartup;
 
     public WorkPatchPolicy(String workerName, WorkerInputType inputType, WorkerOutputType outputType) {
+        this(workerName, inputType, outputType, Map.of());
+    }
+
+    public WorkPatchPolicy(String workerName, WorkerInputType inputType, WorkerOutputType outputType,
+                           Map<String, Object> csvStartup) {
+        this.csvStartup = Map.copyOf(csvStartup);
         this.workerName = Objects.requireNonNull(workerName, "workerName");
         this.inputType = Objects.requireNonNull(inputType, "inputType");
         this.outputType = Objects.requireNonNull(outputType, "outputType");
@@ -113,6 +122,19 @@ public final class WorkPatchPolicy {
             bootstrap,
             workerEnabled
         );
+        if (inputType == WorkerInputType.CSV_DATASET && update.get(INPUTS_ROOT) instanceof Map<?, ?> inputs
+            && inputs.containsKey(inputType.settingsKey())) {
+            Object supplied = inputs.get(inputType.settingsKey());
+            if (supplied instanceof Map<?, ?> patch) {
+                var candidate = new java.util.LinkedHashMap<Object, Object>(csvStartup);
+                Object prior = valueAt(previousRaw, CsvDatasetParser.PATH);
+                if (prior instanceof Map<?, ?> fields) candidate.putAll(fields);
+                candidate.putAll(patch);
+                new CsvDatasetParser().parse(candidate, CsvDatasetParser.PATH);
+            } else {
+                new CsvDatasetParser().parse(supplied, CsvDatasetParser.PATH);
+            }
+        }
     }
 
     public void validateReset(Map<String, Object> previousRaw) {

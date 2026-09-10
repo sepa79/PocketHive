@@ -1,5 +1,7 @@
 package io.pockethive.scenarios.validation;
 
+import io.pockethive.work.config.csv.CsvDatasetParser;
+
 import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.SchedulerResetParser;
@@ -72,6 +74,7 @@ import org.springframework.stereotype.Component;
  * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
  * Input numeric settings delegate to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
  * Scheduler reset declarations delegate to RESP-WORK-SCHEDULER-RESET.
+ * CSV settings delegate to RESP-WORK-CSV-SETTINGS.
  * Removed input controls delegate to RESP-WORK-INPUT-LIFECYCLE-POLICY.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * Redis route diagnostics delegate to RESP-WORK-REDIS-ROUTES; remaining IO validation is B02 debt.
@@ -1262,6 +1265,8 @@ public final class ScenarioBundleValidator {
     private boolean isSharedWorkConfigurationField(Map<String, Object> config, String path) {
         if (path == null) return false;
         String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
+        if (WorkerInputType.CSV_DATASET.name().equals(inputType)
+            && path.startsWith(CsvDatasetParser.PATH + ".")) return true;
         if (WorkerInputType.SCHEDULER.name().equals(inputType) && SchedulerResetParser.PATH.equals(path)) {
             return true;
         }
@@ -1327,14 +1332,17 @@ public final class ScenarioBundleValidator {
         String configPath,
         List<ValidationFinding> findings
     ) {
-        workConfigurationFindings.inputLifecycleControls(config.get("inputs"), configPath + ".inputs", findings);
+        if (workConfigurationFindings.inputLifecycleControls(config.get("inputs"), configPath + ".inputs", findings)) return;
         String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
         String ratePath = inputType == null ? null : InputRateParser.PATHS_BY_INPUT.get(inputType);
-        if (ratePath != null) {
+        if (WorkerInputType.CSV_DATASET.name().equals(inputType)) {
+            workConfigurationFindings.csvSettings(configValue(config, CsvDatasetParser.PATH),
+                configPath + "." + CsvDatasetParser.PATH, findings);
+        } else if (ratePath != null) {
             workConfigurationFindings.inputRate(configValue(config, ratePath), configPath + "." + ratePath, findings);
         }
         for (WorkerInputType type : WorkerInputType.values()) {
-            if (type.name().equals(inputType)) {
+            if (type != WorkerInputType.CSV_DATASET && type.name().equals(inputType)) {
                 String root = "inputs." + type.settingsKey();
                 workConfigurationFindings.inputSchedule(type, configValue(config, root), configPath + "." + root, findings);
             }

@@ -93,6 +93,36 @@ class WorkerControlPlaneRuntimeTest {
         reset(emitter);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void csvRatePatchUsesStartupSettingsWithoutFullControlBootstrap(boolean unrelatedUpdate) throws Exception {
+        var csvDefinition = new WorkerDefinition("csvWorker", TestWorker.class, WorkerInputType.CSV_DATASET,
+            "generator", WorkIoBindings.none(), Void.class, WorkInputConfig.class, WorkOutputConfig.class,
+            WorkerOutputType.NONE, "CSV", Set.of());
+        var csvStore = new WorkerStateStore();
+        csvStore.getOrCreate(csvDefinition);
+        var csvRuntime = new WorkerControlPlaneRuntime(controlPlane, csvStore, MAPPER, emitter, IDENTITY,
+            PROPERTIES.getControlPlane());
+        var startup = new io.pockethive.work.config.csv.CsvDatasetParser().parse(Map.of(
+            "filePath", "/data/input.csv", "ratePerSec", 1, "rotate", false, "skipHeader", true,
+            "delimiter", ",", "charset", "UTF-8", "startupDelaySeconds", 0, "tickIntervalMs", 1000), "inputs.csv");
+        csvRuntime.initializeCsvStartup(csvDefinition.beanName(), startup);
+        if (unrelatedUpdate) applyConfigUpdate(csvRuntime, Map.of("message", Map.of("body", "example")));
+        applyConfigUpdate(csvRuntime, Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2))));
+        assertThat(csvRuntime.workerRawConfig(csvDefinition.beanName()))
+            .containsEntry("inputs", Map.of("csv", Map.of("ratePerSec", 2)));
+        applyConfigUpdate(csvRuntime, Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 3))));
+        var accepted = csvRuntime.workerRawConfig(csvDefinition.beanName());
+        assertThat(accepted).containsEntry("inputs", Map.of("csv", Map.of("ratePerSec", 3)));
+        for (String field : java.util.List.of("ratePerSec", "filePath", "rotate")) {
+            var invalid = new java.util.LinkedHashMap<String, Object>();
+            invalid.put(field, null);
+            applyConfigUpdate(csvRuntime, Map.of("inputs", Map.of("csv", invalid)));
+            assertThat(csvRuntime.workerRawConfig(csvDefinition.beanName())).isEqualTo(accepted);
+        }
+        assertThat(startup.ratePerSec()).isEqualTo(1);
+    }
+
     @Test
     void configUpdateAppliesRuntimeConfig() throws Exception {
         TestConfig configUpdate = new TestConfig(true, 7.5);

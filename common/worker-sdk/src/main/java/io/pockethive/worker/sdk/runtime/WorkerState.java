@@ -17,11 +17,13 @@ import java.util.concurrent.atomic.LongAdder;
  * <p>
  * Responsibility: store accepted worker configuration plus separately updated counters and status contributions.
  * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
+ * Retains the immutable CSV startup baseline defined by RESP-WORK-CSV-SETTINGS separately from CP updates.
  * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  */
 public final class WorkerState {
 
     private final WorkerDefinition definition;
+    private Map<String, Object> csvStartup = Map.of();
     private final AtomicReference<Object> configRef = new AtomicReference<>();
     private volatile boolean enabled;
     private volatile boolean enableConfigured;
@@ -38,6 +40,16 @@ public final class WorkerState {
         WorkIoBindings io = definition.io();
         addIfPresent(workInRoutes, io.inboundQueue());
         addIfPresent(workOutRoutes, io.outboundQueue());
+    }
+
+    // Immutable startup configuration, not a second accepted-update state machine.
+    synchronized void initializeCsvStartup(io.pockethive.work.config.csv.CsvDatasetSettings settings) {
+        if (!csvStartup.isEmpty()) throw new IllegalStateException("CSV startup settings already registered");
+        csvStartup = io.pockethive.work.config.csv.CsvDatasetParser.configuration(settings);
+    }
+
+    synchronized Map<String, Object> csvStartup() {
+        return csvStartup;
     }
 
     WorkerDefinition definition() {

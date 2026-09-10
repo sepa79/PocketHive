@@ -249,6 +249,14 @@ Startup, runtime updates and authoring use that shared parser. Invalid declared 
 are rejected rather than clamped; symbolic authoring constraints remain deferred until
 rendering. This does not make timing fields live-mutable.
 
+Selected CSV_DATASET settings use the complete eight-field contract in
+[RESP-WORK-CSV-SETTINGS](../architecture/runtime-responsibilities.md#resp-work-csv-settings).
+All fields are required; null and unknown fields fail validation. Boolean properties accept
+booleans or exact lowercase `true`/`false` text. The delimiter retains Java regex split
+semantics, and charset must be supported by the JVM. Authoring expressions are deferred;
+resolved settings are validated before use. Source/format/timing changes still require
+rematerialization; only the existing rate control is live-mutable.
+
 The optional `inputs.scheduler.reset` command accepts only boolean `true`/`false`;
 explicit null and text are invalid. Its parser and authoring-expression rules belong to
 [RESP-WORK-SCHEDULER-RESET](../architecture/runtime-responsibilities.md#resp-work-scheduler-reset).

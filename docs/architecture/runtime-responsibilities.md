@@ -808,6 +808,8 @@ type-specific settings validation remains with the owning parser/properties duri
 Input rates delegate to RESP-WORK-INPUT-RATE; scheduled input timing/limits delegate to
 RESP-WORK-INPUT-SCHEDULE. Their property holders retain raw bound values so numeric
 coercion cannot bypass the canonical parser; runtime accessors expose validated numbers.
+Complete CSV settings delegate to RESP-WORK-CSV-SETTINGS; its adapter consumes one
+immutable validated snapshot rather than decoding properties during intake.
 
 Discovery and adapter factories consume bound settings. WorkerControlPlaneRuntime delegates IO mutability decisions to WorkPatchPolicy. Complete runtime candidate parsing and IO adapter parsing still have separate paths pending the rest of B02.
 
@@ -1013,7 +1015,46 @@ RabbitWorkInputFactory dispatches through WorkerRuntime and explicitly installs 
 
 **Migration status:** Current SDK infrastructure. B05 owns delivery/settlement split; this record does not claim callbacks are a proven single-output path.
 
+## RESP-WORK-CSV-SETTINGS
+
+**B02 implemented; awaiting separate review:** `work-config.csv.CsvDatasetParser` owns complete CSV settings
+validation and partial-update merging into immutable `CsvDatasetSettings`. All eight
+fields are required: filePath, ratePerSec, rotate, skipHeader, delimiter, charset,
+startupDelaySeconds and tickIntervalMs. Unknown fields and explicit null fail. FilePath
+is nonblank text representing a path, without filesystem checks or implicit root changes.
+Delimiter preserves the existing Java regex split contract (nonblank, valid pattern);
+quoted CSV parsing is not introduced. Charset must name a JVM-supported charset. Rotate
+and skipHeader accept booleans or exact lowercase property text true/false; other strings
+and coercions fail. Rate and timing delegate existing canonical parsers. AUTHORING defers
+expressions, RESOLVED requires rendered values; no partially valid settings are exposed.
+
+SDK properties carry raw values until parsing, runtime consumes only resolved settings,
+and Scenario Manager projects the same complete validation instead of catalogue rules.
+CSV input construction registers its validated startup settings once with WorkerState,
+through WorkerControlPlaneRuntime. This immutable startup baseline is distinct from the
+CP patch journal; it never changes on control updates or restart. WorkPatchPolicy builds
+the candidate in explicit order: startup baseline, accepted CP fields, supplied patch.
+The input uses the same parser merge semantics for its read-only settings projection.
+WorkPatchPolicy validates a supplied selected CSV candidate before accepted-state writes;
+complete Work candidate/startup integration remains the larger B02 gate.
+
+CsvDatasetEnvironment owns CSV property/environment names and export/projection. Controller
+composes CSV declarations with explicit bee.env overrides before connection environment
+freezing; final CSV validation uses that same frozen Spring-resolved environment and
+preserves declared scalar types unless explicitly overridden. Bootstrap receives the
+accepted CSV values. No environment rewrite follows validation; no process reads.
+
+**Forbidden:** local CSV settings parsers/boolean coercion, per-tick settings decoding,
+filesystem access in work-config, silent omission defaults or partial updates on rejection.
+**Verification:** parser unit tests, existing binder/scenario/Controller suites and CSV
+record/rotation/disable behavior. Full B02 acceptance and phase simplification are later.
+
 ## RESP-WORK-CSV-INPUT
+
+Consumes RESP-WORK-CSV-SETTINGS for one immutable resolved settings snapshot; bootstrap
+and raw updates delegate parsing before replacement. Dataset file reads and cursor /
+initialization failures stay here. A rate change does not reload the file; the existing
+patch policy still requires rematerialization for CSV source/format/timing changes.
 
 **Current module(s):** `common/worker-sdk`.
 
@@ -1435,8 +1476,8 @@ Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
 RequestTemplateFindings projects its problems into bundle findings; profile existence and
 bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
-WorkConfigurationFindings projects canonical input rate/timing/limit errors and deferred
-paths; ScenarioBundleValidator bypasses catalogue type/range/required validation for those
+WorkConfigurationFindings projects canonical input rate/timing/limit and complete CSV
+settings errors and deferred paths; ScenarioBundleValidator bypasses catalogue type/range/required validation for those
 selected fields. Catalogue descriptions remain presentation metadata.
 
 **Forbidden:** execute sequence effects during syntax checks or claim diagnostic success is bundle acceptance.

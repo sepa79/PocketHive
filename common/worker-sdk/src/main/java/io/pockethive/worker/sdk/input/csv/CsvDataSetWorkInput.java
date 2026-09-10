@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.input.csv;
 
-import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.csv.CsvDatasetParser;
+import io.pockethive.work.config.csv.CsvDatasetSettings;
 
 import io.pockethive.work.api.WorkItemBuilder;
 
@@ -17,10 +18,8 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRuntime;
 import java.io.BufferedReader;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
@@ -37,6 +36,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: read CSV dataset records and coordinate their current intake lifecycle.
  * Must not: declare broker resources or own accepted worker configuration.
+ * Consumes: RESP-WORK-CSV-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-csv-settings.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Contract: RESP-WORK-CSV-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-csv-input.
@@ -50,7 +50,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
-    private final CsvDataSetInputProperties properties;
+    private volatile CsvDatasetSettings settings;
     private final Logger log;
 
     private volatile boolean running;
@@ -88,8 +88,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
         this.workerRuntime = Objects.requireNonNull(workerRuntime, "workerRuntime");
         this.identity = Objects.requireNonNull(identity, "identity");
-        this.properties = Objects.requireNonNull(properties, "properties");
+        this.settings = Objects.requireNonNull(properties, "properties").settings();
         this.log = log == null ? defaultLog : log;
+        controlPlaneRuntime.initializeCsvStartup(workerDefinition.beanName(), settings);
     }
 
     @Override
@@ -101,12 +102,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
         enabled = false;
         registerStateListener();
 
-        if (properties.getFilePath() == null || properties.getFilePath().isBlank()) {
-            log.info("{} csv dataset registered, waiting for config from control plane", workerDefinition.beanName());
-            return;
-        }
-
-        log.info("{} csv dataset has filePath, waiting for control plane to enable", workerDefinition.beanName());
+        log.info("{} csv dataset registered, waiting for control plane enablement", workerDefinition.beanName());
     }
 
     @Override
@@ -147,9 +143,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
 
     private int getNextRowIndex() {
         int idx = currentRowIndex.getAndIncrement();
-        log.info("{} getNextRowIndex: idx={}, size={}, rotate={}", workerDefinition.beanName(), idx, csvRows.size(), properties.isRotate());
+        log.info("{} getNextRowIndex: idx={}, size={}, rotate={}", workerDefinition.beanName(), idx, csvRows.size(), settings.rotate());
         if (idx >= csvRows.size()) {
-            if (properties.isRotate()) {
+            if (settings.rotate()) {
                 log.info("{} rotating: resetting to row 0", workerDefinition.beanName());
                 currentRowIndex.set(1);
                 return 0;
@@ -172,10 +168,10 @@ public final class CsvDataSetWorkInput implements WorkInput {
         WorkItemBuilder builder = WorkItem.text(info, json)
             .header("swarmId", identity.swarmId())
             .header("instanceId", identity.instanceId())
-            .header("x-ph-csv-file", properties.getFilePath())
+            .header("x-ph-csv-file", settings.filePath())
             .header("x-ph-csv-row", String.valueOf(rowIdx + 1));
 
-        if (!properties.isRotate()) {
+        if (!settings.rotate()) {
             long remaining = Math.max(0, csvRows.size() - currentRowIndex.get());
             builder.header("x-ph-csv-remaining", remaining);
         }
@@ -196,7 +192,7 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = properties.ratePerSec() * tickIntervalMs / 1_000.0;
+        double perTickRate = settings.ratePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -204,24 +200,24 @@ public final class CsvDataSetWorkInput implements WorkInput {
     }
 
     private void loadCsvFile() {
-        Path path = Paths.get(properties.getFilePath());
+        Path path = Path.of(settings.filePath());
         if (!Files.exists(path)) {
-            throw new IllegalStateException("CSV file not found: " + properties.getFilePath());
+            throw new IllegalStateException("CSV file not found: " + settings.filePath());
         }
         log.info("{} loading CSV (skipHeader={}, rotate={}): {}", workerDefinition.beanName(),
-            properties.isSkipHeader(), properties.isRotate(), properties.getFilePath());
+            settings.skipHeader(), settings.rotate(), settings.filePath());
 
-        try (BufferedReader reader = Files.newBufferedReader(path, Charset.forName(properties.getCharset()))) {
+        try (BufferedReader reader = Files.newBufferedReader(path, settings.charset())) {
             List<String[]> allRows = reader.lines()
                 .filter(line -> !line.trim().isEmpty())
                 .map(this::parseCsvLine)
                 .toList();
 
             if (allRows.isEmpty()) {
-                throw new IllegalStateException("CSV file is empty: " + properties.getFilePath());
+                throw new IllegalStateException("CSV file is empty: " + settings.filePath());
             }
 
-            if (properties.isSkipHeader()) {
+            if (settings.skipHeader()) {
                 if (allRows.size() < 2) {
                     throw new IllegalStateException("CSV has only 1 row but skipHeader=true (need at least 2 rows)");
                 }
@@ -239,13 +235,12 @@ public final class CsvDataSetWorkInput implements WorkInput {
                 throw new IllegalStateException("CSV has no data rows after header processing");
             }
         } catch (IOException ex) {
-            throw new IllegalStateException("Failed to read CSV: " + properties.getFilePath(), ex);
+            throw new IllegalStateException("Failed to read CSV: " + settings.filePath(), ex);
         }
     }
 
     private String[] parseCsvLine(String line) {
-        String delimiter = properties.getDelimiter();
-        return line.split(delimiter, -1);
+        return settings.delimiter().split(line, -1);
     }
 
     private String rowToJson(String[] row) {
@@ -286,40 +281,14 @@ public final class CsvDataSetWorkInput implements WorkInput {
         });
     }
 
-    @SuppressWarnings("unchecked")
     void applyRawConfigOverrides(Map<String, Object> rawConfig) {
-        if (rawConfig == null) return;
-        var inputsMap = (Map<String, Object>) rawConfig.get("inputs");
-        if (inputsMap == null) return;
-        var csvMap = (Map<String, Object>) inputsMap.get("csv");
-        if (csvMap == null) return;
-        Double parsedRate = csvMap.containsKey(InputRateParser.FIELD)
-            ? new InputRateParser().parse(csvMap.get(InputRateParser.FIELD), InputRateParser.CSV_PATH) : null;
-
-
-        Object filePathObj = csvMap.get("filePath");
-        if (filePathObj instanceof String filePath && !filePath.isBlank()) {
-            properties.setFilePath(filePath);
-            log.info("{} csv filePath: {}", workerDefinition.beanName(), filePath);
-        }
-
-        Object skipHeaderObj = csvMap.get("skipHeader");
-        if (skipHeaderObj != null) {
-            boolean skipHeader = skipHeaderObj instanceof Boolean ? (Boolean) skipHeaderObj : Boolean.parseBoolean(String.valueOf(skipHeaderObj));
-            properties.setSkipHeader(skipHeader);
-            log.info("{} csv skipHeader: {}", workerDefinition.beanName(), skipHeader);
-        }
-
-        Object rotateObj = csvMap.get("rotate");
-        if (rotateObj != null) {
-            boolean rotate = rotateObj instanceof Boolean ? (Boolean) rotateObj : Boolean.parseBoolean(String.valueOf(rotateObj));
-            properties.setRotate(rotate);
-            log.info("{} csv rotate: {}", workerDefinition.beanName(), rotate);
-        }
-
-        if (parsedRate != null) {
-            properties.setRatePerSec(parsedRate);
-            log.info("{} csv ratePerSec: {}", workerDefinition.beanName(), parsedRate);
+        if (!(rawConfig.get("inputs") instanceof Map<?, ?> inputs) || !inputs.containsKey("csv")) return;
+        Object csv = inputs.get("csv");
+        if (csv instanceof Map<?, ?> patch) {
+            settings = new CsvDatasetParser().merge(settings, patch, CsvDatasetParser.PATH);
+        } else {
+            // Delegate invalid root shapes to the same settings contract.
+            settings = new CsvDatasetParser().parse(csv, CsvDatasetParser.PATH);
         }
     }
 
@@ -329,9 +298,8 @@ public final class CsvDataSetWorkInput implements WorkInput {
             return;
         }
         try {
-            validateConfiguration();
             loadCsvFile();
-            tickIntervalMs = properties.tickIntervalMs();
+            tickIntervalMs = settings.tickIntervalMs();
             try {
                 this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());
             } catch (Exception ex) {
@@ -343,12 +311,12 @@ public final class CsvDataSetWorkInput implements WorkInput {
                 thread.setDaemon(true);
                 return thread;
             });
-            long initialDelay = properties.getInitialDelayMs();
+            long initialDelay = settings.initialDelayMs();
             log.info("{} scheduling CSV ticks: initialDelay={}ms, interval={}ms", workerDefinition.beanName(), initialDelay, tickIntervalMs);
             schedulerExecutor.scheduleAtFixedRate(this::safeTick, initialDelay, tickIntervalMs, TimeUnit.MILLISECONDS);
             enabled = true;
             log.info("{} csv dataset input initialized (file={}, rows={}, rate={}/sec)",
-                workerDefinition.beanName(), properties.getFilePath(), csvRows.size(), properties.ratePerSec());
+                workerDefinition.beanName(), settings.filePath(), csvRows.size(), settings.ratePerSec());
         } catch (Exception ex) {
             log.error("{} csv dataset initialization failed", workerDefinition.beanName(), ex);
             enabled = false;
@@ -365,9 +333,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
         int currentRow = currentRowIndex.get();
         publisher.update(status -> {
             Map<String, Object> data = new java.util.LinkedHashMap<>();
-            data.put("filePath", properties.getFilePath());
-            data.put("ratePerSec", properties.ratePerSec());
-            data.put("rotate", properties.isRotate());
+            data.put("filePath", settings.filePath());
+            data.put("ratePerSec", settings.ratePerSec());
+            data.put("rotate", settings.rotate());
             data.put("totalRows", csvRows.size());
             data.put("currentRow", currentRow);
             data.put("dispatched", dispatched);
@@ -378,10 +346,4 @@ public final class CsvDataSetWorkInput implements WorkInput {
         });
     }
 
-    void validateConfiguration() {
-        if (properties == null) {
-            throw new IllegalStateException("CSV properties must not be null");
-        }
-        properties.validateConfigured("inputs.csv");
-    }
 }

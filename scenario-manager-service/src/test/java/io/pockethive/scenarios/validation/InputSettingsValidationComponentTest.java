@@ -18,6 +18,18 @@ class InputSettingsValidationComponentTest {
     @TempDir Path bundle;
     private ScenarioBundleValidator validator;
 
+    @Test
+    void csvFormatFieldsHaveCanonicalErrorsAndSymbolicHandling() throws Exception {
+        for (var field : java.util.Map.of("filePath", "123", "rotate", "'yes'", "skipHeader", "null",
+            "delimiter", "'['", "charset", "'no-such-charset'").entrySet()) {
+            var result = validate(WorkerInputType.CSV_DATASET, "ratePerSec: 1", field.getKey(), field.getValue());
+            assertThat(result.findings()).singleElement().satisfies(finding ->
+                assertThat(finding.path()).endsWith(".inputs.csv." + field.getKey()));
+            assertThat(validate(WorkerInputType.CSV_DATASET, "ratePerSec: 1", field.getKey(), "'{{ value }}'").findings())
+                .singleElement().satisfies(finding -> assertThat(finding.code()).isEqualTo(ValidationIssue.WORK_CONFIGURATION_DEFERRED.code()));
+        }
+    }
+
     @BeforeEach
     void loadCatalogue() throws Exception {
         var catalogue = new CapabilityCatalogueService(Path.of("capabilities"));

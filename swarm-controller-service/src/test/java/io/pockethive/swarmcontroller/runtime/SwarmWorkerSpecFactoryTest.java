@@ -29,6 +29,50 @@ import org.springframework.mock.env.MockEnvironment;
 
 class SwarmWorkerSpecFactoryTest {
 
+  private static Map<String, Object> csvSettings() {
+    return Map.of("filePath", "/data/input.csv", "ratePerSec", 1, "rotate", false, "skipHeader", true,
+        "delimiter", ",", "charset", "UTF-8", "startupDelaySeconds", 0, "tickIntervalMs", 1000);
+  }
+
+  @Test
+  void csvOverridesAndCrossConnectionPlaceholdersReachStartupAndBootstrap() {
+    var settings = new LinkedHashMap<>(csvSettings());
+    settings.put("filePath", 123);
+    settings.put("delimiter", "${CSV_SEPARATOR}");
+    var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null),
+        Map.of("POCKETHIVE_INPUTS_CSV_FILE_PATH", "/resolved.csv", "POCKETHIVE_INPUTS_CSV_SKIP_HEADER", "false",
+            "CSV_SEPARATOR", "\\|", "POCKETHIVE_INPUTS_CSV_RATEPERSEC", "${pockethive.outputs.redis.port}"),
+        Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", settings),
+            "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false))));
+    var plan = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var properties = io.pockethive.swarmcontroller.config.SpringConnectionEnvironment.resolved(plan.spec().environment());
+    var startup = new io.pockethive.work.config.csv.CsvDatasetParser().parse(
+        new io.pockethive.work.config.csv.CsvDatasetEnvironment().candidate(Map.of(), properties), "inputs.csv");
+    var bootstrap = objectMap(objectMap(plan.bootstrapConfig().get("inputs")).get("csv"));
+    assertThat(bootstrap).isEqualTo(io.pockethive.work.config.csv.CsvDatasetParser.configuration(startup));
+    assertThat(startup.filePath()).isEqualTo("/resolved.csv");
+    assertThat(startup.skipHeader()).isFalse();
+    assertThat(startup.ratePerSec()).isEqualTo(6379);
+    assertThat(startup.delimiter().split("a|b", -1)).containsExactly("a", "b");
+    assertThat(settings.get("filePath")).isEqualTo(123);
+  }
+
+  @Test
+  void csvRejectsInvalidDeclaredTypesAndFinalEnvironmentOverrides() {
+    var factory = factory(new ClickHouseSinkProperties());
+    var fields = new LinkedHashMap<>(csvSettings());
+    fields.put("filePath", 123);
+    assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(),
+        Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", fields))), null))
+        .hasMessageContaining("inputs.csv.filePath");
+    for (String value : List.of("yes", "", "${MISSING_FLAG}")) {
+      assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null),
+          Map.of("POCKETHIVE_INPUTS_CSV_ROTATE", value),
+          Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", csvSettings()))), null))
+          .isInstanceOf(RuntimeException.class);
+    }
+  }
+
   @Test
   void plansCanonicalWorkerEnvironmentConfigAndVolumeOrder() {
     ClickHouseSinkProperties clickHouse = new ClickHouseSinkProperties();
@@ -49,7 +93,7 @@ class SwarmWorkerSpecFactoryTest {
             "CONTROL_NETWORK", "worker-network",
             "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123"),
         Map.of(
-            "inputs", Map.of("type", "csv_dataset", "csv", Map.of("filePath", "/data/input.csv")),
+            "inputs", Map.of("type", "csv_dataset", "csv", csvSettings()),
             "docker", Map.of("volumes", List.of(" /host/input:/data:ro ")),
             "sut", Map.of("targetEndpointId", "default")));
 

@@ -12,6 +12,7 @@ import io.pockethive.work.config.input.InputScheduleParser;
 import io.pockethive.work.config.input.SchedulerResetParser;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.policy.InputLifecyclePolicy;
+import io.pockethive.work.config.csv.CsvDatasetParser;
 import java.util.Map;
 
 /**
@@ -26,13 +27,21 @@ import java.util.Map;
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
  * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for unsupported input controls.
+ * Consumes: RESP-WORK-CSV-SETTINGS for complete CSV authoring validation.
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
     private final RedisConfigurationParser parser = new RedisConfigurationParser();
 
-    void inputLifecycleControls(Object inputs, String path, List<ValidationFinding> findings) {
-        project(new InputLifecyclePolicy().configurationProblems(inputs, path), List.of(), findings);
+    void csvSettings(Object settings, String path, List<ValidationFinding> findings) {
+        var result = new CsvDatasetParser().validate(settings, path, WorkConfigurationMode.AUTHORING);
+        project(result.problems(), result.deferredPaths(), findings);
+    }
+
+    boolean inputLifecycleControls(Object inputs, String path, List<ValidationFinding> findings) {
+        var problems = new InputLifecyclePolicy().configurationProblems(inputs, path);
+        project(problems, List.of(), findings);
+        return !problems.isEmpty();
     }
 
     void inputRate(Object value, String path, List<ValidationFinding> findings) {

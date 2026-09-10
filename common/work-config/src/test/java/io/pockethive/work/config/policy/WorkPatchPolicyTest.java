@@ -12,6 +12,22 @@ import org.junit.jupiter.api.Test;
 class WorkPatchPolicyTest {
 
     @Test
+    void validatesCompleteCsvCandidateAndKeepsSourceFieldsImmutable() {
+        var policy = policy(WorkerInputType.CSV_DATASET, WorkerOutputType.NONE);
+        var fields = new java.util.LinkedHashMap<String, Object>(Map.of("filePath", "/data.csv", "ratePerSec", 1,
+            "rotate", false, "skipHeader", true, "delimiter", ",", "charset", "UTF-8",
+            "startupDelaySeconds", 0, "tickIntervalMs", 1000));
+        var config = Map.<String, Object>of("inputs", Map.of("type", "CSV_DATASET", "csv", fields));
+        assertThatCode(() -> policy.validate(Map.of(), config, false)).doesNotThrowAnyException();
+        assertThatCode(() -> policy.validate(config, Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2))), true))
+            .doesNotThrowAnyException();
+        assertThatThrownBy(() -> policy.validate(config, Map.of("inputs", Map.of("csv", Map.of("rotate", true))), false))
+            .hasMessageContaining("inputs.csv.rotate");
+        fields.put("skipHeader", "yes");
+        assertThatThrownBy(() -> policy.validate(Map.of(), config, false)).hasMessageContaining("inputs.csv.skipHeader");
+    }
+
+    @Test
     void rejectsInputEnablementDuringBootstrapAndLiveUpdates() {
         for (var type : WorkerInputType.values()) {
             var update = Map.<String, Object>of("inputs", Map.of(type.settingsKey(), Map.of("enabled", false)));

@@ -1,6 +1,6 @@
 # Work Plane boundaries — implementation design
 
-Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
+Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Input enablement is separately accepted and committed as `f166ce38`; complete CSV settings are implemented and await separate review. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
 Acceptance evidence: `docs/inProgress/boundary-design/b01/rv2-correction-review.md`.
 Source revision: `e0d37871`, branch `refactor/control-plane-critical-restart`.
 Execution order and scope are owned by `docs/inProgress/work-plane-module-boundaries.md`.

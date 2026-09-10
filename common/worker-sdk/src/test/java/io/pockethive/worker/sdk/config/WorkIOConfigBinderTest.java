@@ -33,6 +33,31 @@ import org.springframework.mock.env.MockEnvironment;
 
 class WorkIOConfigBinderTest {
 
+    @Test
+    void csvExportBindsWithoutChangingValidatedValues() {
+        var declared = Map.<String, Object>of("filePath", "/data.csv", "ratePerSec", 2.5,
+            "rotate", false, "skipHeader", true, "delimiter", "\\|", "charset", "utf8",
+            "startupDelaySeconds", 2, "tickIntervalMs", 1000);
+        var exported = new io.pockethive.work.config.csv.CsvDatasetEnvironment().encode(declared);
+        var env = new MockEnvironment();
+        env.getPropertySources().addFirst(new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(exported)));
+        var startup = new WorkInputConfigBinder(Binder.get(env)).bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class).settings();
+        assertThat(io.pockethive.work.config.csv.CsvDatasetParser.configuration(startup))
+            .isEqualTo(io.pockethive.work.config.csv.CsvDatasetParser.configuration(
+                new io.pockethive.work.config.csv.CsvDatasetParser().parse(declared, "inputs.csv")));
+        assertThat(startup.delimiter().split("a|b|", -1)).containsExactly("a", "b", "");
+    }
+
+    @ParameterizedTest
+    @CsvSource({"file-path,123", "rotate,yes", "skip-header,1", "delimiter,[", "charset,no-such-charset"})
+    void rejectsInvalidCsvValuesBeforeSpringCoercion(String field, String value) {
+        var source = csvInputSource(Map.of());
+        source.put("pockethive.inputs.csv." + field, field.equals("file-path") ? 123 : value);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(source))
+            .bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+    }
+
     @ParameterizedTest
     @CsvSource({"rabbit,enabled", "scheduler,enabled", "redis,enabled", "csv,enabled", "rabbit,auto-startup"})
     void rejectsRemovedControlsFromPropertiesAndEnvironment(String input, String field) throws IOException {
