@@ -1,25 +1,17 @@
 package io.pockethive.worker.sdk.config;
 
 /**
- * Default RabbitMQ work-input knobs bound from {@code pockethive.inputs.rabbit.*}.
+ * Responsibility: bind Rabbit Work input settings from pockethive.inputs.rabbit.*.
+ * Must not: own worker enablement, start listeners or configure Control Plane.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 public class RabbitInputProperties implements WorkInputConfig {
 
-    private boolean enabled = false;
     private int prefetch = 50;
     private int concurrentConsumers = 1;
     private boolean exclusive = false;
-    private boolean autoStartup = true;
     private String queue;
     private String deadLetterQueue;
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     public int getPrefetch() {
         return prefetch;
@@ -43,14 +35,6 @@ public class RabbitInputProperties implements WorkInputConfig {
 
     public void setExclusive(boolean exclusive) {
         this.exclusive = exclusive;
-    }
-
-    public boolean isAutoStartup() {
-        return autoStartup;
-    }
-
-    public void setAutoStartup(boolean autoStartup) {
-        this.autoStartup = autoStartup;
     }
 
     public String getQueue() {

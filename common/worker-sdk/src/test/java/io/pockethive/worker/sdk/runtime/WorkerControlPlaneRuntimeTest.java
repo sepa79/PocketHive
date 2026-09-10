@@ -364,6 +364,30 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
+    void removedInputEnablementRejectsTheWholeUpdateBeforeChangingWorkerState() throws Exception {
+        var snapshot = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
+        runtime.registerStateListener(definition.beanName(), snapshot::set);
+        for (boolean initiallyEnabled : new boolean[]{false, true}) {
+            if (initiallyEnabled) {
+                applyConfigUpdate(runtime, Map.of("enabled", true, "ratePerSec", 7.5));
+            }
+            var accepted = runtime.workerRawConfig(definition.beanName());
+            reset(emitter);
+            applyConfigUpdate(runtime, Map.of("enabled", !initiallyEnabled,
+                "inputs", Map.of("scheduler", Map.of("enabled", true))));
+
+            var failure = ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+            verify(emitter).emitFailure(failure.capture());
+            verify(emitter, times(0)).emitResult(any());
+            assertThat(failure.getValue().message()).contains("inputs.scheduler.enabled");
+            assertThat(runtime.workerRawConfig(definition.beanName())).isEqualTo(accepted);
+            assertThat(runtime.workerEnabled(definition.beanName())).isEqualTo(initiallyEnabled);
+            assertThat(snapshot.get().rawConfig()).isEqualTo(accepted);
+            assertThat(snapshot.get().enabled()).isEqualTo(initiallyEnabled);
+        }
+    }
+
+    @Test
     void configUpdateRejectsUnsafeLiveIoUpdateBeforeApplyingState() throws Exception {
         WorkerStateStore ioStateStore = new WorkerStateStore();
         WorkerDefinition ioDefinition = new WorkerDefinition(

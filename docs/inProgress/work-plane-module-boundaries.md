@@ -10,6 +10,19 @@ Preparation commit: `e0d37871` (2026-09-07), committed before the first design g
 Known issue: [SEL-R1](boundary-design/b02/known-issues.md) remains open; the user explicitly
 deferred the runtime list-change fix and authorized continuing B02 on 2026-09-08.
 
+Latest execution, 2026-09-10: accepted timing/limit/reset checkpoint committed as
+`8e99c673`; input enablement ownership implemented with 173 passing tests and a passing
+root package build, awaiting separate review. Full B02 remains open; see the latest
+[handoff](boundary-design/b02/README.md#input-enablement-ownership--2026-09-10).
+Separate review found MEDIUM ENBL-R1: startup lookup misses nonempty structured removed
+fields outside the selected input subtree. The slice remains unaccepted; see
+[review evidence](boundary-design/b02/README.md#separate-input-enablement-review--2026-09-10).
+ENBL-R1 correction is implemented with a failing-before/passing-after regression and
+173 passing tests; [correction evidence](boundary-design/b02/README.md#enbl-r1-correction--2026-09-10).
+Separate correction review remains pending.
+Separate correction review on 2026-09-10 closes ENBL-R1 and accepts the scoped input
+enablement transfer: 173 tests and the independent Spring binding probe pass.
+
 ## Outcome and scope
 
 Application code in Orchestrator, Controller, and workers must use narrow capabilities
@@ -619,3 +632,30 @@ Separate review on 2026-09-10 accepts TIM-R1 correction and reset parsing within
 no findings, 130 tests passed, fresh scheduler transition/allocation probe passed.
 TIM-R1 is closed; full B02 and deferred SEL-R1 remain open.
 See [review evidence](boundary-design/b02/README.md#separate-tim-r1-and-reset-review--2026-09-10).
+
+### B02 input enablement ownership — 2026-09-10
+
+Human-requested checkpoint `8e99c673` commits the accepted input timing/limit and reset
+transfers, including TIM-R1. The next slice removes input-local enablement settings and
+the unused Rabbit autoStartup property. RESP-WORK-STATE remains the sole enablement
+owner; Redis startup consumes its current snapshot. RESP-WORK-INPUT-LIFECYCLE-POLICY
+owns rejection of removed controls at authoring, patch, startup and worker-planning
+boundaries. Controller CSV export and affected test producers are migrated.
+
+Implementation delivered, awaiting separate review: **173 selected tests and the full
+root Maven package build pass**. Before-state suite: 159 tests passed. Evidence:
+[input enablement handoff](boundary-design/b02/README.md#input-enablement-ownership--2026-09-10).
+Remaining B02: complete typed settings/candidate validation, startup-shape and producer
+parity (including bee.env authoring), and the other named B02 transfers. SEL-R1 remains
+explicitly deferred. B03 has not started; simplification follows full B02 acceptance.
+
+Separate review reran 173 tests and reproduced ENBL-R1 with real Spring YAML binding.
+Correct the removed-field presence lookup and extend its existing behavior test before
+accepting this slice; other B02 gates and SEL-R1 retain their existing scope.
+
+ENBL-R1 correction delivered: Spring property/descendant presence replaces Object value
+binding, with the existing binder test extended. 173 tests pass; await separate review.
+
+Separate ENBL-R1 correction review accepted the input enablement transfer within scope.
+Next implementation: complete CSV settings ownership in work-config, migrating startup,
+runtime, Scenario Manager and Controller export together; no B03 work starts yet.

@@ -8,13 +8,13 @@ import io.pockethive.work.config.WorkerInputType;
 /**
  * Responsibility: bind scheduler startup settings and delegate rate/timing/limit validation to work-config.
  * Must not: implement rate/timing/limit constraints or schedule work.
+ * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  * Consumes RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE:
  * docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  */
 public class SchedulerInputProperties implements WorkInputConfig {
 
-    private boolean enabled = false;
     private Object initialDelayMs =
         InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.INITIAL_DELAY_MS);
     private Object tickIntervalMs =
@@ -29,14 +29,6 @@ public class SchedulerInputProperties implements WorkInputConfig {
      */
     private Object maxMessages =
         InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.MAX_MESSAGES);
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     public Object getInitialDelayMs() {
         return initialDelayMs;

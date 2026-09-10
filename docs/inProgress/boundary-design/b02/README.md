@@ -1009,3 +1009,122 @@ scheduled phase simplification, without removing validation or separate ownershi
 Full candidate/startup-shape validation and input-local enablement remain B02 work;
 existing reset replay/concurrency behavior is not certified by this parsing transfer.
 Full B02 and user-deferred SEL-R1 remain open; simplification follows full phase acceptance.
+
+### Input enablement ownership — 2026-09-10
+
+Checkpoint `8e99c673` commits the separately accepted timing/limit/reset changes on human
+request. This next, uncommitted B02 slice is implemented and awaits separate review.
+
+| Responsibility | Implementation and removed authority |
+|---|---|
+| RESP-WORK-INPUT-LIFECYCLE-POLICY | New InputLifecyclePolicy in work-config owns the removed-field list and logical/startup names. It reports presence errors without interpreting values or reading environment. WorkPatchPolicy delegates before bootstrap/live classification; WorkInputConfigBinder delegates before selected settings binding. |
+| RESP-WORK-STATE / RESP-WORK-REDIS-DATASET | WorkerState remains the sole desired-enablement writer, initially disabled. RedisDataSetWorkInput.start no longer copies properties.enabled. Registration supplies the current snapshot before scheduled intake; the adapter retains a read-only projection. |
+| RESP-WORK-IO-CONFIG | Removed enabled fields/accessors from all four input properties and unused Rabbit autoStartup. CSV/Scheduler/Rabbit had no runtime consumers; Redis was the remaining property-to-runtime copy. Other Rabbit transport settings remain unchanged B02/B05 work. |
+| RESP-SCENARIO-VALIDATE / RESP-CONTROLLER-WORKER-PLAN | WorkConfigurationFindings projects canonical raw-input errors. Worker planning checks raw config and composed environment through the same policy, reusing SpringConnectionEnvironment.raw for naming/lookup. CSV no longer exports POCKETHIVE_INPUTS_CSV_ENABLED. |
+
+Repository inspection covered removed-property accessors, input enabled assignments,
+raw/property/env names and Controller export. After-search:
+`rg -n '(inputs\.(rabbit|scheduler|redis|csv)\.(enabled|autoStartup|auto-startup)|POCKETHIVE_INPUTS_(RABBIT|SCHEDULER|REDIS|CSV)_(ENABLED|AUTOSTARTUP|AUTO_STARTUP))' --glob '!docs/Archive/**' --glob '!docs/archive/**' --glob '!**/target/**'`.
+Source-search output before this evidence was appended:
+`/tmp/b02-input-enablement-owners-after.txt`. Structured inspection of active YAML input
+maps found no producers requiring migration (`/tmp/b02-input-enablement-yaml.txt`, empty).
+Controller export and Redis/CSV test fixtures were migrated. RedisSequenceProperties.enabled
+controls a distinct sequence facility; Spring SmartLifecycle.isAutoStartup controls
+component startup. Neither is a second Work input enablement setting.
+
+**Before: 159 selected tests passed** (`/tmp/b02-input-enablement-before.log`).
+**After: 173 tests passed**, including the two existing import-test cases:
+`./mvnw -B -ntp -pl common/worker-sdk,scenario-manager-service,swarm-controller-service -am '-Dtest=InputLifecyclePolicyTest,WorkIOConfigBinderTest,WorkPatchPolicyTest,RedisDataSetWorkInputTest,CsvDataSetWorkInputTest,WorkerStateTest,WorkerControlPlaneRuntimeTest,InputSettingsValidationComponentTest,SwarmLifecycleManagerTest,RepositoryImportBoundaryTest' -Dsurefire.failIfNoSpecifiedTests=false test`.
+Log: `/tmp/b02-input-enablement-tests.log`. Added behavior checks cover removed fields
+including null/false/symbolic values, startup properties/environment, first and later CP
+updates retaining prior state on rejection, Redis disable/re-enable/restart without reads
+while disabled, authoring diagnostics and rejection before provisioning. Existing intake,
+configuration, state and Controller behavior suites remain green.
+
+Full reactor `./mvnw -B -ntp -DskipTests package` passed, compiling downstream production
+and test consumers after removal of SDK accessors (`/tmp/b02-input-enablement-package.log`).
+`git diff --check` passes. No additional dependency, scanner, wiring test or deployment.
+This is an implementation handoff, not self-review or full B02 acceptance. Complete
+typed settings/candidate validation, startup-shape checks and bee.env authoring parity
+remain B02 work. SEL-R1 remains deferred; simplification follows full phase acceptance.
+
+#### Separate input enablement review — 2026-09-10
+
+Scope: uncommitted input-enablement transfer after `8e99c673`. **One MEDIUM finding,
+ENBL-R1; this slice is not accepted yet.**
+
+ENBL-R1: WorkInputConfigBinder checks field presence by binding each forbidden path to
+Object. With a valid Scheduler configuration, startup YAML `inputs.redis.enabled: [false]`
+or `{flag: false}` under `pockethive` is silently accepted. Spring exposes indexed/child
+properties, but binding the parent to Object returns unbound; the policy receives null.
+The later WorkConfigBindHandler only checks the selected Scheduler subtree. Raw-map
+validation rejects those same declarations. Check property/descendant presence through
+Spring's existing property-source API without evaluating the removed value; retain one
+canonical removed-field list and extend the existing binder behavior test. Nonempty child
+properties remain available, so this is distinct from deferred empty-YAML-shape loss.
+
+| Responsibility | Reviewed evidence and verdict |
+|---|---|
+| RESP-WORK-INPUT-LIFECYCLE-POLICY / RESP-WORK-IO-CONFIG | Policy owns the field list once and raw-map presence checks reject all values. Discovery and registry initialization call WorkInputConfigBinder; its new Object lookup misses nonempty structured declarations outside the selected subtree (ENBL-R1). Scalar false/null/empty/expression and both Rabbit env spellings reject in the fresh Spring probe. |
+| RESP-WORK-STATE / RESP-WORK-REDIS-DATASET | WorkerControlPlaneRuntime applies WorkPatchPolicy before merging and writing WorkerState. Listener registration immediately supplies known state; Redis no longer seeds enabled from properties, including restart. Scheduler and Rabbit's actual factory consume state snapshots; CSV additionally gates intake on initialization. No second desired-enablement owner introduced. |
+| RESP-WORK-PATCH-POLICY / RESP-SCENARIO-VALIDATE | Both consume the shared raw rule, including bootstrap and unselected input blocks. ScenarioBundleValidator reaches the call for each bee; WorkConfigurationFindings only projects errors. Rejected CP updates preserve prior accepted configuration/enablement. |
+| RESP-CONTROLLER-WORKER-PLAN / RESP-WORK-CONNECTION-ENVIRONMENT | Raw config and composed environment delegate to the shared rule. SpringConnectionEnvironment.raw supplies Spring naming without expansion. SwarmRuntimeCore prepares all specs before publishing its candidate state or provisioning; CSV export was removed. Complete bee.env authoring remains explicitly open. |
+
+Repository-wide search for removed names, enabled setters/getters and input state assignments:
+`/tmp/b02-enablement-review-owners.txt`; inspected actual SDK discovery, registries, input
+factories/listeners, CP update path and Controller preparation. Redis sequence, uploader,
+CP component enablement and SmartLifecycle startup are distinct responsibilities.
+
+**173 tests passed** with the same explicit Maven selection as the handoff above; fresh
+log `/tmp/b02-enablement-review-tests.log`. Independent temporary public-API probe uses
+YamlPropertySourceLoader, Binder.get(environment) and WorkInputConfigBinder:
+`/tmp/EnablementBindingProbe.java`, `/tmp/b02-enablement-binding-probe.txt`. It reproduces
+ENBL-R1 despite the green suite. No permanent test or production edit was made in review.
+
+Six passes: plan outcome blocked by incomplete removed-field rejection; style/headers
+align with the intended owners; no competing field catalogue, fallback or new library;
+policy diagnostics omit values; the simple policy is maintainable, but its startup
+consumer must inspect presence rather than bind values. No broader SSOT isolation,
+concurrent intake-stop guarantee or deployed acceptance is claimed. `git diff --check`
+passes. Full B02, startup-shape debt and deferred SEL-R1 remain open. No commit/deployment.
+
+#### ENBL-R1 correction — 2026-09-10
+
+Implemented; awaiting separate review. InputLifecyclePolicy now consumes a presence
+predicate. SDK InputLifecyclePropertyCheck uses Spring's BindContext sources to check
+exact properties or PRESENT descendants, then returns a null binding target to stop
+before value conversion/placeholder expansion. A fresh check instance is used for each
+call. WorkInputConfigBinder rejects its reported problems before selected settings binding;
+Controller adapts its existing raw environment lookup to the same predicate contract.
+The removed-field catalogue remains solely in InputLifecyclePolicy; no new scanner,
+dependency or settings parser was introduced.
+
+Extended the existing five parameterized binder cases with real Spring YAML loading
+for nonempty lists/maps and cyclic placeholders, covering selected and unselected input
+paths. **Before correction: all five cases fail** (`/tmp/b02-enbl-r1-before.log`).
+**After: all 173 selected tests pass**, using the review's existing reactor/test selection
+(`/tmp/b02-enbl-r1-tests.log`). The unchanged temporary review probe also now rejects
+nonempty structures and the cyclic placeholder with the canonical exception
+(`/tmp/b02-enbl-r1-probe.txt`). Empty YAML object erasure remains the documented deferred
+startup-shape issue. `git diff --check` passes; no commit, deployment or self-review.
+
+#### Separate ENBL-R1 correction review — 2026-09-10
+
+Human-requested review of the correction: **no findings; ENBL-R1 closed and the input
+enablement transfer accepted within scope.** Prior per-owner review remains applicable
+to unchanged code. Inspected InputLifecyclePropertyCheck, policy Predicate consumers,
+WorkInputConfigBinder and Controller raw lookup. A fresh handler is created per call;
+BindContext supplies the actual Binder sources, exact/indexed/nested presence is checked
+before binding, and the null target prevents value/placeholder evaluation. Controller
+still uses its supplied environment snapshot. One removed-field catalogue remains;
+no process reads, fallback, parallel state writer or new dependency introduced.
+
+All six passes support the scoped correction: plan's visible-field rejection now holds;
+headers and architecture agree; the small Spring adapter keeps framework mechanics outside
+the policy; diagnostics omit values; no extra library; straightforward source-presence
+checks replace the erroneous Object binding. **173 tests passed** with the prior review
+selection (`/tmp/b02-enbl-r1-review-tests.log`); the independent YAML/Binder probe now
+rejects nonempty structures and cyclic placeholders (`/tmp/b02-enbl-r1-review-probe.txt`).
+Repository propertyProblems/InputLifecyclePropertyCheck search confirms the two consumers.
+`git diff --check` passes. Empty-object YAML erasure, full B02 and deferred SEL-R1 remain
+open. This review does not claim full candidate or deployed acceptance.

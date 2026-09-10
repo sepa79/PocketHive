@@ -23,6 +23,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import io.pockethive.rabbit.config.RabbitConnectionSettings;
 import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
+import io.pockethive.work.config.WorkConfigurationException;
+import io.pockethive.work.config.policy.InputLifecyclePolicy;
 
 /**
  * Responsibility: Resolve one scenario bee into its effective config, environment, identity, and worker spec.
@@ -31,6 +33,7 @@ import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
  * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for declared Work connections and their shared export.
  * Consumes RESP-WORK-CONNECTION-ENVIRONMENT for final connection settings after bee.env overrides.
+ * Consumes RESP-WORK-INPUT-LIFECYCLE-POLICY to reject input controls before provisioning.
  * Build one worker plan using the shared connection export; existing Work settings/naming remain B02/B04 debt.
  */
 public final class SwarmWorkerSpecFactory {
@@ -64,6 +67,11 @@ public final class SwarmWorkerSpecFactory {
 
   public PlannedSwarmWorker plan(Bee bee, SutEnvironment sutEnvironment) {
     Objects.requireNonNull(bee, "bee");
+    var inputControls = new InputLifecyclePolicy();
+    var unsupported = inputControls.configurationProblems(bee.config().get("inputs"), "inputs");
+    if (!unsupported.isEmpty()) {
+      throw new WorkConfigurationException(unsupported);
+    }
     String beeName = BeeNameGenerator.generate(bee.role(), properties.getSwarmId());
     Map<String, String> environment = new LinkedHashMap<>(
         ControlPlaneContainerEnvironmentFactory.workerEnvironment(
@@ -83,10 +91,15 @@ public final class SwarmWorkerSpecFactory {
       environment.put("CONTROL_NETWORK", network);
     }
     environment.putAll(bee.env());
+    var rawEnvironment = SpringConnectionEnvironment.raw(environment);
+    unsupported = inputControls.propertyProblems(path -> rawEnvironment.apply(path) != null);
+    if (!unsupported.isEmpty()) {
+      throw new WorkConfigurationException(unsupported);
+    }
 
     Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnvironment);
     var connections = new WorkConnectionEnvironmentResolver().resolve(effectiveConfig, environment,
-        SpringConnectionEnvironment.raw(environment), SpringConnectionEnvironment::resolved);
+        rawEnvironment, SpringConnectionEnvironment::resolved);
     effectiveConfig = connections.bootstrapConfig();
     List<String> configuredVolumes = resolveVolumes(effectiveConfig);
     List<String> volumes = new ArrayList<>(configuredVolumes.size() + 1);
@@ -165,7 +178,6 @@ public final class SwarmWorkerSpecFactory {
           "POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS",
           csvMap.get("startupDelaySeconds"));
       putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_TICKINTERVALMS", csvMap.get("tickIntervalMs"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_CSV_ENABLED", csvMap.get("enabled"));
     }
   }
 

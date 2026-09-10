@@ -10,6 +10,7 @@ import io.pockethive.worker.sdk.config.WorkInputConfig;
 /**
  * Responsibility: bind CSV startup settings and delegate rate/timing/limit validation to work-config.
  * Must not: implement rate/timing/limit constraints or read dataset files.
+ * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  * Consumes RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE:
  * docs/architecture/runtime-responsibilities.md#resp-work-input-schedule. Remaining CSV settings are B02 debt.
@@ -24,7 +25,6 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
     private String charset;
     private Object startupDelaySeconds;
     private Object tickIntervalMs;
-    private boolean enabled = true;
 
     public String getFilePath() {
         return filePath;
@@ -102,14 +102,6 @@ public final class CsvDataSetInputProperties implements WorkInputConfig {
     public long tickIntervalMs() {
         return new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
             InputScheduleField.TICK_INTERVAL_MS.path(WorkerInputType.CSV_DATASET));
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
     }
 
     public long getInitialDelayMs() {

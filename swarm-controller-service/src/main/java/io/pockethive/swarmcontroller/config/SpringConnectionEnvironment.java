@@ -14,9 +14,10 @@ import org.springframework.util.PropertyPlaceholderHelper;
 import org.springframework.util.SystemPropertyUtils;
 
 /**
- * Responsibility: bind supplied connection environment snapshots with Spring naming and explicit placeholder modes.
+ * Responsibility: bind supplied worker environment snapshots with Spring naming and explicit placeholder modes.
  * Must not: read process settings, compose environment values, validate connections or expose failed input values.
  * Contract: RESP-WORK-CONNECTION-ENVIRONMENT — docs/architecture/runtime-responsibilities.md#resp-work-connection-environment.
+ * Supplies property lookup for RESP-WORK-INPUT-LIFECYCLE-POLICY without deciding field support.
  */
 public final class SpringConnectionEnvironment {
     private SpringConnectionEnvironment() { }

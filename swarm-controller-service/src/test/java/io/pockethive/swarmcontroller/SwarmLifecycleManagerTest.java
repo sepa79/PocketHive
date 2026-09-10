@@ -422,6 +422,26 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void rejectsRemovedInputControlsBeforeProvisioning() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    for (Bee bee : List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
+            Map.of("inputs", Map.of("csv", Map.of("enabled", false)))),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
+            Map.of("POCKETHIVE_INPUTS_CSV_ENABLED", "false")),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
+            Map.of("POCKETHIVE_INPUTS_RABBIT_AUTOSTARTUP", "false")))) {
+      String plan = mapper.writeValueAsString(new SwarmPlan("swarm", List.of(bee)));
+      assertThatThrownBy(() -> manager.prepare(plan))
+          .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("Input-local lifecycle");
+      assertThat(manager.expectedWorkers()).isEmpty();
+      assertThat(manager.getMetrics().desired()).isZero();
+      verifyNoInteractions(amqp, rabbit);
+      verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+    }
+  }
+
+  @Test
   void exposesCsvInputConfigAsEnvironmentVariables() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
@@ -441,8 +461,7 @@ class SwarmLifecycleManagerTest {
                         "delimiter", "|",
                         "charset", "UTF-8",
                         "startupDelaySeconds", 2,
-                        "tickIntervalMs", 250,
-                        "enabled", true
+                        "tickIntervalMs", 250
                     )
                 ),
                 "outputs", Map.of("type", "RABBITMQ")
@@ -466,7 +485,7 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_CHARSET")).isEqualTo("UTF-8");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS")).isEqualTo("2");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_TICKINTERVALMS")).isEqualTo("250");
-    assertThat(env.get("POCKETHIVE_INPUTS_CSV_ENABLED")).isEqualTo("true");
+    assertThat(env).doesNotContainKey("POCKETHIVE_INPUTS_CSV_ENABLED");
   }
 
   @Test

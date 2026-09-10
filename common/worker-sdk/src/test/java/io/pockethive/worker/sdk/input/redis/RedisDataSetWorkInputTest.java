@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.work.api.WorkItem;
@@ -38,6 +40,47 @@ class RedisDataSetWorkInputTest {
         if (input != null) {
             input.stop();
         }
+    }
+
+    @Test
+    void intakeFollowsWorkerEnablementAcrossUpdatesAndRestart() throws Exception {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        var data = new ArrayDeque<>(List.of("one", "two"));
+        var runtime = new RecordingWorkerRuntime();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(false);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), new QueueRedisClientFactory(data));
+
+        input.start();
+        input.tick();
+        assertThat(data).hasSize(2);
+        assertThat(runtime.items).isEmpty();
+        when(state.enabled()).thenReturn(true);
+        listener.get().accept(state);
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("one");
+
+        when(state.enabled()).thenReturn(false);
+        listener.get().accept(state);
+        input.stop();
+        input.start();
+        input.tick();
+        assertThat(data).hasSize(1);
+        when(state.enabled()).thenReturn(true);
+        listener.get().accept(state);
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("one", "two");
     }
 
     @Test
@@ -343,7 +386,14 @@ class RedisDataSetWorkInputTest {
 
     private static WorkerControlPlaneRuntime mockControlPlane() {
         WorkerControlPlaneRuntime runtime = mock(WorkerControlPlaneRuntime.class);
-        doNothing().when(runtime).registerStateListener(any(), any());
+        doAnswer(call -> {
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot> listener = call.getArgument(1);
+            var snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+            when(snapshot.enabled()).thenReturn(true);
+            when(snapshot.rawConfig()).thenReturn(Map.of());
+            listener.accept(snapshot);
+            return null;
+        }).when(runtime).registerStateListener(any(), any());
         doNothing().when(runtime).emitStatusSnapshot();
         return runtime;
     }
@@ -357,7 +407,6 @@ class RedisDataSetWorkInputTest {
         properties.setSources(List.of());
         properties.setPickStrategy(RedisDatasetPickStrategy.ROUND_ROBIN);
         properties.setRatePerSec(1.0);
-        properties.setEnabled(true);
         return properties;
     }
 

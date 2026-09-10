@@ -34,6 +34,39 @@ import org.springframework.mock.env.MockEnvironment;
 class WorkIOConfigBinderTest {
 
     @ParameterizedTest
+    @CsvSource({"rabbit,enabled", "scheduler,enabled", "redis,enabled", "csv,enabled", "rabbit,auto-startup"})
+    void rejectsRemovedControlsFromPropertiesAndEnvironment(String input, String field) throws IOException {
+        String path = "pockethive.inputs." + input + "." + field;
+        for (Object value : new Object[]{false, "", "${UNRESOLVED}"}) {
+            var source = schedulerInputSource(Map.of());
+            source.put(path, value);
+            assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(source))
+                .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining(path).hasMessageContaining("Input-local lifecycle");
+        }
+        String envName = path.toUpperCase(java.util.Locale.ROOT).replace("-", "").replace('.', '_');
+        var env = new SystemEnvironmentPropertySource("systemEnvironment", Map.of(envName, "false"));
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(ConfigurationPropertySources.from(env)))
+            .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining(path);
+
+        for (String value : List.of("[false]", "{flag: false}", "'${" + path + "}'")) {
+            var environment = new MockEnvironment()
+                .withProperty("pockethive.inputs.scheduler.rate-per-sec", "1")
+                .withProperty("pockethive.inputs.scheduler.max-messages", "0");
+            var yaml = new YamlPropertySourceLoader().load("removed-input-control",
+                new ByteArrayResource((path + ": " + value).getBytes(StandardCharsets.UTF_8)));
+            yaml.forEach(environment.getPropertySources()::addFirst);
+            assertThatThrownBy(() -> new WorkInputConfigBinder(Binder.get(environment))
+                .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining(path).hasMessageContaining("Input-local lifecycle");
+        }
+    }
+
+    @ParameterizedTest
     @CsvSource({"SCHEDULER,initial-delay-ms", "SCHEDULER,tick-interval-ms", "SCHEDULER,max-pending-ticks",
         "SCHEDULER,max-messages", "REDIS_DATASET,initial-delay-ms", "REDIS_DATASET,tick-interval-ms",
         "CSV_DATASET,startup-delay-seconds", "CSV_DATASET,tick-interval-ms"})

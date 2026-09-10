@@ -11,6 +11,7 @@ import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
 import io.pockethive.work.config.input.SchedulerResetParser;
 import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.policy.InputLifecyclePolicy;
 import java.util.Map;
 
 /**
@@ -24,10 +25,15 @@ import java.util.Map;
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
+ * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for unsupported input controls.
  * Consumes: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
  */
 final class WorkConfigurationFindings {
     private final RedisConfigurationParser parser = new RedisConfigurationParser();
+
+    void inputLifecycleControls(Object inputs, String path, List<ValidationFinding> findings) {
+        project(new InputLifecyclePolicy().configurationProblems(inputs, path), List.of(), findings);
+    }
 
     void inputRate(Object value, String path, List<ValidationFinding> findings) {
         var result = new InputRateParser().validate(value, path, WorkConfigurationMode.AUTHORING);

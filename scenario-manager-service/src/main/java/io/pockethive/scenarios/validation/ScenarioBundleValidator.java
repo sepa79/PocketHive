@@ -72,6 +72,7 @@ import org.springframework.stereotype.Component;
  * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
  * Input numeric settings delegate to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
  * Scheduler reset declarations delegate to RESP-WORK-SCHEDULER-RESET.
+ * Removed input controls delegate to RESP-WORK-INPUT-LIFECYCLE-POLICY.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * Redis route diagnostics delegate to RESP-WORK-REDIS-ROUTES; remaining IO validation is B02 debt.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
@@ -1326,6 +1327,7 @@ public final class ScenarioBundleValidator {
         String configPath,
         List<ValidationFinding> findings
     ) {
+        workConfigurationFindings.inputLifecycleControls(config.get("inputs"), configPath + ".inputs", findings);
         String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
         String ratePath = inputType == null ? null : InputRateParser.PATHS_BY_INPUT.get(inputType);
         if (ratePath != null) {

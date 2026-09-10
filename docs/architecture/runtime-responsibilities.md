@@ -763,9 +763,43 @@ values, or partial rate/limit mutation before reset validation succeeds.
 **Verification:** parser boundary tests, patch-policy tests, finite-run behavior and
 scenario diagnostics. Full candidate acceptance remains B02 work.
 
+## RESP-WORK-INPUT-LIFECYCLE-POLICY
+
+**B02 transfer accepted within scope on 2026-09-10:** `work-config.policy.InputLifecyclePolicy` owns the removed
+input-control paths and their canonical startup property spellings: `inputs.*.enabled`
+for Rabbit/Scheduler/Redis/CSV, and Rabbit `autoStartup`. Any declared value is invalid,
+including false, null and expressions; this is a field-presence rule, not a bool parser.
+Use worker-level control enablement instead. No compatibility translation is allowed.
+
+The policy checks supplied raw configuration and property-presence predicates without
+reading process environment itself. WorkPatchPolicy, Scenario Manager, SDK binding and
+Controller worker planning consume its errors. Existing Spring binding supplies property
+lookup; it remains the naming/placeholder owner. Authoring raw-config diagnostics and
+runtime/planner property checks do not claim full candidate or bee.env authoring validation.
+
+ENBL-R1 correction: startup presence is supplied by SDK InputLifecyclePropertyCheck,
+a Spring BindHandler that checks exact properties and present descendants in the
+binding context's sources. It skips value binding entirely, including placeholder
+expansion, and checks all removed input paths before selected settings binding.
+The policy consumes a presence predicate; Controller supplies presence from its raw
+environment lookup. Empty YAML objects already erased by the loader remain separate
+startup-shape debt; nonempty indexed/nested declarations must be rejected.
+
+**Forbidden:** adapter-local enablement settings, duplicate removed-field lists in services,
+silently ignoring the fields or overriding worker desired state from input settings.
+**Verification:** policy/binder rejection, worker-update rejection, Redis intake following
+state snapshots, scenario validation and planner rejection before worker provisioning.
+
 ## RESP-WORK-IO-CONFIG
 
 **Current module(s):** `common/worker-sdk`.
+
+B02 input enablement transfer: input properties no longer expose `enabled`, and Rabbit
+input properties no longer expose the unused `autoStartup`. RESP-WORK-INPUT-LIFECYCLE-POLICY
+rejects those declarations at raw update, authoring, worker binding and worker planning
+boundaries. WorkerState supplies initial disabled state and accepted control updates;
+input adapters hold read-only enablement projections from its snapshots. Input-local
+properties must not seed desired state. Other typed settings/candidate work remains B02.
 
 PocketHiveWorkerProperties holds bound worker settings; WorkOutputConfig is the selected output settings contract. Existing WorkInputConfigBinder/WorkOutputConfigBinder perform startup binding using selection keys from work-config.
 
@@ -808,6 +842,9 @@ SDK composition supplies available factories and bound definitions. NONE is an e
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+Workers start disabled in WorkerState and input registration receives that state before
+intake. Only accepted worker-level control enablement updates may enable intake;
+input properties and container environment must not provide a second enablement flag.
 ControlPlaneNotifier derives results and applied configuration digests from accepted raw
 state. Configuration logs and external status views consume RESP-WORK-CONFIGURATION-DIAGNOSTICS;
 redaction must not change the state, adapter view or digest.
@@ -1003,8 +1040,11 @@ RedisDataSetWorkInput owns Redis dataset reads, cursor/exhaustion handling and c
 Selected Redis settings and worker state drive reads; records dispatch through WorkerRuntime.
 Input rates/timing consume RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE; timing is
 validated before start registers callbacks or creates an executor.
+Enablement is a read-only projection of RESP-WORK-STATE snapshots. Listener registration
+supplies the current worker state before intake starts, including after stop/start;
+Redis input properties do not supply an independent startup flag.
 
-**Forbidden:** refresh auth tokens, generate sequences or declare Rabbit resources.
+**Forbidden:** own worker enablement, refresh auth tokens, generate sequences or declare Rabbit resources.
 
 **Required effect:** Configured dataset reads preserve cursor/order/exhaustion; no switch to a different source on failure.
 
@@ -1270,6 +1310,9 @@ or runtime state, or independently validate/encode the shared Rabbit/Redis conne
 **Required effect:** Planning returns the worker spec and its corresponding bootstrap
 configuration without performing compute or broker operations. After applying bee.env,
 it delegates Rabbit/Redis connection resolution to RESP-WORK-CONNECTION-ENVIRONMENT.
+It consumes RESP-WORK-INPUT-LIFECYCLE-POLICY for raw configuration and the composed
+environment; unsupported input controls fail before provisioning. CSV export no longer
+produces an input-local enablement variable.
 Final validation of other settings remains B02 work.
 
 **Verification entrypoints:** `SwarmWorkerSpecFactoryTest`, `SwarmLifecycleManagerTest`.
@@ -1289,6 +1332,8 @@ both Redis directions first, freezes the complete environment and only then expa
 and validates connections. SwarmWorkerSpecFactory delegates Spring lookup to
 SpringConnectionEnvironment: raw lookup uses Binder without placeholder expansion; final
 lookup uses Binder with strict Spring placeholder resolution over the supplied snapshot.
+The same raw Spring lookup also supplies RESP-WORK-INPUT-LIFECYCLE-POLICY during worker
+planning; SpringConnectionEnvironment does not decide which input fields are supported.
 Names/precedence and successful expansion follow worker binding. Missing/cyclic references
 fail planning with a property name, without exposing the input or exception cause.
 No process properties are consulted, and no custom placeholder parser or retry loop exists.
@@ -1428,6 +1473,8 @@ WorkerInputType and WorkerOutputType remain shared selection values in `io.pocke
 those values and a worker name for diagnostics; it does not depend on SDK WorkerDefinition.
 
 WorkerControlPlaneRuntime delegates before merging/publishing accepted configuration.
+WorkPatchPolicy first consumes RESP-WORK-INPUT-LIFECYCLE-POLICY on proposed inputs,
+including the first bootstrap update, before its existing patch classifications.
 CapabilityCatalogueService reads the same field classifications for authoring metadata.
 LiveIoConfigUpdateGuard and LiveIoConfigMutability have been removed; neither
 SDK nor scenario-validation-contracts retains another implementation of these decisions.

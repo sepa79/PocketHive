@@ -41,7 +41,8 @@ import org.slf4j.LoggerFactory;
  * Work input that pops items from a Redis list at a configured rate and feeds them to the worker runtime.
  * <p>
  * Responsibility: read Redis dataset entries and coordinate cursor, exhaustion and intake.
- * Must not: validate dataset source entries, refresh auth tokens or declare Rabbit resources.
+ * Must not: validate dataset source entries, own worker enablement, refresh auth tokens or declare Rabbit resources.
+ * Enablement is a read-only projection of RESP-WORK-STATE snapshots, including startup.
  * Consumes: RESP-WORK-REDIS-SOURCES and RESP-WORK-REDIS-SELECTION for validated source choices.
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for startup and merged connection values.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
@@ -147,7 +148,6 @@ public final class RedisDataSetWorkInput implements WorkInput {
         }
         long initialDelayMs = properties.initialDelayMs();
         tickIntervalMs = properties.tickIntervalMs();
-        enabled = properties.isEnabled();
         registerStateListener();
         try {
             this.statusPublisher = controlPlaneRuntime.statusPublisher(workerDefinition.beanName());

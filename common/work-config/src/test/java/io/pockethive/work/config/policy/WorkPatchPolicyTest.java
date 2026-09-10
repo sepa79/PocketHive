@@ -12,6 +12,19 @@ import org.junit.jupiter.api.Test;
 class WorkPatchPolicyTest {
 
     @Test
+    void rejectsInputEnablementDuringBootstrapAndLiveUpdates() {
+        for (var type : WorkerInputType.values()) {
+            var update = Map.<String, Object>of("inputs", Map.of(type.settingsKey(), Map.of("enabled", false)));
+            var policy = policy(type, WorkerOutputType.NONE);
+            for (var previous : List.of(Map.<String, Object>of(), Map.<String, Object>of("inputs", Map.of("type", type.name())))) {
+                assertThatThrownBy(() -> policy.validate(previous, update, false))
+                    .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                    .hasMessageContaining("inputs." + type.settingsKey() + ".enabled");
+            }
+        }
+    }
+
+    @Test
     void rejectsExplicitNullRatesForEveryRateDrivenInput() {
         for (var type : List.of(WorkerInputType.SCHEDULER, WorkerInputType.REDIS_DATASET, WorkerInputType.CSV_DATASET)) {
             var previous = Map.<String, Object>of("inputs", Map.of("type", type.name(),

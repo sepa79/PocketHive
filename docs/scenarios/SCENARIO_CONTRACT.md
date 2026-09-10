@@ -253,6 +253,13 @@ The optional `inputs.scheduler.reset` command accepts only boolean `true`/`false
 explicit null and text are invalid. Its parser and authoring-expression rules belong to
 [RESP-WORK-SCHEDULER-RESET](../architecture/runtime-responsibilities.md#resp-work-scheduler-reset).
 
+Worker enablement belongs to the worker control state. Removed input-local lifecycle
+fields are rejected according to
+[RESP-WORK-INPUT-LIFECYCLE-POLICY](../architecture/runtime-responsibilities.md#resp-work-input-lifecycle-policy),
+including when explicitly false, null or symbolic. Scenario validation checks raw
+`config.inputs`; Controller planning and worker startup also check environment properties.
+Complete `bee.env` validation at authoring time remains B02 work.
+
 **Scheduler generator (ticks only):**
 
 ```yaml

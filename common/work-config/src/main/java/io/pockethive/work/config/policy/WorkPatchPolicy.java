@@ -6,6 +6,7 @@ import io.pockethive.work.config.input.InputScheduleParser;
 import io.pockethive.work.config.input.SchedulerResetParser;
 
 import io.pockethive.work.config.WorkConfigurationMode;
+import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.work.config.redis.RedisConfigurationParser;
@@ -21,6 +22,7 @@ import java.util.Set;
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
  * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
+ * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for removed input controls, including bootstrap.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public final class WorkPatchPolicy {
@@ -86,6 +88,10 @@ public final class WorkPatchPolicy {
         boolean workerEnabled
     ) {
         Objects.requireNonNull(update, "update");
+        var unsupported = new InputLifecyclePolicy().configurationProblems(update.get(INPUTS_ROOT), INPUTS_ROOT);
+        if (!unsupported.isEmpty()) {
+            throw new WorkConfigurationException(unsupported);
+        }
         if (update.isEmpty()) {
             return;
         }

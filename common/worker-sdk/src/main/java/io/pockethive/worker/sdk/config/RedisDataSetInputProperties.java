@@ -13,13 +13,13 @@ import java.util.List;
 /**
  * Responsibility: bind startup Redis dataset settings and delegate source selection, rate and timing validation to work-config.
  * Must not: infer source mode, duplicate source-entry validation or open Redis clients.
+ * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  * Consumes RESP-WORK-REDIS-SOURCES, RESP-WORK-REDIS-SELECTION and RESP-REDIS-CONNECTION-SETTINGS; RESP-WORK-INPUT-RATE owns rates.
  * Timing: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  */
 public class RedisDataSetInputProperties extends RedisConnectionProperties implements WorkInputConfig {
 
-    private boolean enabled = false;
     private Object listName;
     private List<RedisDatasetSource> sources;
     private RedisDatasetPickStrategy pickStrategy;
@@ -28,14 +28,6 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
         InputScheduleParser.initialValue(WorkerInputType.REDIS_DATASET, InputScheduleField.INITIAL_DELAY_MS);
     private Object tickIntervalMs =
         InputScheduleParser.initialValue(WorkerInputType.REDIS_DATASET, InputScheduleField.TICK_INTERVAL_MS);
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
 
     public Object getListName() {
         return listName;

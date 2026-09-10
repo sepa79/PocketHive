@@ -69,6 +69,19 @@ class InputSettingsValidationComponentTest {
     }
 
     @Test
+    void rejectsRemovedInputEnablementEvenWhenFalseOrNull() throws Exception {
+        for (var type : List.of(WorkerInputType.SCHEDULER, WorkerInputType.REDIS_DATASET, WorkerInputType.CSV_DATASET)) {
+            for (String value : List.of("false", "null", "'{{ false }}'")) {
+                assertThat(validate(type, "ratePerSec: 1", "enabled", value).findings())
+                    .singleElement().satisfies(finding -> {
+                        assertThat(finding.path()).endsWith(".inputs." + type.settingsKey() + ".enabled");
+                        assertThat(finding.message()).contains("Input-local lifecycle");
+                    });
+            }
+        }
+    }
+
+    @Test
     void schedulerResetUsesBooleanContractAndDefersOnlyExpressions() throws Exception {
         for (String value : List.of("true", "false")) {
             assertThat(validate(WorkerInputType.SCHEDULER, "ratePerSec: 1", "reset", value).findings()).isEmpty();
