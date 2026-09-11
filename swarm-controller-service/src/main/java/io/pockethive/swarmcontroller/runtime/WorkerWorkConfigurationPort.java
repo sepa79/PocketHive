@@ -4,7 +4,7 @@ import io.pockethive.swarm.model.Bee;
 import java.util.Map;
 
 /**
- * Responsibility: supply composed Work environment and bootstrap for one worker plan.
+ * Responsibility: supply composed Work environment and a fully validated RESOLVED bootstrap for one worker plan.
  * Must not: expose infrastructure clients, mutate supplied maps or perform provisioning.
  * Contract: RESP-CONTROLLER-WORK-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-controller-work-configuration.
  */

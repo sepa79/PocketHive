@@ -33,6 +33,8 @@ public class WorkerWorkConfigurationComposition {
         new InputLifecyclePolicy(),
         new CsvDatasetEnvironment(), new SchedulerSettingsEnvironment(), new RedisDatasetEnvironment(),
         new WorkConnectionEnvironmentResolver(),
-        new RabbitWorkSettingsBootstrap(new RabbitInputSettingsParser(), new RabbitOutputSettingsParser()));
+        new RabbitWorkSettingsBootstrap(new RabbitInputSettingsParser(), new RabbitOutputSettingsParser()),
+        new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser(),
+        new io.pockethive.redis.config.RedisOutputEnvironment());
   }
 }

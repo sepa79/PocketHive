@@ -603,3 +603,8 @@ config:
   the body / bodyTemplate.
 - The referenced schema remains **advisory** – workers only see and
   use the templated `body` / `bodyTemplate` strings when generating HTTP payloads.
+
+Controller Redis output composition applies scalar write/target environment overrides
+through the Redis configuration owner before final validation. Output routes belong in
+config; environment route-list overrides are rejected. Bootstrap and startup use the
+same output candidate (RESP-WORK-REDIS-OUTPUT-SETTINGS).

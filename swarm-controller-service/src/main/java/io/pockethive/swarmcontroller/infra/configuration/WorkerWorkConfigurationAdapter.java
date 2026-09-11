@@ -11,6 +11,10 @@ import io.pockethive.swarmcontroller.runtime.environment.WorkConnectionEnvironme
 import io.pockethive.rabbit.config.RabbitWorkSettingsBootstrap;
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationFields;
+import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.WorkConfigurationMode;
+import io.pockethive.work.config.WorkConfigurationProblem;
+import java.util.List;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.work.config.policy.InputLifecyclePolicy;
@@ -28,10 +32,11 @@ import org.slf4j.LoggerFactory;
  * Responsibility: compose worker Work environment and bootstrap through existing settings owners.
  * Must not: duplicate field constraints, provision resources, read process settings or own worker state.
  * Contract: RESP-CONTROLLER-WORK-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-controller-work-configuration.
- * Work naming delegates RESP-WORK-RESOURCE-NAMES; full neutral candidate validation remains B02.
+ * Work naming delegates RESP-WORK-RESOURCE-NAMES; the final bootstrap candidate passes neutral RESOLVED validation.
  */
 public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigurationPort {
   private static final Logger log = LoggerFactory.getLogger(WorkerWorkConfigurationAdapter.class);
+  private final WorkConfigurationParser parser;
   private final SwarmControllerProperties properties;
   private final WorkResourceNamesPort names;
   private final io.pockethive.rabbit.config.RabbitWorkEnvironment rabbitEnvironment;
@@ -39,6 +44,7 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
   private final CsvDatasetEnvironment csvEnvironment;
   private final SchedulerSettingsEnvironment schedulerEnvironment;
   private final RedisDatasetEnvironment redisDatasetEnvironment;
+  private final io.pockethive.redis.config.RedisOutputEnvironment redisOutputEnvironment;
   private final WorkConnectionEnvironmentResolver connectionsResolver;
   private final RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap;
 
@@ -46,7 +52,10 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
       io.pockethive.rabbit.config.RabbitWorkEnvironment rabbitEnvironment,
       InputLifecyclePolicy inputControls, CsvDatasetEnvironment csvEnvironment,
       SchedulerSettingsEnvironment schedulerEnvironment, RedisDatasetEnvironment redisDatasetEnvironment,
-      WorkConnectionEnvironmentResolver connectionsResolver, RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap) {
+      WorkConnectionEnvironmentResolver connectionsResolver, RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap,
+      WorkConfigurationParser parser, io.pockethive.redis.config.RedisOutputEnvironment redisOutputEnvironment) {
+    this.redisOutputEnvironment = Objects.requireNonNull(redisOutputEnvironment, "redisOutputEnvironment");
+    this.parser = Objects.requireNonNull(parser, "parser");
     this.rabbitEnvironment = Objects.requireNonNull(rabbitEnvironment, "rabbitEnvironment");
     this.names = Objects.requireNonNull(names, "names");
     this.properties = Objects.requireNonNull(properties, "properties");
@@ -67,6 +76,7 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
     var selectors = new io.pockethive.work.config.policy.WorkSelectorEnvironmentPolicy()
         .problems(SpringConnectionEnvironment.raw(bee.env()));
     if (!selectors.isEmpty()) throw new WorkConfigurationException(selectors);
+    redisOutputEnvironment.validateOverrides(path -> SpringConnectionEnvironment.containsPropertyTree(bee.env(), path));
     var overrides = rabbitEnvironment.overrideProblems(SpringConnectionEnvironment.raw(bee.env()));
     if (!overrides.isEmpty()) throw new WorkConfigurationException(overrides);
   }
@@ -88,6 +98,9 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
         SpringConnectionEnvironment.raw(bee.env()));
     var redisDatasetCandidate = redisDatasetEnvironment.candidate(bee.config().get(WorkConfigurationFields.INPUTS),
         SpringConnectionEnvironment.raw(bee.env()));
+    var redisOutputCandidate = redisOutputEnvironment.candidate(bee.config().get(WorkConfigurationFields.OUTPUTS),
+        SpringConnectionEnvironment.raw(bee.env()));
+    environment.putAll(redisOutputEnvironment.encode(redisOutputCandidate));
     environment.putAll(csvEnvironment.encode(csvCandidate));
     environment.putAll(schedulerEnvironment.encode(schedulerCandidate));
     environment.putAll(redisDatasetEnvironment.encode(redisDatasetCandidate));
@@ -103,6 +116,13 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
     Map<String, Object> resolvedConfig = csvEnvironment.resolve(connections.bootstrapConfig(), csvCandidate, finalProperties);
     resolvedConfig = schedulerEnvironment.resolve(resolvedConfig, schedulerCandidate, finalProperties);
     resolvedConfig = redisDatasetEnvironment.resolve(resolvedConfig, redisDatasetCandidate, finalProperties);
+    resolvedConfig = redisOutputEnvironment.resolve(resolvedConfig, redisOutputCandidate, finalProperties);
+    var validation = parser.validate(resolvedConfig, WorkConfigurationMode.RESOLVED);
+    if (!validation.problems().isEmpty()) throw new WorkConfigurationException(validation.problems());
+    if (!validation.deferredPaths().isEmpty()) {
+      throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(WorkConfigurationFields.INPUTS,
+          "Resolved Work configuration must not contain deferred paths.")));
+    }
     return new WorkerWorkConfigurationResult(connections.environment(), resolvedConfig);
   }
 
@@ -225,26 +245,6 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
       return;
     }
     putUppercaseType(environment, "POCKETHIVE_OUTPUTS_TYPE", outputsMap.get(WorkConfigurationFields.TYPE));
-    Object redis = outputsMap.get("redis");
-    if (redis instanceof Map<?, ?> redisMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", redisMap.get("sourceStep"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));
-      putEnvIfPresent(
-          environment,
-          "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE",
-          redisMap.get("targetListTemplate"));
-      putIndexedEnvIfPresent(
-          environment,
-          "POCKETHIVE_OUTPUTS_REDIS_ROUTES",
-          redisMap.get("routes"),
-          Map.of(
-              "match", "MATCH",
-              "header", "HEADER",
-              "headerMatch", "HEADERMATCH",
-              "list", "LIST"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", redisMap.get("maxLen"));
-    }
   }
 
   private static void putUppercaseType(Map<String, String> environment, String key, Object value) {
@@ -254,42 +254,6 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
     String text = value.toString().trim();
     if (!text.isBlank()) {
       environment.put(key, text.toUpperCase(Locale.ROOT));
-    }
-  }
-
-  private static void putEnvIfPresent(Map<String, String> environment, String key, Object value) {
-    if (value == null) {
-      return;
-    }
-    String text = value.toString().trim();
-    if (!text.isBlank()) {
-      environment.put(key, text);
-    }
-  }
-
-  private static void putIndexedEnvIfPresent(
-      Map<String, String> environment,
-      String keyPrefix,
-      Object value,
-      Map<String, String> fieldEnvNames) {
-    if (value == null) {
-      return;
-    }
-    if (!(value instanceof Iterable<?> entries)) {
-      throw new IllegalStateException(keyPrefix + " must be a list of objects");
-    }
-    int index = 0;
-    for (Object entry : entries) {
-      if (!(entry instanceof Map<?, ?> entryMap)) {
-        throw new IllegalStateException(keyPrefix + "_" + index + " must be an object");
-      }
-      for (Map.Entry<String, String> field : fieldEnvNames.entrySet()) {
-        putEnvIfPresent(
-            environment,
-            keyPrefix + "_" + index + "_" + field.getValue(),
-            entryMap.get(field.getKey()));
-      }
-      index++;
     }
   }
 

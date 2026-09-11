@@ -19,6 +19,23 @@ class WorkerWorkConfigurationAdapterTest {
       .workerWorkConfiguration(mock(SwarmControllerProperties.class), new io.pockethive.topology.work.PrefixedWorkResourceNames());
 
   @Test
+  void rejectsIncompleteAndUnselectedIoThroughTheCanonicalParser() {
+    var input = Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1, "maxMessages", 0));
+    for (Map<String, Object> config : java.util.List.<Map<String, Object>>of(
+        Map.of(),
+        Map.of("inputs", input),
+        Map.of("inputs", input, "outputs", Map.of("type", "UNKNOWN")),
+        Map.of("inputs", input, "outputs", Map.of("type", "NONE", "rabbit", Map.of())),
+        Map.of("inputs", input, "outputs", Map.of("type", "REDIS", "redis",
+            Map.of("host", "redis", "port", 6379, "ssl", false))))) {
+      var bee = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), config);
+      assertThatThrownBy(() -> adapter.compose(bee, config, baseEnvironment()))
+          .isInstanceOf(WorkConfigurationException.class);
+      assertThat(bee.config()).isEqualTo(config);
+    }
+  }
+
+  @Test
   void repeatedCompositionDoesNotLeakOverridesOrChangeSources() {
     var base = new LinkedHashMap<>(baseEnvironment());
     Map<String, Object> config = Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler",
@@ -28,6 +45,11 @@ class WorkerWorkConfigurationAdapterTest {
     var firstResult = adapter.compose(first, first.config(), base);
     Bee second = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), config);
     var secondResult = adapter.compose(second, second.config(), base);
+    var validation = new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
+        .workConfigurationParser().validate(firstResult.bootstrapConfig(),
+            io.pockethive.work.config.WorkConfigurationMode.RESOLVED);
+    assertThat(validation.problems()).isEmpty();
+    assertThat(validation.deferredPaths()).isEmpty();
 
     assertThat(firstResult.environment()).containsEntry("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC", "7");
     assertThat(secondResult.environment()).containsEntry("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC", "2");
@@ -49,16 +71,14 @@ class WorkerWorkConfigurationAdapterTest {
         .isInstanceOf(WorkConfigurationException.class);
     assertThat(base).isEqualTo(baseEnvironment());
     assertThat(rejected.config()).isEqualTo(invalid);
-    Bee valid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(),
-        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 3.0, "maxMessages", 0))));
+    Bee valid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 3.0, "maxMessages", 0))));
     assertThat(adapter.compose(valid, valid.config(), base).environment())
         .containsEntry("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC", "3");
   }
 
   @Test
   void standaloneCompositionCannotBypassDeclarationPreflight() {
-    Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(),
-        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler",
+    Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler",
             Map.of("ratePerSec", 1.0, "enabled", true))));
     assertThatThrownBy(() -> adapter.compose(invalid, invalid.config(), baseEnvironment()))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("enabled");

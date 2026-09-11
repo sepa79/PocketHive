@@ -14,7 +14,8 @@ Current follow-up: [topology and Scenario transfer](topology-scenario-transfer.m
 [Separate review](topology-scenario-review.md): changes requested.
 [Correction review](topology-scenario-correction-review.md) found TS-R2a.
 [Final correction review](topology-tap-final-review.md) accepts TS-R1–TS-R3 including TS-R2a.
-Full B02 acceptance and the Controller candidate gate remain open.
+Full B02 acceptance remains open. The [Controller candidate gate](controller-resolved-candidate.md)
+is accepted within its bounded scope by the [final gate review](controller-candidate-final-review.md).
 
 ## Historical implementation and review evidence
 
@@ -1038,7 +1039,7 @@ Full B02 and user-deferred SEL-R1 remain open; simplification follows full phase
 ### Input enablement ownership — 2026-09-10
 
 Checkpoint `8e99c673` commits the separately accepted timing/limit/reset changes on human
-request. This next, uncommitted B02 slice is implemented and awaits separate review.
+request. This next, uncommitted B02 slice is accepted within its bounded scope by the [final gate review](controller-candidate-final-review.md).
 
 | Responsibility | Implementation and removed authority |
 |---|---|

@@ -147,14 +147,12 @@ class SwarmWorkerSpecFactoryTest {
         "generator",
         "generator:test",
         Work.ofDefaults("input", null),
-        Map.of(),
-        Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("queue", "another-input"))));
+        Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("queue", "another-input"))));
     Bee invalid = new Bee(
         "generator",
         "generator:test",
         Work.ofDefaults("input", null),
-        Map.of(),
-        Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0))));
+        Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0))));
 
     assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(conflicting, null))
         .isInstanceOf(WorkConfigurationException.class)
@@ -173,7 +171,8 @@ class SwarmWorkerSpecFactoryTest {
         Map.of("POCKETHIVE_INPUTS_CSV_FILE_PATH", "/resolved.csv", "POCKETHIVE_INPUTS_CSV_SKIP_HEADER", "false",
             "CSV_SEPARATOR", "\\|", "POCKETHIVE_INPUTS_CSV_RATEPERSEC", "${pockethive.outputs.redis.port}"),
         Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", settings),
-            "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false))));
+            "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
+                "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
     var plan = factory(new ClickHouseSinkProperties()).plan(bee, null);
     var properties = io.pockethive.swarmcontroller.config.SpringConnectionEnvironment.resolved(plan.spec().environment());
     var startup = new io.pockethive.work.local.csv.CsvDatasetParser().parse(
@@ -192,13 +191,11 @@ class SwarmWorkerSpecFactoryTest {
     var factory = factory(new ClickHouseSinkProperties());
     var fields = new LinkedHashMap<>(csvSettings());
     fields.put("filePath", 123);
-    assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(),
-        Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", fields))), null))
+    assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", fields))), null))
         .hasMessageContaining("inputs.csv.filePath");
     for (String value : List.of("yes", "", "${MISSING_FLAG}")) {
       assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null),
-          Map.of("POCKETHIVE_INPUTS_CSV_ROTATE", value),
-          Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", csvSettings()))), null))
+          Map.of("POCKETHIVE_INPUTS_CSV_ROTATE", value), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", csvSettings()))), null))
           .isInstanceOf(RuntimeException.class);
     }
   }
@@ -208,7 +205,8 @@ class SwarmWorkerSpecFactoryTest {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(
         "POCKETHIVE_INPUTS_SCHEDULER_RATE_PER_SEC", "${pockethive.outputs.redis.port}"), Map.of(
         "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1, "maxMessages", 0, "reset", true)),
-        "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false))));
+        "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
+                "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
 
     var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
     var properties = SpringConnectionEnvironment.resolved(planned.spec().environment());
@@ -229,8 +227,7 @@ class SwarmWorkerSpecFactoryTest {
   @Test
   void schedulerRejectsInvalidFinalOverridesBeforeReturningWorkerPlan() {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null),
-        Map.of("POCKETHIVE_INPUTS_SCHEDULER_MAX_MESSAGES", "-1"),
-        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1, "maxMessages", 0))));
+        Map.of("POCKETHIVE_INPUTS_SCHEDULER_MAX_MESSAGES", "-1"), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1, "maxMessages", 0))));
 
     assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("inputs.scheduler.maxMessages");
@@ -240,7 +237,7 @@ class SwarmWorkerSpecFactoryTest {
   void redisDatasetExportBindsTheFrozenEnvironmentAndMatchesBootstrapSettings() {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(
         "POCKETHIVE_INPUTS_REDIS_PORT", "6381", "DATASET_HOST", "redis", "DATASET_SOURCE", "orders",
-        "DATASET_WEIGHT", "2.5", "DATASET_RATE", "3"), Map.of("inputs", Map.of(
+        "DATASET_WEIGHT", "2.5", "DATASET_RATE", "3"), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
             "type", "REDIS_DATASET", "redis", Map.of("host", "${DATASET_HOST}", "port", 0, "ssl", false,
                 "sources", List.of(Map.of("listName", "${DATASET_SOURCE}", "weight", "${DATASET_WEIGHT}")),
                 "pickStrategy", "ROUND_ROBIN", "ratePerSec", "${DATASET_RATE}"))));
@@ -281,8 +278,7 @@ class SwarmWorkerSpecFactoryTest {
         Work.ofDefaults("generator-in", "generator-out"),
         Map.of(
             "CONTROL_NETWORK", "worker-network",
-            "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123"),
-        Map.of(
+            "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123"), Map.of("outputs", Map.of("type", "NONE"),
             "inputs", Map.of("type", "csv_dataset", "csv", csvSettings()),
             "docker", Map.of("volumes", List.of(" /host/input:/data:ro ")),
             "sut", Map.of("targetEndpointId", "default")));
@@ -347,8 +343,7 @@ class SwarmWorkerSpecFactoryTest {
 
   @Test
   void rejectsIncompleteRedisConnectionBeforeReturningWorkerPlan() {
-    var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(),
-        Map.of("outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379))));
+    var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379))));
 
     assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
         .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
@@ -383,6 +378,39 @@ class SwarmWorkerSpecFactoryTest {
         .containsEntry("defaultList", "out");
     assertThat(objectMap(objectMap(bee.config().get("outputs")).get("redis")))
         .containsEntry("port", 6379).containsEntry("password", "old secret");
+  }
+
+  @Test
+  void redisOutputOverridesProduceOneEffectiveBootstrapAndEnvironment() {
+    for (String key : List.of("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "POCKETHIVE_OUTPUTS_REDIS_PUSH_DIRECTION",
+        "pockethive.outputs.redis.push-direction")) {
+      var bee = redisOutputBee(Map.of(key, "${DIRECTION}", "DIRECTION", "LPUSH",
+          "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "42", "pockethive.outputs.redis.default-list", "selected"), 6379);
+      var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+      var properties = SpringConnectionEnvironment.resolved(planned.spec().environment());
+      var output = objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis"));
+      assertThat(output).containsEntry("pushDirection", "LPUSH").containsEntry("maxLen", 42)
+          .containsEntry("defaultList", "selected");
+      assertThat(properties.apply("pockethive.outputs.redis.push-direction")).isEqualTo(output.get("pushDirection"));
+      assertThat(Integer.parseInt(properties.apply("pockethive.outputs.redis.max-len"))).isEqualTo(output.get("maxLen"));
+      assertThat(properties.apply("pockethive.outputs.redis.default-list")).isEqualTo(output.get("defaultList"));
+      assertThat(objectMap(objectMap(bee.config().get("outputs")).get("redis")))
+          .containsEntry("defaultList", "out");
+    }
+  }
+
+  @Test
+  void rejectsInvalidRedisOutputOverridesAndEnvironmentRoutesBeforeReturningPlan() {
+    for (String key : List.of("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "pockethive.outputs.redis.push-direction",
+        "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP")) {
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "INVALID"), 6379), null))
+          .isInstanceOf(WorkConfigurationException.class);
+    }
+    for (String key : List.of("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_LIST", "POCKETHIVE_OUTPUTS_REDIS_ROUTES_3_LIST",
+        "pockethive.outputs.redis.routes[0].list", "POCKETHIVE_OUTPUTS_REDIS_ROUTES")) {
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "other"), 6379), null))
+          .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("routes belong in config");
+    }
   }
 
   @Test
@@ -422,8 +450,7 @@ class SwarmWorkerSpecFactoryTest {
   @Test
   void rejectsRabbitPasswordThatResolvesToEmptyDeclaredRedisPassword() {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null),
-        Map.of("SPRING_RABBITMQ_PASSWORD", "${POCKETHIVE_OUTPUTS_REDIS_PASSWORD}"),
-        Map.of("outputs", Map.of("type", "REDIS", "redis", Map.of(
+        Map.of("SPRING_RABBITMQ_PASSWORD", "${POCKETHIVE_OUTPUTS_REDIS_PASSWORD}"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of(
             "host", "redis", "port", 6379, "ssl", false, "password", ""))));
 
     assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
@@ -513,8 +540,7 @@ class SwarmWorkerSpecFactoryTest {
       networkReads.incrementAndGet();
       return "control-network";
     });
-    Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(),
-        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler",
+    Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler",
             Map.of("ratePerSec", 1.0, "enabled", true))));
     assertThatThrownBy(() -> factory.plan(invalid, null))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("enabled");
@@ -552,8 +578,7 @@ class SwarmWorkerSpecFactoryTest {
   }
 
   private static Bee redisOutputBee(Map<String, String> environment, int port) {
-    return new Bee("generator", "generator:test", Work.ofDefaults(null, null), environment,
-        Map.of("outputs", Map.of("type", "REDIS", "redis", Map.of(
+    return new Bee("generator", "generator:test", Work.ofDefaults(null, null), environment, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of(
             "host", "redis", "port", port, "ssl", false, "password", "old secret",
             "sourceStep", "LAST", "pushDirection", "RPUSH", "maxLen", -1, "defaultList", "out"))));
   }

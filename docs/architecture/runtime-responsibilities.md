@@ -1167,8 +1167,8 @@ Spring aliases) fail; tuning belongs in config, destinations in the topology own
 environment overrides remain the separate connection contract.
 
 **Migration status:** AUTHORING tuning, RESOLVED materialization, named topology port and
-Scenario neutral integration are implemented, awaiting separate review. Controller's complete
-neutral-candidate gate is still open; this transfer does not claim runtime delivery activation.
+Scenario neutral integration have scoped review evidence. Controller's complete
+neutral-candidate gate is implemented pending separate review; no runtime delivery activation claimed.
 
 ## RESP-WORK-RABBIT-TRANSPORT
 
@@ -1524,7 +1524,7 @@ returned by RESP-CONTROLLER-WORK-CONFIGURATION; propagate rejection before plan 
 
 **Verification:** SwarmWorkerSpecFactoryTest, SwarmLifecycleManagerTest.
 **Migration status:** Work composition extracted for separate review. Existing non-Work
-planning concerns remain; full candidate validation is subsequent B02 work.
+planning concerns remain; full candidate validation now delegates through the configuration port (pending review).
 
 ## RESP-CONTROLLER-WORK-CONFIGURATION
 
@@ -1546,10 +1546,14 @@ WorkerWorkConfigurationAdapter is the sole owner of the extracted Work compositi
 validate removed controls, competing IO selectors and Rabbit environment settings; resolve logical Work
 bindings through WorkResourceNamesPort; materialize Rabbit settings through
 RabbitWorkSettingsBootstrap; export those settings through RabbitWorkEnvironment; compose
-remaining bee.env/CSV/scheduler/Redis exports; validate environment input controls; delegate
-connection freeze/validation; project final local/dataset settings. It returns the connection
+remaining bee.env/CSV/scheduler/Redis exports through adapter-owned projections; validate environment input controls; delegate
+connection freeze/validation; project final local/dataset/output settings. RedisOutputEnvironment
+owns output write/target overrides and exports; the Controller has no Redis output field mapping. It returns the connection
 owner's frozen environment without subsequent mutation. Existing field parsers and codecs
-remain their semantic owners. The full WorkConfigurationParser gate remains open.
+remain their semantic owners. After connection freezing and adapter bootstrap projection, Controller calls the injected
+WorkConfigurationParser in RESOLVED mode on the exact configuration returned to worker
+planning. Any problems or deferred paths reject before a plan is returned; no absent IO
+selector is inferred. Provider ports retain all adapter field rules.
 
 WorkResourceNamesPort and PrefixedWorkResourceNames own effective Work queue/exchange names
 under RESP-WORK-RESOURCE-NAMES. SwarmControllerProperties supplies explicit traffic settings;
@@ -1559,12 +1563,11 @@ WorkerWorkConfigurationComposition explicitly supplies the adapter and its colla
 SwarmLifecycleManager passes the port to the spec factory without choosing its implementation.
 
 **Forbidden:** SUT/volume/identity decisions, process environment reads, clients/provisioning,
-accepted-state writes, duplicate field rules, or presenting this result as a fully validated
-Work candidate. The narrower ResolvedWorkConnectionEnvironment remains connection-owned.
+accepted-state writes, duplicate field rules, or bypassing the selected neutral parser before returning the Work candidate. The narrower ResolvedWorkConnectionEnvironment remains connection-owned.
 
 **Verification:** adapter behavior tests, existing worker-plan/lifecycle component tests and
 RepositoryImportBoundaryTest. Rejection must leave source maps/state/effects untouched.
-**Migration status:** bounded B02 extraction; full candidate validation and B04 topology
+**Migration status:** bounded B02 extraction and full RESOLVED gate implemented pending review; B04 topology
 ownership remain open. This record is not acceptance of the implementation.
 
 ## RESP-WORK-CONNECTION-ENVIRONMENT
@@ -1854,3 +1857,14 @@ Explicit human-authorized correction of the separate transfer review:
 Correction evidence must reproduce the reviewed mismatch cases and demonstrate rejection
 before effects, state retention, and coherent resource identity across consumers with a
 non-default port behavior. This is not a change to lifecycle state-machine ownership.
+
+### CG-R1 correction contract — 2026-09-11
+
+RedisOutputEnvironment in redis-config owns the Controller output candidate and its
+startup/bootstrap projections under RESP-WORK-REDIS-OUTPUT-SETTINGS. Scalar write/target
+overrides use raw Spring property lookup before export; resolved values are validated
+by RedisConfigurationParser after connection freezing. Routes remain config-owned;
+environment route-list overrides are explicitly rejected using Spring canonical property
+presence before composition. Declared route placeholders resolve through final properties.
+Controller removes its Redis output field/export mapping and consumes this adapter owner.
+Both projections derive from the same candidate; no field rules move into Controller.

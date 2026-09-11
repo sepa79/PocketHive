@@ -82,9 +82,11 @@ The previous blanket exclusion of topology migration does not exclude this named
    [extraction evidence](boundary-design/b02/controller-work-composition-extraction.md).
    See [final correction review](boundary-design/b02/topology-tap-final-review.md).
    Full candidate validation is still item 2; the rest of B04 stays excluded.
-2. Rabbit AUTHORING semantics and Scenario neutral validation are implemented. Complete
-   Controller early full RESOLVED validation and remaining startup producers through the
-   same owners; this remains open rather than being inferred from the bounded transfer.
+2. Rabbit AUTHORING semantics and Scenario neutral validation are implemented.
+   Controller full RESOLVED validation has scoped acceptance in the
+   [final gate review](boundary-design/b02/controller-candidate-final-review.md); see
+   [candidate gate evidence](boundary-design/b02/controller-resolved-candidate.md). Remaining
+   startup producers still require reconciliation through the same owners.
 3. Reconcile the already implemented runtime gate and request-template transfers with
    all affected consumers and V04/V05 evidence; remove old paths in their transfer.
 4. Hand off complete B02 for separate review. Acceptance requires every row above,

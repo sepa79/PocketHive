@@ -27,6 +27,19 @@ public final class SpringConnectionEnvironment {
             PlaceholdersResolver.NONE);
     }
 
+    public static boolean containsPropertyTree(Map<String, String> environment, String prefix) {
+        var root = org.springframework.boot.context.properties.source.ConfigurationPropertyName.of(prefix);
+        var source = new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(environment));
+        for (var properties : ConfigurationPropertySources.from(source)) {
+            if (properties instanceof org.springframework.boot.context.properties.source.IterableConfigurationPropertySource names) {
+                for (var name : names) {
+                    if (root.equals(name) || root.isAncestorOf(name)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
     public static Function<String, String> resolved(Map<String, String> environment) {
         var source = new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(environment));
         var helper = new PropertyPlaceholderHelper(SystemPropertyUtils.PLACEHOLDER_PREFIX,

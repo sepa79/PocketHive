@@ -92,7 +92,7 @@ class SwarmLifecycleManagerTest {
   void startDeclaresQueuesStopLeavesResourcesRemoveCleansUp() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img1", Work.ofDefaults("qin", "qout"), null)
+        new Bee("generator", "img1", Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -182,8 +182,8 @@ class SwarmLifecycleManagerTest {
   void rejectsMultipleBeesSharingRole() {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, null), null),
-        new Bee("gen", "img2", Work.ofDefaults(null, null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("gen", "img2", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     assertThatThrownBy(() -> manager.start(mapper.writeValueAsString(plan)))
         .isInstanceOf(IllegalArgumentException.class)
@@ -197,7 +197,7 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", Work.ofDefaults("a", "b"),
-            Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"))));
+            Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -231,10 +231,8 @@ class SwarmLifecycleManagerTest {
   void rejectedRedisPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
     SwarmLifecycleManager manager = newManager();
     ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
-            Map.of("enabled", false)),
-        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(),
-            Map.of("outputs", Map.of("type", "REDIS", "redis", Map.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"), "enabled", false)),
+        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of(
                 "host", "redis", "port", 0, "ssl", false,
                 "sourceStep", "LAST", "pushDirection", "RPUSH", "maxLen", -1,
                 "defaultList", "out"))))), null, "accepted-sut"));
@@ -289,8 +287,9 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void selectorAndNullTuningRejectionsRetainAcceptedPlanWithoutEffects() throws Exception {
-    for (String invalidCase : List.of("input-selector", "output-selector", "null-input", "null-output")) {
+  void invalidWorkCandidatesRetainAcceptedPlanWithoutEffects() throws Exception {
+    for (String invalidCase : List.of("input-selector", "output-selector", "null-input", "null-output",
+        "missing-input", "unknown-output", "unselected-output", "invalid-redis-output", "redis-output-override")) {
       SwarmLifecycleManager manager = newManager();
       ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
           new Bee("processor", "img-proc", Work.ofDefaults("in", "out"), Map.of(),
@@ -311,6 +310,18 @@ class SwarmLifecycleManagerTest {
         case "output-selector" -> bee.withObject("env").put("POCKETHIVE_OUTPUTS_TYPE", "NONE");
         case "null-input" -> ((ObjectNode) bee.path("config").path("inputs")).putNull("rabbit");
         case "null-output" -> ((ObjectNode) bee.path("config").path("outputs")).putNull("rabbit");
+        case "missing-input" -> ((ObjectNode) bee.path("config")).remove("inputs");
+        case "unknown-output" -> ((ObjectNode) bee.path("config").path("outputs")).put("type", "UNKNOWN");
+        case "unselected-output" -> ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+            Map.of("type", "NONE", "rabbit", Map.of())));
+        case "invalid-redis-output" -> ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+            Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false))));
+        case "redis-output-override" -> {
+          ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+              Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
+                  "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
+          bee.withObject("env").put("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "INVALID");
+        }
         default -> throw new AssertionError(invalidCase);
       }
       plan.put("sutId", "rejected-sut");
@@ -330,8 +341,7 @@ class SwarmLifecycleManagerTest {
   void rejectedRabbitPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
     SwarmLifecycleManager manager = newManager();
     ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
-            Map.of("enabled", false)),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"), "enabled", false)),
         new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(),
             Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0)),
                 "outputs", Map.of("type", "NONE")))), null, "accepted-sut"));
@@ -389,10 +399,10 @@ class SwarmLifecycleManagerTest {
   void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-gen", Work.ofDefaults(null, "gen-out"), null),
-        new Bee("moderator", "img-mod", Work.ofDefaults("gen-out", "mod-out"), null),
-        new Bee("processor", "img-proc", Work.ofDefaults("mod-out", "final-out"), null),
-        new Bee("postprocessor", "img-post", Work.ofDefaults("final-out", null), null)));
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "gen-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("moderator", "img-mod", Work.ofDefaults("gen-out", "mod-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("processor", "img-proc", Work.ofDefaults("mod-out", "final-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("postprocessor", "img-post", Work.ofDefaults("final-out", null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
         .thenReturn("c1", "c2", "c3", "c4");
 
@@ -429,8 +439,7 @@ class SwarmLifecycleManagerTest {
             "processor",
             "img-proc",
             Work.ofDefaults("proc-in", null),
-            null,
-            Map.of(
+            Map.of("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "LPUSH"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
                 "outputs", Map.of(
                     "type", "REDIS",
                     "redis", Map.of(
@@ -451,8 +460,7 @@ class SwarmLifecycleManagerTest {
                         "maxLen", 100
                     )
                 )
-            )
-        )));
+            ))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -464,7 +472,7 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_HOST")).isEqualTo("redis");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PORT")).isEqualTo("6379");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP")).isEqualTo("FIRST");
-    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION")).isEqualTo("RPUSH");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION")).isEqualTo("LPUSH");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST")).isEqualTo("webauth.RED.custA");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE"))
         .isEqualTo("webauth.RED.{{ payloadAsJson.customerCode }}");
@@ -473,6 +481,20 @@ class SwarmLifecycleManagerTest {
         .isEqualTo("^webauth\\\\.RED\\\\.cust[A-E]$");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_LIST")).isEqualTo("webauth.BAL.shared");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_MAXLEN")).isEqualTo("100");
+    manager.updateHeartbeat("processor", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+    ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
+    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), anyString(), payloads.capture());
+    JsonNode bootstrap = null;
+    for (String payload : payloads.getAllValues()) {
+      JsonNode data = mapper.readTree(payload).path("data");
+      if (data.path("outputs").path("type").asText().equals("REDIS")) bootstrap = data;
+    }
+    assertThat(bootstrap).isNotNull();
+    assertThat(bootstrap.path("outputs").path("redis").path("pushDirection").asText())
+        .isEqualTo(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION"));
+    assertThat(bootstrap.path("outputs").path("redis").path("defaultList").asText())
+        .isEqualTo(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST"));
+
   }
 
   @Test
@@ -483,8 +505,7 @@ class SwarmLifecycleManagerTest {
             "generator",
             "img-gen",
             Work.ofDefaults(null, "gen-out"),
-            null,
-            Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"),
                 "inputs", Map.of(
                     "type", "REDIS_DATASET",
                     "redis", Map.of(
@@ -499,8 +520,7 @@ class SwarmLifecycleManagerTest {
                         )
                     )
                 )
-            )
-        )));
+            ))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -523,12 +543,11 @@ class SwarmLifecycleManagerTest {
   void rejectsRemovedInputControlsBeforeProvisioning() throws Exception {
     SwarmLifecycleManager manager = newManager();
     for (Bee bee : List.of(
-        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
-            Map.of("inputs", Map.of("csv", Map.of("enabled", false)))),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("csv", Map.of("enabled", false)))),
         new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
-            Map.of("POCKETHIVE_INPUTS_CSV_ENABLED", "false")),
+            Map.of("POCKETHIVE_INPUTS_CSV_ENABLED", "false"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
         new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
-            Map.of("POCKETHIVE_INPUTS_RABBIT_AUTOSTARTUP", "false")))) {
+            Map.of("POCKETHIVE_INPUTS_RABBIT_AUTOSTARTUP", "false"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))))) {
       String plan = mapper.writeValueAsString(new SwarmPlan("swarm", List.of(bee)));
       assertThatThrownBy(() -> manager.prepare(plan))
           .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("Input-local lifecycle");
@@ -590,7 +609,7 @@ class SwarmLifecycleManagerTest {
   void prepareRemovesLegacyBindingsOnSubsequentRuns() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults("in", "out"), null)));
+        new Bee("gen", "img1", Work.ofDefaults("in", "out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     Properties existing = new Properties();
     when(amqp.getQueueProperties(queue("in")))
@@ -623,7 +642,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -648,7 +667,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void heartbeatDoesNotPublishEnablement() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -663,8 +682,8 @@ class SwarmLifecycleManagerTest {
   void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, null), null),
-        new Bee("proc", "img2", Work.ofDefaults(null, null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("proc", "img2", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
 
@@ -694,9 +713,9 @@ class SwarmLifecycleManagerTest {
   void linearTopologyEnablesAndStopsInOrder() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, "a"), null),
-        new Bee("proc", "img2", Work.ofDefaults("a", "b"), null),
-        new Bee("sink", "img3", Work.ofDefaults("b", null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, "a"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("proc", "img2", Work.ofDefaults("a", "b"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("sink", "img3", Work.ofDefaults("b", null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
     when(docker.createAndStartContainer(eq("img3"), anyMap(), anyString(), any(), anyMap())).thenReturn("c3");
@@ -739,7 +758,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void staleHeartbeatRequestsStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
@@ -767,7 +786,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void readyForWorkRequiresAllExpectedWorkers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -783,7 +802,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -805,7 +824,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void snapshotQueueStatsReportsDepthConsumersAndOptionalAge() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     Properties qinProps = new Properties();
     qinProps.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 5);
@@ -862,7 +881,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void removeUnregistersQueueMetrics() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     Properties metrics = new Properties();
     metrics.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 3);
@@ -894,8 +913,8 @@ class SwarmLifecycleManagerTest {
   void startAssignsDistinctRuntimeInstancesForWorkersWithDistinctRolesWithoutBeeIdEnv() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator-alpha", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of()),
-        new Bee("generator-beta", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of())
+        new Bee("generator-alpha", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("generator-beta", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
         .thenReturn("c-alpha", "c-beta");
@@ -939,8 +958,7 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
                 "scheduler", Map.of("ratePerSec", 5d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
@@ -968,7 +986,9 @@ class SwarmLifecycleManagerTest {
   void startPublishesBootstrapConfigAndTracksPendingUntilReady() throws Exception {
     SwarmLifecycleManager manager = newManager();
     Map<String, Object> workerConfig = Map.of(
-        "workerOverrides", Map.of("custom", "value"));
+        "workerOverrides", Map.of("custom", "value"),
+        "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
+        "outputs", Map.of("type", "NONE"));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults(null, null), null, workerConfig)
     ));
@@ -981,6 +1001,8 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
     verify(docker).createAndStartContainer(eq("img1"), anyMap(), nameCaptor.capture(), any(), anyMap());
     String instanceName = nameCaptor.getValue();
+    ArgumentCaptor<Map<String, String>> environmentCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createAndStartContainer(eq("img1"), environmentCaptor.capture(), anyString(), any(), anyMap());
 
     manager.updateHeartbeat("generator", instanceName);
 
@@ -999,6 +1021,15 @@ class SwarmLifecycleManagerTest {
     assertThat(signal.path("scope").path("role").asText()).isEqualTo("generator");
     assertThat(signal.path("scope").path("instance").asText()).isEqualTo(instanceName);
     assertThat(data.path("workerOverrides").path("custom").asText()).isEqualTo("value");
+    var validation = new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
+        .workConfigurationParser().validate(mapper.convertValue(data, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}),
+            io.pockethive.work.config.WorkConfigurationMode.RESOLVED);
+    assertThat(validation.problems()).isEmpty();
+    assertThat(validation.deferredPaths()).isEmpty();
+    assertThat(environmentCaptor.getValue()).containsEntry("POCKETHIVE_INPUTS_TYPE", data.path("inputs").path("type").asText())
+        .containsEntry("POCKETHIVE_OUTPUTS_TYPE", data.path("outputs").path("type").asText());
+    assertThat(Double.parseDouble(environmentCaptor.getValue().get("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC")))
+        .isEqualTo(data.path("inputs").path("scheduler").path("ratePerSec").asDouble());
 
     assertTrue(manager.hasPendingConfigUpdates());
 
@@ -1022,8 +1053,7 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
                 "scheduler", Map.of("ratePerSec", 10d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
@@ -1061,8 +1091,7 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
                 "scheduler", Map.of("ratePerSec", 80d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
@@ -1100,11 +1129,10 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure("proc-out", 500, 250, 15));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
                 "scheduler", Map.of("ratePerSec", 20d, "maxMessages", 0)))),
-        new Bee("processor", "img2", Work.ofDefaults("gen-out", "proc-out"), null)
+        new Bee("processor", "img2", Work.ofDefaults("gen-out", "proc-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
