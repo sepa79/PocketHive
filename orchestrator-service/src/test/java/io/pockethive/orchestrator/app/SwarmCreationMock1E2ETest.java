@@ -55,7 +55,7 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Assumptions;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpAdmin;
+import io.pockethive.rabbit.api.RabbitResources;
 import org.springframework.amqp.core.AnonymousQueue;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.Binding;
@@ -130,7 +130,7 @@ class SwarmCreationMock1E2ETest {
     DockerContainerClient docker;
 
     @MockBean
-    AmqpAdmin amqpAdmin;
+    RabbitResources amqpAdmin;
 
     @Autowired
     TestRestTemplate rest;

@@ -25,22 +25,28 @@ class RepositoryImportBoundaryTest {
   // Current owners, not the final migration layout. Narrow these module scopes with each slice.
   private static final List<Rule> RULES = List.of(
       rule("core-no-infrastructure",
-          "common/(work-api|work-config|rabbit-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
+          "common/(work-api|work-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
               + "|topology-core|swarm-model|scenario-validation-contracts)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),
       rule("scenario-no-adapter-settings", "scenario-manager-service",
           "io\\.pockethive\\.(rabbit\\.config|redis\\.config|work\\.local)\\..*"),
+      rule("rabbit-resource-client-owner", outside("common/rabbit-adapter|e2e-tests"),
+          "org\\.springframework\\.amqp\\.(core\\.(AmqpAdmin|Queue|QueueBuilder|ExchangeBuilder|TopicExchange|Binding|BindingBuilder|Declarables)|rabbit\\.core\\.RabbitAdmin)"),
+      rule("rabbit-template-owner", outside("common/rabbit-adapter|e2e-tests"),
+          "org\\.springframework\\.amqp\\.(core\\.AmqpTemplate|rabbit\\.core\\.RabbitTemplate)"),
+      rule("rabbit-internals-owner", outside("common/rabbit-adapter"),
+          "io\\.pockethive\\.rabbit\\.(topology|transport|config)\\..*"),
+      rule("neutral-core-no-rabbit-implementation", "common/(control-plane-core|topology-core)",
+          "io\\.pockethive\\.rabbit\\..*"),
       rule("control-core-no-work", "common/control-plane-core",
           "io\\.pockethive\\.(work|worker)\\..*"),
-      rule("rabbit-spring-config-owner", outside("common/control-plane-spring"),
+      rule("rabbit-spring-config-owner", outside("common/rabbit-adapter"),
           "org\\.springframework\\.boot\\.autoconfigure\\.amqp\\..*"),
       rule("redis-client-owner", outside("common/(worker-sdk|templating)|e2e-tests"),
           "(io\\.lettuce|redis\\.clients)\\..*"),
-      rule("rabbit-client-owner",
-          outside("common/(worker-sdk|control-plane-spring)|orchestrator-service"
-              + "|swarm-controller-service|generator-service|e2e-tests"),
-          "com\\.rabbitmq\\..*|org\\.springframework\\.amqp\\.(?!rabbit\\.annotation\\.EnableRabbit$).*"),
+      rule("rabbit-client-owner", outside("common/rabbit-adapter|e2e-tests"),
+          "com\\.rabbitmq\\..*|org\\.springframework\\.amqp\\..*"),
       rule("docker-client-owner",
           outside("common/docker-client|orchestrator-service|swarm-controller-service|e2e-tests"),
           "com\\.github\\.dockerjava\\..*"),
@@ -88,7 +94,8 @@ class RepositoryImportBoundaryTest {
     assertThat(violations("processor-service", "import com.rabbitmq.client.*;"))
         .containsExactly("1 [rabbit-client-owner] com.rabbitmq.client.*");
     assertThat(violations("processor-service",
-        "import org.springframework.amqp.rabbit.annotation.EnableRabbit;")).isEmpty();
+        "import org.springframework.amqp.rabbit.annotation.EnableRabbit;"))
+        .containsExactly("1 [rabbit-client-owner] org.springframework.amqp.rabbit.annotation.EnableRabbit");
     assertThat(violations("new-service", "import org.junit.jupiter.api.Test;"))
         .containsExactly("1 [production-no-test-imports] org.junit.jupiter.api.Test");
   }

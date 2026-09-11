@@ -4,14 +4,19 @@ import io.pockethive.worker.sdk.config.RabbitOutputProperties;
 import io.pockethive.worker.sdk.config.WorkOutputConfig;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.core.Ordered;
 
+/**
+ * Responsibility: select the Rabbit output bridge for the worker definition.
+ * Must not: open broker clients or own setting rules.
+ * Contract: RESP-WORK-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-transport.
+ */
 public final class RabbitWorkOutputFactory implements WorkOutputFactory, Ordered {
 
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitPublisher rabbitTemplate;
 
-    public RabbitWorkOutputFactory(RabbitTemplate rabbitTemplate) {
+    public RabbitWorkOutputFactory(RabbitPublisher rabbitTemplate) {
         this.rabbitTemplate = rabbitTemplate;
     }
 
@@ -26,7 +31,7 @@ public final class RabbitWorkOutputFactory implements WorkOutputFactory, Ordered
             throw new IllegalStateException("Rabbit outputs require RabbitOutputProperties configuration");
         }
         if (rabbitTemplate == null) {
-            throw new IllegalStateException("RabbitTemplate is required for RabbitMQ outputs");
+            throw new IllegalStateException("RabbitPublisher is required for RabbitMQ outputs");
         }
         return new RabbitWorkOutput(rabbitTemplate, properties);
     }

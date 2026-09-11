@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.controlplane.spring.WorkerControlTopology;
+
 import io.pockethive.work.config.policy.WorkPatchPolicy;
 import io.pockethive.work.config.projection.WorkConfigurationRedactor;
 
@@ -120,7 +122,7 @@ public final class WorkerControlPlaneRuntime {
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         ControlPlaneIdentity identity,
-        WorkerControlPlaneProperties.ControlPlane controlPlane,
+        WorkerControlTopology controlPlane,
         TemplateRenderer templateRenderer,
         io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
         io.pockethive.work.config.WorkConfigurationParser workConfigurationParser
@@ -136,7 +138,7 @@ public final class WorkerControlPlaneRuntime {
         this.workConfigurationCandidateValidator = new WorkConfigurationCandidateValidator(
             Objects.requireNonNull(workConfigurationParser, "workConfigurationParser"));
         this.runtimeMeta = buildRuntimeMeta();
-        WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
+        WorkerControlTopology resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);

@@ -186,24 +186,7 @@ public final class RuntimeDebugContracts {
         }
     }
 
-    public record RabbitQueueSnapshot(
-        String name,
-        boolean present,
-        Long messages,
-        Integer consumers,
-        String state,
-        Boolean durable,
-        Boolean autoDelete,
-        Boolean diagnosticOnly,
-        String reason) {
-    }
 
-    public record RabbitExchangeSnapshot(
-        String name,
-        boolean present,
-        String type,
-        Boolean durable,
-        Boolean autoDelete,
-        String reason) {
-    }
+
+
 }

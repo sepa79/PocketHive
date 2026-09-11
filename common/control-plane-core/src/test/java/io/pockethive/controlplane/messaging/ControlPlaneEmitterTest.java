@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.messaging;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -42,7 +44,7 @@ class ControlPlaneEmitterTest {
         identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
         settings = new ControlPlaneTopologySettings("swarm-A", "ph.control", Map.of());
         emitter = ControlPlaneEmitter.worker(identity, publisher, settings,
-            Map.of("templateId", "tpl-1", "runId", "run-1"));
+            Map.of("templateId", "tpl-1", "runId", "run-1"), new RabbitResourceNames());
     }
 
     @Test
@@ -191,7 +193,7 @@ class ControlPlaneEmitterTest {
     void workerFactoryAcceptsArbitraryRoles() {
         ControlPlaneIdentity custom = new ControlPlaneIdentity("swarm-A", "custom-role", "worker-1");
         ControlPlaneEmitter customEmitter = ControlPlaneEmitter.worker(custom, publisher, settings,
-            Map.of("templateId", "tpl-1", "runId", "run-1"));
+            Map.of("templateId", "tpl-1", "runId", "run-1"), new RabbitResourceNames());
 
         ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> builder
             .enabled(true)

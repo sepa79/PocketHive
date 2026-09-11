@@ -44,7 +44,9 @@ This does not revoke historical scoped review evidence or accept full B02.
 ## Current interpretation
 
 The architecture plan is `docs/inProgress/work-plane-module-boundaries.md`; its execution
-sequence is under correction following the 2026-09-10 review above.
+sequence was replaced on 2026-09-11 by the human-approved single Rabbit module migration
+for both Work Plane and Control Plane. Old B02/B05 order and archived evidence are not
+implementation instructions. This supersedes earlier sequencing, not unresolved defects.
 CP-N01 is fixed and committed in `19d56091`; CP-N02–CP-N09 and the broader Rabbit/SSOT
 findings remain open. Those findings predate the sink-splitting phase. Accepted scoped
 extractions do not imply that every production sink has gone. `SwarmLifecycleSteps`

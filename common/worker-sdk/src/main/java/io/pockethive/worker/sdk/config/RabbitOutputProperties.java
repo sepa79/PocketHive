@@ -1,12 +1,14 @@
 package io.pockethive.worker.sdk.config;
 
 /**
- * RabbitMQ-specific output knobs bound from {@code pockethive.outputs.rabbit.*}.
+ * Responsibility: bind output properties and project canonical Rabbit settings.
+ * Must not: define defaults, normalize names or implement validation rules.
+ * Contract: docs/architecture/work-plane-boundaries.md#4-configuration-and-topology-ssot.
  */
 public class RabbitOutputProperties implements WorkOutputConfig {
 
-    private boolean persistent = true;
-    private boolean publisherConfirms = false;
+    private boolean persistent = io.pockethive.rabbit.api.RabbitOutputSettings.DEFAULT_PERSISTENT;
+    private boolean publisherConfirms = io.pockethive.rabbit.api.RabbitOutputSettings.DEFAULT_PUBLISHER_CONFIRMS;
     private String exchange;
     private String routingKey;
 
@@ -31,7 +33,7 @@ public class RabbitOutputProperties implements WorkOutputConfig {
     }
 
     public void setExchange(String exchange) {
-        this.exchange = normalise(exchange);
+        this.exchange = exchange;
     }
 
     public String getRoutingKey() {
@@ -39,14 +41,14 @@ public class RabbitOutputProperties implements WorkOutputConfig {
     }
 
     public void setRoutingKey(String routingKey) {
-        this.routingKey = normalise(routingKey);
+        this.routingKey = routingKey;
     }
 
-    private static String normalise(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    public io.pockethive.rabbit.api.RabbitOutputSettings settings() {
+        return io.pockethive.rabbit.api.RabbitConfiguration.resolveOutput(exchange, routingKey, persistent, publisherConfirms);
+    }
+    @Override public void validateConfigured(String prefix) {
+        var resolved = settings();
+        exchange = resolved.exchange(); routingKey = resolved.routingKey();
     }
 }

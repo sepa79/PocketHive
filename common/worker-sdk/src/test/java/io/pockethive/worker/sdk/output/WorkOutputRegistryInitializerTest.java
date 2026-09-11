@@ -17,7 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.core.Ordered;
@@ -59,7 +59,7 @@ class WorkOutputRegistryInitializerTest {
             "pockethive.outputs.rabbit.exchange", "exchange"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
-        RabbitTemplate rabbitTemplate = new RabbitTemplate();
+        RabbitPublisher rabbitTemplate = org.mockito.Mockito.mock(RabbitPublisher.class);
         List<WorkOutputFactory> factories = List.of(
             new NoopWorkOutputFactory(),
             new RabbitWorkOutputFactory(rabbitTemplate)

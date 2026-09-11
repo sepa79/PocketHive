@@ -19,7 +19,7 @@ import java.util.Set;
 /**
  * Responsibility: Project the scenario topology and materialized worker identities into status work bindings.
  * Must not: Mutate runtime state, declare topology, publish status, or infer missing worker identities.
- * Resource names come only from the injected WorkResourceNamesPort.
+ * Resource addresses come only from WorkResourceNamesPort; routing keys must not be inferred from queues.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  * Behavior: Preserve scenario edge order and map each valid endpoint through the canonical traffic queue settings.
  */
@@ -150,7 +150,8 @@ final class SwarmWorkBindingsProjector {
       if (ports != null && !ports.isEmpty()) {
         String suffix = ports.get(endpoint.port());
         if (hasText(suffix)) {
-          payload.put(source ? ROUTING_KEY : QUEUE, workNames.queueName(traffic.queuePrefix(), suffix));
+          var address = workNames.address(traffic.hiveExchange(), traffic.queuePrefix(), suffix);
+          payload.put(source ? ROUTING_KEY : QUEUE, source ? address.routingKey() : address.queue());
         }
       }
     }

@@ -11,8 +11,7 @@ import io.pockethive.work.api.WorkerInfo;
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
+import io.pockethive.rabbit.api.RabbitMessage;
 
 class RabbitWorkItemConverterTest {
 
@@ -29,14 +28,19 @@ class RabbitWorkItemConverterTest {
             .observabilityContext(observability)
             .build();
 
-        Message amqpMessage = converter.toMessage(original);
-        assertThat(amqpMessage.getMessageProperties().getContentType()).isEqualTo(MessageProperties.CONTENT_TYPE_JSON);
-        assertThat(amqpMessage.getMessageProperties().getMessageId()).isNull();
-        assertThat(amqpMessage.getMessageProperties().getHeaders()).isEmpty();
+        RabbitMessage amqpMessage = converter.toMessage(original);
+        assertThat(amqpMessage.contentType()).isEqualTo(RabbitMessage.JSON);
+        assertThat(amqpMessage.headers()).isEmpty();
 
+        var transportHeaders = new java.util.HashMap<String, Object>();
+        transportHeaders.put("nullable", null);
+        transportHeaders.put("x-test", "transport value must not override the envelope");
+        amqpMessage = new RabbitMessage(amqpMessage.body(), transportHeaders, amqpMessage.contentType(),
+            amqpMessage.contentEncoding(), amqpMessage.persistent(), amqpMessage.receivedRoutingKey());
         WorkItem roundTrip = converter.fromMessage(amqpMessage);
         assertThat(roundTrip.asJsonNode()).isEqualTo(original.asJsonNode());
         assertThat(roundTrip.headers()).containsEntry("x-test", "value");
+        assertThat(roundTrip.headers()).doesNotContainKey("nullable");
         assertThat(roundTrip.messageId()).isEqualTo("msg-123");
         assertThat(roundTrip.contentType()).isEqualTo("application/json");
         assertThat(roundTrip.observabilityContext()).isPresent();
@@ -53,7 +57,7 @@ class RabbitWorkItemConverterTest {
         WorkItem withTemplate = seed.addStep(info, "templated", Map.of());
         WorkItem withHttp = withTemplate.addStep(info, "{\"path\":\"/test\",\"method\":\"POST\"}", Map.of());
 
-        Message amqpMessage = converter.toMessage(withHttp);
+        RabbitMessage amqpMessage = converter.toMessage(withHttp);
         WorkItem roundTrip = converter.fromMessage(amqpMessage);
 
         assertThat(roundTrip.payload()).isEqualTo(withHttp.payload());
@@ -66,9 +70,7 @@ class RabbitWorkItemConverterTest {
 
     @Test
     void rejectsInboundAmqpBodyThatViolatesTheCanonicalSchema() {
-        MessageProperties properties = new MessageProperties();
-        properties.setContentType(MessageProperties.CONTENT_TYPE_JSON);
-        Message invalid = new Message("{}".getBytes(StandardCharsets.UTF_8), properties);
+        RabbitMessage invalid = RabbitMessage.json("{}".getBytes(StandardCharsets.UTF_8), true);
 
         assertThatThrownBy(() -> converter.fromMessage(invalid))
             .isInstanceOf(WorkItemContractException.class)

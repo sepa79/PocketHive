@@ -1,7 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
+import io.pockethive.orchestrator.runtime.RabbitTopologyPort;
 import io.pockethive.swarm.model.lifecycle.RemoveError;
 import io.pockethive.swarm.model.lifecycle.RemoveResource;
 import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
@@ -12,7 +12,11 @@ import java.util.Objects;
 import java.util.Set;
 import org.springframework.stereotype.Service;
 
-/** Sole evaluator of runtime and RabbitMQ absence postconditions for swarm removal. */
+/**
+ * Responsibility: verify absence of runtime and explicitly scoped Rabbit removal targets.
+ * Must not: infer success from attempted deletion or inspect a different resource plane.
+ * Contract: docs/spec/swarm-lifecycle.schema.json#/$defs/RemoveResult.
+ */
 @Service
 public final class RuntimeRemovalPostconditionVerifier {
 
@@ -26,7 +30,7 @@ public final class RuntimeRemovalPostconditionVerifier {
     this.rabbitTopology = Objects.requireNonNull(rabbitTopology, "rabbitTopology");
   }
 
-  public Verification verifyAbsent(List<RemoveResource> targets) {
+  public RuntimeRemovalVerification verifyAbsent(List<RemoveResource> targets) {
     Objects.requireNonNull(targets, "targets");
     List<RemoveResource> uniqueTargets = List.copyOf(new LinkedHashSet<>(targets));
     Set<String> runtimeIds = runtimeIds(uniqueTargets);
@@ -44,8 +48,8 @@ public final class RuntimeRemovalPostconditionVerifier {
             }
             yield runtimeObservation.presentRuntimeIds().contains(target.id());
           }
-          case RABBIT_QUEUE -> rabbitTopology.queue(target.id()).isPresent();
-          case RABBIT_EXCHANGE -> rabbitTopology.exchange(target.id()).isPresent();
+          case RABBIT_QUEUE -> rabbitTopology.queue(target.plane(), target.id()).isPresent();
+          case RABBIT_EXCHANGE -> rabbitTopology.exchange(target.plane(), target.id()).isPresent();
           case RABBIT_BINDING -> throw new IllegalArgumentException(
               "Rabbit binding absence is not observable by the configured topology port");
           case NETWORK_BINDING, RUNTIME_DIRECTORY, REGISTRY_ENTRY, TERMINAL_EVIDENCE -> throw new IllegalArgumentException(
@@ -68,7 +72,7 @@ public final class RuntimeRemovalPostconditionVerifier {
             target));
       }
     }
-    return new Verification(removed, remaining, errors);
+    return new RuntimeRemovalVerification(removed, remaining, errors);
   }
 
   private RuntimeObservation observeRuntime(Set<String> targetIds) {
@@ -101,19 +105,4 @@ public final class RuntimeRemovalPostconditionVerifier {
   private record RuntimeObservation(Set<String> presentRuntimeIds, RuntimeException failure) {
   }
 
-  public record Verification(
-      List<RemoveResource> removedResources,
-      List<RemoveResource> remainingResources,
-      List<RemoveError> errors) {
-
-    public Verification {
-      removedResources = List.copyOf(removedResources);
-      remainingResources = List.copyOf(remainingResources);
-      errors = List.copyOf(errors);
-    }
-
-    public boolean succeeded() {
-      return remainingResources.isEmpty() && errors.isEmpty();
-    }
-  }
 }

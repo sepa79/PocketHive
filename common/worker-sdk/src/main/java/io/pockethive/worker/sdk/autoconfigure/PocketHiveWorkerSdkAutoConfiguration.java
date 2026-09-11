@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.autoconfigure;
 
+import io.pockethive.controlplane.spring.WorkerControlTopology;
+
 import io.pockethive.templating.api.SequenceAccess;
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 
@@ -21,7 +23,6 @@ import io.pockethive.worker.sdk.input.WorkInputLifecycle;
 import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
 import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputFactory;
-import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputListenerConfigurer;
 import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
 import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetWorkInputFactory;
@@ -62,8 +63,6 @@ import org.springframework.beans.factory.config.ConfigurableListableBeanFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.amqp.rabbit.annotation.RabbitListenerConfigurer;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.context.properties.bind.Binder;
@@ -71,13 +70,17 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.ConfigurableEnvironment;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
+import io.pockethive.rabbit.api.RabbitListeners;
 
 /**
  * Aggregates the PocketHive control-plane auto-configuration so worker applications can
  * opt-in by depending on the Worker SDK starter.
  */
-@org.springframework.boot.autoconfigure.AutoConfigureAfter(org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration.class)
+@org.springframework.boot.autoconfigure.AutoConfigureAfter(name = {
+    "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration",
+    "io.pockethive.rabbit.transport.RabbitTransportAutoConfiguration"
+})
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({
     WorkerInputTypeProperties.class,
@@ -212,7 +215,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        ObjectProvider<ObjectMapper> objectMapperProvider
 	    ) {
 	        ObjectMapper mapper = objectMapperProvider.getIfAvailable(() -> new ObjectMapper().findAndRegisterModules());
-	        WorkerControlPlaneProperties.ControlPlane controlPlane = Objects
+	        WorkerControlTopology controlPlane = Objects
 	            .requireNonNull(workerControlPlaneProperties, "workerControlPlaneProperties must not be null")
 	            .getControlPlane();
 	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
@@ -226,6 +229,17 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnMissingBean(WorkerControlQueueListener.class)
     WorkerControlQueueListener workerControlQueueListener(WorkerControlPlaneRuntime controlPlaneRuntime) {
         return new WorkerControlQueueListener(controlPlaneRuntime);
+    }
+
+    @Bean
+    @ConditionalOnBean(WorkerControlPlaneRuntime.class)
+    io.pockethive.rabbit.api.RabbitListenerBinding workerControlRabbitBinding(
+        WorkerControlQueueListener listener,
+        io.pockethive.controlplane.spring.ControlPlaneRabbitBindings bindings,
+        @org.springframework.beans.factory.annotation.Qualifier("workerControlQueueName") String queue) {
+        return bindings.bind("workerControl", queue, message -> listener.onControl(
+            message.text(), message.receivedRoutingKey(),
+            (String) message.headers().get(io.pockethive.observability.ObservabilityContextUtil.HEADER)));
     }
 
     @Bean
@@ -283,9 +297,9 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean(RabbitTemplate.class)
+    @ConditionalOnBean(RabbitPublisher.class)
     @ConditionalOnProperty(prefix = "pockethive.outputs", name = "type", havingValue = "RABBITMQ")
-    WorkOutputFactory rabbitWorkOutputFactory(RabbitTemplate rabbitTemplate) {
+    WorkOutputFactory rabbitWorkOutputFactory(@org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER) RabbitPublisher rabbitTemplate) {
         return new RabbitWorkOutputFactory(rabbitTemplate);
     }
 
@@ -312,16 +326,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class, RabbitTemplate.class, RabbitListenerEndpointRegistry.class})
+    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class, RabbitListeners.class})
     @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "RABBITMQ")
     io.pockethive.worker.sdk.input.WorkInputFactory rabbitWorkInputFactory(
         WorkerRuntime workerRuntime,
         WorkerControlPlaneRuntime controlPlaneRuntime,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        RabbitTemplate rabbitTemplate,
-        RabbitListenerEndpointRegistry listenerRegistry
+        RabbitListeners listeners
     ) {
-        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, rabbitTemplate, listenerRegistry);
+        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, listeners);
     }
 
     @Bean
@@ -344,22 +357,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity
     ) {
         return new CsvDataSetWorkInputFactory(workerRuntime, controlPlaneRuntime, identity);
-    }
-
-    @Bean
-    @ConditionalOnBean({WorkerRegistry.class, WorkInputRegistry.class})
-    RabbitListenerConfigurer rabbitWorkInputListenerConfigurer(
-        WorkerRegistry workerRegistry,
-        WorkInputRegistry workInputRegistry
-    ) {
-        return new RabbitWorkInputListenerConfigurer(workerRegistry, workInputRegistry);
-    }
-
-    @Bean
-    @ConditionalOnBean(RabbitListenerEndpointRegistry.class)
-    @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "RABBITMQ")
-    VirtualThreadRabbitContainerCustomizer virtualThreadRabbitContainerCustomizer() {
-        return new VirtualThreadRabbitContainerCustomizer();
     }
 
     @Bean

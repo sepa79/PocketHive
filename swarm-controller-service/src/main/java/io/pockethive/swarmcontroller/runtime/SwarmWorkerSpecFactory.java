@@ -17,7 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnections;
 
 /**
  * Responsibility: assemble worker identity, base environment, SUT context, mounts and the delegated Work result into a spec.
@@ -29,7 +29,7 @@ public final class SwarmWorkerSpecFactory {
 
   private final SwarmControllerProperties properties;
   private final WorkerSettings workerSettings;
-  private final RabbitConnectionSettings rabbitConnection;
+  private final RabbitConnections rabbitConnection;
   private final Supplier<String> controlNetwork;
   private final Supplier<String> templateId;
   private final ClickHouseSinkProperties clickHouseSink;
@@ -39,7 +39,7 @@ public final class SwarmWorkerSpecFactory {
   public SwarmWorkerSpecFactory(
       SwarmControllerProperties properties,
       WorkerSettings workerSettings,
-      RabbitConnectionSettings rabbitConnection,
+      RabbitConnections rabbitConnection,
       Supplier<String> controlNetwork,
       ClickHouseSinkProperties clickHouseSink,
       RuntimeFilesystemMount runtimeFilesystemMount,

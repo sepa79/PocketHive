@@ -10,8 +10,8 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -59,13 +59,13 @@ public class ManagerControlPlaneAutoConfiguration {
 
     @Bean(name = "managerControlPlaneDeclarables")
     @ConditionalOnMissingBean(name = "managerControlPlaneDeclarables")
-    Declarables managerControlPlaneDeclarables(
+    RabbitTopologySpec managerControlPlaneDeclarables(
         @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
         ControlPlaneTopologyDeclarableFactory factory,
-        TopicExchange controlPlaneExchange) {
+        RabbitExchangeSpec controlPlaneExchange) {
         if (!properties.isDeclareTopology() || !properties.getManager().isDeclareTopology()) {
-            return new Declarables(List.of());
+            return new RabbitTopologySpec(List.of(), List.of());
         }
         return factory.create(descriptor, identity, controlPlaneExchange);
     }

@@ -19,11 +19,8 @@ import io.pockethive.swarmcontroller.runtime.SwarmJournalEntries;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 import java.util.Objects;
@@ -84,8 +81,7 @@ public class SwarmSignalListener {
     this.configUpdates = Objects.requireNonNull(configUpdates, "configUpdates");
   }
 
-  @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{swarmControllerControlQueueName}")
-  public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
+  public void handle(String body, String routingKey) {
     // Control-plane messages must never be requeued on failures: ACK (drop) always to avoid storms.
     try {
       if (routingKey == null || routingKey.isBlank()) {

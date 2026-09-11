@@ -9,8 +9,8 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.PocketHiveWorker;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -20,7 +20,8 @@ class WorkControlCompositionTest {
         return new ApplicationContextRunner()
             .withConfiguration(AutoConfigurations.of(org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class))
             .withBean(ObjectMapper.class, ObjectMapper::new)
-            .withBean(RabbitTemplate.class, () -> mock(RabbitTemplate.class))
+            .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> org.mockito.Mockito.mock(RabbitPublisher.class))
+            .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER, RabbitPublisher.class, () -> mock(RabbitPublisher.class))
             .withBean("compositionWorker", CompositionWorker.class)
             .withPropertyValues(
                 "spring.rabbitmq.listener.simple.auto-startup=false",
@@ -41,7 +42,7 @@ class WorkControlCompositionTest {
     void schedulerWithoutOutputStartsWithControlDeclarationsAndNoWorkRabbitSettings() {
         workerContext().run(context -> {
             assertThat(context).hasNotFailed();
-            assertThat(context.getBean("workerControlPlaneDeclarables", Declarables.class).getDeclarables()).isNotEmpty();
+            assertThat(context.getBean("workerControlPlaneDeclarables", RabbitTopologySpec.class).queues()).isNotEmpty();
             assertThat(context.getEnvironment().getProperty("pockethive.outputs.rabbit.exchange")).isNull();
             assertThat(context.getEnvironment().getProperty("pockethive.inputs.rabbit.queue")).isNull();
         });

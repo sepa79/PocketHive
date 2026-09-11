@@ -17,10 +17,7 @@ import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.beans.factory.annotation.Qualifier;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
 /**
@@ -56,8 +53,7 @@ public class SwarmSignalListener {
     this.journalErrors = new ControlPlaneJournalErrors(hiveJournal, ROLE, "swarm-signal-listener");
   }
 
-  @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{managerControlQueueName}")
-  public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
+  public void handle(String body, String routingKey) {
     try {
       RoutingKey key = requireEventKey(routingKey);
       ControlPlaneEnvelope envelope = codec.decode(body, routingKey);

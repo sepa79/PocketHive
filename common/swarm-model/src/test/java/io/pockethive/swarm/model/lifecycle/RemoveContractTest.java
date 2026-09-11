@@ -60,7 +60,7 @@ class RemoveContractTest {
   @Test
   void resultCopiesEvidenceCollections() {
     List<RemoveResource> targets = new ArrayList<>();
-    targets.add(new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1"));
+    targets.add(new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE));
 
     RemoveResult result = RemoveResult.succeeded(
         "alpha", "run-1", "alpha-controller-1", "correlation-1", "idempotency-1", targets, NOW);
@@ -69,4 +69,17 @@ class RemoveContractTest {
     assertEquals(1, result.targetResources().size());
     assertThrows(UnsupportedOperationException.class, () -> result.targetResources().clear());
   }
+  @Test
+  void jsonRequiresPlaneAndRejectsPlaneIncompatibleWithResourceType() throws Exception {
+    var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+    assertThrows(com.fasterxml.jackson.databind.JsonMappingException.class,
+        () -> mapper.readValue("{\"type\":\"RABBIT_QUEUE\",\"id\":\"jobs\"}", RemoveResource.class));
+    assertThrows(com.fasterxml.jackson.databind.JsonMappingException.class,
+        () -> mapper.readValue("{\"type\":\"RABBIT_QUEUE\",\"id\":\"jobs\",\"plane\":\"NONE\"}", RemoveResource.class));
+    assertThrows(IllegalArgumentException.class,
+        () -> new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker", ResourcePlane.CONTROL));
+    var expected = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", ResourcePlane.CONTROL);
+    assertEquals(expected, mapper.readValue(mapper.writeValueAsString(expected), RemoveResource.class));
+  }
+
 }

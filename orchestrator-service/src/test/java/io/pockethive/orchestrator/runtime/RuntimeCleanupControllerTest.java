@@ -9,7 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.orchestrator.app.JacksonConfiguration;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Candidate;
+import io.pockethive.orchestrator.runtime.Candidate;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Plan;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.PlanRequest;
 import java.util.List;
@@ -57,7 +57,7 @@ class RuntimeCleanupControllerTest {
                 true,
                 true,
                 "registered swarm lifecycle cleanup",
-                Map.of())),
+                Map.of(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE)),
             List.of());
         when(service.plan(any(PlanRequest.class))).thenReturn(response);
 

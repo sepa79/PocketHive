@@ -39,32 +39,9 @@ public final class RuntimeCleanupContracts {
         List<Blocked> blocked) {
     }
 
-    public record Candidate(
-        String candidateId,
-        RuntimeCleanupAction action,
-        String resourceId,
-        String resourceType,
-        String resourceKind,
-        String role,
-        String instance,
-        String state,
-        String image,
-        Long queueDepth,
-        Integer consumers,
-        boolean running,
-        boolean highRisk,
-        String reason,
-        Map<String, String> labels) {
-    }
 
-    public record Blocked(
-        String candidateId,
-        RuntimeCleanupAction action,
-        String resourceId,
-        String resourceType,
-        String reason,
-        Map<String, String> labels) {
-    }
+
+
 
     public record ExecuteResponse(boolean idempotent, Evidence evidence) {
     }
@@ -83,13 +60,5 @@ public final class RuntimeCleanupContracts {
         List<String> errors) {
     }
 
-    public record CandidateResult(
-        String candidateId,
-        RuntimeCleanupAction action,
-        String resourceId,
-        RuntimeCleanupStatus status,
-        String correlationId,
-        String operationUrl,
-        String error) {
-    }
+
 }

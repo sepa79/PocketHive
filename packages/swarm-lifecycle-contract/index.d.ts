@@ -112,9 +112,12 @@ export type SwarmStateView = {
 
 export type RemoveResourceType = "CONTROLLER_RUNTIME" | "WORKER_RUNTIME" | "RABBIT_QUEUE" | "RABBIT_EXCHANGE" | "RABBIT_BINDING" | "NETWORK_BINDING" | "RUNTIME_DIRECTORY" | "REGISTRY_ENTRY" | "TERMINAL_EVIDENCE"
 
+export type ResourcePlane = "CONTROL" | "WORK" | "NONE"
+
 export type RemoveResource = {
   readonly "type": RemoveResourceType
   readonly "id": NonEmptyString
+  readonly "plane": ResourcePlane
 }
 
 export type RemoveError = {
@@ -161,6 +164,7 @@ export const lifecycleEnumValues: Readonly<{
   OperationState: readonly OperationState[]
   TerminalStatus: readonly TerminalStatus[]
   RemoveResourceType: readonly RemoveResourceType[]
+  ResourcePlane: readonly ResourcePlane[]
 }>
 
 export function parseControlResponse(value: unknown): Readonly<ControlResponse>

@@ -129,13 +129,7 @@ final class WorkerDefinitionDiscovery {
                 throw new IllegalStateException(
                     "Rabbit inputs require " + RabbitInputProperties.class.getSimpleName() + " configuration");
             }
-            String queue = normalise(rabbit.getQueue());
-            if (queue == null) {
-                throw new IllegalStateException(
-                    "Rabbit workers must configure an input queue via %s.queue".formatted(
-                        inputBinder.prefix(inputType)));
-            }
-            inQueue = queue;
+            inQueue = rabbit.settings().queue();
         }
         String outQueue = null;
         String exchange = null;
@@ -144,20 +138,9 @@ final class WorkerDefinitionDiscovery {
                 throw new IllegalStateException(
                     "Rabbit outputs require " + RabbitOutputProperties.class.getSimpleName() + " configuration");
             }
-            String routingKey = normalise(rabbit.getRoutingKey());
-            String configuredExchange = normalise(rabbit.getExchange());
-            if (routingKey == null) {
-                throw new IllegalStateException(
-                    "Rabbit workers must configure an output routing key via %s.routingKey".formatted(
-                        outputBinder.prefix(outputType)));
-            }
-            if (configuredExchange == null) {
-                throw new IllegalStateException(
-                    "Rabbit workers must configure an output exchange via %s.exchange".formatted(
-                        outputBinder.prefix(outputType)));
-            }
-            outQueue = routingKey;
-            exchange = configuredExchange;
+            var settings = rabbit.settings();
+            outQueue = settings.routingKey();
+            exchange = settings.exchange();
         }
         return new WorkIoBindings(inQueue, outQueue, exchange);
     }
@@ -200,11 +183,4 @@ final class WorkerDefinitionDiscovery {
         return outputTypeProperties.getType();
     }
 
-    private static String normalise(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
 }

@@ -1,5 +1,9 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.payload.JsonFixtureAssertions;
@@ -28,6 +32,29 @@ class ControlPlaneTopologyDescriptorsTest {
         new ControlPlaneTopologySettings(SWARM_ID, CONTROL_QUEUE_PREFIX, Map.of());
 
     @Test
+    void physicalNamesComeFromThePortWithoutChangingControlRecipients() {
+        var names = new ControlResourceNamesPort() {
+            @Override public String workerControlQueue(String prefix, String swarm, String role, String instance) {
+                assertThat(List.of(prefix, swarm, role, instance)).containsExactly(CONTROL_QUEUE_PREFIX, SWARM_ID, "processor", INSTANCE);
+                return "externally.resolved.queue";
+            }
+            @Override public String swarmControllerQueue(String prefix, String swarm, String role, String instance) {
+                throw new AssertionError("Unexpected controller naming");
+            }
+            @Override public String managerControlQueue(String prefix, String role, String instance) {
+                throw new AssertionError("Unexpected manager naming");
+            }
+            @Override public String controllerStatusQueue(String prefix, String instance) {
+                throw new AssertionError("Unexpected status naming");
+            }
+        };
+        var descriptor = new WorkerControlPlaneTopologyDescriptor("processor", SETTINGS, names);
+        var queue = requireQueue(descriptor);
+        assertThat(queue.name()).isEqualTo("externally.resolved.queue");
+        assertThat(queue.signalBindings()).containsExactlyInAnyOrderElementsOf(expectedWorkerSignals("processor", INSTANCE));
+    }
+
+    @Test
     void processorDescriptorMatchesRabbitConfig() {
         WorkerControlPlaneTopologyDescriptor descriptor = workerDescriptor("processor");
 
@@ -54,8 +81,8 @@ class ControlPlaneTopologyDescriptorsTest {
         document.put("trigger", describe(workerDescriptor("trigger")));
         document.put("moderator", describe(workerDescriptor("moderator")));
         document.put("postprocessor", describe(workerDescriptor("postprocessor")));
-        document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS)));
-        document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor(SETTINGS)));
+        document.put("swarmController", describe(new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS, new RabbitResourceNames())));
+        document.put("orchestrator", describe(new OrchestratorControlPlaneTopologyDescriptor(SETTINGS, new RabbitResourceNames())));
         document.put("scenarioManager", describe(new ScenarioManagerTopologyDescriptor()));
 
         String json = MAPPER.writeValueAsString(document);
@@ -118,7 +145,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void swarmControllerDescriptorMatchesRabbitConfig() {
-        SwarmControllerControlPlaneTopologyDescriptor descriptor = new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS);
+        SwarmControllerControlPlaneTopologyDescriptor descriptor = new SwarmControllerControlPlaneTopologyDescriptor(SETTINGS, new RabbitResourceNames());
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -164,7 +191,7 @@ class ControlPlaneTopologyDescriptorsTest {
 
     @Test
     void orchestratorDescriptorMatchesRabbitConfig() {
-        OrchestratorControlPlaneTopologyDescriptor descriptor = new OrchestratorControlPlaneTopologyDescriptor(SETTINGS);
+        OrchestratorControlPlaneTopologyDescriptor descriptor = new OrchestratorControlPlaneTopologyDescriptor(SETTINGS, new RabbitResourceNames());
 
         ControlQueueDescriptor queue = requireQueue(descriptor);
         assertThat(queue.name())
@@ -220,7 +247,7 @@ class ControlPlaneTopologyDescriptorsTest {
     }
 
     private static WorkerControlPlaneTopologyDescriptor workerDescriptor(String role) {
-        return new WorkerControlPlaneTopologyDescriptor(role, SETTINGS);
+        return new WorkerControlPlaneTopologyDescriptor(role, SETTINGS, new RabbitResourceNames());
     }
 
     private Map<String, Object> describe(ControlQueueDescriptor queue) {

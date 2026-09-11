@@ -93,7 +93,7 @@ public class SwarmRemovalConvergenceHandler {
     Swarm swarm = store.find(operation.swarmId()).orElse(null);
     RemoveResource controller = new RemoveResource(
         RemoveResourceType.CONTROLLER_RUNTIME,
-        swarm == null ? operation.target().instance() : swarm.getContainerId());
+        swarm == null ? operation.target().instance() : swarm.getContainerId(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     TerminalResult terminal = new TerminalResult(
         TerminalStatus.FAILED,
         true,
@@ -139,7 +139,7 @@ public class SwarmRemovalConvergenceHandler {
       } else {
         RemoveResource networkBinding = new RemoveResource(
             RemoveResourceType.NETWORK_BINDING,
-            operation.swarmId());
+            operation.swarmId(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
         try {
           networkBindings.clearBindingAndVerifyAbsent(
               operation.swarmId(),
@@ -192,7 +192,7 @@ public class SwarmRemovalConvergenceHandler {
     if (status == TerminalStatus.SUCCEEDED) {
       RemoveResource terminalEvidence = new RemoveResource(
           RemoveResourceType.TERMINAL_EVIDENCE,
-          operation.correlationId());
+          operation.correlationId(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
       removed.add(terminalEvidence);
       context = removeContext(result.controllerInstance(), removed, remaining, errors);
       terminal = new TerminalResult(status, retryable, context);
@@ -238,8 +238,8 @@ public class SwarmRemovalConvergenceHandler {
   }
 
   private CleanupResult removeRuntimeDirectoryAndRegistry(String swarmId) {
-    RemoveResource runtimeDirectory = new RemoveResource(RemoveResourceType.RUNTIME_DIRECTORY, swarmId);
-    RemoveResource registryEntry = new RemoveResource(RemoveResourceType.REGISTRY_ENTRY, swarmId);
+    RemoveResource runtimeDirectory = new RemoveResource(RemoveResourceType.RUNTIME_DIRECTORY, swarmId, io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
+    RemoveResource registryEntry = new RemoveResource(RemoveResourceType.REGISTRY_ENTRY, swarmId, io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     List<RemoveResource> removed = new ArrayList<>();
     List<RemoveResource> remaining = new ArrayList<>();
     List<RemoveError> errors = new ArrayList<>();

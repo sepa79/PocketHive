@@ -2,36 +2,28 @@ package io.pockethive.controlplane.spring;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import java.util.Optional;
-import org.springframework.amqp.rabbit.listener.ConditionalRejectingErrorHandler;
-import org.springframework.amqp.rabbit.support.ListenerExecutionFailedException;
+import java.util.function.Predicate;
 
 /**
  * Responsibility: classify fatal Control Plane decoding failures.
  * Must not: retry malformed envelopes or decide Work delivery policy.
  * Contract: RESP-CP-LISTENER-POLICY — docs/architecture/runtime-responsibilities.md#resp-cp-listener-policy.
  */
-final class ControlPlaneFatalExceptionStrategy extends ConditionalRejectingErrorHandler.DefaultExceptionStrategy {
+final class ControlPlaneFatalExceptionStrategy implements Predicate<Throwable> {
 
     @Override
-    public boolean isFatal(Throwable throwable) {
+    public boolean test(Throwable throwable) {
         if (throwable == null) {
             return false;
         }
-        Throwable candidate = unwrapListenerException(throwable);
+        Throwable candidate = throwable;
         if (findCause(candidate, JsonProcessingException.class).isPresent()) {
             return true;
         }
         if (findCause(candidate, IllegalArgumentException.class).isPresent()) {
             return true;
         }
-        return super.isFatal(throwable);
-    }
-
-    private static Throwable unwrapListenerException(Throwable throwable) {
-        if (throwable instanceof ListenerExecutionFailedException failed && failed.getCause() != null) {
-            return failed.getCause();
-        }
-        return throwable;
+        return false;
     }
 
     private static <T extends Throwable> Optional<T> findCause(Throwable throwable, Class<T> type) {

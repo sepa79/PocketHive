@@ -13,15 +13,14 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.MessageProperties;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitMessage;
+import io.pockethive.rabbit.api.RabbitPublisher;
 
 class RabbitWorkOutputTest {
 
     @Test
     void publishesWorkItemEnvelopeAsJson() {
-        RabbitTemplate template = mock(RabbitTemplate.class);
+        RabbitPublisher template = mock(RabbitPublisher.class);
         RabbitOutputProperties properties = new RabbitOutputProperties();
         properties.setExchange("ex");
         properties.setRoutingKey("rk");
@@ -30,7 +29,7 @@ class RabbitWorkOutputTest {
         // Later mutations of the source settings/template cannot redirect this output instance.
         properties.setExchange("changed");
         properties.setRoutingKey("changed");
-        template.setExchange("control-default");
+        properties.setPublisherConfirms(true);
 
         WorkerInfo info = new WorkerInfo("processor", "swarm", "instance", null, null);
         WorkItem outbound = WorkItem.json(info, Map.of("status", 200))
@@ -42,11 +41,27 @@ class RabbitWorkOutputTest {
         WorkerDefinition definition = mock(WorkerDefinition.class);
         output.publish(outbound, definition);
 
-        ArgumentCaptor<Message> captor = ArgumentCaptor.forClass(Message.class);
+        ArgumentCaptor<RabbitMessage> captor = ArgumentCaptor.forClass(RabbitMessage.class);
         verify(template).send(eq("ex"), eq("rk"), captor.capture());
-        Message sent = captor.getValue();
-        MessageProperties props = sent.getMessageProperties();
-        assertThat(props.getContentType()).isEqualTo("application/json");
-        assertThat(props.getHeaders()).isEmpty();
+        RabbitMessage sent = captor.getValue();
+        assertThat(sent.contentType()).isEqualTo("application/json");
+        assertThat(sent.headers()).isEmpty();
     }
+    @Test
+    void publisherConfirmsSettingRetainsSubmissionOnlyBehavior() {
+        var publisher = mock(RabbitPublisher.class);
+        var properties = new RabbitOutputProperties();
+        properties.setExchange("exchange");
+        properties.setRoutingKey("route");
+        properties.setPublisherConfirms(true);
+        var output = new RabbitWorkOutput(publisher, properties);
+        properties.setPublisherConfirms(false);
+        var failure = new IllegalStateException("client send failed");
+        org.mockito.Mockito.doThrow(failure).when(publisher).send(eq("exchange"), eq("route"), org.mockito.ArgumentMatchers.any());
+        var info = new WorkerInfo("processor", "swarm", "instance", null, null);
+        var item = WorkItem.json(info, Map.of("status", 200))
+            .observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId())).build();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> output.publish(item, mock(WorkerDefinition.class))).isSameAs(failure);
+    }
+
 }

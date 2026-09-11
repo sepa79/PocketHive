@@ -138,7 +138,7 @@ class RuntimeDebugControllerTest {
             SourceSummary.present(),
             SourceSummary.present(),
             true,
-            List.of(new RuntimeDebugContracts.RabbitQueueSnapshot(
+            List.of(new RabbitQueueSnapshot(
                 "ph.control.sw1.processor.worker-1",
                 true,
                 0L,
@@ -147,7 +147,7 @@ class RuntimeDebugControllerTest {
                 null,
                 null,
                 false,
-                null)),
+                null, io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL)),
             List.of(),
             List.of()));
 
@@ -162,7 +162,8 @@ class RuntimeDebugControllerTest {
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.exactOnly").value(true))
             .andExpect(jsonPath("$.queues[0].name").value("ph.control.sw1.processor.worker-1"))
-            .andExpect(jsonPath("$.queues[0].consumers").value(1));
+            .andExpect(jsonPath("$.queues[0].consumers").value(1))
+            .andExpect(jsonPath("$.queues[0].plane").value("CONTROL"));
 
         ArgumentCaptor<RabbitTopologyRequest> captor = ArgumentCaptor.forClass(RabbitTopologyRequest.class);
         verify(reconciliationService).rabbitTopology(captor.capture());

@@ -126,6 +126,7 @@ export function HealthPage() {
           <div className="kv">
             <div className="k">STOMP state</div>
             <div className="v">{controlPlane.stompState}</div>
+            {controlPlane.connectionInfoError ? <div className="muted">{controlPlane.connectionInfoError}</div> : null}
           </div>
           <div className="kv">
             <div className="k">Invalid control frames</div>

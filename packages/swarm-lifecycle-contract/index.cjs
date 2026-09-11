@@ -66,6 +66,11 @@ const lifecycleEnumValues = Object.freeze({
     "RUNTIME_DIRECTORY",
     "REGISTRY_ENTRY",
     "TERMINAL_EVIDENCE"
+  ],
+  "ResourcePlane": [
+    "CONTROL",
+    "WORK",
+    "NONE"
   ]
 })
 

@@ -12,7 +12,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.topology.work.PrefixedWorkResourceNames;
+import io.pockethive.rabbit.api.RabbitResourceNames;
 import io.pockethive.topology.work.WorkResourceNamesPort;
 import io.pockethive.topology.work.WorkTopologySettings;
 import java.time.Instant;
@@ -20,11 +20,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.lang.reflect.Proxy;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitReceiver;
 import org.springframework.web.server.ResponseStatusException;
 
 class DebugTapServiceTest {
@@ -32,10 +31,10 @@ class DebugTapServiceTest {
     @Test
     void cleanupExpiredRemovesTapAndDeletesQueue() {
         SwarmStore store = new SwarmStore();
-        var declaredBindings = new CopyOnWriteArrayList<Binding>();
+        var declaredBindings = new CopyOnWriteArrayList<RabbitBindingSpec>();
         var deletedQueues = new CopyOnWriteArrayList<String>();
-        AmqpAdmin amqp = recordingAmqpAdmin(declaredBindings, deletedQueues);
-        RabbitTemplate rabbit = new RabbitTemplate();
+        RabbitResources amqp = recordingRabbitResources(declaredBindings, deletedQueues);
+        RabbitReceiver rabbit = mock(RabbitReceiver.class);
 
         Swarm swarm = new Swarm("sw1", "inst-1", "c1", "run-1", NetworkMode.DIRECT);
         swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
@@ -45,7 +44,7 @@ class DebugTapServiceTest {
         ));
         store.register(swarm);
 
-        DebugTapService service = new DebugTapService(store, amqp, rabbit, new PrefixedWorkResourceNames());
+        DebugTapService service = new DebugTapService(store, amqp, rabbit, new RabbitResourceNames());
         var created = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 1));
         String tapId = created.tapId();
         String queue = created.queue();
@@ -53,8 +52,8 @@ class DebugTapServiceTest {
         assertThat(created.routingKey()).isEqualTo("ph.sw1.final");
 
         assertThat(declaredBindings).hasSize(1);
-        assertThat(declaredBindings.getFirst().getExchange()).isEqualTo("ph.sw1.hive");
-        assertThat(declaredBindings.getFirst().getRoutingKey()).isEqualTo("ph.sw1.final");
+        assertThat(declaredBindings.getFirst().exchange()).isEqualTo("ph.sw1.hive");
+        assertThat(declaredBindings.getFirst().routingKey()).isEqualTo("ph.sw1.final");
 
         service.cleanupExpired(Instant.now().plusSeconds(5));
 
@@ -74,12 +73,13 @@ class DebugTapServiceTest {
         store.register(swarm);
         var names = mock(WorkResourceNamesPort.class);
         when(names.forSwarm("sw1")).thenReturn(new WorkTopologySettings("selected", "configured.exchange"));
-        when(names.exchangeName("configured.exchange")).thenReturn("selected.exchange");
-        when(names.queueName("selected", "input")).thenReturn("selected.input");
-        when(names.queueName("selected", "output")).thenReturn("selected.output");
-        var bindings = new CopyOnWriteArrayList<Binding>();
-        var service = new DebugTapService(store, recordingAmqpAdmin(bindings, new CopyOnWriteArrayList<>()),
-            new RabbitTemplate(), names);
+        when(names.address("configured.exchange", "selected", "input"))
+            .thenReturn(new io.pockethive.topology.work.WorkAddress("selected.exchange", "queue.input", "selected.input"));
+        when(names.address("configured.exchange", "selected", "output"))
+            .thenReturn(new io.pockethive.topology.work.WorkAddress("selected.exchange", "queue.output", "selected.output"));
+        var bindings = new CopyOnWriteArrayList<RabbitBindingSpec>();
+        var service = new DebugTapService(store, recordingRabbitResources(bindings, new CopyOnWriteArrayList<>()),
+            mock(RabbitReceiver.class), names);
 
         var input = service.create(new DebugTapRequest("sw1", "processor", "IN", null, 1, 60));
         var output = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60));
@@ -88,56 +88,27 @@ class DebugTapServiceTest {
         assertThat(input.routingKey()).isEqualTo("selected.input");
         assertThat(output.exchange()).isEqualTo("selected.exchange");
         assertThat(output.routingKey()).isEqualTo("selected.output");
-        assertThat(bindings).extracting(Binding::getExchange)
+        assertThat(bindings).extracting(RabbitBindingSpec::exchange)
             .containsExactly("selected.exchange", "selected.exchange");
-        assertThat(bindings).extracting(Binding::getRoutingKey)
+        assertThat(bindings).extracting(RabbitBindingSpec::routingKey)
             .containsExactly("selected.input", "selected.output");
-        assertThat(bindings).extracting(Binding::getDestination)
+        assertThat(bindings).extracting(RabbitBindingSpec::queue)
             .containsExactly(input.queue(), output.queue());
     }
 
-    private static AmqpAdmin recordingAmqpAdmin(List<Binding> bindings, List<String> deletedQueues) {
+    private static RabbitResources recordingRabbitResources(List<RabbitBindingSpec> bindings, List<String> deletedQueues) {
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(deletedQueues, "deletedQueues");
 
-        return (AmqpAdmin) Proxy.newProxyInstance(
-            AmqpAdmin.class.getClassLoader(),
-            new Class<?>[]{AmqpAdmin.class},
-            (proxy, method, args) -> {
-                String name = method.getName();
-                if ("declareQueue".equals(name) && args != null && args.length == 1) {
-                    Object queue = args[0];
-                    if (queue instanceof org.springframework.amqp.core.Queue q) {
-                        return q.getName();
-                    }
-                    return null;
-                }
-                if ("declareBinding".equals(name) && args != null && args.length == 1) {
-                    if (args[0] instanceof Binding binding) {
-                        bindings.add(binding);
-                    }
-                    return null;
-                }
-                if ("deleteQueue".equals(name) && args != null && args.length >= 1) {
-                    if (args[0] instanceof String queueName) {
-                        deletedQueues.add(queueName);
-                    }
-                    Class<?> returnType = method.getReturnType();
-                    if (returnType == boolean.class || returnType == Boolean.class) {
-                        return true;
-                    }
-                    return null;
-                }
-                Class<?> returnType = method.getReturnType();
-                if (returnType == boolean.class) return false;
-                if (returnType == int.class) return 0;
-                if (returnType == long.class) return 0L;
-                if (returnType == double.class) return 0.0d;
-                if (returnType == float.class) return 0.0f;
-                if (returnType == short.class) return (short) 0;
-                if (returnType == byte.class) return (byte) 0;
-                if (returnType == char.class) return (char) 0;
-                return null;
-            });
+        var resources = org.mockito.Mockito.mock(RabbitResources.class);
+        org.mockito.Mockito.doAnswer(call -> {
+            bindings.add(call.getArgument(0));
+            return null;
+        }).when(resources).bind(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.doAnswer(call -> {
+            deletedQueues.add(call.getArgument(0));
+            return null;
+        }).when(resources).deleteQueue(org.mockito.ArgumentMatchers.anyString());
+        return resources;
     }
 }

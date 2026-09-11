@@ -383,3 +383,25 @@ Manual checks:
 - **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
 - **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
 - **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.
+
+### Rabbit Control and Work connections
+
+Rabbit runtime now requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
+`SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD` and
+`SPRING_RABBITMQ_VIRTUAL_HOST` configure Control. Work uses `POCKETHIVE_RABBIT_WORK_HOST`,
+`POCKETHIVE_RABBIT_WORK_PORT`, `POCKETHIVE_RABBIT_WORK_USERNAME`,
+`POCKETHIVE_RABBIT_WORK_PASSWORD` and `POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST`.
+The corresponding Work property prefix is `pockethive.rabbit.work`.
+
+Declare both sets explicitly in the Orchestrator environment. Controller/worker launches
+receive them from the Rabbit-owned environment projection. Identical settings are allowed,
+but the planes retain separate client instances. Do not override Work connection fields in
+individual `bee.env` entries: provisioning and worker execution must use the same target.
+For physical resource separation, configure distinct brokers or vhosts; separate client
+instances do not isolate two identical queue names within the same broker/vhost.
+
+There is no inheritance from Control to Work. Missing Work fields stop startup. The current
+connection contract covers host, port, username, password and virtual-host; TLS/address-list
+propagation is not included. `spring.rabbitmq.addresses` is rejected because it would override
+the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,
+request a fresh cleanup plan. This code change does not update or deploy environment manifests.

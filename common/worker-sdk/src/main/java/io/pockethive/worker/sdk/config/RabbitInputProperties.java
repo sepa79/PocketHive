@@ -2,14 +2,14 @@ package io.pockethive.worker.sdk.config;
 
 /**
  * Responsibility: bind Rabbit Work input settings from pockethive.inputs.rabbit.*.
- * Must not: own worker enablement, start listeners or configure Control Plane.
+ * Must not: define defaults or validation rules, normalize names, start listeners or configure Control Plane.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 public class RabbitInputProperties implements WorkInputConfig {
 
-    private int prefetch = 50;
-    private int concurrentConsumers = 1;
-    private boolean exclusive = false;
+    private int prefetch = io.pockethive.rabbit.api.RabbitInputSettings.DEFAULT_PREFETCH;
+    private int concurrentConsumers = io.pockethive.rabbit.api.RabbitInputSettings.DEFAULT_CONCURRENT_CONSUMERS;
+    private boolean exclusive = io.pockethive.rabbit.api.RabbitInputSettings.DEFAULT_EXCLUSIVE;
     private String queue;
     private String deadLetterQueue;
 
@@ -42,7 +42,7 @@ public class RabbitInputProperties implements WorkInputConfig {
     }
 
     public void setQueue(String queue) {
-        this.queue = normalise(queue);
+        this.queue = queue;
     }
 
     public String getDeadLetterQueue() {
@@ -50,14 +50,11 @@ public class RabbitInputProperties implements WorkInputConfig {
     }
 
     public void setDeadLetterQueue(String deadLetterQueue) {
-        this.deadLetterQueue = normalise(deadLetterQueue);
+        this.deadLetterQueue = deadLetterQueue;
     }
 
-    private static String normalise(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
+    public io.pockethive.rabbit.api.RabbitInputSettings settings() {
+        return io.pockethive.rabbit.api.RabbitConfiguration.resolveInput(queue, prefetch, concurrentConsumers, exclusive, deadLetterQueue);
     }
+    @Override public void validateConfigured(String prefix) { queue = settings().queue(); }
 }

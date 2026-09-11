@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
@@ -32,10 +34,10 @@ import java.util.Objects;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
+import io.pockethive.rabbit.api.RabbitResources;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnections;
 import org.springframework.stereotype.Service;
 
 /**
@@ -55,10 +57,10 @@ public class ContainerLifecycleManager {
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmStore store;
-    private final AmqpAdmin amqp;
+    private final RabbitResources amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
-    private final RabbitConnectionSettings rabbitConnection;
+    private final RabbitConnections rabbitConnection;
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
@@ -79,10 +81,10 @@ public class ContainerLifecycleManager {
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
         SwarmStore store,
-        AmqpAdmin amqp,
+        @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitConnectionSettings rabbitConnection,
+        RabbitConnections rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         RuntimeOwnershipManifestStore manifestStore,
@@ -107,10 +109,10 @@ public class ContainerLifecycleManager {
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
         SwarmStore store,
-        AmqpAdmin amqp,
+        @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitConnectionSettings rabbitConnection,
+        RabbitConnections rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
@@ -274,7 +276,7 @@ public class ContainerLifecycleManager {
                                                ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings) {
         String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(
             swarmId,
-            controlPlaneProperties.getControlQueuePrefix())
+            controlPlaneProperties.getControlQueuePrefix(), new RabbitResourceNames())
             .controlQueue(controllerInstance)
             .map(ControlQueueDescriptor::name)
             .orElse(null);
@@ -445,7 +447,7 @@ public class ContainerLifecycleManager {
 
         var controller = new io.pockethive.swarm.model.lifecycle.RemoveResource(
             io.pockethive.swarm.model.lifecycle.RemoveResourceType.CONTROLLER_RUNTIME,
-            swarm.getContainerId());
+            swarm.getContainerId(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
         try {
             log.info("tearing down controller runtime {} for swarm {}", swarm.getContainerId(), swarmId);
             computeAdapter.stopManager(swarm.getContainerId());
@@ -456,13 +458,13 @@ public class ContainerLifecycleManager {
         }
 
         String basePrefix = controlPlaneProperties.getControlQueuePrefix();
-        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix)
+        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix, new RabbitResourceNames())
             .controlQueue(swarm.getInstanceId())
             .map(ControlQueueDescriptor::name)
             .orElseThrow(() -> new IllegalStateException("Controller control queue is not defined"));
         var queue = new io.pockethive.swarm.model.lifecycle.RemoveResource(
             io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_QUEUE,
-            controllerQueue);
+            controllerQueue, io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL);
         try {
             log.info("deleting swarm-controller control queue {}", controllerQueue);
             amqp.deleteQueue(controllerQueue);

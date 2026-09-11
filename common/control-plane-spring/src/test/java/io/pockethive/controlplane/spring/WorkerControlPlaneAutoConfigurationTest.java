@@ -12,10 +12,10 @@ import io.pockethive.controlplane.worker.WorkerControlPlane;
 import java.util.Optional;
 import org.springframework.beans.factory.BeanCreationException;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
@@ -28,7 +28,7 @@ class WorkerControlPlaneAutoConfigurationTest {
             ControlPlaneCommonAutoConfiguration.class,
             WorkerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
+        .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> org.mockito.Mockito.mock(RabbitPublisher.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=generator",
             "pockethive.control-plane.instance-id=gen-1",
@@ -44,22 +44,20 @@ class WorkerControlPlaneAutoConfigurationTest {
         contextRunner.run(context -> {
             assertThat(context).hasSingleBean(WorkerControlPlane.class);
             assertThat(context).hasSingleBean(ControlPlanePublisher.class);
-            TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
-            assertThat(exchange.getName()).isEqualTo("ph.control.worker");
+            RabbitExchangeSpec exchange = context.getBean("controlPlaneExchange", RabbitExchangeSpec.class);
+            assertThat(exchange.name()).isEqualTo("ph.control.worker");
 
             ControlPlaneIdentity identity = context.getBean("workerControlPlaneIdentity", ControlPlaneIdentity.class);
             assertThat(identity.swarmId()).isEqualTo("swarm-alpha");
             assertThat(identity.instanceId()).isEqualTo("gen-1");
             assertThat(identity.role()).isEqualTo("generator");
 
-            Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
-            Optional<Queue> queue = declarables.getDeclarables().stream()
-                .filter(Queue.class::isInstance)
-                .map(Queue.class::cast)
+            RabbitTopologySpec declarables = context.getBean("workerControlPlaneDeclarables", RabbitTopologySpec.class);
+            var queue = declarables.queues().stream()
                 .findFirst();
             assertThat(queue).isPresent();
             String expectedQueue = "ph.control.swarm-alpha.generator.gen-1";
-            assertThat(queue.get().getName()).isEqualTo(expectedQueue);
+            assertThat(queue.get().name()).isEqualTo(expectedQueue);
 
             String queueName = context.getBean("workerControlQueueName", String.class);
             assertThat(queueName).isEqualTo(expectedQueue);
@@ -74,12 +72,13 @@ class WorkerControlPlaneAutoConfigurationTest {
     }
 
     @Test
-    void skipsDeclarablesWhenDisabled() {
+    void skipsRabbitTopologySpecWhenDisabled() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.worker.declare-topology=false")
             .run(context -> {
-                Declarables declarables = context.getBean("workerControlPlaneDeclarables", Declarables.class);
-                assertThat(declarables.getDeclarables()).isEmpty();
+                RabbitTopologySpec declarables = context.getBean("workerControlPlaneDeclarables", RabbitTopologySpec.class);
+                assertThat(declarables.queues()).isEmpty();
+                assertThat(declarables.bindings()).isEmpty();
             });
     }
 

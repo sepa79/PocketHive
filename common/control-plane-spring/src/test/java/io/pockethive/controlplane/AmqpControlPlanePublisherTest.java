@@ -7,7 +7,7 @@ import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.observability.ControlPlaneJson;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentCaptor.forClass;
@@ -21,7 +21,7 @@ class AmqpControlPlanePublisherTest {
 
     @Test
     void rejectsInvalidEnvelopeRoutingBeforeTouchingAmqp() {
-        AmqpTemplate template = mock(AmqpTemplate.class);
+        RabbitPublisher template = mock(RabbitPublisher.class);
         AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(
             template, "ph.control", ControlPlaneCodec.create());
         ControlSignal signal = ControlSignal.forInstance(
@@ -36,7 +36,7 @@ class AmqpControlPlanePublisherTest {
 
     @Test
     void forwardsSignalsAndEvents() throws Exception {
-        AmqpTemplate template = mock(AmqpTemplate.class);
+        RabbitPublisher template = mock(RabbitPublisher.class);
         AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(
             template, "ph.control", ControlPlaneCodec.create());
 
@@ -45,8 +45,8 @@ class AmqpControlPlanePublisherTest {
 	            null);
         publisher.publishSignal(new SignalMessage("signal.config-update.swarm.role.inst", signal));
 
-        var signalCaptor = forClass(Object.class);
-        verify(template).convertAndSend(eq("ph.control"), eq("signal.config-update.swarm.role.inst"), signalCaptor.capture());
+        var signalCaptor = forClass(String.class);
+        verify(template).sendText(eq("ph.control"), eq("signal.config-update.swarm.role.inst"), signalCaptor.capture());
 
         assertThat(signalCaptor.getValue()).isInstanceOf(String.class);
         ObjectMapper mapper = ControlPlaneJson.mapper();

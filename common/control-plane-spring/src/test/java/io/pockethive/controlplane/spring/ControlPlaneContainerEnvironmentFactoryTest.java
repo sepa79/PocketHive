@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 
 class ControlPlaneContainerEnvironmentFactoryTest {
 
@@ -30,7 +30,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "/var/run/docker.sock",
                 "ph.swarm-1",
                 "ph.swarm-1.hive");
-        RabbitConnectionSettings rabbitConnection = rabbitConnection();
+        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
             "swarm-1",
@@ -77,7 +77,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
                 "ph.control",
                 "ph.swarm-1.hive",
                 metrics);
-        RabbitConnectionSettings rabbitConnection = rabbitConnection();
+        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
@@ -106,7 +106,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     void clickHouseMetricsSettingsPropagateToControllerAndWorker() {
         ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(10));
-        RabbitConnectionSettings rabbitConnection = rabbitConnection();
+        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
         controlPlaneProperties.setControlQueuePrefix("ph.control");
@@ -175,9 +175,9 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         }
     }
 
-    private static RabbitConnectionSettings rabbitConnection() {
+    private static io.pockethive.rabbit.api.RabbitConnections rabbitConnection() {
         RabbitConnectionSettings properties = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
-        return properties;
+        return new io.pockethive.rabbit.api.RabbitConnections(properties, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"));
     }
 
     private static ControlPlaneContainerEnvironmentFactory.MetricsSettings disabledMetrics(Duration publishInterval) {

@@ -6,8 +6,8 @@
 > **Scope:** Universal runtime (Docker Compose or Kubernetes).  
 > **Compatibility:** The lifecycle/operation model is a deliberate breaking cut-over. No legacy state or outcome compatibility layer is permitted; this file is the single source of truth.
 
-The [Work Plane boundary design](architecture/work-plane-boundaries.md) specifies the
-target module/port ownership and migration acceptance. Its artifacts and explicit behavior
+The [Rabbit boundary design](architecture/work-plane-boundaries.md) specifies one Rabbit
+technology module for Work Plane and Control Plane, its ownership and migration acceptance. Its artifacts and explicit behavior
 deltas are planned, not deployed behavior; the runtime contracts below remain effective
 until each corresponding contract-first migration is implemented and verified.
 
@@ -93,7 +93,7 @@ B01 establishes the first implemented module boundaries: `work-api`, `observabil
 `auth-contracts` and `templating-api` own shared contracts; `control-plane-core` has no
 Spring AMQP implementation. CP listeners use a dedicated factory and CP worker topology
 no longer reads Work settings. See the [SDK composition rules](sdk/worker-sdk-quickstart.md)
-and the execution record at `docs/inProgress/boundary-design/b01/README.md`. The full Work/Control
+and the execution record at `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b01/README.md`. The full Work/Control
 migration remains governed by the [boundary design](architecture/work-plane-boundaries.md).
 
 ### 2.2 Workers (Bees)

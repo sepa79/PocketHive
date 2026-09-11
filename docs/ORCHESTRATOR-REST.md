@@ -540,13 +540,14 @@ prefix, or expose a RabbitMQ management fallback in the MCP.
   "queues": [
     {
       "name": "ph.control.demo.processor.demo-processor-1",
+      "plane": "CONTROL",
       "present": true,
       "messages": 0,
       "consumers": 1
     }
   ],
   "exchanges": [
-    { "name": "ph.demo.hive", "present": true }
+    { "name": "ph.demo.hive", "plane": "WORK", "present": true }
   ],
   "unmanagedDiagnostics": []
 }
@@ -639,6 +640,7 @@ unavailable; the typed checks remain the authoritative conclusion.
       "candidateId": "docker:container:abc",
       "action": "DELETE_DOCKER_CONTAINER",
       "resourceId": "abc",
+      "plane": "NONE",
       "resourceType": "container",
       "resourceKind": "worker",
       "role": "processor",
@@ -650,16 +652,26 @@ unavailable; the typed checks remain the authoritative conclusion.
   ],
   "blocked": [
     {
-      "candidateId": "rabbit:queue:ph.demo.final",
+      "candidateId": "rabbit:WORK:queue:ph.demo.final",
       "action": "DELETE_RABBIT_QUEUE",
       "resourceId": "ph.demo.final",
+      "plane": "WORK",
       "reason": "active swarm shared RabbitMQ resource is protected"
     }
   ]
 }
 ```
 
-The existing Orchestrator REST DTO remains backward compatible: an omitted
+Rabbit cleanup identity is `(plane, type, name)`. Every candidate, blocked entry and
+execution result carries required `plane`: `CONTROL` or `WORK` for physical Rabbit
+resources, `NONE` for non-messaging resources and missing-manifest markers. Candidate IDs
+include plane (`rabbit:WORK:queue:jobs`). The candidate-set hash also includes the selected
+broker/port/vhost/principal identity, so changing a connection invalidates an earlier plan. Old unscoped
+Rabbit candidate IDs are not accepted. Debug queue/exchange snapshots preserve the same
+plane; equal names on separate planes remain distinct entries. Lifecycle `RemoveResource`
+uses the shared schema's required `plane`, including `NONE` for non-messaging targets.
+
+The existing Orchestrator REST request flags retain their behavior: an omitted
 `includeRunning` means `false`, and an omitted `includeRabbit` means `true`.
 The agent-facing MCP contract is stricter and requires both Boolean fields so
 an agent cannot infer cleanup scope. A registered swarm in `STARTING`,
@@ -700,7 +712,8 @@ production access is governed by HiveGate policy outside Orchestrator.
     "resultByCandidate": [
       {
         "candidateId": "docker:container:abc",
-        "status": "REMOVED"
+        "status": "REMOVED",
+        "plane": "NONE"
       }
     ]
   }
@@ -910,6 +923,21 @@ and signal contract are unchanged.
 
 ## 5. Control-plane sync (debug-only)
 These endpoints are intended for local diagnostics and should be secured behind admin access or removed before exposing the orchestrator publicly.
+
+### Control-plane connection information
+`GET /api/control-plane/info` (UI ingress: `/orchestrator/api/control-plane/info`)
+
+Requires PocketHive read access. Returns the Rabbit-owned read-only STOMP projection of
+`pockethive.control-plane.exchange`:
+
+```json
+{"subscriptionDestination":"/exchange/ph.control/#","destinationPrefix":"/exchange/ph.control/"}
+```
+
+Both fields are required. The example exchange is not a client default. UI uses the subscription
+verbatim and strips the supplied prefix once at the STOMP receive boundary. Failure to load
+this information prevents connection; no hardcoded destination fallback. The endpoint exposes
+no credentials and does not change the STOMP URL, broker authentication or event scope.
 
 ### 5.1 Refresh control-plane status
 `POST /api/control-plane/refresh`

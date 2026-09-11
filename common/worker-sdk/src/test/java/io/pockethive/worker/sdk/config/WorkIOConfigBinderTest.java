@@ -7,8 +7,8 @@ import io.pockethive.redis.config.RedisDatasetPickStrategy;
 import io.pockethive.redis.config.RedisDatasetEnvironment;
 import io.pockethive.redis.config.RedisDatasetSettings;
 import io.pockethive.redis.config.RedisConnectionEnvironmentCodec;
-import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
@@ -170,6 +170,7 @@ class WorkIOConfigBinderTest {
     @Test
     void bindsRabbitInputConfigFromEnvironment() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+            "pockethive.inputs.rabbit.queue", "jobs",
             "pockethive.inputs.rabbit.prefetch", "25",
             "pockethive.inputs.rabbit.concurrent-consumers", "3"
         ));
@@ -183,16 +184,16 @@ class WorkIOConfigBinderTest {
     }
 
     @Test
-    void bindsRabbitOutputConfigWhenPrefixIsPresent() {
+    void rejectsSelectedRabbitOutputWithoutPhysicalDestination() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
             "pockethive.outputs.rabbit.persistent", "true"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
 
-        RabbitOutputProperties config = binder.bind(WorkerOutputType.RABBITMQ, RabbitOutputProperties.class);
-
-        assertThat(config.isPersistent()).isTrue();
-        assertThat(config.getExchange()).isNull();
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.RABBITMQ, RabbitOutputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("outputs.rabbit.exchange")
+            .hasMessageContaining("outputs.rabbit.routingKey");
     }
 
     @Test

@@ -50,6 +50,7 @@
     </plugins>
   </build>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version><scope>test</scope></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>swarm-model</artifactId>

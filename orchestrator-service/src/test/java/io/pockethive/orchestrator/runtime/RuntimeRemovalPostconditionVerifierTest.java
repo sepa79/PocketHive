@@ -8,7 +8,7 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInve
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
+import io.pockethive.orchestrator.runtime.RabbitTopologyPort;
 import io.pockethive.swarm.model.lifecycle.RemoveResource;
 import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
 import java.util.List;
@@ -26,8 +26,8 @@ class RuntimeRemovalPostconditionVerifierTest {
   @Test
   void confirmsAbsenceOnlyFromCurrentAdapterObservations() {
     when(compute.list()).thenReturn(List.of());
-    when(rabbit.queue("queue-1")).thenReturn(Optional.empty());
-    when(rabbit.exchange("exchange-1")).thenReturn(Optional.empty());
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "queue-1")).thenReturn(Optional.empty());
+    when(rabbit.exchange(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "exchange-1")).thenReturn(Optional.empty());
     List<RemoveResource> targets = List.of(
         resource(RemoveResourceType.WORKER_RUNTIME, "worker-1"),
         resource(RemoveResourceType.RABBIT_QUEUE, "queue-1"),
@@ -45,8 +45,8 @@ class RuntimeRemovalPostconditionVerifierTest {
   void reportsEveryResourceThatStillExists() {
     when(compute.list()).thenReturn(List.of(new ComputeRuntimeResource(
         "worker-1", "container", "worker", "image", "running", Map.of())));
-    when(rabbit.queue("queue-1")).thenReturn(Optional.of(new RabbitQueueResource("queue-1", 0, 0)));
-    when(rabbit.exchange("exchange-1")).thenReturn(Optional.of(new RabbitExchangeResource("exchange-1")));
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "queue-1")).thenReturn(Optional.of(new RabbitQueueResource("queue-1", 0, 0)));
+    when(rabbit.exchange(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "exchange-1")).thenReturn(Optional.of(new RabbitExchangeResource("exchange-1")));
     List<RemoveResource> targets = List.of(
         resource(RemoveResourceType.WORKER_RUNTIME, "worker-1"),
         resource(RemoveResourceType.RABBIT_QUEUE, "queue-1"),
@@ -88,6 +88,18 @@ class RuntimeRemovalPostconditionVerifierTest {
   }
 
   private static RemoveResource resource(RemoveResourceType type, String id) {
-    return new RemoveResource(type, id);
+    return new RemoveResource(type, id, type == RemoveResourceType.RABBIT_QUEUE || type == RemoveResourceType.RABBIT_EXCHANGE ? io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK : io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
   }
+  @Test
+  void absenceOnWorkDoesNotConfirmControlWithTheSameName() {
+    var control = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL);
+    var work = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK);
+    when(rabbit.queue(control.plane(), "jobs")).thenReturn(Optional.of(new RabbitQueueResource("jobs", 0, 0)));
+    when(rabbit.queue(work.plane(), "jobs")).thenReturn(Optional.empty());
+    var result = verifier.verifyAbsent(List.of(control, work));
+    assertThat(result.removedResources()).containsExactly(work);
+    assertThat(result.remainingResources()).containsExactly(control);
+    assertThat(result.succeeded()).isFalse();
+  }
+
 }

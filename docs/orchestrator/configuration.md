@@ -24,9 +24,10 @@ legacy defaults.
 pockethive.control-plane.control-queue-prefix  # Shared topology prefix; env: POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX
 ```
 
-`OrchestratorControlPlaneTopologyDescriptor` is the sole owner of the Orchestrator
-control and controller-status queue names and bindings. Given prefix `P` and
-instance `I`, it defines `P.orchestrator.I` and `P.orchestrator-status.I`.
+`OrchestratorControlPlaneTopologyDescriptor` owns Orchestrator recipient/binding policy
+and resolves physical names through ControlResourceNamesPort. RabbitResourceNames is the
+formula owner: prefix `P` and instance `I` produce `P.orchestrator.I` and
+`P.orchestrator-status.I`.
 `ManagerControlPlaneAutoConfiguration` declares those resources through
 `ControlPlaneTopologyDeclarableFactory`. Orchestrator listener queue names are
 read-only projections of that same descriptor; services must not reconstruct

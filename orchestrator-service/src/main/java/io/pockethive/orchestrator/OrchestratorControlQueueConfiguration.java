@@ -8,7 +8,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
- * Responsibility: Expose read-only listener queue names from the shared Orchestrator topology descriptor.
+ * Responsibility: Project resolved Orchestrator queues and receive bindings from the shared topology descriptor.
  * Must not: Construct queue names, routing bindings, or RabbitMQ declarables.
  * Contract: docs/orchestrator/configuration.md; shared manager auto-configuration declares the topology.
  */
@@ -36,5 +36,22 @@ class OrchestratorControlQueueConfiguration {
     @Bean
     String controllerStatusQueueName() {
         return descriptor.controllerStatusQueue(identity.instanceId()).name();
+    }
+    @Bean
+    io.pockethive.rabbit.api.RabbitListenerBinding managerControlRabbitBinding(
+        io.pockethive.controlplane.spring.ControlPlaneRabbitBindings bindings,
+        io.pockethive.orchestrator.app.SwarmSignalListener listener,
+        @Qualifier("managerControlQueueName") String queue) {
+        return bindings.bind("orchestratorControl", queue,
+            message -> listener.handle(message.text(), message.receivedRoutingKey()));
+    }
+
+    @Bean
+    io.pockethive.rabbit.api.RabbitListenerBinding controllerStatusRabbitBinding(
+        io.pockethive.controlplane.spring.ControlPlaneRabbitBindings bindings,
+        io.pockethive.orchestrator.app.ControllerStatusListener listener,
+        @Qualifier("controllerStatusQueueName") String queue) {
+        return bindings.bind("orchestratorControllerStatus", queue,
+            message -> listener.handle(message.text(), message.receivedRoutingKey()));
     }
 }

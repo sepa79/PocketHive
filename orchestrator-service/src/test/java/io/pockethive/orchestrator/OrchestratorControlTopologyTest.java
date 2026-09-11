@@ -14,13 +14,10 @@ import java.util.List;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Declarable;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.beans.factory.config.BeanExpressionContext;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.assertj.AssertableApplicationContext;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -32,7 +29,9 @@ class OrchestratorControlTopologyTest {
             ControlPlaneCommonAutoConfiguration.class, ManagerControlPlaneAutoConfiguration.class))
         .withUserConfiguration(OrchestratorControlQueueConfiguration.class)
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitTemplate.class, () -> mock(RabbitTemplate.class))
+        .withBean(SwarmSignalListener.class, () -> mock(SwarmSignalListener.class))
+        .withBean(ControllerStatusListener.class, () -> mock(ControllerStatusListener.class))
+        .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> mock(RabbitPublisher.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
             "pockethive.control-plane.manager.enabled=true",
@@ -55,20 +54,35 @@ class OrchestratorControlTopologyTest {
             assertThat(listenerQueue(context, SwarmSignalListener.class)).isEqualTo(controlQueue);
             assertThat(listenerQueue(context, ControllerStatusListener.class)).isEqualTo(statusQueue);
 
-            List<Declarable> declarations = declarations(context);
-            assertThat(declarations.stream().filter(Queue.class::isInstance).map(Queue.class::cast))
-                .extracting(Queue::getName).containsExactlyInAnyOrder(controlQueue, statusQueue);
-            List<Binding> bindings = declarations.stream().filter(Binding.class::isInstance)
-                .map(Binding.class::cast).toList();
+            List<Object> declarations = declarations(context);
+            assertThat(declarations.stream().filter(RabbitQueueSpec.class::isInstance).map(RabbitQueueSpec.class::cast))
+                .extracting(RabbitQueueSpec::name).containsExactlyInAnyOrder(controlQueue, statusQueue);
+            List<RabbitBindingSpec> bindings = declarations.stream().filter(RabbitBindingSpec.class::isInstance)
+                .map(RabbitBindingSpec.class::cast).toList();
             assertThat(bindings).hasSize(5).allSatisfy(binding ->
-                assertThat(binding.getExchange()).isEqualTo("custom.control.exchange"));
-            assertThat(bindings.stream().filter(binding -> binding.getDestination().equals(controlQueue)))
-                .extracting(Binding::getRoutingKey)
+                assertThat(binding.exchange()).isEqualTo("custom.control.exchange"));
+            assertThat(bindings.stream().filter(binding -> binding.queue().equals(controlQueue)))
+                .extracting(RabbitBindingSpec::routingKey)
                 .containsExactlyInAnyOrderElementsOf(descriptor.controlQueue(identity.instanceId()).orElseThrow().allBindings());
-            assertThat(bindings.stream().filter(binding -> binding.getDestination().equals(statusQueue)))
-                .extracting(Binding::getRoutingKey)
+            assertThat(bindings.stream().filter(binding -> binding.queue().equals(statusQueue)))
+                .extracting(RabbitBindingSpec::routingKey)
                 .containsExactlyInAnyOrderElementsOf(descriptor.controllerStatusQueue(identity.instanceId()).bindings());
-            assertThat(context.getBeansOfType(Declarables.class)).containsOnlyKeys("managerControlPlaneDeclarables");
+        });
+    }
+
+    @org.junit.jupiter.api.Test
+    void receiveBindingsForwardPayloadAndReceivedRouteToTheirOwnHandlers() {
+        runner.withPropertyValues("pockethive.control-plane.control-queue-prefix=custom").run(context -> {
+            var message = new io.pockethive.rabbit.api.RabbitMessage("payload".getBytes(java.nio.charset.StandardCharsets.UTF_8),
+                java.util.Map.of(), io.pockethive.rabbit.api.RabbitMessage.TEXT, "UTF-8", true, "received.route");
+            context.getBean("managerControlRabbitBinding", io.pockethive.rabbit.api.RabbitListenerBinding.class)
+                .handler().accept(message);
+            org.mockito.Mockito.verify(context.getBean(SwarmSignalListener.class)).handle("payload", "received.route");
+            org.mockito.Mockito.verify(context.getBean(ControllerStatusListener.class), org.mockito.Mockito.never())
+                .handle(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+            context.getBean("controllerStatusRabbitBinding", io.pockethive.rabbit.api.RabbitListenerBinding.class)
+                .handler().accept(message);
+            org.mockito.Mockito.verify(context.getBean(ControllerStatusListener.class)).handle("payload", "received.route");
         });
     }
 
@@ -78,7 +92,7 @@ class OrchestratorControlTopologyTest {
         runner.withPropertyValues("pockethive.control-plane.control-queue-prefix=external", setting + "=false")
             .run(context -> {
                 assertThat(context).hasNotFailed();
-                assertThat(declarations(context)).noneMatch(Queue.class::isInstance).noneMatch(Binding.class::isInstance);
+                assertThat(declarations(context)).noneMatch(RabbitQueueSpec.class::isInstance).noneMatch(RabbitBindingSpec.class::isInstance);
                 assertThat(listenerQueue(context, SwarmSignalListener.class)).isEqualTo("external.orchestrator.orch-1");
                 assertThat(listenerQueue(context, ControllerStatusListener.class)).isEqualTo("external.orchestrator-status.orch-1");
             });
@@ -91,17 +105,14 @@ class OrchestratorControlTopologyTest {
             .run(context -> assertThat(context).hasFailed());
     }
 
-    private static List<Declarable> declarations(AssertableApplicationContext context) {
-        return Stream.concat(
-            context.getBeansOfType(Declarable.class).values().stream(),
-            context.getBeansOfType(Declarables.class).values().stream().flatMap(group -> group.getDeclarables().stream()))
-            .toList();
+    private static List<Object> declarations(AssertableApplicationContext context) {
+        return context.getBeansOfType(RabbitTopologySpec.class).values().stream()
+            .flatMap(spec -> Stream.concat(spec.queues().stream(), spec.bindings().stream()))
+            .map(value -> (Object) value).toList();
     }
 
     private static Object listenerQueue(AssertableApplicationContext context, Class<?> listener) throws Exception {
-        String expression = listener.getMethod("handle", String.class, String.class)
-            .getAnnotation(RabbitListener.class).queues()[0];
-        var beanFactory = context.getSourceApplicationContext().getBeanFactory();
-        return beanFactory.getBeanExpressionResolver().evaluate(expression, new BeanExpressionContext(beanFactory, null));
+        String name = listener == SwarmSignalListener.class ? "managerControlRabbitBinding" : "controllerStatusRabbitBinding";
+        return context.getBean(name, io.pockethive.rabbit.api.RabbitListenerBinding.class).queue();
     }
 }

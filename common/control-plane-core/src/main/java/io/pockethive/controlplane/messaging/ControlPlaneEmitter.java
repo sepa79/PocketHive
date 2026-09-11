@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.messaging;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandResult;
 import io.pockethive.control.JournalEvent;
@@ -27,7 +29,11 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-/** Emits executor results, alerts and status metrics using canonical routing. */
+/**
+ * Responsibility: emit executor results, alerts and status using canonical Control routing and descriptors.
+ * Must not: construct physical resource names, select naming implementations or decide lifecycle outcomes.
+ * Contract: docs/ARCHITECTURE.md and docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ */
 public final class ControlPlaneEmitter {
 
   private static final Logger log = LoggerFactory.getLogger(ControlPlaneEmitter.class);
@@ -69,18 +75,18 @@ public final class ControlPlaneEmitter {
       ControlPlaneIdentity identity,
       ControlPlanePublisher publisher,
       ControlPlaneTopologySettings settings,
-      Map<String, Object> runtime) {
+      Map<String, Object> runtime, ControlResourceNamesPort names) {
     RoleContext role = RoleContext.fromIdentity(identity);
-    return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings), role, publisher, runtime);
+    return using(new WorkerControlPlaneTopologyDescriptor(role.role(), settings, names), role, publisher, runtime);
   }
 
   public static ControlPlaneEmitter swarmController(
       ControlPlaneIdentity identity,
       ControlPlanePublisher publisher,
       ControlPlaneTopologySettings settings,
-      Map<String, Object> runtime) {
+      Map<String, Object> runtime, ControlResourceNamesPort names) {
     RoleContext role = requireIdentity(identity, ControlPlaneRoles.SWARM_CONTROLLER);
-    return using(new SwarmControllerControlPlaneTopologyDescriptor(settings), role, publisher, runtime);
+    return using(new SwarmControllerControlPlaneTopologyDescriptor(settings, names), role, publisher, runtime);
   }
 
   public void emitResult(ResultContext context) {

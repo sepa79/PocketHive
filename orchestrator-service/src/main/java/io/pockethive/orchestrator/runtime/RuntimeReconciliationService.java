@@ -1,18 +1,11 @@
 package io.pockethive.orchestrator.runtime;
 
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
-import io.pockethive.controlplane.topology.ControlQueueDescriptor;
-import io.pockethive.controlplane.topology.WorkerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.orchestrator.app.ContainerLifecycleManager;
 import io.pockethive.orchestrator.app.SwarmLifecycleCommandService;
-import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Blocked;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Candidate;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.CandidateResult;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.Evidence;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.ExecuteRequest;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.ExecuteResponse;
@@ -21,12 +14,7 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupContracts.PlanRequest;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInventoryPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeRemovalPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeResource;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitExchangeSnapshot;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitQueueSnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.SourceSummary;
@@ -39,7 +27,6 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HexFormat;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -50,6 +37,11 @@ import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: coordinate governed runtime cleanup planning and execution through resource owners.
+ * Must not: infer Rabbit plane from names or implement Rabbit resource observation rules.
+ * Contract: docs/ORCHESTRATOR-REST.md#2910-execute-cleanup.
+ */
 @Service
 public class RuntimeReconciliationService {
     private static final Set<String> REQUIRED_LABELS = Set.of(
@@ -63,7 +55,7 @@ public class RuntimeReconciliationService {
     private final RuntimeOwnershipManifestStore manifestStore;
     private final ComputeRuntimeInventoryPort computeInventory;
     private final ComputeRuntimeRemovalPort computeRemoval;
-    private final RabbitTopologyPort rabbitTopology;
+    private final RuntimeRabbitResourcePlanner rabbitPlanner;
     private final RuntimeCleanupEvidenceStore evidenceStore;
     private final ContainerLifecycleManager lifecycleManager;
     private final SwarmLifecycleCommandService lifecycleCommands;
@@ -83,7 +75,7 @@ public class RuntimeReconciliationService {
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
         this.computeInventory = Objects.requireNonNull(computeInventory, "computeInventory");
         this.computeRemoval = Objects.requireNonNull(computeRemoval, "computeRemoval");
-        this.rabbitTopology = Objects.requireNonNull(rabbitTopology, "rabbitTopology");
+        this.rabbitPlanner = new RuntimeRabbitResourcePlanner(rabbitTopology, controlPlaneProperties);
         this.evidenceStore = Objects.requireNonNull(evidenceStore, "evidenceStore");
         this.lifecycleManager = Objects.requireNonNull(lifecycleManager, "lifecycleManager");
         this.lifecycleCommands = Objects.requireNonNull(lifecycleCommands, "lifecycleCommands");
@@ -91,7 +83,7 @@ public class RuntimeReconciliationService {
     }
 
     public Plan plan(PlanRequest request) {
-        CleanupScope scope = CleanupScope.from(request, currentComputeAdapterType());
+        CleanupScope scope = cleanupScope(request, currentComputeAdapterType());
         Optional<Swarm> swarmForId = swarmStore.find(scope.swarmId());
         Optional<Swarm> lifecycleSwarm = swarmForId
             .filter(swarm -> scope.runId().isEmpty() || scope.runId().get().equals(swarm.getRunId()));
@@ -102,7 +94,7 @@ public class RuntimeReconciliationService {
 
         lifecycleSwarm.ifPresent(swarm -> appendLifecycleCandidate(scope, swarm, candidates, blocked));
         appendComputeCandidates(scope, lifecycleSwarm, computeResources, candidates, blocked);
-        appendRabbitCandidates(scope, swarmForId, manifest, computeResources, candidates, blocked);
+        rabbitPlanner.appendCandidates(scope, swarmForId, manifest, computeResources, candidates, blocked);
 
         candidates.sort(Comparator.comparing(Candidate::candidateId));
         blocked.sort(Comparator.comparing(Blocked::candidateId));
@@ -192,7 +184,7 @@ public class RuntimeReconciliationService {
     }
 
     public RabbitTopologySnapshot rabbitTopology(RabbitTopologyRequest request) {
-        CleanupScope scope = CleanupScope.from(new PlanRequest(
+        CleanupScope scope = cleanupScope(new PlanRequest(
             request == null ? null : request.swarmId(),
             request == null ? null : request.runId(),
             true,
@@ -212,26 +204,11 @@ public class RuntimeReconciliationService {
                 List.of());
         }
 
-        RuntimeOwnershipManifest.RabbitResources rabbit = manifest.get().rabbit();
-        List<ComputeRuntimeResource> computeResources = computeInventory.list();
-        LinkedHashSet<String> queues = new LinkedHashSet<>(concat(rabbit.controlQueues(), rabbit.workQueues()));
-        queues.addAll(derivedWorkerControlQueues(scope, computeResources));
-        LinkedHashSet<String> exchanges = new LinkedHashSet<>(rabbit.exchanges());
-
-        return new RabbitTopologySnapshot(
-            scope.computeAdapter(),
-            scope.swarmId(),
-            scope.runId().orElse(null),
-            SourceSummary.present(),
-            SourceSummary.present(),
-            true,
-            queues.stream().sorted().map(this::queueSnapshot).toList(),
-            exchanges.stream().sorted().map(this::exchangeSnapshot).toList(),
-            List.of());
+        return rabbitPlanner.snapshot(scope, manifest.get(), computeInventory.list());
     }
 
     public RuntimeOwnershipManifest ownershipManifest(RabbitTopologyRequest request) {
-        CleanupScope scope = CleanupScope.from(new PlanRequest(
+        CleanupScope scope = cleanupScope(new PlanRequest(
             request == null ? null : request.swarmId(),
             request == null ? null : request.runId(),
             false,
@@ -283,179 +260,6 @@ public class RuntimeReconciliationService {
         }
     }
 
-    private void appendRabbitCandidates(CleanupScope scope,
-                                        Optional<Swarm> activeSwarm,
-                                        Optional<RuntimeOwnershipManifest> manifest,
-                                        List<ComputeRuntimeResource> computeResources,
-                                        List<Candidate> candidates,
-                                        List<Blocked> blocked) {
-        if (!scope.includeRabbit()) {
-            return;
-        }
-        if (manifest.isEmpty()) {
-            blocked.add(new Blocked(
-                "rabbit:manifest:" + scope.swarmId(),
-                RuntimeCleanupAction.DELETE_RABBIT_QUEUE,
-                scope.swarmId(),
-                "manifest",
-                "missing ownership manifest",
-                Map.of()));
-            return;
-        }
-        RuntimeOwnershipManifest.RabbitResources rabbit = manifest.get().rabbit();
-        LinkedHashSet<String> queues = new LinkedHashSet<>(concat(rabbit.controlQueues(), rabbit.workQueues()));
-        queues.addAll(derivedWorkerControlQueues(scope, computeResources));
-        for (String queue : queues) {
-            Optional<RabbitQueueResource> live = rabbitTopology.queue(queue);
-            if (live.isEmpty()) {
-                continue;
-            }
-            if (activeSwarm.isPresent()) {
-                blocked.add(new Blocked(
-                    rabbitCandidateId(RuntimeCleanupAction.DELETE_RABBIT_QUEUE, queue),
-                    RuntimeCleanupAction.DELETE_RABBIT_QUEUE,
-                    queue,
-                    "queue",
-                    "registered swarm RabbitMQ resources must be removed through lifecycle cleanup",
-                    Map.of()));
-                continue;
-            }
-            RabbitQueueResource q = live.get();
-            boolean highRisk = q.depth() > 0 || q.consumers() > 0;
-            candidates.add(new Candidate(
-                rabbitCandidateId(RuntimeCleanupAction.DELETE_RABBIT_QUEUE, queue),
-                RuntimeCleanupAction.DELETE_RABBIT_QUEUE,
-                queue,
-                "queue",
-                null,
-                null,
-                null,
-                "present",
-                null,
-                q.depth(),
-                q.consumers(),
-                q.consumers() > 0,
-                highRisk,
-                highRisk ? "RabbitMQ queue has messages or consumers" : "orphaned RabbitMQ queue from ownership manifest",
-                Map.of()));
-        }
-        for (String exchange : rabbit.exchanges()) {
-            Optional<RabbitExchangeResource> live = rabbitTopology.exchange(exchange);
-            if (live.isEmpty()) {
-                continue;
-            }
-            if (activeSwarm.isPresent()) {
-                blocked.add(new Blocked(
-                    rabbitCandidateId(RuntimeCleanupAction.DELETE_RABBIT_EXCHANGE, exchange),
-                    RuntimeCleanupAction.DELETE_RABBIT_EXCHANGE,
-                    exchange,
-                    "exchange",
-                    "active swarm shared RabbitMQ resource is protected",
-                    Map.of()));
-                continue;
-            }
-            candidates.add(new Candidate(
-                rabbitCandidateId(RuntimeCleanupAction.DELETE_RABBIT_EXCHANGE, exchange),
-                RuntimeCleanupAction.DELETE_RABBIT_EXCHANGE,
-                exchange,
-                "exchange",
-                null,
-                null,
-                null,
-                "manifested",
-                null,
-                null,
-                null,
-                false,
-                false,
-                "orphaned RabbitMQ exchange from ownership manifest",
-                Map.of()));
-        }
-    }
-
-    private List<String> derivedWorkerControlQueues(CleanupScope scope, List<ComputeRuntimeResource> resources) {
-        ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
-            scope.swarmId(),
-            controlPlaneProperties.getControlQueuePrefix(),
-            Map.of());
-        LinkedHashSet<String> queues = new LinkedHashSet<>();
-        for (ComputeRuntimeResource resource : resources) {
-            Map<String, String> labels = resource.labels();
-            if (!PocketHiveDockerLabels.MANAGED_VALUE.equals(labels.get(PocketHiveDockerLabels.MANAGED))) {
-                continue;
-            }
-            if (!scope.swarmId().equals(labels.get(PocketHiveDockerLabels.SWARM_ID))) {
-                continue;
-            }
-            if (scope.runId().isPresent() && !scope.runId().get().equals(labels.get(PocketHiveDockerLabels.RUN_ID))) {
-                continue;
-            }
-            if (!PocketHiveDockerLabels.RESOURCE_KIND_WORKER.equals(labels.get(PocketHiveDockerLabels.RESOURCE_KIND))) {
-                continue;
-            }
-            if (isRunningState(resource.state()) && !scope.includeRunning()) {
-                continue;
-            }
-            String role = labels.get(PocketHiveDockerLabels.ROLE);
-            String instance = labels.get(PocketHiveDockerLabels.INSTANCE);
-            if (!hasText(role) || !hasText(instance)) {
-                continue;
-            }
-            new WorkerControlPlaneTopologyDescriptor(role, settings)
-                .controlQueue(instance)
-                .map(ControlQueueDescriptor::name)
-                .ifPresent(queues::add);
-        }
-        return List.copyOf(queues);
-    }
-
-    private RabbitQueueSnapshot queueSnapshot(String name) {
-        Optional<RabbitQueueResource> queue = rabbitTopology.queue(name);
-        if (queue.isEmpty()) {
-            return new RabbitQueueSnapshot(
-                name,
-                false,
-                null,
-                null,
-                null,
-                null,
-                null,
-                false,
-                "not found");
-        }
-        RabbitQueueResource resource = queue.get();
-        return new RabbitQueueSnapshot(
-            name,
-            true,
-            resource.depth(),
-            resource.consumers(),
-            null,
-            null,
-            null,
-            false,
-            null);
-    }
-
-    private RabbitExchangeSnapshot exchangeSnapshot(String name) {
-        Optional<RabbitExchangeResource> exchange = rabbitTopology.exchange(name);
-        if (exchange.isEmpty()) {
-            return new RabbitExchangeSnapshot(
-                name,
-                false,
-                null,
-                null,
-                null,
-                "not found");
-        }
-        return new RabbitExchangeSnapshot(
-            name,
-            true,
-            null,
-            null,
-            null,
-            null);
-    }
-
     private void appendLifecycleCandidate(CleanupScope scope,
                                           Swarm swarm,
                                           List<Candidate> candidates,
@@ -467,7 +271,7 @@ public class RuntimeReconciliationService {
                 scope.swarmId(),
                 "swarm",
                 "registered swarm already has runtime intent ABSENT; inspect its active REMOVE operation",
-                Map.of()));
+                Map.of(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE));
             return;
         }
         if (workloadActive(swarm) && !scope.includeRunning()) {
@@ -477,7 +281,7 @@ public class RuntimeReconciliationService {
                 scope.swarmId(),
                 "swarm",
                 "active registered swarm requires includeRunning=true",
-                Map.of()));
+                Map.of(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE));
             return;
         }
         candidates.add(lifecycleCandidate(scope, swarm));
@@ -501,7 +305,7 @@ public class RuntimeReconciliationService {
             workloadActive,
             workloadActive,
             "registered swarm must be removed through the canonical REMOVE operation",
-            Map.of());
+            Map.of(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     }
 
     private static boolean workloadActive(Swarm swarm) {
@@ -533,7 +337,7 @@ public class RuntimeReconciliationService {
             running,
             running,
             running ? "running PocketHive runtime resource" : "stopped PocketHive runtime resource",
-            pockethiveLabelsOnly(labels));
+            pockethiveLabelsOnly(labels), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     }
 
     private Blocked blocked(ComputeRuntimeResource resource, String reason) {
@@ -546,7 +350,7 @@ public class RuntimeReconciliationService {
             resource.runtimeId(),
             resource.runtimeType(),
             reason,
-            pockethiveLabelsOnly(resource.labels()));
+            pockethiveLabelsOnly(resource.labels()), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     }
 
     private static Map<String, String> pockethiveLabelsOnly(Map<String, String> labels) {
@@ -577,13 +381,13 @@ public class RuntimeReconciliationService {
                     reservation.operation().correlationId(),
                     "/api/swarms/" + candidate.resourceId() + "/operations/"
                         + reservation.operation().correlationId(),
-                    null);
+                    null, candidate.plane());
             }
             switch (candidate.action()) {
                 case DELETE_DOCKER_CONTAINER -> computeRemoval.removeContainer(candidate.resourceId());
                 case DELETE_DOCKER_SERVICE -> computeRemoval.removeService(candidate.resourceId());
-                case DELETE_RABBIT_QUEUE -> rabbitTopology.deleteQueue(candidate.resourceId());
-                case DELETE_RABBIT_EXCHANGE -> rabbitTopology.deleteExchange(candidate.resourceId());
+                case DELETE_RABBIT_QUEUE -> rabbitPlanner.deleteQueue(candidate);
+                case DELETE_RABBIT_EXCHANGE -> rabbitPlanner.deleteExchange(candidate);
                 case LIFECYCLE_REMOVE_SWARM -> throw new IllegalStateException("handled above");
             }
             return new CandidateResult(
@@ -593,7 +397,7 @@ public class RuntimeReconciliationService {
                 RuntimeCleanupStatus.REMOVED,
                 null,
                 null,
-                null);
+                null, candidate.plane());
         } catch (RuntimeException ex) {
             return new CandidateResult(
                 candidate.candidateId(),
@@ -602,7 +406,7 @@ public class RuntimeReconciliationService {
                 RuntimeCleanupStatus.FAILED,
                 null,
                 null,
-                ex.getMessage());
+                ex.getMessage(), candidate.plane());
         }
     }
 
@@ -630,14 +434,19 @@ public class RuntimeReconciliationService {
         return ids.stream().map(id -> requireText(id, "candidateId")).distinct().toList();
     }
 
-    private static String planHash(Plan plan) {
+    private String planHash(Plan plan) {
         String canonical = plan.computeAdapter() + "\n"
             + plan.swarmId() + "\n"
             + Objects.toString(plan.runId(), "") + "\n"
             + plan.includeRunning() + "\n"
             + plan.includeRabbit() + "\n"
+            + (plan.candidates().stream().anyMatch(c -> c.action() == RuntimeCleanupAction.LIFECYCLE_REMOVE_SWARM)
+                ? rabbitPlanner.connectionIdentity(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL) + "|"
+                    + rabbitPlanner.connectionIdentity(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK) + "\n"
+                : "")
             + plan.candidates().stream()
-                .map(c -> c.candidateId() + "|" + c.action() + "|" + c.resourceId() + "|" + c.highRisk())
+                .map(c -> c.candidateId() + "|" + c.action() + "|" + c.resourceId() + "|" + c.plane() + "|" + c.highRisk()
+                    + (c.plane() == io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE ? "" : "|" + rabbitPlanner.connectionIdentity(c.plane())))
                 .sorted()
                 .collect(Collectors.joining("\n"));
         try {
@@ -665,12 +474,7 @@ public class RuntimeReconciliationService {
         return "docker:" + type + ":" + runtimeId;
     }
 
-    private static String rabbitCandidateId(RuntimeCleanupAction action, String name) {
-        String type = action == RuntimeCleanupAction.DELETE_RABBIT_EXCHANGE ? "exchange" : "queue";
-        return "rabbit:" + type + ":" + name;
-    }
-
-    private static boolean isRunningState(String state) {
+    static boolean isRunningState(String state) {
         if (state == null) {
             return false;
         }
@@ -689,7 +493,7 @@ public class RuntimeReconciliationService {
         return value.trim();
     }
 
-    private static boolean hasText(String value) {
+    static boolean hasText(String value) {
         return value != null && !value.isBlank();
     }
 
@@ -701,38 +505,20 @@ public class RuntimeReconciliationService {
         return hasText(actor) ? actor.trim() : "orchestrator-api";
     }
 
-    private static <T> List<T> concat(List<T> first, List<T> second) {
-        List<T> result = new ArrayList<>();
-        if (first != null) {
-            result.addAll(first);
-        }
-        if (second != null) {
-            result.addAll(second);
-        }
-        return result;
-    }
-
     private static RuntimeCleanupException cleanupError(HttpStatus status, String message) {
         return new RuntimeCleanupException(status, message);
     }
 
-    private record CleanupScope(
-        String computeAdapter,
-        String swarmId,
-        Optional<String> runId,
-        boolean includeRunning,
-        boolean includeRabbit) {
-        static CleanupScope from(PlanRequest request, String computeAdapter) {
-            if (request == null) {
-                throw cleanupError(HttpStatus.BAD_REQUEST, "request body is required");
-            }
-            return new CleanupScope(
-                requireText(computeAdapter, "computeAdapter"),
-                requireText(request.swarmId(), "swarmId"),
-                hasText(request.runId()) ? Optional.of(request.runId().trim()) : Optional.empty(),
-                Boolean.TRUE.equals(request.includeRunning()),
-                !Boolean.FALSE.equals(request.includeRabbit()));
+    private static CleanupScope cleanupScope(PlanRequest request, String computeAdapter) {
+        if (request == null) {
+            throw cleanupError(HttpStatus.BAD_REQUEST, "request body is required");
         }
+        return new CleanupScope(
+            requireText(computeAdapter, "computeAdapter"),
+            requireText(request.swarmId(), "swarmId"),
+            hasText(request.runId()) ? Optional.of(request.runId().trim()) : Optional.empty(),
+            Boolean.TRUE.equals(request.includeRunning()),
+            !Boolean.FALSE.equals(request.includeRabbit()));
     }
 
     private String currentComputeAdapterType() {

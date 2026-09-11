@@ -1,7 +1,7 @@
 package io.pockethive.orchestrator.config;
 
 import io.pockethive.topology.work.WorkResourceNamesPort;
-import io.pockethive.topology.work.PrefixedWorkResourceNames;
+import io.pockethive.rabbit.api.RabbitResourceNames;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,5 +13,5 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 public class WorkResourceNamesConfiguration {
     @Bean
-    WorkResourceNamesPort workResourceNames() { return new PrefixedWorkResourceNames(); }
+    WorkResourceNamesPort workResourceNames() { return new RabbitResourceNames(); }
 }

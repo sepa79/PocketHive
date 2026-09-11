@@ -22,8 +22,8 @@ class SwarmWorkBindingsProjectorTest {
 
   private static io.pockethive.topology.work.WorkResourceNamesPort selectedNames() {
     var names = org.mockito.Mockito.mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
-    org.mockito.Mockito.when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(call -> "selected." + call.getArgument(1));
+    org.mockito.Mockito.when(names.address(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        .thenAnswer(call -> new io.pockethive.topology.work.WorkAddress("selected.hive", "selected." + call.getArgument(2), "route." + call.getArgument(2)));
     org.mockito.Mockito.when(names.exchangeName(org.mockito.ArgumentMatchers.anyString())).thenReturn("selected.hive");
     return names;
   }
@@ -57,7 +57,7 @@ class SwarmWorkBindingsProjectorTest {
                 "role", "generator",
                 "instance", "generator-1",
                 "port", "out.fast",
-                "routingKey", "selected.generator.fast"),
+                "routingKey", "route.generator.fast"),
             "to", Map.of(
                 "role", "processor",
                 "instance", "processor-1",

@@ -901,6 +901,8 @@ public final class ScenarioBundleValidator {
             validateCapabilityConfigOptions(bee, config, configPath, findings);
             validateCapabilityConfigNumericRanges(bee, config, configPath, findings);
             workConfigurationFindings.validate(config, configPath, findings);
+            ScenarioEnvironmentFindings.validate(bee.env(), ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+                + ":template.bees[" + index + "].env", findings);
             index++;
         }
         return List.copyOf(findings);

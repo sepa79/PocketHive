@@ -143,7 +143,7 @@ function entry(controlEnvelope: ControlPlaneEnvelope): WireLogEntry {
     id: `${controlEnvelope.kind}-${controlEnvelope.type}`,
     receivedAt: controlEnvelope.timestamp,
     source: 'stomp',
-    routingKey: `/exchange/ph.control/${routingKey}`,
+    routingKey,
     payload: JSON.stringify(controlEnvelope),
     envelope: controlEnvelope,
     errors: [],

@@ -223,6 +223,17 @@ class McpOwnerToolExecutionIntegrationTest {
         clearInvocations(owners);
     }
 
+    @Test
+    void preservesOwnerPlaneIdentityInCleanupAndDebugResults() {
+        var targets = List.of(
+            Map.of("name", "jobs", "plane", "CONTROL"),
+            Map.of("name", "jobs", "plane", "WORK"));
+        for (String tool : List.of("runtime_cleanup_plan", "runtime_cleanup_execute", "runtime_rabbit_topology_snapshot")) {
+            when(owners.post(any(), any())).thenReturn(targets);
+            assertThat(execute(tool, ownerInput())).isEqualTo(targets);
+        }
+    }
+
     private void assertOwnerPost(String toolId, Map<String, Object> input, String path, Object body) {
         execute(toolId, input);
         verify(owners).post(path, body);

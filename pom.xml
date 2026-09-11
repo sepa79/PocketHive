@@ -7,6 +7,7 @@
   <packaging>pom</packaging>
     <properties>
     <work.boundary.enforcer.skip>true</work.boundary.enforcer.skip>
+    <rabbit.boundary.clients.skip>false</rabbit.boundary.clients.skip>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
     <revision>0.15.35</revision>
     <tomcat.version>10.1.55</tomcat.version>
@@ -29,7 +30,7 @@
     <module>common/work-config</module>
     <module>common/redis-config</module>
     <module>common/work-local-config</module>
-    <module>common/rabbit-config</module>
+    <module>common/rabbit-adapter</module>
     <module>common/work-config-composition</module>
     <module>common/work-test-fixtures</module>
     <module>observability</module>
@@ -260,6 +261,18 @@
                 <exclude>io.pockethive:docker-client</exclude>
                 <exclude>io.pockethive:templating</exclude>
                 <exclude>io.pockethive:*-adapter*</exclude>
+              </excludes>
+              <includes><include>*:*:*:*:test</include></includes>
+            </bannedDependencies></rules></configuration>
+          </execution>
+          <execution>
+            <id>rabbit-client-owner</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+            <configuration><skip>${rabbit.boundary.clients.skip}</skip><rules><bannedDependencies>
+              <searchTransitive>false</searchTransitive>
+              <excludes>
+                <exclude>org.springframework.amqp:*</exclude>
+                <exclude>com.rabbitmq:*</exclude>
+                <exclude>org.springframework.boot:spring-boot-starter-amqp</exclude>
               </excludes>
               <includes><include>*:*:*:*:test</include></includes>
             </bannedDependencies></rules></configuration>

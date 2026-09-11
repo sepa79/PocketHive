@@ -11,7 +11,7 @@ import io.pockethive.observability.ControlPlaneJson;
 import java.time.Instant;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.core.AmqpTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
@@ -22,7 +22,7 @@ class ControlPlaneWireShapeTest {
 
   @Test
   void publisherUsesCanonicalWireShape() throws Exception {
-    AmqpTemplate template = mock(AmqpTemplate.class);
+    RabbitPublisher template = mock(RabbitPublisher.class);
     AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(
         template, "ph.control", io.pockethive.controlplane.codec.ControlPlaneCodec.create());
 
@@ -33,8 +33,8 @@ class ControlPlaneWireShapeTest {
 	        "idem-1");
 	    publisher.publishSignal(new SignalMessage("signal.status-request.sw1.role.inst", signal));
 
-    ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
-    verify(template).convertAndSend(eq("ph.control"), eq("signal.status-request.sw1.role.inst"), payload.capture());
+    ArgumentCaptor<String> payload = ArgumentCaptor.forClass(String.class);
+    verify(template).sendText(eq("ph.control"), eq("signal.status-request.sw1.role.inst"), payload.capture());
 
     assertThat(payload.getValue()).isInstanceOf(String.class);
     ObjectMapper mapper = ControlPlaneJson.mapper();

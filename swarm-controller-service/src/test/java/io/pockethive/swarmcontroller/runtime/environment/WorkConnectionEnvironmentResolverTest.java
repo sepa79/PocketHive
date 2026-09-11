@@ -82,7 +82,9 @@ class WorkConnectionEnvironmentResolverTest {
     }
 
     private static Map<String, String> rabbitProperties() {
-        return new LinkedHashMap<>(Map.of("spring.rabbitmq.host", "rabbit", "spring.rabbitmq.port", "5672",
+        return new LinkedHashMap<>(Map.of("pockethive.rabbit.work.host", "work", "pockethive.rabbit.work.port", "5673",
+            "pockethive.rabbit.work.username", "worker", "pockethive.rabbit.work.password", "worksecret",
+            "pockethive.rabbit.work.virtual-host", "/work", "spring.rabbitmq.host", "rabbit", "spring.rabbitmq.port", "5672",
             "spring.rabbitmq.username", "user", "spring.rabbitmq.password", "secret",
             "spring.rabbitmq.virtual-host", "/"));
     }

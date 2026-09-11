@@ -14,8 +14,8 @@ import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.AssessmentS
 import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.DifferenceKind;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.BlockedResource;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.Counts;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitExchangeSnapshot;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitQueueSnapshot;
+import io.pockethive.orchestrator.runtime.RabbitExchangeSnapshot;
+import io.pockethive.orchestrator.runtime.RabbitQueueSnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;
@@ -562,9 +562,9 @@ class RuntimeAssessmentServiceTest {
                 true,
                 false,
                 false,
-                null)),
+                null, io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK)),
             List.of(new RabbitExchangeSnapshot(
-                "ph.control", present, "topic", true, false, null)),
+                "ph.control", present, "topic", true, false, null, io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK)),
             List.of());
     }
 }

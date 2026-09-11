@@ -5,7 +5,7 @@ import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.messaging.EventMessage;
 
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
-import org.springframework.amqp.core.AmqpTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 
 import java.util.Objects;
 
@@ -18,11 +18,11 @@ import java.util.Objects;
  */
 public final class AmqpControlPlanePublisher implements ControlPlanePublisher {
 
-    private final AmqpTemplate template;
+    private final RabbitPublisher template;
     private final String exchange;
     private final ControlPlaneCodec codec;
 
-    public AmqpControlPlanePublisher(AmqpTemplate template, String exchange, ControlPlaneCodec codec) {
+    public AmqpControlPlanePublisher(RabbitPublisher template, String exchange, ControlPlaneCodec codec) {
         this.template = Objects.requireNonNull(template, "template");
         this.exchange = Objects.requireNonNull(exchange, "exchange");
         this.codec = Objects.requireNonNull(codec, "codec");
@@ -31,12 +31,12 @@ public final class AmqpControlPlanePublisher implements ControlPlanePublisher {
     @Override
     public void publishSignal(SignalMessage message) {
         Objects.requireNonNull(message, "message");
-        template.convertAndSend(exchange, message.routingKey(), codec.encode(message.payload(), message.routingKey()));
+        template.sendText(exchange, message.routingKey(), codec.encode(message.payload(), message.routingKey()));
     }
 
     @Override
     public void publishEvent(EventMessage message) {
         Objects.requireNonNull(message, "message");
-        template.convertAndSend(exchange, message.routingKey(), codec.encode(message.payload(), message.routingKey()));
+        template.sendText(exchange, message.routingKey(), codec.encode(message.payload(), message.routingKey()));
     }
 }

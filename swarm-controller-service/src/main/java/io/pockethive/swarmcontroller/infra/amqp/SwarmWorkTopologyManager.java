@@ -7,15 +7,14 @@ import java.util.Set;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.BindingBuilder;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.QueueBuilder;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import java.util.Map;
 
 /**
- * Responsibility: declare and remove Rabbit Work resources using the canonical name-resolution port.
+ * Responsibility: translate the swarm queue requirements into calls to Rabbit resource and naming APIs.
  * Must not: construct resource names, validate worker settings or own lifecycle convergence.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
@@ -24,10 +23,10 @@ public final class SwarmWorkTopologyManager {
   private static final Logger log = LoggerFactory.getLogger(SwarmWorkTopologyManager.class);
 
   private final WorkResourceNamesPort names;
-  private final AmqpAdmin amqp;
+  private final RabbitResources amqp;
   private final SwarmControllerProperties properties;
 
-  public SwarmWorkTopologyManager(AmqpAdmin amqp, SwarmControllerProperties properties, WorkResourceNamesPort names) {
+  public SwarmWorkTopologyManager(@org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.WORK) RabbitResources amqp, SwarmControllerProperties properties, WorkResourceNamesPort names) {
     this.names = Objects.requireNonNull(names, "names");
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.properties = Objects.requireNonNull(properties, "properties");
@@ -36,11 +35,11 @@ public final class SwarmWorkTopologyManager {
   /**
    * Declare (or ensure existence of) the work exchange for the current swarm.
    *
-   * @return the declared {@link TopicExchange}.
+   * @return the declared exchange name.
    */
-  public TopicExchange declareWorkExchange() {
-    TopicExchange hive = new TopicExchange(names.exchangeName(properties.getTraffic().hiveExchange()), true, false);
-    amqp.declareExchange(hive);
+  public String declareWorkExchange() {
+    String hive = names.exchangeName(properties.getTraffic().hiveExchange());
+    amqp.declareExchange(new RabbitExchangeSpec(hive, true, false, Map.of()));
     log.info("declared work exchange {}", names.exchangeName(properties.getTraffic().hiveExchange()));
     return hive;
   }
@@ -52,7 +51,7 @@ public final class SwarmWorkTopologyManager {
    * declared so repeated calls can skip redundant declarations while still healing
    * missing queues.
    */
-  public void declareWorkQueues(TopicExchange workExchange,
+  public void declareWorkQueues(String workExchange,
                                 Set<String> suffixes,
                                 Set<String> declaredSuffixes) {
     Objects.requireNonNull(workExchange, "workExchange");
@@ -60,23 +59,22 @@ public final class SwarmWorkTopologyManager {
     Objects.requireNonNull(declaredSuffixes, "declaredSuffixes");
 
     for (String suffix : suffixes) {
-      String queueName = names.queueName(properties.getTraffic().queuePrefix(), suffix);
-      boolean queueMissing = amqp.getQueueProperties(queueName) == null;
+      var address = names.address(workExchange, properties.getTraffic().queuePrefix(), suffix);
+      String queueName = address.queue();
+      boolean queueMissing = amqp.queue(queueName).isEmpty();
       if (queueMissing) {
         declaredSuffixes.remove(suffix);
       }
-      Binding legacyBinding = new Binding(queueName, Binding.DestinationType.QUEUE,
-          workExchange.getName(), suffix, null);
-      amqp.removeBinding(legacyBinding);
+      RabbitBindingSpec legacyBinding = new RabbitBindingSpec(queueName, address.exchange(), suffix, Map.of());
+      amqp.unbind(legacyBinding);
 
-      Queue queue = QueueBuilder.durable(queueName).build();
+      RabbitQueueSpec queue = new RabbitQueueSpec(queueName, true, false, false, Map.of());
       if (queueMissing || !declaredSuffixes.contains(suffix)) {
         amqp.declareQueue(queue);
         log.info("declared queue {}", queueName);
       }
 
-      Binding desiredBinding = BindingBuilder.bind(queue).to(workExchange).with(queueName);
-      amqp.declareBinding(desiredBinding);
+      amqp.bind(new RabbitBindingSpec(queueName, address.exchange(), address.routingKey(), Map.of()));
       declaredSuffixes.add(suffix);
     }
   }

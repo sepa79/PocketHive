@@ -1,6 +1,6 @@
 package io.pockethive.swarmcontroller.runtime.environment;
 
-import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
 import io.pockethive.redis.config.RedisConnectionEnvironmentCodec;
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationProblem;
@@ -35,7 +35,7 @@ public final class WorkConnectionEnvironmentResolver {
         environment.putAll(RedisConnectionEnvironmentCodec.output(outputCandidate));
         Map<String, String> frozenEnvironment = Map.copyOf(environment);
         var properties = bindFinalEnvironment.apply(frozenEnvironment);
-        RabbitConnectionEnvironment.decode(properties);
+        RabbitConnectionEnvironment.decodeConnections(properties);
         resolveRedis("inputs", input, inputCandidate,
             selected(properties, "pockethive.inputs.type", WorkerInputType.REDIS_DATASET.name()),
             RedisConnectionEnvironmentCodec.inputProperties(properties), bootstrap);

@@ -30,11 +30,11 @@ import java.util.Objects;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Autowired;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnections;
 import org.springframework.stereotype.Component;
 
 /**
@@ -55,13 +55,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
   private final io.pockethive.swarmcontroller.runtime.SwarmJournal journal;
 
   @Autowired
-  public SwarmLifecycleManager(AmqpAdmin amqp,
+  public SwarmLifecycleManager(
+      @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
+      @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.WORK) RabbitResources workResources,
                                ObjectMapper mapper,
                                DockerClient dockerClient,
                                DockerContainerClient docker,
-                               RabbitTemplate rabbit,
+                               @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER) RabbitPublisher rabbit,
                                ControlPlaneCodec controlPlaneCodec,
-                               RabbitConnectionSettings rabbitConnection,
+                               RabbitConnections rabbitConnection,
                                @Qualifier("instanceId") String instanceId,
                                SwarmControllerProperties properties,
                                MeterRegistry meterRegistry,
@@ -70,20 +72,22 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
                                WorkerWorkConfigurationPort workConfiguration,
                         io.pockethive.topology.work.WorkResourceNamesPort workNames) {
-    this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
+    this(amqp, workResources, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
         clickHouseSink,
         runtimeFilesystemMount, workConfiguration, workNames);
   }
 
-  SwarmLifecycleManager(AmqpAdmin amqp,
+  SwarmLifecycleManager(
+      @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
+      @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.WORK) RabbitResources workResources,
                         ObjectMapper mapper,
                         DockerClient dockerClient,
                         DockerContainerClient docker,
-                        RabbitTemplate rabbit,
+                        @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER) RabbitPublisher rabbit,
                         ControlPlaneCodec controlPlaneCodec,
-                        RabbitConnectionSettings rabbitConnection,
+                        RabbitConnections rabbitConnection,
                         String instanceId,
                         SwarmControllerProperties properties,
                         MeterRegistry meterRegistry,
@@ -98,7 +102,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.journal = Objects.requireNonNull(journal, "journal");
     ControlPlanePublisher controlPublisher = new AmqpControlPlanePublisher(
         rabbit, properties.getControlExchange(), Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec"));
-    SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties, workNames);
+    SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(workResources, properties, workNames);
     ComputeAdapter computeAdapter;
     ComputeAdapterType adapterType = properties.getDocker() == null
         ? ComputeAdapterType.DOCKER_SINGLE
@@ -111,7 +115,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     }
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
     io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
-        new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(amqp);
+        new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(workResources);
     ConfigFanout configFanout =
         new ConfigFanout(
             mapper,

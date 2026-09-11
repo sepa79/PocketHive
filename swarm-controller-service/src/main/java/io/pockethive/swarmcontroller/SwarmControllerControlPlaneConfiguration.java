@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
@@ -13,7 +15,7 @@ import io.pockethive.swarmcontroller.runtime.JournalControlPlanePublisher;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal;
 import java.time.Duration;
 import java.util.Map;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -29,7 +31,7 @@ class SwarmControllerControlPlaneConfiguration {
 
   @Bean
   JournalControlPlanePublisher swarmControllerControlPlanePublisher(
-      RabbitTemplate rabbit,
+      @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER) RabbitPublisher rabbit,
       SwarmControllerProperties properties,
       SwarmJournal journal,
       ControlPlaneCodec codec) {
@@ -64,7 +66,7 @@ class SwarmControllerControlPlaneConfiguration {
             properties.getSwarmId(),
             properties.getControlQueuePrefixBase(),
             Map.of()),
-        runtimeMetadata.values());
+        runtimeMetadata.values(), new RabbitResourceNames());
   }
 
   @Bean
@@ -156,5 +158,13 @@ class SwarmControllerControlPlaneConfiguration {
         statusPublisher,
         readiness,
         results);
+  }
+  @Bean
+  io.pockethive.rabbit.api.RabbitListenerBinding swarmControlRabbitBinding(
+      io.pockethive.controlplane.spring.ControlPlaneRabbitBindings bindings,
+      SwarmSignalListener listener,
+      @Qualifier("swarmControllerControlQueueName") String queue) {
+    return bindings.bind("swarmControllerControl", queue,
+        message -> listener.handle(message.text(), message.receivedRoutingKey()));
   }
 }

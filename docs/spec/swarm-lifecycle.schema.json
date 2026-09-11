@@ -331,14 +331,19 @@
       "type": "string",
       "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING", "NETWORK_BINDING", "RUNTIME_DIRECTORY", "REGISTRY_ENTRY", "TERMINAL_EVIDENCE"]
     },
+    "ResourcePlane": { "type": "string", "enum": ["CONTROL", "WORK", "NONE"] },
     "RemoveResource": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["type", "id"],
+      "required": ["type", "id", "plane"],
       "properties": {
         "type": { "$ref": "#/$defs/RemoveResourceType" },
-        "id": { "$ref": "#/$defs/NonEmptyString" }
-      }
+        "id": { "$ref": "#/$defs/NonEmptyString" },
+        "plane": { "$ref": "#/$defs/ResourcePlane" }
+      },
+      "if": { "properties": { "type": { "enum": ["RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING"] } } },
+      "then": { "properties": { "plane": { "enum": ["CONTROL", "WORK"] } } },
+      "else": { "properties": { "plane": { "const": "NONE" } } }
     },
     "RemoveError": {
       "type": "object",

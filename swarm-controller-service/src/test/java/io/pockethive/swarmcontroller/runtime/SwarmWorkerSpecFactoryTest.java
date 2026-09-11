@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -25,8 +27,8 @@ import java.util.LinkedHashMap;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
-import io.pockethive.rabbit.config.RabbitWorkSettingsBootstrap;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitWorkSettingsBootstrap;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.mock.env.MockEnvironment;
@@ -72,7 +74,7 @@ class SwarmWorkerSpecFactoryTest {
         Map.of(),
         Map.of(
             "inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of(
-                "prefetch", 7, "concurrentConsumers", 3, "exclusive", "true")),
+                "prefetch", 7, "concurrentConsumers", 3, "exclusive", "false")),
             "outputs", Map.of("type", "RABBITMQ", "rabbit", Map.of(
                 "persistent", "false", "publisherConfirms", true))));
 
@@ -89,7 +91,7 @@ class SwarmWorkerSpecFactoryTest {
         "queue", "ph.test.input",
         "prefetch", 7,
         "concurrentConsumers", 3,
-        "exclusive", true));
+        "exclusive", false));
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("rabbit"))).isEqualTo(Map.of(
         "exchange", "ph.test.hive",
         "routingKey", "ph.test.output",
@@ -363,14 +365,12 @@ class SwarmWorkerSpecFactoryTest {
   @Test
   void validOverridesReachBothStartupAndBootstrapWithoutChangingSource() {
     var bee = redisOutputBee(Map.of(
-        "SPRING_RABBITMQ_PORT", "5673",
         "POCKETHIVE_OUTPUTS_REDIS_PORT", "6381",
         "pockethive.outputs.redis.password", " new secret "), 6379);
 
     var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
 
     assertThat(planned.spec().environment())
-        .containsEntry("SPRING_RABBITMQ_PORT", "5673")
         .containsEntry("POCKETHIVE_OUTPUTS_REDIS_PORT", "6381")
         .containsEntry("POCKETHIVE_OUTPUTS_REDIS_PASSWORD", " new secret ");
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis")))
@@ -422,26 +422,29 @@ class SwarmWorkerSpecFactoryTest {
         .containsEntry("port", 6381);
   }
 
-  @Test
-  void rejectsEmptyRabbitAliasAndResolvedPasswordBeforeReturningPlan() {
-    for (var overrides : List.of(Map.of("SPRING_RABBITMQ_VIRTUALHOST", ""),
-        Map.of("SPRING_RABBITMQ_PASSWORD", "${EMPTY}", "EMPTY", ""))) {
-      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(overrides, 6379), null))
-          .isInstanceOf(IllegalStateException.class).hasMessageContaining("must not be null or blank");
+  @ParameterizedTest
+  @ValueSource(strings = {"SPRING_RABBITMQ_HOST", "SPRING_RABBITMQ_PORT", "SPRING_RABBITMQ_USERNAME",
+      "SPRING_RABBITMQ_PASSWORD", "SPRING_RABBITMQ_VIRTUALHOST", "SPRING_RABBITMQ_VIRTUAL_HOST",
+      "spring.rabbitmq.virtual-host", "SPRING_RABBITMQ_ADDRESSES", "SPRING_RABBITMQ_SSL_ENABLED"})
+  void rejectsControlConnectionOverridesBeforeReturningPlan(String key) {
+    for (String value : List.of("other", "", "${SECRET}")) {
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, value), 6379), null))
+          .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("per-worker overrides are unsupported")
+          .hasMessageNotContaining("${SECRET}");
     }
   }
 
   @Test
   void springAliasesAndPlaceholdersReachBothStartupAndBootstrap() {
     var planned = factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(
-        "SPRING_RABBITMQ_VIRTUALHOST", "/other", "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "${REDIS_SECRET}",
+        "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "${REDIS_SECRET}",
         "REDIS_SECRET", " secret "), 6379), null);
     var workerEnvironment = new MockEnvironment();
     workerEnvironment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
         "systemEnvironment", new LinkedHashMap<>(planned.spec().environment())));
     var startup = Binder.get(workerEnvironment).bind("spring.rabbitmq", RabbitConnectionSettings.class).get();
-    assertThat(startup.virtualHost()).isEqualTo("/other");
-    assertThat(planned.spec().environment()).containsEntry("SPRING_RABBITMQ_VIRTUALHOST", startup.virtualHost())
+    assertThat(startup.virtualHost()).isEqualTo("/");
+    assertThat(planned.spec().environment()).containsEntry("SPRING_RABBITMQ_VIRTUAL_HOST", startup.virtualHost())
         .containsEntry("POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "${REDIS_SECRET}");
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis")))
         .containsEntry("password", " secret ");
@@ -454,20 +457,18 @@ class SwarmWorkerSpecFactoryTest {
             "host", "redis", "port", 6379, "ssl", false, "password", ""))));
 
     assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
-        .isInstanceOf(IllegalStateException.class).hasMessageContaining("spring.rabbitmq.password");
+        .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("spring.rabbitmq.password");
   }
 
   @Test
   void resolvesConnectionReferencesAgainstCompleteUnchangedEnvironment() {
-    var bee = redisOutputBee(Map.of("SPRING_RABBITMQ_PASSWORD", "${POCKETHIVE_OUTPUTS_REDIS_PASSWORD}",
-        "POCKETHIVE_OUTPUTS_REDIS_HOST", "${SPRING_RABBITMQ_HOST}"), 6379);
+    var bee = redisOutputBee(Map.of("POCKETHIVE_OUTPUTS_REDIS_HOST", "${SPRING_RABBITMQ_HOST}"), 6379);
     var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
     var workerEnvironment = new MockEnvironment();
     workerEnvironment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
         "systemEnvironment", new LinkedHashMap<>(planned.spec().environment())));
     var binder = Binder.get(workerEnvironment);
 
-    assertThat(binder.bind("spring.rabbitmq", RabbitConnectionSettings.class).get().password()).isEqualTo("old secret");
     assertThat(planned.spec().environment()).containsAllEntriesOf(bee.env());
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis")))
         .containsEntry("host", binder.bind("pockethive.outputs.redis.host", String.class).get())
@@ -568,13 +569,13 @@ class SwarmWorkerSpecFactoryTest {
     return new SwarmWorkerSpecFactory(
         properties,
         workerSettings,
-        rabbit,
+        new io.pockethive.rabbit.api.RabbitConnections(rabbit, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work")),
         controlNetwork,
         clickHouse,
         RuntimeFilesystemMount.of("/opt/pockethive/scenarios-runtime"),
         () -> "template-1",
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
-            .workerWorkConfiguration(properties, new io.pockethive.topology.work.PrefixedWorkResourceNames()));
+            .workerWorkConfiguration(properties, new RabbitResourceNames()));
   }
 
   private static Bee redisOutputBee(Map<String, String> environment, int port) {

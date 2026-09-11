@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.orchestrator.runtime.RuntimeRemovalVerification;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
@@ -89,10 +91,10 @@ class SwarmRemovalConvergenceHandlerTest {
   @Test
   void removeCannotCleanupArtifactsOrRegistryWhileRuntimeResourceRemains() {
     Instant now = reserveRemove();
-    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1");
+    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     succeededResult(List.of(worker), now);
     when(verifier.verifyAbsent(List.of(worker))).thenReturn(
-        new RuntimeRemovalPostconditionVerifier.Verification(
+        new RuntimeRemovalVerification(
             List.of(),
             List.of(worker),
             List.of(new RemoveError("RESOURCE_STILL_PRESENT", "worker is still running", worker))));
@@ -110,15 +112,15 @@ class SwarmRemovalConvergenceHandlerTest {
   @Test
   void removeSucceedsOnlyAfterRuntimeDirectoryAndRegistryAreAbsent() {
     Instant now = reserveRemove();
-    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1");
-    RemoveResource controller = new RemoveResource(RemoveResourceType.CONTROLLER_RUNTIME, "container-1");
+    RemoveResource worker = new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
+    RemoveResource controller = new RemoveResource(RemoveResourceType.CONTROLLER_RUNTIME, "container-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
     succeededResult(List.of(worker), now);
     when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
         new ContainerLifecycleManager.ControllerRuntimeRemoval(List.of(controller), List.of(), List.of()));
     when(verifier.verifyAbsent(List.of(worker))).thenReturn(
-        new RuntimeRemovalPostconditionVerifier.Verification(List.of(worker), List.of(), List.of()));
+        new RuntimeRemovalVerification(List.of(worker), List.of(), List.of()));
     when(verifier.verifyAbsent(List.of(controller))).thenReturn(
-        new RuntimeRemovalPostconditionVerifier.Verification(List.of(controller), List.of(), List.of()));
+        new RuntimeRemovalVerification(List.of(controller), List.of(), List.of()));
     when(removeStore.swarmRuntimeExists(SWARM_ID)).thenReturn(false);
 
     handler.checkResults();
@@ -152,7 +154,7 @@ class SwarmRemovalConvergenceHandlerTest {
     assertThat(operations.findByCorrelation("remove-corr").orElseThrow().terminalResult().context())
         .extracting("remainingResources")
         .asList()
-        .contains(new RemoveResource(RemoveResourceType.TERMINAL_EVIDENCE, "remove-corr"));
+        .contains(new RemoveResource(RemoveResourceType.TERMINAL_EVIDENCE, "remove-corr", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE));
   }
 
   @Test
@@ -160,7 +162,7 @@ class SwarmRemovalConvergenceHandlerTest {
     Instant now = reserveRemove();
     succeededResult(List.of(), now);
     when(verifier.verifyAbsent(List.of())).thenReturn(
-        new RuntimeRemovalPostconditionVerifier.Verification(List.of(), List.of(), List.of()));
+        new RuntimeRemovalVerification(List.of(), List.of(), List.of()));
     doThrow(new IllegalStateException("binding still active"))
         .when(networkBindings)
         .clearBindingAndVerifyAbsent(
@@ -181,7 +183,7 @@ class SwarmRemovalConvergenceHandlerTest {
     assertThat(operations.findByCorrelation("remove-corr").orElseThrow().terminalResult().context())
         .extracting("remainingResources")
         .asList()
-        .contains(new RemoveResource(RemoveResourceType.NETWORK_BINDING, SWARM_ID));
+        .contains(new RemoveResource(RemoveResourceType.NETWORK_BINDING, SWARM_ID, io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE));
     assertThat(store.find(SWARM_ID)).isPresent();
     verify(lifecycle, never()).removeControllerRuntime(SWARM_ID);
     verify(removeStore, never()).deleteSwarmRuntime(SWARM_ID);
@@ -234,7 +236,7 @@ class SwarmRemovalConvergenceHandlerTest {
     when(lifecycle.removeControllerRuntime(SWARM_ID)).thenReturn(
         new ContainerLifecycleManager.ControllerRuntimeRemoval(controllerResources, List.of(), List.of()));
     when(verifier.verifyAbsent(List.of())).thenReturn(
-        new RuntimeRemovalPostconditionVerifier.Verification(List.of(), List.of(), List.of()));
+        new RuntimeRemovalVerification(List.of(), List.of(), List.of()));
   }
 
   private static final class CapturingPublisher implements ControlPlanePublisher {

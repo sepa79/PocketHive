@@ -17,7 +17,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.amqp.core.MessageProperties;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -149,7 +149,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
       return WorkItem.text(context.info(), rendered.body())
           .headers(headers)
           .messageId(messageId)
-          .contentType(MessageProperties.CONTENT_TYPE_JSON)
+          .contentType(MimeTypeUtils.APPLICATION_JSON_VALUE)
           .build();
     }
 
@@ -165,7 +165,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     return WorkItem.json(context.info(), payload)
         .headers(baseHeaders)
         .messageId(messageId)
-        .contentType(MessageProperties.CONTENT_TYPE_JSON)
+        .contentType(MimeTypeUtils.APPLICATION_JSON_VALUE)
         .build();
   }
 

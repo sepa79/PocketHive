@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.testing;
 
+import io.pockethive.controlplane.spring.WorkerControlTopology;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -29,7 +31,7 @@ class ControlPlaneTestFixturesTest {
         assertThat(ControlPlaneTestFixtures.hiveExchange("swarm-1")).isEqualTo("ph.swarm-1.hive");
         assertThat(ControlPlaneTestFixtures.workerQueue("swarm-1", "generator")).isEqualTo("ph.swarm-1.gen");
         assertThat(ControlPlaneTestFixtures.workerQueue("swarm-1", "moderator")).isEqualTo("ph.swarm-1.mod");
-        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        WorkerControlTopology controlPlane = properties.getControlPlane();
         assertThat(controlPlane.getControlQueueName()).isEqualTo("ph.control.swarm-1.generator.worker-a");
         assertThat(controlPlane.getRoutes().configSignals())
             .contains("signal.config-update.swarm-1.generator.{instance}");

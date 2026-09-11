@@ -21,14 +21,14 @@ import java.util.Set;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpAdmin;
+import io.pockethive.rabbit.api.RabbitResources;
 import org.springframework.amqp.core.TopicExchange;
 
 class SwarmRuntimeInfrastructureTest {
 
   private static final String SWARM_ID = "swarm-1";
 
-  private AmqpAdmin amqp;
+  private RabbitResources amqp;
   private SwarmControllerProperties properties;
   private SwarmWorkTopologyManager topology;
   private ComputeAdapter computeAdapter;
@@ -37,7 +37,7 @@ class SwarmRuntimeInfrastructureTest {
 
   @BeforeEach
   void setUp() {
-    amqp = mock(AmqpAdmin.class);
+    amqp = mock(RabbitResources.class);
     properties = mock(SwarmControllerProperties.class);
     topology = mock(SwarmWorkTopologyManager.class);
     computeAdapter = mock(ComputeAdapter.class);
@@ -54,7 +54,7 @@ class SwarmRuntimeInfrastructureTest {
 
   @Test
   void declaresWorkTopologyAndProvisionsExactlyTheSuppliedWorkers() {
-    TopicExchange exchange = new TopicExchange("selected.hive");
+    String exchange = "selected.hive";
     Set<String> suffixes = Set.of("generated");
     WorkerSpec worker = new WorkerSpec(
         "generator-1", "generator", "generator:latest", Map.of(), List.of());
@@ -78,15 +78,15 @@ class SwarmRuntimeInfrastructureTest {
     verify(computeAdapter).removeWorkers(SWARM_ID);
     verify(amqp).deleteQueue("ph.control.swarm-1.generator.generator-1");
     assertThat(removed).containsExactly(
-        new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "generator-1"),
+        new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "generator-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE),
         new RemoveResource(
             RemoveResourceType.RABBIT_QUEUE,
-            "ph.control.swarm-1.generator.generator-1"));
+            "ph.control.swarm-1.generator.generator-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL));
   }
 
   @Test
   void removesDeclaredWorkTopologyUnregistersMetricsAndClearsItsInventory() {
-    TopicExchange exchange = new TopicExchange("selected.hive");
+    String exchange = "selected.hive";
     when(topology.declareWorkExchange()).thenReturn(exchange);
     doAnswer(invocation -> {
       Set<String> suffixes = invocation.getArgument(1);
@@ -109,8 +109,8 @@ class SwarmRuntimeInfrastructureTest {
     verify(queueMetrics).unregister("selected.generated");
     verify(topology).deleteWorkExchange();
     assertThat(removed).containsExactly(
-        new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "selected.generated"),
-        new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, "selected.hive"));
+        new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "selected.generated", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK),
+        new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, "selected.hive", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK));
     assertThat(infrastructure.declaredQueueSuffixes()).isEmpty();
   }
 }

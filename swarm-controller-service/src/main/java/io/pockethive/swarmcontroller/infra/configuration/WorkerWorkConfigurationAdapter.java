@@ -8,7 +8,7 @@ import io.pockethive.swarmcontroller.config.SpringConnectionEnvironment;
 import io.pockethive.swarmcontroller.runtime.WorkerWorkConfigurationPort;
 import io.pockethive.swarmcontroller.runtime.WorkerWorkConfigurationResult;
 import io.pockethive.swarmcontroller.runtime.environment.WorkConnectionEnvironmentResolver;
-import io.pockethive.rabbit.config.RabbitWorkSettingsBootstrap;
+import io.pockethive.rabbit.api.RabbitWorkSettingsBootstrap;
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationFields;
 import io.pockethive.work.config.WorkConfigurationParser;
@@ -39,7 +39,7 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
   private final WorkConfigurationParser parser;
   private final SwarmControllerProperties properties;
   private final WorkResourceNamesPort names;
-  private final io.pockethive.rabbit.config.RabbitWorkEnvironment rabbitEnvironment;
+  private final io.pockethive.rabbit.api.RabbitWorkEnvironment rabbitEnvironment;
   private final InputLifecyclePolicy inputControls;
   private final CsvDatasetEnvironment csvEnvironment;
   private final SchedulerSettingsEnvironment schedulerEnvironment;
@@ -49,7 +49,7 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
   private final RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap;
 
   public WorkerWorkConfigurationAdapter(SwarmControllerProperties properties, WorkResourceNamesPort names,
-      io.pockethive.rabbit.config.RabbitWorkEnvironment rabbitEnvironment,
+      io.pockethive.rabbit.api.RabbitWorkEnvironment rabbitEnvironment,
       InputLifecyclePolicy inputControls, CsvDatasetEnvironment csvEnvironment,
       SchedulerSettingsEnvironment schedulerEnvironment, RedisDatasetEnvironment redisDatasetEnvironment,
       WorkConnectionEnvironmentResolver connectionsResolver, RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap,
@@ -70,6 +70,8 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
   @Override
   public void validateDeclaration(Bee bee) {
     Objects.requireNonNull(bee, "bee");
+    var controlOverrides = io.pockethive.rabbit.api.RabbitConnectionEnvironment.controlOverrideProblems(bee.env());
+    if (!controlOverrides.isEmpty()) throw new WorkConfigurationException(controlOverrides);
     var unsupported = inputControls.configurationProblems(
         bee.config().get(WorkConfigurationFields.INPUTS), WorkConfigurationFields.INPUTS);
     if (!unsupported.isEmpty()) throw new WorkConfigurationException(unsupported);
@@ -210,17 +212,18 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
       boolean hasInput = hasText(inputQueue);
       boolean hasOutput = hasText(outputQueue);
       if (hasInput) {
-        environment.put(RabbitWorkSettingsBootstrap.INPUT_QUEUE_ENV, names.queueName(properties.getTraffic().queuePrefix(), inputQueue));
+        var address = names.address(properties.getTraffic().hiveExchange(), properties.getTraffic().queuePrefix(), inputQueue);
+        environment.put(RabbitWorkSettingsBootstrap.INPUT_QUEUE_ENV, address.queue());
+        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, address.exchange());
       } else if (!work.in().isEmpty()) {
         log.warn("Bee {} declares input ports without a default; skipping input queue wiring", bee.role());
       }
       if (hasOutput) {
-        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_ROUTING_KEY_ENV, names.queueName(properties.getTraffic().queuePrefix(), outputQueue));
+        var address = names.address(properties.getTraffic().hiveExchange(), properties.getTraffic().queuePrefix(), outputQueue);
+        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_ROUTING_KEY_ENV, address.routingKey());
+        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, address.exchange());
       } else if (!work.out().isEmpty()) {
         log.warn("Bee {} declares output ports without a default; skipping output queue wiring", bee.role());
-      }
-      if (hasInput || hasOutput) {
-        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, names.exchangeName(properties.getTraffic().hiveExchange()));
       }
     }
 

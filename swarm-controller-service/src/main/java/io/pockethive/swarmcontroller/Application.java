@@ -1,14 +1,9 @@
 package io.pockethive.swarmcontroller;
 
-import org.springframework.amqp.rabbit.annotation.EnableRabbit;
-import io.pockethive.controlplane.spring.RabbitConnectionConfiguration;
-import org.springframework.context.annotation.Import;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
-@EnableRabbit
-@Import(RabbitConnectionConfiguration.class)
 @SpringBootApplication
 @ConfigurationPropertiesScan(basePackages = {
     "io.pockethive.swarmcontroller.config",

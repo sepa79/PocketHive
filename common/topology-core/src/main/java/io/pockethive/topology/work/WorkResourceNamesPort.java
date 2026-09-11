@@ -7,6 +7,7 @@ package io.pockethive.topology.work;
  */
 public interface WorkResourceNamesPort {
     WorkTopologySettings forSwarm(String swarmId);
+    WorkAddress address(String exchange, String prefix, String suffix);
     String exchangeName(String configuredName);
     String queueName(String prefix, String suffix);
 }

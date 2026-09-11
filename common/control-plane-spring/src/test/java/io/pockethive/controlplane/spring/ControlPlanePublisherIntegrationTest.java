@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -19,9 +21,9 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
 import io.pockethive.swarm.model.lifecycle.TerminalResult;
 import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 
@@ -39,18 +41,18 @@ class ControlPlanePublisherIntegrationTest {
     void publisherSendsSignalsAndEventsToConfiguredExchange() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.exchange=ph.integration")
-            .withBean(RabbitTemplate.class, () -> mock(RabbitTemplate.class))
+            .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> mock(RabbitPublisher.class))
             .run(context -> {
             ControlPlanePublisher publisher = context.getBean(ControlPlanePublisher.class);
-            RabbitTemplate template = context.getBean(RabbitTemplate.class);
-            TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
+            RabbitPublisher template = context.getBean(RabbitPublisher.class);
+            RabbitExchangeSpec exchange = context.getBean("controlPlaneExchange", RabbitExchangeSpec.class);
 
             ControlPlaneIdentity identity = new ControlPlaneIdentity("swarm-A", "generator", "gen-1");
             ControlPlaneProperties properties = context.getBean(ControlPlaneProperties.class);
             ControlPlaneTopologySettings settings = new ControlPlaneTopologySettings(
                 properties.getSwarmId(), properties.getControlQueuePrefix(), Map.of());
             Map<String, Object> runtime = Map.of("templateId", "tpl-1", "runId", "run-1");
-            ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings, runtime);
+            ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings, runtime, new RabbitResourceNames());
             ConfirmationScope scope = new ConfirmationScope("swarm-A", "generator", "gen-1");
 
             ControlPlaneEmitter.ResultContext result = new ControlPlaneEmitter.ResultContext(
@@ -78,8 +80,8 @@ class ControlPlanePublisherIntegrationTest {
             publisher.publishSignal(new SignalMessage(signalKey, signal));
 
             ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
-            ArgumentCaptor<Object> payloadCaptor = ArgumentCaptor.forClass(Object.class);
-            verify(template, times(2)).convertAndSend(eq(exchange.getName()), routingCaptor.capture(), payloadCaptor.capture());
+            ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
+            verify(template, times(2)).sendText(eq(exchange.name()), routingCaptor.capture(), payloadCaptor.capture());
 
             List<String> routes = routingCaptor.getAllValues();
             assertThat(routes).contains(signalKey,
@@ -92,7 +94,7 @@ class ControlPlanePublisherIntegrationTest {
     void disablingControlPlaneSkipsCommonInfrastructure() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.enabled=false")
-            .withBean(RabbitTemplate.class, () -> mock(RabbitTemplate.class))
+            .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> mock(RabbitPublisher.class))
             .run(context -> {
                 assertThat(context).hasNotFailed();
                 assertThat(context).doesNotHaveBean("controlPlaneExchange");

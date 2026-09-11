@@ -71,10 +71,15 @@ import static org.junit.jupiter.api.Assertions.*;
 
     var broker = RabbitAvailableCondition.getBrokerRunning();
     setRequiredSystemProperty("SPRING_RABBITMQ_HOST", broker.getHostName());
+    setRequiredSystemProperty("POCKETHIVE_RABBIT_WORK_HOST", broker.getHostName());
     setRequiredSystemProperty("SPRING_RABBITMQ_PORT", Integer.toString(broker.getPort()));
+    setRequiredSystemProperty("POCKETHIVE_RABBIT_WORK_PORT", Integer.toString(broker.getPort()));
     setRequiredSystemProperty("SPRING_RABBITMQ_USERNAME", "guest");
+    setRequiredSystemProperty("POCKETHIVE_RABBIT_WORK_USERNAME", "guest");
     setRequiredSystemProperty("SPRING_RABBITMQ_PASSWORD", "guest");
+    setRequiredSystemProperty("POCKETHIVE_RABBIT_WORK_PASSWORD", "guest");
     setRequiredSystemProperty("SPRING_RABBITMQ_VIRTUAL_HOST", "/");
+    setRequiredSystemProperty("POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST", "/");
 
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_EXCHANGE", CONTROL_EXCHANGE);
     setRequiredSystemProperty("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED", Boolean.FALSE.toString());
@@ -98,10 +103,15 @@ import static org.junit.jupiter.api.Assertions.*;
 	    String swarmId = TEST_SWARM_ID;
 
     register(registry, "SPRING_RABBITMQ_HOST", "spring.rabbitmq.host", broker.getHostName());
+    register(registry, "POCKETHIVE_RABBIT_WORK_HOST", "pockethive.rabbit.work.host", broker.getHostName());
     register(registry, "SPRING_RABBITMQ_PORT", "spring.rabbitmq.port", Integer.toString(broker.getPort()));
+    register(registry, "POCKETHIVE_RABBIT_WORK_PORT", "pockethive.rabbit.work.port", Integer.toString(broker.getPort()));
     register(registry, "SPRING_RABBITMQ_USERNAME", "spring.rabbitmq.username", "guest");
+    register(registry, "POCKETHIVE_RABBIT_WORK_USERNAME", "pockethive.rabbit.work.username", "guest");
     register(registry, "SPRING_RABBITMQ_PASSWORD", "spring.rabbitmq.password", "guest");
+    register(registry, "POCKETHIVE_RABBIT_WORK_PASSWORD", "pockethive.rabbit.work.password", "guest");
     register(registry, "SPRING_RABBITMQ_VIRTUAL_HOST", "spring.rabbitmq.virtual-host", "/");
+    register(registry, "POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST", "pockethive.rabbit.work.virtual-host", "/");
 
     register(registry, "POCKETHIVE_CONTROL_PLANE_EXCHANGE", "pockethive.control-plane.exchange", CONTROL_EXCHANGE);
     register(registry, "POCKETHIVE_CONTROL_PLANE_SWARM_ID", "pockethive.control-plane.swarm-id", swarmId);

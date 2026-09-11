@@ -7,8 +7,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
-import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.api.RabbitConnections;
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
 
 /**
  * Builds environment maps for control-plane participants so services share a consistent
@@ -29,7 +29,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                                             String managerRole,
                                                             ControlPlaneProperties controlPlaneProperties,
                                                             ControllerSettings settings,
-                                                            RabbitConnectionSettings rabbitConnection) {
+                                                            RabbitConnections rabbitConnection) {
         String resolvedSwarmId = requireArgument(swarmId, "swarmId");
         String resolvedInstance = requireArgument(instanceId, "controller instance");
         Objects.requireNonNull(settings, "settings");
@@ -69,7 +69,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public static Map<String, String> workerEnvironment(String instanceId,
                                                         String role,
                                                         WorkerSettings settings,
-                                                        RabbitConnectionSettings rabbitConnection) {
+                                                        RabbitConnections rabbitConnection) {
         String resolvedInstance = requireArgument(instanceId, "worker instance");
         String resolvedRole = requireArgument(role, "worker role");
         Objects.requireNonNull(settings, "settings");

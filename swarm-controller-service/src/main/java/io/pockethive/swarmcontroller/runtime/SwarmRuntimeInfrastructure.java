@@ -16,8 +16,8 @@ import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitResources;
+
 
 /**
  * Responsibility: Apply and remove the compute and AMQP resources selected by the runtime state machine.
@@ -30,7 +30,7 @@ public final class SwarmRuntimeInfrastructure {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmRuntimeInfrastructure.class);
 
-  private final AmqpAdmin amqp;
+  private final RabbitResources amqp;
   private final SwarmControllerProperties properties;
   private final WorkResourceNamesPort workNames;
   private final SwarmWorkTopologyManager topology;
@@ -40,7 +40,7 @@ public final class SwarmRuntimeInfrastructure {
   private final Set<String> declaredQueueSuffixes = new HashSet<>();
 
   public SwarmRuntimeInfrastructure(
-      AmqpAdmin amqp,
+      RabbitResources amqp,
       SwarmControllerProperties properties,
       SwarmWorkTopologyManager topology,
       ComputeAdapter computeAdapter,
@@ -56,7 +56,7 @@ public final class SwarmRuntimeInfrastructure {
 
   public void declareWorkTopology(Set<String> queueSuffixes) {
     Objects.requireNonNull(queueSuffixes, "queueSuffixes");
-    TopicExchange workExchange = topology.declareWorkExchange();
+    String workExchange = topology.declareWorkExchange();
     topology.declareWorkQueues(workExchange, queueSuffixes, declaredQueueSuffixes);
   }
 
@@ -70,7 +70,7 @@ public final class SwarmRuntimeInfrastructure {
     computeAdapter.removeWorkers(swarmId);
     instancesByRole.values().stream()
         .flatMap(List::stream)
-        .map(workerId -> new RemoveResource(RemoveResourceType.WORKER_RUNTIME, workerId))
+        .map(workerId -> new RemoveResource(RemoveResourceType.WORKER_RUNTIME, workerId, io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE))
         .forEach(removed::add);
     for (Map.Entry<String, List<String>> entry : instancesByRole.entrySet()) {
       String workerRole = entry.getKey();
@@ -78,7 +78,7 @@ public final class SwarmRuntimeInfrastructure {
         String controlQueue = properties.controlQueueName(workerRole, workerInstanceId);
         log.info("deleting control queue {}", controlQueue);
         amqp.deleteQueue(controlQueue);
-        removed.add(new RemoveResource(RemoveResourceType.RABBIT_QUEUE, controlQueue));
+        removed.add(new RemoveResource(RemoveResourceType.RABBIT_QUEUE, controlQueue, io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL));
       }
     }
     return List.copyOf(removed);
@@ -90,10 +90,10 @@ public final class SwarmRuntimeInfrastructure {
     topology.deleteWorkQueues(queueSuffixes, queueMetrics::unregister);
     queueSuffixes.stream()
         .map(suffix -> workNames.queueName(properties.getTraffic().queuePrefix(), suffix))
-        .map(queue -> new RemoveResource(RemoveResourceType.RABBIT_QUEUE, queue))
+        .map(queue -> new RemoveResource(RemoveResourceType.RABBIT_QUEUE, queue, io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK))
         .forEach(removed::add);
     topology.deleteWorkExchange();
-    removed.add(new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, workNames.exchangeName(properties.getTraffic().hiveExchange())));
+    removed.add(new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, workNames.exchangeName(properties.getTraffic().hiveExchange()), io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK));
     declaredQueueSuffixes.clear();
     return List.copyOf(removed);
   }

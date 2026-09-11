@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapRequest;
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapResponse;
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapSample;
@@ -20,13 +22,10 @@ import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Binding.DestinationType;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.QueueBuilder;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitDebugTapSpec;
+import io.pockethive.rabbit.api.RabbitMessage;
+import io.pockethive.rabbit.api.RabbitReceiver;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -34,9 +33,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Responsibility: manage temporary Work debug taps and their captured samples.
- * Must not: reconstruct source resource names or mutate swarm topology and lifecycle state.
+ * Must not: reconstruct source addresses, map Rabbit queue arguments or mutate swarm topology and lifecycle state.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names;
- * source destinations come from the injected naming port; temporary tap resources remain local.
+ * source destinations come from the injected naming port; temporary tap lifecycle remains local and broker operations use RabbitResources.
  */
 @Service
 public class DebugTapService {
@@ -45,12 +44,12 @@ public class DebugTapService {
     private static final int DEFAULT_TTL_SECONDS = 60;
 
     private final SwarmStore swarmStore;
-    private final AmqpAdmin amqp;
-    private final RabbitTemplate rabbitTemplate;
+    private final RabbitResources amqp;
+    private final RabbitReceiver rabbitTemplate;
     private final WorkResourceNamesPort workNames;
     private final ConcurrentMap<String, DebugTap> taps = new ConcurrentHashMap<>();
 
-    public DebugTapService(SwarmStore swarmStore, AmqpAdmin amqp, RabbitTemplate rabbitTemplate,
+    public DebugTapService(SwarmStore swarmStore, @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.WORK) RabbitResources amqp, RabbitReceiver rabbitTemplate,
                            WorkResourceNamesPort workNames) {
         this.swarmStore = Objects.requireNonNull(swarmStore, "swarmStore");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
@@ -67,20 +66,11 @@ public class DebugTapService {
         int ttlSeconds = resolveTtlSeconds(request.ttlSeconds());
 
         String tapId = UUID.randomUUID().toString();
-        String tapQueue = "ph.debug.%s.%s.%s".formatted(binding.swarmId(), binding.role(), shortId(tapId));
+        String tapQueue = RabbitResourceNames.debugTapQueue(binding.swarmId(), binding.role(), tapId);
 
-        Map<String, Object> args = Map.of(
-            "x-message-ttl", ttlSeconds * 1000L,
-            "x-max-length", maxItems
-        );
-        Queue queue = QueueBuilder.nonDurable(tapQueue)
-            .exclusive()
-            .autoDelete()
-            .withArguments(args)
-            .build();
-        amqp.declareQueue(queue);
-        Binding bindingDef = new Binding(queue.getName(), DestinationType.QUEUE, binding.exchange(), binding.routingKey(), null);
-        amqp.declareBinding(bindingDef);
+        var specification = RabbitDebugTapSpec.create(tapQueue, binding.exchange(), binding.routingKey(), ttlSeconds, maxItems);
+        amqp.declareQueue(specification.queue());
+        amqp.bind(specification.binding());
 
         DebugTap tap = new DebugTap(
             tapId,
@@ -90,7 +80,7 @@ public class DebugTapService {
             binding.ioName(),
             binding.exchange(),
             binding.routingKey(),
-            queue.getName(),
+            tapQueue,
             maxItems,
             ttlSeconds,
             Instant.now()
@@ -183,11 +173,9 @@ public class DebugTapService {
         if (suffix == null || suffix.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown ioName for role");
         }
-        // Work queues are bound to the hive exchange using the resolved queue name as the routing key.
         var topology = workNames.forSwarm(swarmId);
-        String exchange = workNames.exchangeName(topology.hiveExchange());
-        String routingKey = workNames.queueName(topology.queuePrefix(), suffix);
-        return new TapBinding(swarmId, role, ioName, exchange, routingKey);
+        var address = workNames.address(topology.hiveExchange(), topology.queuePrefix(), suffix);
+        return new TapBinding(swarmId, role, ioName, address.exchange(), address.routingKey());
     }
 
     private Bee findBee(Swarm swarm, String role) {
@@ -238,10 +226,6 @@ public class DebugTapService {
         }
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
-    }
-
-    private static String shortId(String tapId) {
-        return tapId.substring(0, 8);
     }
 
     private enum TapDirection {
@@ -320,14 +304,14 @@ public class DebugTapService {
             return now.isAfter(expiresAt);
         }
 
-        void drain(RabbitTemplate template, int limit) {
+        void drain(RabbitReceiver template, int limit) {
             int drained = 0;
             while (drained < limit) {
-                Message message = template.receive(queue);
+                RabbitMessage message = template.receive(queue).orElse(null);
                 if (message == null) {
                     break;
                 }
-                byte[] body = message.getBody() == null ? new byte[0] : message.getBody();
+                byte[] body = message.body() == null ? new byte[0] : message.body();
                 String payload = new String(body, StandardCharsets.UTF_8);
                 DebugTapSample sample = new DebugTapSample(
                     UUID.randomUUID().toString(),

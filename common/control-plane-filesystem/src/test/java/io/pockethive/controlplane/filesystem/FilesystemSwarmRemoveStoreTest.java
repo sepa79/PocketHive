@@ -31,7 +31,10 @@ class FilesystemSwarmRemoveStoreTest {
 
     RemoveResult result = RemoveResult.succeeded(
         "alpha", "run-1", "controller-1", "corr-1", "idem-1",
-        List.of(new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1")),
+        List.of(
+            new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker-1", io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE),
+            new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL),
+            new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK)),
         Instant.parse("2026-07-22T12:00:01Z"));
     store.saveResult(result);
     store.saveResult(result);

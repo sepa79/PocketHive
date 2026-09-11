@@ -35,8 +35,8 @@ IO selection/settings come exclusively from `pockethive.inputs.*` and
 Only selected factories are activated, and each worker requires exactly one matching
 input and output factory. Missing or duplicate matches fail application startup.
 
-CP listeners use `controlPlaneRabbitListenerContainerFactory`; the Work listener
-factory retains its own error policy and owned virtual-thread executor. CP declarations
+CP receive bindings use the public Rabbit API; the module applies CP error policy.
+Work subscriptions retain their own tuning and owned virtual-thread executor. CP declarations
 read no Work queue/exchange settings. Scheduler, CSV and Redis dataset inputs with
 `NONE` output therefore start with CP enabled and no dummy Rabbit Work exchange.
 Rabbit output captures its destination when created, so subsequent properties/template

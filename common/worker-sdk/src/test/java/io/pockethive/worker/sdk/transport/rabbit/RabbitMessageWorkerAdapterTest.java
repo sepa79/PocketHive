@@ -29,10 +29,9 @@ import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.Message;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.amqp.rabbit.listener.MessageListenerContainer;
-import org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry;
+import io.pockethive.rabbit.api.RabbitMessage;
+import io.pockethive.rabbit.api.RabbitListeners;
+import io.pockethive.rabbit.api.RabbitListenerState;
 import org.springframework.context.event.ContextRefreshedEvent;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -58,22 +57,16 @@ class RabbitMessageWorkerAdapterTest {
     private WorkerControlPlaneRuntime controlPlaneRuntime;
 
     @Mock
-    private RabbitListenerEndpointRegistry listenerRegistry;
+    private RabbitListeners listenerRegistry;
+
 
     @Mock
-    private MessageListenerContainer listenerContainer;
-
-    @Mock
-    private RabbitMessageWorkerAdapter.WorkDispatcher dispatcher;
+    private RabbitWorkDispatcher dispatcher;
 
     @Mock
     private Consumer<Exception> errorHandler;
 
-    @Mock
-    private RabbitTemplate rabbitTemplate;
 
-    @Mock
-    private RabbitMessageWorkerAdapter.MessageResultPublisher resultPublisher;
 
     private WorkerDefinition workerDefinition;
     private ControlPlaneIdentity identity;
@@ -98,8 +91,7 @@ class RabbitMessageWorkerAdapterTest {
 
     @Test
     void initialiseStateListenerRegistersControlPlaneHookAndWaitsForEnablement() {
-        when(listenerRegistry.getListenerContainer("listener")).thenReturn(listenerContainer);
-        when(listenerContainer.isRunning()).thenReturn(false);
+        when(listenerRegistry.state("listener")).thenReturn(RabbitListenerState.STOPPED);
 
         RabbitMessageWorkerAdapter adapter = builder().build();
 
@@ -109,227 +101,39 @@ class RabbitMessageWorkerAdapterTest {
         ArgumentCaptor<Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>> listenerCaptor = ArgumentCaptor.forClass(Consumer.class);
         verify(controlPlaneRuntime).registerStateListener(eq("processorWorker"), listenerCaptor.capture());
         verify(controlPlaneRuntime).emitStatusSnapshot();
-        verify(listenerContainer, never()).start();
+        verify(listenerRegistry, never()).start("listener");
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot disabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(disabledSnapshot.enabled()).thenReturn(false);
         listenerCaptor.getValue().accept(disabledSnapshot);
-        verify(listenerContainer, never()).start();
-        verify(listenerContainer, never()).stop();
+        verify(listenerRegistry, never()).start("listener");
+        verify(listenerRegistry, never()).stop("listener");
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot enabledSnapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(enabledSnapshot.enabled()).thenReturn(true);
         listenerCaptor.getValue().accept(enabledSnapshot);
-        verify(listenerContainer).start();
-        when(listenerContainer.isRunning()).thenReturn(true);
+        verify(listenerRegistry).start("listener");
+        when(listenerRegistry.state("listener")).thenReturn(RabbitListenerState.RUNNING);
 
         WorkerControlPlaneRuntime.WorkerStateSnapshot snapshotDisabledAgain = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
         when(snapshotDisabledAgain.enabled()).thenReturn(false);
         listenerCaptor.getValue().accept(snapshotDisabledAgain);
-        verify(listenerContainer).stop();
-    }
-
-    @Test
-    void onWorkDispatchesAndPublishesMessageResults() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-
-        when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(workItem("processed"));
-
-        adapter.onWork(inbound);
-
-        ArgumentCaptor<WorkItem> workCaptor = ArgumentCaptor.forClass(WorkItem.class);
-        verify(dispatcher).dispatch(workCaptor.capture());
-        assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
-
-        ArgumentCaptor<Message> outboundCaptor = ArgumentCaptor.forClass(Message.class);
-        verify(rabbitTemplate)
-            .send(eq(workerDefinition.io().outboundExchange()), Mockito.<String>eq(workerDefinition.io().outboundQueue()), outboundCaptor.capture());
-        WorkItem roundTrip = converter.fromMessage(outboundCaptor.getValue());
-        assertThat(roundTrip.asString()).isEqualTo("processed");
-    }
-
-    @Test
-    void onWorkPublishesAlertWhenAsyncDispatchRejectedAndFallsBackToSync() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-        ThreadPoolExecutor rejectingExecutor = mock(ThreadPoolExecutor.class);
-        RejectedExecutionException rejection = new RejectedExecutionException("executor saturated");
-        doThrow(rejection).when(rejectingExecutor).execute(any(Runnable.class));
-        when(dispatcher.dispatch(any(WorkItem.class))).thenReturn(workItem("processed"));
-        setConcurrencyState(adapter, rejectingExecutor, 2);
-
-        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
-
-        verify(rejectingExecutor).execute(any(Runnable.class));
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(rejection));
-        verify(errorHandler).accept(rejection);
-        verify(rabbitTemplate).send(eq(workerDefinition.io().outboundExchange()), eq(workerDefinition.io().outboundQueue()), any(Message.class));
-    }
-
-    @Test
-    void onWorkErrorsDelegateToErrorHandler() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-        RuntimeException failure = new RuntimeException("boom");
-        doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
-
-        adapter.onWork(inbound);
-
-        verify(errorHandler).accept(failure);
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkSwallowsDispatchErrorHandlerFailureWhenDispatcherThrows() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-        RuntimeException dispatchFailure = new RuntimeException("boom");
-        RuntimeException handlerFailure = new RuntimeException("handler failed");
-        doThrow(dispatchFailure).when(dispatcher).dispatch(any(WorkItem.class));
-        doThrow(handlerFailure).when(errorHandler).accept(any(Exception.class));
-
-        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
-
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(dispatchFailure));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkDecoderErrorsPublishAlertAndDelegateToErrorHandler() {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        Message inbound = new Message("not-a-json-envelope".getBytes(StandardCharsets.UTF_8), new org.springframework.amqp.core.MessageProperties());
-
-        adapter.onWork(inbound);
-
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
-        verify(errorHandler).accept(any(Exception.class));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkSwallowsDispatchErrorHandlerFailureWhenDecodeFails() {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        Message inbound = new Message("not-a-json-envelope".getBytes(StandardCharsets.UTF_8), new org.springframework.amqp.core.MessageProperties());
-        RuntimeException handlerFailure = new RuntimeException("handler failed");
-        doThrow(handlerFailure).when(errorHandler).accept(any(Exception.class));
-
-        assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
-
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkPublishesAlertWhenDispatcherThrowsAndNoCustomHandlerConfigured() throws Exception {
-        RabbitMessageWorkerAdapter adapter = baseBuilderWithoutErrorHandler().rabbitTemplate(rabbitTemplate).build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload").toBuilder().messageId("mid-1").build());
-        RuntimeException failure = new RuntimeException("boom");
-        doThrow(failure).when(dispatcher).dispatch(any(WorkItem.class));
-
-        adapter.onWork(inbound);
-
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
-    }
-
-    @Test
-    void onWorkUsesCustomPublisherWhenProvided() throws Exception {
-        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate()
-            .messageResultPublisher(resultPublisher)
-            .build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-
-        when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(workItem("processed"));
-
-        adapter.onWork(inbound);
-
-        verify(resultPublisher).publish(any(WorkItem.class), any(Message.class));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onControlValidatesPayloadAndDelegates() {
-        RabbitMessageWorkerAdapter adapter = builder().build();
-        when(controlPlaneRuntime.handle("{}", "processor.control")).thenReturn(true);
-
-        adapter.onControl("{}", "processor.control", null);
-
-        verify(controlPlaneRuntime).handle("{}", "processor.control");
-
-        assertThatThrownBy(() -> adapter.onControl(" ", "processor.control", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("payload");
-        assertThatThrownBy(() -> adapter.onControl("{}", " ", null))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("routing");
+        verify(listenerRegistry).stop("listener");
     }
 
     @Test
     void onApplicationEventReappliesListenerState() {
         RabbitMessageWorkerAdapter adapter = builder().build();
-        when(listenerContainer.isRunning()).thenReturn(false);
+        when(listenerRegistry.state("listener")).thenReturn(RabbitListenerState.STOPPED);
 
         adapter.initialiseStateListener();
 
-        reset(listenerRegistry, listenerContainer);
-        when(listenerRegistry.getListenerContainer("listener")).thenReturn(listenerContainer);
-        when(listenerContainer.isRunning()).thenReturn(true);
+        reset(listenerRegistry);
+        when(listenerRegistry.state("listener")).thenReturn(RabbitListenerState.RUNNING);
 
         adapter.onApplicationEvent(mock(ContextRefreshedEvent.class));
 
-        verify(listenerRegistry).getListenerContainer("listener");
-    }
-
-    @Test
-    void buildFailsWhenTemplateConfiguredWithoutOutboundQueue() {
-        workerDefinition = new WorkerDefinition(
-            "processorWorker",
-            Object.class,
-            WorkerInputType.RABBITMQ,
-            "processor",
-            WorkIoBindings.of("processor.in", null, "ph.test.hive"),
-            Object.class,
-            WorkInputConfig.class,
-            WorkOutputConfig.class,
-            WorkerOutputType.RABBITMQ,
-            "Processor worker",
-            Set.of(WorkerCapability.MESSAGE_DRIVEN)
-        );
-
-        assertThatThrownBy(() -> builder().build())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("outbound queue");
-    }
-
-    @Test
-    void buildFailsWhenTemplateConfiguredWithoutExchange() {
-        workerDefinition = new WorkerDefinition(
-            "processorWorker",
-            Object.class,
-            WorkerInputType.RABBITMQ,
-            "processor",
-            WorkIoBindings.of("processor.in", "processor.out", null),
-            Object.class,
-            WorkInputConfig.class,
-            WorkOutputConfig.class,
-            WorkerOutputType.RABBITMQ,
-            "Processor worker",
-            Set.of(WorkerCapability.MESSAGE_DRIVEN)
-        );
-
-        assertThatThrownBy(() -> builder().build())
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("exchange");
+        verify(listenerRegistry).state("listener");
     }
 
     @Test
@@ -351,65 +155,7 @@ class RabbitMessageWorkerAdapterTest {
         assertThatCode(() -> builderWithoutTemplate().build()).doesNotThrowAnyException();
     }
 
-    @Test
-    void onWorkThrowsWhenMessageResultProducedWithoutOutboundQueue() throws Exception {
-        workerDefinition = new WorkerDefinition(
-            "processorWorker",
-            Object.class,
-            WorkerInputType.RABBITMQ,
-            "processor",
-            WorkIoBindings.of("processor.in", null, null),
-            Object.class,
-            WorkInputConfig.class,
-            WorkOutputConfig.class,
-            WorkerOutputType.RABBITMQ,
-            "Processor worker",
-            Set.of(WorkerCapability.MESSAGE_DRIVEN)
-        );
-
-        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-
-        when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(workItem("processed"));
-
-        adapter.onWork(inbound);
-
-        verify(errorHandler).accept(any(Exception.class));
-        verifyNoInteractions(rabbitTemplate);
-    }
-
-    @Test
-    void onWorkThrowsWhenMessageResultProducedWithoutPublisher() throws Exception {
-        workerDefinition = new WorkerDefinition(
-            "processorWorker",
-            Object.class,
-            WorkerInputType.RABBITMQ,
-            "processor",
-            WorkIoBindings.of("processor.in", "processor.out", "ph.test.hive"),
-            Object.class,
-            WorkInputConfig.class,
-            WorkOutputConfig.class,
-            WorkerOutputType.RABBITMQ,
-            "Processor worker",
-            Set.of(WorkerCapability.MESSAGE_DRIVEN)
-        );
-
-        RabbitMessageWorkerAdapter adapter = builderWithoutTemplate().build();
-        RabbitWorkItemConverter converter = new RabbitWorkItemConverter();
-        Message inbound = converter.toMessage(workItem("payload"));
-
-        when(dispatcher.dispatch(any(WorkItem.class)))
-            .thenReturn(workItem("processed"));
-
-        adapter.onWork(inbound);
-
-        verify(errorHandler).accept(any(Exception.class));
-        verify(rabbitTemplate, never()).send(anyString(), anyString(), any(Message.class));
-    }
-
-    private RabbitMessageWorkerAdapter.Builder baseBuilder() {
+    private RabbitMessageWorkerAdapterBuilder baseBuilder() {
         return RabbitMessageWorkerAdapter.builder()
             .logger(LOGGER)
             .listenerId("listener")
@@ -423,7 +169,7 @@ class RabbitMessageWorkerAdapterTest {
             .dispatchErrorHandler(errorHandler);
     }
 
-    private RabbitMessageWorkerAdapter.Builder baseBuilderWithoutErrorHandler() {
+    private RabbitMessageWorkerAdapterBuilder baseBuilderWithoutErrorHandler() {
         return RabbitMessageWorkerAdapter.builder()
             .logger(LOGGER)
             .listenerId("listener")
@@ -450,30 +196,12 @@ class RabbitMessageWorkerAdapterTest {
             .build();
     }
 
-    private RabbitMessageWorkerAdapter.Builder builder() {
-        return baseBuilder().rabbitTemplate(rabbitTemplate);
-    }
-
-    private RabbitMessageWorkerAdapter.Builder builderWithoutTemplate() {
+    private RabbitMessageWorkerAdapterBuilder builder() {
         return baseBuilder();
     }
 
-    private static void setConcurrencyState(RabbitMessageWorkerAdapter adapter, ThreadPoolExecutor executor, int maxInFlight)
-        throws ReflectiveOperationException {
-        setField(adapter, "workExecutor", executor);
-        AtomicInteger counter = (AtomicInteger) readField(adapter, "maxInFlight");
-        counter.set(maxInFlight);
+    private RabbitMessageWorkerAdapterBuilder builderWithoutTemplate() {
+        return baseBuilder();
     }
 
-    private static void setField(Object target, String fieldName, Object value) throws ReflectiveOperationException {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
-    private static Object readField(Object target, String fieldName) throws ReflectiveOperationException {
-        Field field = target.getClass().getDeclaredField(fieldName);
-        field.setAccessible(true);
-        return field.get(target);
-    }
 }

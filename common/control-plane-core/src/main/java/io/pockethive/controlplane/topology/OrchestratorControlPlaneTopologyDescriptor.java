@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.CommandResult;
 import io.pockethive.controlplane.ControlPlaneEventTypes;
@@ -11,22 +13,24 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * Responsibility: Own Orchestrator control and controller-status queue names and routing bindings.
- * Must not: Declare broker resources or reconstruct service-local configuration.
- * Contract: docs/ARCHITECTURE.md and docs/orchestrator/configuration.md.
+ * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
+ * Must not: construct broker names, select a naming implementation or declare resources.
+ * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
  */
 public final class OrchestratorControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
     private static final String ROLE = ControlPlaneRoles.ORCHESTRATOR;
 
     private final String controlQueuePrefix;
+    private final ControlResourceNamesPort names;
 
-    public OrchestratorControlPlaneTopologyDescriptor(String controlQueuePrefix) {
+    public OrchestratorControlPlaneTopologyDescriptor(String controlQueuePrefix, ControlResourceNamesPort names) {
         this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
+        this.names = java.util.Objects.requireNonNull(names, "names");
     }
 
-    public OrchestratorControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings) {
-        this(settings.controlQueuePrefix());
+    public OrchestratorControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings, ControlResourceNamesPort names) {
+        this(settings.controlQueuePrefix(), names);
     }
 
     @Override
@@ -37,7 +41,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = controlQueuePrefix + "." + ROLE + "." + id;
+        String queueName = names.managerControlQueue(controlQueuePrefix, ROLE, id);
         Set<String> executorEvents = Set.of(
             lifecycleEventPattern(CommandResult.KIND),
             lifecycleEventPattern(ControlPlaneEventTypes.JOURNAL_WORK_JOURNAL),
@@ -52,7 +56,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
 
     public QueueDescriptor controllerStatusQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = controlQueuePrefix + ".orchestrator-status." + id;
+        String queueName = names.controllerStatusQueue(controlQueuePrefix, id);
         Set<String> bindings = Set.of(
             controllerStatusPattern(ControlPlaneEventTypes.STATUS_FULL),
             controllerStatusPattern(ControlPlaneEventTypes.STATUS_DELTA)

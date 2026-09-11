@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -32,13 +34,13 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.InOrder;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitPublisher;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -65,13 +67,13 @@ class SwarmLifecycleManagerTest {
       ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "ALL", "ALL");
 
   @Mock
-  AmqpAdmin amqp;
+  RabbitResources amqp;
   @Mock
   DockerContainerClient docker;
   @Mock
   DockerClient dockerClient;
   @Mock
-  RabbitTemplate rabbit;
+  RabbitPublisher rabbit;
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
   private SimpleMeterRegistry meterRegistry;
@@ -101,20 +103,20 @@ class SwarmLifecycleManagerTest {
     manager.updateHeartbeat("generator", "g1");
     manager.markReady("generator", "g1");
 
-    verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals(HIVE_EXCHANGE)));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("qin"))));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("qout"))));
-    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).declareBinding(bindingCaptor.capture());
+    verify(amqp).declareExchange(argThat((RabbitExchangeSpec e) -> e.name().equals(HIVE_EXCHANGE)));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("qin"))));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("qout"))));
+    ArgumentCaptor<RabbitBindingSpec> bindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).bind(bindingCaptor.capture());
     assertThat(bindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("qin"),
             queue("qout"));
-    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).removeBinding(legacyCaptor.capture());
+    ArgumentCaptor<RabbitBindingSpec> legacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).unbind(legacyCaptor.capture());
     assertThat(legacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder("qin", "qout");
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap = ArgumentCaptor.forClass(String.class);
@@ -156,7 +158,7 @@ class SwarmLifecycleManagerTest {
     manager.stop();
 
     ArgumentCaptor<String> stopPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         stopPayload.capture());
     JsonNode stopNode = mapper.readTree(stopPayload.getValue());
@@ -210,20 +212,20 @@ class SwarmLifecycleManagerTest {
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).resolveControlNetwork();
-    verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals(HIVE_EXCHANGE)));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("a"))));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("b"))));
-    ArgumentCaptor<Binding> prepareBindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).declareBinding(prepareBindingCaptor.capture());
+    verify(amqp).declareExchange(argThat((RabbitExchangeSpec e) -> e.name().equals(HIVE_EXCHANGE)));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("a"))));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("b"))));
+    ArgumentCaptor<RabbitBindingSpec> prepareBindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).bind(prepareBindingCaptor.capture());
     assertThat(prepareBindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("a"),
             queue("b"));
-    ArgumentCaptor<Binding> prepareLegacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).removeBinding(prepareLegacyCaptor.capture());
+    ArgumentCaptor<RabbitBindingSpec> prepareLegacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).unbind(prepareLegacyCaptor.capture());
     assertThat(prepareLegacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder("a", "b");
   }
 
@@ -483,7 +485,7 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_MAXLEN")).isEqualTo("100");
     manager.updateHeartbeat("processor", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
-    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), anyString(), payloads.capture());
+    verify(rabbit, atLeastOnce()).sendText(eq(CONTROL_EXCHANGE), anyString(), payloads.capture());
     JsonNode bootstrap = null;
     for (String payload : payloads.getAllValues()) {
       JsonNode data = mapper.readTree(payload).path("data");
@@ -611,27 +613,27 @@ class SwarmLifecycleManagerTest {
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", Work.ofDefaults("in", "out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties existing = new Properties();
-    when(amqp.getQueueProperties(queue("in")))
-        .thenReturn(null)
+    var existing = queueProps(0);
+    when(amqp.queue(queue("in")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(existing);
-    when(amqp.getQueueProperties(queue("out")))
-        .thenReturn(null)
+    when(amqp.queue(queue("out")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(existing);
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.prepare(mapper.writeValueAsString(plan));
 
-    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(4)).removeBinding(legacyCaptor.capture());
+    ArgumentCaptor<RabbitBindingSpec> legacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(4)).unbind(legacyCaptor.capture());
     assertThat(legacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder("in", "out", "in", "out");
 
-    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(4)).declareBinding(bindingCaptor.capture());
+    ArgumentCaptor<RabbitBindingSpec> bindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(4)).bind(bindingCaptor.capture());
     assertThat(bindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("in"),
             queue("out"),
@@ -653,7 +655,7 @@ class SwarmLifecycleManagerTest {
     manager.start("{}");
 
     ArgumentCaptor<String> enablePayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         enablePayload.capture());
     JsonNode enableNode = mapper.readTree(enablePayload.getValue());
@@ -699,7 +701,7 @@ class SwarmLifecycleManagerTest {
     manager.setSwarmEnabled(false);
 
     ArgumentCaptor<String> disablePayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         disablePayload.capture());
     JsonNode disableNode = mapper.readTree(disablePayload.getValue());
@@ -732,7 +734,7 @@ class SwarmLifecycleManagerTest {
 
     manager.enableAll();
     ArgumentCaptor<String> fanoutEnable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutEnable.capture());
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutEnable.capture());
     JsonNode fanoutEnableNode = mapper.readTree(fanoutEnable.getValue());
     assertThat(fanoutEnableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -741,7 +743,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.stop();
     ArgumentCaptor<String> fanoutDisable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
     assertThat(fanoutDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -766,7 +768,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.updateHeartbeat("gen", "g1", System.currentTimeMillis() - 20_000);
     assertFalse(manager.markReady("gen", "g1"));
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1")), anyString());
 
     manager.updateHeartbeat("gen", "g1");
@@ -826,17 +828,14 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties qinProps = new Properties();
-    qinProps.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 5);
-    qinProps.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 2);
-    qinProps.put("x-queue-oldest-age-seconds", "17");
+    var qinProps = java.util.Optional.of(new io.pockethive.rabbit.api.RabbitQueueObservation(5, 2, java.util.OptionalLong.of(17)));
 
-    when(amqp.getQueueProperties(queue("qin")))
-        .thenReturn(null)
+    when(amqp.queue(queue("qin")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(qinProps);
-    when(amqp.getQueueProperties(queue("qout")))
-        .thenReturn(null)
-        .thenReturn(null);
+    when(amqp.queue(queue("qout")))
+        .thenReturn(java.util.Optional.empty())
+        .thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -883,11 +882,9 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties metrics = new Properties();
-    metrics.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 3);
-    metrics.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
-    when(amqp.getQueueProperties(queue("qin"))).thenReturn(metrics);
-    when(amqp.getQueueProperties(queue("qout"))).thenReturn(new Properties());
+    var metrics = queueProps(3);
+    when(amqp.queue(queue("qin"))).thenReturn(metrics);
+    when(amqp.queue(queue("qout"))).thenReturn(queueProps(0));
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -935,11 +932,8 @@ class SwarmLifecycleManagerTest {
         .allSatisfy(env -> assertThat(env).doesNotContainKey("POCKETHIVE_BEE_ID"));
   }
 
-  private Properties queueProps(long depth) {
-    Properties props = new Properties();
-    props.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, depth);
-    props.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
-    return props;
+  private java.util.Optional<io.pockethive.rabbit.api.RabbitQueueObservation> queueProps(long depth) {
+    return java.util.Optional.of(new io.pockethive.rabbit.api.RabbitQueueObservation(depth, 1, java.util.OptionalLong.empty()));
   }
 
   @Test
@@ -965,8 +959,8 @@ class SwarmLifecycleManagerTest {
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(50);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     // In real lifecycle the guard is configured during prepare from the filesystem startup artifact.
     // and only enabled during start (swarm-start carries no plan payload).
@@ -1009,7 +1003,7 @@ class SwarmLifecycleManagerTest {
     String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
     ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
-    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
+    verify(rabbit, atLeastOnce()).sendText(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
     int index = IntStream.range(0, routingCaptor.getAllValues().size())
         .filter(i -> routingCaptor.getAllValues().get(i).equals(expectedRoute))
         .findFirst()
@@ -1060,8 +1054,8 @@ class SwarmLifecycleManagerTest {
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(180);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -1098,8 +1092,8 @@ class SwarmLifecycleManagerTest {
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(240);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -1139,9 +1133,9 @@ class SwarmLifecycleManagerTest {
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong upstreamDepth = new AtomicLong(220);
     AtomicLong downstreamDepth = new AtomicLong(800);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(upstreamDepth.get()));
-    when(amqp.getQueueProperties(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(upstreamDepth.get()));
+    when(amqp.queue(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -1177,22 +1171,21 @@ class SwarmLifecycleManagerTest {
     RabbitConnectionSettings rabbitConnection = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     meterRegistry = new SimpleMeterRegistry();
     var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
-    return new SwarmLifecycleManager(
-        amqp,
+    return new SwarmLifecycleManager(amqp, amqp,
         mapper,
         dockerClient,
         docker,
         rabbit,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
-        rabbitConnection,
+        new io.pockethive.rabbit.api.RabbitConnections(rabbitConnection, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work")),
         "inst",
         properties,
         meterRegistry,
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
         runtimeMount(),
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
-            .workerWorkConfiguration(properties, new io.pockethive.topology.work.PrefixedWorkResourceNames()),
-        new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            .workerWorkConfiguration(properties, new RabbitResourceNames()),
+        new RabbitResourceNames());
   }
 
   private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {

@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.infra.configuration;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -16,7 +18,7 @@ import org.junit.jupiter.api.Test;
 
 class WorkerWorkConfigurationAdapterTest {
   private final WorkerWorkConfigurationPort adapter = new WorkerWorkConfigurationComposition()
-      .workerWorkConfiguration(mock(SwarmControllerProperties.class), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+      .workerWorkConfiguration(mock(SwarmControllerProperties.class), new RabbitResourceNames());
 
   @Test
   void rejectsIncompleteAndUnselectedIoThroughTheCanonicalParser() {
@@ -85,7 +87,9 @@ class WorkerWorkConfigurationAdapterTest {
   }
 
   private static Map<String, String> baseEnvironment() {
-    return Map.of("SPRING_RABBITMQ_HOST", "rabbit", "SPRING_RABBITMQ_PORT", "5672",
+    return Map.of("POCKETHIVE_RABBIT_WORK_HOST", "work", "POCKETHIVE_RABBIT_WORK_PORT", "5673",
+        "POCKETHIVE_RABBIT_WORK_USERNAME", "worker", "POCKETHIVE_RABBIT_WORK_PASSWORD", "worksecret",
+        "POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST", "/work", "SPRING_RABBITMQ_HOST", "rabbit", "SPRING_RABBITMQ_PORT", "5672",
         "SPRING_RABBITMQ_USERNAME", "user", "SPRING_RABBITMQ_PASSWORD", "test-secret",
         "SPRING_RABBITMQ_VIRTUAL_HOST", "/");
   }

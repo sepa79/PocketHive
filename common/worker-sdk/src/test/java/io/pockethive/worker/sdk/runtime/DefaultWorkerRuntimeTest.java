@@ -62,6 +62,14 @@ class DefaultWorkerRuntimeTest {
 
         assertThat(result).isNotNull();
         verify(outputRegistry).publish(eq(result), eq(definition));
+        var failure = new IllegalStateException("publication not confirmed");
+        org.mockito.Mockito.doThrow(failure).when(outputRegistry).publish(org.mockito.ArgumentMatchers.any(), eq(definition));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runtime.dispatch("testWorker", WorkItem.text(info, "payload").build()))
+            .isSameAs(failure);
+        state.updateConfig(null, false, Boolean.FALSE);
+        org.mockito.Mockito.clearInvocations(outputRegistry);
+        assertThat(runtime.dispatch("testWorker", WorkItem.text(info, "payload").build())).isNull();
+        org.mockito.Mockito.verifyNoInteractions(outputRegistry);
     }
 
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {

@@ -15,9 +15,6 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -69,8 +66,7 @@ public class ControllerStatusListener {
             this.hiveJournal, ControlPlaneRoles.ORCHESTRATOR, "controller-status-listener");
     }
 
-    @RabbitListener(containerFactory = io.pockethive.controlplane.spring.ControlPlaneRabbitListenerConfiguration.FACTORY_NAME, queues = "#{controllerStatusQueueName}")
-    public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
+    public void handle(String body, String routingKey) {
         // Controller status messages are control-plane traffic: never requeue on failures (avoid storms).
         try {
             if (routingKey == null || routingKey.isBlank()) {

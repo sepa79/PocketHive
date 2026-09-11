@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.mockito.Mockito.mock;
 import static org.mockito.ArgumentMatchers.anyString;
 
@@ -48,8 +50,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.amqp.core.AmqpAdmin;
-import io.pockethive.rabbit.config.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 
 @ExtendWith(MockitoExtension.class)
 class ContainerLifecycleManagerTest {
@@ -61,7 +63,7 @@ class ContainerLifecycleManagerTest {
     ComputeAdapter computeAdapter;
 
     @Mock
-    AmqpAdmin amqp;
+    RabbitResources amqp;
 
     @Mock
     JournalRunMetadataWriter runMetadataWriter;
@@ -78,7 +80,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         Swarm swarm = manager.startSwarm(
             "sw1",
@@ -212,7 +214,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         manager.startSwarm(
             "sw1",
@@ -241,7 +243,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         Swarm swarm = manager.startSwarm(
             "sw1",
@@ -270,7 +272,7 @@ class ContainerLifecycleManagerTest {
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         manager.startSwarm(
             "sw1",
@@ -311,7 +313,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         var result = manager.removeControllerRuntime(swarm.getId());
 
@@ -332,7 +334,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         manager.removeControllerRuntime(sw1.getId());
 
@@ -356,7 +358,7 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = withRepositoryPrefix("ghcr.io/acme/pockethive");
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), runtimeMount(), new RabbitResourceNames());
 
         manager.preloadSwarmImages("sw1");
 
@@ -428,9 +430,9 @@ class ContainerLifecycleManagerTest {
         return properties;
     }
 
-    private static RabbitConnectionSettings rabbitConnection() {
+    private static io.pockethive.rabbit.api.RabbitConnections rabbitConnection() {
         RabbitConnectionSettings properties = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
-        return properties;
+        return new io.pockethive.rabbit.api.RabbitConnections(properties, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"));
     }
 
     private static SwarmTemplateMetadata startupMetadata(String templateId,

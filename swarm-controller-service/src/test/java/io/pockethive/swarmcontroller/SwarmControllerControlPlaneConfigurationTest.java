@@ -16,7 +16,7 @@ import io.pockethive.swarmcontroller.runtime.SwarmJournal;
 import java.time.Instant;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
@@ -66,9 +66,14 @@ class SwarmControllerControlPlaneConfigurationTest {
   @EnableConfigurationProperties(SwarmControllerProperties.class)
   static class TestDependencies {
 
+    @Bean(name = "swarmControllerControlQueueName")
+    String controlQueueName(SwarmControllerProperties properties, @org.springframework.beans.factory.annotation.Qualifier("instanceId") String instanceId) {
+      return properties.controlQueueName(instanceId);
+    }
+
     @Bean
-    RabbitTemplate rabbitTemplate() {
-      return mock(RabbitTemplate.class);
+    RabbitPublisher rabbitTemplate() {
+      return mock(RabbitPublisher.class);
     }
 
     @Bean

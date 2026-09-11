@@ -1,5 +1,4 @@
 import type { WireLogEntry } from './controlPlane/wireLogStore'
-import { normalizeControlPlaneRoutingKey } from './controlPlane/decoder'
 import {
   parseControlResponse,
   parseOperationState,
@@ -65,7 +64,7 @@ export function resolveSwarmLifecycleFeedback(
     .find(
       (entry) =>
         entry.routingKey !== undefined &&
-        normalizeControlPlaneRoutingKey(entry.routingKey) === feedback.outcomeTopic &&
+        entry.routingKey === feedback.outcomeTopic &&
         entry.envelope?.kind === 'outcome',
     )?.envelope
   if (outcome) {

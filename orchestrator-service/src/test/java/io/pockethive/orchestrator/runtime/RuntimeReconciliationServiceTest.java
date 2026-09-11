@@ -26,7 +26,7 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeInve
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeRemovalPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.ComputeRuntimeResource;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitQueueResource;
-import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitTopologyPort;
+import io.pockethive.orchestrator.runtime.RabbitTopologyPort;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import io.pockethive.swarm.model.lifecycle.OperationType;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
@@ -57,6 +57,7 @@ class RuntimeReconciliationServiceTest {
 
   @BeforeEach
   void setUp() {
+    when(rabbit.connectionIdentity(any())).thenAnswer(call -> "connection-" + call.getArgument(0));
     when(lifecycleManager.currentComputeAdapterType()).thenReturn(ComputeAdapterType.DOCKER_SINGLE);
     when(inventory.list()).thenReturn(List.of());
     when(manifests.find(any(), any())).thenReturn(Optional.empty());
@@ -71,14 +72,14 @@ class RuntimeReconciliationServiceTest {
     swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT));
     when(inventory.list()).thenReturn(List.of(runtime("manager-1", "manager", "swarm-controller", "controller-1")));
     when(manifests.find("sw1", "run-1")).thenReturn(Optional.of(manifest()));
-    when(rabbit.queue("ph.sw1.work")).thenReturn(Optional.of(new RabbitQueueResource("ph.sw1.work", 0, 0)));
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "ph.sw1.work")).thenReturn(Optional.of(new RabbitQueueResource("ph.sw1.work", 0, 0)));
 
     Plan plan = service.plan(new PlanRequest("sw1", "run-1", true, true));
 
     assertThat(plan.candidates()).extracting("candidateId")
         .containsExactly("lifecycle:swarm:sw1");
     assertThat(plan.blocked()).extracting("candidateId")
-        .contains("docker:container:manager-1", "rabbit:queue:ph.sw1.work");
+        .contains("docker:container:manager-1", "rabbit:WORK:queue:ph.sw1.work");
   }
 
   @Test
@@ -145,6 +146,17 @@ class RuntimeReconciliationServiceTest {
   }
 
   @Test
+  void lifecycleCleanupApprovalAlsoBindsBothConnections() {
+    swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT));
+    var original = service.plan(new PlanRequest("sw1", "run-1", false, false));
+    when(rabbit.connectionIdentity(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL)).thenReturn("replacement-control");
+    assertThatThrownBy(() -> service.execute(new ExecuteRequest(
+        "sw1", "run-1", false, false, original.candidateSetHash(), List.of("lifecycle:swarm:sw1"),
+        "stale-lifecycle", "cleanup", "alice"))).isInstanceOf(RuntimeCleanupException.class);
+    verify(lifecycleCommands, never()).dispatch(any(), any(), any(), any());
+  }
+
+  @Test
   void lifecycleCleanupDispatchesCanonicalRemoveAndReturnsOperationIdentity() {
     swarms.register(new Swarm("sw1", "controller-1", "manager-1", "run-1", NetworkMode.DIRECT));
     Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, false));
@@ -170,7 +182,7 @@ class RuntimeReconciliationServiceTest {
     assertThat(result.correlationId()).isEqualTo("corr-remove");
     assertThat(result.operationUrl()).isEqualTo("/api/swarms/sw1/operations/corr-remove");
     verify(computeRemoval, never()).removeContainer(any());
-    verify(rabbit, never()).deleteQueue(any());
+    verify(rabbit, never()).deleteQueue(any(), any());
   }
 
   @Test
@@ -238,4 +250,38 @@ class RuntimeReconciliationServiceTest {
     properties.setInstanceId("orchestrator-1");
     return properties;
   }
+  @Test
+  void plansAndDeletesEqualQueueNamesAsSeparatePlaneTargets() {
+    var manifest = new RuntimeOwnershipManifest(
+        "sw1", "run-1", "template-1", "DOCKER_SINGLE", Instant.now(), List.of(),
+        new RuntimeOwnershipManifest.RabbitResources(List.of("jobs"), List.of("jobs"), List.of()));
+    when(manifests.find("sw1", "run-1")).thenReturn(Optional.of(manifest));
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL, "jobs"))
+        .thenReturn(Optional.of(new RabbitQueueResource("jobs", 0, 0)));
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "jobs"))
+        .thenReturn(Optional.of(new RabbitQueueResource("jobs", 0, 0)));
+    Plan plan = service.plan(new PlanRequest("sw1", "run-1", false, true));
+    assertThat(plan.candidates()).extracting(Candidate::candidateId)
+        .containsExactlyInAnyOrder("rabbit:CONTROL:queue:jobs", "rabbit:WORK:queue:jobs");
+    var snapshot = service.rabbitTopology(new RuntimeDebugContracts.RabbitTopologyRequest("sw1", "run-1"));
+    assertThat(snapshot.queues()).extracting(RabbitQueueSnapshot::plane)
+        .containsExactly(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL, io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK);
+    when(rabbit.connectionIdentity(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK)).thenReturn("replacement-broker");
+    assertThatThrownBy(() -> service.execute(new ExecuteRequest(
+        "sw1", "run-1", false, true, plan.candidateSetHash(), List.of("rabbit:WORK:queue:jobs"),
+        "stale-connection", "orphan cleanup", "alice"))).isInstanceOf(RuntimeCleanupException.class);
+    verify(rabbit, never()).deleteQueue(any(), any());
+    when(rabbit.connectionIdentity(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK)).thenReturn("connection-WORK");
+    var result = service.execute(new ExecuteRequest(
+        "sw1", "run-1", false, true, plan.candidateSetHash(), List.of("rabbit:WORK:queue:jobs"),
+        "work-only", "orphan cleanup", "alice"));
+    verify(rabbit).deleteQueue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "jobs");
+    verify(rabbit, never()).deleteQueue(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL, "jobs");
+    assertThat(result.evidence().resultByCandidate()).singleElement()
+        .satisfies(item -> assertThat(item.plane()).isEqualTo(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK));
+    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL, "jobs")).thenReturn(Optional.empty());
+    assertThat(service.plan(new PlanRequest("sw1", "run-1", false, true)).candidateSetHash())
+        .isNotEqualTo(plan.candidateSetHash());
+  }
+
 }

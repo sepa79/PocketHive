@@ -1,3 +1,8 @@
+/**
+ * Responsibility: validate Control Plane envelopes and normalized domain routing keys.
+ * Must not: resolve physical broker destinations or mutate domain state.
+ * Contract: RESP-CONTROL-STOMP-INFO — docs/architecture/runtime-responsibilities.md#resp-control-stomp-info.
+ */
 import type { ErrorObject } from 'ajv'
 import { getSchemaState, getControlPlaneValidator } from './schemaRegistry'
 import type {
@@ -115,8 +120,7 @@ function validateRouting(routingKey: string | undefined, envelope: ControlPlaneE
   if (!expectedPrefix) {
     return null
   }
-  const normalized = normalizeControlPlaneRoutingKey(routingKey)
-  if (normalized.startsWith(expectedPrefix)) {
+  if (routingKey.startsWith(expectedPrefix)) {
     return null
   }
   return `Routing key does not match envelope kind/type (${expectedPrefix}*)`
@@ -136,14 +140,6 @@ function routingPrefix(envelope: ControlPlaneEnvelope) {
     return `event.alert.${envelope.type}.`
   }
   return null
-}
-
-export function normalizeControlPlaneRoutingKey(routingKey: string) {
-  const prefix = '/exchange/ph.control/'
-  if (routingKey.startsWith(prefix)) {
-    return routingKey.slice(prefix.length)
-  }
-  return routingKey
 }
 
 function snippet(value: string) {

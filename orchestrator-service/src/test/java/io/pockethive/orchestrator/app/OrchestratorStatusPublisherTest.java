@@ -1,5 +1,7 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.RETURNS_SELF;
 import static org.mockito.Mockito.mock;
@@ -74,7 +76,7 @@ class OrchestratorStatusPublisherTest {
         lifecycle,
         emitter,
         new ControlPlaneIdentity("ALL", "orchestrator", "orchestrator-1"),
-        new OrchestratorControlPlaneTopologyDescriptor("ph.control"),
+        new OrchestratorControlPlaneTopologyDescriptor("ph.control", new RabbitResourceNames()),
         CONTROL_QUEUE);
   }
 }

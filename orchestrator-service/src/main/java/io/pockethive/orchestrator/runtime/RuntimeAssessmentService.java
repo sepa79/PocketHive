@@ -11,8 +11,8 @@ import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.CheckResult
 import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.Difference;
 import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.DifferenceKind;
 import io.pockethive.orchestrator.runtime.RuntimeAssessmentContracts.SwarmSnapshot;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitExchangeSnapshot;
-import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitQueueSnapshot;
+import io.pockethive.orchestrator.runtime.RabbitExchangeSnapshot;
+import io.pockethive.orchestrator.runtime.RabbitQueueSnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologyRequest;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.RabbitTopologySnapshot;
 import io.pockethive.orchestrator.runtime.RuntimeDebugContracts.ResourceListRequest;

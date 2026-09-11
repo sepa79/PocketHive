@@ -1,9 +1,6 @@
 package io.pockethive.work.config.composition;
 
-import io.pockethive.rabbit.config.RabbitInputMutationPolicy;
-import io.pockethive.rabbit.config.RabbitInputSettingsParser;
-import io.pockethive.rabbit.config.RabbitOutputMutationPolicy;
-import io.pockethive.rabbit.config.RabbitOutputSettingsParser;
+import io.pockethive.rabbit.api.RabbitConfiguration;
 import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.redis.config.RedisWorkInputMutationPolicy;
 import io.pockethive.redis.config.RedisWorkInputSettingsParser;
@@ -42,23 +39,23 @@ public final class CurrentWorkConfigurationProviders {
         SchedulerSettingsParser scheduler = new SchedulerSettingsParser();
 
         inputSettingsParsers = List.of(
-            new RabbitInputSettingsParser(),
+            RabbitConfiguration.inputParser(),
             new RedisWorkInputSettingsParser(redis),
             new CsvWorkInputSettingsParser(csv),
             new SchedulerWorkInputSettingsParser(scheduler)
         );
         outputSettingsParsers = List.of(
-            new RabbitOutputSettingsParser(),
+            RabbitConfiguration.outputParser(),
             new RedisWorkOutputSettingsParser(redis)
         );
         inputMutationPolicies = List.of(
-            new RabbitInputMutationPolicy(),
+            RabbitConfiguration.inputMutationPolicy(),
             new RedisWorkInputMutationPolicy(redis),
             new CsvWorkInputMutationPolicy(csv),
             new SchedulerWorkInputMutationPolicy()
         );
         outputMutationPolicies = List.of(
-            new RabbitOutputMutationPolicy(),
+            RabbitConfiguration.outputMutationPolicy(),
             new RedisWorkOutputMutationPolicy(),
             new NoOutputMutationPolicy()
         );

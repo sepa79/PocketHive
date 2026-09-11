@@ -89,7 +89,7 @@ final class SwarmControllerStatusPublisher {
         .data("swarmDiagnostics", workerStatuses.diagnosticsSnapshot())
         .data("bindings", Map.of("work", lifecycle.workBindingsSnapshot()));
     appendNetworkContext(builder);
-    String controlQueue = properties.controlQueueName(role, instanceId);
+    String controlQueue = properties.controlQueueName(instanceId);
     builder.controlIn(controlQueue)
         .controlRoutes(SwarmControllerRoutes.controllerControlRoutes(swarmId, role, instanceId))
         .controlOut(routingKey);

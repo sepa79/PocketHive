@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
@@ -88,6 +90,6 @@ class SwarmRuntimeCoreScenarioEngineTest {
         mock(SwarmWorkerSpecFactory.class),
         mock(SwarmRuntimeInfrastructure.class),
         mock(SwarmQueueStatsCollector.class),
-        mock(WorkerStatusRequestCallback.class), new io.pockethive.topology.work.PrefixedWorkResourceNames());
+        mock(WorkerStatusRequestCallback.class), new RabbitResourceNames());
   }
 }

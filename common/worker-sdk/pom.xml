@@ -34,6 +34,7 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>work-config</artifactId>
@@ -50,7 +51,6 @@
       <version>${project.version}</version>
     </dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-local-config</artifactId><version>${project.version}</version></dependency>
-    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-config</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>work-test-fixtures</artifactId>
@@ -100,10 +100,6 @@
     <dependency>
       <groupId>io.lettuce</groupId>
       <artifactId>lettuce-core</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.amqp</groupId>
-      <artifactId>spring-rabbit</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
