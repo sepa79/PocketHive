@@ -379,7 +379,7 @@ class RedisUploaderInterceptorTest {
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(io.pockethive.work.config.redis.RedisConnectionSettings config) {
+        public RedisPushSupport.RedisWriter create(io.pockethive.redis.config.RedisConnectionSettings config) {
             return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload));
         }
     }

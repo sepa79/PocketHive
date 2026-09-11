@@ -172,7 +172,7 @@ config:
     scheduler:
       ratePerSec: 50
   outputs:
-    type: RABBITMQ             # or REDIS / NOOP, etc.
+    type: RABBITMQ             # or REDIS / NONE
   message:
     bodyType: HTTP
     path: /test
@@ -189,13 +189,29 @@ This mirrors how workers bind properties:
   - `<typeKey>` – type‑specific config section
     (e.g. `scheduler`, `redis`).
 - `outputs` – IO configuration for the outbound side.
-  - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NOOP`).
+  - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NONE`).
   - `<typeKey>` – type‑specific config.
 - Role-specific worker fields live directly under `config`.
   - These keys are documented in the worker SDK and capability manifests.
 
+Every worker bee explicitly declares `config.inputs.type` and `config.outputs.type`.
+Scenario validation uses the injected neutral WorkConfigurationParser in AUTHORING mode;
+missing roots/selectors are errors, not defaults inferred from an image or role. The selected
+provider validates an omitted tuning block as an empty object. Rabbit permits empty tuning;
+its queue/exchange/routingKey fields cannot be authored, including as expressions. Logical
+bindings belong in `work`; RESP-WORK-RESOURCE-NAMES resolves their physical names later.
+Rabbit tuning belongs in `config.inputs.rabbit` / `config.outputs.rabbit`. Competing Rabbit
+settings in `bee.env` are rejected; connection overrides remain governed separately.
+Controller also rejects input/output selector overrides in `bee.env` (including Spring
+aliases): selection belongs in `config`. Explicit null Rabbit tuning is invalid; omission
+is represented by an empty tuning object when materializing resolved settings.
+
+Work selection/settings constraints come from the canonical Work parser and its adapter
+providers. Capabilities present these fields; their generic validators do not revalidate
+Work roots. Bundle file/reference and non-Work capability checks remain Scenario-owned.
+
 The **capabilities** files under `scenario-manager-service/capabilities/` are
-the authoritative list of user-tunable fields per worker and IO type.
+the presentation catalogue of user-tunable fields per worker and IO type.
 Capability lookup uses the canonical image name without registry, namespace,
 tag, or digest, so `processor:0.15`, `processor:latest`, and
 `registry.example.lan:5000/pockethive/processor:dev-*` all resolve the

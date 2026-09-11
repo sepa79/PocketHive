@@ -1,10 +1,8 @@
 package io.pockethive.worker.sdk.input.redis;
 
-import io.pockethive.work.config.input.InputRateParser;
-
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
-import io.pockethive.work.config.redis.RedisConnectionSettings;
+import io.pockethive.redis.config.RedisConnectionSettings;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -12,11 +10,10 @@ import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
-import io.pockethive.work.config.redis.RedisDatasetSource;
-import io.pockethive.work.config.redis.RedisDatasetSourceMode;
-import io.pockethive.work.config.redis.RedisDatasetSelectionValidation;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisDatasetSource;
+import io.pockethive.redis.config.RedisDatasetSourceMode;
+import io.pockethive.redis.config.RedisDatasetSettings;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
@@ -43,10 +40,7 @@ import org.slf4j.LoggerFactory;
  * Responsibility: read Redis dataset entries and coordinate cursor, exhaustion and intake.
  * Must not: validate dataset source entries, own worker enablement, refresh auth tokens or declare Rabbit resources.
  * Enablement is a read-only projection of RESP-WORK-STATE snapshots, including startup.
- * Consumes: RESP-WORK-REDIS-SOURCES and RESP-WORK-REDIS-SELECTION for validated source choices.
- * Consumes RESP-REDIS-CONNECTION-SETTINGS for startup and merged connection values.
- * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
- * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
+ * Consumes: RESP-WORK-REDIS-DATASET-SETTINGS for complete validated settings.
  * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
 public final class RedisDataSetWorkInput implements WorkInput {
@@ -63,8 +57,8 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private final DoubleSupplier randomUnit;
     private final Logger log;
 
-    // Read-only selection projection refreshed by validation at the start of each tick.
-    private RedisDatasetSelectionValidation sourceSelection;
+    // Read-only resolved settings projection refreshed by validation at the start of each tick.
+    private RedisDatasetSettings datasetSettings;
     private volatile boolean running;
     private volatile boolean enabled;
     private volatile ScheduledExecutorService schedulerExecutor;
@@ -266,7 +260,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
 
     private boolean ensureReadyForTick(long now) {
         try {
-            sourceSelection = validateConfiguration();
+            datasetSettings = validateConfiguration();
         } catch (IllegalArgumentException | IllegalStateException ex) {
             recordConfigError(now, ex.getMessage(), ex, false);
             return false;
@@ -275,7 +269,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return true;
         }
         try {
-            redisClient = clientFactory.create(properties.connectionSettings("inputs.redis"));
+            redisClient = clientFactory.create(datasetSettings.connection());
             clearConfigError();
             return true;
         } catch (Exception ex) {
@@ -296,7 +290,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     }
 
     private int planInvocations() {
-        double perTickRate = properties.ratePerSec() * tickIntervalMs / 1_000.0;
+        double perTickRate = datasetSettings.ratePerSec() * tickIntervalMs / 1_000.0;
         double planned = perTickRate + carryOver;
         int quota = (int) Math.floor(planned);
         carryOver = planned - quota;
@@ -339,63 +333,23 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return;
         }
 
-        RedisDatasetSelectionValidation selection = redisMap.containsKey("sources") || redisMap.containsKey("listName")
-            ? CONFIGURATION.parseRedisDatasetSelection(
-                redisMap.containsKey("listName") ? redisMap.get("listName") : properties.getListName(),
-                redisMap.containsKey("sources") ? redisMap.get("sources") : properties.getSources(), "inputs.redis")
-            : null;
-        RedisDatasetPickStrategy parsedStrategy = redisMap.containsKey("pickStrategy")
-            ? requirePickStrategy(redisMap.get("pickStrategy"))
-            : null;
-        var connection = CONFIGURATION.mergeRedisConnection(
-            properties.connectionSettings("inputs.redis"), redisMap, "inputs.redis");
-        Double parsedRate = redisMap.containsKey(InputRateParser.FIELD)
-            ? new InputRateParser().parse(redisMap.get(InputRateParser.FIELD), InputRateParser.REDIS_PATH) : null;
-
-        if (selection != null && (!Objects.equals(selection.listName(), properties.getListName())
-            || !selection.sources().equals(properties.getSources()))) {
-            properties.setListName(selection.listName());
-            properties.setSources(selection.sources());
+        Map<Object, Object> candidate = new java.util.LinkedHashMap<>(properties.declarations());
+        redisMap.forEach(candidate::put);
+        RedisDatasetSettings updated = CONFIGURATION.parseRedisDatasetSettings(candidate, "inputs.redis");
+        RedisDatasetSettings previous = properties.settings("inputs.redis");
+        if (updated.sourceMode() != previous.sourceMode() || !Objects.equals(updated.listName(), previous.listName())
+            || !updated.sources().equals(previous.sources())) {
             log.info("{} redis dataset selection updated via config: mode={}, list={}, sources={}",
-                workerDefinition.beanName(), selection.mode(), selection.listName(),
-                selection.sources().stream().map(RedisDatasetSource::getListName).toList());
+                workerDefinition.beanName(), updated.sourceMode(), updated.listName(),
+                updated.sources().stream().map(RedisDatasetSource::getListName).toList());
         }
-        if (redisMap.containsKey("pickStrategy")) {
-            if (parsedStrategy != properties.getPickStrategy()) {
-                properties.setPickStrategy(parsedStrategy);
-                if (log.isInfoEnabled()) {
-                    log.info("{} redis dataset pickStrategy updated via config: {}", workerDefinition.beanName(), parsedStrategy);
-                }
-            }
+        if (updated.pickStrategy() != previous.pickStrategy() && log.isInfoEnabled()) {
+            log.info("{} redis dataset pickStrategy updated via config: {}", workerDefinition.beanName(), updated.pickStrategy());
         }
-        properties.applyConnection(connection);
-        if (redisMap.containsKey(InputRateParser.FIELD) && parsedRate != properties.ratePerSec()) {
-            properties.setRatePerSec(parsedRate);
-            if (log.isInfoEnabled()) {
-                log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), parsedRate);
-            }
+        if (Double.compare(updated.ratePerSec(), previous.ratePerSec()) != 0 && log.isInfoEnabled()) {
+            log.info("{} redis dataset ratePerSec updated via config: {}", workerDefinition.beanName(), updated.ratePerSec());
         }
-    }
-
-    private static String asText(Object value) {
-        return value == null ? null : value.toString();
-    }
-
-    private static String requireNonBlankText(Object value, String field) {
-        String text = asText(value);
-        if (text == null || text.isBlank()) {
-            throw new IllegalArgumentException(field + " must not be blank");
-        }
-        return text;
-    }
-
-    private static RedisDatasetPickStrategy requirePickStrategy(Object value) {
-        String strategy = requireNonBlankText(value, "inputs.redis.pickStrategy");
-        try {
-            return RedisDatasetPickStrategy.valueOf(strategy.trim().toUpperCase());
-        } catch (IllegalArgumentException ex) {
-            throw new IllegalArgumentException("inputs.redis.pickStrategy must be ROUND_ROBIN or WEIGHTED_RANDOM", ex);
-        }
+        properties.apply(updated);
     }
 
     private void recordConfigError(long now, String message, Exception ex, boolean warnWithStack) {
@@ -433,11 +387,12 @@ public final class RedisDataSetWorkInput implements WorkInput {
             data.put("host", properties.getHost());
             data.put("port", properties.getPort());
             data.put("listName", properties.getListName());
-            data.put("pickStrategy", properties.getPickStrategy().name());
+            RedisDatasetSettings settings = datasetSettings;
+            data.put("pickStrategy", settings == null ? null : settings.pickStrategy().name());
             if (!properties.getSources().isEmpty()) {
                 data.put("sources", properties.getSources().stream().map(RedisDatasetSource::getListName).toList());
             }
-            data.put("ratePerSec", properties.ratePerSec());
+            data.put("ratePerSec", settings == null ? null : settings.ratePerSec());
             data.put("dispatched", dispatched);
             if (lastPopListName != null && !lastPopListName.isBlank()) {
                 data.put("lastPopList", lastPopListName);
@@ -458,19 +413,14 @@ public final class RedisDataSetWorkInput implements WorkInput {
         });
     }
 
-    private RedisDatasetSelectionValidation validateConfiguration() {
-        properties.connectionSettings("inputs.redis");
-        if (properties.getPickStrategy() == null) {
-            throw new IllegalStateException("Redis dataset input pickStrategy must be configured");
-        }
-        properties.ratePerSec();
-        return CONFIGURATION.parseRedisDatasetSelection(properties.getListName(), properties.getSources(), "inputs.redis");
+    private RedisDatasetSettings validateConfiguration() {
+        return properties.settings("inputs.redis");
     }
 
     private PopResult popNextValue() {
-        List<RedisDatasetSource> sources = sourceSelection.sources();
-        if (sourceSelection.mode() == RedisDatasetSourceMode.SINGLE) {
-            String listName = sourceSelection.listName();
+        List<RedisDatasetSource> sources = datasetSettings.sources();
+        if (datasetSettings.sourceMode() == RedisDatasetSourceMode.SINGLE) {
+            String listName = datasetSettings.listName();
             String value = redisClient.pop(listName);
             return value == null ? null : new PopResult(listName, value);
         }
@@ -489,7 +439,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         if (sources.size() == 1) {
             return List.of(sources.get(0));
         }
-        if (properties.getPickStrategy() == RedisDatasetPickStrategy.WEIGHTED_RANDOM) {
+        if (datasetSettings.pickStrategy() == io.pockethive.redis.config.RedisDatasetPickStrategy.WEIGHTED_RANDOM) {
             int first = weightedIndex(sources);
             List<RedisDatasetSource> ordered = new ArrayList<>(sources.size());
             ordered.add(sources.get(first));

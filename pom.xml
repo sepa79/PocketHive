@@ -27,7 +27,10 @@
     <module>common/observability-core</module>
     <module>common/work-api</module>
     <module>common/work-config</module>
+    <module>common/redis-config</module>
+    <module>common/work-local-config</module>
     <module>common/rabbit-config</module>
+    <module>common/work-config-composition</module>
     <module>common/work-test-fixtures</module>
     <module>observability</module>
     <module>common/topology-core</module>

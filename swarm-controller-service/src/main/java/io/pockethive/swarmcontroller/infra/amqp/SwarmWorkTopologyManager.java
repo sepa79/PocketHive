@@ -2,6 +2,7 @@ package io.pockethive.swarmcontroller.infra.amqp;
 
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import java.util.Objects;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -14,20 +15,20 @@ import org.springframework.amqp.core.QueueBuilder;
 import org.springframework.amqp.core.TopicExchange;
 
 /**
- * Helper responsible for declaring and tearing down the swarm's work topology
- * (hive exchange + work queues) based on plan-derived queue suffixes.
- * <p>
- * This class is deliberately small and reusable so other swarm-controller
- * implementations or tools can share the same topology wiring logic.
+ * Responsibility: declare and remove Rabbit Work resources using the canonical name-resolution port.
+ * Must not: construct resource names, validate worker settings or own lifecycle convergence.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class SwarmWorkTopologyManager {
 
   private static final Logger log = LoggerFactory.getLogger(SwarmWorkTopologyManager.class);
 
+  private final WorkResourceNamesPort names;
   private final AmqpAdmin amqp;
   private final SwarmControllerProperties properties;
 
-  public SwarmWorkTopologyManager(AmqpAdmin amqp, SwarmControllerProperties properties) {
+  public SwarmWorkTopologyManager(AmqpAdmin amqp, SwarmControllerProperties properties, WorkResourceNamesPort names) {
+    this.names = Objects.requireNonNull(names, "names");
     this.amqp = Objects.requireNonNull(amqp, "amqp");
     this.properties = Objects.requireNonNull(properties, "properties");
   }
@@ -38,9 +39,9 @@ public final class SwarmWorkTopologyManager {
    * @return the declared {@link TopicExchange}.
    */
   public TopicExchange declareWorkExchange() {
-    TopicExchange hive = new TopicExchange(properties.hiveExchange(), true, false);
+    TopicExchange hive = new TopicExchange(names.exchangeName(properties.getTraffic().hiveExchange()), true, false);
     amqp.declareExchange(hive);
-    log.info("declared work exchange {}", properties.hiveExchange());
+    log.info("declared work exchange {}", names.exchangeName(properties.getTraffic().hiveExchange()));
     return hive;
   }
 
@@ -59,7 +60,7 @@ public final class SwarmWorkTopologyManager {
     Objects.requireNonNull(declaredSuffixes, "declaredSuffixes");
 
     for (String suffix : suffixes) {
-      String queueName = properties.queueName(suffix);
+      String queueName = names.queueName(properties.getTraffic().queuePrefix(), suffix);
       boolean queueMissing = amqp.getQueueProperties(queueName) == null;
       if (queueMissing) {
         declaredSuffixes.remove(suffix);
@@ -89,7 +90,7 @@ public final class SwarmWorkTopologyManager {
   public void deleteWorkQueues(Set<String> suffixes, Consumer<String> onQueueDeleted) {
     Objects.requireNonNull(suffixes, "suffixes");
     for (String suffix : suffixes) {
-      String queueName = properties.queueName(suffix);
+      String queueName = names.queueName(properties.getTraffic().queuePrefix(), suffix);
       log.info("deleting queue {}", queueName);
       amqp.deleteQueue(queueName);
       if (onQueueDeleted != null) {
@@ -102,6 +103,6 @@ public final class SwarmWorkTopologyManager {
    * Delete the work exchange for the current swarm.
    */
   public void deleteWorkExchange() {
-    amqp.deleteExchange(properties.hiveExchange());
+    amqp.deleteExchange(names.exchangeName(properties.getTraffic().hiveExchange()));
   }
 }

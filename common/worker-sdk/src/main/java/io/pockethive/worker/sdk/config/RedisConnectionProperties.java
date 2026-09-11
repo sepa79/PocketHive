@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.redis.RedisConnectionSettings;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisConnectionSettings;
+import io.pockethive.redis.config.RedisConfigurationParser;
 
 /**
  * Responsibility: bind raw Redis connection fields and delegate resolution to work-config.

@@ -27,11 +27,11 @@ abstract class ScenarioComponentTestFixture {
     final void createScenarioFixture() throws IOException {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
-        capabilities = new CapabilityCatalogueService(capabilitiesDir);
+        capabilities = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         writeManifest("ctrl", "ctrl-image");
         writeManifest("worker", "worker-image");
         capabilities.reload();
-        validator = new ScenarioBundleValidator(capabilities, null, "test");
+        validator = new ScenarioBundleValidator(capabilities, null, "test", new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser());
         scenarios = new ScenarioService(scenariosDir.toString(), tempDir.resolve("runtime"), validator);
     }
 

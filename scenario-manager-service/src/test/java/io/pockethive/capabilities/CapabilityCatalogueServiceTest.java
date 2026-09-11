@@ -20,7 +20,7 @@ class CapabilityCatalogueServiceTest {
     @Test
     void imageNameLookupCanonicalizesRegistryNamespaceTagAndDigest() throws Exception {
         writeManifest("processor");
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         assertThat(catalogue.findByImageName("processor")).isPresent();
@@ -31,7 +31,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledDbQueryCapabilityLoads() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         CapabilityManifest manifest = catalogue.findByImageName("db-query").orElseThrow();
@@ -47,7 +47,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledCapabilitiesDoNotNeedCompatibilityTags() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         assertThat(catalogue.allManifests())
@@ -57,7 +57,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledCapabilityConfigPublishesCanonicalAuthoringDefaults() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         assertThat(defaultValue(catalogue, "io-scheduler", "inputs.scheduler.maxMessages"))
@@ -86,7 +86,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledIoCapabilitiesExposeScopeAndType() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         CapabilityManifest manifest = catalogue.findByImageName("io-scheduler").orElseThrow();
@@ -98,7 +98,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledRedisDatasetCapabilityExposesManualListNameRuntimeEdit() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         CapabilityManifest manifest = catalogue.findByImageName("io-redis-dataset").orElseThrow();
@@ -114,7 +114,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledHttpSequenceCapabilityPublishesStepTargetOverrides() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         CapabilityManifest manifest = catalogue.findByImageName("http-sequence").orElseThrow();
@@ -133,7 +133,7 @@ class CapabilityCatalogueServiceTest {
 
     @Test
     void bundledCapabilitiesDeclareLiveMutabilityForEveryConfigEntry() throws Exception {
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
 
         assertThat(catalogue.allManifests())
@@ -160,7 +160,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -187,7 +187,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("io-redis-output.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -210,7 +210,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -237,7 +237,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -265,7 +265,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -292,7 +292,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("generator.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         assertThatThrownBy(catalogue::reload)
                 .isInstanceOf(IllegalStateException.class)
@@ -314,7 +314,7 @@ class CapabilityCatalogueServiceTest {
                 """;
         Files.writeString(capabilitiesDir.resolve("processor.yaml"), body);
 
-        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir);
+        CapabilityCatalogueService catalogue = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
 
         catalogue.reload();
 

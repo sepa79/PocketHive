@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
 import io.pockethive.templating.RedisSequenceGenerator;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import java.util.Map;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;

@@ -1,347 +1,214 @@
 package io.pockethive.work.config.policy;
 
-import io.pockethive.work.config.input.InputRateParser;
-import io.pockethive.work.config.input.InputScheduleField;
-import io.pockethive.work.config.input.InputScheduleParser;
-import io.pockethive.work.config.input.SchedulerResetParser;
-import io.pockethive.work.config.csv.CsvDatasetParser;
-
-import io.pockethive.work.config.WorkConfigurationMode;
 import io.pockethive.work.config.WorkConfigurationException;
-import io.pockethive.work.config.WorkerInputType;
-import io.pockethive.work.config.WorkerOutputType;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
-import io.pockethive.work.config.redis.RedisDatasetSourceMode;
+import io.pockethive.work.config.WorkConfigurationFields;
+import io.pockethive.work.config.WorkInputMutationPolicy;
+import io.pockethive.work.config.WorkMutationDescriptors;
+import io.pockethive.work.config.WorkMutationRequest;
+import io.pockethive.work.config.WorkOutputMutationPolicy;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 /**
- * Responsibility: own IO patch mutability and validate changes against accepted settings and enablement.
- * Must not: write accepted state, apply adapters, read environment or replace complete candidate validation.
- * Consumes: RESP-WORK-REDIS-SELECTION for the requested list name and prior source mode.
- * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
- * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
- * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
- * Consumes: RESP-WORK-INPUT-LIFECYCLE-POLICY for removed input controls, including bootstrap.
- * Consumes: RESP-WORK-CSV-SETTINGS for startup plus accepted-field plus patch candidates before acceptance.
+ * Responsibility: validate outer IO patch structure and delegate selected adapter field semantics.
+ * Must not: own adapter mutability rules, parse adapter settings or write accepted state.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public final class WorkPatchPolicy {
-
-    private static final String INPUTS_ROOT = "inputs";
-    private static final String OUTPUTS_ROOT = "outputs";
-    private static final String TYPE_FIELD = "type";
-
-    public static final String LIVE_MUTABLE_FIELD = "liveMutable";
-    public static final String SCHEDULER_RATE_PER_SEC = InputRateParser.SCHEDULER_PATH;
-    public static final String SCHEDULER_MAX_MESSAGES = InputScheduleParser.SCHEDULER_MAX_MESSAGES_PATH;
-    public static final String SCHEDULER_RESET = SchedulerResetParser.PATH;
-    public static final String REDIS_DATASET_RATE_PER_SEC = InputRateParser.REDIS_PATH;
-    public static final String REDIS_DATASET_LIST_NAME = "inputs.redis.listName";
-    public static final String REDIS_DATASET_SOURCES = "inputs.redis.sources";
-    public static final String CSV_DATASET_RATE_PER_SEC = InputRateParser.CSV_PATH;
-
-    private static final String INPUTS_PREFIX = "inputs.";
-    private static final String OUTPUTS_PREFIX = "outputs.";
-    private static final Set<String> LIVE_MUTABLE_IO_PATHS = Set.of(
-            SCHEDULER_RATE_PER_SEC,
-            SCHEDULER_MAX_MESSAGES,
-            SCHEDULER_RESET,
-            REDIS_DATASET_RATE_PER_SEC,
-            REDIS_DATASET_LIST_NAME,
-            CSV_DATASET_RATE_PER_SEC
-    );
-    private static final Set<String> DISABLED_ONLY_IO_PATHS = Set.of(REDIS_DATASET_LIST_NAME);
+    private static final String INPUTS_PREFIX = WorkConfigurationFields.INPUTS + ".";
+    private static final String OUTPUTS_PREFIX = WorkConfigurationFields.OUTPUTS + ".";
 
     private final String workerName;
-    private final WorkerInputType inputType;
-    private final WorkerOutputType outputType;
-    private final Map<String, Object> csvStartup;
+    private final WorkInputMutationPolicy inputPolicy;
+    private final Map<String, Object> inputStartupSettings;
+    private final WorkOutputMutationPolicy outputPolicy;
+    private final Map<String, Object> outputStartupSettings;
 
-    public WorkPatchPolicy(String workerName, WorkerInputType inputType, WorkerOutputType outputType) {
-        this(workerName, inputType, outputType, Map.of());
+    public WorkPatchPolicy(String workerName,
+                           WorkInputMutationPolicy inputPolicy,
+                           Map<String, Object> inputStartupSettings,
+                           WorkOutputMutationPolicy outputPolicy,
+                           Map<String, Object> outputStartupSettings) {
+        this.workerName = Objects.requireNonNull(workerName, "workerName");
+        this.inputPolicy = requireInputPolicy(inputPolicy);
+        this.inputStartupSettings = Map.copyOf(Objects.requireNonNull(inputStartupSettings, "inputStartupSettings"));
+        this.outputPolicy = requireOutputPolicy(outputPolicy);
+        this.outputStartupSettings = Map.copyOf(Objects.requireNonNull(outputStartupSettings, "outputStartupSettings"));
     }
 
-    public WorkPatchPolicy(String workerName, WorkerInputType inputType, WorkerOutputType outputType,
-                           Map<String, Object> csvStartup) {
-        this.csvStartup = Map.copyOf(csvStartup);
-        this.workerName = Objects.requireNonNull(workerName, "workerName");
-        this.inputType = Objects.requireNonNull(inputType, "inputType");
-        this.outputType = Objects.requireNonNull(outputType, "outputType");
+    public boolean isLiveMutableIoPath(String path) {
+        return descriptorsFor(path).liveMutablePaths().contains(path);
+    }
+
+    public Set<String> liveMutableIoPaths() {
+        return union(inputPolicy.descriptors().liveMutablePaths(), outputPolicy.descriptors().liveMutablePaths());
+    }
+
+    public boolean isDisabledOnlyIoPath(String path) {
+        return descriptorsFor(path).disabledOnlyPaths().contains(path);
+    }
+
+    public Set<String> disabledOnlyIoPaths() {
+        return union(inputPolicy.descriptors().disabledOnlyPaths(), outputPolicy.descriptors().disabledOnlyPaths());
     }
 
     public static boolean isIoPath(String path) {
         return path != null && (path.startsWith(INPUTS_PREFIX) || path.startsWith(OUTPUTS_PREFIX));
     }
 
-    public static boolean isLiveMutableIoPath(String path) {
-        return LIVE_MUTABLE_IO_PATHS.contains(path);
-    }
-
-    public static Set<String> liveMutableIoPaths() {
-        return LIVE_MUTABLE_IO_PATHS;
-    }
-
-    public static boolean isDisabledOnlyIoPath(String path) {
-        return DISABLED_ONLY_IO_PATHS.contains(path);
-    }
-
-    public static Set<String> disabledOnlyIoPaths() {
-        return DISABLED_ONLY_IO_PATHS;
-    }
-
-    public void validate(
-        Map<String, Object> previousRaw,
-        Map<String, Object> update,
-        boolean workerEnabled
-    ) {
+    public void validate(Map<String, Object> previousRaw, Map<String, Object> update, boolean workerEnabled) {
         Objects.requireNonNull(update, "update");
-        var unsupported = new InputLifecyclePolicy().configurationProblems(update.get(INPUTS_ROOT), INPUTS_ROOT);
-        if (!unsupported.isEmpty()) {
-            throw new WorkConfigurationException(unsupported);
-        }
-        if (update.isEmpty()) {
-            return;
-        }
+        var unsupported = new InputLifecyclePolicy().configurationProblems(
+            update.get(WorkConfigurationFields.INPUTS), WorkConfigurationFields.INPUTS);
+        if (!unsupported.isEmpty()) throw new WorkConfigurationException(unsupported);
+        if (update.isEmpty()) return;
         Map<String, Object> previous = Objects.requireNonNull(previousRaw, "previousRaw");
         boolean bootstrap = previous.isEmpty();
-        validateIoRoot(
-            INPUTS_ROOT,
-            inputType.settingsKey(),
-            previous,
-            update,
-            bootstrap,
-            workerEnabled
-        );
-        validateIoRoot(
-            OUTPUTS_ROOT,
-            outputType.settingsKey(),
-            previous,
-            update,
-            bootstrap,
-            workerEnabled
-        );
-        if (inputType == WorkerInputType.CSV_DATASET && update.get(INPUTS_ROOT) instanceof Map<?, ?> inputs
-            && inputs.containsKey(inputType.settingsKey())) {
-            Object supplied = inputs.get(inputType.settingsKey());
-            if (supplied instanceof Map<?, ?> patch) {
-                var candidate = new java.util.LinkedHashMap<Object, Object>(csvStartup);
-                Object prior = valueAt(previousRaw, CsvDatasetParser.PATH);
-                if (prior instanceof Map<?, ?> fields) candidate.putAll(fields);
-                candidate.putAll(patch);
-                new CsvDatasetParser().parse(candidate, CsvDatasetParser.PATH);
-            } else {
-                new CsvDatasetParser().parse(supplied, CsvDatasetParser.PATH);
-            }
-        }
+        validateInputRoot(previous, update, bootstrap, workerEnabled);
+        validateOutputRoot(previous, update, bootstrap, workerEnabled);
     }
 
     public void validateReset(Map<String, Object> previousRaw) {
         Objects.requireNonNull(previousRaw, "previousRaw");
-        if (previousRaw.isEmpty()) {
-            return;
+        if (previousRaw.isEmpty()) return;
+        if (previousRaw.containsKey(WorkConfigurationFields.INPUTS)) {
+            throw unsafeUpdate(WorkConfigurationFields.INPUTS);
         }
-        if (previousRaw.containsKey(INPUTS_ROOT)) {
-            throw unsafeUpdate(INPUTS_ROOT);
-        }
-        if (previousRaw.containsKey(OUTPUTS_ROOT)) {
-            throw unsafeUpdate(OUTPUTS_ROOT);
+        if (previousRaw.containsKey(WorkConfigurationFields.OUTPUTS)) {
+            throw unsafeUpdate(WorkConfigurationFields.OUTPUTS);
         }
     }
 
-    private void validateIoRoot(
-        String root,
-        String selectedSubblock,
-        Map<String, Object> previousRaw,
-        Map<String, Object> update,
-        boolean bootstrap,
-        boolean workerEnabled
-    ) {
-        Object rawRootUpdate = update.get(root);
-        if (rawRootUpdate == null) {
-            return;
-        }
-        if (!(rawRootUpdate instanceof Map<?, ?> rootUpdate)) {
-            throw unsafeUpdate(root);
-        }
-        for (Map.Entry<?, ?> entry : rootUpdate.entrySet()) {
-            if (entry.getKey() == null) {
-                continue;
-            }
+    private void validateInputRoot(Map<String, Object> previous, Map<String, Object> update,
+                                   boolean bootstrap, boolean workerEnabled) {
+        validateRoot(WorkConfigurationFields.INPUTS, previous, update, bootstrap, workerEnabled,
+            inputPolicy.type().settingsKey(),
+            inputPolicy.descriptors(), inputStartupSettings, request -> inputPolicy.validate(request));
+    }
+
+    private void validateOutputRoot(Map<String, Object> previous, Map<String, Object> update,
+                                    boolean bootstrap, boolean workerEnabled) {
+        validateRoot(WorkConfigurationFields.OUTPUTS, previous, update, bootstrap, workerEnabled,
+            outputPolicy.type().settingsKey(),
+            outputPolicy.descriptors(), outputStartupSettings, request -> outputPolicy.validate(request));
+    }
+
+    private void validateRoot(String root, Map<String, Object> previous, Map<String, Object> update,
+                              boolean bootstrap, boolean workerEnabled, String selectedSettingsKey,
+                              WorkMutationDescriptors descriptors, Map<String, Object> startupSettings,
+                              MutationValidator validator) {
+        Object raw = update.get(root);
+        if (raw == null) return;
+        if (!(raw instanceof Map<?, ?> fields)) throw unsafeUpdate(root);
+        for (var entry : fields.entrySet()) {
+            if (entry.getKey() == null) continue;
             String key = entry.getKey().toString();
-            Object value = entry.getValue();
             String path = root + "." + key;
-            if (TYPE_FIELD.equals(key)) {
-                if (!bootstrap) {
-                    rejectIfChanged(previousRaw, path, value);
-                }
-                continue;
-            }
-            if (!(value instanceof Map<?, ?> nestedUpdate)) {
+            if (WorkConfigurationFields.TYPE.equals(key)) {
+                if (!bootstrap) rejectIfChanged(previous, path, entry.getValue());
+            } else if (!(entry.getValue() instanceof Map<?, ?> nested)) {
                 throw unsafeUpdate(path);
+            } else {
+                validateSubblock(previous, update, path, nested, bootstrap, workerEnabled, selectedSettingsKey,
+                    descriptors, startupSettings, validator);
             }
-            validateSubblock(selectedSubblock, previousRaw, path, nestedUpdate, bootstrap, workerEnabled);
         }
     }
 
-    private void validateSubblock(
-        String selectedSubblock,
-        Map<String, Object> previousRaw,
-        String subblockPath,
-        Map<?, ?> nestedUpdate,
-        boolean bootstrap,
-        boolean workerEnabled
-    ) {
-        for (Map.Entry<?, ?> nestedEntry : nestedUpdate.entrySet()) {
-            if (nestedEntry.getKey() == null) {
-                continue;
+    private void validateSubblock(Map<String, Object> previous, Map<String, Object> update, String subblockPath,
+                                  Map<?, ?> patch, boolean bootstrap, boolean workerEnabled, String selectedSettingsKey,
+                                  WorkMutationDescriptors descriptors, Map<String, Object> startupSettings,
+                                  MutationValidator validator) {
+        for (var entry : patch.entrySet()) {
+            if (entry.getKey() == null) continue;
+            String path = subblockPath + "." + entry.getKey();
+            if (subblockPath.endsWith("." + selectedSettingsKey) && descriptors.liveMutablePaths().contains(path)) {
+                validateMutable(previous, subblockPath, path, entry.getValue(), patch, workerEnabled,
+                    descriptors, startupSettings, validator);
+            } else if (!bootstrap) {
+                rejectIfChanged(previous, path, entry.getValue());
             }
-            String field = nestedEntry.getKey().toString();
-            String fieldPath = subblockPath + "." + field;
-            boolean safe = subblockPath.endsWith("." + selectedSubblock)
-                && isLiveMutableIoPath(fieldPath);
-            if (safe) {
-                validateSafeOperationalField(
-                    previousRaw,
-                    fieldPath,
-                    nestedEntry.getValue(),
-                    workerEnabled
-                );
-                continue;
-            }
-            if (bootstrap) {
-                continue;
-            }
-            rejectIfChanged(previousRaw, fieldPath, nestedEntry.getValue());
         }
     }
 
-    private void validateSafeOperationalField(
-        Map<String, Object> previousRaw,
-        String dottedPath,
-        Object value,
-        boolean workerEnabled
-    ) {
-        if (isDisabledOnlyIoPath(dottedPath)) {
-            validateDisabledRedisListName(previousRaw, dottedPath, value, workerEnabled);
-            return;
+    private void validateMutable(Map<String, Object> previous, String subblockPath, String path, Object value,
+                                 Map<?, ?> patch, boolean workerEnabled, WorkMutationDescriptors descriptors,
+                                 Map<String, Object> startupSettings, MutationValidator validator) {
+        Object prior = valueAt(previous, path);
+        if (Objects.equals(prior, value)) return;
+        if (descriptors.disabledOnlyPaths().contains(path) && workerEnabled) {
+            throw new IllegalStateException("Runtime config-update cannot change disabled-only IO field '" + path
+                + "' for enabled worker '" + workerName + "'; stop the swarm first.");
         }
-        switch (dottedPath) {
-            case SCHEDULER_RATE_PER_SEC,
-                 REDIS_DATASET_RATE_PER_SEC,
-                 CSV_DATASET_RATE_PER_SEC ->
-                requireRatePerSec(dottedPath, value);
-            case SCHEDULER_MAX_MESSAGES -> requireMaxMessages(dottedPath, value);
-            case SCHEDULER_RESET -> requireSchedulerReset(dottedPath, value);
-            default -> throw unsafeUpdate(dottedPath);
+        validator.validate(new WorkMutationRequest(workerName, startupSettings,
+            settingsAt(previous, subblockPath), stringMap(patch), path, prior, value, workerEnabled));
+    }
+
+    private WorkMutationDescriptors descriptorsFor(String path) {
+        if (path != null && path.startsWith(INPUTS_PREFIX)) return inputPolicy.descriptors();
+        if (path != null && path.startsWith(OUTPUTS_PREFIX)) return outputPolicy.descriptors();
+        return new WorkMutationDescriptors(Set.of(), Set.of());
+    }
+
+    private static WorkInputMutationPolicy requireInputPolicy(WorkInputMutationPolicy policy) {
+        Objects.requireNonNull(policy, "inputPolicy");
+        validatePolicy(policy.type(), policy.descriptors(), INPUTS_PREFIX);
+        return policy;
+    }
+
+    private static WorkOutputMutationPolicy requireOutputPolicy(WorkOutputMutationPolicy policy) {
+        Objects.requireNonNull(policy, "outputPolicy");
+        validatePolicy(policy.type(), policy.descriptors(), OUTPUTS_PREFIX);
+        return policy;
+    }
+
+    private static void validatePolicy(Object type, WorkMutationDescriptors descriptors, String prefix) {
+        Objects.requireNonNull(type, "policy.type()");
+        Objects.requireNonNull(descriptors, "policy.descriptors()");
+        if (!descriptors.liveMutablePaths().stream().allMatch(path -> path.startsWith(prefix))
+            || !descriptors.disabledOnlyPaths().stream().allMatch(path -> path.startsWith(prefix))) {
+            throw new IllegalArgumentException("Mutation policy descriptors must use '" + prefix + "' paths");
         }
     }
 
-    private void validateDisabledRedisListName(
-        Map<String, Object> previousRaw,
-        String dottedPath,
-        Object value,
-        boolean workerEnabled
-    ) {
-        if (previousRaw.isEmpty()) {
-            return;
-        }
-        Object previousValue = valueAt(previousRaw, dottedPath);
-        if (Objects.equals(previousValue, value)) {
-            return;
-        }
-        if (workerEnabled) {
-            throw new IllegalStateException(
-                "Runtime config-update cannot change disabled-only IO field '" + dottedPath
-                    + "' for enabled worker '" + workerName + "'; stop the swarm first."
-            );
-        }
-        var parser = new RedisConfigurationParser();
-        String sourcePath = INPUTS_ROOT + "." + inputType.settingsKey();
-        var requestedSelection = parser.validateRedisDatasetSelection(value, java.util.List.of(), sourcePath,
-            WorkConfigurationMode.RESOLVED);
-        if (!requestedSelection.problems().isEmpty()) {
-            throw invalidOperationalValue(dottedPath, requestedSelection.problems().getFirst().message());
-        }
-        if (!requestedSelection.listName().equals(value)) {
-            throw invalidOperationalValue(dottedPath, "must not contain surrounding whitespace");
-        }
-        Object redis = valueAt(previousRaw, sourcePath);
-        Map<?, ?> previousSettings = redis instanceof Map<?, ?> fields ? fields : Map.of();
-        var previousSelection = parser.validateRedisDatasetSelection(previousSettings.get("listName"),
-            previousSettings.containsKey("sources") ? previousSettings.get("sources") : java.util.List.of(),
-            sourcePath, WorkConfigurationMode.RESOLVED);
-        if (previousSelection.mode() != RedisDatasetSourceMode.SINGLE) {
-            throw new IllegalStateException(
-                "Runtime config-update cannot change disabled-only IO field '" + dottedPath
-                    + "' for worker '" + workerName
-                    + "'; the worker must already use Redis single-source listName mode."
-            );
-        }
+    private static Set<String> union(Set<String> first, Set<String> second) {
+        return Stream.concat(first.stream(), second.stream()).collect(Collectors.toUnmodifiableSet());
     }
 
-    private double requireRatePerSec(String dottedPath, Object value) {
-        var result = new InputRateParser().validate(value, dottedPath, WorkConfigurationMode.RESOLVED);
-        if (!result.problems().isEmpty()) {
-            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
-        }
-        return result.ratePerSec();
+    private void rejectIfChanged(Map<String, Object> previous, String path, Object value) {
+        if (!Objects.equals(valueAt(previous, path), value)) throw unsafeUpdate(path);
     }
 
-    private void requireMaxMessages(String dottedPath, Object value) {
-        var result = new InputScheduleParser().validate(value, InputScheduleField.MAX_MESSAGES, dottedPath,
-            WorkConfigurationMode.RESOLVED);
-        if (!result.problems().isEmpty()) {
-            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
-        }
-    }
-
-    private void requireSchedulerReset(String dottedPath, Object value) {
-        var result = new SchedulerResetParser().validate(value, dottedPath, WorkConfigurationMode.RESOLVED);
-        if (!result.problems().isEmpty()) {
-            throw invalidOperationalValue(dottedPath, result.problems().getFirst().message());
-        }
-    }
-
-    private void rejectIfChanged(
-        Map<String, Object> previousRaw,
-        String dottedPath,
-        Object updatedValue
-    ) {
-        Object previousValue = valueAt(previousRaw, dottedPath);
-        if (!Objects.equals(previousValue, updatedValue)) {
-            throw unsafeUpdate(dottedPath);
-        }
-    }
-
-    private Object valueAt(Map<String, Object> source, String dottedPath) {
+    private static Object valueAt(Map<String, Object> source, String path) {
         Object current = source;
-        for (String segment : dottedPath.split("\\.")) {
-            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) {
-                return null;
-            }
+        for (String segment : path.split("\\.")) {
+            if (!(current instanceof Map<?, ?> map) || !map.containsKey(segment)) return null;
             current = map.get(segment);
         }
         return current;
     }
 
-    private IllegalStateException unsafeUpdate(String dottedPath) {
-        return new IllegalStateException(
-            "Runtime config-update cannot change unsafe IO field '" + dottedPath
-                + "' for worker '" + workerName
-                + "'; restart the worker/swarm to change input or output wiring."
-        );
+    private static Map<String, Object> settingsAt(Map<String, Object> source, String settingsPath) {
+        Object settings = valueAt(source, settingsPath);
+        return settings instanceof Map<?, ?> map ? stringMap(map) : Map.of();
     }
 
-    private IllegalArgumentException invalidOperationalValue(
-        String dottedPath,
-        String reason
-    ) {
-        return new IllegalArgumentException(
-            "Runtime config-update has invalid operational IO field '" + dottedPath
-                + "' for worker '" + workerName + "': " + reason + "."
-        );
+    private static Map<String, Object> stringMap(Map<?, ?> source) {
+        var copy = new java.util.LinkedHashMap<String, Object>();
+        source.forEach((key, value) -> copy.put(Objects.toString(key), value));
+        return copy;
     }
 
+    private IllegalStateException unsafeUpdate(String path) {
+        return new IllegalStateException("Runtime config-update cannot change unsafe IO field '" + path
+            + "' for worker '" + workerName + "'; restart the worker/swarm to change input or output wiring.");
+    }
+
+    @FunctionalInterface
+    private interface MutationValidator {
+        void validate(WorkMutationRequest request);
+    }
 }

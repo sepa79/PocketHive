@@ -41,9 +41,9 @@ class InputSettingsValidationComponentTest {
 
     @BeforeEach
     void loadCatalogue() throws Exception {
-        var catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        var catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
-        validator = new ScenarioBundleValidator(catalogue, "latest", "test");
+        validator = new ScenarioBundleValidator(catalogue, "latest", "test", new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser());
     }
 
     @ParameterizedTest

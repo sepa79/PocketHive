@@ -289,6 +289,103 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void selectorAndNullTuningRejectionsRetainAcceptedPlanWithoutEffects() throws Exception {
+    for (String invalidCase : List.of("input-selector", "output-selector", "null-input", "null-output")) {
+      SwarmLifecycleManager manager = newManager();
+      ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+          new Bee("processor", "img-proc", Work.ofDefaults("in", "out"), Map.of(),
+              Map.of("inputs", Map.of("type", "RABBITMQ"), "outputs", Map.of("type", "RABBITMQ")))),
+          null, "accepted-sut"));
+      when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("accepted");
+      manager.start(plan.toString());
+      var accepted = manager.expectedWorkers();
+      accepted.forEach(worker -> {
+        manager.updateHeartbeat(worker.role(), worker.instance());
+        manager.markReady(worker.role(), worker.instance());
+      });
+      assertTrue(manager.isReadyForWork());
+      clearInvocations(amqp, docker, rabbit);
+      var bee = (ObjectNode) plan.path("bees").get(0);
+      switch (invalidCase) {
+        case "input-selector" -> bee.withObject("env").put("POCKETHIVE_INPUTS_TYPE", "SCHEDULER");
+        case "output-selector" -> bee.withObject("env").put("POCKETHIVE_OUTPUTS_TYPE", "NONE");
+        case "null-input" -> ((ObjectNode) bee.path("config").path("inputs")).putNull("rabbit");
+        case "null-output" -> ((ObjectNode) bee.path("config").path("outputs")).putNull("rabbit");
+        default -> throw new AssertionError(invalidCase);
+      }
+      plan.put("sutId", "rejected-sut");
+      assertThatThrownBy(() -> manager.prepare(plan.toString())).isInstanceOf(WorkConfigurationException.class);
+      assertThat(manager.expectedWorkers()).isEqualTo(accepted);
+      assertThat(manager.sutId()).isEqualTo("accepted-sut");
+      assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+      assertTrue(manager.isReadyForWork());
+      assertFalse(manager.hasPendingConfigUpdates());
+      verifyNoInteractions(amqp, rabbit);
+      verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+      clearInvocations(amqp, docker, rabbit);
+    }
+  }
+
+  @Test
+  void rejectedRabbitPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(),
+            Map.of("enabled", false)),
+        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(),
+            Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0)),
+                "outputs", Map.of("type", "NONE")))), null, "accepted-sut"));
+    ObjectNode rabbitSettings = (ObjectNode) plan.path("bees").get(1)
+        .path("config").path("inputs").path("rabbit");
+
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class)
+        .hasMessageContaining("inputs.rabbit.prefetch");
+    assertThat(manager.expectedWorkers()).isEmpty();
+    assertThat(manager.getMetrics().desired()).isZero();
+    assertThat(manager.sutId()).isNull();
+    assertFalse(manager.hasPendingConfigUpdates());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+
+    rabbitSettings.put("prefetch", 7);
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        .thenReturn("c1", "c2");
+    manager.start(plan.toString());
+
+    ArgumentCaptor<Map<String, String>> environment = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(2)).createAndStartContainer(
+        anyString(), environment.capture(), anyString(), any(), anyMap());
+    assertThat(environment.getAllValues().get(1)).containsEntry("POCKETHIVE_INPUTS_RABBIT_PREFETCH", "7");
+    assertThat(manager.expectedWorkers()).hasSize(2);
+    assertThat(manager.getMetrics().desired()).isEqualTo(2);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.hasPendingConfigUpdates());
+    var acceptedWorkers = manager.expectedWorkers();
+    acceptedWorkers.forEach(worker -> {
+      manager.updateHeartbeat(worker.role(), worker.instance());
+      manager.markReady(worker.role(), worker.instance());
+    });
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    clearInvocations(amqp, docker, rabbit);
+
+    rabbitSettings.put("prefetch", 0);
+    plan.put("sutId", "rejected-sut");
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class);
+    assertThat(manager.expectedWorkers()).isEqualTo(acceptedWorkers);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+  }
+
+  @Test
   void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
@@ -394,6 +491,7 @@ class SwarmLifecycleManagerTest {
                         "host", "redis",
                         "port", 6379,
                         "ssl", false,
+                        "ratePerSec", 10.0,
                         "pickStrategy", "WEIGHTED_RANDOM",
                         "sources", List.of(
                             Map.of("listName", "webauth.RED.custA", "weight", 40),
@@ -844,7 +942,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 5d))))
+                "scheduler", Map.of("ratePerSec", 5d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -927,7 +1025,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 10d))))
+                "scheduler", Map.of("ratePerSec", 10d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -966,7 +1064,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 80d))))
+                "scheduler", Map.of("ratePerSec", 80d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -1005,7 +1103,7 @@ class SwarmLifecycleManagerTest {
             null,
             Map.of("inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 20d)))),
+                "scheduler", Map.of("ratePerSec", 20d, "maxMessages", 0)))),
         new Bee("processor", "img2", Work.ofDefaults("gen-out", "proc-out"), null)
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
@@ -1050,6 +1148,7 @@ class SwarmLifecycleManagerTest {
   private SwarmLifecycleManager newManager(boolean bufferGuardEnabled) {
     RabbitConnectionSettings rabbitConnection = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     meterRegistry = new SimpleMeterRegistry();
+    var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
     return new SwarmLifecycleManager(
         amqp,
         mapper,
@@ -1059,10 +1158,13 @@ class SwarmLifecycleManagerTest {
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         rabbitConnection,
         "inst",
-        SwarmControllerTestProperties.defaults(bufferGuardEnabled),
+        properties,
         meterRegistry,
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
-        runtimeMount());
+        runtimeMount(),
+        new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
+            .workerWorkConfiguration(properties, new io.pockethive.topology.work.PrefixedWorkResourceNames()),
+        new io.pockethive.topology.work.PrefixedWorkResourceNames());
   }
 
   private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {

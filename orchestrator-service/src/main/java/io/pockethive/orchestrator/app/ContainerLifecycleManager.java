@@ -47,6 +47,8 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ContainerLifecycleManager {
+    private final io.pockethive.topology.work.WorkResourceNamesPort workNames;
+
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
     private final io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount;
@@ -84,7 +86,9 @@ public class ContainerLifecycleManager {
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         RuntimeOwnershipManifestStore manifestStore,
-        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
+        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
+        this.workNames = Objects.requireNonNull(workNames, "workNames");
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.store = Objects.requireNonNull(store, "store");
@@ -109,7 +113,8 @@ public class ContainerLifecycleManager {
         RabbitConnectionSettings rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
-        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
+        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
         this(
             docker,
             computeAdapter,
@@ -135,7 +140,7 @@ public class ContainerLifecycleManager {
                     return java.util.Optional.empty();
                 }
             },
-            runtimeFilesystemMount);
+            runtimeFilesystemMount, workNames);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -156,13 +161,14 @@ public class ContainerLifecycleManager {
         NetworkMode resolvedNetworkMode = Objects.requireNonNull(networkMode, "networkMode");
         String resolvedRunId = requireNonBlank(runId, "runId");
         MetricsSettings metrics = metricsSettings(properties.getMetrics());
+        var workTopology = workNames.forSwarm(resolvedSwarmId);
         ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
             new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
                 metrics,
                 resolvedRunId,
                 properties.getDocker().getSocketPath(),
-                "ph." + resolvedSwarmId,
-                "ph." + resolvedSwarmId + ".hive");
+                workTopology.queuePrefix(),
+                workTopology.hiveExchange());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
                 resolvedSwarmId,
@@ -272,7 +278,9 @@ public class ContainerLifecycleManager {
             .controlQueue(controllerInstance)
             .map(ControlQueueDescriptor::name)
             .orElse(null);
-        List<String> workQueues = controllerSettings.trafficQueueNames(workQueueSuffixes(templateMetadata.bees()));
+        List<String> workQueues = workQueueSuffixes(templateMetadata.bees()).stream()
+            .map(suffix -> workNames.queueName(controllerSettings.trafficQueuePrefix(), suffix))
+            .distinct().toList();
         List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
             ? List.of()
             : List.of(controllerQueue);
@@ -292,7 +300,7 @@ public class ContainerLifecycleManager {
             new RuntimeOwnershipManifest.RabbitResources(
                 controlQueues,
                 workQueues,
-                List.of(controllerSettings.trafficHiveExchange())));
+                List.of(workNames.exchangeName(controllerSettings.trafficHiveExchange()))));
         manifestStore.save(manifest);
     }
 

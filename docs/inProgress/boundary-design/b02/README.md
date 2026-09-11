@@ -1,8 +1,27 @@
 # B02 settings and authoring execution
 
-Current checkpoint: `68677fd2` commits the CSV transfer and CSV-R1 correction on
-explicit human request. The correction has not had a separate acceptance review.
-Scheduler settings transfer below is the next implementation handoff; B02 remains open.
+Current scope and remaining order are owned exclusively by the
+[execution contract](../../work-plane-module-boundaries.md#current-execution-contract).
+B02 is incomplete and unaccepted. Rabbit/Redis/local config providers and narrow runtime
+candidate validation have implementation evidence; all affected consumer boundaries
+must still be closed. Historical B05a/B06a/B07a and B03a labels refer to parts of B02,
+not additional phases. Full state/runtime extraction remains B03.
+
+Current bounded handoff: [Controller Work composition extraction](controller-work-composition-extraction.md)
+(implemented, tested, awaiting separate review; no full B02 acceptance).
+
+Current follow-up: [topology and Scenario transfer](topology-scenario-transfer.md).
+[Separate review](topology-scenario-review.md): changes requested.
+[Correction review](topology-scenario-correction-review.md) found TS-R2a.
+[Final correction review](topology-tap-final-review.md) accepts TS-R1–TS-R3 including TS-R2a.
+Full B02 acceptance and the Controller candidate gate remain open.
+
+## Historical implementation and review evidence
+
+Everything below records its own revision and scoped result. Former remaining-work lists,
+model assignments and pending-review statements are historical, not current execution
+instructions. Later reviews may close individual findings without accepting full B02.
+Use the current execution contract for the frozen candidate surface and exclusions.
 
 Status: implementation started, not accepted. B01 was committed as `eb681ee7` on
 2026-09-08 after separate review. This task does not run an automatic acceptance review.
@@ -26,7 +45,9 @@ input timing/limit transfer's TIM-R1 correction and the subsequent scheduler-res
 transfer passed separate review on 2026-09-10: no new findings, 130 tests passed.
 TIM-R1 is closed; timing/limit and reset parsing are accepted within their stated scope.
 Full B02 remains open. After full B02 acceptance, the execution plan requires
-a separate simplification task across the completed phase before B03.
+a separate simplification task across the completed phase before full B03 extraction.
+The already implemented narrow B03a mutation/runtime activation is an explicit B02
+integration prerequisite, not acceptance or completion of B03.
 
 Separate [review on 2026-09-08](review-2026-09-08.md) found HIGH R1: template loading
 lost the auth failure classification used by worker error handling. The
@@ -864,7 +885,7 @@ validation, other settings/defaults, reset decoding and input enablement remain 
 No full startup-shape/bee.env acceptance or deployed-stack delivery claim follows here.
 `git diff --check` passes. No additional scanner, wiring tests, automatic review, deployment
 or second commit. Hand off this uncommitted transfer for separate review; B02 and SEL-R1
-remain open, and B03 has not started.
+remained open, and B03 had not started at that historical checkpoint.
 
 #### Separate input timing/limit review — 2026-09-09
 
@@ -1296,3 +1317,408 @@ This is not full B02 acceptance. Controller scheduler startup export, full Work 
 validation, startup shape and bee.env authoring parity remain open. SEL-R1 is still deferred;
 CSV-R1 correction review remains pending despite its explicitly requested checkpoint.
 Separate simplification follows full phase acceptance. No self-review or deployment.
+
+
+#### Separate scheduler settings review — 2026-09-10
+
+Reviewed commit `ee424015` against `68677fd2`. **No findings; scheduler settings transfer
+accepted within its documented scope.** This does not accept the unrelated pending
+CSV-R1 correction or complete B02.
+
+| Responsibility | Reviewed source and result |
+|---|---|
+| RESP-WORK-SCHEDULER-SETTINGS | SchedulerSettingsParser owns the five-field composition and unknown/root checks. It delegates rate, exact integer/default and reset semantics to their existing parsers. Error/deferred results cannot expose partial settings; package-private value construction and immutable fields align with the header. No IO or process access. |
+| RESP-WORK-IO-CONFIG | WorkInputConfigBinder binds raw SchedulerInputProperties and invokes complete validation. Properties retain shared omission defaults and preserve declared null. Discovery selects these properties; factory/builder reach constructor settings() before scheduling-policy updates or timers. Existing scalar accessors still delegate field owners. |
+| RESP-WORK-SCHEDULE-INPUT / RESP-WORK-INPUT-RATE / RESP-WORK-INPUT-SCHEDULE / RESP-WORK-SCHEDULER-RESET | Constructor captures validated startup values. Listener serializes projection updates; rate/max/reset are parsed before changing rate, counters or policy snapshot. The new volatile rate replaces mutation of the Spring carrier; dispatch and diagnostics consume the same projection. Timer, finite-run, reset and stop paths otherwise retain prior behavior. |
+| RESP-SCENARIO-VALIDATE | Selected scheduler declarations reach WorkConfigurationFindings.schedulerSettings and the shared AUTHORING parser. Catalogue field checks are bypassed for that subtree; reset and schedule checks are no longer assembled separately for scheduler. Redis timing remains a distinct consumer of shared numeric semantics. |
+
+Repository-wide Java search for SchedulerSettings, SchedulerInputProperties,
+maxPendingTicks and inputs.scheduler: `/tmp/scheduler-review-owners.txt`. Inspected
+all production SchedulerInputProperties consumers (discovery, factory, builder, runtime),
+canonical numeric/reset parsers and Scenario validator/projection. No competing active
+scheduler field-constraint owner found. Existing maxPendingTicks runtime usage is unchanged;
+this transfer makes no claim to add new scheduling behavior.
+
+**107 tests passed** with the handoff's explicit Maven selection, freshly run in
+`/tmp/b02-scheduler-review-tests.log`. Tests cover parser null/default/expression behavior,
+real Spring binding, Scenario findings, policy gates and scheduler dispatch counts through
+rate/limit/reset transitions and rejected combined updates. `git diff --check` passes.
+The implementation's full reactor package remains supporting compilation evidence;
+no additional deployment or broad isolation acceptance is inferred.
+
+Six passes: plan outcome met for startup/authoring settings with larger gates explicitly
+open; style/headers and one-type-per-file align; conciseness removes repeated complete
+validation assembly and runtime property decoding; no new trust boundary, IO or secret
+exposure found; standard JDK and existing parsers suffice with no dependency addition;
+readability improves through immutable startup values and a named runtime rate projection.
+Full candidate validation, Controller scheduler export, bee.env authoring/startup shape,
+CSV-R1 correction review and deferred SEL-R1 remain open. No production edits or commit
+were made during this review; phase simplification still follows full B02 acceptance.
+
+
+#### Scheduler environment export — 2026-09-10
+
+Implementation after `ee424015`, delegated to Terra under the human-approved execution
+split; separate review is not part of this task. Scope: Controller planning exports the
+five scheduler startup fields before connection-environment freezing and derives bootstrap
+from the same final Spring-resolved environment. Field constraints/defaults remain owned
+by the existing scheduler/numeric parsers. Reset is a CP command, retained in bootstrap
+when supplied and validated; it must not become an unsupported startup property.
+
+Coordinator inspected SwarmRuntimeCore.prepare: every worker spec is planned before
+declaring topology or provisioning workers. Invalid scheduler planning therefore aborts
+before these effects. ConfigFanout receives the resulting planned bootstrap. Focused
+consumer search: `/tmp/b02-scheduler-export-consumers.txt`; this integration check does
+not substitute for the separately requested review or full B02 acceptance.
+
+
+Terra implemented `SchedulerSettingsEnvironment` in `work-config.scheduler` and its
+Controller consumer. It applies explicit Spring-resolved environment names, materializes
+shared omission defaults before freezing, retains declared types/nulls for validation,
+and projects validated settings into bootstrap. `reset` is never exported as a startup
+property. Required maxMessages was added explicitly to four invalid lifecycle fixtures;
+no production default was introduced. Architecture/header updates accompany the change.
+
+**51 focused tests passed** (2 environment + 3 parser + 1 SDK binding + 19 worker planner
++ 26 lifecycle). Terra's command and log:
+
+```bash
+mvn -pl common/worker-sdk,swarm-controller-service -am \
+  -Dmaven.compiler.source=21 -Dmaven.compiler.target=21 \
+  '-Dtest=SchedulerSettingsParserTest,SchedulerSettingsEnvironmentTest,WorkIOConfigBinderTest#schedulerExportAndSpringEnvironmentAliasesBindToTheValidatedStartupSnapshot,SwarmWorkerSpecFactoryTest,SwarmLifecycleManagerTest' \
+  -Dsurefire.failIfNoSpecifiedTests=false test
+```
+
+`/tmp/b02-scheduler-export-targeted.log`. Behavior includes explicit overrides, required
+and invalid values, defaults referenced by placeholders, final-environment/bootstrap
+parity, real SDK binding and reset omission from startup environment.
+Coordinator `./mvnw -B -ntp -DskipTests package` passed for the full reactor
+(`/tmp/b02-scheduler-export-package.log`). `git diff --check` passes.
+
+**Verification limitation:** the broader WorkIOConfigBinderTest currently fails for Redis
+source-list binding (`UnboundConfigurationPropertiesException` on list-name/weight),
+including unchanged cases. Controlled removal of the new scheduler test reproduced
+73 tests with 11 assertion failures and 3 errors (`/tmp/b02-scheduler-export-sdk-baseline.log`).
+Coordinator repeated with repository `./mvnw`: 74 tests with the same 11 failures/3 errors;
+the added scheduler case passes (`/tmp/b02-scheduler-export-wrapper-tests.log`). The
+existing two import-test cases also passed in that run. This differs from earlier passing
+binding runs; the underlying cause is not established and is not claimed fixed or dismissed
+as a proven old source defect. No Redis implementation was changed. Follow up separately.
+
+No self-review, commit or deployment. The scheduler export slice awaits separately
+requested review (Sol under the agreed split). Full Work candidate validation, startup
+shape, complete bee.env authoring, pending CSV-R1 correction review and deferred SEL-R1
+remain open. Phase simplification follows full B02 acceptance.
+
+
+#### Separate scheduler export review (Sol) — 2026-09-10
+
+Scope: uncommitted scheduler export after `ee424015`. **No findings; export slice accepted
+within its declared scope.** Sol independently reviewed source/owners and ran focused
+checks. Coordinator investigated the distinct build/test environment failures in parallel.
+No production changes, commit or automatic fix loop were performed during review.
+
+| Responsibility | Reviewed evidence and verdict |
+|---|---|
+| RESP-WORK-SCHEDULER-SETTINGS | SchedulerSettingsEnvironment owns five-field export/projection; SchedulerSettingsParser delegates InputRateParser, InputScheduleParser and SchedulerResetParser. Explicit overrides, declared null/types, omission defaults, immutable maps and reset separation align with the contract. No competing scheduler exporter found in repository-wide active-source searches. |
+| RESP-CONTROLLER-WORKER-PLAN | SwarmWorkerSpecFactory composes bee.env, candidates and encoded settings before raw lifecycle checks and connection freezing. Both CSV and scheduler bootstrap projections use the final frozen properties. SwarmRuntimeCore plans all workers before topology/provision effects. No post-freeze environment rewrite. |
+| RESP-WORK-CONNECTION-ENVIRONMENT | WorkConnectionEnvironmentResolver freezes the environment; SpringConnectionEnvironment owns alias lookup and placeholder expansion. Scheduler defaults are present before freeze, so references resolve consistently. No additional environment-name parser or constraints owner introduced. |
+| RESP-WORK-IO-CONFIG / RESP-SCENARIO-VALIDATE / RESP-WORK-SCHEDULE-INPUT | SDK binder, Scenario Manager and scheduler runtime retain distinct startup/authoring/live-update roles using canonical parsers. Actual SDK binding confirms exported startup settings; reset is excluded from startup properties and preserved only after canonical bootstrap validation. |
+
+All six passes support scoped acceptance: plan's Controller export outcome is implemented;
+headers and implementation units align; no extra framework/duplicate semantic parser;
+no new credential exposure or external effects in codec; existing JDK/Spring facilities
+suffice without new libraries; explicit compose/freeze/project flow is maintainable.
+Full Work candidate validation, broader bee.env authoring/startup shape, CSV-R1 correction
+review and deferred SEL-R1 remain separate open work. No full B02/deployed acceptance.
+
+Coordinator resolved the previous Redis binding test limitation: system Maven 3.8.7 used
+compiler plugin 3.1 and produced RedisDatasetSource without MethodParameters, despite the
+module's parameters=true property. Subsequent wrapper incremental builds reused that class.
+An isolated public Binder probe on identical source demonstrates failure without -parameters
+and successful binding with it (`/tmp/redis-binding-metadata-probe.log`). Wrapper clean
+compile restored metadata (`/tmp/scheduler-review-rebuild.log`); full WorkIOConfigBinderTest
+then passed **74/74**. This was a stale compiled-artifact failure, not a proven Redis code
+regression. Use repository ./mvnw consistently; no Redis source change was needed.
+
+**126 cases passed across final runs:** 2 environment + 3 parser + 74 SDK binder +
+19 worker planner + 2 existing import cases in `/tmp/scheduler-export-sol-review-tests.log`,
+and 26 lifecycle cases in `/tmp/scheduler-review-lifecycle-agent.log`. The first run's
+lifecycle stage could not self-attach Mockito in the sandbox. Re-running that class with
+`-DargLine=-javaagent:/home/sepa/.m2/repository/org/mockito/mockito-core/5.17.0/mockito-core-5.17.0.jar`
+passed, without changing tests or production. Both runs used ./mvnw, -am,
+-Dsurefire.failIfNoSpecifiedTests=false, and the test selections reported above.
+Sol's own focused environment/SDK/planner runs also passed; its lifecycle run hit the same
+attachment restriction. `git diff --check` passes. Prior full reactor package remains
+compilation evidence; this review does not claim a deployment check.
+
+
+#### Complete Redis Dataset settings composition — 2026-09-10
+
+Next bounded B02 implementation delegated to Terra after accepted scheduler export.
+RESP-WORK-REDIS-DATASET-SETTINGS composes the existing connection, selection/source,
+rate and timing contracts; remaining pickStrategy semantics move to that owner. SDK
+startup and Scenario Manager consume one complete report. AUTHORING problems/deferred
+paths must not expose partially resolved settings. Existing MULTIPLE-mode optional
+listName and omission/default semantics remain canonical; explicit null for required
+fields is not treated as omission. Runtime validation must finish before mutation while
+preserving the explicitly deferred SEL-R1 list-switch mechanics.
+
+Coordinator focused call-site search for getPickStrategy/setPickStrategy/requirePickStrategy:
+`/tmp/b02-redis-dataset-settings-pick-consumers.txt`. Redis runtime still had a local enum
+parser and startup properties assembled independent field calls before this transfer.
+Redis dataset environment export and whole Work candidate acceptance remain subsequent
+B02 work. This implementation task does not perform its own acceptance review or commit.
+
+
+Terra implementation delivered: RedisConfigurationParser now composes complete
+RedisDatasetSettings/RedisDatasetSettingsValidation and owns pickStrategy decoding.
+It delegates all existing connection, selection/source, rate and timing rules. SDK
+RedisDataSetInputProperties builds the complete candidate; runtime raw updates parse
+merged current declarations and patch before applying changes. Scenario Manager projects
+one complete AUTHORING report and bypasses the second capability pickStrategy check.
+No local runtime pickStrategy parser remains. Partial symbolic reports expose no settings.
+Architecture and affected responsibility headers were updated before/with implementation.
+
+Normal SDK startup still reaches WorkInputConfigBinder.validateConfigured before input
+use. Direct construction retains the existing timing-only start; complete settings resolve
+before Redis client creation/reads/dispatch at each tick. That path's lifecycle remains
+unchanged, including deferred SEL-R1; this does not claim a new accepted-state machine or
+full Work candidate gate. Runtime still uses mutable SDK carriers and per-tick validation;
+a future simplification must not be confused with changes delivered here.
+
+**132 tests passed**, 0 failures/errors/skips:
+
+- work-config: RedisDatasetSettingsTest (5), RedisDatasetSelectionTest (7).
+- SDK: WorkIOConfigBinderTest (75), RedisDataSetWorkInputTest (12).
+- Scenario Manager: RedisConfigurationValidationComponentTest (21), InputSettingsValidationComponentTest (10).
+- Existing RepositoryImportBoundaryTest (2).
+
+Terra used ./mvnw -q with -Dsurefire.failIfNoSpecifiedTests=false, selecting the named
+classes for common/work-config, common/worker-sdk -am, and scenario-manager-service -am.
+SDK tests supplied the Mockito startup agent as in the previous review. Logs:
+`/tmp/b02-redis-dataset-settings-work-config.log`, `...-worker-sdk.log`,
+`...-scenario-manager.log`. Coordinator ran the import test through its existing
+control-plane-core host (`...-imports.log`) and full reactor ./mvnw -B -ntp -DskipTests
+package (`...-package.log`); both passed. `git diff --check` passes.
+
+Implementation handoff only: separate Sol review is next. No new scanner, dependency,
+commit or deployment. The earlier accepted scheduler export remains uncommitted alongside
+this slice. Redis environment export and whole Work candidate acceptance remain B02 work;
+CSV-R1 correction review and deferred SEL-R1 remain open. Simplification follows full
+phase acceptance, as agreed.
+
+
+#### Separate Redis Dataset settings review (Sol) — 2026-09-10
+
+Scope: uncommitted complete Redis Dataset settings composition after `ee424015`.
+**No findings; the slice is accepted within its declared scope.** The earlier accepted
+scheduler export remained adjacent uncommitted work and was not re-reviewed.
+
+All six required passes support scoped acceptance. `RedisConfigurationParser` is the
+sole aggregate settings and pick-strategy owner; SDK startup and runtime consumers
+delegate to it, while Scenario Manager only projects the AUTHORING report. Repository-wide
+searches for pick-strategy accessors/literals, aggregate parse calls and Redis effects
+found no competing active authority. WorkPatchPolicy's selection/rate use remains the
+distinct patch-policy responsibility and delegates the canonical field parsers.
+
+Sol independently reran **132 tests**, 0 failures/errors: 12 work-config Redis settings
+and selection cases, 87 SDK binder/runtime cases, 31 Scenario Manager validation cases,
+and 2 RepositoryImportBoundaryTest cases. The SDK run used the existing Mockito agent.
+`git diff --check` passed. No production or documentation files were changed by review.
+
+No deployment or full reactor rerun was performed. The import test proves only its
+declared restrictions. Deferred SEL-R1, Redis environment export, whole Work candidate
+acceptance and remaining connection lifecycle debt stay out of scope. The next bounded
+implementation task is Redis Dataset environment export; this review does not accept B02.
+
+
+#### Redis Dataset environment export — implementation handoff — 2026-09-10
+
+`RedisDatasetEnvironment` in `common/work-config` now owns only Redis Dataset candidate
+composition, dataset property names, environment encoding and bootstrap projection from
+one complete `RedisDatasetSettings`. The five Redis connection property/environment
+mappings remain solely in `RedisConnectionEnvironmentCodec` and
+`WorkConnectionEnvironmentResolver`; the environment owner consumes their frozen
+connection projection. `SwarmWorkerSpecFactory` composes explicit `bee.env` values before
+connection freezing, then projects only the final Spring-resolved and canonically
+validated snapshot; its former field-by-field Redis input export is removed. Indexed
+source properties retain SDK Binder parity. Focused work-config, worker-SDK and planner
+tests were added/run. This SSOT correction awaits separate review. SEL-R1, empty-YAML
+behavior, whole Work candidate acceptance, full B02 acceptance, commit and deployment
+remain outside this handoff.
+
+
+#### Combined Redis environment / CSV-R1 review (Sol) — 2026-09-10
+
+One cost-conscious Sol pass produced separate verdicts. **CSV-R1: no findings; correction
+accepted within scope.** Startup settings register once as WorkerState's immutable baseline;
+WorkPatchPolicy composes startup, accepted CP journal and patch in order. Explicit null
+still fails and the baseline does not mutate across commands or lifecycle changes.
+
+**Redis Dataset environment export: initially rejected by CRITICAL SSOT finding.**
+`RedisDatasetEnvironment` duplicated the five Redis connection property/environment
+mappings owned by `RedisConnectionEnvironmentCodec`; both paths were active during worker
+planning. Green tests did not waive the competing owner. The combined focused run passed
+154 tests and `git diff --check` passed; review made no edits.
+
+Terra corrected only that finding: the dataset environment owner now excludes connection
+fields, consumes the resolver-produced connection projection and delegates accepted
+connection projection to `RedisConnectionEnvironmentCodec.configuration`. It owns only
+dataset fields and their property/environment mapping.
+
+The subsequent narrow Sol correction review found **no findings and accepts the corrected
+Redis Dataset environment export within scope**. Repository search found the five Redis
+connection mappings only in the canonical codec/resolver path. Four focused correction
+cases passed: two environment-owner tests, SDK binding parity and planner frozen-environment/
+bootstrap parity. No deployment, full reactor or import-test claim follows from that narrow
+review; the implementation handoff's earlier full 42-module package remains compilation
+evidence. Empty-YAML preservation, whole Work candidate acceptance, deferred SEL-R1 and
+full B02 remain open.
+
+
+#### Remaining B02 contract-decision blocker — 2026-09-10
+
+Terra stopped before implementation because the current SSOT names a future complete
+`WorkConfigurationParser` but does not define its complete candidate inventory. Active
+state currently carries arbitrary typed WorkerDefinition configuration alongside IO,
+capability, interceptor, reset and private configuration concerns. No authoritative
+contract decides which roots belong to the candidate, which unknown fields fail, how
+reset/privateConfig participate, or the exact producer migration set.
+
+The empty-YAML requirement is also under-specified. Spring's standard property loader
+flattens an empty object away and an empty list to blank text. Preserving original `{}`/
+`[]` therefore requires either a named raw-document boundary adapter or an explicit
+contract that rejects those shapes before flattening. The withdrawn global YAML-loader
+replacement and the ban on custom heuristic parsers remain in force.
+
+No code or tests changed for this attempted step. Selecting either boundary behavior or
+the complete candidate surface without a human-approved contract would create a competing
+owner and violate SSOT/NFF. Final B02 implementation and its separate review remain blocked
+until those decisions are added to the architecture contract.
+
+
+#### Remaining B02 contract decisions — 2026-09-10
+
+The preceding blocker is resolved docs-first. The runtime Work-config boundary starts
+after standard Spring flattening: empty YAML `{}`/`[]` has no explicit-empty semantic,
+and no raw-YAML adapter, global loader, scanner, custom parser or recovery heuristic is
+permitted. `WorkConfigurationParser` covers only `inputs` and `outputs`, returns one
+immutable complete IO candidate or problems/deferred paths, and has only AUTHORING and
+RESOLVED modes. It excludes `privateConfig`, reset, `MaxInFlightConfig`, execution and
+timeout/confirm/drain settings; non-Work roots pass through unchanged. Selected blocks
+are strict, unselected blocks conflict, and NONE permits no output settings block.
+
+Controller acceptance ordering is fixed: compose the candidate, invoke the canonical
+parser before state/ACK, and leave accepted state unchanged on problems/deferred results.
+The swarm-level owner of messaging transport is
+`SwarmWorkMessagingSelectionResolver` in `swarm-controller-work-core`. Each Work
+messaging edge/endpoint uses the single selected RabbitMQ or Artemis adapter; mixing
+fails before provisioning. CSV, scheduler, Redis dataset/sink and NONE remain
+non-messaging selections and are unaffected. Adapter-specific settings are validated behind
+the adapter-neutral `WorkInputSettingsParser` / `WorkOutputSettingsParser` ports, so generic
+work-config does not import RabbitMQ/Artemis types. This documents the next implementation scope;
+no code, tests, review, commit or deployment is part of this docs-first decision.
+
+
+#### Adapter-port correction to remaining B02 decisions — 2026-09-10
+
+`WorkConfigurationParser` is deliberately adapter-neutral: it owns only outer
+`inputs`/`outputs` shape, selector consistency, selected/unselected block checks,
+complete-candidate orchestration, AUTHORING/RESOLVED aggregation and the canonical generic
+result. It owns/imports no Redis, RabbitMQ, Artemis, CSV or scheduler settings type,
+parser or environment codec. Every selected implementation-specific block delegates via
+the narrow `WorkInputSettingsParser` or `WorkOutputSettingsParser` port; exactly one
+matching parser is required and missing/duplicate/incompatible selection fails without a
+fallback. Concrete settings/config codecs remain in the respective adapter/config module.
+
+Redis remains an adapter behind existing neutral ports: Redis dataset/sink uses
+`WorkInput`/`WorkOutput`; Redis sequence, token and capture retain `SequenceAccess`,
+`TokenStore` and `DebugCaptureStore`. No parallel Redis-specific core authority is added.
+The subsequent provider extraction moved Redis configuration to `common/redis-config`;
+the historical pre-extraction placement described above is no longer active.
+
+
+#### Neutral Work configuration parser core — 2026-09-10
+
+This section records the initial adapter-neutral core delivery before call-site activation.
+Generic
+`WorkConfigurationParser` owns only required `inputs`/`outputs` shape, explicit selector
+and selected-block consistency, `NONE`, exact-one parser selection and aggregation of
+`AUTHORING`/`RESOLVED` results. Direction-specific settings markers prevent input/output
+settings interchange. A complete immutable configuration is exposed only when both
+directions are concrete and valid; problems or deferred paths cannot carry partial
+settings/configuration. Non-Work roots are ignored at this boundary, and selector block
+names come only from `WorkerInputType.settingsKey()` / `WorkerOutputType.settingsKey()`.
+
+`WorkConfigurationContractTest` adds 13 focused cases for required roots/types/blocks,
+unknown or unselected blocks, `NONE`, missing/duplicate parsers, symbolic authoring,
+resolved rejection, direction independence, immutable results and invalid port outcomes.
+The full `common/work-config` test run passed **121 tests**, with zero failures/errors/skips;
+`git diff --check` passed.
+
+The separate Sol review found one MEDIUM documentation/API mismatch: the port table named
+`parse`, while the validation-report interfaces expose `validate`. The documentation now
+uses `validate` and the redundant messaging-only parser name was removed; messaging uses
+the same input/output parser ports as every adapter. Per the agreed cost-conscious process,
+this mechanical documentation correction was not followed by another full review loop.
+
+At this historical checkpoint there was no call-site or B02 acceptance and no adapter
+parser registration. The later provider/composition section below supersedes those two
+limitations: current providers and the runtime RESOLVED gate are now active. Scenario
+AUTHORING and Controller early RESOLVED validation remain open.
+
+#### Provider extraction order — 2026-09-10
+
+The approved provider order was B05a Rabbit config provider, B06a shared `redis-config`
+provider and B07a local config providers, followed by B03a parser/state activation.
+Those provider extractions and the narrow B03a activation are complete. Artemis
+runtime/config and SEL-R1 remain deferred and excluded from current acceptance.
+
+#### Adapter providers and minimal mutation composition — 2026-09-10
+
+B05a/B06a/B07a provider extraction is implemented for the current Rabbit, Redis and
+local adapters; Artemis remains excluded. `work-config` contains only the neutral outer
+parser, settings/mutation ports, immutable aggregate results and generic shared numeric
+field parsers. Redis concrete configuration moved to `common/redis-config`; CSV and
+scheduler configuration moved to `common/work-local-config`; Rabbit Work settings remain
+in `common/rabbit-config`. No compatibility aliases or duplicate source definitions remain.
+
+All current directions now have explicit settings-parser providers: Rabbit input/output,
+Redis dataset/output, CSV input and scheduler input; NONE remains an explicit neutral
+output value. Redis output gained one complete aggregate over its existing connection,
+write and target owners. Adapter mutation providers own their descriptors and semantic
+validation. CSV candidate validation preserves startup, accepted settings and patch
+precedence; Redis preserves the disabled prior-SINGLE listName rule.
+
+The narrow B03a mutation cut is also implemented. Worker composition constructs one
+exact policy registry and `WorkerControlPlaneRuntime` selects policies from it; the
+runtime stores a neutral selected-input startup snapshot rather than a CSV type. Scenario
+Manager capability validation consumes its own explicit composition of the same provider
+implementations instead of static mutability constants. The runtime invokes the complete
+Work parser in RESOLVED mode after merge and before logging, typed conversion, adapter
+effects, state writes and ready ACK; `WorkerControlPlaneRuntimeTest` passes 33/33 with
+the explicit Mockito javaagent. B03a has started, while the full B03 state/runtime
+extraction remains open.
+
+Focused `work-config`, `redis-config`, `rabbit-config`, `work-local-config`, Scenario
+Manager capability and SDK binder tests pass, as do Controller/Scenario Manager/SDK test
+compilation checks executed during the slices. Unrelated ClickHouse tests still cannot
+open a local socket in this sandbox. These are not acceptance claims. `git diff --check`
+passes. No commit or deployment was performed.
+
+#### Current remaining order — 2026-09-10
+
+1. Correct Rabbit AUTHORING settings so Scenario Manager validates only selected adapter
+   and optional Rabbit tuning; it must neither contain nor defer queue, exchange or
+   routingKey.
+2. Make Controller the sole owner that materializes physical Rabbit queue or
+   exchange/routingKey topology into a RESOLVED candidate before canonical parsing.
+3. Migrate the remaining Scenario, Controller and startup producers to those AUTHORING /
+   RESOLVED boundaries, preserving the closed Spring-flattening rule and no fallback.
+4. Complete the remaining B02 implementation evidence and run exactly one separate Sol
+   review; B02 remains unaccepted until that review passes.
+5. Run the required simplification task after B02 acceptance.
+6. Continue full B03 state/runtime extraction, then B04 resource ownership, B05 Rabbit
+   delivery, B06 Redis capabilities and B07 local adapter/worker packaging. Artemis and
+   SEL-R1 remain separately deferred.

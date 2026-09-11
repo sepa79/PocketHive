@@ -21,9 +21,9 @@ class RedisConfigurationValidationComponentTest {
 
     @BeforeEach
     void loadCatalogue() throws Exception {
-        var catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
+        var catalogue = new CapabilityCatalogueService(Path.of("capabilities"), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         catalogue.reload();
-        validator = new ScenarioBundleValidator(catalogue, "latest", "test");
+        validator = new ScenarioBundleValidator(catalogue, "latest", "test", new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser());
     }
 
     @ParameterizedTest
@@ -108,22 +108,38 @@ class RedisConfigurationValidationComponentTest {
         });
     }
 
+    @Test
+    void bundleProjectsPickStrategyThroughTheCompleteDatasetSettingsContract() throws Exception {
+        var result = validateSources("[]", "dataset", "RANDOM");
+
+        assertThat(result.ok()).isFalse();
+        assertThat(result.findings()).singleElement().satisfies(finding -> {
+            assertThat(finding.severity()).isEqualTo(ValidationSeverity.ERROR);
+            assertThat(finding.path()).endsWith(".inputs.redis.pickStrategy");
+        });
+    }
+
     private BundleValidationResult validateSources(String sources) throws Exception {
         return validateSources(sources, "\"\"");
     }
 
     private BundleValidationResult validateSources(String sources, String name) throws Exception {
+        return validateSources(sources, name, "ROUND_ROBIN");
+    }
+
+    private BundleValidationResult validateSources(String sources, String name, String pickStrategy) throws Exception {
         return validateIo("""
             type: REDIS_DATASET
             redis:
               host: redis
               port: 6379
               ssl: false
-              pickStrategy: ROUND_ROBIN
+              pickStrategy: PICK_STRATEGY
               ratePerSec: 1
               listName: LIST_NAME
               sources: SOURCE_VALUE
-            """.replace("SOURCE_VALUE", sources).replace("LIST_NAME", name), "type: NONE");
+            """.replace("SOURCE_VALUE", sources).replace("LIST_NAME", name)
+            .replace("PICK_STRATEGY", pickStrategy), "type: NONE");
     }
 
     @ParameterizedTest

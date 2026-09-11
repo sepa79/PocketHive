@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.input.csv;
 
-import io.pockethive.work.config.csv.CsvDatasetParser;
-import io.pockethive.work.config.csv.CsvDatasetSettings;
+import io.pockethive.work.local.csv.CsvDatasetParser;
+import io.pockethive.work.local.csv.CsvDatasetSettings;
 
 import io.pockethive.work.api.WorkItemBuilder;
 
@@ -90,7 +90,9 @@ public final class CsvDataSetWorkInput implements WorkInput {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.settings = Objects.requireNonNull(properties, "properties").settings();
         this.log = log == null ? defaultLog : log;
-        controlPlaneRuntime.initializeCsvStartup(workerDefinition.beanName(), settings);
+        controlPlaneRuntime.initializeInputStartup(workerDefinition.beanName(),
+            io.pockethive.work.config.WorkerInputType.CSV_DATASET,
+            io.pockethive.work.local.csv.CsvDatasetParser.configuration(settings));
     }
 
     @Override

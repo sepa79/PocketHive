@@ -1,12 +1,9 @@
 package io.pockethive.scenarios.validation;
 
-import io.pockethive.work.config.csv.CsvDatasetParser;
 
-import io.pockethive.work.config.input.InputRateParser;
-import io.pockethive.work.config.input.InputScheduleField;
-import io.pockethive.work.config.input.SchedulerResetParser;
-import io.pockethive.work.config.WorkerInputType;
 
+import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.WorkConfigurationFields;
 import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pockethive.templating.api.TemplateSyntaxValidator;
 
@@ -71,14 +68,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
- * Redis connection diagnostics delegate to RESP-REDIS-CONNECTION-SETTINGS.
- * Input numeric settings delegate to RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
- * Scheduler reset declarations delegate to RESP-WORK-SCHEDULER-RESET.
- * Scheduler settings delegate to RESP-WORK-SCHEDULER-SETTINGS.
- * CSV settings delegate to RESP-WORK-CSV-SETTINGS.
- * Removed input controls delegate to RESP-WORK-INPUT-LIFECYCLE-POLICY.
+ * Work diagnostics delegate to the injected neutral parser and its selected providers.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
- * Redis route diagnostics delegate to RESP-WORK-REDIS-ROUTES; remaining IO validation is B02 debt.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
  * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
  */
@@ -102,23 +93,9 @@ public final class ScenarioBundleValidator {
     private static final String TYPE_CONFIG_LEAF = "type";
     private static final String INPUT_SELECTOR_CONFIG_PATH = INPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
     private static final String OUTPUT_SELECTOR_CONFIG_PATH = OUTPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
-    private static final String REDIS_DATASET_IO_TYPE = "REDIS_DATASET";
-    private static final String REDIS_OUTPUT_IO_TYPE = "REDIS";
-    private static final String REDIS_DATASET_CONFIG_PATH = INPUT_CONFIG_ROOT + ".redis";
-    private static final String REDIS_DATASET_LIST_NAME_PATH = REDIS_DATASET_CONFIG_PATH + ".listName";
-    private static final String REDIS_DATASET_SOURCES_PATH = REDIS_DATASET_CONFIG_PATH + ".sources";
-    private static final String REDIS_OUTPUT_CONFIG_PATH = OUTPUT_CONFIG_ROOT + ".redis";
-    private static final String REDIS_OUTPUT_ROUTES_PATH = REDIS_OUTPUT_CONFIG_PATH + ".routes";
-    private static final String REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH = REDIS_OUTPUT_CONFIG_PATH + ".targetListTemplate";
-    private static final String REDIS_OUTPUT_DEFAULT_LIST_PATH = REDIS_OUTPUT_CONFIG_PATH + ".defaultList";
-    private static final String REDIS_OUTPUT_SOURCE_STEP_PATH = REDIS_OUTPUT_CONFIG_PATH + ".sourceStep";
-    private static final String REDIS_OUTPUT_PUSH_DIRECTION_PATH = REDIS_OUTPUT_CONFIG_PATH + ".pushDirection";
-    private static final String REDIS_OUTPUT_MAX_LEN_PATH = REDIS_OUTPUT_CONFIG_PATH + ".maxLen";
-    private static final Set<String> REDIS_WRITE_SETTING_PATHS = Set.of(
-        REDIS_OUTPUT_SOURCE_STEP_PATH, REDIS_OUTPUT_PUSH_DIRECTION_PATH, REDIS_OUTPUT_MAX_LEN_PATH);
     private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
     private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
-    private final WorkConfigurationFindings workConfigurationFindings = new WorkConfigurationFindings();
+    private final WorkConfigurationFindings workConfigurationFindings;
     private final RequestTemplateFindings requestTemplateFindings = new RequestTemplateFindings();
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
@@ -135,8 +112,10 @@ public final class ScenarioBundleValidator {
     public ScenarioBundleValidator(
         CapabilityCatalogueService capabilities,
         @Value("${pockethive.images.default-tag:}") String defaultImageTag,
-        @Value("${pockethive.release.version}") String scenarioManagerVersion
+        @Value("${pockethive.release.version}") String scenarioManagerVersion,
+        WorkConfigurationParser workConfigurationParser
     ) {
+        this.workConfigurationFindings = new WorkConfigurationFindings(workConfigurationParser);
         this.capabilities = capabilities;
         this.defaultImageTag = normalizeTag(defaultImageTag);
         this.scenarioManagerVersion = Objects.requireNonNull(scenarioManagerVersion, "scenarioManagerVersion");
@@ -917,12 +896,11 @@ public final class ScenarioBundleValidator {
                     "Scenario bee config must not use legacy config.pockethive worker settings.",
                     "Move fields from config.pockethive.worker.config into config."));
             }
-            validateIoSelectorConfig(config, configPath, findings);
             validateRequiredCapabilityConfig(bee, config, configPath, findings);
             validateCapabilityConfigTypes(bee, config, configPath, findings);
             validateCapabilityConfigOptions(bee, config, configPath, findings);
             validateCapabilityConfigNumericRanges(bee, config, configPath, findings);
-            validateSelectedIoSemanticContracts(config, configPath, findings);
+            workConfigurationFindings.validate(config, configPath, findings);
             index++;
         }
         return List.copyOf(findings);
@@ -1004,68 +982,6 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private void validateIoSelectorConfig(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        for (IoSelectorRequirement requirement : ioSelectorRequirements()) {
-            if (!containsConfigPath(config, requirement.subblockPath())) {
-                continue;
-            }
-            Object rawSelector = configValue(config, requirement.selectorPath());
-            String actualSelector = stringValue(rawSelector);
-            if (actualSelector == null || actualSelector.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + requirement.selectorPath(),
-                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
-                        + "' but is missing required selector '" + requirement.selectorPath()
-                        + ": " + requirement.expectedSelector() + "'.",
-                    "Add config." + requirement.selectorPath() + ": " + requirement.expectedSelector() + "."));
-                continue;
-            }
-            if (!requirement.expectedSelector().equals(actualSelector)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + requirement.selectorPath(),
-                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
-                        + "' but selector '" + requirement.selectorPath() + "' is '" + actualSelector
-                        + "'; expected '" + requirement.expectedSelector() + "'.",
-                    "Set config." + requirement.selectorPath() + " to " + requirement.expectedSelector()
-                        + " or remove config." + requirement.subblockPath() + "."));
-            }
-        }
-    }
-
-    private List<IoSelectorRequirement> ioSelectorRequirements() {
-        Map<String, IoSelectorRequirement> requirements = new LinkedHashMap<>();
-        for (CapabilityManifest manifest : capabilities.allManifests()) {
-            CapabilityManifest.Ui ui = manifest.ui();
-            if (ui == null) {
-                continue;
-            }
-            String ioType = trimToNull(ui.ioType());
-            String selectorPath = selectorPathForIoScope(ui.ioScope());
-            String configRoot = configRootForIoScope(ui.ioScope());
-            if (ioType == null || selectorPath == null || configRoot == null) {
-                continue;
-            }
-            for (CapabilityManifest.ConfigEntry entry : manifest.config()) {
-                if (entry == null) {
-                    continue;
-                }
-                String subblockPath = ioSubblockPath(entry.name(), configRoot);
-                if (subblockPath == null) {
-                    continue;
-                }
-                String key = selectorPath + "|" + subblockPath + "|" + ioType;
-                requirements.putIfAbsent(key, new IoSelectorRequirement(subblockPath, selectorPath, ioType));
-            }
-        }
-        return List.copyOf(requirements.values());
-    }
-
     private String selectorPathForIoScope(String scope) {
         String normalized = trimToNull(scope);
         if (INPUT_IO_SCOPE.equals(normalized)) {
@@ -1075,29 +991,6 @@ public final class ScenarioBundleValidator {
             return OUTPUT_SELECTOR_CONFIG_PATH;
         }
         return null;
-    }
-
-    private String configRootForIoScope(String scope) {
-        String normalized = trimToNull(scope);
-        if (INPUT_IO_SCOPE.equals(normalized)) {
-            return INPUT_CONFIG_ROOT;
-        }
-        if (OUTPUT_IO_SCOPE.equals(normalized)) {
-            return OUTPUT_CONFIG_ROOT;
-        }
-        return null;
-    }
-
-    private String ioSubblockPath(String configName, String configRoot) {
-        String normalized = trimToNull(configName);
-        if (normalized == null) {
-            return null;
-        }
-        String[] segments = normalized.split("\\.");
-        if (segments.length < 3 || !configRoot.equals(segments[0]) || TYPE_CONFIG_LEAF.equals(segments[1])) {
-            return null;
-        }
-        return segments[0] + "." + segments[1];
     }
 
     private void validateRequiredCapabilityConfig(
@@ -1115,7 +1008,7 @@ public final class ScenarioBundleValidator {
                 if (requiredPath == null || requiredPath.isBlank()) {
                     return;
                 }
-                if (ioSelectorSpecificFindingWillCover(config, requiredPath) || isSharedWorkConfigurationField(config, requiredPath)) {
+                if (isSharedWorkConfigurationField(config, requiredPath)) {
                     return;
                 }
                 if (hasConfigValue(config, requiredPath, Boolean.TRUE.equals(entry.allowBlank()))) {
@@ -1128,20 +1021,6 @@ public final class ScenarioBundleValidator {
                         + ref.owner() + ".",
                     "Add config." + requiredPath + " to the scenario bee."));
             });
-    }
-
-    private boolean ioSelectorSpecificFindingWillCover(Map<String, Object> config, String requiredPath) {
-        if (!INPUT_SELECTOR_CONFIG_PATH.equals(requiredPath) && !OUTPUT_SELECTOR_CONFIG_PATH.equals(requiredPath)) {
-            return false;
-        }
-        Object rawSelector = configValue(config, requiredPath);
-        String actualSelector = stringValue(rawSelector);
-        if (actualSelector != null && !actualSelector.isBlank()) {
-            return false;
-        }
-        return ioSelectorRequirements().stream()
-            .filter(requirement -> requiredPath.equals(requirement.selectorPath()))
-            .anyMatch(requirement -> containsConfigPath(config, requirement.subblockPath()));
     }
 
     private void validateCapabilityConfigTypes(
@@ -1160,14 +1039,6 @@ public final class ScenarioBundleValidator {
                     return;
                 }
                 if (isSharedWorkConfigurationField(config, fieldPath)) {
-                    return;
-                }
-                if (((REDIS_OUTPUT_ROUTES_PATH.equals(fieldPath) || REDIS_OUTPUT_DEFAULT_LIST_PATH.equals(fieldPath)
-                    || REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH.equals(fieldPath))
-                    && REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH))))
-                    || ((REDIS_DATASET_SOURCES_PATH.equals(fieldPath) || REDIS_DATASET_LIST_NAME_PATH.equals(fieldPath))
-                    && REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH))))) {
-                    // Selected Work fields and symbolic constraints belong to work-config.
                     return;
                 }
                 Object rawValue = configValue(config, fieldPath);
@@ -1264,41 +1135,10 @@ public final class ScenarioBundleValidator {
     }
 
     private boolean isSharedWorkConfigurationField(Map<String, Object> config, String path) {
-        if (path == null) return false;
-        String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
-        if (WorkerInputType.CSV_DATASET.name().equals(inputType)
-            && path.startsWith(CsvDatasetParser.PATH + ".")) return true;
-        if (WorkerInputType.SCHEDULER.name().equals(inputType) && path.startsWith("inputs.scheduler.")) {
-            return true;
-        }
-        if (inputType != null && path.equals(InputRateParser.PATHS_BY_INPUT.get(inputType))) {
-            return true;
-        }
-        for (WorkerInputType type : WorkerInputType.values()) {
-            if (type.name().equals(inputType)
-                && InputScheduleField.forInput(type).stream().anyMatch(field -> field.path(type).equals(path))) {
-                return true;
-            }
-        }
-        if (REDIS_WRITE_SETTING_PATHS.contains(path) && hasSelectedRedisBlock(config, REDIS_OUTPUT_CONFIG_PATH)) {
-            return true;
-        }
-        for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
-            if (path.startsWith(root + ".") && hasSelectedRedisBlock(config, root)
-                && io.pockethive.work.config.redis.RedisConfigurationParser.REDIS_CONNECTION_FIELDS.contains(path.substring(root.length() + 1))) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private boolean hasSelectedRedisBlock(Map<String, Object> config, String root) {
-        if (!containsConfigPath(config, root)) return false;
-        return switch (root) {
-            case REDIS_OUTPUT_CONFIG_PATH -> REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)));
-            case REDIS_DATASET_CONFIG_PATH -> REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)));
-            default -> false;
-        };
+        return path != null && (path.equals(WorkConfigurationFields.INPUTS)
+            || path.startsWith(WorkConfigurationFields.INPUTS + ".")
+            || path.equals(WorkConfigurationFields.OUTPUTS)
+            || path.startsWith(WorkConfigurationFields.OUTPUTS + "."));
     }
 
     private ValidationFinding numericRangeFinding(
@@ -1326,69 +1166,6 @@ public final class ScenarioBundleValidator {
             return ">= " + formatNumber(min);
         }
         return "<= " + formatNumber(max);
-    }
-
-    private void validateSelectedIoSemanticContracts(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (workConfigurationFindings.inputLifecycleControls(config.get("inputs"), configPath + ".inputs", findings)) return;
-        String inputType = stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH));
-        String ratePath = inputType == null ? null : InputRateParser.PATHS_BY_INPUT.get(inputType);
-        if (WorkerInputType.CSV_DATASET.name().equals(inputType)) {
-            workConfigurationFindings.csvSettings(configValue(config, CsvDatasetParser.PATH),
-                configPath + "." + CsvDatasetParser.PATH, findings);
-        } else if (WorkerInputType.SCHEDULER.name().equals(inputType)) {
-            workConfigurationFindings.schedulerSettings(configValue(config, "inputs.scheduler"),
-                configPath + ".inputs.scheduler", findings);
-        } else if (ratePath != null) {
-            workConfigurationFindings.inputRate(configValue(config, ratePath), configPath + "." + ratePath, findings);
-        }
-        for (WorkerInputType type : WorkerInputType.values()) {
-            if (type != WorkerInputType.CSV_DATASET && type != WorkerInputType.SCHEDULER && type.name().equals(inputType)) {
-                String root = "inputs." + type.settingsKey();
-                workConfigurationFindings.inputSchedule(type, configValue(config, root), configPath + "." + root, findings);
-            }
-        }
-        for (String root : List.of(REDIS_OUTPUT_CONFIG_PATH, REDIS_DATASET_CONFIG_PATH)) {
-            if (hasSelectedRedisBlock(config, root)) {
-                workConfigurationFindings.redisConnection(configValue(config, root), configPath + "." + root, findings);
-            }
-        }
-        if (REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)))
-            && containsConfigPath(config, REDIS_DATASET_CONFIG_PATH)) {
-            validateRedisDatasetSourceContract(config, configPath, findings);
-        }
-        if (REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)))
-            && containsConfigPath(config, REDIS_OUTPUT_CONFIG_PATH)) {
-            validateRedisOutputSettings(config, configPath, findings);
-        }
-    }
-
-    private void validateRedisDatasetSourceContract(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        Object listName = configValue(config, REDIS_DATASET_LIST_NAME_PATH);
-        Object declarations = containsConfigPath(config, REDIS_DATASET_SOURCES_PATH)
-            ? configValue(config, REDIS_DATASET_SOURCES_PATH) : List.of();
-        workConfigurationFindings.redisDatasetSelection(listName, declarations,
-            configPath + "." + REDIS_DATASET_CONFIG_PATH, findings);
-    }
-
-    private void validateRedisOutputSettings(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        workConfigurationFindings.redisWriteSettings(configValue(config, REDIS_OUTPUT_SOURCE_STEP_PATH),
-            configValue(config, REDIS_OUTPUT_PUSH_DIRECTION_PATH), configValue(config, REDIS_OUTPUT_MAX_LEN_PATH),
-            configPath + "." + REDIS_OUTPUT_CONFIG_PATH, findings);
-        workConfigurationFindings.redisOutputTargets(configValue(config, REDIS_OUTPUT_ROUTES_PATH),
-            configValue(config, REDIS_OUTPUT_DEFAULT_LIST_PATH), configValue(config, REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH),
-            configPath + "." + REDIS_OUTPUT_CONFIG_PATH, findings);
     }
 
     private boolean isBlank(String value) {
@@ -2548,7 +2325,6 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private record IoSelectorRequirement(String subblockPath, String selectorPath, String expectedSelector) { }
 
     private record CapabilityConfigEntryRef(CapabilityManifest.ConfigEntry entry, String owner) { }
 

@@ -3,7 +3,7 @@ package io.pockethive.worker.sdk.input;
 import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
-import io.pockethive.work.config.input.SchedulerResetParser;
+import io.pockethive.work.local.scheduler.SchedulerResetParser;
 
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.work.api.SchedulingState;

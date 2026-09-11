@@ -6,7 +6,6 @@ import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.spi.ILoggingEvent;
 import ch.qos.logback.core.read.ListAppender;
-import io.pockethive.controlplane.CanonicalPayloadDigest;
 import org.slf4j.LoggerFactory;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.control.AlertMessage;
@@ -89,7 +88,7 @@ class WorkerControlPlaneRuntimeTest {
             .identity(IDENTITY)
             .build();
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
-            PROPERTIES.getControlPlane());
+            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser());
         reset(emitter);
     }
 
@@ -102,11 +101,12 @@ class WorkerControlPlaneRuntimeTest {
         var csvStore = new WorkerStateStore();
         csvStore.getOrCreate(csvDefinition);
         var csvRuntime = new WorkerControlPlaneRuntime(controlPlane, csvStore, MAPPER, emitter, IDENTITY,
-            PROPERTIES.getControlPlane());
-        var startup = new io.pockethive.work.config.csv.CsvDatasetParser().parse(Map.of(
+            PROPERTIES.getControlPlane(), null, mutationPolicies(), workConfigurationParser());
+        var startup = new io.pockethive.work.local.csv.CsvDatasetParser().parse(Map.of(
             "filePath", "/data/input.csv", "ratePerSec", 1, "rotate", false, "skipHeader", true,
             "delimiter", ",", "charset", "UTF-8", "startupDelaySeconds", 0, "tickIntervalMs", 1000), "inputs.csv");
-        csvRuntime.initializeCsvStartup(csvDefinition.beanName(), startup);
+        csvRuntime.initializeInputStartup(csvDefinition.beanName(), WorkerInputType.CSV_DATASET,
+            io.pockethive.work.local.csv.CsvDatasetParser.configuration(startup));
         if (unrelatedUpdate) applyConfigUpdate(csvRuntime, Map.of("message", Map.of("body", "example")));
         applyConfigUpdate(csvRuntime, Map.of("inputs", Map.of("csv", Map.of("ratePerSec", 2))));
         assertThat(csvRuntime.workerRawConfig(csvDefinition.beanName()))
@@ -153,7 +153,7 @@ class WorkerControlPlaneRuntimeTest {
 	    }
 
     @Test
-    void redisPasswordsStayInAdapterStateButNotConfigLogsOrStatus() throws Exception {
+    void incompleteRedisConfigIsRejectedWithoutLeakingPassword() throws Exception {
         var logger = (Logger) LoggerFactory.getLogger(WorkerControlPlaneRuntime.class);
         var previousLevel = logger.getLevel();
         var logs = new ListAppender<ILoggingEvent>();
@@ -166,21 +166,10 @@ class WorkerControlPlaneRuntimeTest {
             var adapterSnapshot = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
             runtime.registerStateListener(definition.beanName(), adapterSnapshot::set);
             applyConfigUpdate(runtime, config);
-            assertThat(adapterSnapshot.get().rawConfig()).isEqualTo(config);
-            assertThat(runtime.workerRawConfig(definition.beanName())).isEqualTo(config);
-            var result = ArgumentCaptor.forClass(ControlPlaneEmitter.ResultContext.class);
-            verify(emitter).emitResult(result.capture());
-            assertThat(result.getValue().result().context())
-                .containsEntry("appliedConfigSha256", CanonicalPayloadDigest.sha256(MAPPER, config));
-
-            reset(emitter);
-            runtime.emitStatusSnapshot();
-            var status = ArgumentCaptor.forClass(ControlPlaneEmitter.StatusContext.class);
-            verify(emitter).emitStatusSnapshot(status.capture());
-            assertThat(buildEnvelopeJson(status.getValue(), "status-full"))
-                .contains("redis", "[redacted]").doesNotContain("synthetic-env-secret");
-            assertThat(logs.list).anySatisfy(event -> assertThat(event.getFormattedMessage())
-                .contains("Applied config update", "[redacted]"));
+            verify(emitter, times(0)).emitResult(any());
+            verify(emitter).emitFailure(any());
+            assertThat(adapterSnapshot.get().rawConfig()).isEmpty();
+            assertThat(runtime.workerRawConfig(definition.beanName())).isEmpty();
             assertThat(logs.list).allSatisfy(event -> assertThat(event.getFormattedMessage())
                 .doesNotContain("synthetic-env-secret"));
         } finally {
@@ -288,7 +277,8 @@ class WorkerControlPlaneRuntimeTest {
 	            emitter,
 	            IDENTITY,
 	            PROPERTIES.getControlPlane(),
-	            renderer
+	            renderer,
+	            mutationPolicies(), workConfigurationParser()
 	        );
 
 	        String correlationId = UUID.randomUUID().toString();
@@ -356,7 +346,8 @@ class WorkerControlPlaneRuntimeTest {
         try {
             TemplateRenderer renderer = mock(TemplateRenderer.class);
             WorkerControlPlaneRuntime target = new WorkerControlPlaneRuntime(
-                controlPlane, stateStore, MAPPER, emitter, IDENTITY, PROPERTIES.getControlPlane(), renderer);
+                controlPlane, stateStore, MAPPER, emitter, IDENTITY, PROPERTIES.getControlPlane(), renderer,
+                mutationPolicies(), workConfigurationParser());
             applyConfigUpdate(target, Map.of("enabled", false, "ratePerSec", 1.0,
                 "redis", Map.of("host", "redis", "port", 6379, "ssl", false)));
             var acceptedConfig = target.workerRawConfig(definition.beanName());
@@ -440,7 +431,9 @@ class WorkerControlPlaneRuntimeTest {
             MAPPER,
             emitter,
             IDENTITY,
-            PROPERTIES.getControlPlane()
+            PROPERTIES.getControlPlane(),
+            null,
+            mutationPolicies(), workConfigurationParser()
         );
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
@@ -495,7 +488,9 @@ class WorkerControlPlaneRuntimeTest {
             MAPPER,
             emitter,
             IDENTITY,
-            PROPERTIES.getControlPlane()
+            PROPERTIES.getControlPlane(),
+            null,
+            mutationPolicies(), workConfigurationParser()
         );
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
@@ -521,7 +516,9 @@ class WorkerControlPlaneRuntimeTest {
             MAPPER,
             emitter,
             IDENTITY,
-            PROPERTIES.getControlPlane()
+            PROPERTIES.getControlPlane(),
+            null,
+            mutationPolicies(), workConfigurationParser()
         );
         Map<String, Object> initialConfig = new java.util.LinkedHashMap<>(redisRuntimeIoConfig(1.0));
         initialConfig.put("enabled", true);
@@ -566,7 +563,9 @@ class WorkerControlPlaneRuntimeTest {
             MAPPER,
             emitter,
             IDENTITY,
-            PROPERTIES.getControlPlane()
+            PROPERTIES.getControlPlane(),
+            null,
+            mutationPolicies(), workConfigurationParser()
         );
         applyConfigUpdate(ioRuntime, redisRuntimeIoConfig(1.0));
         reset(emitter);
@@ -1014,7 +1013,9 @@ class WorkerControlPlaneRuntimeTest {
             MAPPER,
             emitter,
             IDENTITY,
-            PROPERTIES.getControlPlane()
+            PROPERTIES.getControlPlane(),
+            null,
+            mutationPolicies(), workConfigurationParser()
         );
         PrivateTestConfig initialConfig = new PrivateTestConfig(
             true,
@@ -1370,6 +1371,16 @@ class WorkerControlPlaneRuntimeTest {
             Map<String, Object> snapshot = MAPPER.readValue(buildEnvelopeJson(context, "status-full"), Map.class);
             return snapshot;
         }
+
+    private static io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies() {
+        return new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
+            .workMutationPolicyRegistry();
+    }
+
+    private static io.pockethive.work.config.WorkConfigurationParser workConfigurationParser() {
+        return new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
+            .workConfigurationParser();
+    }
 
     private static final class TestWorker {
         // marker class for definition

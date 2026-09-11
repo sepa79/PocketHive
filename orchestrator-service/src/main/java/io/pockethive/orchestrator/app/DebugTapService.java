@@ -7,6 +7,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -31,6 +32,12 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+/**
+ * Responsibility: manage temporary Work debug taps and their captured samples.
+ * Must not: reconstruct source resource names or mutate swarm topology and lifecycle state.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names;
+ * source destinations come from the injected naming port; temporary tap resources remain local.
+ */
 @Service
 public class DebugTapService {
 
@@ -40,12 +47,15 @@ public class DebugTapService {
     private final SwarmStore swarmStore;
     private final AmqpAdmin amqp;
     private final RabbitTemplate rabbitTemplate;
+    private final WorkResourceNamesPort workNames;
     private final ConcurrentMap<String, DebugTap> taps = new ConcurrentHashMap<>();
 
-    public DebugTapService(SwarmStore swarmStore, AmqpAdmin amqp, RabbitTemplate rabbitTemplate) {
+    public DebugTapService(SwarmStore swarmStore, AmqpAdmin amqp, RabbitTemplate rabbitTemplate,
+                           WorkResourceNamesPort workNames) {
         this.swarmStore = Objects.requireNonNull(swarmStore, "swarmStore");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
+        this.workNames = Objects.requireNonNull(workNames, "workNames");
     }
 
     public DebugTapResponse create(DebugTapRequest request) {
@@ -174,9 +184,9 @@ public class DebugTapService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown ioName for role");
         }
         // Work queues are bound to the hive exchange using the resolved queue name as the routing key.
-        // See swarm-controller's SwarmWorkTopologyManager + applyWorkIoEnvironment.
-        String exchange = "ph." + swarmId + ".hive";
-        String routingKey = "ph." + swarmId + "." + suffix.trim();
+        var topology = workNames.forSwarm(swarmId);
+        String exchange = workNames.exchangeName(topology.hiveExchange());
+        String routingKey = workNames.queueName(topology.queuePrefix(), suffix);
         return new TapBinding(swarmId, role, ioName, exchange, routingKey);
     }
 

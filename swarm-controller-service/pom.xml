@@ -51,6 +51,8 @@
   <dependencies>
     <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-config</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>redis-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-local-config</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter</artifactId>

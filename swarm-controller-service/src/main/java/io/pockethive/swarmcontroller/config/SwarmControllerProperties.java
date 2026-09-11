@@ -1,6 +1,5 @@
 package io.pockethive.swarmcontroller.config;
 
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
@@ -12,6 +11,11 @@ import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * Responsibility: bind explicit Controller settings, including raw traffic prefix and exchange.
+ * Must not: own Work resource naming formulas, configure adapters or perform runtime effects.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ */
 @Validated
 @ConfigurationProperties(prefix = "pockethive.control-plane")
 public class SwarmControllerProperties {
@@ -83,9 +87,7 @@ public class SwarmControllerProperties {
         return traffic.hiveExchange();
     }
 
-    public String queueName(String suffix) {
-        return traffic.queueName(suffix);
-    }
+
 
     public String controlQueueName(String instanceId) {
         return controlQueueName(role, instanceId);
@@ -174,9 +176,7 @@ public class SwarmControllerProperties {
             return queuePrefix;
         }
 
-        public String queueName(String suffix) {
-            return ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(queuePrefix, suffix);
-        }
+
     }
 
     @Validated

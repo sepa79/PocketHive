@@ -5,7 +5,7 @@ import io.pockethive.worker.sdk.config.RedisOutputProperties;
 import io.pockethive.worker.sdk.runtime.RedisPushSupport;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;

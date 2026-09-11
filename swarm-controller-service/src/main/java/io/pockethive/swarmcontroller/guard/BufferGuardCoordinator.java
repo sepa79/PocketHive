@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -42,6 +43,7 @@ public final class BufferGuardCoordinator {
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final SwarmControllerProperties properties;
+  private final WorkResourceNamesPort workNames;
   private final String swarmId;
   private final String instanceId;
   private final ControlPlanePublisher controlPublisher;
@@ -57,7 +59,8 @@ public final class BufferGuardCoordinator {
                                 MeterRegistry meterRegistry,
                                 ControlPlanePublisher controlPublisher,
                                 ObjectMapper mapper,
-                                String instanceId) {
+                                String instanceId, WorkResourceNamesPort workNames) {
+    this.workNames = Objects.requireNonNull(workNames, "workNames");
     this.properties = Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
@@ -190,7 +193,7 @@ public final class BufferGuardCoordinator {
     }
     String queueName;
     try {
-      queueName = properties.queueName(queueAlias);
+      queueName = workNames.queueName(properties.getTraffic().queuePrefix(), queueAlias);
     } catch (IllegalArgumentException ex) {
       log.warn("Buffer guard queue alias '{}' invalid: {}", queueAlias, ex.getMessage());
       lastProblem = "invalid-queue-alias";
@@ -245,7 +248,7 @@ public final class BufferGuardCoordinator {
     String downstreamQueue = null;
     if (hasText(downstreamAlias)) {
       try {
-        downstreamQueue = properties.queueName(downstreamAlias);
+        downstreamQueue = workNames.queueName(properties.getTraffic().queuePrefix(), downstreamAlias);
       } catch (IllegalArgumentException ex) {
         log.warn("Backpressure queue alias '{}' invalid: {}", downstreamAlias, ex.getMessage());
         downstreamQueue = null;

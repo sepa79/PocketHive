@@ -161,21 +161,18 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     }
 
     @Test
-    void buildsSwarmTrafficQueueNamesFromControllerEnvironmentContract() {
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                disabledMetrics(Duration.ofSeconds(30)),
-                "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive");
-
-        assertThat(settings.trafficQueueName("gen")).isEqualTo("ph.swarm-1.gen");
-        assertThat(settings.trafficQueueNames(List.of("gen", "final", "gen")))
-            .containsExactly("ph.swarm-1.gen", "ph.swarm-1.final");
-        assertThatThrownBy(() -> settings.trafficQueueName(" "))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("traffic queue suffix");
+    void refusesToReconstructMissingTrafficSettings() {
+        var control = new ControlPlaneProperties();
+        control.setExchange("ph.control");
+        control.setControlQueuePrefix("ph.control");
+        for (boolean missingPrefix : List.of(true, false)) {
+            var settings = new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+                disabledMetrics(Duration.ofSeconds(30)), "run", "/var/run/docker.sock",
+                missingPrefix ? null : "explicit-prefix", missingPrefix ? "explicit-exchange" : null);
+            assertThatThrownBy(() -> ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
+                "swarm", "controller", "swarm-controller", control, settings, rabbitConnection()))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("traffic");
+        }
     }
 
     private static RabbitConnectionSettings rabbitConnection() {

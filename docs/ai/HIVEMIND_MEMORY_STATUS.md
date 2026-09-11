@@ -1,11 +1,50 @@
 # PocketHive memory maintenance status
 
 Status: partial cleanup verified; learning lifecycle and historical-thread reconciliation remain blocked by missing MCP capabilities.
-Reviewed: 2026-09-07, checkpoint `19d56091`, project `pockethive`.
+Rechecked: 2026-09-10, `ee424015` plus the existing working tree, project `pockethive`.
+
+## Current capability and correction check — 2026-09-10
+
+The user requested memory correction and retirement of this file. The selected global
+server reports API **0.5.6**. A fresh `tools/list` request to the configured MCP endpoint
+returned **45 tools, no continuation cursor**. Existing-learning resolution/supersession
+and historical rule-check concern linking are still absent; this is not a stale client
+catalogue. HiveMind's `docs/specs/api/automatic-recall.md`, section "First-slice boundaries",
+also identifies those operations as subsequent work. No alternate endpoint or backing
+storage was used.
+
+The new automatic recall filters unclassified knowledge and historical blocked checks.
+It does not change lifecycle: explicit learning search still returns all **23 active
+learnings**, including the fourteen correction candidates below. Their prior feedback
+is not retirement. Keep this register until supported lifecycle operations complete its
+remaining gate; the user's requested deletion is not yet completed.
+
+Twelve old journal records were corrected or retired using recorded decisions/reviews:
+four atomic corrections, seven additional obsolete B02 entries, and the closed B01
+design-evidence wording finding. The two completed correction reports were marked resolved.
+Fresh open-entry search, branch brief and a newly opened context exclude the retired
+blockers. Unresolved CP/Rabbit/SSOT concerns and SEL-R1 remain open. Automatic recall is
+budgeted/truncated; missing items are not evidence of resolution. Explicit searches remain
+necessary. No old blocked rule check was rewritten and no runtime tests were rerun.
+
+HiveMind evidence:
+
+- Session: `sess-6ec1f2bc56f75be8f981c87191d4c500`.
+- Current direction: `ent-e1350b68caa63f6447b9ddb6d8e43697`.
+- Superseded continuation handoff: `ent-68c8816c84841454c8cc565268137f89`.
+- CSV-R1/Redis correction review reconciliation: `ent-61dcba44c4767da40e42005e162a79d3`.
+- Candidate/empty-YAML decision reconciliation: `ent-a580a6a7afbc75c7a011df34a4b8885d`.
+- Current capability limitation: `ent-d7994aab46c60733d59d06a9151ad801`.
+
+The current user rejected the previous GPT-5.6 subagent execution workflow. Historical
+Terra/Sol assignments do not authorize automatic continuation. Ports/adapters and SSOT
+remain the objective; the execution plan needs correction before further migration.
+This does not revoke historical scoped review evidence or accept full B02.
 
 ## Current interpretation
 
-The active architecture sequence is `docs/inProgress/work-plane-module-boundaries.md`.
+The architecture plan is `docs/inProgress/work-plane-module-boundaries.md`; its execution
+sequence is under correction following the 2026-09-10 review above.
 CP-N01 is fixed and committed in `19d56091`; CP-N02–CP-N09 and the broader Rabbit/SSOT
 findings remain open. Those findings predate the sink-splitting phase. Accepted scoped
 extractions do not imply that every production sink has gone. `SwarmLifecycleSteps`
@@ -16,7 +55,7 @@ architecture contract. Follow the linked living docs/current plan. Once supporte
 lifecycle operations retire or replace these records and fresh reads confirm it,
 archive the corresponding rows. Do not assume feedback has removed them from startup.
 
-## Connected capability check
+## Historical connected capability check — 2026-09-07
 
 Both tool discovery and an actual `tools/list` request against the configured global
 HiveMind MCP endpoint identified server version **0.5.4**. No other endpoint or local

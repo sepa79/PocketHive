@@ -19,24 +19,26 @@ class SwarmQueueStatsCollectorTest {
   @Test
   void collectsEveryResolvedQueueAndUpdatesItsMatchingMetrics() {
     SwarmControllerProperties properties = mock(SwarmControllerProperties.class);
+    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
+    when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        .thenAnswer(call -> "selected." + call.getArgument(1));
     QueueStatsPort queueStats = mock(QueueStatsPort.class);
     SwarmQueueMetrics queueMetrics = mock(SwarmQueueMetrics.class);
     QueueStats inputStats = new QueueStats(5, 2, OptionalLong.of(17));
     QueueStats outputStats = QueueStats.empty();
-    when(properties.queueName("input")).thenReturn("ph.swarm-1.input");
-    when(properties.queueName("output")).thenReturn("ph.swarm-1.output");
-    when(queueStats.getQueueStats("ph.swarm-1.input")).thenReturn(inputStats);
-    when(queueStats.getQueueStats("ph.swarm-1.output")).thenReturn(outputStats);
+    when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic("hive", "ph.swarm-1"));
+    when(queueStats.getQueueStats("selected.input")).thenReturn(inputStats);
+    when(queueStats.getQueueStats("selected.output")).thenReturn(outputStats);
     SwarmQueueStatsCollector collector = new SwarmQueueStatsCollector(
-        properties, queueStats, queueMetrics);
+        properties, queueStats, queueMetrics, names);
 
     Map<String, QueueStats> snapshot = collector.snapshot(
         new LinkedHashSet<>(java.util.List.of("input", "output")));
 
     assertThat(snapshot).containsExactlyInAnyOrderEntriesOf(Map.of(
-        "ph.swarm-1.input", inputStats,
-        "ph.swarm-1.output", outputStats));
-    verify(queueMetrics).update("ph.swarm-1.input", inputStats);
-    verify(queueMetrics).update("ph.swarm-1.output", outputStats);
+        "selected.input", inputStats,
+        "selected.output", outputStats));
+    verify(queueMetrics).update("selected.input", inputStats);
+    verify(queueMetrics).update("selected.output", outputStats);
   }
 }

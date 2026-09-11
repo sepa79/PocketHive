@@ -33,7 +33,7 @@ class ScenarioServiceTest {
     void setUp() throws IOException {
         scenariosDir = Files.createDirectories(tempDir.resolve("scenarios"));
         capabilitiesDir = Files.createDirectories(tempDir.resolve("capabilities"));
-        capabilities = new CapabilityCatalogueService(capabilitiesDir.toString());
+        capabilities = new CapabilityCatalogueService(capabilitiesDir.toString(), io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         validator = validator(null);
         service = new ScenarioService(scenariosDir.toString(), tempDir.resolve("runtime"), validator);
     }
@@ -453,7 +453,7 @@ class ScenarioServiceTest {
     void capabilityLookupIgnoresExplicitImageTags() throws IOException {
         writeManifest("ctrl", "ctrl-image", "latest");
         writeManifest("worker", "worker-image", "latest");
-        capabilities = new CapabilityCatalogueService(capabilitiesDir);
+        capabilities = new CapabilityCatalogueService(capabilitiesDir, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
         capabilities.reload();
         service = new ScenarioService(scenariosDir.toString(), validator(null));
 
@@ -489,7 +489,7 @@ class ScenarioServiceTest {
     }
 
     private ScenarioBundleValidator validator(String defaultImageTag) {
-        return new ScenarioBundleValidator(capabilities, defaultImageTag, "test");
+        return new ScenarioBundleValidator(capabilities, defaultImageTag, "test", new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser());
     }
 
     private void writeManifest(String prefix, String imageName, String tag) throws IOException {

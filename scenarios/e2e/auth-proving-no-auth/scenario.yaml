@@ -9,6 +9,8 @@ template:
     - role: generator
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -28,6 +30,10 @@ template:
     - role: request-builder
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/http
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -60,6 +66,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

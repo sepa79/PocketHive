@@ -87,7 +87,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 @Import({
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
-    ManagerControlPlaneAutoConfiguration.class
+    ManagerControlPlaneAutoConfiguration.class,
+    WorkerWorkConfigurationComposition.class
 })
 /**
  * Responsibility: compose the selected worker runtime, policy and IO adapters.
@@ -205,6 +206,8 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
 	        @Qualifier("workerControlPlaneEmitter") ControlPlaneEmitter controlPlaneEmitter,
 	        WorkerControlPlaneProperties workerControlPlaneProperties,
+	        io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
+	        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser,
 	        ObjectProvider<TemplateRenderer> templateRendererProvider,
 	        ObjectProvider<ObjectMapper> objectMapperProvider
 	    ) {
@@ -215,7 +218,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
 	        TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
 	        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
-	            controlPlane, renderer);
+	            controlPlane, renderer, mutationPolicies, workConfigurationParser);
 	    }
 
     @Bean

@@ -1,28 +1,27 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.redis.config.RedisDatasetSettings;
+import io.pockethive.redis.config.RedisDatasetSource;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.work.config.WorkerInputType;
-
-import io.pockethive.work.config.redis.RedisDatasetPickStrategy;
-import io.pockethive.work.config.redis.RedisDatasetSource;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
- * Responsibility: bind startup Redis dataset settings and delegate source selection, rate and timing validation to work-config.
- * Must not: infer source mode, duplicate source-entry validation or open Redis clients.
+ * Responsibility: bind raw Redis dataset fields and delegate complete settings resolution to work-config.
+ * Must not: infer source mode, duplicate field validation or open Redis clients.
  * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
  * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
- * Consumes RESP-WORK-REDIS-SOURCES, RESP-WORK-REDIS-SELECTION and RESP-REDIS-CONNECTION-SETTINGS; RESP-WORK-INPUT-RATE owns rates.
- * Timing: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
+ * Consumes RESP-WORK-REDIS-DATASET-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset-settings.
  */
 public class RedisDataSetInputProperties extends RedisConnectionProperties implements WorkInputConfig {
 
     private Object listName;
     private List<RedisDatasetSource> sources;
-    private RedisDatasetPickStrategy pickStrategy;
+    private Object pickStrategy;
     private Object ratePerSec;
     private Object initialDelayMs =
         InputScheduleParser.initialValue(WorkerInputType.REDIS_DATASET, InputScheduleField.INITIAL_DELAY_MS);
@@ -45,11 +44,11 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
         this.sources = new RedisConfigurationParser().parseRedisSources(sources, "inputs.redis.sources");
     }
 
-    public RedisDatasetPickStrategy getPickStrategy() {
+    public Object getPickStrategy() {
         return pickStrategy;
     }
 
-    public void setPickStrategy(RedisDatasetPickStrategy pickStrategy) {
+    public void setPickStrategy(Object pickStrategy) {
         this.pickStrategy = pickStrategy;
     }
 
@@ -62,7 +61,7 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
     }
 
     public double ratePerSec() {
-        return new InputRateParser().parse(ratePerSec, InputRateParser.REDIS_PATH);
+        return settings("inputs.redis").ratePerSec();
     }
 
     public Object getInitialDelayMs() {
@@ -93,23 +92,37 @@ public class RedisDataSetInputProperties extends RedisConnectionProperties imple
 
     @Override
     public void validateConfigured(String prefix) {
-        var connection = connectionSettings(prefix);
-        requirePresent(pickStrategy, prefix + ".pickStrategy");
-        new InputRateParser().parse(ratePerSec, prefix + "." + InputRateParser.FIELD);
-        new InputScheduleParser().parse(initialDelayMs, InputScheduleField.INITIAL_DELAY_MS,
-            prefix + "." + InputScheduleField.INITIAL_DELAY_MS.key());
-        new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
-            prefix + "." + InputScheduleField.TICK_INTERVAL_MS.key());
-        var selection = new RedisConfigurationParser().parseRedisDatasetSelection(listName, getSources(), prefix);
-        applyConnection(connection);
-        listName = selection.listName();
+        apply(settings(prefix));
     }
 
-    private static <T> T requirePresent(T value, String name) {
-        if (value == null) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
+    public RedisDatasetSettings settings(String path) {
+        return new RedisConfigurationParser().parseRedisDatasetSettings(declarations(), path);
+    }
+
+    public Map<String, Object> declarations() {
+        Map<String, Object> values = new LinkedHashMap<>();
+        values.put("host", getHost());
+        values.put("port", getPort());
+        values.put("username", getUsername());
+        values.put("password", getPassword());
+        values.put("ssl", getSsl());
+        values.put("listName", listName);
+        values.put("sources", getSources());
+        values.put("pickStrategy", pickStrategy);
+        values.put("ratePerSec", ratePerSec);
+        values.put("initialDelayMs", initialDelayMs);
+        values.put("tickIntervalMs", tickIntervalMs);
+        return values;
+    }
+
+    public void apply(RedisDatasetSettings settings) {
+        applyConnection(settings.connection());
+        listName = settings.listName();
+        sources = settings.sources();
+        pickStrategy = settings.pickStrategy();
+        ratePerSec = settings.ratePerSec();
+        initialDelayMs = settings.initialDelayMs();
+        tickIntervalMs = settings.tickIntervalMs();
     }
 
 }

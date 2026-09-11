@@ -41,6 +41,18 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
+      <artifactId>work-config-composition</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>redis-config</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-local-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-config</artifactId><version>${project.version}</version></dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
       <artifactId>work-test-fixtures</artifactId>
       <version>${project.version}</version>
       <scope>test</scope>

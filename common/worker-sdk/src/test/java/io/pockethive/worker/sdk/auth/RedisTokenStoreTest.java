@@ -178,7 +178,7 @@ class RedisTokenStoreTest {
         RedisEndpoint endpoint = redisEndpoint();
         return new RedisTokenStore(
             SWARM_ID,
-            new io.pockethive.work.config.redis.RedisConfigurationParser().parseRedisConnection(
+            new io.pockethive.redis.config.RedisConfigurationParser().parseRedisConnection(
                 endpoint.host(), endpoint.port(), null, null, false, "redis")
         );
     }

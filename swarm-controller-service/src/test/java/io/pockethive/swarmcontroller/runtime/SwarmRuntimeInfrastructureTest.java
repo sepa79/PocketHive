@@ -43,13 +43,18 @@ class SwarmRuntimeInfrastructureTest {
     computeAdapter = mock(ComputeAdapter.class);
     queueMetrics = mock(SwarmQueueMetrics.class);
     when(properties.getSwarmId()).thenReturn(SWARM_ID);
+    when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic("configured.hive", "configured-prefix"));
+    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
+    when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        .thenAnswer(call -> "selected." + call.getArgument(1));
+    when(names.exchangeName(org.mockito.ArgumentMatchers.anyString())).thenReturn("selected.hive");
     infrastructure = new SwarmRuntimeInfrastructure(
-        amqp, properties, topology, computeAdapter, queueMetrics);
+        amqp, properties, topology, computeAdapter, queueMetrics, names);
   }
 
   @Test
   void declaresWorkTopologyAndProvisionsExactlyTheSuppliedWorkers() {
-    TopicExchange exchange = new TopicExchange("ph.swarm-1.hive");
+    TopicExchange exchange = new TopicExchange("selected.hive");
     Set<String> suffixes = Set.of("generated");
     WorkerSpec worker = new WorkerSpec(
         "generator-1", "generator", "generator:latest", Map.of(), List.of());
@@ -81,10 +86,8 @@ class SwarmRuntimeInfrastructureTest {
 
   @Test
   void removesDeclaredWorkTopologyUnregistersMetricsAndClearsItsInventory() {
-    TopicExchange exchange = new TopicExchange("ph.swarm-1.hive");
+    TopicExchange exchange = new TopicExchange("selected.hive");
     when(topology.declareWorkExchange()).thenReturn(exchange);
-    when(properties.queueName("generated")).thenReturn("ph.swarm-1.generated");
-    when(properties.hiveExchange()).thenReturn("ph.swarm-1.hive");
     doAnswer(invocation -> {
       Set<String> suffixes = invocation.getArgument(1);
       Set<String> declared = invocation.getArgument(2);
@@ -93,7 +96,7 @@ class SwarmRuntimeInfrastructureTest {
     }).when(topology).declareWorkQueues(eq(exchange), eq(Set.of("generated")), anySet());
     doAnswer(invocation -> {
       Consumer<String> onQueueDeleted = invocation.getArgument(1);
-      onQueueDeleted.accept("ph.swarm-1.generated");
+      onQueueDeleted.accept("selected.generated");
       return null;
     }).when(topology).deleteWorkQueues(eq(Set.of("generated")), org.mockito.ArgumentMatchers.any());
 
@@ -103,11 +106,11 @@ class SwarmRuntimeInfrastructureTest {
     List<RemoveResource> removed = infrastructure.removeWorkTopology(
         infrastructure.declaredQueueSuffixes());
 
-    verify(queueMetrics).unregister("ph.swarm-1.generated");
+    verify(queueMetrics).unregister("selected.generated");
     verify(topology).deleteWorkExchange();
     assertThat(removed).containsExactly(
-        new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "ph.swarm-1.generated"),
-        new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, "ph.swarm-1.hive"));
+        new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "selected.generated"),
+        new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, "selected.hive"));
     assertThat(infrastructure.declaredQueueSuffixes()).isEmpty();
   }
 }

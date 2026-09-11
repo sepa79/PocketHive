@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
-import io.pockethive.work.config.redis.RedisConnectionSettings;
+import io.pockethive.redis.config.RedisConnectionSettings;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;

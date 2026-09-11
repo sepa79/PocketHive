@@ -12,6 +12,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -21,7 +22,9 @@ import org.springframework.amqp.core.TopicExchange;
 /**
  * Responsibility: Apply and remove the compute and AMQP resources selected by the runtime state machine.
  * Must not: Parse plans, decide lifecycle transitions, or own worker/readiness domain state.
- * Contract: Execute explicit adapter operations and report every targeted worker, queue, and exchange resource.
+ * Resource names come only from the injected WorkResourceNamesPort.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ * Behavior: Execute explicit adapter operations and report every targeted worker, queue, and exchange resource.
  */
 public final class SwarmRuntimeInfrastructure {
 
@@ -29,6 +32,7 @@ public final class SwarmRuntimeInfrastructure {
 
   private final AmqpAdmin amqp;
   private final SwarmControllerProperties properties;
+  private final WorkResourceNamesPort workNames;
   private final SwarmWorkTopologyManager topology;
   private final ComputeAdapter computeAdapter;
   private final SwarmQueueMetrics queueMetrics;
@@ -40,8 +44,9 @@ public final class SwarmRuntimeInfrastructure {
       SwarmControllerProperties properties,
       SwarmWorkTopologyManager topology,
       ComputeAdapter computeAdapter,
-      SwarmQueueMetrics queueMetrics) {
+      SwarmQueueMetrics queueMetrics, WorkResourceNamesPort workNames) {
     this.amqp = Objects.requireNonNull(amqp, "amqp");
+    this.workNames = Objects.requireNonNull(workNames, "workNames");
     this.properties = Objects.requireNonNull(properties, "properties");
     this.topology = Objects.requireNonNull(topology, "topology");
     this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
@@ -84,11 +89,11 @@ public final class SwarmRuntimeInfrastructure {
     List<RemoveResource> removed = new ArrayList<>();
     topology.deleteWorkQueues(queueSuffixes, queueMetrics::unregister);
     queueSuffixes.stream()
-        .map(properties::queueName)
+        .map(suffix -> workNames.queueName(properties.getTraffic().queuePrefix(), suffix))
         .map(queue -> new RemoveResource(RemoveResourceType.RABBIT_QUEUE, queue))
         .forEach(removed::add);
     topology.deleteWorkExchange();
-    removed.add(new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, properties.hiveExchange()));
+    removed.add(new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, workNames.exchangeName(properties.getTraffic().hiveExchange())));
     declaredQueueSuffixes.clear();
     return List.copyOf(removed);
   }

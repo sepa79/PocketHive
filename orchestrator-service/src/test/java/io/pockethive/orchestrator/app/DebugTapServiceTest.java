@@ -4,12 +4,17 @@ import io.pockethive.swarm.model.NetworkMode;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapRequest;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.topology.work.PrefixedWorkResourceNames;
+import io.pockethive.topology.work.WorkResourceNamesPort;
+import io.pockethive.topology.work.WorkTopologySettings;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -40,7 +45,7 @@ class DebugTapServiceTest {
         ));
         store.register(swarm);
 
-        DebugTapService service = new DebugTapService(store, amqp, rabbit);
+        DebugTapService service = new DebugTapService(store, amqp, rabbit, new PrefixedWorkResourceNames());
         var created = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 1));
         String tapId = created.tapId();
         String queue = created.queue();
@@ -57,6 +62,38 @@ class DebugTapServiceTest {
         assertThatThrownBy(() -> service.read(tapId, 1))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("debug tap not found");
+    }
+
+    @Test
+    void bindsBothDirectionsToResolvedSourceResources() {
+        var store = new SwarmStore();
+        var swarm = new Swarm("sw1", "inst-1", "c1", "run-1", NetworkMode.DIRECT);
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+            "tpl-1", "controller", List.of(
+                new Bee("processor", "image", Work.ofDefaults("input", "output"), Map.of()))));
+        store.register(swarm);
+        var names = mock(WorkResourceNamesPort.class);
+        when(names.forSwarm("sw1")).thenReturn(new WorkTopologySettings("selected", "configured.exchange"));
+        when(names.exchangeName("configured.exchange")).thenReturn("selected.exchange");
+        when(names.queueName("selected", "input")).thenReturn("selected.input");
+        when(names.queueName("selected", "output")).thenReturn("selected.output");
+        var bindings = new CopyOnWriteArrayList<Binding>();
+        var service = new DebugTapService(store, recordingAmqpAdmin(bindings, new CopyOnWriteArrayList<>()),
+            new RabbitTemplate(), names);
+
+        var input = service.create(new DebugTapRequest("sw1", "processor", "IN", null, 1, 60));
+        var output = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60));
+
+        assertThat(input.exchange()).isEqualTo("selected.exchange");
+        assertThat(input.routingKey()).isEqualTo("selected.input");
+        assertThat(output.exchange()).isEqualTo("selected.exchange");
+        assertThat(output.routingKey()).isEqualTo("selected.output");
+        assertThat(bindings).extracting(Binding::getExchange)
+            .containsExactly("selected.exchange", "selected.exchange");
+        assertThat(bindings).extracting(Binding::getRoutingKey)
+            .containsExactly("selected.input", "selected.output");
+        assertThat(bindings).extracting(Binding::getDestination)
+            .containsExactly(input.queue(), output.queue());
     }
 
     private static AmqpAdmin recordingAmqpAdmin(List<Binding> bindings, List<String> deletedQueues) {

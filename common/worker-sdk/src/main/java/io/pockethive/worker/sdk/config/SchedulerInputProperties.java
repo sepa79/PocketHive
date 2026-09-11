@@ -2,8 +2,8 @@ package io.pockethive.worker.sdk.config;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
-import io.pockethive.work.config.scheduler.SchedulerSettings;
-import io.pockethive.work.config.scheduler.SchedulerSettingsParser;
+import io.pockethive.work.local.scheduler.SchedulerSettings;
+import io.pockethive.work.local.scheduler.SchedulerSettingsParser;
 import io.pockethive.work.config.input.InputRateParser;
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;

@@ -23,7 +23,7 @@ import java.util.concurrent.atomic.LongAdder;
 public final class WorkerState {
 
     private final WorkerDefinition definition;
-    private Map<String, Object> csvStartup = Map.of();
+    private Map<String, Object> inputStartup = Map.of();
     private final AtomicReference<Object> configRef = new AtomicReference<>();
     private volatile boolean enabled;
     private volatile boolean enableConfigured;
@@ -43,13 +43,15 @@ public final class WorkerState {
     }
 
     // Immutable startup configuration, not a second accepted-update state machine.
-    synchronized void initializeCsvStartup(io.pockethive.work.config.csv.CsvDatasetSettings settings) {
-        if (!csvStartup.isEmpty()) throw new IllegalStateException("CSV startup settings already registered");
-        csvStartup = io.pockethive.work.config.csv.CsvDatasetParser.configuration(settings);
+    synchronized void initializeInputStartup(io.pockethive.work.config.WorkerInputType inputType,
+                                             Map<String, Object> settings) {
+        if (definition.input() != inputType) throw new IllegalArgumentException("Startup input type does not match worker definition");
+        if (!inputStartup.isEmpty()) throw new IllegalStateException("Input startup settings already registered");
+        inputStartup = Map.copyOf(settings);
     }
 
-    synchronized Map<String, Object> csvStartup() {
-        return csvStartup;
+    synchronized Map<String, Object> inputStartup() {
+        return inputStartup;
     }
 
     WorkerDefinition definition() {

@@ -10,6 +10,8 @@ template:
     - role: generator
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -33,6 +35,10 @@ template:
     - role: db-query
       image: db-query:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         adapter: POSTGRES
         templateRoot: /app/scenario/templates/db
         serviceId: db
@@ -69,6 +75,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: "{{ vars.txOutcomeSinkMode }}"
         dropTxOutcomeWithoutCallId: "{{ vars.dropTxOutcomeWithoutCallId }}"

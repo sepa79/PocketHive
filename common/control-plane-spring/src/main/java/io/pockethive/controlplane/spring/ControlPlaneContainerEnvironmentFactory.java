@@ -3,9 +3,7 @@ package io.pockethive.controlplane.spring;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -18,9 +16,10 @@ import io.pockethive.rabbit.config.RabbitConnectionEnvironment;
  * Responsibility: compose participant environment values with the canonical connection export.
  * Must not: validate or encode Rabbit connection fields independently.
  * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
- * Existing metrics and Work naming responsibilities remain pending their planned extractions.
+ * Traffic values are required resolved inputs from RESP-WORK-RESOURCE-NAMES; no naming defaults are reconstructed.
  */
 public final class ControlPlaneContainerEnvironmentFactory {
+
 
     private ControlPlaneContainerEnvironmentFactory() {
     }
@@ -49,14 +48,10 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(controlPlaneProperties.getControlQueuePrefix(),
                 "pockethive.control-plane.control-queue-prefix"));
-        String trafficPrefix = settings.trafficQueuePrefix() != null && !settings.trafficQueuePrefix().isBlank()
-            ? settings.trafficQueuePrefix()
-            : "ph." + resolvedSwarmId;
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", trafficPrefix);
-        String hiveExchange = settings.trafficHiveExchange() != null && !settings.trafficHiveExchange().isBlank()
-            ? settings.trafficHiveExchange()
-            : trafficPrefix + ".hive";
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", hiveExchange);
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
+            requireSetting(settings.trafficQueuePrefix(), "traffic queue prefix"));
+        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
+            requireSetting(settings.trafficHiveExchange(), "traffic hive exchange"));
         applyPocketHiveMetricsSettings(
             env,
             settings.metrics(),
@@ -97,23 +92,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             resolvedRole,
             resolvedInstance);
         return env;
-    }
-
-    public static String swarmTrafficQueueName(String queuePrefix, String suffix) {
-        return requireArgument(queuePrefix, "traffic queue prefix")
-            + "."
-            + requireArgument(suffix, "traffic queue suffix");
-    }
-
-    public static List<String> swarmTrafficQueueNames(String queuePrefix, Collection<String> suffixes) {
-        if (suffixes == null || suffixes.isEmpty()) {
-            return List.of();
-        }
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        for (String suffix : suffixes) {
-            names.add(swarmTrafficQueueName(queuePrefix, suffix));
-        }
-        return List.copyOf(names);
     }
 
     private static String requireSetting(String value, String propertyName) {
@@ -227,13 +205,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             requireArgument(dockerSocketPath, "dockerSocketPath");
         }
 
-        public String trafficQueueName(String suffix) {
-            return swarmTrafficQueueName(trafficQueuePrefix, suffix);
-        }
-
-        public List<String> trafficQueueNames(Collection<String> suffixes) {
-            return swarmTrafficQueueNames(trafficQueuePrefix, suffixes);
-        }
     }
 
     public record WorkerSettings(String swarmId,

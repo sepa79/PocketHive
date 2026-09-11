@@ -1,27 +1,103 @@
 # Enforced module boundaries — Work Plane first
 
-Status: active; B01 accepted in separate review on 2026-09-08. RV2 responsibility/header corrections accepted; RV1's wiring-test requirement and the generic scanner remedy remain superseded by human decisions. Boundary verification uses documentation, one import test and source review evidence; extracted behavior carries unit/component tests. B01 committed as `eb681ee7`; B02 transfers through Redis connection settings and CONN-R1 committed as `63597068`. Subsequent namespace/ENV-R1 changes passed separate review. FENV-R2 diagnostic masking and the follow-up FENV-R1 complete-environment correction passed separate reviews within their scope. The latest review reran 140 tests and independently checked eight planner-to-worker binding variants; see [review evidence](boundary-design/b02/README.md#separate-complete-environment-review--2026-09-09). The reviewed checkpoint is committed as `7ac51535` on human request. The separate RATE-R1 correction review closes Controller BufferGuard’s competing rate decoder/fallback and accepts the scoped input-rate transfer; 52 tests and five active-guard transition checks passed. Checkpoint `e17dee90` commits the accepted rate transfer. Input timing/limit parsing has 143 passing tests and a passing root package build; separate review found MEDIUM TIM-R1 (per-message limit parsing). Separate review on 2026-09-10 closes TIM-R1 and accepts the timing/limit and reset transfers within scope: 130 tests and a fresh scheduler transition/allocation probe passed. A distinct simplification task follows each completed phase. Remaining B02 settings/candidate parsing is open. Evidence: [B01 correction review](boundary-design/b01/rv2-correction-review.md).
-Memory cleanup remains partially blocked by missing lifecycle tools; this does not block design work.
-Plan review: four planning gaps addressed on 2026-09-07; design and evidence linked below.
+Status: active plan; B01 accepted, B02 incomplete and unaccepted. Updated 2026-09-10
+on human request to unify sequencing and freeze B02 scope. The subsequent Controller
+Work composition extraction and topology/Scenario corrections have scoped review evidence; B02 stays open.
 Owner: PocketHive architecture work on `refactor/control-plane-critical-restart`.
-Checkpoint: `19d56091` (2026-09-07), committed before this plan and documentation cleanup.
-Preparation commit: `e0d37871` (2026-09-07), committed before the first design goal.
+Current inspected checkpoint: `ee424015` plus existing uncommitted changes.
+Scoped implementation/review results: [B02 evidence](boundary-design/b02/README.md).
+Memory maintenance is separate; its remaining gate is recorded in
+[the memory register](../ai/HIVEMIND_MEMORY_STATUS.md).
 
-Known issue: [SEL-R1](boundary-design/b02/known-issues.md) remains open; the user explicitly
-deferred the runtime list-change fix and authorized continuing B02 on 2026-09-08.
+## Current execution contract
 
-Latest execution, 2026-09-10: accepted timing/limit/reset checkpoint committed as
-`8e99c673`; input enablement ownership implemented with 173 passing tests and a passing
-root package build, awaiting separate review. Full B02 remains open; see the latest
-[handoff](boundary-design/b02/README.md#input-enablement-ownership--2026-09-10).
-Separate review found MEDIUM ENBL-R1: startup lookup misses nonempty structured removed
-fields outside the selected input subtree. The slice remains unaccepted; see
-[review evidence](boundary-design/b02/README.md#separate-input-enablement-review--2026-09-10).
-ENBL-R1 correction is implemented with a failing-before/passing-after regression and
-173 passing tests; [correction evidence](boundary-design/b02/README.md#enbl-r1-correction--2026-09-10).
-Separate correction review remains pending.
-Separate correction review on 2026-09-10 closes ENBL-R1 and accepts the scoped input
-enablement transfer: 173 tests and the independent Spring binding probe pass.
+This section owns the current order and bounded B02 worklist. Dated reports below and
+in the evidence directory describe their recorded revisions, not additional instructions.
+Their former next steps, model assignments and pending-review statements do not override
+this section. Historical scoped acceptance remains evidence within its original scope.
+The former Terra/Sol execution assignment is withdrawn; no automatic subagent dispatch
+or review/fix loop is authorized. Review remains a separately requested task.
+
+### Frozen B02 scope
+
+B02 closes configuration boundaries: neutral IO selection/candidate and patch orchestration,
+existing Rabbit/Redis/CSV/scheduler settings providers, and all affected startup,
+Scenario, Controller and runtime configuration consumers. Existing request-template
+parsing/file-boundary transfers retain their V05 acceptance obligation.
+
+The candidate covers only `inputs`/`outputs`, with AUTHORING/RESOLVED modes. Concrete
+settings and field rules belong to adapter/config modules behind neutral parser and
+mutation-policy ports. Standard Spring flattening remains the runtime input boundary.
+Rabbit AUTHORING contains selection and optional tuning, never physical destinations
+or deferred placeholders for them. Controller materialization consumes resolved topology;
+it must not become a second name or field-rule owner.
+
+B05a/B06a/B07a are historical labels for the Rabbit/Redis/local configuration parts of
+B02, not later prerequisites or separate phases. B03a names the already implemented
+narrow mutation-provider composition and pre-acceptance validation integration within
+B02. It does not transfer accepted-state ownership or start full B03 extraction.
+
+Excluded from new B02 work: `privateConfig`, reset and execution/timeout/confirm/drain
+mechanics; runtime state-machine extraction; topology provisioning/observation/cleanup;
+broker replacement/Artemis; SEL-R1; unrelated service, UI or tooling cleanup. Previously
+accepted reset/rate/timing/enablement transfers remain scoped evidence; their presence
+does not authorize expanding this candidate. New issues enter the normal backlog unless
+a concrete failure of a B02 gate makes them necessary. Any proposed scope addition must
+name that failure and receive an explicit plan amendment before implementation.
+
+### B02 transfers and completion conditions
+
+Architecture owns port definitions and responsibility contracts. The rows below own
+execution scope. A missing contract is a named preparation task, not permission to embed
+its implementation in a consumer. Proposed extractions are targets, not delivered owners.
+
+| Transfer | Owner and port boundary | Consumers | Old paths to remove | Completion condition |
+|---|---|---|---|---|
+| Neutral configuration and adapter providers | `WorkConfigurationParser` / `WorkPatchPolicy`; `WorkInputSettingsParser`, `WorkOutputSettingsParser`, `WorkInputMutationPolicy`, `WorkOutputMutationPolicy`; field owners in `rabbit-config`, `redis-config`, `work-local-config` | Worker SDK, Scenario validation/capabilities, Controller configuration flow | Adapter-specific parsing in neutral modules; duplicate selection/field validators and mutation descriptors | Exactly one selected provider, shared field decisions, strict AUTHORING/RESOLVED behavior; all affected consumers migrated (V04) |
+| Controller configuration composition | `WorkerWorkConfigurationPort` consumed by `SwarmWorkerSpecFactory`, implemented by `WorkerWorkConfigurationAdapter` and wired by `WorkerWorkConfigurationComposition`; extraction implemented, awaiting separate review; existing codecs/parsers retain field ownership | Worker planning and environment/bootstrap production | Concrete provider construction and adapter-specific composition in the mixed spec factory; repeated mapping/validation | Consumer receives the configured capability; one effective environment/bootstrap result, complete validation before plan acceptance/effects; no new topology/name owner |
+| Scenario AUTHORING integration | `WorkConfigurationParser` delegates through its existing parser ports; Scenario owns only authoring projection and bundle references | `ScenarioBundleValidator`, `WorkConfigurationFindings`, capability projections | Concrete parser construction and local adapter-validation assembly in Scenario consumers | Rabbit tuning-only authoring works without physical topology; diagnostics come from canonical validation; bundle-reference checks preserved |
+| Startup and runtime validation integration (historical B03a) | Existing worker state owner consumes neutral parser and mutation registry; adapters supply startup settings through their existing configuration boundary | Startup binders, worker composition, `WorkerControlPlaneRuntime` | Bypasses of candidate validation; duplicate settings rules and accepted-configuration authorities | Invalid candidates fail before logging/conversion/effects/state/ACK; accepted state remains unchanged on rejection; no worker-state ownership transfer |
+| Existing request-template transfer | `RequestTemplateParser` owns decoded semantics; `request-template-files` owns file access through the existing loading boundary | Scenario, template loading, Request Builder, HTTP Sequence, offline diagnostics | Previous template validators/parsers and direct loading bypasses in migrated consumers | V05 semantics and failure classification preserved; historical open findings reconciled against recorded review evidence |
+
+Each implementation handoff must enumerate actual affected source paths and consumers
+for its row, identify the owner/header/port, and show deletion of the prior path in the
+same transfer. Use repository-wide searches to find remaining consumers. A moved class,
+provider catalogue or passing parser suite alone cannot close a row. Do not defer duplicate
+owners or consumer bypasses to the later simplification task.
+
+### Authorized follow-up — 2026-09-10
+
+Human authorization extends this slice to the named shared topology name-resolution owner
+and port (RESP-WORK-RESOURCE-NAMES), Rabbit AUTHORING/RESOLVED separation and Scenario's
+injected neutral validation path. This is the narrow B04 naming prerequisite; provisioning,
+observation and cleanup state machines remain excluded. Remove replaced formulas and local
+validators in the same transfer; test failure before effects and environment/bootstrap parity.
+The previous blanket exclusion of topology migration does not exclude this named slice.
+
+### Remaining order and B02 exit
+
+1. Controller composition extraction, shared topology naming and Scenario neutral
+   validation are implemented; the recorded TS findings are closed by separate review. See
+   [topology/Scenario transfer evidence](boundary-design/b02/topology-scenario-transfer.md) and
+   [extraction evidence](boundary-design/b02/controller-work-composition-extraction.md).
+   See [final correction review](boundary-design/b02/topology-tap-final-review.md).
+   Full candidate validation is still item 2; the rest of B04 stays excluded.
+2. Rabbit AUTHORING semantics and Scenario neutral validation are implemented. Complete
+   Controller early full RESOLVED validation and remaining startup producers through the
+   same owners; this remains open rather than being inferred from the bounded transfer.
+3. Reconcile the already implemented runtime gate and request-template transfers with
+   all affected consumers and V04/V05 evidence; remove old paths in their transfer.
+4. Hand off complete B02 for separate review. Acceptance requires every row above,
+   matching architecture/headers/code, the existing import/dependency checks and relevant
+   behavior evidence. No new scanner or bean-selection tests. Full B02 stays unaccepted
+   until that review passes.
+5. Run the separately reviewed simplification task across accepted B02.
+6. Continue full B03 state/runtime extraction, B04 resource ownership, B05 Rabbit delivery,
+   B06 Redis capabilities and B07 local runtime/worker packaging, with the same acceptance
+   and simplification gates between phases. C01–C03 follow Work acceptance.
+
+Artemis and [SEL-R1](boundary-design/b02/known-issues.md) remain separate deferred work.
+The completed extraction does not authorize an automatic review or expansion beyond this worklist.
 
 ## Outcome and scope
 
@@ -37,8 +113,8 @@ names, copy validators, or turn attempted actions into successful outcomes.
 
 This is the single execution plan for this architecture stream. Begin with Work Plane,
 then apply the same boundary discipline to Control Plane and remaining service concerns.
-The current turn authorizes the checkpoint, plan, documentation/review-rule preparation,
-and PocketHive memory cleanup. It does not require starting the production migrations below.
+The Controller extraction was subsequently authorized explicitly. Further runtime migrations
+remain governed by the bounded worklist and existing contract/review rules.
 
 Existing runtime contracts remain authoritative until their relevant contract-first change
 is reviewed. Proposed module names below are planning names, not already delivered APIs.
@@ -49,7 +125,8 @@ does not make those extractions regressions.
 
 | Boundary | Owns | Must not own |
 |---|---|---|
-| Work contracts/configuration | Work envelope, adapter-specific settings contracts, canonical parsing/validation and explicit patch semantics | Broker connections, service lifecycle, duplicated client-side validators |
+| Work API / neutral configuration | Work envelope in `work-api`; selection, parser/mutation ports and candidate orchestration in `work-config` | Concrete adapter settings/parsers/codecs, broker connections, service lifecycle |
+| Adapter configuration | Concrete settings, field parsing/validation and codecs in the matching config module, exposed through neutral ports | Application orchestration, topology naming, duplicate client-side validators |
 | Work runtime | Work delivery/execution policy and use-case orchestration through ports | Rabbit/Redis/Docker imports, infrastructure naming, topology declaration |
 | Worker integration contracts | Infrastructure-free identity, configuration commands, status and lifecycle capabilities required by Work consumers | Control transport, Spring configuration beans, copied Control contracts |
 | Work topology owner | Effective logical-to-physical resource mapping and desired topology for Work | Control Plane topology or Orchestrator operation state |
@@ -282,10 +359,10 @@ dependency of completing the production work. Any later change of that scope is 
 ## Coverage matrix and slice assignment
 
 This matrix tracks migration acceptance, not a second runtime capability catalogue.
-The current input/output enum owners are `common/worker-sdk/.../config/WorkerInputType.java`
+The current input/output enum owners are `common/work-config/.../config/WorkerInputType.java`
 and `WorkerOutputType.java`; contract changes update their authoritative definitions first.
-The matrix below references the concrete owners/slices and V-checks in the design; all
-implementation evidence remains pending. The design owns the port/artifact definitions,
+The matrix below references the concrete owners/slices and V-checks in the design; phase acceptance follows the current status above, while scoped evidence
+is retained in the linked review records. The design owns the port/artifact definitions,
 consumer/deletion ledger and commands. Extend the inventory for additional active paths
 found by repository-wide searches; do not treat this initial list as exhaustive discovery.
 
@@ -429,6 +506,12 @@ Keep evidence in a durable repository/CI artifact referenced from the plan or sl
 temporary `/tmp` logs alone are insufficient for future verification. This protocol applies
 to the shared prerequisites as well as Work, Control and other infrastructure migrations.
 It does not require a production baseline run for this documentation-only amendment.
+
+## Historical execution and review records
+
+These dated records retain original evidence and decisions. Their next-action and status
+wording applies only to the recorded checkpoint. Current scope/order is owned by
+"Current execution contract" above; later decisions do not erase earlier evidence.
 
 ### Plan review corrections — 2026-09-07
 
@@ -592,7 +675,7 @@ Implementation verification and limits: [B02 input-rate evidence](boundary-desig
 The [separate RATE-R1 correction review](boundary-design/b02/README.md#separate-rate-r1-correction-review--2026-09-09)
 closes the missed BufferGuard consumer and accepts the scoped input-rate transfer: 52 tests
 and five active-guard transition checks passed. Full settings/candidate acceptance, timing and limits,
-other B02 work and deferred SEL-R1 remain open. B03 has not started.
+other B02 work and deferred SEL-R1 remained open at that checkpoint; B03 had not started then.
 
 ### B02 input timing and limits — 2026-09-09
 
@@ -647,7 +730,8 @@ root Maven package build pass**. Before-state suite: 159 tests passed. Evidence:
 [input enablement handoff](boundary-design/b02/README.md#input-enablement-ownership--2026-09-10).
 Remaining B02: complete typed settings/candidate validation, startup-shape and producer
 parity (including bee.env authoring), and the other named B02 transfers. SEL-R1 remains
-explicitly deferred. B03 has not started; simplification follows full B02 acceptance.
+explicitly deferred. At that checkpoint B03 had not started; the current narrow B03a
+status is recorded at the top of this plan. Simplification follows full B02 acceptance.
 
 Separate review reran 173 tests and reproduced ENBL-R1 with real Spring YAML binding.
 Correct the removed-field presence lookup and extend its existing behavior test before

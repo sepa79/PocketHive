@@ -29,6 +29,8 @@ class RepositoryImportBoundaryTest {
               + "|topology-core|swarm-model|scenario-validation-contracts)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),
+      rule("scenario-no-adapter-settings", "scenario-manager-service",
+          "io\\.pockethive\\.(rabbit\\.config|redis\\.config|work\\.local)\\..*"),
       rule("control-core-no-work", "common/control-plane-core",
           "io\\.pockethive\\.(work|worker)\\..*"),
       rule("rabbit-spring-config-owner", outside("common/control-plane-spring"),

@@ -72,6 +72,8 @@ public final class WorkerControlPlaneRuntime {
     private final ControlPlaneNotifier notifier;
     private final WorkerConfigurationLog configurationLog;
     private final TemplateRenderer templateRenderer;
+    private final io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies;
+    private final WorkConfigurationCandidateValidator workConfigurationCandidateValidator;
 
     /**
      * Tracks the most recent status-delta emission so we can derive a per-second throughput
@@ -118,19 +120,10 @@ public final class WorkerControlPlaneRuntime {
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         ControlPlaneIdentity identity,
-        WorkerControlPlaneProperties.ControlPlane controlPlane
-    ) {
-        this(workerControlPlane, stateStore, objectMapper, emitter, identity, controlPlane, null);
-    }
-
-    public WorkerControlPlaneRuntime(
-        WorkerControlPlane workerControlPlane,
-        WorkerStateStore stateStore,
-        ObjectMapper objectMapper,
-        ControlPlaneEmitter emitter,
-        ControlPlaneIdentity identity,
         WorkerControlPlaneProperties.ControlPlane controlPlane,
-        TemplateRenderer templateRenderer
+        TemplateRenderer templateRenderer,
+        io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
+        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser
     ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
@@ -139,6 +132,9 @@ public final class WorkerControlPlaneRuntime {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
+        this.mutationPolicies = Objects.requireNonNull(mutationPolicies, "mutationPolicies");
+        this.workConfigurationCandidateValidator = new WorkConfigurationCandidateValidator(
+            Objects.requireNonNull(workConfigurationParser, "workConfigurationParser"));
         this.runtimeMeta = buildRuntimeMeta();
         WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
@@ -326,14 +322,15 @@ public final class WorkerControlPlaneRuntime {
         return text.isEmpty() ? null : text;
     }
 
-    /** Registers validated CSV startup configuration before control commands or intake. */
-    public void initializeCsvStartup(String workerBeanName,
-                                     io.pockethive.work.config.csv.CsvDatasetSettings settings) {
+    /** Registers validated selected-input startup configuration before control commands or intake. */
+    public void initializeInputStartup(String workerBeanName, io.pockethive.work.config.WorkerInputType inputType,
+                                       Map<String, Object> settings) {
         WorkerState state = stateStore.find(workerBeanName).orElseThrow();
-        if (state.definition().input() != io.pockethive.work.config.WorkerInputType.CSV_DATASET) {
-            throw new IllegalStateException("CSV startup settings require a CSV input");
+        if (state.definition().input() != inputType) {
+            throw new IllegalStateException("Startup settings input type must match the worker definition");
         }
-        state.initializeCsvStartup(Objects.requireNonNull(settings, "settings"));
+        state.initializeInputStartup(Objects.requireNonNull(inputType, "inputType"),
+            Objects.requireNonNull(settings, "settings"));
     }
 
     /**
@@ -430,10 +427,11 @@ public final class WorkerControlPlaneRuntime {
             boolean previousEnabled = state.enabled();
             try {
                 WorkPatchPolicy patchPolicy = new WorkPatchPolicy(state.definition().beanName(),
-                    state.definition().input(), state.definition().outputType(), state.csvStartup());
+                    mutationPolicies.inputPolicy(state.definition().input()), state.inputStartup(),
+                    mutationPolicies.outputPolicy(state.definition().outputType()), Map.of());
                 if (patch.resetRequested()) {
                     patchPolicy.validateReset(state.rawConfig());
-                } else {
+                } else if (!state.rawConfig().isEmpty()) {
                     patchPolicy.validate(
                         state.rawConfig(),
                         canonicalUpdate,
@@ -446,6 +444,7 @@ public final class WorkerControlPlaneRuntime {
                     canonicalUpdate,
                     patch.resetRequested()
                 );
+                workConfigurationCandidateValidator.validate(state, mergeResult.rawConfig());
                 Boolean enabled = command.enabled();
                 configurationLog.applying(state, enabled, canonicalUpdate);
                 Map<String, Object> candidatePrivateConfig = state.privateConfig();

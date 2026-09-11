@@ -2,8 +2,8 @@ package io.pockethive.templating;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
-import io.pockethive.work.config.redis.RedisConnectionSettings;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisConnectionSettings;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import io.lettuce.core.api.sync.RedisCommands;
 
 import java.util.Objects;

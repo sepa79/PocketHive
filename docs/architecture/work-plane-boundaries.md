@@ -1,6 +1,12 @@
 # Work Plane boundaries — implementation design
 
-Status: target design; B01 accepted in separate review on 2026-09-08. B02 patch-policy, request-template, Rabbit connection export, Redis route, dataset-source, source-mode, output-target and write-settings transfers are implemented. Input enablement is separately accepted and committed as `f166ce38`; complete CSV settings and CSV-R1 correction are committed as `68677fd2` on human request, with correction review still pending. Scheduler settings are implemented and await separate review. Individual review status is tracked in `docs/inProgress/boundary-design/b02/README.md`; remaining B02 work is open.
+Status: target design; B01 accepted, full B02 unaccepted. Configuration providers and
+the narrow runtime candidate gate have implementation evidence, while consumer boundary
+migration remains incomplete. Current scope, phase status and order are owned by the
+execution contract at `docs/inProgress/work-plane-module-boundaries.md#current-execution-contract`.
+The Controller-local WorkerWorkConfigurationPort, shared topology naming port and Scenario
+neutral validation are implemented, awaiting separate review. Their current contract is RESP-CONTROLLER-WORK-CONFIGURATION
+in `docs/architecture/runtime-responsibilities.md`; full candidate validation remains open.
 Acceptance evidence: `docs/inProgress/boundary-design/b01/rv2-correction-review.md`.
 Source revision: `e0d37871`, branch `refactor/control-plane-critical-restart`.
 Execution order and scope are owned by `docs/inProgress/work-plane-module-boundaries.md`.
@@ -65,8 +71,11 @@ Retained infrastructure artifacts with other names remain explicitly classified 
 | Artifact | Namespace / contents | Allowed project dependencies |
 |---|---|---|
 | `work-api` | `io.pockethive.work.api`: WorkItem, wire envelopes/codec/schema, worker function/context/info, history, diagnostic/capture and status contribution API | `observability-core`, `swarm-model`, `auth-contracts` |
-| `work-config` | `io.pockethive.work.config`: shared IO selection and validation reports; `.redis`: Redis settings/parser; `.environment`: connection composition and environment/bootstrap mapping; `.policy`: patch/mutability policy; `.projection`: redacted configuration diagnostics | `swarm-model`, `rabbit-config` |
-| `rabbit-config` | `io.pockethive.rabbit.config`: shared connection settings/parser and environment encoding; no Spring/client types or plane topology | None |
+| `work-config` | `io.pockethive.work.config`: outer IO selection, complete-candidate orchestration, generic validation reports, patch/mutability policy and redacted diagnostics; no adapter-specific settings/parser/codec | `swarm-model` |
+| `rabbit-config` | `io.pockethive.rabbit.config`: shared connection settings/environment encoding plus Rabbit Work settings values and direction-specific parser/mutation providers; no Spring/client types or plane topology | `work-config` |
+| `redis-config` | `io.pockethive.redis.config`: complete Redis dataset/output settings, canonical parsing/environment encoding and direction-specific parser/mutation providers; no Spring/Lettuce/client types | `work-config` |
+| `work-local-config` | `io.pockethive.work.local.csv` and `.scheduler`: complete local-input settings, canonical parsing/environment encoding and direction-specific parser/mutation providers | `work-config` |
+| `work-config-composition` | `io.pockethive.work.config.composition`: one framework-free catalogue of the currently supported Rabbit, Redis, CSV, scheduler and NONE settings/mutation providers | `work-config`, `rabbit-config`, `redis-config`, `work-local-config` |
 | `work-runtime-spi` | `io.pockethive.work.spi`: dispatch, input lifecycle, output, state views, commands and effects; no resource administration | `work-api`, `work-config` |
 | `work-resource-api` | `io.pockethive.work.resource`: immutable resource plans/observations and scoped provisioning/observation/removal/tap ports | `work-config`, `swarm-model` |
 | `work-runtime` | `io.pockethive.work.runtime`: invocation pipeline, worker state coordinator/store, IO coordination and status contributions | `work-api`, `work-config`, `work-runtime-spi`, `templating-api` |
@@ -191,6 +200,8 @@ never arbitrary names reconstructed by a consumer.
 | `WorkInput.start/stop/update` | Selected input adapter; `WorkerIoCoordinator` only | Takes typed settings and immutable desired-state revision; returns/observes actual lifecycle state; no CP runtime object |
 | `WorkerStateView.snapshot/subscribe` | `WorkerStateCoordinator`; worker context, IO coordinator and CP status projection | Immutable config/enablement revision; no mutable state/maps or setters exposed |
 | `WorkerCommands.apply` | `WorkerStateCoordinator`; decoded `WorkerControlCommandBridge` only | Validate complete candidate via canonical config owner, serialize acceptance and publish one new state revision; rejected patch leaves state unchanged |
+| `WorkInputSettingsParser.validate` / `WorkOutputSettingsParser.validate` | Selected input/output adapter; WorkConfigurationParser only | Each adapter validates its own selected implementation-specific block to a neutral result; exactly one matching parser is required and missing/duplicate/incompatible parsers fail |
+| `SwarmWorkMessagingSelectionResolver.resolve` | `swarm-controller-work-core`; Controller planning only | Resolves one explicit RabbitMQ or Artemis transport for every Work messaging edge/endpoint; mixed messaging transport fails before provisioning and non-messaging IO remains independent |
 | `WorkerEffects.report` | CP effect adapter; runtime/IO observations | Typed error/status contribution, not raw envelope/routing/publisher access or operation terminalization |
 | `WorkerDiagnostics.emit(WorkerDiagnostic)` | Work API facade implemented by runtime; assigned worker functions | Typed business diagnostic/journal contribution forwarded through WorkerEffects; no CP envelope or publisher access |
 | `WorkProvisioner.ensure(ResolvedWorkTopology)` | Rabbit resource adapter; Controller Work lifecycle only | Applies only supplied owner-resolved resources; observed result required before readiness |
@@ -305,47 +316,53 @@ generic rate-policy implementation beside the existing scheduler until B07 moves
 ## 4. Configuration and topology SSOT
 
 The target `WorkConfigurationParser` in `work-config` owns input/output selection, settings parsing,
-normalization and complete candidate validation. `WorkPatchPolicy` owns mutable-field
+normalization and complete candidate validation for the `inputs` and `outputs` roots only.
+It has exactly `AUTHORING` and `RESOLVED` modes: it returns one immutable complete IO
+configuration or problems/deferred paths. It has no PATCH mode. `WorkPatchPolicy` owns mutable-field
 classification and patch validation. The first B02 transfer consolidated `LiveIoConfigMutability` and
 `LiveIoConfigUpdateGuard` there and deleted both previous definitions. Complete candidate
 validation remains a separate required WorkConfigurationParser responsibility.
-Current typed settings parsers are `redis.RedisConfigurationParser`,
-`csv.CsvDatasetParser` and `scheduler.SchedulerSettingsParser` under
-`io.pockethive.work.config`. They stay with their validated values so constructors
-remain package-private. The future complete Work candidate parser must delegate
-field semantics to these owners. There is no active
-WorkConfigurationParser facade or compatibility alias. WorkPatchPolicy lives in
-`.config.policy`; `.config.environment` contains RedisConnectionEnvironmentCodec and
-WorkConnectionEnvironmentResolver. The resolver applies final `bee.env` connection
-overrides, delegates validation to RedisConfigurationParser and the shared Rabbit contract,
-then produces matching environment/bootstrap values. Spring property lookup is supplied
-by Controller bootstrap; no custom environment-name parser is introduced. See
-[RESP-WORK-CONNECTION-ENVIRONMENT](runtime-responsibilities.md#resp-work-connection-environment)
-for the implemented five-field Rabbit / Redis IO connection scope and remaining gaps.
-These packages share the existing work-config artifact, which depends on rabbit-config
-but has no Spring or infrastructure client dependency.
-`WorkInputConfigBinder`/`WorkOutputConfigBinder` become one bootstrap decoder of raw
-environment properties; they delegate decisions to the parser. Remove repeated validation
-from Redis properties, `RedisWorkOutput.applyRawConfig`, dataset source parsing,
-`RedisUploaderInterceptor`, and `ScenarioBundleValidator`.
+There is no compatibility alias. The parser delegates every implementation-specific
+selected-block field decision through
+`WorkInputSettingsParser` or `WorkOutputSettingsParser`; RabbitMQ, Artemis, Redis dataset/
+sink, CSV and scheduler each retain their concrete settings values, parsers and environment
+codecs in their adapter/config module. Exactly one parser must match a selected type;
+missing, duplicate or incompatible parsers fail with no fallback. `work-config` stores
+only the neutral aggregate result, never Redis or other adapter settings types. Existing
+Redis client/operation authority remains in `redis-adapter`: Redis dataset/sink implements
+the existing neutral `WorkInput`/`WorkOutput` ports, and the distinct `SequenceAccess`,
+`TokenStore` and `DebugCaptureStore` ports remain their existing domain-facing contracts.
+No Redis-specific core authority is added. `WorkPatchPolicy` stays in `.config.policy`.
 
-Use separate typed `RabbitInputSettings`, `RabbitOutputSettings`, `RedisDatasetSettings`,
-`RedisOutputSettings`, `CsvDatasetSettings`, `SchedulerSettings` and `NoOutputSettings`.
-Shared `RedisConnectionSettings` has one parser; token, sequence, dataset and capture
-scopes remain distinct. Every selected adapter/settings block is explicit. Missing,
-unknown, conflicting or unsupported settings fail; configuration aliases/fallbacks are
-removed and all packaged samples/producers are updated in the same slice.
-
-The canonical record fields move from the current properties without adding parallel
-DTOs. New `WorkExecutionSettings` requires `maxInFlight`, `dispatchTimeoutMs` and
-`drainTimeoutMs`; `RabbitOutputSettings.confirmTimeoutMs` is required when confirmations
-are selected. Their startup paths are `pockethive.worker.execution.*` and
-`pockethive.outputs.rabbit.confirmTimeoutMs`; bootstrap alone maps environment spelling.
-Timeouts are positive bounded durations; admission capacity is positive; existing rate,
-maxMessages, cursor and route constraints keep their canonical limits. Remove all
+Every RESOLVED selected adapter/settings block is explicit. A selected non-NONE input or
+output requires its canonical complete settings block. An empty YAML object lost by Spring
+flattening is absent and fails at that runtime boundary; no raw-shape recovery is permitted.
+Unknown fields in an owned selected block fail; a block for an unselected adapter conflicts
+and fails; `NONE` is the only RESOLVED output selection permitted without an output settings
+block and settings alongside `NONE` fail. Non-Work roots pass through unchanged; `privateConfig`,
+reset, `MaxInFlightConfig`, and all execution/timeout/confirm/drain settings are outside
+this parser. Existing rate, maxMessages, cursor and route constraints retain their typed
+owners. Remove all
 input-local `enabled` fields (Rabbit, scheduler, Redis, CSV) as duplicate state controls,
 not only the Rabbit no-op field. Seed required worker enablement through its one owner.
 This is a declared B02 contract delta; update all configuration producers together.
+
+`WorkPatchPolicy` owns only outer patch flow and selection. Exactly one selected
+`WorkInputMutationPolicy` and `WorkOutputMutationPolicy` supplies each adapter's mutable
+and disabled-only descriptors plus semantic candidate validation; missing or duplicate
+policies fail. Redis policy preserves listName changes only while disabled and only from
+the prior SINGLE selection. CSV policy composes its candidate from the immutable selected
+startup settings, the previously accepted selected block and the proposed selected-block
+patch before delegating to the CSV parser. The neutral mutation request exposes only these
+selected-block projections, never the whole raw/private worker configuration. No Artemis
+policy is in current scope.
+
+`CurrentWorkConfigurationProviders` in `work-config-composition` is the SSOT inventory
+of provider implementations used by current Worker SDK and Scenario Manager composition.
+It returns immutable direction-specific provider lists and constructs the neutral parser
+and mutation registry. Applications still select this catalogue explicitly; there is no
+classpath discovery, protocol fallback or implicit alternate-adapter selection. A future
+Artemis task must extend or replace this explicit catalogue as part of its contract change.
 
 Preserve the current live-mutability contract in ARCHITECTURE: adapter/endpoint/source-mode
 changes require rematerialization; rates and scheduler controls use its allowlist; Redis
@@ -353,14 +370,52 @@ single-source listName alone can change while disabled. UI intent/observation ST
 checks remain mandatory. Accepted state is published only after full candidate validation;
 adapter application failure is reported as non-convergence, never accepted success.
 
-Scenario authoring validates the same contract over a symbolic document. The parser owns
-both `AUTHORING` and `RESOLVED` modes: unresolved template expressions are identified and
-reported as deferred constraints in authoring, then fully validated after rendering at
-runtime. This is not a second permissive validator. Bundle file/reference existence stays
-in Scenario Manager. `RequestTemplateParser` extracted from `TemplateLoader` owns shape,
+The runtime invokes complete Work parsing when the merged candidate contains either
+`inputs` or `outputs`. Before parsing it may complete the selected input block from the
+immutable adapter-provided startup snapshot and materialize the explicit selection values
+already owned by WorkerDefinition, including `outputs.type=NONE`; it must not invent a
+non-NONE settings block. The parsed selections must equal WorkerDefinition. Updates that
+contain no Work root remain outside this parser and pass through unchanged.
+
+Scenario authoring validates the same adapter selection and author-owned settings semantics,
+but never contains physical Rabbit queue, exchange or routing-key settings and never reports
+those absent physical values as deferred. For an explicit `RABBITMQ` selector, the named
+neutral parser passes an omitted selected AUTHORING settings block to its provider as an
+empty map. Required adapter fields still fail in that provider; Rabbit's empty block yields
+its canonical tuning defaults. Explicit selectors remain required and explicit null/non-object
+blocks are rejected. Rabbit AUTHORING accepts only tuning fields, never physical destinations.
+`WorkResourceNamesPort` (`topology-core`) and `PrefixedWorkResourceNames` own the name mapping.
+Controller configuration and Rabbit provisioning consume that port. `RabbitWorkSettingsBootstrap`
+materializes RESOLVED settings from those resolved names; `RabbitWorkEnvironment` exports the
+same settings. See RESP-WORK-RESOURCE-NAMES and RESP-WORK-RABBIT-SETTINGS for current ownership.
+
+The parser owns both `AUTHORING` and `RESOLVED` modes: unresolved expressions in fields that
+actually belong to authored settings are identified and reported as deferred constraints,
+then fully validated after rendering at runtime. Infrastructure-owned Rabbit topology fields
+are neither authored nor deferred. This is not a second permissive validator. Bundle
+file/reference existence stays in Scenario Manager. `RequestTemplateParser` extracted from
+`TemplateLoader` owns shape,
 required fields and protocol/auth values for both authoring and loading (SSOT-04).
 UI consumes generated capability/mutability descriptions and server validation results;
 TypeScript never reimplements Redis route/source or IO patch semantics.
+
+The Work configuration runtime boundary begins after standard Spring property flattening.
+Empty YAML objects/lists have no retained explicit-empty meaning at that boundary: no raw
+YAML adapter, global loader, source scanner, custom parser or shape-recovery heuristic is
+introduced. The parser validates only values Spring exposes.
+
+`SwarmWorkMessagingSelectionResolver` in `swarm-controller-work-core` is the sole owner
+of the immutable swarm-level Work Plane messaging transport selection. It produces one
+`WorkMessagingAdapterSelection` consumed by every Work messaging edge/endpoint; mixed
+RabbitMQ/Artemis messaging selection in a swarm fails before provisioning. RabbitMQ and
+Artemis may coexist in an installation and are both supported adapters; no global fallback
+chooses one. This selection does not constrain non-messaging inputs/outputs: CSV,
+scheduler, Redis dataset/sink and NONE remain independently selectable under their typed
+contracts. Each messaging adapter owns its settings behind the same direction-specific
+`WorkInputSettingsParser` / `WorkOutputSettingsParser` ports used for every selected Work
+adapter. `work-config` consumes only those ports/results and never imports RabbitMQ or
+Artemis settings types. Missing, duplicate or incompatible messaging-adapter settings
+fail explicitly.
 
 `WorkTopologyResolver.resolve(swarmId, logicalTopology, WorkNamingSettings)` is the sole
 name/resource-plan owner. Keep the current explicit base-prefix + logical-port convention
@@ -489,8 +544,8 @@ responsibility; they must consume migrated contracts, never retain old definitio
 | Slice | Concrete scope / final owners | Delete or replace in the same slice | Required checks |
 |---|---|---|---|
 | B01 — shared prerequisites and composition isolation | `work-api`, `observability-core`, auth value/port moves, `templating-api`; remove AMQP from CP core; full V03 isolation using existing IO contracts | SDK API/auth/observability originals; CP-core publisher moves to CP Spring; template API/sequence injection; CP Work binding/declaration and global customizer behavior; first-match input/output selection, TriggerWorkInputFactory and old scheduler policy contracts | V01, V02, full V03 including non-Rabbit/NONE, distinct policies and missing/duplicate factory rejection; trigger policy parity; all moved-type consumers compile; CP-N01 stays green |
-| B02 — settings and authoring | `work-config`, `RequestTemplateParser`, file loader adapter, explicit connection/settings binding | SDK binder/auto-config decisions, property/runtime Redis validators, `LiveIoConfigMutability`/guard originals, ScenarioBundleValidator IO/template semantic copies | V04, V05; symbolic/resolved parity and existing scenario/config suites |
-| B03 — execution/state boundary | `work-runtime`, `work-runtime-spi`, `WorkerStateCoordinator`, `WorkerIoCoordinator`, `worker-control-adapter` | WorkerControlPlaneRuntime mixed responsibilities; mutable state access, nested snapshots, generic input attributes and bean resolver hooks; old adapters and B01 scheduling policies consume new state/dispatch ports | V01, V03 regression from B01, V06; all four existing input implementations and outputs compile/use sole state owner |
+| B02 — configuration boundaries and consumer integration | Neutral `work-config`; Rabbit/Redis/local config providers; startup/Scenario/Controller consumers; narrow runtime validation integration; existing request-template transfer | Local parser/selection copies, adapter construction/composition in application consumers, candidate-validation bypasses and previous template owners | V04/V05 and the execution plan's complete B02 transfer/consumer gates |
+| B03 — state and runtime extraction | `work-runtime`, `work-runtime-spi`, `WorkerStateCoordinator`, `WorkerIoCoordinator`, `worker-control-adapter` | WorkerControlPlaneRuntime mixed responsibilities; mutable state access, nested snapshots, generic input attributes and bean resolver hooks; old adapters and B01 scheduling policies consume new state/dispatch ports | V01, V03 regression from B01, V06; all four existing input implementations and outputs compile/use sole state owner |
 | B04 — resource ownership | `work-topology-core`, Work resource/statistics ports and Rabbit observer; Controller/Orchestrator Work use cases and QueueStatsPort projection | Work naming in lifecycle/properties/environment/spec/tap/collector code; SwarmWorkTopologyManager effects; Rabbit reads/coercion in SwarmQueueStatsPortAdapter; zero-filled missing observations; Node Work provisioning copies | V07, V08; statistics/availability, BufferGuard and gauge behavior, non-default prefixes, taps/removal; RAB-04 and Work part of SSOT-01 |
 | B05 — Rabbit delivery | Rabbit input/output implementation in `work-rabbit-adapter`; move Work factory wiring with B01 isolation preserved | SDK Rabbit input/output/transport originals, alternate publisher hook, swallowed/early asynchronous completion and unsupported property fields | V03 regression from B01, V06, V09; RAB-07 concurrent dispatch and confirm failure cases; preserve B01 RAB-03 isolation |
 | B06 — Redis capabilities | Dataset/output/sequence/token/capture implementations in `redis-adapter`; worker auth policy/HTTP/file adapters separated | SDK RedisDataSetWorkInput/RedisWorkOutput/RedisPushSupport client code, static RedisSequenceGenerator/global configuration, AuthRuntime client construction, HttpSequenceRunner nested Redis store | V04, V10; source/route/template/auth scope parity and explicit no-retry failure behavior |
@@ -503,8 +558,11 @@ B02 input-rate transfer: see [RESP-WORK-INPUT-RATE](runtime-responsibilities.md#
 This slice removes local rate parsing from startup, patch policy, input adapters and
 authoring; it does not close the complete-settings or accepted-candidate gate.
 
-B01→B02→B03→B04→B05→B06→B07 is the execution order. C01–C03 follow completed Work
-acceptance. CP/Work factory isolation and removal of CP-owned Work bindings are B01
+Phase order and separate post-acceptance simplification gates are owned by the execution
+plan. Historical B05a/B06a/B07a labels now identify configuration parts of B02; B03a
+identifies its narrow provider/validation integration, not full B03. State extraction
+remains B03; resource ownership remains B04. Configuration providers are no longer
+prerequisites scheduled in later runtime phases. C01–C03 follow completed Work acceptance. CP/Work factory isolation and removal of CP-owned Work bindings are B01
 prerequisites (RAB-03), not B05 work. State integration is B03; Rabbit delivery is B05;
 they cannot be moved into C01 to declare a premature Work success. Full C-slice public
 contract details belong to their contract-first implementation preparation; no unresolved
@@ -629,3 +687,13 @@ Canonical packaged-schema loading retains its existing owner. The former scanner
 JSON policy and catch-all ArchUnit test have been removed by explicit user decision;
 B01-R3's automation remedy is superseded, not reported as a technically repaired scanner.
 The underlying ownership and IO restrictions remain mandatory review obligations.
+
+### Topology/Scenario correction handoff — 2026-09-10
+
+Controller rejects environment IO selectors before context lookup; selection belongs in
+config. Explicit null Rabbit tuning is invalid, distinct from omission. All migrated
+resource-name consumers receive WorkResourceNamesPort; startup selects the formula owner,
+which also resolves swarm prefix/exchange settings. Control Plane export requires those
+resolved settings and has no naming fallback. See
+`docs/inProgress/boundary-design/b02/topology-scenario-corrections.md`;
+separate correction review remains pending.

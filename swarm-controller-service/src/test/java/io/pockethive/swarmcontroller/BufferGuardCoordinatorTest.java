@@ -27,7 +27,14 @@ class BufferGuardCoordinatorTest {
   private final QueueStatsPort queueStats = mock(QueueStatsPort.class);
   private final ControlPlanePublisher publisher = mock(ControlPlanePublisher.class);
   private final BufferGuardCoordinator coordinator = new BufferGuardCoordinator(
-      SwarmControllerTestProperties.defaults(true), queueStats, new SimpleMeterRegistry(), publisher, mapper, "test");
+      SwarmControllerTestProperties.defaults(true), queueStats, new SimpleMeterRegistry(), publisher, mapper, "test", selectedNames());
+
+  private static io.pockethive.topology.work.WorkResourceNamesPort selectedNames() {
+    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
+    org.mockito.Mockito.when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        .thenAnswer(call -> "selected." + call.getArgument(1));
+    return names;
+  }
 
   @ParameterizedTest
   @EnumSource(value = WorkerInputType.class, names = {"SCHEDULER", "REDIS_DATASET"})
@@ -35,6 +42,8 @@ class BufferGuardCoordinatorTest {
     for (var rate : Map.<Object, Double>of("3.0", 3.0, 0, 1.0, 500, 100.0).entrySet()) {
       configure(type, Map.of("ratePerSec", rate.getKey()));
       assertThat(coordinator.isActive()).isTrue();
+      assertThat(coordinator.currentSettings()).allSatisfy(settings ->
+          assertThat(settings.queueName()).startsWith("selected."));
       assertThat(coordinator.lastProblem()).isNull();
       assertThat(coordinator.currentSettings()).singleElement().satisfies(settings ->
           assertThat(settings.initialRatePerSec()).isEqualTo(rate.getValue()));

@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
 import java.util.Map;

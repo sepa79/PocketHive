@@ -64,7 +64,8 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
                           SwarmWorkerSpecFactory workerSpecFactory,
                           SwarmRuntimeInfrastructure infrastructure,
                           SwarmQueueStatsCollector queueStatsCollector,
-                          WorkerStatusRequestCallback statusRequests) {
+                          WorkerStatusRequestCallback statusRequests,
+                          io.pockethive.topology.work.WorkResourceNamesPort workNames) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     Objects.requireNonNull(properties, "properties");
     this.configFanout = Objects.requireNonNull(configFanout, "configFanout");
@@ -75,7 +76,7 @@ public final class SwarmRuntimeCore implements SwarmLifecycleCore {
     this.swarmId = properties.getSwarmId();
     this.runtimeJournal = new SwarmRuntimeJournal(journal, swarmId, role, instanceId);
     this.workerSpecFactory = Objects.requireNonNull(workerSpecFactory, "workerSpecFactory");
-    this.workBindingsProjector = new SwarmWorkBindingsProjector(properties.getTraffic());
+    this.workBindingsProjector = new SwarmWorkBindingsProjector(properties.getTraffic(), workNames);
     this.readinessTracker = new SwarmReadinessTracker(
         Objects.requireNonNull(statusRequests, "statusRequests"));
     ScenarioLifecyclePort scenarioLifecycle = new ScenarioLifecyclePort() {

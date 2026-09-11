@@ -18,7 +18,15 @@ import org.junit.jupiter.api.Test;
 class SwarmWorkBindingsProjectorTest {
 
   private final SwarmWorkBindingsProjector projector = new SwarmWorkBindingsProjector(
-      new SwarmControllerProperties.Traffic("ph.test.hive", "ph.test"));
+      new SwarmControllerProperties.Traffic("ph.test.hive", "ph.test"), selectedNames());
+
+  private static io.pockethive.topology.work.WorkResourceNamesPort selectedNames() {
+    var names = org.mockito.Mockito.mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
+    org.mockito.Mockito.when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
+        .thenAnswer(call -> "selected." + call.getArgument(1));
+    org.mockito.Mockito.when(names.exchangeName(org.mockito.ArgumentMatchers.anyString())).thenReturn("selected.hive");
+    return names;
+  }
 
   @Test
   void projectsTopologyPortsSelectorsAndMaterializedInstances() {
@@ -42,19 +50,19 @@ class SwarmWorkBindingsProjectorTest {
         Map.of("generator", List.of("generator-1"), "processor", List.of("processor-1")));
 
     assertThat(projection).isEqualTo(Map.of(
-        "exchange", "ph.test.hive",
+        "exchange", "selected.hive",
         "edges", List.of(Map.of(
             "edgeId", "edge-fast",
             "from", Map.of(
                 "role", "generator",
                 "instance", "generator-1",
                 "port", "out.fast",
-                "routingKey", "ph.test.generator.fast"),
+                "routingKey", "selected.generator.fast"),
             "to", Map.of(
                 "role", "processor",
                 "instance", "processor-1",
                 "port", "in.fast",
-                "queue", "ph.test.processor.fast"),
+                "queue", "selected.processor.fast"),
             "selector", Map.of(
                 "policy", "predicate",
                 "expr", "payload.priority >= 50")))));
@@ -63,7 +71,7 @@ class SwarmWorkBindingsProjectorTest {
   @Test
   void projectsEmptyBindingsBeforeAPlanIsPrepared() {
     assertThat(projector.project(null, Map.of())).isEqualTo(Map.of(
-        "exchange", "ph.test.hive",
+        "exchange", "selected.hive",
         "edges", List.of()));
   }
 

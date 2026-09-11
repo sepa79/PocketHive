@@ -24,6 +24,7 @@ import io.pockethive.swarmcontroller.runtime.SwarmQueueStatsCollector;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeCore;
 import io.pockethive.swarmcontroller.runtime.SwarmRuntimeInfrastructure;
 import io.pockethive.swarmcontroller.runtime.SwarmWorkerSpecFactory;
+import io.pockethive.swarmcontroller.runtime.WorkerWorkConfigurationPort;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -66,12 +67,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                MeterRegistry meterRegistry,
                                io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                                ClickHouseSinkProperties clickHouseSink,
-                               io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
+                               io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
+                               WorkerWorkConfigurationPort workConfiguration,
+                        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
     this(amqp, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
         clickHouseSink,
-        runtimeFilesystemMount);
+        runtimeFilesystemMount, workConfiguration, workNames);
   }
 
   SwarmLifecycleManager(AmqpAdmin amqp,
@@ -87,13 +90,15 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                         io.pockethive.swarmcontroller.runtime.SwarmJournal journal,
                         WorkerSettings workerSettings,
                         ClickHouseSinkProperties clickHouseSink,
-                        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount) {
+                        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
+                        WorkerWorkConfigurationPort workConfiguration,
+                        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
     Objects.requireNonNull(workerSettings, "workerSettings");
     this.mapper = mapper;
     this.journal = Objects.requireNonNull(journal, "journal");
     ControlPlanePublisher controlPublisher = new AmqpControlPlanePublisher(
         rabbit, properties.getControlExchange(), Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec"));
-    SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties);
+    SwarmWorkTopologyManager topology = new SwarmWorkTopologyManager(amqp, properties, workNames);
     ComputeAdapter computeAdapter;
     ComputeAdapterType adapterType = properties.getDocker() == null
         ? ComputeAdapterType.DOCKER_SINGLE
@@ -120,11 +125,12 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         docker::resolveControlNetwork,
         clickHouseSink,
         runtimeFilesystemMount,
-        () -> requireEnvValue("POCKETHIVE_TEMPLATE_ID"));
+        () -> requireEnvValue("POCKETHIVE_TEMPLATE_ID"),
+        workConfiguration);
     SwarmRuntimeInfrastructure runtimeInfrastructure = new SwarmRuntimeInfrastructure(
-        amqp, properties, topology, computeAdapter, queueMetrics);
+        amqp, properties, topology, computeAdapter, queueMetrics, workNames);
     SwarmQueueStatsCollector queueStatsCollector = new SwarmQueueStatsCollector(
-        properties, queueStatsPort, queueMetrics);
+        properties, queueStatsPort, queueMetrics, workNames);
     WorkerStatusRequestCallback statusRequests = new SwarmWorkerStatusRequestPublisher(
         controlPublisher, properties.getSwarmId(), instanceId);
 
@@ -137,14 +143,14 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
         workerSpecFactory,
         runtimeInfrastructure,
         queueStatsCollector,
-        statusRequests);
+        statusRequests, workNames);
     this.bufferGuard = new io.pockethive.swarmcontroller.guard.BufferGuardCoordinator(
         properties,
         queueStatsPort,
         meterRegistry,
         controlPublisher,
         mapper,
-        instanceId);
+        instanceId, workNames);
   }
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {

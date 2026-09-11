@@ -1,7 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.redis.RedisRouteDefinition;
-import io.pockethive.work.config.redis.RedisConfigurationParser;
+import io.pockethive.redis.config.RedisRouteDefinition;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import java.util.List;
 
 /**

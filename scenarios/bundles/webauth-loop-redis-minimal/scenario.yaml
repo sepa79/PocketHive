@@ -10,6 +10,8 @@ template:
     - role: generator
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: REDIS_DATASET
           redis:
@@ -41,6 +43,10 @@ template:
     - role: request-builder
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/http
         serviceId: webauth
         passThroughOnMissingTemplate: false
@@ -73,6 +79,8 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

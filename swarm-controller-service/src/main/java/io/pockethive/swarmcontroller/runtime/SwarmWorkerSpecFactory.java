@@ -8,9 +8,7 @@ import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
-import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
-import io.pockethive.swarmcontroller.config.SpringConnectionEnvironment;
 import io.pockethive.util.BeeNameGenerator;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -19,28 +17,15 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import io.pockethive.rabbit.config.RabbitConnectionSettings;
-import io.pockethive.work.config.environment.WorkConnectionEnvironmentResolver;
-import io.pockethive.work.config.WorkConfigurationException;
-import io.pockethive.work.config.policy.InputLifecyclePolicy;
-import io.pockethive.work.config.csv.CsvDatasetEnvironment;
 
 /**
- * Responsibility: Resolve one scenario bee into its effective config, environment, identity, and worker spec.
- * Must not: Register runtime state, publish bootstrap config, provision workers, or mutate the scenario plan.
+ * Responsibility: assemble worker identity, base environment, SUT context, mounts and the delegated Work result into a spec.
+ * Must not: interpret Work settings, construct Work providers, provision workers or mutate accepted state.
  * Contract: RESP-CONTROLLER-WORKER-PLAN — docs/architecture/runtime-responsibilities.md#resp-controller-worker-plan.
- * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
- * Consumes RESP-REDIS-CONNECTION-SETTINGS for declared Work connections and their shared export.
- * Consumes RESP-WORK-CONNECTION-ENVIRONMENT for final connection settings after bee.env overrides.
- * Consumes RESP-WORK-INPUT-LIFECYCLE-POLICY to reject input controls before provisioning.
- * Consumes RESP-WORK-CSV-SETTINGS for CSV environment export and validated bootstrap projection.
- * Build one worker plan using the shared connection export; existing Work settings/naming remain B02/B04 debt.
+ * Consumes: RESP-CONTROLLER-WORK-CONFIGURATION through WorkerWorkConfigurationPort.
  */
 public final class SwarmWorkerSpecFactory {
-
-  private static final Logger log = LoggerFactory.getLogger(SwarmWorkerSpecFactory.class);
 
   private final SwarmControllerProperties properties;
   private final WorkerSettings workerSettings;
@@ -49,6 +34,7 @@ public final class SwarmWorkerSpecFactory {
   private final Supplier<String> templateId;
   private final ClickHouseSinkProperties clickHouseSink;
   private final RuntimeFilesystemMount runtimeFilesystemMount;
+  private final WorkerWorkConfigurationPort workConfiguration;
 
   public SwarmWorkerSpecFactory(
       SwarmControllerProperties properties,
@@ -57,7 +43,8 @@ public final class SwarmWorkerSpecFactory {
       Supplier<String> controlNetwork,
       ClickHouseSinkProperties clickHouseSink,
       RuntimeFilesystemMount runtimeFilesystemMount,
-      Supplier<String> templateId) {
+      Supplier<String> templateId,
+      WorkerWorkConfigurationPort workConfiguration) {
     this.properties = Objects.requireNonNull(properties, "properties");
     this.workerSettings = Objects.requireNonNull(workerSettings, "workerSettings");
     this.rabbitConnection = Objects.requireNonNull(rabbitConnection, "rabbitConnection");
@@ -65,15 +52,12 @@ public final class SwarmWorkerSpecFactory {
     this.templateId = Objects.requireNonNull(templateId, "templateId");
     this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
     this.runtimeFilesystemMount = Objects.requireNonNull(runtimeFilesystemMount, "runtimeFilesystemMount");
+    this.workConfiguration = Objects.requireNonNull(workConfiguration, "workConfiguration");
   }
 
   public PlannedSwarmWorker plan(Bee bee, SutEnvironment sutEnvironment) {
     Objects.requireNonNull(bee, "bee");
-    var inputControls = new InputLifecyclePolicy();
-    var unsupported = inputControls.configurationProblems(bee.config().get("inputs"), "inputs");
-    if (!unsupported.isEmpty()) {
-      throw new WorkConfigurationException(unsupported);
-    }
+    workConfiguration.validateDeclaration(bee);
     String beeName = BeeNameGenerator.generate(bee.role(), properties.getSwarmId());
     Map<String, String> environment = new LinkedHashMap<>(
         ControlPlaneContainerEnvironmentFactory.workerEnvironment(
@@ -86,27 +70,13 @@ public final class SwarmWorkerSpecFactory {
     environment.put(
         "POCKETHIVE_RUNTIME_STACK_NAME",
         "ph-" + properties.getSwarmId().toLowerCase(Locale.ROOT));
-    applyWorkIoEnvironment(bee, environment);
     applyClickHouseSinkEnvironment(environment);
     String network = controlNetwork.get();
     if (hasText(network)) {
       environment.put("CONTROL_NETWORK", network);
     }
-    environment.putAll(bee.env());
-    var csvEnvironment = new CsvDatasetEnvironment();
-    var csvCandidate = csvEnvironment.candidate(bee.config().get("inputs"), SpringConnectionEnvironment.raw(bee.env()));
-    environment.putAll(csvEnvironment.encode(csvCandidate));
-    var rawEnvironment = SpringConnectionEnvironment.raw(environment);
-    unsupported = inputControls.propertyProblems(path -> rawEnvironment.apply(path) != null);
-    if (!unsupported.isEmpty()) {
-      throw new WorkConfigurationException(unsupported);
-    }
-
-    Map<String, Object> effectiveConfig = enrichConfigWithSut(bee.config(), sutEnvironment);
-    var connections = new WorkConnectionEnvironmentResolver().resolve(effectiveConfig, environment,
-        rawEnvironment, SpringConnectionEnvironment::resolved);
-    effectiveConfig = csvEnvironment.resolve(connections.bootstrapConfig(), csvCandidate,
-        SpringConnectionEnvironment.resolved(connections.environment()));
+    var work = workConfiguration.compose(bee, enrichConfigWithSut(bee.config(), sutEnvironment), environment);
+    Map<String, Object> effectiveConfig = work.bootstrapConfig();
     List<String> configuredVolumes = resolveVolumes(effectiveConfig);
     List<String> volumes = new ArrayList<>(configuredVolumes.size() + 1);
     volumes.add(runtimeFilesystemMount.volume());
@@ -116,88 +86,9 @@ public final class SwarmWorkerSpecFactory {
         beeName,
         bee.role(),
         bee.image(),
-        connections.environment(),
+        work.environment(),
         List.copyOf(volumes));
     return new PlannedSwarmWorker(spec, effectiveConfig);
-  }
-
-  private void applyWorkIoEnvironment(Bee bee, Map<String, String> environment) {
-    Work work = bee.work();
-    if (work != null) {
-      String inputQueue = work.defaultIn();
-      String outputQueue = work.defaultOut();
-      boolean hasInput = hasText(inputQueue);
-      boolean hasOutput = hasText(outputQueue);
-      if (hasInput) {
-        environment.put("POCKETHIVE_INPUT_RABBIT_QUEUE", properties.queueName(inputQueue));
-      } else if (!work.in().isEmpty()) {
-        log.warn("Bee {} declares input ports without a default; skipping input queue wiring", bee.role());
-      }
-      if (hasOutput) {
-        environment.put("POCKETHIVE_OUTPUT_RABBIT_ROUTING_KEY", properties.queueName(outputQueue));
-      } else if (!work.out().isEmpty()) {
-        log.warn("Bee {} declares output ports without a default; skipping output queue wiring", bee.role());
-      }
-      if (hasInput || hasOutput) {
-        environment.put("POCKETHIVE_OUTPUT_RABBIT_EXCHANGE", properties.hiveExchange());
-      }
-    }
-
-    Map<String, Object> config = bee.config();
-    if (config == null || config.isEmpty()) {
-      return;
-    }
-    applyInputEnvironment(config.get("inputs"), environment);
-    applyOutputEnvironment(config.get("outputs"), environment);
-  }
-
-  private static void applyInputEnvironment(Object inputs, Map<String, String> environment) {
-    if (!(inputs instanceof Map<?, ?> inputsMap)) {
-      return;
-    }
-    putUppercaseType(environment, "POCKETHIVE_INPUTS_TYPE", inputsMap.get("type"));
-
-    Object redis = inputsMap.get("redis");
-    if (redis instanceof Map<?, ?> redisMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_LISTNAME", redisMap.get("listName"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", redisMap.get("pickStrategy"));
-      putIndexedEnvIfPresent(
-          environment,
-          "POCKETHIVE_INPUTS_REDIS_SOURCES",
-          redisMap.get("sources"),
-          Map.of("listName", "LISTNAME", "weight", "WEIGHT"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", redisMap.get("ratePerSec"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_INITIALDELAYMS", redisMap.get("initialDelayMs"));
-      putEnvIfPresent(environment, "POCKETHIVE_INPUTS_REDIS_TICKINTERVALMS", redisMap.get("tickIntervalMs"));
-    }
-
-  }
-
-  private static void applyOutputEnvironment(Object outputs, Map<String, String> environment) {
-    if (!(outputs instanceof Map<?, ?> outputsMap)) {
-      return;
-    }
-    putUppercaseType(environment, "POCKETHIVE_OUTPUTS_TYPE", outputsMap.get("type"));
-    Object redis = outputsMap.get("redis");
-    if (redis instanceof Map<?, ?> redisMap) {
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", redisMap.get("sourceStep"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", redisMap.get("pushDirection"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", redisMap.get("defaultList"));
-      putEnvIfPresent(
-          environment,
-          "POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE",
-          redisMap.get("targetListTemplate"));
-      putIndexedEnvIfPresent(
-          environment,
-          "POCKETHIVE_OUTPUTS_REDIS_ROUTES",
-          redisMap.get("routes"),
-          Map.of(
-              "match", "MATCH",
-              "header", "HEADER",
-              "headerMatch", "HEADERMATCH",
-              "list", "LIST"));
-      putEnvIfPresent(environment, "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", redisMap.get("maxLen"));
-    }
   }
 
   private void applyClickHouseSinkEnvironment(Map<String, String> environment) {

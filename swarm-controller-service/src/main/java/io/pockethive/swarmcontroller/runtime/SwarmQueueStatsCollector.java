@@ -8,23 +8,28 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.Map;
 import java.util.Objects;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
 
 /**
  * Responsibility: Read one immutable queue-stat snapshot and update its matching queue gauges.
  * Must not: Declare/delete queues, derive lifecycle state, or interpret scenario plans.
- * Contract: Resolve queue names canonically and return one stat entry for every distinct supplied suffix.
+ * Resource names come only from the injected WorkResourceNamesPort.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ * Behavior: Resolve queue names canonically and return one stat entry for every distinct supplied suffix.
  */
 public final class SwarmQueueStatsCollector {
 
   private final SwarmControllerProperties properties;
+  private final WorkResourceNamesPort workNames;
   private final QueueStatsPort queueStats;
   private final SwarmQueueMetrics queueMetrics;
 
   public SwarmQueueStatsCollector(
       SwarmControllerProperties properties,
       QueueStatsPort queueStats,
-      SwarmQueueMetrics queueMetrics) {
+      SwarmQueueMetrics queueMetrics, WorkResourceNamesPort workNames) {
+    this.workNames = Objects.requireNonNull(workNames, "workNames");
     this.properties = Objects.requireNonNull(properties, "properties");
     this.queueStats = Objects.requireNonNull(queueStats, "queueStats");
     this.queueMetrics = Objects.requireNonNull(queueMetrics, "queueMetrics");
@@ -33,7 +38,7 @@ public final class SwarmQueueStatsCollector {
   public Map<String, QueueStats> snapshot(Set<String> queueSuffixes) {
     Objects.requireNonNull(queueSuffixes, "queueSuffixes");
     Set<String> queueNames = new LinkedHashSet<>(queueSuffixes.size());
-    queueSuffixes.stream().map(properties::queueName).forEach(queueNames::add);
+    queueSuffixes.stream().map(suffix -> workNames.queueName(properties.getTraffic().queuePrefix(), suffix)).forEach(queueNames::add);
     Map<String, QueueStats> snapshot = new LinkedHashMap<>(queueNames.size());
     for (String queueName : queueNames) {
       QueueStats stats = queueStats.getQueueStats(queueName);

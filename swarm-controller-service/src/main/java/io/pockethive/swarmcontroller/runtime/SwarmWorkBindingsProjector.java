@@ -13,12 +13,15 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
 
 /**
  * Responsibility: Project the scenario topology and materialized worker identities into status work bindings.
  * Must not: Mutate runtime state, declare topology, publish status, or infer missing worker identities.
- * Contract: Preserve scenario edge order and map each valid endpoint through the canonical traffic queue settings.
+ * Resource names come only from the injected WorkResourceNamesPort.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ * Behavior: Preserve scenario edge order and map each valid endpoint through the canonical traffic queue settings.
  */
 final class SwarmWorkBindingsProjector {
 
@@ -37,14 +40,16 @@ final class SwarmWorkBindingsProjector {
   private static final String EXPRESSION = "expr";
 
   private final SwarmControllerProperties.Traffic traffic;
+  private final WorkResourceNamesPort workNames;
 
-  SwarmWorkBindingsProjector(SwarmControllerProperties.Traffic traffic) {
+  SwarmWorkBindingsProjector(SwarmControllerProperties.Traffic traffic, WorkResourceNamesPort workNames) {
+    this.workNames = Objects.requireNonNull(workNames, "workNames");
     this.traffic = Objects.requireNonNull(traffic, "traffic");
   }
 
   Map<String, Object> project(SwarmPlan plan, Map<String, List<String>> instancesByRole) {
     Map<String, Object> work = new LinkedHashMap<>();
-    work.put(EXCHANGE, traffic.hiveExchange());
+    work.put(EXCHANGE, workNames.exchangeName(traffic.hiveExchange()));
     List<Map<String, Object>> edgesPayload = new java.util.ArrayList<>();
     work.put(EDGES, edgesPayload);
 
@@ -145,7 +150,7 @@ final class SwarmWorkBindingsProjector {
       if (ports != null && !ports.isEmpty()) {
         String suffix = ports.get(endpoint.port());
         if (hasText(suffix)) {
-          payload.put(source ? ROUTING_KEY : QUEUE, traffic.queueName(suffix));
+          payload.put(source ? ROUTING_KEY : QUEUE, workNames.queueName(traffic.queuePrefix(), suffix));
         }
       }
     }
