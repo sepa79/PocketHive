@@ -1,7 +1,7 @@
 # Current runtime responsibility records
 
 > Migration direction updated 2026-09-11: the [Rabbit boundary design](work-plane-boundaries.md)
-> and [current plan](../inProgress/work-plane-module-boundaries.md) replace historical
+> and the repository plan `docs/inProgress/work-plane-module-boundaries.md` replace historical
 > B02/B05 and later-phase sequencing in these records. Records describe existing code until
 > their owners move; they do not authorize retaining duplicate Rabbit implementations.
 > Update affected records with each migration. Other domain responsibilities remain effective.

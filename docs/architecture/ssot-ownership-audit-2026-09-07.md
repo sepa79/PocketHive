@@ -60,13 +60,13 @@ owners exist. Similar names and equivalent adapter interfaces were not sufficien
 
 **CRITICAL; behavioral contradiction reproduced.**
 
-- [RuntimeReconciliationService](../../orchestrator-service/src/main/java/io/pockethive/orchestrator/runtime/RuntimeReconciliationService.java),
+- `orchestrator-service/src/main/java/io/pockethive/orchestrator/runtime/RuntimeReconciliationService.java`,
   `executeCandidate`, lines 564–598: direct orphan cleanup invokes a void removal port and
   immediately constructs `RuntimeCleanupStatus.REMOVED`.
-- [RuntimeRemovalPostconditionVerifier](../../orchestrator-service/src/main/java/io/pockethive/orchestrator/runtime/RuntimeRemovalPostconditionVerifier.java),
+- `orchestrator-service/src/main/java/io/pockethive/orchestrator/runtime/RuntimeRemovalPostconditionVerifier.java`,
   `verifyAbsent`, line 29: independently observes compute/Rabbit resources and refuses
   success when a resource is still present or observation fails.
-- [SwarmRemovalConvergenceHandler](../../orchestrator-service/src/main/java/io/pockethive/orchestrator/app/SwarmRemovalConvergenceHandler.java)
+- `orchestrator-service/src/main/java/io/pockethive/orchestrator/app/SwarmRemovalConvergenceHandler.java`
   uses that verifier for the canonical swarm removal flow.
 
 These are legitimately different workflows: registered-swarm cleanup dispatches lifecycle
@@ -94,11 +94,11 @@ workflows; action dispatch, observation failure, and verified absence must remai
 
 **CRITICAL; cross-swarm file read reproduced on synthetic data.**
 
-- [RuntimeFilesystemLayout](../../common/control-plane-filesystem/src/main/java/io/pockethive/controlplane/filesystem/RuntimeFilesystemLayout.java),
+- `common/control-plane-filesystem/src/main/java/io/pockethive/controlplane/filesystem/RuntimeFilesystemLayout.java`,
   `swarmRunDirectory`, line 38, validates `runId` as a single segment.
-- [FileSwarmJournal](../../swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/FileSwarmJournal.java),
+- `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/FileSwarmJournal.java`,
   lines 46–48, uses that resolver when writing.
-- [SwarmJournalController](../../orchestrator-service/src/main/java/io/pockethive/orchestrator/app/SwarmJournalController.java),
+- `orchestrator-service/src/main/java/io/pockethive/orchestrator/app/SwarmJournalController.java`,
   lines 370–384 and 415–422, resolves only the swarm root, accepts an explicitly supplied
   `runId` after trimming, and builds `dir.resolve(runId).resolve("journal.ndjson")` itself.
 
@@ -127,15 +127,15 @@ are not themselves duplicate validators.
 
 **CRITICAL; one input inconsistency reproduced, wider duplicated validation traced.**
 
-- [RedisDataSetInputProperties](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/RedisDataSetInputProperties.java),
+- `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/RedisDataSetInputProperties.java`,
   `validateConfigured`, line 147: host/port/SSL/strategy/rate and source-mode/weight rules.
-- [RedisDataSetWorkInput](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/redis/RedisDataSetWorkInput.java),
+- `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/redis/RedisDataSetWorkInput.java`,
   `validateConfiguration`, line 548: repeats those rules and additionally rejects duplicate
   source list names. Runtime config updates also have their own map parsing and checks.
-- [ScenarioBundleValidator](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java),
+- `scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java`,
   lines 1258–1359: dispatches to another Redis source-mode, duplicate-name, and weight validator.
-- [RedisOutputProperties](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/RedisOutputProperties.java),
-  [RedisWorkOutput](../../common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RedisWorkOutput.java),
+- `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/RedisOutputProperties.java`,
+  `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RedisWorkOutput.java`,
   and `ScenarioBundleValidator` lines 1360–1445 similarly own overlapping output target/route
   rules. Delegation from the runtime output to `RedisPushSupport` does not remove the
   separate authoring implementation of route semantics.
@@ -161,7 +161,7 @@ can defer unresolved values, but must delegate the rules for resolved literal va
 
 **CRITICAL; the same document was evaluated by both implementations.**
 
-- [ScenarioBundleValidator](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java),
+- `scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java`,
   `validateRequestTemplateShape`, lines 1747–1795, independently requires protocol,
   serviceId, callId, and HTTP method/pathTemplate.
 - `common/request-templates/src/main/java/io/pockethive/requesttemplates/TemplateLoader.java`
@@ -195,11 +195,11 @@ Scenario Manager should translate its diagnostics and add bundle-reference check
 
 Producer-owned files:
 
-- [RuntimeRequest](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/RuntimeRequest.java)
-- [ScenarioRuntimeResponse](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioRuntimeResponse.java)
-- [VariablesResolveResponse](../../scenario-manager-service/src/main/java/io/pockethive/scenarios/VariablesResolveResponse.java)
+- `scenario-manager-service/src/main/java/io/pockethive/scenarios/RuntimeRequest.java`
+- `scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioRuntimeResponse.java`
+- `scenario-manager-service/src/main/java/io/pockethive/scenarios/VariablesResolveResponse.java`
 
-[ScenarioManagerClient](../../orchestrator-service/src/main/java/io/pockethive/orchestrator/infra/scenario/ScenarioManagerClient.java)
+`orchestrator-service/src/main/java/io/pockethive/orchestrator/infra/scenario/ScenarioManagerClient.java`
 declares independent matching records at lines 277, 280, and 287. They are active:
 materialization constructs/deserializes them at lines 88–91 and variable resolution
 deserializes its copy at line 155. Producer endpoints in `ScenarioController` use their
@@ -217,13 +217,13 @@ may map that contract into its own domain model after decoding.
 
 **CRITICAL; two disagreements reproduced from current TypeScript sources.**
 
-- [networkProxy.ts](../../ui-v2/src/lib/networkProxy.ts), lines 3, 76–78 and 98–115,
+- `ui-v2/src/lib/networkProxy.ts`, lines 3, 76–78 and 98–115,
   hand-defines NetworkMode and maps every value except exact `PROXIED` to `DIRECT`.
   `normalizeBindings` applies this to both requested and effective mode.
-- [NetworkBinding](../../common/swarm-model/src/main/java/io/pockethive/swarm/model/NetworkBinding.java),
+- `common/swarm-model/src/main/java/io/pockethive/swarm/model/NetworkBinding.java`,
   lines 23–24 and its `requireMode`, requires explicit non-null modes. Architecture
   §5.1.1 specifically prohibits null-to-DIRECT and invalid-value recovery.
-- [runtimeConfigGuard.ts](../../ui-v2/src/lib/runtimeConfigGuard.ts), line 11,
+- `ui-v2/src/lib/runtimeConfigGuard.ts`, line 11,
   trims and uppercases workload state instead of using the strict
   generated lifecycle parser (`packages/swarm-lifecycle-contract/index.cjs`).
 
@@ -252,12 +252,12 @@ as invalid. A display projection must not choose a network mode or invent compat
 
 **CRITICAL under the SSOT rule; duplicate observation policy, no outage reproduced.**
 
-- [SwarmReadinessTracker](../../swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmReadinessTracker.java)
+- `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmReadinessTracker.java`
   owns a heartbeat registry, timestamps, and `STATUS_TTL_MS = 15_000` (line 24).
   Its metrics and readiness evaluate heartbeat age at lines 154 and 188.
-- [SwarmWorkerStatusHandler](../../swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmWorkerStatusHandler.java)
+- `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmWorkerStatusHandler.java`
   declares another 15-second constant at line 19 and constructs a separate aggregator.
-- [SwarmWorkersAggregator](../../swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmWorkersAggregator.java)
+- `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmWorkersAggregator.java`
   independently validates `enabled`, timestamps raw status receipt, stores worker state,
   and computes `stale` from its own clock/map at lines 28–69 and 86.
 
@@ -278,11 +278,11 @@ presentation/diagnostic fields with explicitly distinct ownership.
 
 **CRITICAL under the SSOT rule; structural policy duplication, no authorization bypass proved.**
 
-- [PocketHiveGrantChecks](../../common/auth-contracts/src/main/java/io/pockethive/auth/contract/PocketHiveGrantChecks.java)
+- `common/auth-contracts/src/main/java/io/pockethive/auth/contract/PocketHiveGrantChecks.java`
   owns permission membership and DEPLOYMENT/FOLDER/BUNDLE scope matching in Java.
-- [auth.ts](../../ui-v2/src/lib/auth.ts), lines 201–244, independently implements the same
+- `ui-v2/src/lib/auth.ts`, lines 201–244, independently implements the same
   product, permission, folder-prefix, bundle, and global-selector checks.
-- [authContracts.ts](../../ui-v2/src/lib/authContracts.ts) hand-maintains the related product,
+- `ui-v2/src/lib/authContracts.ts` hand-maintains the related product,
   resource, and permission constants; this is not the generated lifecycle package.
 
 Server callers include Orchestrator and Network Proxy authorization; UI `authContext.tsx`

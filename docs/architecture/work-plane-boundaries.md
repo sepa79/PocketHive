@@ -1,7 +1,7 @@
 # Rabbit technology boundary
 
 Status: approved target direction, 2026-09-11; not a claim of implemented isolation.
-The [execution plan](../inProgress/work-plane-module-boundaries.md#current-execution-contract)
+The repository execution plan `docs/inProgress/work-plane-module-boundaries.md`
 owns sequence and completion. This design replaces the previous B02–B07 technology split.
 Current wire and lifecycle contracts in [ARCHITECTURE](../ARCHITECTURE.md) remain effective.
 
