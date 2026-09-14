@@ -47,8 +47,8 @@ class WorkConfigurationCandidateValidatorTest {
 
     private static WorkerState csvState() {
         var definition = new WorkerDefinition("csv", Object.class, WorkerInputType.CSV_DATASET, "role",
-            WorkIoBindings.none(), Void.class, io.pockethive.worker.sdk.config.WorkInputConfig.class,
-            io.pockethive.worker.sdk.config.WorkOutputConfig.class, WorkerOutputType.NONE, "csv", Set.of());
+            WorkIoBindings.none(), Void.class, io.pockethive.work.config.binding.WorkInputConfig.class,
+            io.pockethive.work.config.binding.WorkOutputConfig.class, WorkerOutputType.NONE, "csv", Set.of());
         var state = new WorkerState(definition);
         state.initializeInputStartup(WorkerInputType.CSV_DATASET, Map.of("filePath", "/data.csv", "ratePerSec", 1.0,
             "rotate", false, "skipHeader", true, "delimiter", ",", "charset", "UTF-8",

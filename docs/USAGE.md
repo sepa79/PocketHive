@@ -43,8 +43,8 @@ From the repository root, run:
 ```
 
 This full build includes `auth-service` and the Java `pockethive-mcp` service.
-It builds their JARs and images and deploys them with the rest of the local
-Compose stack. Use `--quick` only for a later development rebuild where
+It builds their JARs with the repository-pinned Maven wrapper, builds images and
+deploys them with the rest of the local Compose stack. Use `--quick` only for a later development rebuild where
 skipping the Maven test phase is intentional.
 
 Verify the supported public ingress, not a service container port:

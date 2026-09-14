@@ -25,11 +25,11 @@ import org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainer
 public final class SpringRabbitListeners implements RabbitListeners, DisposableBean {
     private final RabbitListenerEndpointRegistry registry;
     private final ConnectionFactory connection;
-    private final ConnectionFactory workConnection;
+    private final java.util.function.Supplier<ConnectionFactory> workConnection;
     private final SimpleRabbitListenerContainerFactoryConfigurer configurer;
     private final ExecutorService executor = Executors.newVirtualThreadPerTaskExecutor();
 
-    public SpringRabbitListeners(RabbitListenerEndpointRegistry registry, ConnectionFactory connection, ConnectionFactory workConnection,
+    public SpringRabbitListeners(RabbitListenerEndpointRegistry registry, ConnectionFactory connection, java.util.function.Supplier<ConnectionFactory> workConnection,
                                  SimpleRabbitListenerContainerFactoryConfigurer configurer) {
         this.registry = Objects.requireNonNull(registry, "registry");
         this.connection = Objects.requireNonNull(connection, "connection");
@@ -59,7 +59,7 @@ public final class SpringRabbitListeners implements RabbitListeners, DisposableB
     @Override public void register(RabbitSubscription subscription, Consumer<RabbitMessage> handler) {
         Objects.requireNonNull(handler, "handler");
         var factory = new SimpleRabbitListenerContainerFactory();
-        factory.setConnectionFactory(workConnection);
+        factory.setConnectionFactory(workConnection.get());
         factory.setContainerCustomizer(container -> container.setAutoDeclare(false));
         factory.setPrefetchCount(subscription.prefetch());
         factory.setConcurrentConsumers(subscription.concurrentConsumers());

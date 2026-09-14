@@ -10,7 +10,7 @@ import org.springframework.amqp.core.TopicExchange;
 /**
  * Responsibility: map public resource specifications to Spring Rabbit declarations once.
  * Must not: resolve names, add defaults or access a broker.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-RABBIT-RESOURCES — docs/architecture/runtime-responsibilities.md#resp-rabbit-resources.
  */
 final class RabbitDeclarations {
     private RabbitDeclarations() { }

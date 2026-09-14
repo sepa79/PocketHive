@@ -22,7 +22,9 @@ import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
 import io.pockethive.worker.sdk.input.WorkInputLifecycle;
 import io.pockethive.worker.sdk.input.WorkInputRegistry;
 import io.pockethive.worker.sdk.input.WorkInputRegistryInitializer;
-import io.pockethive.worker.sdk.input.rabbit.RabbitWorkInputFactory;
+import io.pockethive.worker.sdk.input.message.MessageWorkInputFactory;
+import io.pockethive.work.api.transport.WorkInputTransportFactory;
+import io.pockethive.work.api.transport.WorkOutputTransportFactory;
 import io.pockethive.worker.sdk.input.SchedulerWorkInputFactory;
 import io.pockethive.worker.sdk.input.redis.RedisDataSetWorkInputFactory;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetWorkInputFactory;
@@ -48,7 +50,7 @@ import io.pockethive.worker.sdk.output.WorkOutputFactory;
 import io.pockethive.worker.sdk.output.WorkOutputLifecycle;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import io.pockethive.worker.sdk.output.WorkOutputRegistryInitializer;
-import io.pockethive.worker.sdk.output.RabbitWorkOutputFactory;
+import io.pockethive.worker.sdk.output.TransportWorkOutputFactory;
 import io.pockethive.worker.sdk.output.RedisWorkOutputFactory;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderer;
@@ -70,12 +72,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 import org.springframework.core.env.ConfigurableEnvironment;
-import io.pockethive.rabbit.api.RabbitPublisher;
-import io.pockethive.rabbit.api.RabbitListeners;
 
 /**
- * Aggregates the PocketHive control-plane auto-configuration so worker applications can
- * opt-in by depending on the Worker SDK starter.
+ * Responsibility: compose worker discovery, runtime, policies and the selected I/O capabilities.
+ * Must not: implement worker behavior, adapter settings or broker operations.
+ * Contract: RESP-WORK-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-work-composition.
  */
 @org.springframework.boot.autoconfigure.AutoConfigureAfter(name = {
     "org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration",
@@ -88,16 +89,12 @@ import io.pockethive.rabbit.api.RabbitListeners;
     RedisSequenceProperties.class
 })
 @Import({
+    WorkIoBindingConfiguration.class,
     ControlPlaneCommonAutoConfiguration.class,
     WorkerControlPlaneAutoConfiguration.class,
     ManagerControlPlaneAutoConfiguration.class,
     WorkerWorkConfigurationComposition.class
 })
-/**
- * Responsibility: compose the selected worker runtime, policy and IO adapters.
- * Must not: resolve resource names or implement transport/domain behavior.
- * Contract: RESP-WORK-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-work-composition.
- */
 public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
@@ -128,10 +125,11 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkInputConfigBinder workInputConfigBinder,
         WorkOutputConfigBinder workOutputConfigBinder,
         ObjectProvider<WorkerInputTypeProperties> inputTypePropertiesProvider,
-        ObjectProvider<WorkerOutputTypeProperties> outputTypePropertiesProvider
+        ObjectProvider<WorkerOutputTypeProperties> outputTypePropertiesProvider,
+        io.pockethive.worker.sdk.config.WorkIoConfigurationCatalog configurationCatalog
     ) {
         return WorkerDefinitionDiscovery.discover(beanFactory, workerProperties, workInputConfigBinder,
-            workOutputConfigBinder, inputTypePropertiesProvider, outputTypePropertiesProvider);
+            workOutputConfigBinder, inputTypePropertiesProvider, outputTypePropertiesProvider, configurationCatalog);
     }
 
     @Bean
@@ -147,10 +145,15 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerRegistry workerRegistry,
         WorkInputRegistry workInputRegistry,
         WorkInputConfigBinder workInputConfigBinder,
-        ObjectProvider<List<io.pockethive.worker.sdk.input.WorkInputFactory>> factoriesProvider
+        ObjectProvider<List<io.pockethive.worker.sdk.input.WorkInputFactory>> factoriesProvider,
+        ObjectProvider<WorkInputTransportFactory> transports, ObjectProvider<WorkerRuntime> runtime,
+        ObjectProvider<WorkerControlPlaneRuntime> control,
+        @Qualifier("workerControlPlaneIdentity") ObjectProvider<ControlPlaneIdentity> identity
     ) {
         List<io.pockethive.worker.sdk.input.WorkInputFactory> factories =
-            factoriesProvider.getIfAvailable(Collections::emptyList);
+            new java.util.ArrayList<>(factoriesProvider.getIfAvailable(Collections::emptyList));
+        transports.stream().map(transport -> new MessageWorkInputFactory(
+            runtime.getObject(), control.getObject(), identity.getObject(), transport)).forEach(factories::add);
         return new WorkInputRegistryInitializer(workerRegistry, workInputRegistry, workInputConfigBinder, factories);
     }
 
@@ -277,9 +280,11 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         WorkerRegistry workerRegistry,
         WorkOutputRegistry workOutputRegistry,
         WorkOutputConfigBinder binder,
-        ObjectProvider<List<WorkOutputFactory>> factoriesProvider
+        ObjectProvider<List<WorkOutputFactory>> factoriesProvider,
+        ObjectProvider<WorkOutputTransportFactory> transports
     ) {
-        List<WorkOutputFactory> factories = factoriesProvider.getIfAvailable(Collections::emptyList);
+        List<WorkOutputFactory> factories = new java.util.ArrayList<>(factoriesProvider.getIfAvailable(Collections::emptyList));
+        transports.stream().map(TransportWorkOutputFactory::new).forEach(factories::add);
         return new WorkOutputRegistryInitializer(workerRegistry, workOutputRegistry, binder, factories);
     }
 
@@ -294,13 +299,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @ConditionalOnProperty(prefix = "pockethive.outputs", name = "type", havingValue = "NONE")
     WorkOutputFactory noopWorkOutputFactory() {
         return new NoopWorkOutputFactory();
-    }
-
-    @Bean
-    @ConditionalOnBean(RabbitPublisher.class)
-    @ConditionalOnProperty(prefix = "pockethive.outputs", name = "type", havingValue = "RABBITMQ")
-    WorkOutputFactory rabbitWorkOutputFactory(@org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER) RabbitPublisher rabbitTemplate) {
-        return new RabbitWorkOutputFactory(rabbitTemplate);
     }
 
     @Bean
@@ -323,18 +321,6 @@ public class PocketHiveWorkerSdkAutoConfiguration {
         ScheduledInvocationPolicy<?> policy
     ) {
         return new SchedulerWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, policy);
-    }
-
-    @Bean
-    @ConditionalOnBean({WorkerRuntime.class, WorkerControlPlaneRuntime.class, RabbitListeners.class})
-    @ConditionalOnProperty(prefix = "pockethive.inputs", name = "type", havingValue = "RABBITMQ")
-    io.pockethive.worker.sdk.input.WorkInputFactory rabbitWorkInputFactory(
-        WorkerRuntime workerRuntime,
-        WorkerControlPlaneRuntime controlPlaneRuntime,
-        @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity,
-        RabbitListeners listeners
-    ) {
-        return new RabbitWorkInputFactory(workerRuntime, controlPlaneRuntime, identity, listeners);
     }
 
     @Bean

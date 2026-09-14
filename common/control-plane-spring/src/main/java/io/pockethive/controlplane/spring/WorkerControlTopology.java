@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * Responsibility: retain worker-facing names and routes projected from the canonical descriptor.
  * Must not: assemble queue names, duplicate route selection or mutate topology.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public record WorkerControlTopology(String controlQueuePrefix, String controlQueueName, ControlPlaneRouteCatalog routes) {
     static WorkerControlTopology forWorker(String swarmId, String prefix, String role, String instanceId) {

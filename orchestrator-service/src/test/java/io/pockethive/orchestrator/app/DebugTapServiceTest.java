@@ -13,8 +13,9 @@ import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.rabbit.api.RabbitResourceNames;
-import io.pockethive.topology.work.WorkResourceNamesPort;
-import io.pockethive.topology.work.WorkTopologySettings;
+import io.pockethive.rabbit.work.RabbitWorkDebugTaps;
+import io.pockethive.rabbit.work.RabbitWorkTopologyResolver;
+import io.pockethive.rabbit.api.RabbitWorkTopologySettings;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -27,6 +28,24 @@ import io.pockethive.rabbit.api.RabbitReceiver;
 import org.springframework.web.server.ResponseStatusException;
 
 class DebugTapServiceTest {
+
+    @Test
+    void unsupportedSelectedWorkDiagnosticsAreExplicit() {
+        var store = new SwarmStore();
+        var swarm = new Swarm("sw1", "instance", "controller", "run", NetworkMode.DIRECT);
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("template", "controller",
+            List.of(new Bee("processor", "image", Work.ofDefaults("in", "out"), Map.of()))));
+        store.register(swarm);
+        io.pockethive.topology.work.WorkDebugTaps unsupported = (swarmId, role, tapId, source, ttl, limit) -> {
+            throw new UnsupportedOperationException("Memory Work does not support captures");
+        };
+        var service = new DebugTapService(store, unsupported, new io.pockethive.worker.sdk.testing.InMemoryWorkTopologyResolver());
+        assertThatThrownBy(() -> service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60)))
+            .isInstanceOfSatisfying(ResponseStatusException.class, failure -> {
+                assertThat(failure.getStatusCode().value()).isEqualTo(501);
+                assertThat(failure.getReason()).isEqualTo("Memory Work does not support captures");
+            });
+    }
 
     @Test
     void cleanupExpiredRemovesTapAndDeletesQueue() {
@@ -44,7 +63,9 @@ class DebugTapServiceTest {
         ));
         store.register(swarm);
 
-        DebugTapService service = new DebugTapService(store, amqp, rabbit, new RabbitResourceNames());
+        var names = new RabbitResourceNames();
+        DebugTapService service = new DebugTapService(store, new RabbitWorkDebugTaps(amqp, rabbit),
+            new RabbitWorkTopologyResolver(names, names::forSwarm));
         var created = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 1));
         String tapId = created.tapId();
         String queue = created.queue();
@@ -71,15 +92,16 @@ class DebugTapServiceTest {
             "tpl-1", "controller", List.of(
                 new Bee("processor", "image", Work.ofDefaults("input", "output"), Map.of()))));
         store.register(swarm);
-        var names = mock(WorkResourceNamesPort.class);
-        when(names.forSwarm("sw1")).thenReturn(new WorkTopologySettings("selected", "configured.exchange"));
-        when(names.address("configured.exchange", "selected", "input"))
-            .thenReturn(new io.pockethive.topology.work.WorkAddress("selected.exchange", "queue.input", "selected.input"));
-        when(names.address("configured.exchange", "selected", "output"))
-            .thenReturn(new io.pockethive.topology.work.WorkAddress("selected.exchange", "queue.output", "selected.output"));
+        var names = org.mockito.Mockito.spy(new RabbitResourceNames());
+        org.mockito.Mockito.doReturn(new RabbitWorkTopologySettings("selected", "selected.exchange")).when(names).forSwarm("sw1");
+        when(names.address("selected.exchange", "selected", "input"))
+            .thenReturn(new io.pockethive.rabbit.api.RabbitWorkAddress("selected.exchange", "queue.input", "selected.input"));
+        when(names.address("selected.exchange", "selected", "output"))
+            .thenReturn(new io.pockethive.rabbit.api.RabbitWorkAddress("selected.exchange", "queue.output", "selected.output"));
         var bindings = new CopyOnWriteArrayList<RabbitBindingSpec>();
-        var service = new DebugTapService(store, recordingRabbitResources(bindings, new CopyOnWriteArrayList<>()),
-            mock(RabbitReceiver.class), names);
+        var service = new DebugTapService(store, new RabbitWorkDebugTaps(
+            recordingRabbitResources(bindings, new CopyOnWriteArrayList<>()), mock(RabbitReceiver.class)),
+            new RabbitWorkTopologyResolver(names, names::forSwarm));
 
         var input = service.create(new DebugTapRequest("sw1", "processor", "IN", null, 1, 60));
         var output = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60));

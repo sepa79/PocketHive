@@ -11,7 +11,8 @@ import static org.mockito.Mockito.*;
 class AmqpRabbitTopologyAdapterTest {
     @Test void projectsObservedCountsAndPreservesFailure() {
         var resources = mock(RabbitResources.class);
-        var adapter = new AmqpRabbitTopologyAdapter(resources, resources, connections());
+        var adapter = new AmqpRabbitTopologyAdapter(resources,
+            new io.pockethive.rabbit.work.RabbitWorkResources(resources, connections().work()), connections().control());
         when(resources.queue("jobs")).thenReturn(Optional.of(new RabbitQueueObservation(8, 2, OptionalLong.empty())));
         assertThat(adapter.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "jobs")).contains(new RuntimeCleanupPorts.RabbitQueueResource("jobs", 8, 2));
         when(resources.queue("offline")).thenThrow(new IllegalStateException("broker unavailable"));
@@ -20,7 +21,8 @@ class AmqpRabbitTopologyAdapterTest {
     @Test void routesEqualNamesOnlyToTheExplicitPlane() {
         var control = mock(RabbitResources.class);
         var work = mock(RabbitResources.class);
-        var adapter = new AmqpRabbitTopologyAdapter(control, work, connections());
+        var adapter = new AmqpRabbitTopologyAdapter(control,
+            new io.pockethive.rabbit.work.RabbitWorkResources(work, connections().work()), connections().control());
         adapter.deleteQueue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "jobs");
         verify(work).deleteQueue("jobs");
         verifyNoInteractions(control);

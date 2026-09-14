@@ -1,31 +1,21 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.rabbit.api.RabbitResourceNames;
-
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapRequest;
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapResponse;
-import io.pockethive.orchestrator.app.DebugTapController.DebugTapSample;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.topology.work.WorkResourceNamesPort;
-import java.nio.charset.StandardCharsets;
-import java.time.Duration;
+import io.pockethive.topology.work.WorkTopologyResolver;
+import io.pockethive.topology.work.WorkChannelAddress;
+import io.pockethive.topology.work.WorkDebugTap;
+import io.pockethive.topology.work.WorkDebugTaps;
 import java.time.Instant;
-import java.util.ArrayDeque;
-import java.util.Deque;
-import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import io.pockethive.rabbit.api.RabbitResources;
-import io.pockethive.rabbit.api.RabbitDebugTapSpec;
-import io.pockethive.rabbit.api.RabbitMessage;
-import io.pockethive.rabbit.api.RabbitReceiver;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
@@ -35,7 +25,7 @@ import org.springframework.web.server.ResponseStatusException;
  * Responsibility: manage temporary Work debug taps and their captured samples.
  * Must not: reconstruct source addresses, map Rabbit queue arguments or mutate swarm topology and lifecycle state.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names;
- * source destinations come from the injected naming port; temporary tap lifecycle remains local and broker operations use RabbitResources.
+ * source destinations and capture operations come from the explicitly selected Work owner.
  */
 @Service
 public class DebugTapService {
@@ -44,56 +34,42 @@ public class DebugTapService {
     private static final int DEFAULT_TTL_SECONDS = 60;
 
     private final SwarmStore swarmStore;
-    private final RabbitResources amqp;
-    private final RabbitReceiver rabbitTemplate;
-    private final WorkResourceNamesPort workNames;
-    private final ConcurrentMap<String, DebugTap> taps = new ConcurrentHashMap<>();
+    private final WorkDebugTaps debugTaps;
+    private final WorkTopologyResolver topologyResolver;
+    private final ConcurrentMap<String, DebugTapSession> taps = new ConcurrentHashMap<>();
 
-    public DebugTapService(SwarmStore swarmStore, @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.WORK) RabbitResources amqp, RabbitReceiver rabbitTemplate,
-                           WorkResourceNamesPort workNames) {
+    public DebugTapService(SwarmStore swarmStore, WorkDebugTaps debugTaps, WorkTopologyResolver topologyResolver) {
         this.swarmStore = Objects.requireNonNull(swarmStore, "swarmStore");
-        this.amqp = Objects.requireNonNull(amqp, "amqp");
-        this.rabbitTemplate = Objects.requireNonNull(rabbitTemplate, "rabbitTemplate");
-        this.workNames = Objects.requireNonNull(workNames, "workNames");
+        this.debugTaps = Objects.requireNonNull(debugTaps, "debugTaps");
+        this.topologyResolver = Objects.requireNonNull(topologyResolver, "topologyResolver");
     }
 
     public DebugTapResponse create(DebugTapRequest request) {
         Objects.requireNonNull(request, "request");
         cleanupExpired(Instant.now());
-        TapDirection direction = TapDirection.from(request.direction());
+        DebugTapDirection direction = DebugTapDirection.from(request.direction());
         TapBinding binding = resolveBinding(request, direction);
         int maxItems = resolveMaxItems(request.maxItems());
         int ttlSeconds = resolveTtlSeconds(request.ttlSeconds());
 
         String tapId = UUID.randomUUID().toString();
-        String tapQueue = RabbitResourceNames.debugTapQueue(binding.swarmId(), binding.role(), tapId);
-
-        var specification = RabbitDebugTapSpec.create(tapQueue, binding.exchange(), binding.routingKey(), ttlSeconds, maxItems);
-        amqp.declareQueue(specification.queue());
-        amqp.bind(specification.binding());
-
-        DebugTap tap = new DebugTap(
-            tapId,
-            binding.swarmId(),
-            binding.role(),
-            direction,
-            binding.ioName(),
-            binding.exchange(),
-            binding.routingKey(),
-            tapQueue,
-            maxItems,
-            ttlSeconds,
-            Instant.now()
-        );
+        WorkDebugTap capture;
+        try {
+            capture = debugTaps.open(binding.swarmId(), binding.role(), tapId, binding.source(), ttlSeconds, maxItems);
+        } catch (UnsupportedOperationException unsupported) {
+            throw new ResponseStatusException(HttpStatus.NOT_IMPLEMENTED, unsupported.getMessage(), unsupported);
+        }
+        DebugTapSession tap = new DebugTapSession(tapId, binding.swarmId(), binding.role(), direction,
+            binding.ioName(), capture, maxItems, ttlSeconds, Instant.now());
         taps.put(tapId, tap);
         return tap.snapshot();
     }
 
     public DebugTapResponse read(String tapId, Integer drain) {
         cleanupExpired(Instant.now());
-        DebugTap tap = requireTap(tapId);
+        DebugTapSession tap = requireTap(tapId);
         int limit = resolveDrainLimit(drain, tap.maxItems());
-        tap.drain(rabbitTemplate, limit);
+        tap.drain(limit);
         return tap.snapshot();
     }
 
@@ -103,23 +79,23 @@ public class DebugTapService {
     }
 
     public DebugTapResponse close(String tapId) {
-        DebugTap tap = taps.remove(tapId);
+        DebugTapSession tap = taps.remove(tapId);
         if (tap == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap not found");
         }
-        safeDeleteQueue(tap.queue());
+        safeClose(tap);
         return tap.snapshot();
     }
 
-    private DebugTap requireTap(String tapId) {
-        DebugTap tap = taps.get(tapId);
+    private DebugTapSession requireTap(String tapId) {
+        DebugTapSession tap = taps.get(tapId);
         if (tap == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap not found");
         }
         Instant now = Instant.now();
         if (tap.isExpired(now)) {
             taps.remove(tapId, tap);
-            safeDeleteQueue(tap.queue());
+            safeClose(tap);
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap expired");
         }
         return tap;
@@ -131,27 +107,27 @@ public class DebugTapService {
     }
 
     void cleanupExpired(Instant now) {
-        for (Map.Entry<String, DebugTap> entry : taps.entrySet()) {
+        for (Map.Entry<String, DebugTapSession> entry : taps.entrySet()) {
             String tapId = entry.getKey();
-            DebugTap tap = entry.getValue();
+            DebugTapSession tap = entry.getValue();
             if (!tap.isExpired(now)) {
                 continue;
             }
             if (taps.remove(tapId, tap)) {
-                safeDeleteQueue(tap.queue());
+                safeClose(tap);
             }
         }
     }
 
-    private void safeDeleteQueue(String name) {
+    private void safeClose(DebugTapSession tap) {
         try {
-            amqp.deleteQueue(name);
+            tap.transport().close();
         } catch (Exception ignored) {
-            // best-effort cleanup: tap queues are exclusive + auto-delete
+            // Preserve best-effort cleanup of temporary captures.
         }
     }
 
-    private TapBinding resolveBinding(DebugTapRequest request, TapDirection direction) {
+    private TapBinding resolveBinding(DebugTapRequest request, DebugTapDirection direction) {
         String swarmId = normalize(request.swarmId(), "swarmId");
         String role = normalize(request.role(), "role");
         Swarm swarm = swarmStore.find(swarmId)
@@ -161,21 +137,20 @@ public class DebugTapService {
         if (work == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no work configuration for role");
         }
-        Map<String, String> ports = direction == TapDirection.IN ? work.in() : work.out();
+        Map<String, String> ports = direction == DebugTapDirection.IN ? work.in() : work.out();
         if (ports == null || ports.isEmpty()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "no work ports for role");
         }
         String ioName = normalizeOptional(request.ioName());
         if (ioName == null) {
-            ioName = direction == TapDirection.IN ? "in" : "out";
+            ioName = direction == DebugTapDirection.IN ? "in" : "out";
         }
         String suffix = ports.get(ioName);
         if (suffix == null || suffix.isBlank()) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown ioName for role");
         }
-        var topology = workNames.forSwarm(swarmId);
-        var address = workNames.address(topology.hiveExchange(), topology.queuePrefix(), suffix);
-        return new TapBinding(swarmId, role, ioName, address.exchange(), address.routingKey());
+        var topology = topologyResolver.resolve(swarmId, java.util.Set.of(suffix));
+        return new TapBinding(swarmId, role, ioName, topology.channel(suffix));
     }
 
     private Bee findBee(Swarm swarm, String role) {
@@ -228,132 +203,6 @@ public class DebugTapService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private enum TapDirection {
-        IN,
-        OUT;
-
-        static TapDirection from(String raw) {
-            if (raw == null) {
-                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "direction is required");
-            }
-            String value = raw.trim().toUpperCase(Locale.ROOT);
-            for (TapDirection direction : values()) {
-                if (direction.name().equals(value)) {
-                    return direction;
-                }
-            }
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "direction must be IN or OUT");
-        }
-    }
-
-    private record TapBinding(String swarmId, String role, String ioName, String exchange, String routingKey) {
-    }
-
-    private static final class DebugTap {
-        private final String id;
-        private final String swarmId;
-        private final String role;
-        private final TapDirection direction;
-        private final String ioName;
-        private final String exchange;
-        private final String routingKey;
-        private final String queue;
-        private final int maxItems;
-        private final int ttlSeconds;
-        private final Instant createdAt;
-        private final Instant expiresAt;
-        private final Deque<DebugTapSample> samples = new ArrayDeque<>();
-        private final Object lock = new Object();
-        private volatile Instant lastReadAt;
-
-        private DebugTap(String id,
-                         String swarmId,
-                         String role,
-                         TapDirection direction,
-                         String ioName,
-                         String exchange,
-                         String routingKey,
-                         String queue,
-                         int maxItems,
-                         int ttlSeconds,
-                         Instant createdAt) {
-            this.id = id;
-            this.swarmId = swarmId;
-            this.role = role;
-            this.direction = direction;
-            this.ioName = ioName;
-            this.exchange = exchange;
-            this.routingKey = routingKey;
-            this.queue = queue;
-            this.maxItems = maxItems;
-            this.ttlSeconds = ttlSeconds;
-            this.createdAt = createdAt;
-            this.expiresAt = createdAt.plus(Duration.ofSeconds(ttlSeconds));
-            this.lastReadAt = createdAt;
-        }
-
-        String queue() {
-            return queue;
-        }
-
-        int maxItems() {
-            return maxItems;
-        }
-
-        boolean isExpired(Instant now) {
-            return now.isAfter(expiresAt);
-        }
-
-        void drain(RabbitReceiver template, int limit) {
-            int drained = 0;
-            while (drained < limit) {
-                RabbitMessage message = template.receive(queue).orElse(null);
-                if (message == null) {
-                    break;
-                }
-                byte[] body = message.body() == null ? new byte[0] : message.body();
-                String payload = new String(body, StandardCharsets.UTF_8);
-                DebugTapSample sample = new DebugTapSample(
-                    UUID.randomUUID().toString(),
-                    Instant.now(),
-                    body.length,
-                    payload
-                );
-                addSample(sample);
-                drained++;
-            }
-            lastReadAt = Instant.now();
-        }
-
-        DebugTapResponse snapshot() {
-            List<DebugTapSample> snapshot;
-            synchronized (lock) {
-                snapshot = List.copyOf(samples);
-            }
-            return new DebugTapResponse(
-                id,
-                swarmId,
-                role,
-                direction.name(),
-                ioName,
-                exchange,
-                routingKey,
-                queue,
-                maxItems,
-                ttlSeconds,
-                createdAt,
-                lastReadAt,
-                snapshot
-            );
-        }
-
-        private void addSample(DebugTapSample sample) {
-            synchronized (lock) {
-                while (samples.size() >= maxItems) {
-                    samples.pollFirst();
-                }
-                samples.addLast(sample);
-            }
-        }
+    private record TapBinding(String swarmId, String role, String ioName, WorkChannelAddress source) {
     }
 }

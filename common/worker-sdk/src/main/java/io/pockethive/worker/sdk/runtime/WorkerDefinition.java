@@ -1,12 +1,11 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.config.WorkIoType;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.work.api.WorkerCapability;
-import io.pockethive.work.config.WorkerInputType;
-import io.pockethive.work.config.WorkerOutputType;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -23,13 +22,13 @@ import java.util.stream.Collectors;
 public record WorkerDefinition(
     String beanName,
     Class<?> beanType,
-    WorkerInputType input,
+    WorkIoType input,
     String role,
     WorkIoBindings io,
     Class<?> configType,
     Class<? extends WorkInputConfig> inputConfigType,
     Class<? extends WorkOutputConfig> outputConfigType,
-    WorkerOutputType outputType,
+    WorkIoType outputType,
     String description,
     Set<WorkerCapability> capabilities
 ) {

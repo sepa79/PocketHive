@@ -1,8 +1,12 @@
 # Rabbit SSOT i izolacja WorkPlane — plan domknięcia
 
-Status: plan zaakceptowany do wykonania przez użytkownika 2026-09-14.
-Transfer technologii Rabbit jest zaimplementowany. Opisana niżej końcowa izolacja pozostaje
-do wykonania. Ten plan zastępuje wcześniejszą kolejność „izolacja + Artemis w jednym PR”.
+Status: odbiór techniczny uzgodnionego zakresu R1–R6 zakończony 2026-09-14; pakiet gotowy do PR.
+Zaimplementowano bieżący zakres transferu i wykonano weryfikację R6 z opisanymi niżej lukami. Natywny manifest i osierocony
+cleanup z R4 zostały jawnie odłożone przez użytkownika. Ten plan zastępuje wcześniejszą kolejność
+„izolacja + Artemis w jednym PR”. Bloker SSOT selektora R6-REV-1 ze zbiorczego review
+2026-09-14 został poprawiony na polecenie użytkownika; regresje przed/po opisano w raporcie.
+Review poprawki i normalne E2E wydzielonego pakietu Rabbit przeszły. O1/O2 Orchestratora
+pozostają osobnymi zmianami, poza tym pakietem.
 
 ## Cel i granica odbioru
 
@@ -142,6 +146,23 @@ również przy takich samych nazwach zasobów. Diagnostyka WORK nie wybiera Rabb
   wyniki testów i ograniczenia. Gate obejmuje również oczekujące lokalne poprawki Rabbit.
   Nie uruchamiać automatycznego cyklu review/fix ani nie przydzielać subagentów.
 
+## Jawne odroczenie części R4 — 2026-09-14
+
+Użytkownik zatwierdził lifecycle `WORK_RESOURCE`/`WORK`, lecz odłożył dodatek
+`manifest.workResources`, `DELETE_WORK_RESOURCE`, `includeWorkResources`.
+Manifest i orphan cleanup pozostają Rabbit-only. Natywny manifest jest odrzucany przed
+skutkami; fake nie udaje Rabbit. Pełne uruchomienie Orchestratora na fake'u i osierocony
+cleanup natywnych zasobów nie są odbiorem bieżącego zakresu. Zachować jawny zapis luki R4;
+pozostałe testy Controller/worker oraz verifier nie zastępują tej odłożonej próby.
+Szczegóły: `docs/todo/work-plane-artemis-3ds.md`.
+
+Użytkownik odłożył również poprawę kompletności diagnostyki UI/MCP do osobnego refaktoru.
+Runtime inspector odczytuje aktualny stan zasobów z ograniczonej listy manifestu/deskryptorów;
+nie jest pełnym bieżącym wykazem zasobów brokera. Pusta lista nie dowodzi ich nieobecności.
+Faktyczne zachowanie i zakres odroczenia zapisano w
+[planie diagnostyki](runtime-debug-mcp-cleanup-spec.md#deferred-diagnostic-completeness--user-decision-2026-09-14).
+To ograniczenie nie jest naprawiane przez samo dodanie natywnego manifestu dla Artemis.
+
 ## Niezmienne zachowanie i wyłączenia
 
 Rabbit zachowuje nazwy, routing, WorkItem envelope, tuning i izolację CONTROL/WORK.
@@ -175,12 +196,82 @@ Czytać ten plan, boundary design, AGENTS.md i aktualny kod. Punkty styku:
 Odwołania tych raportów do Artemis wskazują przyszły konsument granicy; W1 jest wycofany,
 a sam brak delayed publish nie jest blokerem tego planu.
 
-Baseline: 14 testów ścieżki Controllera i 113 testów SDK/Rabbit/importów z review 2026-09-14;
-normalny E2E 39 scenariuszy z 2026-09-11 poprzedza późniejsze zmiany. To wyniki historyczne,
-nie odbiór R1–R6. Ta aktualizacja zmienia dokumentację, bez nowych testów runtime/deploymentu.
+### Wykonanie — 2026-09-14
 
-Plan pass: wymagane efekty obejmują wszystkich konsumentów i usunięcie alternatyw; styl/SRP:
-jeden typ i odpowiedzialność, bez powiększania runtime; zwięzłość: istniejące moduły i mały fake;
-security: obecne uprawnienia/scope cleanup bez nowego hardeningu; biblioteki: brak nowego klienta;
-utrzymanie: jednokierunkowe zależności i jawne oddzielenie obecnego refaktoru od następnej funkcji.
-Weryfikacja dokumentacji nie oznacza wykonania osobnego review kodu ani zamknięcia refaktoru.
+Punkt odniesienia implementacji: commit planu `817113a1`. Końcowy pakiet do commita
+wydzielono z katalogu roboczego i zweryfikowano bez oczekujących poprawek O1/O2 Orchestratora.
+
+| Zakres | Właściciel i rzeczywiści konsumenci | Usunięta droga |
+| --- | --- | --- |
+| R1: transport i wybór I/O | `WorkIoType`, parser/provider ports; Rabbit w `rabbit.work`; wykonanie i pojedyncze wyjście w SDK | Klasy Rabbit Work w SDK, zamknięte enumy w neutralnych sygnaturach, osobny Rabbit dispatch |
+| R2: bootstrap | CONTROL ma osobny eksport; WORK: `WorkAdapterEnvironment`; discovery używa deskryptorów | Wymaganie Rabbit WORK przez CONTROL; Rabbit materialization w Controllerze; wybór klas Rabbit w discovery |
+| R3: topologia i zasoby | `WorkTopologyResolver` → `ResolvedWorkTopology`; worker ENV, provisioning, guard/status/stats/remove konsumują wynik | `SwarmWorkTopologyManager`, osobne listy logicznych kanałów, lokalny cache deklaracji |
+| R4: lifecycle i diagnostyka | Verifier używa wybranego WORK; `WorkDebugTaps` → Rabbit; `WORK_RESOURCE`/`WORK` zatwierdzony i wdrożony | WorkResourceNamesPort, Rabbit capture operations w DebugTapService, odczyt WORK przez CONTROL |
+| R5: adapter w pamięci | `WorkPlaneFlowTest`: Controller bootstrap → typed worker binding → config-update → wykonanie → jedno wyjście → statystyki → usunięcie; osobno verifier | Dotychczasowy test transportowy z metadanymi RABBITMQ zastąpiony pełną próbą z własnym typem MEMORY |
+| R6: stare ścieżki i odbiór | RabbitWorkAddress/TopologySettings przeniesione do Rabbit API; aktualizowana istniejąca tabela importów | Stary port nazw i zastąpione konstruktory/helpery; bez nowego skanera |
+
+Guard pobiera adresy przyjętej topologii; dodatkowy alias obserwacji jest rozwiązywany u tego
+samego właściciela bez deklarowania zasobu. Partial prepare zachowuje cleanup zakończonych
+bindingów. Błąd odczytu propaguje się; algorytm guard i semantyka ACK pozostają niezmienione.
+
+Fake jest wyłącznie fixture testowym z jednym stanem w procesie. Próba odrzuca błędną konfigurację
+przed utworzeniem zasobów, zachowuje zaakceptowany stan po błędnym update i sprawdza nieudane
+usunięcie aktywnego wejścia. Błąd workera jest raportowany bez ponownego dostarczenia. Rabbit
+WORK nie jest wymagany. Diagnostyka nieobsługiwana przez wybrany adapter zwraca HTTP 501.
+
+**Jawna luka R4, odłożona decyzją użytkownika:** natywny manifest i osierocony cleanup.
+Manifest Orchestratora zachowuje obecny format Rabbit i odrzuca natywne zasoby przed skutkami.
+Nie ogłaszać pełnego uruchomienia Orchestratora na fake'u ani tej części planu jako odebranej.
+
+Weryfikacja — wcześniejsze przebiegi i końcowy pakiet do commita:
+
+| Próba | Wynik / dowód lokalny |
+| --- | --- |
+| Czysta regresja SDK, Controller, Orchestrator i zależności, bez ScenarioControllerTest | 1263 testy, 0 błędów, 1 pominięty; `/tmp/workplane-r6-clean-tests.log` |
+| Poprawiony import w TriggerSchedulerIntegrationTest | 1 test przeszedł; `/tmp/workplane-r6-trigger-test.log` |
+| Generator kontraktu + UI schema tests | Kontrakt aktualny; 3 testy UI przeszły; `/tmp/workplane-r6-ui-schema-tests.log` |
+| Kanoniczny rebuild/redeploy | `build-hive.sh --quick` ukończony; `/tmp/workplane-r6-build-hive.log` |
+| UI/schema/CONTROL STOMP przez ingress | Połączenie `/ws`, subskrypcja zgodna z info Orchestratora, schema 200/ETag/304, WORK_RESOURCE obecny, Buzz valid, brak błędów konsoli; `/tmp/workplane-r6-browser-smoke.json` |
+| Normalny start-e2e-tests.sh, bez filtrowania scenariuszy | 39/39 scenariuszy, 463/463 kroki, kod wyjścia 0; `/tmp/workplane-r6-e2e.log` |
+| Pełny root reactor po naprawie ScenarioControllerTest, standardowy profil bez nowych wykluczeń | `./mvnw -fae clean test`: 45 modułów SUCCESS, 1858 testów przeszło, 1 warunkowo pominięty, 0 błędów; `/tmp/scenario-controller-fix-full-reactor-complete.log` |
+| Pełny root reactor po usunięciu placeholdera Redis, podczas zbiorczego review | 45 modułów SUCCESS, 1858/1858 testów, 0 błędów i pominięć; `/tmp/rabbit-r6-aggregate-review-tests.log` |
+| Pełny root reactor po poprawce R6-REV-1 | `./mvnw -fae clean test`: 45 modułów SUCCESS, 1876/1876 testów, 0 błędów i pominięć; `/tmp/rabbit-r6-selector-full-reactor.log`. Regresje selektora: 24/24; przed poprawką 5 przypadków wykazywało błąd |
+| Budowa wydzielonego pakietu Rabbit bez O1/O2 | Maven: 44 moduły SUCCESS; 1839 testów przeszło podczas budowy, dwa wymagające brokera przeszły 2/2 po starcie stacka. Łącznie pozytywny wynik wszystkich 1841 przypadków budowy. Pełny rebuild/redeploy ukończony; logi `/tmp/rabbit-r6-isolated-build.log`, `/tmp/rabbit-r6-isolated-broker-tests.log`, `/tmp/rabbit-r6-isolated-redeploy.log` |
+| Końcowe normalne E2E wydzielonego pakietu | `start-e2e-tests.sh`: 39/39 scenariuszy, 463/463 kroki, BUILD SUCCESS; `/tmp/rabbit-r6-isolated-e2e.log`. Kod zgodny z przygotowanym indeksem Git; później dopisano tylko wyniki do dokumentacji |
+
+HTTP w E2E kierowano przez oficjalny ingress, w tym jawne `AUTH_SERVICE_BASE_URL=http://localhost:8088/auth-service`,
+`RABBITMQ_MANAGEMENT_BASE_URL=http://localhost:8088/rabbitmq/api` i
+`POCKETHIVE_TCP_MOCK_URL=http://localhost:8088/tcp-mock`. Pozostałe adresy HTTP/UI/WS to
+domyślny ingress normalnego skryptu. Próba obejmuje lifecycle/idempotency, konfigurację
+defaults/overrides widzianą przez workerów, proxy HTTP/HTTPS/TCPS, Redis, ClickHouse i clearing export.
+
+**Luka ScenarioControllerTest zamknięta — 2026-09-14.** Raport rozliczył wszystkie 26
+niepowodzeń po wcześniejszym transferze walidacji. Po zatwierdzeniu naprawy uzupełniono jawne
+I/O w fixture, dostosowano asercje do kanonicznego parsera i usunięto jego nadmiarowy wymóg
+bloku settings w AUTHORING przy obcym subbloku. Kryteria dopuszczenia konfiguracji pozostały
+bez zmian; produkcyjny SM nie otrzymał lokalnego parsera ani refaktoru S1–S10.
+
+Pełna klasa przeszła 89/89, testy kontraktu parsera 16/16, a czysty root reactor zakończył
+się sukcesem. Regresja ujawniła jeszcze niezgodną nazwę mocka CONTROL w teście Processora
+i serviceId w fixture HTTP Sequence; skorygowano wyłącznie te dane testowe, zachowując asercje.
+Jedyny wcześniej pomijany przypadek był pustym placeholderem Redis; usunięto go na polecenie użytkownika.
+Stackowe E2E nie były ponawiane po tej naprawie. Szczegóły i granice dowodów:
+[raport naprawy](../architecture/scenario-controller-test-failures-2026-09-14.md).
+
+### Pozostałe kroki i odroczenia — potwierdzenie 2026-09-14
+
+- Bieżący PR: R6-REV-1 poprawione — aktywacja połączenia i obu transportów Rabbit deleguje
+  do WorkIoTypeParser. Regresje obejmują selektory ENV ze spacjami, wymagane ustawienia WORK
+  i działający CONTROL bez WORK. [Raport](../architecture/rabbit-workplane-r6-review-2026-09-14.md)
+  zawiera dowody przed/po oraz odróżnia poprawkę od pierwotnego review. Starsze warunki
+  innych adapterów I/O pozostają osobnym długiem, opisanym w raporcie.
+  Odbiór poprawki i pełne E2E zakończone pozytywnie; nie ma otwartego blokera uzgodnionego zakresu Rabbit.
+- Osobny PR Artemis: natywny manifest i osierocony cleanup dla zasobów innych niż Rabbit.
+  Istniejący Rabbit orphan cleanup pozostaje; zatwierdzony WORK_RESOURCE obsługuje zwykły
+  lifecycle remove. Pełne create przez Orchestrator nadal wymaga obsługi natywnego manifestu.
+- Osobne refaktory: kompletność diagnostyki UI/MCP według odroczenia powyżej oraz
+  rejestr/reset Orchestratora według `orchestrator-correctness.md`.
+
+Implementacja przekazuje dowody do osobnego zbiorczego review. Nie jest samodzielnym odbiorem
+architektury ani automatycznym cyklem review/fix. Artemis i odłożone rozszerzenia publiczne
+pozostają w osobnym planie.

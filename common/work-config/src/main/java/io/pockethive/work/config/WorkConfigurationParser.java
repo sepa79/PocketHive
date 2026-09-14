@@ -2,7 +2,8 @@ package io.pockethive.work.config;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
+import java.util.stream.Stream;
+import java.util.Arrays;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -56,8 +57,9 @@ public final class WorkConfigurationParser {
         if (fields == null) {
             return null;
         }
-        WorkerInputType type = parseType(fields, WorkConfigurationFields.INPUTS,
-            WorkerInputType.class, mode, problems, deferredPaths);
+        WorkIoType type = parseType(fields, WorkConfigurationFields.INPUTS,
+            Stream.concat(Arrays.stream(WorkerInputType.values()), parsers.stream().map(WorkInputSettingsParser::type)).toList(),
+            mode, problems, deferredPaths);
         if (type == null) {
             return null;
         }
@@ -67,7 +69,7 @@ public final class WorkConfigurationParser {
             return null;
         }
         List<WorkInputSettingsParser> matches = parsers.stream()
-            .filter(parser -> parser.type() == type)
+            .filter(parser -> parser.type().equals(type))
             .toList();
         if (!requireExactlyOneParser(matches, WorkConfigurationFields.path(
             WorkConfigurationFields.INPUTS, settingsKey), problems)) {
@@ -90,8 +92,9 @@ public final class WorkConfigurationParser {
         if (fields == null) {
             return null;
         }
-        WorkerOutputType type = parseType(fields, WorkConfigurationFields.OUTPUTS,
-            WorkerOutputType.class, mode, problems, deferredPaths);
+        WorkIoType type = parseType(fields, WorkConfigurationFields.OUTPUTS,
+            Stream.concat(Arrays.stream(WorkerOutputType.values()), parsers.stream().map(WorkOutputSettingsParser::type)).toList(),
+            mode, problems, deferredPaths);
         if (type == null) {
             return null;
         }
@@ -104,7 +107,7 @@ public final class WorkConfigurationParser {
             return null;
         }
         List<WorkOutputSettingsParser> matches = parsers.stream()
-            .filter(parser -> parser.type() == type)
+            .filter(parser -> parser.type().equals(type))
             .toList();
         if (!requireExactlyOneParser(matches, WorkConfigurationFields.path(
             WorkConfigurationFields.OUTPUTS, settingsKey), problems)) {
@@ -139,8 +142,8 @@ public final class WorkConfigurationParser {
             .toList();
         unsupported.forEach(key -> problems.add(problem(
             WorkConfigurationFields.path(root, String.valueOf(key)), "Unsupported or unselected settings block.")));
-        if (unsupported.isEmpty() && !fields.containsKey(settingsKey) && mode == WorkConfigurationMode.AUTHORING) {
-            return Map.of();
+        if (!fields.containsKey(settingsKey) && mode == WorkConfigurationMode.AUTHORING) {
+            return unsupported.isEmpty() ? Map.of() : null;
         }
         if (!fields.containsKey(settingsKey)) {
             problems.add(problem(WorkConfigurationFields.path(root, settingsKey),
@@ -161,7 +164,7 @@ public final class WorkConfigurationParser {
         return null;
     }
 
-    private static <T extends Enum<T>> T parseType(Map<?, ?> fields, String root, Class<T> enumType,
+    private static WorkIoType parseType(Map<?, ?> fields, String root, List<? extends WorkIoType> declaredTypes,
                                                    WorkConfigurationMode mode,
                                                    List<WorkConfigurationProblem> problems,
                                                    List<String> deferredPaths) {
@@ -175,9 +178,9 @@ public final class WorkConfigurationParser {
             return null;
         }
         try {
-            return Enum.valueOf(enumType, text.trim().toUpperCase(Locale.ROOT));
+            return WorkIoTypeParser.parse(text, declaredTypes);
         } catch (IllegalArgumentException exception) {
-            problems.add(problem(typePath, "Unsupported type."));
+            problems.add(problem(typePath, exception.getMessage()));
             return null;
         }
     }
@@ -216,9 +219,9 @@ public final class WorkConfigurationParser {
         return new WorkConfigurationProblem(path, message);
     }
 
-    private record InputResult(WorkerInputType type, WorkInputSettings settings) {
+    private record InputResult(WorkIoType type, WorkInputSettings settings) {
     }
 
-    private record OutputResult(WorkerOutputType type, WorkOutputSettings settings) {
+    private record OutputResult(WorkIoType type, WorkOutputSettings settings) {
     }
 }

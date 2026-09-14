@@ -6,8 +6,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.controlplane.spring.MetricsSettings;
+import io.pockethive.controlplane.spring.WorkerSettings;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
@@ -51,7 +51,7 @@ class SwarmWorkerSpecFactoryTest {
             "inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of()),
             "outputs", Map.of("type", "RABBITMQ", "rabbit", Map.of())));
 
-    PlannedSwarmWorker planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    PlannedSwarmWorker planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
 
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("inputs")).get("rabbit"))).isEqualTo(Map.of(
         "queue", "ph.test.input",
@@ -78,7 +78,7 @@ class SwarmWorkerSpecFactoryTest {
             "outputs", Map.of("type", "RABBITMQ", "rabbit", Map.of(
                 "persistent", "false", "publisherConfirms", true))));
 
-    PlannedSwarmWorker planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    PlannedSwarmWorker planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
 
     assertThat(planned.spec().environment())
         .containsEntry("POCKETHIVE_INPUTS_RABBIT_PREFETCH", "7")
@@ -108,7 +108,7 @@ class SwarmWorkerSpecFactoryTest {
           Map.of("inputs", Map.of("type", "RABBITMQ"), "outputs", Map.of("type", "RABBITMQ")));
       assertThatThrownBy(() -> factory(new ClickHouseSinkProperties(), () -> {
         calls.incrementAndGet(); return "network";
-      }).plan(bee, null)).isInstanceOf(WorkConfigurationException.class).hasMessageContaining("selection belongs in config");
+      }).plan(bee, null, topology(bee))).isInstanceOf(WorkConfigurationException.class).hasMessageContaining("selection belongs in config");
       assertThat(calls).hasValue(0);
     }
   }
@@ -124,7 +124,7 @@ class SwarmWorkerSpecFactoryTest {
       config.put("outputs", Map.of("type", "RABBITMQ"));
       config.put(root, block);
       var bee = new Bee("processor", "image", Work.ofDefaults("in", "out"), Map.of(), config);
-      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee)))
           .isInstanceOf(WorkConfigurationException.class).hasMessageContaining(root + ".rabbit");
     }
   }
@@ -138,7 +138,7 @@ class SwarmWorkerSpecFactoryTest {
           Map.of("inputs", Map.of("type", "RABBITMQ"), "outputs", Map.of("type", "RABBITMQ")));
       assertThatThrownBy(() -> factory(new ClickHouseSinkProperties(), () -> {
         calls.incrementAndGet(); return "network";
-      }).plan(bee, null)).isInstanceOf(WorkConfigurationException.class).hasMessageContaining("owned by topology");
+      }).plan(bee, null, topology(bee))).isInstanceOf(WorkConfigurationException.class).hasMessageContaining("owned by topology");
       assertThat(calls).hasValue(0);
     }
   }
@@ -156,10 +156,10 @@ class SwarmWorkerSpecFactoryTest {
         Work.ofDefaults("input", null),
         Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0))));
 
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(conflicting, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(conflicting, null, topology(conflicting)))
         .isInstanceOf(WorkConfigurationException.class)
         .hasMessageContaining("owned by topology");
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(invalid, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(invalid, null, topology(invalid)))
         .isInstanceOf(WorkConfigurationException.class)
         .hasMessageContaining("positive 32-bit integer");
   }
@@ -175,7 +175,7 @@ class SwarmWorkerSpecFactoryTest {
         Map.of("inputs", Map.of("type", "CSV_DATASET", "csv", settings),
             "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
                 "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
-    var plan = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var plan = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
     var properties = io.pockethive.swarmcontroller.config.SpringConnectionEnvironment.resolved(plan.spec().environment());
     var startup = new io.pockethive.work.local.csv.CsvDatasetParser().parse(
         new io.pockethive.work.local.csv.CsvDatasetEnvironment().candidate(Map.of(), properties), "inputs.csv");
@@ -193,11 +193,11 @@ class SwarmWorkerSpecFactoryTest {
     var factory = factory(new ClickHouseSinkProperties());
     var fields = new LinkedHashMap<>(csvSettings());
     fields.put("filePath", 123);
-    assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", fields))), null))
+    assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", fields))), null, emptyTopology()))
         .hasMessageContaining("inputs.csv.filePath");
     for (String value : List.of("yes", "", "${MISSING_FLAG}")) {
       assertThatThrownBy(() -> factory.plan(new Bee("generator", "generator:test", Work.ofDefaults(null, null),
-          Map.of("POCKETHIVE_INPUTS_CSV_ROTATE", value), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", csvSettings()))), null))
+          Map.of("POCKETHIVE_INPUTS_CSV_ROTATE", value), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "CSV_DATASET", "csv", csvSettings()))), null, emptyTopology()))
           .isInstanceOf(RuntimeException.class);
     }
   }
@@ -210,7 +210,7 @@ class SwarmWorkerSpecFactoryTest {
         "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
                 "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
 
-    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
     var properties = SpringConnectionEnvironment.resolved(planned.spec().environment());
     var bootstrap = objectMap(objectMap(planned.bootstrapConfig().get("inputs")).get("scheduler"));
 
@@ -231,7 +231,7 @@ class SwarmWorkerSpecFactoryTest {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null),
         Map.of("POCKETHIVE_INPUTS_SCHEDULER_MAX_MESSAGES", "-1"), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1, "maxMessages", 0))));
 
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee)))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("inputs.scheduler.maxMessages");
   }
 
@@ -244,7 +244,7 @@ class SwarmWorkerSpecFactoryTest {
                 "sources", List.of(Map.of("listName", "${DATASET_SOURCE}", "weight", "${DATASET_WEIGHT}")),
                 "pickStrategy", "ROUND_ROBIN", "ratePerSec", "${DATASET_RATE}"))));
 
-    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
     var properties = SpringConnectionEnvironment.resolved(planned.spec().environment());
     var bootstrap = objectMap(objectMap(planned.bootstrapConfig().get("inputs")).get("redis"));
 
@@ -285,7 +285,7 @@ class SwarmWorkerSpecFactoryTest {
             "docker", Map.of("volumes", List.of(" /host/input:/data:ro ")),
             "sut", Map.of("targetEndpointId", "default")));
 
-    PlannedSwarmWorker planned = factory.plan(bee, sutEnvironment);
+    PlannedSwarmWorker planned = factory.plan(bee, sutEnvironment, topology(bee));
 
     assertThat(planned.spec().role()).isEqualTo("generator");
     assertThat(planned.spec().image()).isEqualTo("generator:test");
@@ -325,7 +325,7 @@ class SwarmWorkerSpecFactoryTest {
           "outputs", Map.of("type", "REDIS", "redis", output));
       var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), config);
 
-      var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+      var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
 
       for (String prefix : List.of("POCKETHIVE_INPUTS_REDIS_", "POCKETHIVE_OUTPUTS_REDIS_")) {
         assertThat(planned.spec().environment())
@@ -347,7 +347,7 @@ class SwarmWorkerSpecFactoryTest {
   void rejectsIncompleteRedisConnectionBeforeReturningWorkerPlan() {
     var bee = new Bee("generator", "generator:test", Work.ofDefaults(null, null), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379))));
 
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee)))
         .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
         .hasMessageContaining("outputs.redis.ssl");
   }
@@ -357,7 +357,7 @@ class SwarmWorkerSpecFactoryTest {
   void rejectsInvalidConnectionOverrideBeforeReturningWorkerPlan(String variable) {
     var bee = redisOutputBee(Map.of(variable, "0"), 6379);
 
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee)))
         .isInstanceOf(RuntimeException.class)
         .hasMessageContaining("port");
   }
@@ -368,7 +368,7 @@ class SwarmWorkerSpecFactoryTest {
         "POCKETHIVE_OUTPUTS_REDIS_PORT", "6381",
         "pockethive.outputs.redis.password", " new secret "), 6379);
 
-    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
 
     assertThat(planned.spec().environment())
         .containsEntry("POCKETHIVE_OUTPUTS_REDIS_PORT", "6381")
@@ -386,7 +386,7 @@ class SwarmWorkerSpecFactoryTest {
         "pockethive.outputs.redis.push-direction")) {
       var bee = redisOutputBee(Map.of(key, "${DIRECTION}", "DIRECTION", "LPUSH",
           "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "42", "pockethive.outputs.redis.default-list", "selected"), 6379);
-      var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+      var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
       var properties = SpringConnectionEnvironment.resolved(planned.spec().environment());
       var output = objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis"));
       assertThat(output).containsEntry("pushDirection", "LPUSH").containsEntry("maxLen", 42)
@@ -403,12 +403,12 @@ class SwarmWorkerSpecFactoryTest {
   void rejectsInvalidRedisOutputOverridesAndEnvironmentRoutesBeforeReturningPlan() {
     for (String key : List.of("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "pockethive.outputs.redis.push-direction",
         "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP")) {
-      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "INVALID"), 6379), null))
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "INVALID"), 6379), null, emptyTopology()))
           .isInstanceOf(WorkConfigurationException.class);
     }
     for (String key : List.of("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_LIST", "POCKETHIVE_OUTPUTS_REDIS_ROUTES_3_LIST",
         "pockethive.outputs.redis.routes[0].list", "POCKETHIVE_OUTPUTS_REDIS_ROUTES")) {
-      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "other"), 6379), null))
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, "other"), 6379), null, emptyTopology()))
           .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("routes belong in config");
     }
   }
@@ -416,7 +416,7 @@ class SwarmWorkerSpecFactoryTest {
   @Test
   void validatesAfterOverridesHaveCorrectedTheDeclaredConnection() {
     var planned = factory(new ClickHouseSinkProperties())
-        .plan(redisOutputBee(Map.of("POCKETHIVE_OUTPUTS_REDIS_PORT", "6381"), 0), null);
+        .plan(redisOutputBee(Map.of("POCKETHIVE_OUTPUTS_REDIS_PORT", "6381"), 0), null, emptyTopology());
 
     assertThat(objectMap(objectMap(planned.bootstrapConfig().get("outputs")).get("redis")))
         .containsEntry("port", 6381);
@@ -428,7 +428,7 @@ class SwarmWorkerSpecFactoryTest {
       "spring.rabbitmq.virtual-host", "SPRING_RABBITMQ_ADDRESSES", "SPRING_RABBITMQ_SSL_ENABLED"})
   void rejectsControlConnectionOverridesBeforeReturningPlan(String key) {
     for (String value : List.of("other", "", "${SECRET}")) {
-      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, value), 6379), null))
+      assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(key, value), 6379), null, emptyTopology()))
           .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("per-worker overrides are unsupported")
           .hasMessageNotContaining("${SECRET}");
     }
@@ -438,7 +438,7 @@ class SwarmWorkerSpecFactoryTest {
   void springAliasesAndPlaceholdersReachBothStartupAndBootstrap() {
     var planned = factory(new ClickHouseSinkProperties()).plan(redisOutputBee(Map.of(
         "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "${REDIS_SECRET}",
-        "REDIS_SECRET", " secret "), 6379), null);
+        "REDIS_SECRET", " secret "), 6379), null, emptyTopology());
     var workerEnvironment = new MockEnvironment();
     workerEnvironment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
         "systemEnvironment", new LinkedHashMap<>(planned.spec().environment())));
@@ -456,14 +456,14 @@ class SwarmWorkerSpecFactoryTest {
         Map.of("SPRING_RABBITMQ_PASSWORD", "${POCKETHIVE_OUTPUTS_REDIS_PASSWORD}"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of(
             "host", "redis", "port", 6379, "ssl", false, "password", ""))));
 
-    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null))
+    assertThatThrownBy(() -> factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee)))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("spring.rabbitmq.password");
   }
 
   @Test
   void resolvesConnectionReferencesAgainstCompleteUnchangedEnvironment() {
     var bee = redisOutputBee(Map.of("POCKETHIVE_OUTPUTS_REDIS_HOST", "${SPRING_RABBITMQ_HOST}"), 6379);
-    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null);
+    var planned = factory(new ClickHouseSinkProperties()).plan(bee, null, topology(bee));
     var workerEnvironment = new MockEnvironment();
     workerEnvironment.getPropertySources().addFirst(new SystemEnvironmentPropertySource(
         "systemEnvironment", new LinkedHashMap<>(planned.spec().environment())));
@@ -543,7 +543,7 @@ class SwarmWorkerSpecFactoryTest {
     });
     Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler",
             Map.of("ratePerSec", 1.0, "enabled", true))));
-    assertThatThrownBy(() -> factory.plan(invalid, null))
+    assertThatThrownBy(() -> factory.plan(invalid, null, topology(invalid)))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("enabled");
     assertThat(networkReads).hasValue(0);
   }
@@ -560,7 +560,6 @@ class SwarmWorkerSpecFactoryTest {
         "run-1",
         properties.getControlExchange(),
         properties.getControlQueuePrefixBase(),
-        properties.hiveExchange(),
         new MetricsSettings(
             PocketHiveMetricsAdapter.DISABLED,
             Duration.ofSeconds(10),
@@ -569,13 +568,25 @@ class SwarmWorkerSpecFactoryTest {
     return new SwarmWorkerSpecFactory(
         properties,
         workerSettings,
-        new io.pockethive.rabbit.api.RabbitConnections(rabbit, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work")),
+        rabbit,
         controlNetwork,
         clickHouse,
         RuntimeFilesystemMount.of("/opt/pockethive/scenarios-runtime"),
         () -> "template-1",
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
-            .workerWorkConfiguration(properties, new RabbitResourceNames()));
+            .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"))));
+  }
+
+  private static io.pockethive.topology.work.ResolvedWorkTopology emptyTopology() {
+    return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
+        new io.pockethive.rabbit.api.RabbitResourceNames()::forSwarm).resolve("test", java.util.Set.of());
+  }
+
+  private static io.pockethive.topology.work.ResolvedWorkTopology topology(Bee bee) {
+    var traffic = properties().getTraffic();
+    return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings(traffic.queuePrefix(), traffic.hiveExchange()))
+        .resolve(properties().getSwarmId(), io.pockethive.topology.work.WorkTopologyChannels.from(java.util.List.of(bee)));
   }
 
   private static Bee redisOutputBee(Map<String, String> environment, int port) {

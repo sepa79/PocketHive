@@ -12,7 +12,7 @@ import org.springframework.context.annotation.Bean;
 /**
  * Responsibility: expose transport capabilities from the configured Rabbit connection.
  * Must not: own domain routing, envelopes or mutable plane policy.
- * Contract: docs/architecture/work-plane-boundaries.md#6-build-and-composition-enforcement.
+ * Contract: RESP-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-rabbit-transport.
  */
 @AutoConfiguration(after = {RabbitAutoConfiguration.class, io.pockethive.rabbit.config.RabbitConnectionConfiguration.class})
 @org.springframework.amqp.rabbit.annotation.EnableRabbit
@@ -22,11 +22,13 @@ public class RabbitTransportAutoConfiguration {
     @ConditionalOnMissingBean(name = io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER)
     RabbitPublisher rabbitPublisher(RabbitTemplate template) { return new SpringRabbitPublisher(template); }
     @Bean(name = io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER)
+    @ConditionalOnBean(io.pockethive.rabbit.config.WorkRabbitConnection.class)
     @ConditionalOnMissingBean(name = io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER)
     RabbitPublisher workRabbitPublisher(io.pockethive.rabbit.config.WorkRabbitConnection work) {
         return new SpringRabbitPublisher(work.template());
     }
     @Bean @ConditionalOnMissingBean(RabbitReceiver.class)
+    @ConditionalOnBean(io.pockethive.rabbit.config.WorkRabbitConnection.class)
     RabbitReceiver rabbitReceiver(io.pockethive.rabbit.config.WorkRabbitConnection work) { return new SpringRabbitReceiver(work.template()); }
     @Bean
     @ConditionalOnBean(org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry.class)
@@ -35,8 +37,8 @@ public class RabbitTransportAutoConfiguration {
         org.springframework.amqp.rabbit.listener.RabbitListenerEndpointRegistry registry,
         org.springframework.amqp.rabbit.connection.ConnectionFactory connection,
         org.springframework.boot.autoconfigure.amqp.SimpleRabbitListenerContainerFactoryConfigurer configurer,
-        io.pockethive.rabbit.config.WorkRabbitConnection work) {
-        return new SpringRabbitListeners(registry, connection, work.connection(), configurer);
+        org.springframework.beans.factory.ObjectProvider<io.pockethive.rabbit.config.WorkRabbitConnection> work) {
+        return new SpringRabbitListeners(registry, connection, () -> work.getObject().connection(), configurer);
     }
     @Bean
     org.springframework.beans.factory.SmartInitializingSingleton rabbitInboundRegistration(

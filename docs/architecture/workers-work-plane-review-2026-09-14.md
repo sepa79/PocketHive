@@ -3,8 +3,8 @@
 Stan: HEAD `4062be40` z bieżącymi lokalnymi zmianami. Review rzeczywistych wywołań,
 nie diffu. Zakres: dziewięć usług workerów, wspólne SDK oraz używane API Rabbit,
 Pierwotnie pod wspólny zakres WorkPlane + Artemis. Aktualna kolejność:
-[domknięcie izolacji Rabbit](../inProgress/work-plane-module-boundaries.md) z adapterem testowym,
-następnie [Artemis/3DS](../todo/work-plane-artemis-3ds.md). W2/W3 i granice I/O z W4 dotyczą
+domknięcie izolacji Rabbit (plik w repozytorium: `docs/inProgress/work-plane-module-boundaries.md`) z adapterem testowym,
+następnie Artemis/3DS (plik w repozytorium: `docs/todo/work-plane-artemis-3ds.md`). W2/W3 i granice I/O z W4 dotyczą
 obecnego refaktoru; kontrakt opóźnienia i implementacja Artemis są późniejszym etapem.
 Nie zmieniano kodu produkcyjnego ani semantyki dostarczenia.
 
@@ -37,10 +37,10 @@ akceptacji `PREFETCH=2.9`. Pierwotna klasyfikacja P2 i propozycja zastąpienia b
 nieuzasadnione zakresem dowodu. W1 nie jest zadaniem ani blokerem PR Rabbit/Artemis.
 Nie dodawać na tej podstawie hardeningu ręcznie zmienianej konfiguracji.
 
-Źródła: [RabbitWorkSettingsBootstrap.java](/home/sepa/PocketHive/common/rabbit-adapter/src/main/java/io/pockethive/rabbit/api/RabbitWorkSettingsBootstrap.java:32),
-[RabbitWorkEnvironment.java](/home/sepa/PocketHive/common/rabbit-adapter/src/main/java/io/pockethive/rabbit/api/RabbitWorkEnvironment.java:40),
-[WorkerWorkConfigurationAdapter.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/infra/configuration/WorkerWorkConfigurationAdapter.java:87),
-[SwarmWorkerSpecFactory.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmWorkerSpecFactory.java:78).
+Źródła: `common/rabbit-adapter/src/main/java/io/pockethive/rabbit/api/RabbitWorkSettingsBootstrap.java:32`,
+`common/rabbit-adapter/src/main/java/io/pockethive/rabbit/api/RabbitWorkEnvironment.java:40`,
+`swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/infra/configuration/WorkerWorkConfigurationAdapter.java:87`,
+`swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmWorkerSpecFactory.java:78`.
 
 ## W2 — bootstrap wiąże Rabbit CONTROL z wymaganym Rabbit WORK
 
@@ -57,8 +57,8 @@ W następnym PR rozdzielić kompozycję połączeń/transportu CONTROL i wybrane
 CONTROL nadal korzysta z tego samego API; brak Rabbit WORK przy Artemis ma być prawidłowym
 wyborem, nie fallbackiem. To druga strona problemu WP2 ze Swarm Controllera.
 
-Źródła: [RabbitConnectionConfiguration.java](/home/sepa/PocketHive/common/rabbit-adapter/src/main/java/io/pockethive/rabbit/config/RabbitConnectionConfiguration.java:24),
-[RabbitTransportAutoConfiguration.java](/home/sepa/PocketHive/common/rabbit-adapter/src/main/java/io/pockethive/rabbit/transport/RabbitTransportAutoConfiguration.java:26).
+Źródła: `common/rabbit-adapter/src/main/java/io/pockethive/rabbit/config/RabbitConnectionConfiguration.java:24`,
+`common/rabbit-adapter/src/main/java/io/pockethive/rabbit/transport/RabbitTransportAutoConfiguration.java:26`.
 
 ## W3 — adaptery I/O mają SPI, ale ich konfiguracja i projekcje nadal są w SDK
 
@@ -82,9 +82,9 @@ ani wymagać fikcyjnego exchange. Utrzymać obecny format Rabbit; nowe publiczne
 uzgodnienia kontraktu. Create/observe/destroy zasobów pozostają po stronie wybranego właściciela
 WorkPlane wywoływanego przez zarządzanie swarmem, nie przez poszczególne funkcje workerów.
 
-Źródła: [WorkerDefinitionDiscovery.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/WorkerDefinitionDiscovery.java:118),
-[WorkInput.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/WorkInput.java:17),
-[WorkIoBindings.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkIoBindings.java:7).
+Źródła: `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/WorkerDefinitionDiscovery.java:118`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/WorkInput.java:17`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkIoBindings.java:7`.
 
 ## W4 — jedna publikacja wyniku już istnieje; brakuje jawnego zamiaru opóźnienia
 
@@ -108,9 +108,9 @@ do wykonania, w sync po obsłudze. Błąd dekodera/worker dispatch jest raportow
 callbacku; odrzucenie zadania przez executor zachowuje historyczne wykonanie synchroniczne.
 Disabled invocation zwraca null. Nie dodawać requeue po błędzie parsera/executora.
 
-Źródła: [DefaultWorkerRuntime.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/DefaultWorkerRuntime.java:63),
-[WorkOutput.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutput.java:13),
-[RabbitWorkExecution.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitWorkExecution.java:103).
+Źródła: `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/DefaultWorkerRuntime.java:63`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutput.java:13`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitWorkExecution.java:103`.
 
 ## Sprawdzone funkcje workerów
 
@@ -154,11 +154,11 @@ WorkIOConfigBinderTest, RabbitWorkOutputTest), Rabbit 15 (SpringRabbitListenersT
 SpringRabbitTransportTest, RabbitConnectionConfigurationTest), RepositoryImportBoundaryTest 2.
 Maven: `./mvnw -pl common/worker-sdk -am -Dtest=<powyższe klasy> -Dsurefire.failIfNoSpecifiedTests=false test`.
 Pierwszą próbę zatrzymał self-attach Mockito w sandboxie. Te same testy poza sandboxem przeszły;
-[pełny log](/tmp/workers-workplane-review-verified.log).
+`/tmp/workers-workplane-review-verified.log`.
 
 **5 dodatkowych prób sprawdziło konwersje przy bezpośrednim bindingu** — ominęły produkcyjne
 przygotowanie ENV i nie wykazały błędu tej ścieżki (wycofany W1).
-[Źródło prób](/tmp/RabbitBindingReviewProbeTest.java), [log](/tmp/workers-rabbit-binding-probes.log).
+`/tmp/RabbitBindingReviewProbeTest.java`, `/tmp/workers-rabbit-binding-probes.log`.
 Tymczasowe źródło testu i jego skompilowaną klasę usunięto z modułu. Nie dodano poprawki produkcyjnej.
 
 Testy odbioru używają rzeczywistych kontenerów listenerów z atrapą klienta; nie wykonano live broker,

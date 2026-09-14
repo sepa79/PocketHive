@@ -6,7 +6,7 @@ package io.pockethive.work.config;
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
 public interface WorkInputMutationPolicy {
-    WorkerInputType type();
+    WorkIoType type();
 
     WorkMutationDescriptors descriptors();
 

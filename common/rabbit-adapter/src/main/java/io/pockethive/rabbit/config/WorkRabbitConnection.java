@@ -9,7 +9,7 @@ import org.springframework.beans.factory.DisposableBean;
 /**
  * Responsibility: own the Work connection and template configured from canonical settings.
  * Must not: inherit Control settings, register Control declarations or expose clients outside this module.
- * Contract: docs/architecture/work-plane-boundaries.md#connection-split-prerequisite-resource-identity.
+ * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
  */
 public final class WorkRabbitConnection implements DisposableBean {
     private final CachingConnectionFactory connection;

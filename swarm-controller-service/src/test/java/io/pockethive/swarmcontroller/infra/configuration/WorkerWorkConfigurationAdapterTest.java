@@ -18,7 +18,11 @@ import org.junit.jupiter.api.Test;
 
 class WorkerWorkConfigurationAdapterTest {
   private final WorkerWorkConfigurationPort adapter = new WorkerWorkConfigurationComposition()
-      .workerWorkConfiguration(mock(SwarmControllerProperties.class), new RabbitResourceNames());
+      .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work", 5673, "worker", "worksecret", "/work")));
+
+  private final io.pockethive.topology.work.ResolvedWorkTopology topology =
+      new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(),
+          new RabbitResourceNames()::forSwarm).resolve("test", java.util.Set.of());
 
   @Test
   void rejectsIncompleteAndUnselectedIoThroughTheCanonicalParser() {
@@ -31,7 +35,7 @@ class WorkerWorkConfigurationAdapterTest {
         Map.of("inputs", input, "outputs", Map.of("type", "REDIS", "redis",
             Map.of("host", "redis", "port", 6379, "ssl", false))))) {
       var bee = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), config);
-      assertThatThrownBy(() -> adapter.compose(bee, config, baseEnvironment()))
+      assertThatThrownBy(() -> adapter.compose(bee, config, baseEnvironment(), topology))
           .isInstanceOf(WorkConfigurationException.class);
       assertThat(bee.config()).isEqualTo(config);
     }
@@ -44,9 +48,9 @@ class WorkerWorkConfigurationAdapterTest {
         Map.of("ratePerSec", 2.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"));
     var overrides = new LinkedHashMap<>(Map.of("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC", "7"));
     Bee first = new Bee("generator", "image", Work.ofDefaults(null, null), overrides, config);
-    var firstResult = adapter.compose(first, first.config(), base);
+    var firstResult = adapter.compose(first, first.config(), base, topology);
     Bee second = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), config);
-    var secondResult = adapter.compose(second, second.config(), base);
+    var secondResult = adapter.compose(second, second.config(), base, topology);
     var validation = new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
         .workConfigurationParser().validate(firstResult.bootstrapConfig(),
             io.pockethive.work.config.WorkConfigurationMode.RESOLVED);
@@ -69,12 +73,12 @@ class WorkerWorkConfigurationAdapterTest {
     Map<String, Object> invalid = Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler",
         Map.of("ratePerSec", -1.0, "maxMessages", 0)));
     Bee rejected = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), invalid);
-    assertThatThrownBy(() -> adapter.compose(rejected, rejected.config(), base))
+    assertThatThrownBy(() -> adapter.compose(rejected, rejected.config(), base, topology))
         .isInstanceOf(WorkConfigurationException.class);
     assertThat(base).isEqualTo(baseEnvironment());
     assertThat(rejected.config()).isEqualTo(invalid);
     Bee valid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 3.0, "maxMessages", 0))));
-    assertThat(adapter.compose(valid, valid.config(), base).environment())
+    assertThat(adapter.compose(valid, valid.config(), base, topology).environment())
         .containsEntry("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC", "3");
   }
 
@@ -82,7 +86,7 @@ class WorkerWorkConfigurationAdapterTest {
   void standaloneCompositionCannotBypassDeclarationPreflight() {
     Bee invalid = new Bee("generator", "image", Work.ofDefaults(null, null), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("type", "SCHEDULER", "scheduler",
             Map.of("ratePerSec", 1.0, "enabled", true))));
-    assertThatThrownBy(() -> adapter.compose(invalid, invalid.config(), baseEnvironment()))
+    assertThatThrownBy(() -> adapter.compose(invalid, invalid.config(), baseEnvironment(), topology))
         .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("enabled");
   }
 

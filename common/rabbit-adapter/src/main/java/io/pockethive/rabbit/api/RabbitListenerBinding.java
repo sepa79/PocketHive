@@ -7,7 +7,7 @@ import java.util.function.Predicate;
 /**
  * Responsibility: describe a resolved inbound endpoint and its domain fatal-failure classifier.
  * Must not: expose broker clients, construct physical names or define domain error classification.
- * Contract: docs/architecture/work-plane-boundaries.md#5-delivery-and-failure-decisions.
+ * Contract: RESP-CP-LISTENER-POLICY — docs/architecture/runtime-responsibilities.md#resp-cp-listener-policy.
  */
 public record RabbitListenerBinding(String id, String queue, Consumer<RabbitMessage> handler,
                                     Predicate<Throwable> rejectWithoutRequeue) {

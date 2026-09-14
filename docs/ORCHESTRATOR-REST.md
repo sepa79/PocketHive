@@ -307,8 +307,10 @@ Pins a swarm journal run into an archive so it can be kept beyond time-based ret
 ```
 
 ### 2.8 Debug taps (UI V2)
-Debug taps mirror data-plane messages without touching worker code. The orchestrator creates a
-temporary queue bound to the swarm's hive exchange and buffers samples for UI inspection.
+Debug taps mirror data-plane messages without touching worker code. The selected Work adapter
+creates the capture; for Rabbit this is a temporary queue bound to the swarm's hive exchange.
+Orchestrator buffers samples for UI inspection. An adapter without capture support returns
+`501 Not Implemented`; it does not activate Rabbit as a replacement.
 
 #### 2.8.1 Create tap
 `POST /api/debug/taps`
@@ -671,6 +673,14 @@ Rabbit candidate IDs are not accepted. Debug queue/exchange snapshots preserve t
 plane; equal names on separate planes remain distinct entries. Lifecycle `RemoveResource`
 uses the shared schema's required `plane`, including `NONE` for non-messaging targets.
 
+R4 contract amendment (approved 2026-09-14): `WORK_RESOURCE` identifies a
+non-Rabbit Work resource through its adapter-owned address in `id`; its plane must be
+`WORK`. Example: `{"type":"WORK_RESOURCE","id":"memory://swarm/jobs","plane":"WORK"}`.
+The selected Work owner observes/removes it and supplies the connection identity used
+for cleanup fingerprinting. Missing/wrong ownership must fail before effects. Existing
+Rabbit targets retain `RABBIT_QUEUE`/`RABBIT_EXCHANGE`, names and CONTROL/WORK meanings.
+This introduces no production mock selection or Artemis-specific field.
+
 The existing Orchestrator REST request flags retain their behavior: an omitted
 `includeRunning` means `false`, and an omitted `includeRabbit` means `true`.
 The agent-facing MCP contract is stricter and requires both Boolean fields so
@@ -972,10 +982,13 @@ no credentials and does not change the STOMP URL, broker authentication or event
 `GET /api/control-plane/schema/control-events`
 
 **Behavior**
-- Returns the raw `docs/spec/control-events.schema.json` payload.
+- Returns a compound JSON Schema rooted at canonical `docs/spec/control-events.schema.json`.
+  Its `$defs` embeds the unchanged canonical `swarm-lifecycle.schema.json`, retaining its `$id`
+  and all original references. No dependency fetch or independent UI contract is required.
+- The ETag covers the complete compound document, including lifecycle definitions.
 - Supports `ETag` and `If-None-Match` for caching (5 minute max-age).
 - Intended for UI bootstrap; no fallback source should be used if unavailable.
-- Should be secured behind admin access or removed before exposing the orchestrator publicly.
+- Requires PocketHive read authorization, including conditional requests.
 
 **Response (200)**
 ```

@@ -9,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Responsibility: bind worker identity/settings and retain the owner's read-only topology projection.
  * Must not: construct queue names or independently define routing catalogs.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 @Validated
 @ConfigurationProperties(prefix = "pockethive.control-plane")

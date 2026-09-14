@@ -18,22 +18,19 @@ class SwarmQueueStatsCollectorTest {
 
   @Test
   void collectsEveryResolvedQueueAndUpdatesItsMatchingMetrics() {
-    SwarmControllerProperties properties = mock(SwarmControllerProperties.class);
-    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
-    when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(call -> "selected." + call.getArgument(1));
     QueueStatsPort queueStats = mock(QueueStatsPort.class);
     SwarmQueueMetrics queueMetrics = mock(SwarmQueueMetrics.class);
     QueueStats inputStats = new QueueStats(5, 2, OptionalLong.of(17));
     QueueStats outputStats = QueueStats.empty();
-    when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic("hive", "ph.swarm-1"));
     when(queueStats.getQueueStats("selected.input")).thenReturn(inputStats);
     when(queueStats.getQueueStats("selected.output")).thenReturn(outputStats);
     SwarmQueueStatsCollector collector = new SwarmQueueStatsCollector(
-        properties, queueStats, queueMetrics, names);
+        queueStats, queueMetrics);
 
     Map<String, QueueStats> snapshot = collector.snapshot(
-        new LinkedHashSet<>(java.util.List.of("input", "output")));
+        new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
+            swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("selected", "selected.hive"))
+            .resolve("swarm-1", new LinkedHashSet<>(java.util.List.of("input", "output"))));
 
     assertThat(snapshot).containsExactlyInAnyOrderEntriesOf(Map.of(
         "selected.input", inputStats,

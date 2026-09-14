@@ -52,6 +52,9 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency>
+      <groupId>io.pockethive</groupId><artifactId>work-test-fixtures</artifactId><version>${project.version}</version><scope>test</scope>
+    </dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -208,12 +211,6 @@
       <resource>
         <directory>src/main/resources</directory>
         <filtering>true</filtering>
-      </resource>
-      <resource>
-        <directory>${project.basedir}/../docs/spec</directory>
-        <includes>
-          <include>control-events.schema.json</include>
-        </includes>
       </resource>
     </resources>
     <plugins>

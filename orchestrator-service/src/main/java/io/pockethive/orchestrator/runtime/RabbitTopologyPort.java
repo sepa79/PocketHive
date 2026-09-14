@@ -8,7 +8,7 @@ import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RabbitExchangeReso
 /**
  * Responsibility: observe and remove explicitly scoped Rabbit resources.
  * Must not: infer plane from resource names or bypass the owning resource operation.
- * Contract: docs/architecture/work-plane-boundaries.md#connection-split-prerequisite-resource-identity.
+ * Contract: RESP-RUNTIME-CLEANUP — docs/architecture/runtime-responsibilities.md#resp-runtime-cleanup.
  */
 public interface RabbitTopologyPort {
     String connectionIdentity(ResourcePlane plane);

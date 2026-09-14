@@ -165,7 +165,7 @@ class HttpSequenceMultiEndpointAcceptanceTest {
   private void writeTemplate(String callId, String path) throws Exception {
     Files.writeString(templates.resolve(callId + ".yaml"), """
         protocol: HTTP
-        serviceId: default
+        serviceId: journey
         callId: %s
         method: GET
         pathTemplate: %s

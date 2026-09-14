@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.orchestrator.infra.schema.ControlPlaneSchemaBundle;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -56,7 +57,7 @@ class OrchestratorAdminAuthTest {
     @Test
     void controlPlaneSchemaAllowsReadUser() {
         SwarmStore store = storeWithSwarm("demo-swarm", "demo/tpl-1", "demo");
-        ControlPlaneSchemaController controller = new ControlPlaneSchemaController(endpointAuthorization(store));
+        ControlPlaneSchemaController controller = new ControlPlaneSchemaController(new ControlPlaneSchemaBundle(mapper), endpointAuthorization(store));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(

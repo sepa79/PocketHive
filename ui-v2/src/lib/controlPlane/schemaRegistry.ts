@@ -1,3 +1,8 @@
+/**
+ * Responsibility: load and cache the canonical Control Plane bootstrap validator.
+ * Must not: supply independent schemas or admit events after schema loading fails.
+ * Contract: RESP-CONTROL-SCHEMA-BOOTSTRAP — docs/architecture/runtime-responsibilities.md#resp-control-schema-bootstrap--control-plane-schema-delivery.
+ */
 import Ajv from 'ajv/dist/2020'
 import addFormats from 'ajv-formats'
 import type { AnySchema, ValidateFunction } from 'ajv'
@@ -117,7 +122,9 @@ async function fetchSchema(signal?: AbortSignal): Promise<SchemaState> {
   }
   let validator: ValidateFunction<unknown>
   try {
-    const ajv = new Ajv({ allErrors: true, strict: true })
+    // Canonical constraints are composed through refs/conditionals. These two options
+    // lint schema authoring; disabling them does not disable instance validation.
+    const ajv = new Ajv({ allErrors: true, strict: true, strictTypes: false, strictRequired: false })
     addFormats(ajv)
     validator = ajv.compile(json as AnySchema)
   } catch (error) {

@@ -6,7 +6,7 @@ import java.util.Objects;
 /**
  * Responsibility: carry validated consumer settings and explicit startup intent to Rabbit.
  * Must not: define adapter defaults, construct names or own worker enablement.
- * Contract: docs/architecture/work-plane-boundaries.md#4-configuration-and-topology-ssot.
+ * Contract: RESP-WORK-RABBIT-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-policy.
  */
 public record RabbitSubscription(String id, String queue, int prefetch, int concurrentConsumers,
                                  boolean exclusive, boolean autoStartup) {

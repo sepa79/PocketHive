@@ -43,9 +43,9 @@ public final class WorkerState {
     }
 
     // Immutable startup configuration, not a second accepted-update state machine.
-    synchronized void initializeInputStartup(io.pockethive.work.config.WorkerInputType inputType,
+    synchronized void initializeInputStartup(io.pockethive.work.config.WorkIoType inputType,
                                              Map<String, Object> settings) {
-        if (definition.input() != inputType) throw new IllegalArgumentException("Startup input type does not match worker definition");
+        if (!definition.input().equals(inputType)) throw new IllegalArgumentException("Startup input type does not match worker definition");
         if (!inputStartup.isEmpty()) throw new IllegalStateException("Input startup settings already registered");
         inputStartup = Map.copyOf(settings);
     }

@@ -525,7 +525,7 @@ class RuntimeAssessmentServiceTest {
     }
 
     private static RuntimeOwnershipManifest manifest(
-        List<RuntimeOwnershipManifest.RuntimeObject> runtimeObjects) {
+        List<io.pockethive.orchestrator.runtime.RuntimeManifestObject> runtimeObjects) {
         return new RuntimeOwnershipManifest(
             "sw1",
             "run-1",
@@ -533,14 +533,14 @@ class RuntimeAssessmentServiceTest {
             "DOCKER_SINGLE",
             NOW,
             runtimeObjects,
-            new RuntimeOwnershipManifest.RabbitResources(
+            new io.pockethive.orchestrator.runtime.RuntimeRabbitManifest(
                 List.of("ph.control.sw1.generator.generator-1"),
                 List.of(),
                 List.of("ph.control")));
     }
 
-    private static RuntimeOwnershipManifest.RuntimeObject managerObject(String runtimeId) {
-        return new RuntimeOwnershipManifest.RuntimeObject(
+    private static io.pockethive.orchestrator.runtime.RuntimeManifestObject managerObject(String runtimeId) {
+        return new io.pockethive.orchestrator.runtime.RuntimeManifestObject(
             runtimeId, "container", "manager", "swarm-controller", "controller-1",
             "swarm-controller:latest");
     }

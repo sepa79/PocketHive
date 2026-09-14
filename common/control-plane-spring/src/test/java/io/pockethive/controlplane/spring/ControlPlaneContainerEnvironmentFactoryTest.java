@@ -21,16 +21,14 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         controlPlaneProperties.getWorker().setEnabled(false);
         controlPlaneProperties.setSwarmId("swarm-1");
         controlPlaneProperties.setInstanceId("controller-a");
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(15));
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+        io.pockethive.controlplane.spring.ControllerSettings settings =
+            new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
                 "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive");
-        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
+                "/var/run/docker.sock");
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
             "swarm-1",
@@ -67,17 +65,16 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void workerEnvironmentBuildsMap() {
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(20));
-        ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
+        io.pockethive.controlplane.spring.WorkerSettings settings =
+            new io.pockethive.controlplane.spring.WorkerSettings(
                 "swarm-1",
                 "run-1",
                 "ph.control",
                 "ph.control",
-                "ph.swarm-1.hive",
                 metrics);
-        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
@@ -104,9 +101,9 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void clickHouseMetricsSettingsPropagateToControllerAndWorker() {
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(10));
-        io.pockethive.rabbit.api.RabbitConnections rabbitConnection = rabbitConnection();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
         controlPlaneProperties.setControlQueuePrefix("ph.control");
@@ -116,12 +113,10 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "controller-a",
             "swarm-controller",
             controlPlaneProperties,
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+            new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
                 "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive"),
+                "/var/run/docker.sock"),
             rabbitConnection);
 
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
@@ -135,12 +130,11 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         Map<String, String> workerEnv = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
             "processor",
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
+            new io.pockethive.controlplane.spring.WorkerSettings(
                 "swarm-1",
                 "run-1",
                 "ph.control",
                 "ph.control",
-                "ph.swarm-1.hive",
                 metrics),
             rabbitConnection);
 
@@ -152,7 +146,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void clickHouseAdapterRequiresConfiguredSettings() {
-        assertThatThrownBy(() -> new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+        assertThatThrownBy(() -> new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             Duration.ofSeconds(10),
             ClickHouseMetricsSinkProperties.disabled()))
@@ -161,34 +155,32 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     }
 
     @Test
-    void refusesToReconstructMissingTrafficSettings() {
+    void participantEnvironmentRequiresOnlyControlSettings() {
         var control = new ControlPlaneProperties();
         control.setExchange("ph.control");
         control.setControlQueuePrefix("ph.control");
-        for (boolean missingPrefix : List.of(true, false)) {
-            var settings = new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                disabledMetrics(Duration.ofSeconds(30)), "run", "/var/run/docker.sock",
-                missingPrefix ? null : "explicit-prefix", missingPrefix ? "explicit-exchange" : null);
-            assertThatThrownBy(() -> ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
-                "swarm", "controller", "swarm-controller", control, settings, rabbitConnection()))
-                .isInstanceOf(IllegalStateException.class).hasMessageContaining("traffic");
-        }
+        var settings = new ControllerSettings(disabledMetrics(Duration.ofSeconds(30)), "run", "/var/run/docker.sock");
+        var environment = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
+            "swarm", "controller", "swarm-controller", control, settings, rabbitConnection());
+        assertThat(environment).containsEntry("SPRING_RABBITMQ_HOST", "rabbitmq");
+        assertThat(environment.keySet()).noneMatch(key -> key.startsWith("POCKETHIVE_RABBIT_WORK_")
+            || key.startsWith("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_"));
     }
 
-    private static io.pockethive.rabbit.api.RabbitConnections rabbitConnection() {
+    private static RabbitConnectionSettings rabbitConnection() {
         RabbitConnectionSettings properties = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
-        return new io.pockethive.rabbit.api.RabbitConnections(properties, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"));
+        return properties;
     }
 
-    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings disabledMetrics(Duration publishInterval) {
-        return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+    private static io.pockethive.controlplane.spring.MetricsSettings disabledMetrics(Duration publishInterval) {
+        return new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.DISABLED,
             publishInterval,
             ClickHouseMetricsSinkProperties.disabled());
     }
 
-    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings clickHouseMetrics(Duration publishInterval) {
-        return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+    private static io.pockethive.controlplane.spring.MetricsSettings clickHouseMetrics(Duration publishInterval) {
+        return new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             publishInterval,
             clickHouseProperties(

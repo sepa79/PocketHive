@@ -1,25 +1,23 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.WorkerInputType;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Binds the worker's input type from configuration.
- * <p>
- * NFF: {@code type} must be configured; there is no fallback to {@link PocketHiveWorker}
- * annotation attributes. IO is driven exclusively from {@code pockethive.inputs.*}.
+ * Responsibility: retain the explicit startup input selection text for the IO catalog.
+ * Must not: infer adapter selection or parse adapter settings.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 @ConfigurationProperties(prefix = "pockethive.inputs")
 public class WorkerInputTypeProperties {
 
-    private WorkerInputType type;
+    private String type;
 
-    public WorkerInputType getType() {
+    public String getType() {
         return type;
     }
 
-    public void setType(WorkerInputType type) {
+    public void setType(String type) {
         this.type = type;
     }
 }

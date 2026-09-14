@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Responsibility: Project resolved Orchestrator queues and receive bindings from the shared topology descriptor.
  * Must not: Construct queue names, routing bindings, or RabbitMQ declarables.
- * Contract: docs/orchestrator/configuration.md; shared manager auto-configuration declares the topology.
+ * Contract: RESP-CP-DECLARATIONS — docs/architecture/runtime-responsibilities.md#resp-cp-declarations.
  */
 @Configuration(proxyBeanMethods = false)
 class OrchestratorControlQueueConfiguration {

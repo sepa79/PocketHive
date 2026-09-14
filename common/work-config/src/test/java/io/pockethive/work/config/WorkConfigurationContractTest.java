@@ -94,6 +94,36 @@ class WorkConfigurationContractTest {
     }
 
     @Test
+    void authoringRejectsUnselectedBlocksWithoutRequiringOmittedSelectedSettings() {
+        Map<String, Object> omittedSettings = candidate(
+            Map.of("type", "SCHEDULER"), Map.of("type", "REDIS"));
+        assertThat(validate(omittedSettings, WorkConfigurationMode.AUTHORING).problems()).isEmpty();
+
+        WorkConfigurationValidation result = validate(candidate(
+            Map.of("type", "SCHEDULER", "csv", Map.of()),
+            Map.of("type", "REDIS", "rabbit", Map.of())), WorkConfigurationMode.AUTHORING);
+
+        assertThat(result.configuration()).isNull();
+        assertThat(result.problems()).containsExactly(
+            new WorkConfigurationProblem("inputs.csv", "Unsupported or unselected settings block."),
+            new WorkConfigurationProblem("outputs.rabbit", "Unsupported or unselected settings block."));
+    }
+
+    @Test
+    void resolvedStillRequiresSelectedSettingsAlongsideUnselectedBlockErrors() {
+        WorkConfigurationValidation result = validate(candidate(
+            Map.of("type", "SCHEDULER", "csv", Map.of()),
+            Map.of("type", "REDIS", "rabbit", Map.of())), WorkConfigurationMode.RESOLVED);
+
+        assertThat(result.configuration()).isNull();
+        assertThat(result.problems()).containsExactly(
+            new WorkConfigurationProblem("inputs.csv", "Unsupported or unselected settings block."),
+            new WorkConfigurationProblem("inputs.scheduler", "Selected settings block is required."),
+            new WorkConfigurationProblem("outputs.rabbit", "Unsupported or unselected settings block."),
+            new WorkConfigurationProblem("outputs.redis", "Selected settings block is required."));
+    }
+
+    @Test
     void noneRejectsEverySettingsBlockWithoutInvokingOutputParser() {
         var outputCalled = new AtomicBoolean();
         WorkConfigurationValidation result = parser(

@@ -43,7 +43,8 @@ class RabbitPlaneOperationsTest {
             when(factory.createConnection()).thenReturn(workConnection);
         })) {
             new ApplicationContextRunner()
-                .withConfiguration(AutoConfigurations.of(RabbitAutoConfiguration.class,
+                .withUserConfiguration(io.pockethive.rabbit.work.RabbitWorkPlaneConfiguration.class)
+            .withConfiguration(AutoConfigurations.of(RabbitAutoConfiguration.class,
                     RabbitConnectionConfiguration.class, RabbitResourceAutoConfiguration.class,
                     RabbitTransportAutoConfiguration.class))
                 .withBean(ConnectionFactory.class, () -> control)

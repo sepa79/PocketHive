@@ -13,5 +13,5 @@ public interface WorkerWorkConfigurationPort {
   void validateDeclaration(Bee bee);
 
   WorkerWorkConfigurationResult compose(Bee bee, Map<String, Object> effectiveConfig,
-      Map<String, String> baseEnvironment);
+      Map<String, String> baseEnvironment, io.pockethive.topology.work.ResolvedWorkTopology topology);
 }

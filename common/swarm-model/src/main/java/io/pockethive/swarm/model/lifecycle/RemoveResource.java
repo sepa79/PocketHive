@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Responsibility: identify one removal target by type, name and explicit plane.
  * Must not: infer a missing plane or decide whether removal succeeded.
- * Contract: docs/spec/swarm-lifecycle.schema.json#/$defs/RemoveResource.
+ * Contract: RESP-RUNTIME-CLEANUP — docs/architecture/runtime-responsibilities.md#resp-runtime-cleanup.
  */
 public record RemoveResource(RemoveResourceType type, String id, ResourcePlane plane) {
 

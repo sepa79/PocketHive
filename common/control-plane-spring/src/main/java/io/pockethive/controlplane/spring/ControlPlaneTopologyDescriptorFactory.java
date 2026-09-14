@@ -15,7 +15,7 @@ import java.util.function.Function;
 /**
  * Responsibility: compose role-specific Control descriptors with the Rabbit naming owner.
  * Must not: assemble resource names, duplicate routing rules or provision resources.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class ControlPlaneTopologyDescriptorFactory {
 

@@ -8,7 +8,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 /**
  * Responsibility: submit public messages through the Rabbit client.
  * Must not: encode domain envelopes, choose destinations, change delivery semantics or infer ACK from submission.
- * Contract: docs/architecture/work-plane-boundaries.md#5-delivery-and-failure-decisions.
+ * Contract: RESP-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-rabbit-transport.
  */
 public final class SpringRabbitPublisher implements RabbitPublisher {
     private final RabbitTemplate template;

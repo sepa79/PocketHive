@@ -129,7 +129,7 @@ class SwarmCreationMock1E2ETest {
     @MockBean
     DockerContainerClient docker;
 
-    @MockBean
+    @MockBean(name = io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL)
     RabbitResources amqpAdmin;
 
     @Autowired
@@ -149,7 +149,7 @@ class SwarmCreationMock1E2ETest {
 
     @Autowired
     @Qualifier("controlPlaneExchange")
-    TopicExchange controlExchange;
+    io.pockethive.rabbit.api.RabbitExchangeSpec controlExchange;
 
     @Autowired
     @Qualifier("managerControlQueueName")
@@ -212,6 +212,14 @@ class SwarmCreationMock1E2ETest {
         }
         registry.add("spring.rabbitmq.host", RABBIT::getHost);
         registry.add("spring.rabbitmq.port", RABBIT::getAmqpPort);
+        registry.add("spring.rabbitmq.username", RABBIT::getAdminUsername);
+        registry.add("spring.rabbitmq.password", RABBIT::getAdminPassword);
+        registry.add("spring.rabbitmq.virtual-host", () -> "/");
+        registry.add("pockethive.rabbit.work.host", RABBIT::getHost);
+        registry.add("pockethive.rabbit.work.port", RABBIT::getAmqpPort);
+        registry.add("pockethive.rabbit.work.username", RABBIT::getAdminUsername);
+        registry.add("pockethive.rabbit.work.password", RABBIT::getAdminPassword);
+        registry.add("pockethive.rabbit.work.virtual-host", () -> "/");
         registry.add("spring.rabbitmq.listener.simple.missingQueuesFatal", () -> "false");
         registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
         registry.add("spring.datasource.username", POSTGRES::getUsername);
@@ -276,15 +284,15 @@ class SwarmCreationMock1E2ETest {
         createBody.put("networkProfileId", null);
         HttpEntity<Map<String, Object>> request = jsonRequest(createBody);
 
-        ResponseEntity<ControlResponse> response = rest.exchange(
+        ResponseEntity<String> response = rest.exchange(
             "/api/swarms/{swarmId}/create",
             HttpMethod.POST,
             request,
-            ControlResponse.class,
+            String.class,
             swarmId);
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.ACCEPTED);
-        ControlResponse body = response.getBody();
+        assertThat(response.getStatusCode()).withFailMessage("Unexpected create response: %s", response.getBody()).isEqualTo(HttpStatus.ACCEPTED);
+        ControlResponse body = objectMapper.readValue(response.getBody(), ControlResponse.class);
         assertThat(body).isNotNull();
         String correlationId = body.correlationId();
         assertThat(correlationId).isNotBlank();
@@ -307,7 +315,7 @@ class SwarmCreationMock1E2ETest {
         String outcomeRoutingKey = ControlPlaneRouting.event("outcome", "swarm-create",
             new ConfirmationScope(swarmId, "orchestrator", managerIdentity.instanceId()));
         Binding createBinding = BindingBuilder.bind(captureQueue)
-            .to(controlExchange)
+            .to(controlExchange())
             .with(outcomeRoutingKey);
         assertThat(createBinding.getRoutingKey()).isEqualTo(outcomeRoutingKey);
         admin.declareBinding(createBinding);
@@ -324,7 +332,7 @@ class SwarmCreationMock1E2ETest {
 	              "idempotencyKey": null,
 	              "runtime": {
 	                "templateId": "local-rest",
-	                "runId": "run-1",
+	                "runId": "%s",
 	                "containerId": "%s",
 	                "image": "swarm-controller:latest",
 	                "stackName": "ph-%s"
@@ -347,7 +355,7 @@ class SwarmCreationMock1E2ETest {
 	                }
 	              }
             }
-            """.formatted(instanceId, swarmId, instanceId, instanceId, swarmId,
+            """.formatted(instanceId, swarmId, instanceId, swarm.getRunId(), instanceId, swarmId,
                 swarm.startupArtifact().sha256());
 
         rabbitTemplate.convertAndSend(
@@ -382,6 +390,7 @@ class SwarmCreationMock1E2ETest {
                         "type", "SCHEDULER",
                         "scheduler", Map.of("ratePerSec", 50, "maxMessages", 0)
                     ),
+                    "outputs", Map.of("type", "RABBITMQ"),
                     "message", Map.of(
                         "bodyType", "HTTP",
                         "path", "/api/guarded",
@@ -398,6 +407,8 @@ class SwarmCreationMock1E2ETest {
                 Map.of(),
                 Map.of(
                     "docker", dockerConfig,
+                    "inputs", Map.of("type", "RABBITMQ"),
+                    "outputs", Map.of("type", "RABBITMQ"),
                     "mode", Map.of("type", "pass-through", "ratePerSec", 0.0)
                 )
             ),
@@ -420,6 +431,8 @@ class SwarmCreationMock1E2ETest {
                 Map.of(),
                 Map.of(
                     "docker", dockerConfig,
+                    "inputs", Map.of("type", "RABBITMQ"),
+                    "outputs", Map.of("type", "NONE"),
                     "forwardToOutput", false,
                     "txOutcomeSinkMode", "NONE",
                     "dropTxOutcomeWithoutCallId", true
@@ -533,16 +546,16 @@ class SwarmCreationMock1E2ETest {
         Queue controlQueue = QueueBuilder.durable(controlQueueName).build();
         Queue statusQueue = QueueBuilder.durable(controllerStatusQueueName).build();
         Binding outcome = BindingBuilder.bind(controlQueue)
-            .to(controlExchange)
+            .to(controlExchange())
             .with(outcomePattern());
         Binding statusFull = BindingBuilder.bind(statusQueue)
-            .to(controlExchange)
+            .to(controlExchange())
             .with(statusPattern("status-full"));
         Binding statusDelta = BindingBuilder.bind(statusQueue)
-            .to(controlExchange)
+            .to(controlExchange())
             .with(statusPattern("status-delta"));
 
-        admin.declareExchange(controlExchange);
+        admin.declareExchange(controlExchange());
         admin.declareQueue(controlQueue);
         admin.declareQueue(statusQueue);
         admin.declareBinding(outcome);
@@ -617,6 +630,11 @@ class SwarmCreationMock1E2ETest {
         } finally {
             exchange.close();
         }
+    }
+
+    private TopicExchange controlExchange() {
+        return new TopicExchange(controlExchange.name(), controlExchange.durable(),
+            controlExchange.autoDelete(), controlExchange.arguments());
     }
 
     private Message awaitMessage(String queue, Duration timeout) throws InterruptedException {

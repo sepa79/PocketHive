@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import io.pockethive.rabbit.api.RabbitTransportBeans;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -29,7 +30,8 @@ class ProcessorTopologyProvisioningTest {
             ControlPlaneCommonAutoConfiguration.class,
             WorkerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitPublisher.class, () -> Mockito.mock(RabbitPublisher.class))
+        .withBean(RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class,
+            () -> Mockito.mock(RabbitPublisher.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=processor",
             "pockethive.control-plane.instance-id=" + WORKER_PROPERTIES.getInstanceId(),

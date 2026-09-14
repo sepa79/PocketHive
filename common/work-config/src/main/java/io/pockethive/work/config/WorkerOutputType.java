@@ -5,7 +5,7 @@ package io.pockethive.work.config;
  * Must not: select or construct adapters, or bind environment properties.
  * Contract: RESP-WORK-PATCH-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-patch-policy.
  */
-public enum WorkerOutputType {
+public enum WorkerOutputType implements WorkIoType {
     NONE("none"),
     RABBITMQ("rabbit"),
     REDIS("redis");

@@ -1052,6 +1052,11 @@ class ScenarioControllerTest {
                       config:
                         inputs:
                           type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: NONE
                         message:
                           body: "{}"
                 """);
@@ -1136,11 +1141,11 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.findings", hasSize(2)))
                 .andExpect(jsonPath("$.findings[*].path", org.hamcrest.Matchers.hasItems(
-                        "scenario.yaml:template.bees[0].config.inputs.type",
-                        "scenario.yaml:template.bees[0].config.outputs.type")))
-                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
-                        org.hamcrest.Matchers.containsString("missing required field 'inputs.type'"),
-                        org.hamcrest.Matchers.containsString("missing required field 'outputs.type'"))));
+                        "scenario.yaml:template.bees[0].config.inputs",
+                        "scenario.yaml:template.bees[0].config.outputs")))
+                .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.containsInAnyOrder(
+                        "Settings must be an object.",
+                        "Settings must be an object.")));
     }
 
     @Test
@@ -1164,6 +1169,8 @@ class ScenarioControllerTest {
                           type: SCHEDULER
                           scheduler:
                             ratePerSec: 1
+                        outputs:
+                          type: NONE
                         message:
                           bodyType: SIMPLE
                           body: "{}"
@@ -1180,7 +1187,7 @@ class ScenarioControllerTest {
                         .value("scenario.yaml:template.bees[0].config.inputs.scheduler.maxMessages"))
                 .andExpect(jsonPath("$.findings[0].message")
                         .value(org.hamcrest.Matchers.containsString(
-                                "missing required field 'inputs.scheduler.maxMessages'")));
+                                "maxMessages must be an integer")));
     }
 
     @Test
@@ -1199,6 +1206,10 @@ class ScenarioControllerTest {
                       image: http-sequence:latest
                       work: {}
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: NONE
                         baseUrl: "http://wiremock:8080"
                 """);
 
@@ -1270,6 +1281,10 @@ class ScenarioControllerTest {
                       image: db-query:latest
                       work: {}
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: NONE
                         adapter: POSTGRES
                         templateRoot: "/scenario/templates"
                         serviceId: demo-service
@@ -1353,7 +1368,11 @@ class ScenarioControllerTest {
                     - role: request-builder
                       image: request-builder:latest
                       work: {}
-                      config: {}
+                      config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: NONE
                 """);
 
         mvc.perform(post("/validation/scenario-bundles")
@@ -1389,6 +1408,13 @@ class ScenarioControllerTest {
                       image: trigger:latest
                       work: {}
                       config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: NONE
                         intervalMs: 1000
                         singleRequest: true
                         actionType: rest
@@ -1424,6 +1450,13 @@ class ScenarioControllerTest {
                       image: trigger:latest
                       work: {}
                       config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: NONE
                         intervalMs: 1000
                         singleRequest: true
                         actionType: shell
@@ -1480,7 +1513,7 @@ class ScenarioControllerTest {
                         .value("scenario.yaml:template.bees[0].config.inputs.type"))
                 .andExpect(jsonPath("$.findings[0].message")
                         .value(org.hamcrest.Matchers.containsString(
-                                "missing required selector 'inputs.type: REDIS_DATASET'")));
+                                "Type must be configured as nonblank text.")));
     }
 
     @Test
@@ -1519,10 +1552,10 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.findings", hasSize(1)))
                 .andExpect(jsonPath("$.findings[0].path")
-                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                        .value("scenario.yaml:template.bees[0].config.inputs.redis"))
                 .andExpect(jsonPath("$.findings[0].message")
                         .value(org.hamcrest.Matchers.containsString(
-                                "selector 'inputs.type' is 'RABBITMQ'; expected 'REDIS_DATASET'")));
+                                "Unsupported or unselected settings block.")));
     }
 
     @Test
@@ -1546,6 +1579,8 @@ class ScenarioControllerTest {
                           type: REDIS_DATASET
                           csv:
                             filePath: /app/scenario/datasets/users.csv
+                        outputs:
+                          type: NONE
                         message:
                           bodyType: SIMPLE
                           body: "{}"
@@ -1559,10 +1594,10 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.ok").value(false))
                 .andExpect(jsonPath("$.findings", hasSize(1)))
                 .andExpect(jsonPath("$.findings[0].path")
-                        .value("scenario.yaml:template.bees[0].config.inputs.type"))
+                        .value("scenario.yaml:template.bees[0].config.inputs.csv"))
                 .andExpect(jsonPath("$.findings[0].message")
                         .value(org.hamcrest.Matchers.containsString(
-                                "selector 'inputs.type' is 'REDIS_DATASET'; expected 'CSV_DATASET'")));
+                                "Unsupported or unselected settings block.")));
     }
 
     @Test
@@ -1603,7 +1638,7 @@ class ScenarioControllerTest {
                         .value("scenario.yaml:template.bees[0].config.outputs.type"))
                 .andExpect(jsonPath("$.findings[0].message")
                         .value(org.hamcrest.Matchers.containsString(
-                                "missing required selector 'outputs.type: REDIS'")));
+                                "Type must be configured as nonblank text.")));
     }
 
     @Test
@@ -1972,7 +2007,7 @@ class ScenarioControllerTest {
                         "scenario.yaml:template.bees[0].config.outputs.redis.maxLen")))
                 .andExpect(jsonPath("$.findings[*].message", org.hamcrest.Matchers.hasItems(
                         org.hamcrest.Matchers.containsString("Port must be between 1 and 65535."),
-                        org.hamcrest.Matchers.containsString("expected >= 0"),
+                        org.hamcrest.Matchers.containsString("ratePerSec must be a finite number >= 0.0."),
                         org.hamcrest.Matchers.containsString("Must be -1 or greater."))));
     }
 
@@ -2009,6 +2044,10 @@ class ScenarioControllerTest {
                       image: typed-worker:latest
                       work: {}
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: NONE
                         textValue: 123
                         flagValue: "true"
                         jsonValue: "[]"
@@ -2066,6 +2105,10 @@ class ScenarioControllerTest {
                       image: bounded-worker:latest
                       work: {}
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: NONE
                         rateValue: "fast"
                 """);
 
@@ -2108,6 +2151,8 @@ class ScenarioControllerTest {
                             ratePerSec: "1.0"
                             maxMessages: 10.5
                             reset: "true"
+                        outputs:
+                          type: NONE
                         message:
                           bodyType: SIMPLE
                           body:
@@ -2166,10 +2211,7 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.findings[0].path")
                         .value("scenario.yaml:template.bees[0].config.inputs.type"))
                 .andExpect(jsonPath("$.findings[0].message")
-                        .value(org.hamcrest.Matchers.allOf(
-                                org.hamcrest.Matchers.containsString("unsupported value 'BANANA'"),
-                                org.hamcrest.Matchers.containsString("RABBITMQ"),
-                                org.hamcrest.Matchers.containsString("REDIS_DATASET"))));
+                        .value("Unsupported type."));
     }
 
     @Test
@@ -2207,11 +2249,7 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.findings[0].path")
                         .value("scenario.yaml:template.bees[0].config.outputs.type"))
                 .andExpect(jsonPath("$.findings[0].message")
-                        .value(org.hamcrest.Matchers.allOf(
-                                org.hamcrest.Matchers.containsString("unsupported value 'BANANA'"),
-                                org.hamcrest.Matchers.containsString("RABBITMQ"),
-                                org.hamcrest.Matchers.containsString("REDIS"),
-                                org.hamcrest.Matchers.containsString("NONE"))));
+                        .value("Unsupported type."));
     }
 
     @Test
@@ -2272,6 +2310,10 @@ class ScenarioControllerTest {
                           image: postprocessor:latest
                           work: {}
                           config:
+                            inputs:
+                              type: RABBITMQ
+                            outputs:
+                              type: NONE
                             forwardToOutput: false
                             txOutcomeSinkMode: "{{ vars.txOutcomeSinkMode }}"
                             dropTxOutcomeWithoutCallId: true
@@ -2620,6 +2662,13 @@ class ScenarioControllerTest {
                     - role: generator
                       image: generator:latest
                       config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: RABBITMQ
                         message:
                           headers:
                             x-ph-service-id: auth
@@ -2630,6 +2679,10 @@ class ScenarioControllerTest {
                     - role: request-builder
                       image: request-builder:latest
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: RABBITMQ
                         templateRoot: /app/scenario/templates/redemption
                         serviceId: auth
                       work:
@@ -2663,6 +2716,13 @@ class ScenarioControllerTest {
                     - role: generator
                       image: generator:latest
                       config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: RABBITMQ
                         message:
                           headers:
                             x-ph-service-id: auth
@@ -2673,6 +2733,10 @@ class ScenarioControllerTest {
                     - role: request-builder-iso
                       image: request-builder:latest
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: RABBITMQ
                         templateRoot: /app/scenario/templates/auth
                         serviceId: auth
                       work:
@@ -2706,6 +2770,13 @@ class ScenarioControllerTest {
                     - role: generator
                       image: generator:latest
                       config:
+                        inputs:
+                          type: SCHEDULER
+                          scheduler:
+                            ratePerSec: 1
+                            maxMessages: 0
+                        outputs:
+                          type: RABBITMQ
                         message:
                           headers:
                             x-ph-service-id: auth
@@ -2716,6 +2787,10 @@ class ScenarioControllerTest {
                     - role: request-builder
                       image: worker-image:latest
                       config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: RABBITMQ
                         templateRoot: /app/scenario/templates/auth
                         serviceId: auth
                       work:
@@ -2747,6 +2822,13 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
+                            inputs:
+                              type: SCHEDULER
+                              scheduler:
+                                ratePerSec: 1
+                                maxMessages: 0
+                            outputs:
+                              type: RABBITMQ
                             message:
                               headers:
                                 x-ph-call-id: tcp-request
@@ -2756,6 +2838,10 @@ class ScenarioControllerTest {
                         - role: request-builder
                           image: request-builder:latest
                           config:
+                            inputs:
+                              type: RABBITMQ
+                            outputs:
+                              type: RABBITMQ
                             templateRoot: /app/scenario/templates/tcp
                             serviceId: banking
                           work:
@@ -2793,6 +2879,13 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
+                            inputs:
+                              type: SCHEDULER
+                              scheduler:
+                                ratePerSec: 1
+                                maxMessages: 0
+                            outputs:
+                              type: RABBITMQ
                             message:
                               headers:
                                 x-ph-call-id: redeem
@@ -2802,6 +2895,10 @@ class ScenarioControllerTest {
                         - role: request-builder
                           image: request-builder:latest
                           config:
+                            inputs:
+                              type: RABBITMQ
+                            outputs:
+                              type: RABBITMQ
                             templateRoot: /app/scenario/templates/redemption
                             serviceId: default
                           work:
@@ -2847,6 +2944,13 @@ class ScenarioControllerTest {
                         - role: generator
                           image: generator:latest
                           config:
+                            inputs:
+                              type: SCHEDULER
+                              scheduler:
+                                ratePerSec: 1
+                                maxMessages: 0
+                            outputs:
+                              type: RABBITMQ
                             message:
                               headers:
                                 x-ph-call-id: redeem
@@ -2856,6 +2960,10 @@ class ScenarioControllerTest {
                         - role: request-builder
                           image: request-builder:latest
                           config:
+                            inputs:
+                              type: RABBITMQ
+                            outputs:
+                              type: RABBITMQ
                             templateRoot: /app/scenario/templates/redemption
                             serviceId: default
                           work:
@@ -3263,6 +3371,11 @@ class ScenarioControllerTest {
                   bees:
                     - role: worker
                       image: missing-image:latest
+                      config:
+                        inputs:
+                          type: RABBITMQ
+                        outputs:
+                          type: RABBITMQ
                       work:
                         in:
                           in: a

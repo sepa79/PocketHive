@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.output;
 
+
 import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pockethive.work.api.WorkItemBuilder;
 
@@ -9,8 +10,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisOutputProperties;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.redis.config.RedisPushDirection;
@@ -56,7 +57,7 @@ class RedisWorkOutputTest {
 
         RedisWorkOutput output = new RedisWorkOutput(DEFINITION, properties, pushSupport);
         WorkItem item = message("original", Map.of("x-ph-flow", "TOP")).addStepPayload("processed");
-        output.publish(item, DEFINITION);
+        output.publish(item);
 
         assertThat(writerFactory.pushes).hasSize(1);
         assertThat(writerFactory.pushes.get(0).list()).isEqualTo("webauth.RED.custA");
@@ -66,7 +67,7 @@ class RedisWorkOutputTest {
 
         output.applyRawConfig(Map.of("outputs", Map.of("redis", Map.of(
             "sourceStep", "LAST", "pushDirection", "LPUSH", "maxLen", "2"))));
-        output.publish(item, DEFINITION);
+        output.publish(item);
         assertThat(writerFactory.pushes.getLast().payload()).isEqualTo("processed");
         assertThat(writerFactory.pushes.getLast().direction()).isEqualTo(RedisPushDirection.LPUSH);
         assertThat(writerFactory.pushes.getLast().maxLen()).isEqualTo(2);
@@ -104,7 +105,7 @@ class RedisWorkOutputTest {
         ));
 
         output.applyRawConfig(Map.of("outputs", Map.of("redis", Map.of("maxLen", 10))));
-        output.publish(message("{\"AccountNumber\":\"8601\"}", Map.of("x-ph-flow", "TOP")), DEFINITION);
+        output.publish(message("{\"AccountNumber\":\"8601\"}", Map.of("x-ph-flow", "TOP")));
 
         assertThat(writerFactory.pushes).hasSize(1);
         assertThat(writerFactory.pushes.get(0).list()).isEqualTo("webauth.RED.custA");
@@ -130,10 +131,10 @@ class RedisWorkOutputTest {
         properties.setTargetListTemplate("{{ headers.target }}");
         RedisWorkOutput output = new RedisWorkOutput(DEFINITION, properties, pushSupport);
 
-        assertThatThrownBy(() -> output.publish(message("{}", Map.of("target", "")), DEFINITION))
+        assertThatThrownBy(() -> output.publish(message("{}", Map.of("target", ""))))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("could not resolve target list");
-        output.publish(message("{}", Map.of("target", "selected")), DEFINITION);
+        output.publish(message("{}", Map.of("target", "selected")));
         assertThat(writerFactory.pushes).extracting(Push::list).containsExactly("selected");
     }
 
@@ -197,7 +198,7 @@ class RedisWorkOutputTest {
         update.putIfAbsent("defaultList", "ph:dataset:updated");
         output.applyRawConfig(Map.of("outputs", Map.of("redis", update)));
 
-        output.publish(message("{}", Map.of()), DEFINITION);
+        output.publish(message("{}", Map.of()));
 
         assertThat(writerFactory.pushes).hasSize(1);
         assertThat(writerFactory.pushes.getFirst().list()).isEqualTo("ph:dataset:base");

@@ -1,6 +1,8 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkIoType;
+import io.pockethive.work.config.binding.WorkInputConfig;
+
 import io.pockethive.work.config.WorkConfigurationException;
 
 import java.util.Objects;
@@ -23,7 +25,7 @@ public final class WorkInputConfigBinder {
         this.binder = Objects.requireNonNull(binder, "binder");
     }
 
-    public <C extends WorkInputConfig> C bind(WorkerInputType inputType, Class<C> configType) {
+    public <C extends WorkInputConfig> C bind(WorkIoType inputType, Class<C> configType) {
         Objects.requireNonNull(inputType, "inputType");
         Objects.requireNonNull(configType, "configType");
         var unsupported = new InputLifecyclePropertyCheck().check(binder);
@@ -40,7 +42,7 @@ public final class WorkInputConfigBinder {
         return config;
     }
 
-    public String prefix(WorkerInputType inputType) {
+    public String prefix(WorkIoType inputType) {
         Objects.requireNonNull(inputType, "inputType");
         return "pockethive.inputs." + inputType.settingsKey();
     }

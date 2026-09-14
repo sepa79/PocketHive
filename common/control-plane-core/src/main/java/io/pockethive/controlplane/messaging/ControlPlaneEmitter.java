@@ -32,7 +32,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Responsibility: emit executor results, alerts and status using canonical Control routing and descriptors.
  * Must not: construct physical resource names, select naming implementations or decide lifecycle outcomes.
- * Contract: docs/ARCHITECTURE.md and docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-CP-PUBLISH — docs/architecture/runtime-responsibilities.md#resp-cp-publish.
  */
 public final class ControlPlaneEmitter {
 

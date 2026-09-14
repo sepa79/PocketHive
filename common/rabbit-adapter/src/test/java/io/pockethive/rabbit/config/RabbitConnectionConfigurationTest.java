@@ -13,12 +13,11 @@ import org.springframework.core.env.SystemEnvironmentPropertySource;
 import org.springframework.mock.env.MockEnvironment;
 
 class RabbitConnectionConfigurationTest {
-    private final RabbitConnectionConfiguration configuration = new RabbitConnectionConfiguration();
 
     @Test
     void environmentExportRoundTripsThroughBootstrapDecoding() {
         var input = connectionEnvironment();
-        var settings = configuration.rabbitConnections(environment(input));
+        var settings = RabbitConnectionEnvironment.decodeConnections(environment(input)::getProperty);
 
         assertThat(RabbitConnectionEnvironment.encode(settings)).containsExactlyInAnyOrderEntriesOf(input);
     }
@@ -29,13 +28,13 @@ class RabbitConnectionConfigurationTest {
         var input = connectionEnvironment();
         input.remove("SPRING_RABBITMQ_" + suffix);
 
-        assertThatThrownBy(() -> configuration.rabbitConnections(environment(input)))
+        assertThatThrownBy(() -> RabbitConnectionEnvironment.decodeConnections(environment(input)::getProperty))
             .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void rejectsAbsentConnectionBlock() {
-        assertThatThrownBy(() -> configuration.rabbitConnections(new MockEnvironment()))
+        assertThatThrownBy(() -> RabbitConnectionEnvironment.decodeConnections(new MockEnvironment()::getProperty))
             .isInstanceOf(IllegalStateException.class).hasMessageContaining("spring.rabbitmq");
     }
 
@@ -43,13 +42,14 @@ class RabbitConnectionConfigurationTest {
     void refusesToInheritMissingWorkSettingsFromControl() {
         var input = connectionEnvironment();
         input.remove("POCKETHIVE_RABBIT_WORK_HOST");
-        assertThatThrownBy(() -> configuration.rabbitConnections(environment(input)))
+        assertThatThrownBy(() -> RabbitConnectionEnvironment.decodeConnections(environment(input)::getProperty))
             .isInstanceOf(IllegalStateException.class);
     }
 
     @Test
     void bootControlClientUsesTheSameValuesThatAreExported() {
         new org.springframework.boot.test.context.runner.ApplicationContextRunner()
+            .withUserConfiguration(io.pockethive.rabbit.config.RabbitWorkConnectionConfiguration.class)
             .withConfiguration(org.springframework.boot.autoconfigure.AutoConfigurations.of(
                 org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration.class,
                 RabbitConnectionConfiguration.class))

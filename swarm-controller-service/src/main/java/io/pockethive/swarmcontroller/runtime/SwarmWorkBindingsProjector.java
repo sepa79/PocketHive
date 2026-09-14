@@ -7,25 +7,21 @@ import io.pockethive.swarm.model.TopologyEdge;
 import io.pockethive.swarm.model.TopologyEndpoint;
 import io.pockethive.swarm.model.TopologySelector;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.topology.work.ResolvedWorkTopology;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
-import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Set;
-
 /**
  * Responsibility: Project the scenario topology and materialized worker identities into status work bindings.
  * Must not: Mutate runtime state, declare topology, publish status, or infer missing worker identities.
- * Resource addresses come only from WorkResourceNamesPort; routing keys must not be inferred from queues.
+ * Resource addresses are read-only projections of the supplied resolved topology.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
- * Behavior: Preserve scenario edge order and map each valid endpoint through the canonical traffic queue settings.
+ * Behavior: Preserve scenario edge order and map each valid endpoint through the supplied adapter projection.
  */
 final class SwarmWorkBindingsProjector {
 
-  private static final String EXCHANGE = "exchange";
   private static final String EDGES = "edges";
   private static final String EDGE_ID = "edgeId";
   private static final String FROM = "from";
@@ -34,22 +30,11 @@ final class SwarmWorkBindingsProjector {
   private static final String ROLE = "role";
   private static final String INSTANCE = "instance";
   private static final String PORT = "port";
-  private static final String ROUTING_KEY = "routingKey";
-  private static final String QUEUE = "queue";
   private static final String POLICY = "policy";
   private static final String EXPRESSION = "expr";
 
-  private final SwarmControllerProperties.Traffic traffic;
-  private final WorkResourceNamesPort workNames;
-
-  SwarmWorkBindingsProjector(SwarmControllerProperties.Traffic traffic, WorkResourceNamesPort workNames) {
-    this.workNames = Objects.requireNonNull(workNames, "workNames");
-    this.traffic = Objects.requireNonNull(traffic, "traffic");
-  }
-
-  Map<String, Object> project(SwarmPlan plan, Map<String, List<String>> instancesByRole) {
-    Map<String, Object> work = new LinkedHashMap<>();
-    work.put(EXCHANGE, workNames.exchangeName(traffic.hiveExchange()));
+  Map<String, Object> project(SwarmPlan plan, Map<String, List<String>> instancesByRole, ResolvedWorkTopology resolvedTopology) {
+    Map<String, Object> work = new LinkedHashMap<>(resolvedTopology.status());
     List<Map<String, Object>> edgesPayload = new java.util.ArrayList<>();
     work.put(EDGES, edgesPayload);
 
@@ -74,8 +59,8 @@ final class SwarmWorkBindingsProjector {
       }
       Map<String, Object> edgePayload = new LinkedHashMap<>();
       edgePayload.put(EDGE_ID, edge.id());
-      edgePayload.put(FROM, endpointPayload(edge.from(), fromBee, instanceByRole, true));
-      edgePayload.put(TO, endpointPayload(edge.to(), toBee, instanceByRole, false));
+      edgePayload.put(FROM, endpointPayload(edge.from(), fromBee, instanceByRole, true, resolvedTopology));
+      edgePayload.put(TO, endpointPayload(edge.to(), toBee, instanceByRole, false, resolvedTopology));
       TopologySelector selector = edge.selector();
       if (selector != null) {
         Map<String, Object> selectorPayload = new LinkedHashMap<>();
@@ -134,7 +119,7 @@ final class SwarmWorkBindingsProjector {
       TopologyEndpoint endpoint,
       Bee bee,
       Map<String, String> instanceByRole,
-      boolean source) {
+      boolean source, ResolvedWorkTopology resolvedTopology) {
     Map<String, Object> payload = new LinkedHashMap<>();
     if (endpoint == null || bee == null) {
       return payload;
@@ -150,8 +135,8 @@ final class SwarmWorkBindingsProjector {
       if (ports != null && !ports.isEmpty()) {
         String suffix = ports.get(endpoint.port());
         if (hasText(suffix)) {
-          var address = workNames.address(traffic.hiveExchange(), traffic.queuePrefix(), suffix);
-          payload.put(source ? ROUTING_KEY : QUEUE, source ? address.routingKey() : address.queue());
+          var address = resolvedTopology.channel(suffix);
+          payload.putAll(source ? address.outputStatus() : address.inputStatus());
         }
       }
     }

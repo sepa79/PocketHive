@@ -10,7 +10,7 @@ import java.util.Objects;
 /**
  * Responsibility: carry message bytes and transport metadata without Rabbit client types.
  * Must not: decode domain envelopes, select destinations or publish messages.
- * Contract: docs/architecture/work-plane-boundaries.md#5-delivery-and-failure-decisions.
+ * Contract: RESP-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-rabbit-transport.
  */
 public record RabbitMessage(byte[] body, Map<String, Object> headers, String contentType,
                             String contentEncoding, boolean persistent, String receivedRoutingKey) {

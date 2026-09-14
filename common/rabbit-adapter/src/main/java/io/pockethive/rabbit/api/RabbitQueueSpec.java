@@ -7,7 +7,7 @@ import java.util.Objects;
 /**
  * Responsibility: retain explicit Rabbit queue declaration parameters.
  * Must not: invent names, defaults or create broker resources.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-RABBIT-RESOURCES — docs/architecture/runtime-responsibilities.md#resp-rabbit-resources.
  */
 public record RabbitQueueSpec(String name, boolean durable, boolean exclusive, boolean autoDelete,
                               Map<String, Object> arguments) {

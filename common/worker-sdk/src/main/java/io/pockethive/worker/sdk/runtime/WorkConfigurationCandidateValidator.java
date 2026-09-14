@@ -38,8 +38,8 @@ public final class WorkConfigurationCandidateValidator {
                 "Resolved Work configuration must not contain deferred paths: " + validation.deferredPaths())));
         }
         var configuration = validation.configuration();
-        if (configuration.inputType() != state.definition().input()
-            || configuration.outputType() != state.definition().outputType()) {
+        if (!configuration.inputType().equals(state.definition().input())
+            || !configuration.outputType().equals(state.definition().outputType())) {
             throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(WorkConfigurationFields.path(
                 WorkConfigurationFields.INPUTS, WorkConfigurationFields.TYPE),
                 "Validated Work IO types must match the worker definition.")));

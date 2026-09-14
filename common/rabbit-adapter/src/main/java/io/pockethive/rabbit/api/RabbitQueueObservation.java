@@ -6,7 +6,7 @@ import java.util.OptionalLong;
 /**
  * Responsibility: project broker-reported queue counts and optional oldest-message age.
  * Must not: infer readiness, desired state or operation completion.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-RABBIT-RESOURCES — docs/architecture/runtime-responsibilities.md#resp-rabbit-resources.
  */
 public record RabbitQueueObservation(long messages, int consumers, OptionalLong oldestAgeSeconds) {
     public RabbitQueueObservation {

@@ -1,11 +1,15 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.rabbit.work.RabbitWorkOutputFactory;
+
+import io.pockethive.work.api.transport.WorkOutput;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.worker.sdk.config.RabbitOutputProperties;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.rabbit.work.RabbitOutputProperties;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
 import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.config.WorkerInputType;
@@ -62,7 +66,7 @@ class WorkOutputRegistryInitializerTest {
         RabbitPublisher rabbitTemplate = org.mockito.Mockito.mock(RabbitPublisher.class);
         List<WorkOutputFactory> factories = List.of(
             new NoopWorkOutputFactory(),
-            new RabbitWorkOutputFactory(rabbitTemplate)
+            new TransportWorkOutputFactory(new RabbitWorkOutputFactory(rabbitTemplate))
         );
 
         WorkOutputRegistryInitializer initializer = new WorkOutputRegistryInitializer(
@@ -73,8 +77,16 @@ class WorkOutputRegistryInitializerTest {
         );
         initializer.afterSingletonsInstantiated();
 
-        assertThat(outputRegistry.get("noopWorker")).isInstanceOf(NoopWorkOutput.class);
-        assertThat(outputRegistry.get("rabbitWorker")).isInstanceOf(RabbitWorkOutput.class);
+        var info = new io.pockethive.work.api.WorkerInfo("processor", "swarm", "instance", null, null);
+        var item = io.pockethive.work.api.WorkItem.text(info, "result")
+            .observabilityContext(io.pockethive.observability.ObservabilityContextUtil.init("processor", "instance", "swarm")).build();
+        outputRegistry.publish(item, noopDefinition);
+        org.mockito.Mockito.verifyNoInteractions(rabbitTemplate);
+        outputRegistry.publish(item, rabbitDefinition);
+        var sent = org.mockito.ArgumentCaptor.forClass(io.pockethive.rabbit.api.RabbitMessage.class);
+        org.mockito.Mockito.verify(rabbitTemplate).send(org.mockito.ArgumentMatchers.eq("exchange"),
+            org.mockito.ArgumentMatchers.eq("custom.out"), sent.capture());
+        assertThat(new io.pockethive.work.api.WorkItemJsonCodec().fromJson(sent.getValue().body()).asString()).isEqualTo("result");
     }
 
     @Test
@@ -95,7 +107,7 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(definition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource(Map.of())));
-        WorkOutput preferredOutput = (result, def) -> { };
+        WorkOutput preferredOutput = result -> { };
         WorkOutputFactory preferred = new OrderedOutputFactory(Ordered.HIGHEST_PRECEDENCE) {
             @Override
             public WorkOutput create(WorkerDefinition def, WorkOutputConfig config) {
@@ -162,7 +174,7 @@ class WorkOutputRegistryInitializerTest {
 
         @Override
         public WorkOutput create(WorkerDefinition definition, WorkOutputConfig config) {
-            return new NoopWorkOutput();
+            return new NoopWorkOutput(definition.beanName());
         }
 
         @Override

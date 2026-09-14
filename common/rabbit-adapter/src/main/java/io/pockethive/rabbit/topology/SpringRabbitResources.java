@@ -16,7 +16,7 @@ import org.springframework.amqp.rabbit.core.RabbitAdmin;
 /**
  * Responsibility: implement broker resource operations and decode observations for both planes.
  * Must not: decide domain names, authorize removal or suppress broker failures.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-RABBIT-RESOURCES — docs/architecture/runtime-responsibilities.md#resp-rabbit-resources.
  */
 public final class SpringRabbitResources implements RabbitResources {
     private final RabbitAdmin admin;

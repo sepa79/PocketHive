@@ -6,7 +6,7 @@ import java.util.Optional;
 /**
  * Responsibility: expose Rabbit resource operations with explicit outcomes and no client access.
  * Must not: decide domain topology, authorize cleanup or infer operation success for a caller.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-RABBIT-RESOURCES — docs/architecture/runtime-responsibilities.md#resp-rabbit-resources.
  */
 public interface RabbitResources {
     void declareExchange(RabbitExchangeSpec exchange);

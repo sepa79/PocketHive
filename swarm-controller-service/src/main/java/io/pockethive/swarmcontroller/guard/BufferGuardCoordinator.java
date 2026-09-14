@@ -7,6 +7,7 @@ import io.micrometer.core.instrument.Tags;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.guard.BufferGuardMetrics;
@@ -17,6 +18,8 @@ import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.topology.work.ResolvedWorkTopology;
+import io.pockethive.topology.work.WorkTopologyResolver;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.input.InputRateParser;
 import java.time.Duration;
@@ -26,7 +29,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import io.pockethive.topology.work.WorkResourceNamesPort;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,11 +45,12 @@ public final class BufferGuardCoordinator {
   private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
 
   private final SwarmControllerProperties properties;
-  private final WorkResourceNamesPort workNames;
+  private final WorkTopologyResolver workTopologyResolver;
   private final String swarmId;
   private final String instanceId;
   private final ControlPlanePublisher controlPublisher;
   private final ObjectMapper mapper;
+  private final java.util.function.Supplier<ResolvedWorkTopology> acceptedTopology;
 
   private final io.pockethive.manager.guard.BufferGuardCoordinator coordinator;
   private final Map<String, WorkerInputType> inputKindByRole = new HashMap<>();
@@ -59,8 +62,10 @@ public final class BufferGuardCoordinator {
                                 MeterRegistry meterRegistry,
                                 ControlPlanePublisher controlPublisher,
                                 ObjectMapper mapper,
-                                String instanceId, WorkResourceNamesPort workNames) {
-    this.workNames = Objects.requireNonNull(workNames, "workNames");
+                                String instanceId, WorkTopologyResolver workTopologyResolver,
+                                java.util.function.Supplier<ResolvedWorkTopology> acceptedTopology) {
+    this.workTopologyResolver = Objects.requireNonNull(workTopologyResolver, "workTopologyResolver");
+    this.acceptedTopology = Objects.requireNonNull(acceptedTopology, "acceptedTopology");
     this.properties = Objects.requireNonNull(properties, "properties");
     this.swarmId = properties.getSwarmId();
     this.controlPublisher = Objects.requireNonNull(controlPublisher, "controlPublisher");
@@ -137,9 +142,9 @@ public final class BufferGuardCoordinator {
     var inputs = patch.putObject("inputs");
     inputs.putObject(kind.settingsKey()).put(InputRateParser.FIELD, rate);
     try {
-      var targetScope = io.pockethive.control.ControlScope.forRole(swarmId, targetRole);
+      var targetScope = ControlScope.forRole(swarmId, targetRole);
       Map<String, Object> patchData = mapper.convertValue(patch, MAP_TYPE);
-      var signal = io.pockethive.controlplane.messaging.ControlSignals.configUpdate(
+      var signal = ControlSignals.configUpdate(
           instanceId,
           targetScope,
           java.util.UUID.randomUUID().toString(),
@@ -152,6 +157,13 @@ public final class BufferGuardCoordinator {
     } catch (Exception ex) {
       log.warn("Failed to publish buffer-guard rate update for role {}", targetRole, ex);
     }
+  }
+
+  private String inputAddress(String alias) {
+    var topology = acceptedTopology.get();
+    if (topology.channels().containsKey(alias)) return topology.channel(alias).inputAddress();
+    // A configured downstream watch may observe a channel outside this swarm's declared resources.
+    return workTopologyResolver.resolve(swarmId, java.util.Set.of(alias)).channel(alias).inputAddress();
   }
 
   private List<BufferGuardSettings> resolveSettings(SwarmPlan plan) {
@@ -193,7 +205,7 @@ public final class BufferGuardCoordinator {
     }
     String queueName;
     try {
-      queueName = workNames.queueName(properties.getTraffic().queuePrefix(), queueAlias);
+      queueName = inputAddress(queueAlias);
     } catch (IllegalArgumentException ex) {
       log.warn("Buffer guard queue alias '{}' invalid: {}", queueAlias, ex.getMessage());
       lastProblem = "invalid-queue-alias";
@@ -248,7 +260,7 @@ public final class BufferGuardCoordinator {
     String downstreamQueue = null;
     if (hasText(downstreamAlias)) {
       try {
-        downstreamQueue = workNames.queueName(properties.getTraffic().queuePrefix(), downstreamAlias);
+        downstreamQueue = inputAddress(downstreamAlias);
       } catch (IllegalArgumentException ex) {
         log.warn("Backpressure queue alias '{}' invalid: {}", downstreamAlias, ex.getMessage());
         downstreamQueue = null;

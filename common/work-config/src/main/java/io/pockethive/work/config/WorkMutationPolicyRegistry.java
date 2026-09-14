@@ -24,14 +24,14 @@ public final class WorkMutationPolicyRegistry {
         this.outputPolicies = List.copyOf(suppliedOutputs);
     }
 
-    public WorkInputMutationPolicy inputPolicy(WorkerInputType type) {
+    public WorkInputMutationPolicy inputPolicy(WorkIoType type) {
         Objects.requireNonNull(type, "type");
-        return exactlyOne(inputPolicies.stream().filter(policy -> policy.type() == type).toList(), "input", type);
+        return exactlyOne(inputPolicies.stream().filter(policy -> policy.type().equals(type)).toList(), "input", type);
     }
 
-    public WorkOutputMutationPolicy outputPolicy(WorkerOutputType type) {
+    public WorkOutputMutationPolicy outputPolicy(WorkIoType type) {
         Objects.requireNonNull(type, "type");
-        return exactlyOne(outputPolicies.stream().filter(policy -> policy.type() == type).toList(), "output", type);
+        return exactlyOne(outputPolicies.stream().filter(policy -> policy.type().equals(type)).toList(), "output", type);
     }
 
     public boolean isLiveMutableIoPath(String path) {

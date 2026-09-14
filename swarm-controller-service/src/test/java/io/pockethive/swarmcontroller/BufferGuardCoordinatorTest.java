@@ -27,13 +27,11 @@ class BufferGuardCoordinatorTest {
   private final QueueStatsPort queueStats = mock(QueueStatsPort.class);
   private final ControlPlanePublisher publisher = mock(ControlPlanePublisher.class);
   private final BufferGuardCoordinator coordinator = new BufferGuardCoordinator(
-      SwarmControllerTestProperties.defaults(true), queueStats, new SimpleMeterRegistry(), publisher, mapper, "test", selectedNames());
+      SwarmControllerTestProperties.defaults(true), queueStats, new SimpleMeterRegistry(), publisher, mapper, "test", selectedNames(), () -> selectedNames().resolve("test", java.util.Set.of("gen-out")));
 
-  private static io.pockethive.topology.work.WorkResourceNamesPort selectedNames() {
-    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
-    org.mockito.Mockito.when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(call -> "selected." + call.getArgument(1));
-    return names;
+  private static io.pockethive.topology.work.WorkTopologyResolver selectedNames() {
+    return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("selected", "selected.hive"));
   }
 
   @ParameterizedTest

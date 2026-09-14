@@ -1,11 +1,10 @@
 package io.pockethive.rabbit.api;
-import io.pockethive.topology.work.WorkResourceNamesPort;
 
 import static org.junit.jupiter.api.Assertions.*;
 import org.junit.jupiter.api.Test;
 
 class RabbitResourceNamesTest {
-    private final WorkResourceNamesPort names = new RabbitResourceNames();
+    private final RabbitResourceNames names = new RabbitResourceNames();
 
     @Test
     void resolvesExplicitNamesWithoutInferringAlreadyPrefixedAliases() {

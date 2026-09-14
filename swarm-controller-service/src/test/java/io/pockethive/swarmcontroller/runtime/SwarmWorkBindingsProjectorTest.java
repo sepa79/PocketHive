@@ -17,15 +17,17 @@ import org.junit.jupiter.api.Test;
 
 class SwarmWorkBindingsProjectorTest {
 
-  private final SwarmWorkBindingsProjector projector = new SwarmWorkBindingsProjector(
-      new SwarmControllerProperties.Traffic("ph.test.hive", "ph.test"), selectedNames());
+  private final SwarmWorkBindingsProjector projector = new SwarmWorkBindingsProjector();
+  private final io.pockethive.topology.work.ResolvedWorkTopology topology = topology();
 
-  private static io.pockethive.topology.work.WorkResourceNamesPort selectedNames() {
-    var names = org.mockito.Mockito.mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
-    org.mockito.Mockito.when(names.address(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(call -> new io.pockethive.topology.work.WorkAddress("selected.hive", "selected." + call.getArgument(2), "route." + call.getArgument(2)));
-    org.mockito.Mockito.when(names.exchangeName(org.mockito.ArgumentMatchers.anyString())).thenReturn("selected.hive");
-    return names;
+  private static io.pockethive.topology.work.ResolvedWorkTopology topology() {
+    var names = org.mockito.Mockito.spy(new io.pockethive.rabbit.api.RabbitResourceNames());
+    org.mockito.Mockito.doAnswer(call -> new io.pockethive.rabbit.api.RabbitWorkAddress("selected.hive",
+        "selected." + call.getArgument(2), "route." + call.getArgument(2)))
+        .when(names).address(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString());
+    return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(names,
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("selected", "selected.hive"))
+        .resolve("test", java.util.Set.of("generator.fast", "processor.fast", "generator"));
   }
 
   @Test
@@ -47,7 +49,7 @@ class SwarmWorkBindingsProjectorTest {
 
     Map<String, Object> projection = projector.project(
         plan,
-        Map.of("generator", List.of("generator-1"), "processor", List.of("processor-1")));
+        Map.of("generator", List.of("generator-1"), "processor", List.of("processor-1")), topology);
 
     assertThat(projection).isEqualTo(Map.of(
         "exchange", "selected.hive",
@@ -70,7 +72,7 @@ class SwarmWorkBindingsProjectorTest {
 
   @Test
   void projectsEmptyBindingsBeforeAPlanIsPrepared() {
-    assertThat(projector.project(null, Map.of())).isEqualTo(Map.of(
+    assertThat(projector.project(null, Map.of(), topology)).isEqualTo(Map.of(
         "exchange", "selected.hive",
         "edges", List.of()));
   }
@@ -88,7 +90,7 @@ class SwarmWorkBindingsProjectorTest {
 
     assertThatThrownBy(() -> projector.project(
         plan,
-        Map.of("generator", List.of("generator-1", "generator-2"))))
+        Map.of("generator", List.of("generator-1", "generator-2")), topology))
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("duplicate runtime worker role");
   }

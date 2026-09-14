@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.input.csv;
 
 import io.pockethive.work.local.csv.CsvDatasetParser;
 import io.pockethive.work.local.csv.CsvDatasetSettings;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import java.util.LinkedHashMap;
 import java.util.Map;
 

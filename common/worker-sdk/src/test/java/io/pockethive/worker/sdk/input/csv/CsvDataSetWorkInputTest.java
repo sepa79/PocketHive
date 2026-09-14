@@ -9,8 +9,8 @@ import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;

@@ -8,7 +8,7 @@ import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition;
-import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
+
 import io.pockethive.rabbit.api.RabbitResourceNames;
 import java.util.LinkedHashSet;
 import java.util.Map;
@@ -29,22 +29,25 @@ class WorkTopologyConfigurationTest {
         var names = spy(new RabbitResourceNames());
         String outputRoute = distinctRoutingKey ? "separate.route" : "prefix.out";
         if (distinctRoutingKey) {
-            doReturn(new io.pockethive.topology.work.WorkAddress("hive", "prefix.out", outputRoute))
+            doReturn(new io.pockethive.rabbit.api.RabbitWorkAddress("hive", "prefix.out", outputRoute))
                 .when(names).address(anyString(), anyString(), eq("out"));
         }
-        var adapter = new WorkerWorkConfigurationComposition().workerWorkConfiguration(properties, names);
+        var adapter = new WorkerWorkConfigurationComposition().workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work", 5673, "worker", "worksecret", "/work")));
         var bee = new Bee("processor", "image", Work.ofDefaults("in", "out"), Map.of(),
             Map.of("inputs", Map.of("type", "RABBITMQ"), "outputs", Map.of("type", "RABBITMQ")));
+        var topology = new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(names,
+            swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings(" prefix ", " hive ")).resolve("swarm", Set.of("in", "out"));
         var result = adapter.compose(bee, bee.config(), Map.of(
             "POCKETHIVE_RABBIT_WORK_HOST", "work", "POCKETHIVE_RABBIT_WORK_PORT", "5673",
         "POCKETHIVE_RABBIT_WORK_USERNAME", "worker", "POCKETHIVE_RABBIT_WORK_PASSWORD", "worksecret",
         "POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST", "/work", "SPRING_RABBITMQ_HOST", "broker", "SPRING_RABBITMQ_PORT", "5672",
             "SPRING_RABBITMQ_USERNAME", "user", "SPRING_RABBITMQ_PASSWORD", "secret",
-            "SPRING_RABBITMQ_VIRTUAL_HOST", "/"));
+            "SPRING_RABBITMQ_VIRTUAL_HOST", "/"), topology);
         var amqp = mock(RabbitResources.class);
-        var topology = new SwarmWorkTopologyManager(amqp, properties, names);
-        var exchange = topology.declareWorkExchange();
-        topology.declareWorkQueues(exchange, Set.of("in", "out"), new LinkedHashSet<>());
+        new io.pockethive.rabbit.work.RabbitWorkResources(amqp,
+            new io.pockethive.rabbit.api.RabbitConnectionSettings("work", 5673, "worker", "worksecret", "/work"))
+            .ensure(topology);
+        String exchange = "hive";
         var queues = ArgumentCaptor.forClass(RabbitQueueSpec.class);
         verify(amqp, times(2)).declareQueue(queues.capture());
         assertThat(queues.getAllValues()).extracting(RabbitQueueSpec::name)

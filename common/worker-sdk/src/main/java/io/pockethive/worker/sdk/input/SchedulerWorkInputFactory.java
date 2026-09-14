@@ -3,7 +3,7 @@ package io.pockethive.worker.sdk.input;
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.worker.sdk.config.SchedulerInputProperties;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;

@@ -56,7 +56,7 @@ class SpringRabbitListenersTest {
         }).when(configurer).configure(any(), eq(connections));
         var registry = new RabbitListenerEndpointRegistry();
         var control = mock(ConnectionFactory.class);
-        var listeners = new SpringRabbitListeners(registry, control, connections, configurer);
+        var listeners = new SpringRabbitListeners(registry, control, () -> connections, configurer);
         var pending = new java.util.concurrent.LinkedBlockingQueue<java.util.concurrent.CompletableFuture<Void>>();
         try {
             listeners.register(new RabbitSubscription("worker", "jobs", prefetch, consumers, exclusive, false), message -> {

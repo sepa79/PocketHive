@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.binding.WorkInputConfig;
+
 import io.pockethive.work.config.input.InputScheduleField;
 import io.pockethive.work.config.input.InputScheduleParser;
 import io.pockethive.redis.config.RedisDatasetSettings;

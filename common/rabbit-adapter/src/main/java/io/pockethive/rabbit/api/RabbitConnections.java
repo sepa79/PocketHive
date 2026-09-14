@@ -5,7 +5,7 @@ import java.util.Objects;
 /**
  * Responsibility: retain the explicitly configured Control and Work connections.
  * Must not: inherit settings between planes or create clients.
- * Contract: docs/architecture/work-plane-boundaries.md#connection-split-prerequisite-resource-identity.
+ * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
  */
 public record RabbitConnections(RabbitConnectionSettings control, RabbitConnectionSettings work) {
     public RabbitConnections {

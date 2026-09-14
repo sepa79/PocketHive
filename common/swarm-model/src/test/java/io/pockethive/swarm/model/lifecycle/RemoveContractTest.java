@@ -80,6 +80,12 @@ class RemoveContractTest {
         () -> new RemoveResource(RemoveResourceType.WORKER_RUNTIME, "worker", ResourcePlane.CONTROL));
     var expected = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", ResourcePlane.CONTROL);
     assertEquals(expected, mapper.readValue(mapper.writeValueAsString(expected), RemoveResource.class));
+    var nativeWork = new RemoveResource(RemoveResourceType.WORK_RESOURCE, "memory://swarm/jobs", ResourcePlane.WORK);
+    assertEquals(nativeWork, mapper.readValue(mapper.writeValueAsString(nativeWork), RemoveResource.class));
+    assertThrows(IllegalArgumentException.class,
+        () -> new RemoveResource(RemoveResourceType.WORK_RESOURCE, "memory://swarm/jobs", ResourcePlane.CONTROL));
+    assertThrows(IllegalArgumentException.class,
+        () -> new RemoveResource(RemoveResourceType.WORK_RESOURCE, "memory://swarm/jobs", ResourcePlane.NONE));
   }
 
 }

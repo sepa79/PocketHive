@@ -7,20 +7,15 @@
 > Update affected records with each migration. Other domain responsibilities remain effective.
 
 
-Status: B01 adoption accepted in separate review, 2026-09-08.
-RV2 descriptions/headers agree with the inspected source. Current review evidence:
-`docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b01/rv2-correction-review.md`.
-RV1's wiring-test requirement remains superseded by the human boundary-verification
-policy in `docs/REVIEW_RULES.md`. Implemented B02 transfers, including the provider
-catalogue and runtime RESOLVED candidate gate, and their individual review status are
-tracked in `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b02/README.md`. Scenario AUTHORING and
-Controller early RESOLVED parser integration remain before the single consolidated B02
-review; full B03 and B04–B07 remain open.
-This is the canonical current-owner record for the 157 production files in the B01
-adoption scope and the B02 transfers recorded below. The [boundary design](work-plane-boundaries.md) owns target module
-placement and migration gates; it is not evidence that later slices are implemented.
-Other services/responsibilities are outside this adoption and retain their existing
-architecture sections. This is not a complete repository SSOT certification.
+Status: current ownership records, aligned with the Rabbit aggregate review corrections on
+2026-09-14. B01/B02 review reports remain historical evidence in
+`docs/archive/module-boundaries-before-rabbit-2026-09-11/`; they do not define current execution order.
+`docs/inProgress/work-plane-module-boundaries.md` records Rabbit implementation, verification
+and explicit exclusions. `docs/inProgress/functional-module-boundaries.md` owns the proposed
+repair order for the remaining functionalities. The [boundary design](work-plane-boundaries.md)
+owns the Rabbit boundary contract. Unrelated records below may retain historical slice labels;
+those labels do not reopen completed Rabbit transfers or authorize deferred behavior changes.
+This is not a complete repository SSOT certification.
 
 Each ID names a bounded concern. Where several classes appear, the record states
 their distinct roles (value contract, selected implementation, projection or delegate),
@@ -34,7 +29,7 @@ The source import table stays in `RepositoryImportBoundaryTest`; artifact bans s
 in the root POM. Neither proves the action restrictions below. Verification names
 are existing test entrypoints, not a claim that every postcondition is covered or
 that every test was rerun. Fresh execution, call-path evidence and gaps are recorded
-in `docs/archive/module-boundaries-before-rabbit-2026-09-11/boundary-design/b01/responsibility-adoption.md`. Acceptance uses
+in the applicable current plan; archived adoption reports describe their original revision. Acceptance uses
 [the separate review workflow](../ai/RESPONSIBILITY_WORKFLOW.md#separate-review-task).
 
 ## RESP-WORK-ITEM
@@ -331,8 +326,8 @@ Existing CP handlers' explicit catch/drop behavior remains their current contrac
 RabbitInboundCompositionTest verify classification, delivery, broker ACK/NACK effects,
 startup registration and independent CP/Work tuning with a mocked connection. No live broker test.
 
-**Migration status:** CP listener mechanics moved. Separate plane connections remain open;
-passing these tests is not a complete Rabbit SSOT or aggregate review verdict.
+**Migration status:** CP listener mechanics and separate Control/Work connections are implemented.
+The Rabbit execution plan records current verification and separately requested review results.
 
 ## RESP-CP-DECLARATIONS
 
@@ -368,11 +363,29 @@ own treatment of absent queues and must not decode raw broker properties.
 
 Controller provisioning/cleanup/statistics/control-queue verification, Orchestrator
 cleanup and DebugTap resource calls now consume this API. Domain lifecycle writers,
-physical naming, transport and connection composition retain their recorded owners
-pending the rest of the Rabbit migration. Non-Java diagnostic clients still need migration.
+physical naming, transport and connection composition retain their distinct recorded owners.
+Legacy Node diagnostic clients and test-fixture naming are explicitly deferred for replacement/removal;
+they are not pending implementation steps in this Java transfer.
 
 **Verification:** SpringRabbitResourcesTest and existing Controller/Orchestrator behavior
 suites. This resource transfer is implementation progress, not complete Rabbit SSOT acceptance.
+
+## RESP-RABBIT-TRANSPORT
+
+**Current module:** `common/rabbit-adapter`. RabbitPublisher/SpringRabbitPublisher and
+RabbitReceiver/SpringRabbitReceiver own send and polling mechanics. RabbitMessage and
+RabbitMessages own the immutable transport value and its mapping to Spring AMQP metadata.
+RabbitTransportAutoConfiguration and RabbitTransportBeans compose explicitly scoped capabilities.
+Listener mechanics delegate to RESP-WORK-RABBIT-POLICY; CP classification stays in
+RESP-CP-LISTENER-POLICY. Connections remain under RESP-RABBIT-CONNECTION.
+
+**Forbidden:** domain envelope encoding, route/name construction, domain outcomes,
+raw client types in the public API or activation of publisher confirms during extraction.
+
+**Required effect:** The selected plane receives unchanged bytes/metadata; publishing
+retains submission-only behavior. Incoming AMQP null header values remain representable.
+
+**Verification:** SpringRabbitTransportTest and RabbitPlaneOperationsTest.
 
 ## RESP-CP-PUBLISH
 
@@ -418,16 +431,29 @@ credentials, are preserved exactly. The settings' text representation hides cred
 `RabbitConnections` retains explicit Control and Work settings. `RabbitConnectionEnvironment`
 is the sole property/environment codec: `spring.rabbitmq` belongs to Control and
 `pockethive.rabbit.work` belongs to Work. Missing Work settings never inherit Control values.
-`RabbitConnectionConfiguration` composes the runtime; `RabbitConnectionClients` applies
+`RabbitConnectionConfiguration` supplies CONTROL alone. Explicitly imported
+`RabbitWorkConnectionConfiguration` supplies WORK; its configuration and the manager WorkPlane
+composition are not component-scan candidates. `RabbitConnectionClients` applies
 canonical fields to either client. Control uses the Boot connection lifecycle with the
 module's canonical field mapper; `WorkRabbitConnection` owns a separate client lifecycle.
 Work does not consume Control listener/template customizers or automatic declarations.
+Worker composition activates WORK through RabbitWorkerIoCondition, which combines the
+same RabbitWorkerInputCondition/RabbitWorkerOutputCondition used by the transport factories.
+Both directions delegate selector comparison to WorkIoTypeParser; they do not own normalization
+or validate the provider catalogue. An absent or non-Rabbit direction never requires WORK settings.
 
-ContainerLifecycleManager and SwarmLifecycleManager/SwarmWorkerSpecFactory receive the
-immutable pair. ControlPlaneContainerEnvironmentFactory composes the shared encoder's
-result with participant settings. Final worker environment validation uses the same decoder;
+ContainerLifecycleManager and SwarmLifecycleManager/SwarmWorkerSpecFactory receive CONTROL
+settings separately from the selected WorkAdapterEnvironment. ControlPlaneContainerEnvironmentFactory
+requires only CONTROL and composes its encoder result with participant settings. The selected Work
+owner supplies WORK connection and topology exports. Final environment validation delegates CONTROL
+to the shared Rabbit decoder and WORK to its selected configuration owner;
 per-worker Work connection overrides are rejected by the Rabbit owner before provisioning.
-Control's existing explicit worker environment override behavior is retained.
+Direct per-worker Control overrides of `spring.rabbitmq`, including Spring environment aliases,
+are rejected by RabbitConnectionEnvironment in Scenario validation and worker planning.
+Ordinary ENV remains supported. Indirect startup overrides through SPRING_APPLICATION_JSON
+or JAVA_TOOL_OPTIONS remain the explicitly accepted limitation described in
+[the boundary design](work-plane-boundaries.md#accepted-cp-override-limitation); no additional
+hardening is part of this transfer.
 
 `RabbitConnectionSettings.identity()` derives an opaque broker/port/vhost/principal identity
 without passwords. The scoped cleanup port exposes it and the planner includes it in the
@@ -442,6 +468,15 @@ only their subscription tuning. Missing settings and stale cleanup connection id
 before the corresponding effects. Tests use mocked broker clients; no deployment acceptance.
 The connection contract covers five fields only, not TLS or address lists. Control address
 lists are rejected because they would override canonical host/port identity.
+
+CONTROL startup now decodes only its own settings. RabbitWorkPlaneConfiguration explicitly
+activates WORK for current manager composition; RabbitWorkerConnectionAutoConfiguration does
+so for declared Rabbit worker IO. RabbitConnectionEnvironment owns both decoders. WORK
+resources/publisher/receiver require that connection; CONTROL listener registration does not.
+The shared listener facade obtains its required WORK connection only for WORK registration.
+No credentials select an adapter and no WORK field inherits from CONTROL. Connection export
+consumers in Controller/Orchestrator still await the neutral selected-owner transfer (R2–R4).
+Verification also includes RabbitConnectionActivationTest.
 
 ## RESP-WORK-REDIS-ROUTES
 
@@ -905,42 +940,54 @@ state snapshots, scenario validation and planner rejection before worker provisi
 
 ## RESP-WORK-IO-CONFIG
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/work-config` for neutral binding contracts/descriptors;
+`common/rabbit-adapter` for Rabbit properties/providers; `common/worker-sdk` for generic
+Spring binding, discovery and existing local IO properties.
 
-B02 input enablement transfer: input properties no longer expose `enabled`, and Rabbit
-input properties no longer expose the unused `autoStartup`. RESP-WORK-INPUT-LIFECYCLE-POLICY
-rejects those declarations at raw update, authoring, worker binding and worker planning
-boundaries. WorkerState supplies initial disabled state and accepted control updates;
-input adapters hold read-only enablement projections from its snapshots. Input-local
-properties must not seed desired state. Other typed settings/candidate work remains B02.
+WorkInputConfig and WorkOutputConfig expose validation and read-only status routes.
+WorkInputConfigProvider/WorkOutputConfigProvider declare the binding type supplied by an
+adapter. WorkIoConfigurationCatalog requires exactly one descriptor per selected direction.
+WorkerDefinitionDiscovery binds that class and consumes its route projection; it no longer
+switches on Rabbit properties. RabbitInputProperties/RabbitOutputProperties retain their typed
+fields, Rabbit-owned defaults and canonical parser delegation in `io.pockethive.rabbit.work`.
+WorkIoBindingConfiguration declares the SDK-owned Scheduler/CSV/Redis/NONE bindings.
+WorkIoType carries the declared IO name/settings key. Existing enums implement this contract;
+test composition can explicitly supply its own type. WorkIoTypeParser owns boundary name
+normalization and rejects absent/ambiguous definitions. Startup type properties retain raw
+text for that parser; adapter field binding/defaults remain unchanged.
+Rabbit bootstrap conditions use WorkIoTypeParser.matches for the same normalized identity;
+WorkIoConfigurationCatalog retains complete declared-type validation, including ambiguity rejection.
 
-PocketHiveWorkerProperties holds bound worker settings; WorkOutputConfig is the selected output settings contract. Existing WorkInputConfigBinder/WorkOutputConfigBinder perform startup binding using selection keys from work-config.
+WorkInputConfigBinder/WorkOutputConfigBinder remain the startup Spring boundary, with
+WorkConfigBindHandler rejecting unrepresentable or unknown fields. Rabbit environment values
+are already exported from canonically validated settings; ordinary Spring type restoration
+is not a second parser authority. RESP-WORK-INPUT-LIFECYCLE-POLICY rejects unsupported input
+enablement; input rates, scheduling and CSV settings retain their existing canonical owners.
+WorkerControlPlaneRuntime validates complete candidate settings through WorkConfigurationParser
+before accepting state. No startup conversion/ACK/requeue behavior is changed by this extraction.
 
-WorkConfigBindHandler rejects unknown/unrepresentable fields for both directions;
-type-specific settings validation remains with the owning parser/properties during B02.
-Input rates delegate to RESP-WORK-INPUT-RATE; scheduled input timing/limits delegate to
-RESP-WORK-INPUT-SCHEDULE. Their property holders retain raw bound values so numeric
-coercion cannot bypass the canonical parser; runtime accessors expose validated numbers.
-Complete CSV settings delegate to RESP-WORK-CSV-SETTINGS; its adapter consumes one
-immutable validated snapshot rather than decoding properties during intake.
+**Forbidden:** adapter-class switches in neutral discovery, duplicate settings rules, missing
+or ambiguous binding descriptors, settings objects that open connections.
 
-Discovery and adapter factories consume bound settings. WorkerControlPlaneRuntime delegates IO mutability decisions to WorkPatchPolicy. Complete runtime candidate parsing and IO adapter parsing still have separate paths pending the rest of B02.
+**Required effect:** selected settings and their status projection reach the chosen transport;
+invalid settings or selection fail before input registration/publication. Rejected runtime
+updates retain the last accepted worker state.
 
-**Forbidden:** make settings objects open connections or infer successful publication from configuration.
-
-**Required effect:** Settings reach the selected adapter; consistent startup/patch validation is a B02 requirement still unverified here.
-
-**Verification entrypoints:** `WorkIOConfigBinderTest`, `PocketHiveWorkerIoFromConfigTest`.
-
-**Migration status:** B02 owns consolidation of startup/patch parsing. Current duplicated parsing paths remain debt, not accepted SSOT.
+**Verification:** WorkIOConfigBinderTest, PocketHiveWorkerIoFromConfigTest,
+MessageWorkInputFactoryTest, WorkOutputRegistryInitializerTest.
 
 ## RESP-WORK-ADAPTER-SELECTION
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/worker-sdk`; neutral IO type/parser in `common/work-config`.
 
 WorkInputRegistryInitializer selects one input factory; WorkOutputRegistryInitializer selects one output factory. Each owns its distinct direction; WorkOutputRegistry retains the selected outputs and dispatches publication.
 
-SDK composition supplies available factories and bound definitions. NONE is an explicit output implementation.
+SDK composition supplies available factories and bound definitions. Neutral
+WorkInputTransportFactory/WorkOutputTransportFactory providers in work-api receive adapter
+configuration without WorkerDefinition. MessageWorkInputFactory and TransportWorkOutputFactory
+wrap these providers for the existing registries; Rabbit factory implementations live in
+rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
+NONE is an explicit output implementation.
 
 **Forbidden:** choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
 
@@ -994,7 +1041,7 @@ Input adapters dispatch through WorkerRuntime; invocation context carries values
 
 **Required effect:** A named dispatch invokes the selected function/interceptors and publishes its result through the selected output once on the normal SDK path.
 
-**Verification entrypoints:** `DefaultWorkerRuntimeTest`, `RabbitMessageWorkerAdapterTest`.
+**Verification entrypoints:** `DefaultWorkerRuntimeTest`, `MessageWorkInputTest`.
 
 **Migration status:** Current path. Settlement/dispatch and lifecycle separation remain B03/B05; separate callback output paths need review.
 
@@ -1208,27 +1255,56 @@ environment overrides remain the separate connection contract.
 exposed through RabbitConfiguration. Properties-local normalization/validation removed; scalar
 rules shared by parsers and snapshots. Aggregate review pending.
 
+## RESP-WORK-TRANSPORT
+
+**Current module(s):** `common/work-api` for channel/delivery/output contracts; `common/worker-sdk` for execution and state integration.
+
+WorkInputChannel exposes an already configured subscription without broker types or WorkerDefinition.
+WorkDeliveryHandler separates decoded delivery from decode failure reporting. MessageWorkInput
+applies accepted enabled state and max-in-flight configuration; MessageWorkExecution owns the
+existing synchronous/asynchronous dispatch and error reporting. It uses WorkMessageDispatcher;
+the redundant RabbitWorkDispatcher is removed. WorkOutput accepts only a WorkItem, with the
+selected target already captured by its instance. DefaultWorkerRuntime remains the sole result
+publication path through WorkOutputRegistry. Local scheduled WorkInput lifecycle is unchanged.
+
+**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path, retry,
+requeue, completion-based ACK or an added drain policy.
+
+**Required effect:** the same SDK execution path accepts input from Rabbit or a test-only stateful
+in-memory channel; disabled workers return null, worker/decode failures are reported and swallowed,
+and executor rejection retains synchronous dispatch.
+
+**Verification:** MessageWorkInputTest, MessageWorkExecutionTest, DefaultWorkerRuntimeTest;
+stateful fake consumer-path coverage is added with the extraction.
+
+The test-only InMemoryWorkTransport indexes explicit single-process resources;
+InMemoryWorkChannel owns each resource's pending items, listener state and removal.
+Concurrent publication, intake and lifecycle operations must preserve that state. A handler
+runs outside resource/index locks; taking an item from pending admits it for dispatch, so
+already admitted work may finish after stop/removal. Removing a stopped resource discards
+pending items and invalidates its input/output handles, including after address reuse.
+The fixture does not add retry, requeue, cancellation or a wait for admitted work to finish.
+InMemoryWorkTransportTest verifies these effects through its public API.
+
 ## RESP-WORK-RABBIT-TRANSPORT
 
-**Current module(s):** `common/worker-sdk` for Work semantics; `common/rabbit-adapter` for broker mechanics.
+**Current module(s):** `common/rabbit-adapter`, package `io.pockethive.rabbit.work`.
 
-RabbitMessageWorkerAdapter applies desired listener state through RabbitListeners and delegates
-to RabbitWorkExecution. RabbitWorkExecution decodes through the canonical converter, invokes
-the runtime once and preserves the previous async dispatch and error-reporting behavior. It has no output publisher; the runtime's
-selected WorkOutput owns results. RabbitWorkOutput passes an immutable destination/persistence
-snapshot and encoded envelope to RabbitPublisher. RabbitWorkInputFactory validates settings
-before creating the subscription. RabbitMessage carries bytes/metadata across the boundary.
+RabbitWorkInputChannel registers resolved RabbitInputSettings via RabbitListeners, unwraps the
+message body and calls RabbitWorkItemConverter/WorkItemJsonCodec. It reports decode failure to
+the neutral handler with original bytes; AMQP headers remain ignored. RabbitWorkOutput alone
+assembles outgoing Work Rabbit messages using the canonical codec and immutable
+RabbitOutputSettings, then calls RabbitPublisher.send. Neither implementation depends on SDK
+worker definitions or control snapshots. RabbitWorkInputFactory/RabbitWorkOutputFactory consume the neutral binding contracts; SDK wraps them through transport factory ports.
 
-**Forbidden:** second result publisher, alternative envelope codec, raw client access or mutable output destination.
+**Forbidden:** second result publisher, alternative envelope codec, raw client access outside
+rabbit-adapter, mutable output destination or an SDK dependency from rabbit-adapter.
 
-**Required effect:** Work envelopes preserve their canonical format; only the selected output publishes.
-Delivery behavior is preserved: callback-return AUTO ACK, historical error swallowing and
-executor-rejection synchronous dispatch. Disabled invocation returns null. publisherConfirms
-remains a represented but inactive setting; output uses RabbitPublisher.send with no added
-confirmation wait. No new input requeue or shutdown/drain policy is introduced.
+**Required effect:** Work envelopes preserve their canonical format; callback-return AUTO ACK
+is unchanged. publisherConfirms remains represented and inactive. No new input requeue or
+shutdown/drain policy is introduced.
 
-**Verification:** RabbitMessageWorkerAdapterTest, RabbitWorkExecutionTest,
-RabbitWorkInputFactoryTest, RabbitWorkItemConverterTest, RabbitWorkOutputTest,
+**Verification:** MessageWorkInputFactoryTest, RabbitWorkItemConverterTest, RabbitWorkOutputTest,
 SpringRabbitTransportTest and SpringRabbitListenersTest.
 
 ## RESP-WORK-CSV-SETTINGS
@@ -1512,7 +1588,8 @@ Scheduling quota comes from TriggerSchedulePolicy through SchedulerWorkInput; HT
 **Current module(s):** `orchestrator-service`.
 
 ContainerLifecycleManager prepares controller container settings, invokes the configured
-compute adapter, records the resulting Swarm runtime identity and ownership manifest,
+compute adapter, records the resulting Swarm runtime identity and stores the ownership manifest
+constructed by RuntimeOwnershipManifestFactory,
 pre-pulls requested images and removes controller compute/control queues. It consumes
 RESP-RABBIT-CONNECTION through the participant environment factory, plus the existing
 runtime filesystem mount, metrics and compute contracts. Swarm operation handlers invoke
@@ -1579,7 +1656,7 @@ planning concerns remain; full candidate validation now delegates through the co
 WorkerWorkConfigurationPort.validateDeclaration(Bee) preserves early input-control rejection
 before the spec factory resolves external network context. compose repeats that same
 canonical preflight so its standalone callers cannot bypass declaration validation.
-WorkerWorkConfigurationPort.compose(Bee, effectiveConfig, baseEnvironment) returns
+WorkerWorkConfigurationPort.compose(Bee, effectiveConfig, baseEnvironment, resolvedTopology) returns
 WorkerWorkConfigurationResult(environment, bootstrapConfig). Bee supplies logical Work
 bindings and explicit environment overrides; effectiveConfig is the existing SUT-enriched
 configuration; baseEnvironment contains participant/diagnostic/network values. Input maps
@@ -1588,9 +1665,8 @@ unchanged non-Work nested values remain borrowed projections, not a new domain s
 Its string representation redacts both maps.
 
 WorkerWorkConfigurationAdapter is the sole owner of the extracted Work composition flow:
-validate removed controls, competing IO selectors and Rabbit environment settings; resolve logical Work
-bindings through WorkResourceNamesPort; materialize Rabbit settings through
-RabbitWorkSettingsBootstrap; export those settings through RabbitWorkEnvironment; compose
+validate removed controls and competing IO selectors; consume resolved Work channel/environment
+projections and delegate selected adapter bootstrap to WorkAdapterEnvironment; compose
 remaining bee.env/CSV/scheduler/Redis exports through adapter-owned projections; validate environment input controls; delegate
 connection freeze/validation; project final local/dataset/output settings. RedisOutputEnvironment
 owns output write/target overrides and exports; the Controller has no Redis output field mapping. It returns the connection
@@ -1600,10 +1676,9 @@ WorkConfigurationParser in RESOLVED mode on the exact configuration returned to 
 planning. Any problems or deferred paths reject before a plan is returned; no absent IO
 selector is inferred. Provider ports retain all adapter field rules.
 
-WorkResourceNamesPort and RabbitResourceNames own effective Work queue/exchange names
-under RESP-WORK-RESOURCE-NAMES. SwarmControllerProperties supplies explicit traffic settings;
-it performs no resource-name resolution. Provisioning
-consumes the same name-resolution port without owning its formula.
+ResolvedWorkTopology supplies the same addresses used by resource provisioning and status
+under RESP-WORK-RESOURCE-NAMES. The Controller consumes it without resolving or mapping Rabbit
+fields. SwarmControllerProperties supplies explicit traffic settings only at composition.
 WorkerWorkConfigurationComposition explicitly supplies the adapter and its collaborators.
 SwarmLifecycleManager passes the port to the spec factory without choosing its implementation.
 
@@ -1612,10 +1687,17 @@ accepted-state writes, duplicate field rules, or bypassing the selected neutral 
 
 **Verification:** adapter behavior tests, existing worker-plan/lifecycle component tests and
 RepositoryImportBoundaryTest. Rejection must leave source maps/state/effects untouched.
-**Migration status:** bounded B02 extraction and full RESOLVED gate implemented pending review; B04 topology
-ownership remain open. This record is not acceptance of the implementation.
+**Migration status:** the bounded Work configuration adapter, full RESOLVED gate and Rabbit
+name-owner transfer are implemented. The current Rabbit plan records review and correction status.
 
 ## RESP-WORK-CONNECTION-ENVIRONMENT
+
+WorkAdapterEnvironment in work-config is the selected WorkPlane configuration capability.
+It exports its connection, validates the final connection projection and materializes selected
+adapter settings into WorkBootstrapProjection. RabbitWorkBootstrapEnvironment implements it
+inside rabbit-adapter by delegating to RabbitWorkSettingsBootstrap, RabbitWorkEnvironment and
+RabbitConnectionEnvironment. Controller composition consumes this port; adapter parsing and
+mapping remain with those existing owners. CONTROL validation/export remain separate.
 
 **Current module:** `swarm-controller-service`,
 `io.pockethive.swarmcontroller.runtime.environment`, consuming connection contracts/codecs
@@ -1633,8 +1715,9 @@ planning; SpringConnectionEnvironment does not decide which input fields are sup
 Names/precedence and successful expansion follow worker binding. Missing/cyclic references
 fail planning with a property name, without exposing the input or exception cause.
 No process properties are consulted, and no custom placeholder parser or retry loop exists.
-The resolver validates the five Rabbit connection fields through RabbitConnectionEnvironment
-and RabbitConnectionSettings. For each declared Redis IO block, selected Redis IO direction,
+The resolver validates CONTROL fields through RabbitConnectionEnvironment and delegates WORK
+connection validation to WorkAdapterEnvironment. RabbitWorkBootstrapEnvironment uses the same
+canonical Rabbit connection decoder and settings contract. For each declared Redis IO block, selected Redis IO direction,
 or direction with connection overrides, explicit unexpanded environment values replace
 corresponding declared fields before encoding. Final text comes from the complete snapshot;
 non-text declaration types stay intact for RedisConfigurationParser to validate.
@@ -1662,8 +1745,9 @@ choose adapters, mutate accepted runtime state or present this slice as full Wor
 **Verification:** resolver/codec and SpringConnectionEnvironment unit tests, worker
 environment binding and SwarmWorkerSpecFactory/SwarmLifecycleManager behavioral tests.
 
-**Migration status:** B02 connection composition only. Other IO/execution settings,
-additional Rabbit transport options, other Redis scopes and later property sources remain open.
+**Migration status:** explicit Rabbit connection composition is implemented. Additional Rabbit
+transport options are outside the accepted five-field contract, not unfinished migration steps.
+Further Redis/I/O ownership work follows the functional module plan.
 
 ## RESP-WORK-CONFIGURATION-DIAGNOSTICS
 
@@ -1863,26 +1947,44 @@ runtime fields are rejected. ISO8583 schemaRef remains its distinct typed schema
 
 ## RESP-WORK-RESOURCE-NAMES
 
-Contract amendment, 2026-09-10, explicitly authorized with the Scenario neutral-validation
-transfer. `WorkResourceNamesPort` in `topology-core` resolves a logical queue suffix against
-an explicit prefix. `RabbitResourceNames` in `rabbit-adapter` is its sole formula owner. Existing traffic
-settings expose the configured exchange and prefix; they do not own concatenation rules.
-Controller configuration, Rabbit provisioning, guard, statistics, bindings, cleanup and
-Orchestrator ownership manifests and DebugTapService receive this port from startup.
-Debug taps resolve their source exchange/routing key through this owner, then manage
-only their temporary tap queue/binding and samples; they never reconstruct source names. The port also resolves
-swarm prefix/exchange settings through `forSwarm`; Orchestrator no longer builds these
-names locally. Control Plane environment helpers require these explicit resolved values
-and neither select an implementation nor reconstruct missing topology settings.
-No provisioning, observation, cleanup or accepted-state ownership moves in this slice.
+R1–R3 transfer, 2026-09-14: WorkTopologyChannels in topology-core owns extraction of logical
+channel requirements from worker ports. WorkTopologyResolver returns an immutable
+ResolvedWorkTopology with native resource identities and channel ENV/status projections.
+RabbitWorkTopologyResolver is the production implementation in rabbit.work; RabbitResourceNames
+remains the only Rabbit physical-name formula owner. Explicit settings are supplied at composition.
 
-`WorkResourceNamesPort.address` now returns a read-only `WorkAddress` containing exchange,
-queue and routingKey. `RabbitResourceNames` is the sole owner of the existing equality
-between Work queue and routing key. Provisioning, worker environment/bootstrap, status
-bindings and debug taps consume these fields instead of reconstructing that relationship.
-`RabbitDebugTapSpec` owns TTL/capacity-to-Rabbit-argument mapping and existing tap queue flags;
-Orchestrator retains request limits, tap lifetime and samples. Neither transfer changes
-wire addresses, delivery/ACK behavior or the allowed connection override policy.
+Controller worker planning, resource creation, bindings and statistics consume that resolved
+result. WorkPlaneResources exposes native ensure/observe/remove operations; RabbitWorkResources
+owns the existing declaration cache and Rabbit operation mapping. appliedResources is a read-only
+projection of completed channel declarations/bindings, not proof of current broker presence.
+Before the first accepted plan, the Controller retains the existing partial-prepare behavior by
+projecting completed declarations from attempted topology. Once accepted, the runtime plan owns
+the resource intent; this transfer does not repair broader lifecycle/reset behavior.
+A resource-observation exception propagates; existing queue-statistics behavior for an explicitly
+absent queue remains QueueStats.empty(). Removal absence is independently verified in Orchestrator.
+
+Rabbit settings/bootstrap exports remain in the Rabbit module. SwarmWorkTopologyManager and its
+old Controller-side declaration/cache rules are removed. RabbitInput/OutputProperties remain
+canonical startup configuration; the transfer does not introduce another parser/default owner.
+Guard consumes accepted channel addresses; external downstream observation aliases are resolved
+by the same selected owner without being declared as swarm resources. Guard math remains in manager-sdk.
+
+Orchestrator controller bootstrap consumes the selected environment/topology projection.
+RuntimeOwnershipManifestFactory owns projection of that result to the existing public manifest;
+its current Rabbit-only shape is an R4 boundary, not a generic native manifest. Unsupported native
+target kinds must be rejected before compute effects rather than stored as invented Rabbit objects.
+RuntimeRemovalPostconditionVerifier reads WORK absence through WorkPlaneResources and CONTROL
+through the existing scoped Rabbit port; it alone classifies observations into removal evidence.
+AmqpRabbitTopologyAdapter projects the current Rabbit cleanup contract through selected WorkPlaneResources
+for WORK; its fingerprint and delete operations use that same owner. The user deferred native
+manifest fields and orphan-cleanup actions on 2026-09-14. They are not implemented.
+The separately approved WORK_RESOURCE lifecycle type requires WORK and an owner-issued address.
+WorkResourceNamesPort is removed. RabbitWorkAddress and RabbitWorkTopologySettings are Rabbit API
+types; neutral consumers use ResolvedWorkTopology. WorkDebugTaps/WorkDebugTap now carry selected
+capture operations. RabbitWorkDebugTaps delegates TTL/capacity mapping to RabbitDebugTapSpec;
+Orchestrator DebugTapSession owns bounded samples/lifetime, and DebugTapService maps an explicitly
+unsupported selected capture to HTTP 501 without activating Rabbit.
+Neither transfer changes addresses, delivery/ACK, or the accepted environment override policy.
 
 Control names use the neutral ControlResourceNamesPort from topology-core. RabbitResourceNames
 owns worker/controller/orchestrator/status queue names and debug tap names; descriptors retain
@@ -1917,7 +2019,7 @@ Explicit human-authorized correction of the separate transfer review:
 - Work selectors belong to config. Controller declaration preflight rejects environment
   input/output selector overrides using the shared Work selector policy, before external
   context lookup. No second selector is accepted or silently overwritten.
-- Every resource-name consumer receives the configured WorkResourceNamesPort. Traffic
+- Resource-name consumers, including DebugTap, receive owner projections (ResolvedWorkTopology). Traffic
   properties contain only explicit values; no static resolver selection or name methods.
   Guard, statistics, bindings, cleanup projections and Orchestrator ownership manifests
   use their startup-injected port. Control Plane environment/settings helpers no longer
@@ -1942,7 +2044,12 @@ presence before composition. Declared route placeholders resolve through final p
 Controller removes its Redis output field/export mapping and consumes this adapter owner.
 Both projections derive from the same candidate; no field rules move into Controller.
 
-### Scoped Rabbit cleanup identity
+## RESP-RUNTIME-CLEANUP
+
+Canonical `RemoveResource` and `ResourcePlane` in swarm-model own the scoped resource identity
+and valid type/plane combinations. CleanupScope carries request scope; Candidate, Blocked and
+CandidateResult carry the planner/execution projections, never a second outcome calculation.
+ScopedRabbitName and RabbitQueueSnapshot/RabbitExchangeSnapshot preserve that identity.
 
 `RuntimeRabbitResourcePlanner` owns Rabbit cleanup target selection and debug projections
 from the ownership manifest's distinct Control/Work lists. `RuntimeReconciliationService`
@@ -1969,3 +2076,22 @@ hardcoded decoder prefix. Stop/restart discards stale metadata responses and rec
 Verification: ControlPlaneInfoControllerTest (non-default exchange and read denial), UI connectionInfo,
 healthStore and stompGateway tests (verbatim subscription, normalization, failed load and stale work),
 plus swarmLifecycleAction tests. No deployed broker connection is claimed.
+
+## RESP-CONTROL-SCHEMA-BOOTSTRAP — Control Plane schema delivery
+
+**Owner:** Orchestrator `ControlPlaneSchemaBundle` projects the canonical schema resources
+packaged by control-plane-core into one compound JSON Schema and owns its content digest.
+`ControlPlaneSchemaController` authorizes and maps HTTP/cache responses; UI `schemaRegistry`
+owns loading, cached validator state and compilation with Ajv.
+
+**Contract:** `docs/ORCHESTRATOR-REST.md` section 5.3. The projection preserves the root
+and embedded lifecycle schema IDs/references and never edits their validation rules.
+UI disables only Ajv's `strictTypes`/`strictRequired` authoring lint, because these canonical
+schemas compose type/property constraints through refs and conditionals; instance validation
+(including types, required properties, formats and enums) remains enabled.
+
+**Forbidden:** independent schema copies, constraint rewriting, remote schema fallback,
+starting STOMP when schema compilation fails, or treating a root-only digest as bundle identity.
+
+**Required effect:** Canonical lifecycle refs compile in the browser; malformed events remain
+rejected. Conditional requests reuse the validator only for identical complete schema content.

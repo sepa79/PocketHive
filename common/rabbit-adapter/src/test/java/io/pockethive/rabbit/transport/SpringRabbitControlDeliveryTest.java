@@ -56,7 +56,7 @@ class SpringRabbitControlDeliveryTest {
             return null;
         }).when(configurer).configure(any(), eq(connections));
         var registry = new RabbitListenerEndpointRegistry();
-        var listeners = new SpringRabbitListeners(registry, connections, connections, configurer);
+        var listeners = new SpringRabbitListeners(registry, connections, () -> connections, configurer);
         var delivered = new AtomicReference<RabbitMessage>();
         try {
             listeners.register(new RabbitSubscription("work", "jobs", 29, 3, false, false), message -> {});

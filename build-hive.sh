@@ -187,8 +187,8 @@ require_tools() {
     echo "Docker Compose V2 is required (docker compose)." >&2
     exit 1
   fi
-  if ! command -v mvn >/dev/null 2>&1; then
-    echo "Maven is required for local builds." >&2
+  if [[ ! -x ./mvnw ]]; then
+    echo "Maven wrapper ./mvnw is required for local builds." >&2
     exit 1
   fi
 }
@@ -254,7 +254,7 @@ run_maven_package() {
     mvn_goals=(clean package)
     reset_local_build_state
   fi
-  local mvn_cmd=(mvn -B -pl "$csv" -am "${mvn_goals[@]}")
+  local mvn_cmd=(./mvnw -B -pl "$csv" -am "${mvn_goals[@]}")
   if $SKIP_TESTS; then
     mvn_cmd+=("-DskipTests")
   fi

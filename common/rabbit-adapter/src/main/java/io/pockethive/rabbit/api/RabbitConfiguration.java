@@ -12,7 +12,7 @@ import io.pockethive.work.config.WorkOutputMutationPolicy;
 /**
  * Responsibility: expose Rabbit's canonical configuration providers through neutral parser/policy ports.
  * Must not: repeat field rules, select worker adapters or construct transport clients.
- * Contract: docs/architecture/work-plane-boundaries.md#4-configuration-and-topology-ssot.
+ * Contract: RESP-WORK-RABBIT-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-settings.
  */
 public final class RabbitConfiguration {
     private RabbitConfiguration() { }

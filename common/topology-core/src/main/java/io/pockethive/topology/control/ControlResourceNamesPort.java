@@ -3,7 +3,7 @@ package io.pockethive.topology.control;
 /**
  * Responsibility: resolve physical queue names for Control topology consumers.
  * Must not: select recipients, build event routing keys or perform broker operations.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public interface ControlResourceNamesPort {
     String workerControlQueue(String prefix, String swarmId, String role, String instanceId);

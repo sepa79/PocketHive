@@ -14,7 +14,7 @@ import java.util.Set;
 /**
  * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
  * Must not: construct broker names, select a naming implementation or declare resources.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class SwarmControllerControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 

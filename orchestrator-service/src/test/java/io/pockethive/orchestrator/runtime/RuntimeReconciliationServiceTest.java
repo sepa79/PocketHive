@@ -239,7 +239,7 @@ class RuntimeReconciliationServiceTest {
   private static RuntimeOwnershipManifest manifest() {
     return new RuntimeOwnershipManifest(
         "sw1", "run-1", "template-1", "DOCKER_SINGLE", Instant.now(), List.of(),
-        new RuntimeOwnershipManifest.RabbitResources(
+        new io.pockethive.orchestrator.runtime.RuntimeRabbitManifest(
             List.of(), List.of("ph.sw1.work"), List.of()));
   }
 
@@ -254,7 +254,7 @@ class RuntimeReconciliationServiceTest {
   void plansAndDeletesEqualQueueNamesAsSeparatePlaneTargets() {
     var manifest = new RuntimeOwnershipManifest(
         "sw1", "run-1", "template-1", "DOCKER_SINGLE", Instant.now(), List.of(),
-        new RuntimeOwnershipManifest.RabbitResources(List.of("jobs"), List.of("jobs"), List.of()));
+        new io.pockethive.orchestrator.runtime.RuntimeRabbitManifest(List.of("jobs"), List.of("jobs"), List.of()));
     when(manifests.find("sw1", "run-1")).thenReturn(Optional.of(manifest));
     when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL, "jobs"))
         .thenReturn(Optional.of(new RabbitQueueResource("jobs", 0, 0)));

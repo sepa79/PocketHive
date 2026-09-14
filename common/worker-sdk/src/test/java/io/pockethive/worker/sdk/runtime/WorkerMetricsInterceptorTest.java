@@ -16,8 +16,8 @@ import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
 import io.pockethive.work.api.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
@@ -49,6 +49,7 @@ class WorkerMetricsInterceptorTest {
     );
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withConfiguration(org.springframework.boot.autoconfigure.AutoConfigurations.of(io.pockethive.rabbit.work.RabbitWorkAutoConfiguration.class))
         .withPropertyValues(
             "pockethive.control-plane.exchange=metrics-swarm.control",
             "pockethive.control-plane.swarm-id=metrics-swarm",
@@ -162,8 +163,13 @@ class WorkerMetricsInterceptorTest {
             return new SimpleMeterRegistry();
         }
 
-        @Bean
+        @Bean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER)
         RabbitPublisher rabbitTemplate() {
+            return Mockito.mock(RabbitPublisher.class);
+        }
+
+        @Bean(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER)
+        RabbitPublisher workPublisher() {
             return Mockito.mock(RabbitPublisher.class);
         }
 

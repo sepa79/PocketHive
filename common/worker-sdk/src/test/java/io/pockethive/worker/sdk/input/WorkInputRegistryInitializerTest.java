@@ -2,7 +2,7 @@ package io.pockethive.worker.sdk.input;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
 import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.work.config.WorkerInputType;
@@ -122,6 +122,6 @@ class WorkInputRegistryInitializerTest {
         }
     }
 
-    private static class WorkOutputConfigStub implements io.pockethive.worker.sdk.config.WorkOutputConfig {
+    private static class WorkOutputConfigStub implements io.pockethive.work.config.binding.WorkOutputConfig {
     }
 }

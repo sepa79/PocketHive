@@ -61,15 +61,16 @@ the governing domain boundary; module ownership grants no additional permission.
 ### Physical resource naming transfer
 
 `RabbitResourceNames` in rabbit-adapter owns the existing Work prefix/queue/exchange,
-Control queue and debug tap name formulas. WorkResourceNamesPort and ControlResourceNamesPort
-are neutral capabilities in topology-core; Control descriptors consume the latter explicitly.
+Control queue and debug tap name formulas. WorkTopologyResolver exposes an immutable
+ResolvedWorkTopology; Control descriptors consume ControlResourceNamesPort explicitly.
 ControlPlaneRouting remains the canonical domain signal/event grammar. Descriptors retain
 recipient/binding policy, not broker name construction. The transfer preserves names,
 including the Controller's existing swarm-segment handling. No second default constructor
 may reconstruct a name without the owner. Debug tap shortening belongs to the same owner.
 
-WorkResourceNamesPort.address exposes a read-only WorkAddress (exchange, queue, routingKey).
-RabbitResourceNames alone realizes the existing routingKey-equals-queue rule. Provisioning,
+RabbitResourceNames.address exposes RabbitWorkAddress (exchange, queue, routingKey) inside
+the Rabbit API. The replaced WorkResourceNamesPort is removed; RabbitWorkTopologySettings
+also belongs to rabbit-adapter. RabbitResourceNames alone realizes routingKey-equals-queue. Provisioning,
 worker configuration, status and debug taps consume that projection; they must not infer
 routing keys from queue names. This adds no topology registry or mutable state.
 
@@ -258,6 +259,57 @@ inside rabbit-adapter, using that module's existing configuration/naming/resourc
 implementations. It implements neutral Work capabilities and delegates WorkItem coding to the
 existing codec. It does not define Work business behavior or depend on worker-sdk/services.
 Generic execution, accepted worker state and output dispatch remain with their existing owners.
+
+The worker transport seam uses `WorkInputChannel` (register a delivery handler, observe
+listener state, start and stop) and `WorkOutput.publish(WorkItem)` in work-api. A channel
+is already configured by its adapter; neither contract takes WorkerDefinition or a control
+snapshot. `WorkDeliveryHandler` receives a decoded WorkItem or the original bytes and a
+decode error. Rabbit alone unwraps RabbitMessage and calls WorkItemJsonCodec; transport
+headers do not become envelope headers. MessageWorkInput and MessageWorkExecution in SDK
+own enabled state, max-in-flight dispatch and existing error reporting. Local scheduled
+inputs retain their separate runtime lifecycle contract. This is a Java consumption seam;
+wire selections and envelope fields are unchanged.
+
+RabbitWorkInputChannel and RabbitWorkOutput live in rabbit-adapter's `rabbit.work` package.
+Their constructors take the existing resolved Rabbit settings. Rabbit factories and bound
+properties now live in the same module; SDK uses the neutral transport factory contracts.
+The test-only in-memory implementation of this same channel/output seam retains queued
+messages and listener state; its delivery runs through the SDK input and sole result
+publication path. It introduces no production MOCK selection.
+
+Startup binding uses neutral `WorkInputConfig`/`WorkOutputConfig` and explicit
+`WorkInputConfigProvider`/`WorkOutputConfigProvider` descriptors in work-config. Descriptors
+declare the selected type and binding class; the SDK catalog rejects missing or ambiguous
+descriptors before binding. Bound adapter properties project the existing input/output
+status addresses through these contracts. Rabbit properties retain their typed Spring
+fields, canonical Rabbit defaults and parser delegation inside rabbit-adapter. Local
+inputs and Redis retain their existing empty status-address projections.
+
+Selection uses the narrow `WorkIoType` contract (name and settings key). Existing input/output
+enums implement it; the generic parser, binding descriptors and transport factories accept it.
+`WorkIoTypeParser` resolves only explicitly declared types with one canonical normalization.
+Rabbit worker connection and per-direction transport conditions delegate their selector
+comparison to this same owner. A condition only checks whether its adapter was selected;
+it does not validate the complete provider catalogue. Missing/blank or other-adapter
+selectors do not activate Rabbit WORK; complete worker selection validation remains in
+the parser/catalogue. This permits CONTROL-only startup and explicitly declared test types.
+A test adapter can declare its own type through those providers without a production MOCK enum.
+Settings parsing and per-direction factory selection retain their existing single owners.
+
+Transport factories receive the bound adapter configuration and worker subscription name,
+never WorkerDefinition or WorkerControlPlaneRuntime. SDK composition wraps selected
+WorkInputTransportFactory in MessageWorkInputFactory and selected WorkOutputTransportFactory
+in TransportWorkOutputFactory. The existing per-direction registries still own runtime
+selection and reject missing/ambiguous factories; descriptors do not perform runtime selection.
+
+CONTROL bootstrap decodes its own connection unconditionally. Rabbit WORK bootstrap is an
+explicit separate configuration: current manager composition opts into RabbitWorkPlaneConfiguration;
+worker composition activates it when its declared input or output selects Rabbit. No decision is
+made from the presence of credentials and no missing WORK value is borrowed from CONTROL.
+The Rabbit listener facade resolves its required WORK connection only when registering a WORK
+subscription, so CONTROL registration has no WORK dependency. WORK publisher/receiver/resources
+are exposed only with that explicitly activated connection. Removing the manager's concrete
+selection belongs to the selected-owner migration in R3/R4.
 Extract only the neutral data/callback contracts needed to break dependencies on WorkerDefinition
 and WorkerControlPlaneRuntime snapshots. Composition may depend on both implementations and
 contracts; neutral consumers and contracts must not depend on adapter implementation packages.
@@ -271,6 +323,26 @@ and observation. Resource effects remain with the adapter; swarm transitions and
 remain with their domain owners. Existing Rabbit public representations retain their meaning;
 necessary contract amendments are documented/reviewed before implementation without compatibility
 aliases or invented Artemis fields.
+
+The closing transfer uses ResolvedWorkTopology in topology-core: an immutable map from logical
+channel names to WorkChannelAddress, native WorkResourceIdentity values, and controller/status
+projections. WorkChannelAddress contains explicitly resolved input/output addresses and their
+environment/status projections; it imposes no exchange or queue/routing-key relationship.
+WorkTopologyResolver creates this result before effects. SwarmRuntimeCore retains it with the
+accepted runtime plan; worker planning, provisioning, guard/status/stats and removal consume it.
+A guard alias outside the declared channel inventory is an observation-only request to the same
+resolver; it does not add declared resources. Before initial prepare succeeds, completed bindings
+are projected from attempted topology and the resource owner's appliedResources inventory, preserving
+existing partial-prepare cleanup. Current broker presence remains a separate observation.
+RabbitWorkTopologyResolver delegates all physical names to RabbitResourceNames. WorkPlaneResources
+performs native resource operations; WorkAdapterEnvironment owns bootstrap/connection export.
+These are Java consumption contracts. Any corresponding public lifecycle/cleanup amendments are
+recorded in their schemas separately before those consumers change.
+
+Temporary Work captures use `WorkDebugTaps` and a `WorkDebugTap` handle over the selected
+resolved channel. Rabbit owns capture resources and byte reads in rabbit-adapter. Orchestrator
+owns request selection, sample retention and HTTP projection. An unsupported selected adapter
+returns HTTP 501 without activating Rabbit.
 
 The second implementation is a test-only, stateful in-memory fake. It has its own identity and
 addresses and can create/observe/delete resources and move messages through the required Work

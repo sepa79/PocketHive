@@ -7,7 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import io.pockethive.rabbit.api.RabbitConnections;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
 
 /**
@@ -16,7 +16,7 @@ import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
  * Responsibility: compose participant environment values with the canonical connection export.
  * Must not: validate or encode Rabbit connection fields independently.
  * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
- * Traffic values are required resolved inputs from RESP-WORK-RESOURCE-NAMES; no naming defaults are reconstructed.
+ * Work environment is composed separately through its selected owner.
  */
 public final class ControlPlaneContainerEnvironmentFactory {
 
@@ -29,7 +29,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                                             String managerRole,
                                                             ControlPlaneProperties controlPlaneProperties,
                                                             ControllerSettings settings,
-                                                            RabbitConnections rabbitConnection) {
+                                                            RabbitConnectionSettings rabbitConnection) {
         String resolvedSwarmId = requireArgument(swarmId, "swarmId");
         String resolvedInstance = requireArgument(instanceId, "controller instance");
         Objects.requireNonNull(settings, "settings");
@@ -48,10 +48,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(controlPlaneProperties.getControlQueuePrefix(),
                 "pockethive.control-plane.control-queue-prefix"));
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX",
-            requireSetting(settings.trafficQueuePrefix(), "traffic queue prefix"));
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE",
-            requireSetting(settings.trafficHiveExchange(), "traffic hive exchange"));
         applyPocketHiveMetricsSettings(
             env,
             settings.metrics(),
@@ -69,7 +65,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public static Map<String, String> workerEnvironment(String instanceId,
                                                         String role,
                                                         WorkerSettings settings,
-                                                        RabbitConnections rabbitConnection) {
+                                                        RabbitConnectionSettings rabbitConnection) {
         String resolvedInstance = requireArgument(instanceId, "worker instance");
         String resolvedRole = requireArgument(role, "worker role");
         Objects.requireNonNull(settings, "settings");
@@ -187,55 +183,11 @@ public final class ControlPlaneContainerEnvironmentFactory {
         }
     }
 
-    private static String requireArgument(String value, String description) {
+    static String requireArgument(String value, String description) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(description + " must not be null or blank");
         }
         return value;
     }
 
-    public record ControllerSettings(MetricsSettings metrics,
-                                     String runId,
-                                     String dockerSocketPath,
-                                     String trafficQueuePrefix,
-                                     String trafficHiveExchange) {
-        public ControllerSettings {
-            Objects.requireNonNull(metrics, "metrics");
-            requireArgument(runId, "runId");
-            requireArgument(dockerSocketPath, "dockerSocketPath");
-        }
-
-    }
-
-    public record WorkerSettings(String swarmId,
-                                 String runId,
-                                 String controlExchange,
-                                 String controlQueuePrefix,
-                                 String hiveExchange,
-                                 MetricsSettings metrics) {
-        public WorkerSettings {
-            Objects.requireNonNull(metrics, "metrics");
-            requireArgument(swarmId, "swarmId");
-            requireArgument(runId, "runId");
-            requireArgument(controlExchange, "controlExchange");
-            requireArgument(controlQueuePrefix, "controlQueuePrefix");
-            requireArgument(hiveExchange, "hiveExchange");
-        }
-    }
-
-    public record MetricsSettings(PocketHiveMetricsAdapter adapter,
-                                  Duration publishInterval,
-                                  ClickHouseMetricsSinkProperties clickHouse) {
-        public MetricsSettings {
-            Objects.requireNonNull(adapter, "adapter");
-            Objects.requireNonNull(publishInterval, "publishInterval");
-            clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
-            if (publishInterval.isZero() || publishInterval.isNegative()) {
-                throw new IllegalArgumentException("metrics.publishInterval must be positive");
-            }
-            if (adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
-                clickHouse.requireConfigured();
-            }
-        }
-    }
 }

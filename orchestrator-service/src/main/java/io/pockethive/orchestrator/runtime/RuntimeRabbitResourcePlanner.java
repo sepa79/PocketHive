@@ -27,7 +27,7 @@ import static io.pockethive.orchestrator.runtime.RuntimeReconciliationService.ha
 /**
  * Responsibility: derive scoped Rabbit cleanup targets and projections from the ownership manifest.
  * Must not: infer planes from names, collapse equal names across planes or grant cleanup approval.
- * Contract: docs/architecture/work-plane-boundaries.md#connection-split-prerequisite-resource-identity.
+ * Contract: RESP-RUNTIME-CLEANUP — docs/architecture/runtime-responsibilities.md#resp-runtime-cleanup.
  */
 final class RuntimeRabbitResourcePlanner {
     private final RabbitTopologyPort rabbitTopology;
@@ -39,7 +39,7 @@ final class RuntimeRabbitResourcePlanner {
     }
 
     RabbitTopologySnapshot snapshot(CleanupScope scope, RuntimeOwnershipManifest manifest, List<ComputeRuntimeResource> computeResources) {
-        RuntimeOwnershipManifest.RabbitResources rabbit = manifest.rabbit();
+        io.pockethive.orchestrator.runtime.RuntimeRabbitManifest rabbit = manifest.rabbit();
         var queues = queues(rabbit, derivedWorkerControlQueues(scope, computeResources));
         LinkedHashSet<String> exchanges = new LinkedHashSet<>(rabbit.exchanges());
 
@@ -74,7 +74,7 @@ final class RuntimeRabbitResourcePlanner {
                 Map.of(), ResourcePlane.NONE));
             return;
         }
-        RuntimeOwnershipManifest.RabbitResources rabbit = manifest.get().rabbit();
+        io.pockethive.orchestrator.runtime.RuntimeRabbitManifest rabbit = manifest.get().rabbit();
         var queues = queues(rabbit, derivedWorkerControlQueues(scope, computeResources));
         for (var target : queues) {
             ResourcePlane plane = target.plane();
@@ -240,7 +240,7 @@ final class RuntimeRabbitResourcePlanner {
 
     void deleteQueue(Candidate candidate) { rabbitTopology.deleteQueue(candidate.plane(), candidate.resourceId()); }
     void deleteExchange(Candidate candidate) { rabbitTopology.deleteExchange(candidate.plane(), candidate.resourceId()); }
-    private static Set<ScopedRabbitName> queues(RuntimeOwnershipManifest.RabbitResources manifest, List<String> workerControlQueues) {
+    private static Set<ScopedRabbitName> queues(io.pockethive.orchestrator.runtime.RuntimeRabbitManifest manifest, List<String> workerControlQueues) {
         var result = new LinkedHashSet<ScopedRabbitName>();
         manifest.controlQueues().forEach(name -> result.add(new ScopedRabbitName(ResourcePlane.CONTROL, name)));
         workerControlQueues.forEach(name -> result.add(new ScopedRabbitName(ResourcePlane.CONTROL, name)));

@@ -90,6 +90,6 @@ class SwarmRuntimeCoreScenarioEngineTest {
         mock(SwarmWorkerSpecFactory.class),
         mock(SwarmRuntimeInfrastructure.class),
         mock(SwarmQueueStatsCollector.class),
-        mock(WorkerStatusRequestCallback.class), new RabbitResourceNames());
+        mock(WorkerStatusRequestCallback.class), new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(), new RabbitResourceNames()::forSwarm));
   }
 }

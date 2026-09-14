@@ -18,16 +18,41 @@ import org.junit.jupiter.api.Test;
 
 class RuntimeRemovalPostconditionVerifierTest {
 
+  @Test
+  void nativeWorkRemovalRequiresObservedAbsenceAndNeverQueriesRabbit() {
+    var transport = new io.pockethive.worker.sdk.testing.InMemoryWorkTransport();
+    var owner = new io.pockethive.worker.sdk.testing.InMemoryWorkResources(transport, "verification");
+    var topology = new io.pockethive.worker.sdk.testing.InMemoryWorkTopologyResolver().resolve("swarm", java.util.Set.of("jobs"));
+    owner.ensure(topology);
+    var resource = topology.channel("jobs").resource();
+    var target = owner.removalTarget(resource);
+    var nativeVerifier = new RuntimeRemovalPostconditionVerifier(compute, rabbit, owner);
+    assertThat(target.type()).isEqualTo(RemoveResourceType.WORK_RESOURCE);
+    assertThat(target.id()).isEqualTo("memory://swarm/jobs");
+    assertThat(nativeVerifier.verifyAbsent(List.of(target)).remainingResources()).containsExactly(target);
+    var input = transport.input(resource.name());
+    input.register(mock(io.pockethive.work.api.transport.WorkDeliveryHandler.class));
+    input.start();
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> owner.remove(resource)).hasMessage("Input is running");
+    assertThat(nativeVerifier.verifyAbsent(List.of(target)).succeeded()).isFalse();
+    input.stop();
+    owner.remove(resource);
+    assertThat(nativeVerifier.verifyAbsent(List.of(target)).removedResources()).containsExactly(target);
+    org.mockito.Mockito.verifyNoInteractions(rabbit, compute);
+  }
+
   private final ComputeRuntimeInventoryPort compute = mock(ComputeRuntimeInventoryPort.class);
   private final RabbitTopologyPort rabbit = mock(RabbitTopologyPort.class);
+  private final io.pockethive.rabbit.api.RabbitResources workBroker = mock(io.pockethive.rabbit.api.RabbitResources.class);
   private final RuntimeRemovalPostconditionVerifier verifier =
-      new RuntimeRemovalPostconditionVerifier(compute, rabbit);
+      new RuntimeRemovalPostconditionVerifier(compute, rabbit, new io.pockethive.rabbit.work.RabbitWorkResources(workBroker,
+          new io.pockethive.rabbit.api.RabbitConnectionSettings("work", 5672, "user", "secret", "/work")));
 
   @Test
   void confirmsAbsenceOnlyFromCurrentAdapterObservations() {
     when(compute.list()).thenReturn(List.of());
-    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "queue-1")).thenReturn(Optional.empty());
-    when(rabbit.exchange(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "exchange-1")).thenReturn(Optional.empty());
+    when(workBroker.queue("queue-1")).thenReturn(Optional.empty());
+    when(workBroker.exchangeExists("exchange-1")).thenReturn(false);
     List<RemoveResource> targets = List.of(
         resource(RemoveResourceType.WORKER_RUNTIME, "worker-1"),
         resource(RemoveResourceType.RABBIT_QUEUE, "queue-1"),
@@ -45,8 +70,8 @@ class RuntimeRemovalPostconditionVerifierTest {
   void reportsEveryResourceThatStillExists() {
     when(compute.list()).thenReturn(List.of(new ComputeRuntimeResource(
         "worker-1", "container", "worker", "image", "running", Map.of())));
-    when(rabbit.queue(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "queue-1")).thenReturn(Optional.of(new RabbitQueueResource("queue-1", 0, 0)));
-    when(rabbit.exchange(io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK, "exchange-1")).thenReturn(Optional.of(new RabbitExchangeResource("exchange-1")));
+    when(workBroker.queue("queue-1")).thenReturn(Optional.of(new io.pockethive.rabbit.api.RabbitQueueObservation(0, 0, java.util.OptionalLong.empty())));
+    when(workBroker.exchangeExists("exchange-1")).thenReturn(true);
     List<RemoveResource> targets = List.of(
         resource(RemoveResourceType.WORKER_RUNTIME, "worker-1"),
         resource(RemoveResourceType.RABBIT_QUEUE, "queue-1"),
@@ -87,6 +112,18 @@ class RuntimeRemovalPostconditionVerifierTest {
         assertThat(error.message()).contains("later remove postcondition stage"));
   }
 
+  @Test
+  void workObservationFailureCannotBecomeAbsenceOrUseControlAsAReplacement() {
+    when(workBroker.queue("jobs")).thenThrow(new IllegalStateException("work unavailable"));
+    var target = resource(RemoveResourceType.RABBIT_QUEUE, "jobs");
+    var result = verifier.verifyAbsent(List.of(target));
+    assertThat(result.succeeded()).isFalse();
+    assertThat(result.removedResources()).isEmpty();
+    assertThat(result.remainingResources()).containsExactly(target);
+    assertThat(result.errors()).singleElement().satisfies(error -> assertThat(error.message()).isEqualTo("work unavailable"));
+    org.mockito.Mockito.verifyNoInteractions(rabbit, compute);
+  }
+
   private static RemoveResource resource(RemoveResourceType type, String id) {
     return new RemoveResource(type, id, type == RemoveResourceType.RABBIT_QUEUE || type == RemoveResourceType.RABBIT_EXCHANGE ? io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK : io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
   }
@@ -95,7 +132,7 @@ class RuntimeRemovalPostconditionVerifierTest {
     var control = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL);
     var work = new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "jobs", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK);
     when(rabbit.queue(control.plane(), "jobs")).thenReturn(Optional.of(new RabbitQueueResource("jobs", 0, 0)));
-    when(rabbit.queue(work.plane(), "jobs")).thenReturn(Optional.empty());
+    when(workBroker.queue("jobs")).thenReturn(Optional.empty());
     var result = verifier.verifyAbsent(List.of(control, work));
     assertThat(result.removedResources()).containsExactly(work);
     assertThat(result.remainingResources()).containsExactly(control);

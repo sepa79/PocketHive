@@ -11,7 +11,7 @@ przyjmowanie dowodów, granicę rejestru/obserwacji i aktywne duplikaty odpowied
 Nie przypisuję tych problemów ostatniemu commitowi ani ekstrakcji Rabbit.
 
 Dalsze działania: O1/O2 zostały następnie poprawione i przeszły 74 testy; oczekują osobnego review.
-[Plan poprawności Orchestratora](../inProgress/orchestrator-correctness.md) oddziela te poprawki oraz
+Plan poprawności Orchestratora (plik w repozytorium: `docs/inProgress/orchestrator-correctness.md`) oddziela te poprawki oraz
 projekt resetu od ekstrakcji SSOT. Poniższe ustalenia zachowują stan z momentu przeglądu.
 
 ## Ustalenia

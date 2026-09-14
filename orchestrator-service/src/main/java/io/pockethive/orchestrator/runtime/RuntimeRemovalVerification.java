@@ -7,7 +7,7 @@ import io.pockethive.swarm.model.lifecycle.RemoveError;
 /**
  * Responsibility: retain the removal verifier's immutable result.
  * Must not: observe resources or independently infer removal effects.
- * Contract: docs/architecture/runtime-responsibilities.md.
+ * Contract: RESP-RUNTIME-CLEANUP — docs/architecture/runtime-responsibilities.md#resp-runtime-cleanup.
  */
 public record RuntimeRemovalVerification(
       List<RemoveResource> removedResources,

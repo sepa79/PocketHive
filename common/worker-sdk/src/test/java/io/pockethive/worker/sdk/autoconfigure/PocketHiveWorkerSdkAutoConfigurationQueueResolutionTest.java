@@ -12,17 +12,22 @@ import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Optional;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
 import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
 
 class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withConfiguration(org.springframework.boot.autoconfigure.AutoConfigurations.of(io.pockethive.rabbit.work.RabbitWorkAutoConfiguration.class))
         .withPropertyValues(defaultProperties())
         .withBean(ObjectMapper.class, ObjectMapper::new)
         .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> org.mockito.Mockito.mock(RabbitPublisher.class))
@@ -30,9 +35,16 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         .withBean(io.pockethive.rabbit.api.RabbitListeners.class, () -> Mockito.mock(io.pockethive.rabbit.api.RabbitListeners.class))
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
-    @Test
-    void bindsIoConfigurationIntoWorkerDefinition() {
-        contextRunner.run(context -> {
+    @ParameterizedTest
+    @CsvSource({
+        "RABBITMQ,RABBITMQ", "' RaBbItMq ',RABBITMQ",
+        "RABBITMQ,' RaBbItMq '", "' RABBITMQ ',' RABBITMQ '"
+    })
+    void bindsIoConfigurationIntoWorkerDefinition(String input, String output) {
+        contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources().addFirst(
+            new SystemEnvironmentPropertySource("selection", Map.of(
+                "POCKETHIVE_INPUTS_TYPE", input, "POCKETHIVE_OUTPUTS_TYPE", output)))).run(context -> {
+            assertThat(context).hasNotFailed();
             WorkerRegistry registry = context.getBean(WorkerRegistry.class);
             Optional<WorkerDefinition> definition = registry.find("processorWorker");
             assertThat(definition).isPresent();

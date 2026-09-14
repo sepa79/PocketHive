@@ -180,7 +180,7 @@ class RuntimeDebugControllerTest {
                 "DOCKER_SINGLE",
                 java.time.Instant.parse("2026-07-23T09:00:00Z"),
                 List.of(),
-                new RuntimeOwnershipManifest.RabbitResources(List.of(), List.of(), List.of())));
+                new io.pockethive.orchestrator.runtime.RuntimeRabbitManifest(List.of(), List.of(), List.of())));
 
         mvc().perform(post("/api/runtime/debug/manifest")
                 .contentType(MediaType.APPLICATION_JSON)

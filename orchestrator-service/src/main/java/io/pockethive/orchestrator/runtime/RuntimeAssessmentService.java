@@ -202,7 +202,7 @@ public final class RuntimeAssessmentService {
         }
 
         Map<String, ExpectedRuntime> expected = new LinkedHashMap<>();
-        for (RuntimeOwnershipManifest.RuntimeObject object : manifest.runtimeObjects()) {
+        for (io.pockethive.orchestrator.runtime.RuntimeManifestObject object : manifest.runtimeObjects()) {
             String identity = identity(object.resourceKind(), object.role(), object.instance());
             ExpectedRuntime expectedRuntime = ExpectedRuntime.fromManifest(object);
             ExpectedRuntime previous = expected.putIfAbsent(identity, expectedRuntime);
@@ -489,7 +489,7 @@ public final class RuntimeAssessmentService {
         String instance,
         String image,
         Object evidence) {
-        private static ExpectedRuntime fromManifest(RuntimeOwnershipManifest.RuntimeObject object) {
+        private static ExpectedRuntime fromManifest(io.pockethive.orchestrator.runtime.RuntimeManifestObject object) {
             return new ExpectedRuntime(
                 object.runtimeId(),
                 object.resourceKind(),

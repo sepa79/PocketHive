@@ -8,7 +8,7 @@ import org.springframework.amqp.core.MessageProperties;
 /**
  * Responsibility: map Rabbit API message values to and from Spring AMQP messages.
  * Must not: encode domain payloads, resolve configuration or decide settlement.
- * Contract: docs/architecture/work-plane-boundaries.md#5-delivery-and-failure-decisions.
+ * Contract: RESP-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-rabbit-transport.
  */
 final class RabbitMessages {
     private RabbitMessages() { }

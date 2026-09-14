@@ -5,7 +5,7 @@ import java.util.Map;
 /**
  * Responsibility: project debug tap TTL and capacity into Rabbit queue and binding specifications.
  * Must not: choose Work routes, manage tap lifecycle, validate request limits or access the broker.
- * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public record RabbitDebugTapSpec(RabbitQueueSpec queue, RabbitBindingSpec binding) {
     private static final String MESSAGE_TTL = "x-message-ttl";

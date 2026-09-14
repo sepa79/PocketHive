@@ -6,6 +6,6 @@ package io.pockethive.work.config;
  * Contract: RESP-WORK-CONFIGURATION-PARSER — docs/architecture/work-plane-boundaries.md#4-configuration-and-topology-ssot.
  */
 public interface WorkInputSettingsParser {
-    WorkerInputType type();
+    WorkIoType type();
     WorkInputSettingsParseResult validate(java.util.Map<?, ?> settings, String path, WorkConfigurationMode mode);
 }

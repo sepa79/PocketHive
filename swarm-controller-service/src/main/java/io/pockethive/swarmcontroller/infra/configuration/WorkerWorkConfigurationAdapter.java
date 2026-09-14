@@ -1,27 +1,27 @@
 package io.pockethive.swarmcontroller.infra.configuration;
 
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
+import io.pockethive.redis.config.RedisDatasetEnvironment;
+import io.pockethive.redis.config.RedisOutputEnvironment;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
-import io.pockethive.topology.work.WorkResourceNamesPort;
-import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.config.SpringConnectionEnvironment;
 import io.pockethive.swarmcontroller.runtime.WorkerWorkConfigurationPort;
 import io.pockethive.swarmcontroller.runtime.WorkerWorkConfigurationResult;
 import io.pockethive.swarmcontroller.runtime.environment.WorkConnectionEnvironmentResolver;
-import io.pockethive.rabbit.api.RabbitWorkSettingsBootstrap;
+import io.pockethive.topology.work.ResolvedWorkTopology;
+import io.pockethive.work.config.WorkAdapterEnvironment;
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationFields;
-import io.pockethive.work.config.WorkConfigurationParser;
 import io.pockethive.work.config.WorkConfigurationMode;
+import io.pockethive.work.config.WorkConfigurationParser;
 import io.pockethive.work.config.WorkConfigurationProblem;
-import java.util.List;
-import io.pockethive.work.config.WorkerInputType;
-import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.work.config.policy.InputLifecyclePolicy;
+import io.pockethive.work.config.policy.WorkSelectorEnvironmentPolicy;
 import io.pockethive.work.local.csv.CsvDatasetEnvironment;
 import io.pockethive.work.local.scheduler.SchedulerSettingsEnvironment;
-import io.pockethive.redis.config.RedisDatasetEnvironment;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
@@ -32,67 +32,62 @@ import org.slf4j.LoggerFactory;
  * Responsibility: compose worker Work environment and bootstrap through existing settings owners.
  * Must not: duplicate field constraints, provision resources, read process settings or own worker state.
  * Contract: RESP-CONTROLLER-WORK-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-controller-work-configuration.
- * Work naming delegates RESP-WORK-RESOURCE-NAMES; the final bootstrap candidate passes neutral RESOLVED validation.
+ * Work addresses are projections of the supplied resolved topology; the final candidate passes neutral RESOLVED validation.
  */
 public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigurationPort {
   private static final Logger log = LoggerFactory.getLogger(WorkerWorkConfigurationAdapter.class);
   private final WorkConfigurationParser parser;
-  private final SwarmControllerProperties properties;
-  private final WorkResourceNamesPort names;
-  private final io.pockethive.rabbit.api.RabbitWorkEnvironment rabbitEnvironment;
+  private final WorkAdapterEnvironment workEnvironment;
   private final InputLifecyclePolicy inputControls;
   private final CsvDatasetEnvironment csvEnvironment;
   private final SchedulerSettingsEnvironment schedulerEnvironment;
   private final RedisDatasetEnvironment redisDatasetEnvironment;
-  private final io.pockethive.redis.config.RedisOutputEnvironment redisOutputEnvironment;
+  private final RedisOutputEnvironment redisOutputEnvironment;
   private final WorkConnectionEnvironmentResolver connectionsResolver;
-  private final RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap;
 
-  public WorkerWorkConfigurationAdapter(SwarmControllerProperties properties, WorkResourceNamesPort names,
-      io.pockethive.rabbit.api.RabbitWorkEnvironment rabbitEnvironment,
+  public WorkerWorkConfigurationAdapter(WorkAdapterEnvironment workEnvironment,
       InputLifecyclePolicy inputControls, CsvDatasetEnvironment csvEnvironment,
       SchedulerSettingsEnvironment schedulerEnvironment, RedisDatasetEnvironment redisDatasetEnvironment,
-      WorkConnectionEnvironmentResolver connectionsResolver, RabbitWorkSettingsBootstrap rabbitWorkSettingsBootstrap,
-      WorkConfigurationParser parser, io.pockethive.redis.config.RedisOutputEnvironment redisOutputEnvironment) {
+      WorkConnectionEnvironmentResolver connectionsResolver,
+      WorkConfigurationParser parser, RedisOutputEnvironment redisOutputEnvironment) {
     this.redisOutputEnvironment = Objects.requireNonNull(redisOutputEnvironment, "redisOutputEnvironment");
     this.parser = Objects.requireNonNull(parser, "parser");
-    this.rabbitEnvironment = Objects.requireNonNull(rabbitEnvironment, "rabbitEnvironment");
-    this.names = Objects.requireNonNull(names, "names");
-    this.properties = Objects.requireNonNull(properties, "properties");
+    this.workEnvironment = Objects.requireNonNull(workEnvironment, "workEnvironment");
     this.inputControls = Objects.requireNonNull(inputControls, "inputControls");
     this.csvEnvironment = Objects.requireNonNull(csvEnvironment, "csvEnvironment");
     this.schedulerEnvironment = Objects.requireNonNull(schedulerEnvironment, "schedulerEnvironment");
     this.redisDatasetEnvironment = Objects.requireNonNull(redisDatasetEnvironment, "redisDatasetEnvironment");
     this.connectionsResolver = Objects.requireNonNull(connectionsResolver, "connectionsResolver");
-    this.rabbitWorkSettingsBootstrap = Objects.requireNonNull(rabbitWorkSettingsBootstrap, "rabbitWorkSettingsBootstrap");
   }
 
   @Override
   public void validateDeclaration(Bee bee) {
     Objects.requireNonNull(bee, "bee");
-    var controlOverrides = io.pockethive.rabbit.api.RabbitConnectionEnvironment.controlOverrideProblems(bee.env());
+    var controlOverrides = RabbitConnectionEnvironment.controlOverrideProblems(bee.env());
     if (!controlOverrides.isEmpty()) throw new WorkConfigurationException(controlOverrides);
     var unsupported = inputControls.configurationProblems(
         bee.config().get(WorkConfigurationFields.INPUTS), WorkConfigurationFields.INPUTS);
     if (!unsupported.isEmpty()) throw new WorkConfigurationException(unsupported);
-    var selectors = new io.pockethive.work.config.policy.WorkSelectorEnvironmentPolicy()
+    var selectors = new WorkSelectorEnvironmentPolicy()
         .problems(SpringConnectionEnvironment.raw(bee.env()));
     if (!selectors.isEmpty()) throw new WorkConfigurationException(selectors);
     redisOutputEnvironment.validateOverrides(path -> SpringConnectionEnvironment.containsPropertyTree(bee.env(), path));
-    var overrides = rabbitEnvironment.overrideProblems(SpringConnectionEnvironment.raw(bee.env()));
+    var overrides = workEnvironment.overrideProblems(SpringConnectionEnvironment.raw(bee.env()));
     if (!overrides.isEmpty()) throw new WorkConfigurationException(overrides);
   }
 
   @Override
   public WorkerWorkConfigurationResult compose(Bee bee, Map<String, Object> effectiveConfig,
-      Map<String, String> baseEnvironment) {
+      Map<String, String> baseEnvironment, ResolvedWorkTopology topology) {
     Objects.requireNonNull(bee, "bee");
     Objects.requireNonNull(effectiveConfig, "effectiveConfig");
     validateDeclaration(bee);
     Map<String, String> environment = new LinkedHashMap<>(baseEnvironment);
-    applyWorkIoEnvironment(bee, environment);
-    var materialized = materializeRabbitWorkSettings(effectiveConfig, environment);
-    exportRabbitSettings(materialized, environment);
+    environment.putAll(workEnvironment.connectionEnvironment());
+    applyWorkIoEnvironment(bee, environment, topology);
+    var bootstrap = workEnvironment.bootstrap(effectiveConfig, environment);
+    var materialized = bootstrap.configuration();
+    environment.putAll(bootstrap.environment());
     environment.putAll(bee.env());
     var csvCandidate = csvEnvironment.candidate(bee.config().get(WorkConfigurationFields.INPUTS),
         SpringConnectionEnvironment.raw(bee.env()));
@@ -128,83 +123,7 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
     return new WorkerWorkConfigurationResult(connections.environment(), resolvedConfig);
   }
 
-  private void exportRabbitSettings(Map<String, Object> config, Map<String, String> environment) {
-    var input = io(config, WorkConfigurationFields.INPUTS);
-    if (selected(input, WorkerInputType.RABBITMQ)) {
-      environment.putAll(rabbitEnvironment.input((Map<?, ?>) input.get(WorkerInputType.RABBITMQ.settingsKey())));
-    }
-    var output = io(config, WorkConfigurationFields.OUTPUTS);
-    if (selected(output, WorkerOutputType.RABBITMQ)) {
-      environment.putAll(rabbitEnvironment.output((Map<?, ?>) output.get(WorkerOutputType.RABBITMQ.settingsKey())));
-    }
-  }
-
-  private Map<String, Object> materializeRabbitWorkSettings(
-      Map<String, Object> effectiveConfig,
-      Map<String, String> finalEnvironment) {
-    Map<String, Object> materialized = new LinkedHashMap<>(effectiveConfig);
-    materializeRabbitInput(materialized, finalEnvironment);
-    materializeRabbitOutput(materialized, finalEnvironment);
-    return Map.copyOf(materialized);
-  }
-
-  private void materializeRabbitInput(
-      Map<String, Object> configuration,
-      Map<String, String> finalEnvironment) {
-    Map<?, ?> inputs = io(configuration, WorkConfigurationFields.INPUTS);
-    if (!selected(inputs, WorkerInputType.RABBITMQ)) {
-      return;
-    }
-    String queue = finalEnvironment.get(RabbitWorkSettingsBootstrap.INPUT_QUEUE_ENV);
-    configuration.put(WorkConfigurationFields.INPUTS, withRabbitSettings(
-        inputs,
-        rabbitWorkSettingsBootstrap.input(
-            inputs.containsKey(WorkerInputType.RABBITMQ.settingsKey())
-                ? inputs.get(WorkerInputType.RABBITMQ.settingsKey()) : Map.of(), queue)));
-  }
-
-  private void materializeRabbitOutput(
-      Map<String, Object> configuration,
-      Map<String, String> finalEnvironment) {
-    Map<?, ?> outputs = io(configuration, WorkConfigurationFields.OUTPUTS);
-    if (!selected(outputs, WorkerOutputType.RABBITMQ)) {
-      return;
-    }
-    String exchange = finalEnvironment.get(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV);
-    String routingKey = finalEnvironment.get(RabbitWorkSettingsBootstrap.OUTPUT_ROUTING_KEY_ENV);
-    configuration.put(WorkConfigurationFields.OUTPUTS, withRabbitSettings(
-        outputs,
-        rabbitWorkSettingsBootstrap.output(
-            outputs.containsKey(WorkerOutputType.RABBITMQ.settingsKey())
-                ? outputs.get(WorkerOutputType.RABBITMQ.settingsKey()) : Map.of(), exchange, routingKey)));
-  }
-
-  private static Map<?, ?> io(Map<String, Object> configuration, String root) {
-    Object value = configuration.get(root);
-    return value instanceof Map<?, ?> fields ? fields : Map.of();
-  }
-
-  private static boolean selected(Map<?, ?> fields, WorkerInputType type) {
-    return selected(fields, type.name());
-  }
-
-  private static boolean selected(Map<?, ?> fields, WorkerOutputType type) {
-    return selected(fields, type.name());
-  }
-
-  private static boolean selected(Map<?, ?> fields, String type) {
-    Object declared = fields.get(WorkConfigurationFields.TYPE);
-    return declared instanceof String text && type.equalsIgnoreCase(text.trim());
-  }
-
-  private static Map<String, Object> withRabbitSettings(Map<?, ?> root, Map<String, Object> settings) {
-    Map<String, Object> materialized = new LinkedHashMap<>();
-    root.forEach((key, value) -> materialized.put(Objects.toString(key), value));
-    materialized.put(WorkerInputType.RABBITMQ.settingsKey(), settings);
-    return Map.copyOf(materialized);
-  }
-
-  private void applyWorkIoEnvironment(Bee bee, Map<String, String> environment) {
+  private void applyWorkIoEnvironment(Bee bee, Map<String, String> environment, ResolvedWorkTopology topology) {
     Work work = bee.work();
     if (work != null) {
       String inputQueue = work.defaultIn();
@@ -212,16 +131,12 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
       boolean hasInput = hasText(inputQueue);
       boolean hasOutput = hasText(outputQueue);
       if (hasInput) {
-        var address = names.address(properties.getTraffic().hiveExchange(), properties.getTraffic().queuePrefix(), inputQueue);
-        environment.put(RabbitWorkSettingsBootstrap.INPUT_QUEUE_ENV, address.queue());
-        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, address.exchange());
+        environment.putAll(topology.channel(inputQueue).inputEnvironment());
       } else if (!work.in().isEmpty()) {
         log.warn("Bee {} declares input ports without a default; skipping input queue wiring", bee.role());
       }
       if (hasOutput) {
-        var address = names.address(properties.getTraffic().hiveExchange(), properties.getTraffic().queuePrefix(), outputQueue);
-        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_ROUTING_KEY_ENV, address.routingKey());
-        environment.put(RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, address.exchange());
+        environment.putAll(topology.channel(outputQueue).outputEnvironment());
       } else if (!work.out().isEmpty()) {
         log.warn("Bee {} declares output ports without a default; skipping output queue wiring", bee.role());
       }

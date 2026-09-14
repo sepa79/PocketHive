@@ -6,7 +6,7 @@ import java.util.function.Consumer;
 /**
  * Responsibility: register subscriptions and operate their listener lifecycle through Rabbit's API.
  * Must not: expose containers, interpret messages or decide worker desired state.
- * Contract: docs/architecture/work-plane-boundaries.md#3-ports-owners-and-state-transitions.
+ * Contract: RESP-WORK-RABBIT-POLICY — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-policy.
  */
 public interface RabbitListeners {
     void register(RabbitListenerBinding binding);

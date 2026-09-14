@@ -9,7 +9,7 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class WorkConnectionEnvironmentResolverTest {
-    private final WorkConnectionEnvironmentResolver resolver = new WorkConnectionEnvironmentResolver();
+    private final WorkConnectionEnvironmentResolver resolver = new WorkConnectionEnvironmentResolver(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work")));
 
     @Test
     void resolvesBothDirectionsWithoutMutatingSourceOrLosingOtherSettings() {

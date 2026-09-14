@@ -8,9 +8,9 @@ import java.util.Objects;
  * Contract: RESP-WORK-CONFIGURATION-PARSER — docs/architecture/work-plane-boundaries.md#4-configuration-and-topology-ssot.
  */
 public record CompleteWorkConfiguration(
-    WorkerInputType inputType,
+    WorkIoType inputType,
     WorkInputSettings inputSettings,
-    WorkerOutputType outputType,
+    WorkIoType outputType,
     WorkOutputSettings outputSettings
 ) {
     public CompleteWorkConfiguration {

@@ -42,7 +42,7 @@ w SCENARIO_MANAGER_BUNDLE_REST jawnie mówi, że CREATE nigdy nie zmienia istnie
 Naprawa: właściciel publikacji musi rozróżniać warunki CREATE i REPLACE przed pierwszym efektem;
 zajęty target CREATE oznacza konflikt. To naprawa zachowania, nie samo przeniesienie helpera.
 
-Źródło: [ScenarioBundlePublicationService.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundlePublicationService.java:48).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundlePublicationService.java:48`.
 
 ### S2 — P1, poprawność: validate-existing nie waliduje tego samego wejścia co publikacja/runtime
 
@@ -64,7 +64,7 @@ workflow odczytu wejścia do walidacji, obejmujący wybór deskryptora; katalog 
 i konflikty katalogowe. Nie może zastępować deskryptora w dowodzie dla aktualnego digestu.
 Zakres współbieżnego zapisu wymaga osobnego ustalenia; te próby były sekwencyjne.
 
-Źródło: [ScenarioBundlePublicationService.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundlePublicationService.java:111).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundlePublicationService.java:111`.
 
 ### S3 — P1, poprawność/SSOT wyniku: katalog ma węższą definicję runnability
 
@@ -83,7 +83,7 @@ Nie dopisywać kolejnych wybranych kontroli do `defunctReason`. Samo przeniesien
 różnicy; uzgodnić tę korektę zachowania osobno od ekstrakcji. Nie utożsamiać dozwolonych ostrzeżeń
 AUTHORING o nierozwiązanych wyrażeniach z błędami, które blokują bundle.
 
-Źródło: [ScenarioService.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioService.java:371).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioService.java:371`.
 
 ### S4 — P1 / CRITICAL SSOT: reguły profili worker-auth mają dwie implementacje
 
@@ -102,8 +102,8 @@ refresh/token/claim; nie przenosić do Scenario implementacji runtime z SDK.
 Kontrakty: `RESP-AUTH-VALUES`, `RESP-WORK-AUTH-RUNTIME`, `RESP-SCENARIO-VALIDATE`.
 Nagłówki opisują obecne moduły, ale nie uzasadniają dwóch aktywnych implementacji tej samej reguły.
 
-Źródła: [ScenarioBundleValidator.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java:1759),
-[AuthRuntime.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthRuntime.java:482).
+Źródła: `scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java:1759`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthRuntime.java:482`.
 
 ### S5 — P1 / CRITICAL SSOT: REST sam definiuje kontrakt authoringu; definicje już się rozjechały
 
@@ -120,7 +120,7 @@ Naprawa: kontrakt authoringu powinien być projekcją metadanych właścicieli, 
 Przeniesienie obecnej mapy do nowej klasy pozostawi duplikat. Uzupełnienie brakującego pola jest
 korektą odpowiedzi publicznej i powinno być jawne w osobnym zakresie poprawności.
 
-Źródło: [CapabilityCatalogueController.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:160).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:160`.
 
 ### S6 — P1 / CRITICAL SSOT: eksport tego samego bundla do ZIP ma dwóch właścicieli
 
@@ -134,8 +134,8 @@ Nagłówek kontrolera i reguła cienkiego REST nie odpowiadają rzeczywistym efe
 Oba endpointy powinny korzystać z jednego eksportera po rozwiązaniu celu; zachować obecne nazwy
 plików odpowiedzi i mapowanie HTTP. Nie przebudowywać publikacji ZIP przy okazji tej ekstrakcji.
 
-Źródła: [ScenarioController.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioController.java:679),
-[ScenarioBundleWorkspaceService.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundleWorkspaceService.java:40).
+Źródła: `scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioController.java:679`,
+`scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundleWorkspaceService.java:40`.
 
 ### S7 — P1 / CRITICAL SSOT: wspólny layout nie zamyka budowania ścieżek
 
@@ -154,8 +154,8 @@ Zachować dzisiejsze ścieżki i zasady doboru plików. Zmiana istniejącej poli
 to osobne zachowanie. Brak kompletnego rekordu odpowiedzialności tego layoutu należy zamknąć
 przed implementacją; raport nie tworzy zastępczego katalogu właścicieli.
 
-Źródła: [ScenarioBundleLayout.java](/home/sepa/PocketHive/common/scenario-validation-contracts/src/main/java/io/pockethive/scenarios/ScenarioBundleLayout.java:5),
-[ScenarioBundleSutService.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundleSutService.java:97).
+Źródła: `common/scenario-validation-contracts/src/main/java/io/pockethive/scenarios/ScenarioBundleLayout.java:5`,
+`scenario-manager-service/src/main/java/io/pockethive/scenarios/ScenarioBundleSutService.java:97`.
 
 ### S8 — P1 / CRITICAL SSOT: kontrakty runtime i variables są skopiowane w konsumencie
 
@@ -168,7 +168,7 @@ konsumenta powinny zamknąć ten kontrakt. `ScenarioTemplateResponse` będący w
 trzeba oceniać osobno; nie każda projekcja klienta jest duplikatem pełnego kontraktu.
 Potwierdzenie istniejącego F07. Ekstrakcja ma zachować dokładny obecny wire format.
 
-Źródło: [ScenarioManagerClient.java](/home/sepa/PocketHive/orchestrator-service/src/main/java/io/pockethive/orchestrator/infra/scenario/ScenarioManagerClient.java:277).
+Źródło: `orchestrator-service/src/main/java/io/pockethive/orchestrator/infra/scenario/ScenarioManagerClient.java:277`.
 
 ### S9 — P2, poprawność: filtr katalogu wraca z bundleKey do niejednoznacznego scenarioId
 
@@ -187,7 +187,7 @@ Naprawa: projekcja katalogu ma stosować uprawnienia do konkretnego bundleKey/lo
 Nie zmieniać semantyki grantów ani dodawać nowych zabezpieczeń. To obsługa zwykłych stanów
 malformed/duplicate, które system już oficjalnie wspiera.
 
-Źródło: [CapabilityCatalogueController.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:246).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:246`.
 
 ### S10 — P2, poprawność: fingerprint nie identyfikuje zwracanej projekcji
 
@@ -199,7 +199,7 @@ przy identycznym fingerprint. Klient postępujący według umowy odświeżania c
 treści, którą wcześniej otrzymał. Naprawa: fingerprint obliczany z jednej kompletnej, deterministycznej
 projekcji kontraktu. Samo przeniesienie hashowania poza REST nie naprawi pominiętych danych.
 
-Źródło: [CapabilityCatalogueController.java](/home/sepa/PocketHive/scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:223).
+Źródło: `scenario-manager-service/src/main/java/io/pockethive/capabilities/api/CapabilityCatalogueController.java:223`.
 
 ## Sprawdzone granice i właściciele
 
@@ -236,9 +236,9 @@ ponownie HTTP do auth-service. Brak testowania przez bezpośrednie porty serwis�
 Polecenia: Maven `-pl scenario-manager-service -am test`, z powyższymi listami `-Dtest` oraz
 `-Dsurefire.failIfNoSpecifiedTests=false`. Artefakty lokalne:
 
-- [wynik prób i testów komponentów](/tmp/scenario-manager-review-probes.log),
-- [wynik testów delegacji walidacji](/tmp/scenario-manager-review-validation.log),
-- [źródło tymczasowych prób](/tmp/scenario-manager-review/ScenarioManagerReviewProbeTest.java).
+- `/tmp/scenario-manager-review-probes.log`,
+- `/tmp/scenario-manager-review-validation.log`,
+- `/tmp/scenario-manager-review/ScenarioManagerReviewProbeTest.java`.
 
 Pierwszy przebieg prób ujawnił dwa błędy samej próby (zła trasa tworzenia pliku i nazwa pola odpowiedzi);
 poprawiono je przed końcowym przebiegiem. Źródło prób i ich pojedynczy skompilowany plik usunięto

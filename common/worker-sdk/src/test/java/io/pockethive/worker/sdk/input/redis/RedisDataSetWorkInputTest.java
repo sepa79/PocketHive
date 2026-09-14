@@ -15,7 +15,7 @@ import io.pockethive.redis.config.RedisDatasetSource;
 import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;

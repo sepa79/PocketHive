@@ -20,6 +20,11 @@ import java.util.function.Function;
  */
 public final class WorkConnectionEnvironmentResolver {
     private final RedisConfigurationParser parser = new RedisConfigurationParser();
+    private final io.pockethive.work.config.WorkAdapterEnvironment workEnvironment;
+
+    public WorkConnectionEnvironmentResolver(io.pockethive.work.config.WorkAdapterEnvironment workEnvironment) {
+        this.workEnvironment = java.util.Objects.requireNonNull(workEnvironment, "workEnvironment");
+    }
 
     public ResolvedWorkConnectionEnvironment resolve(Map<String, Object> configuration,
                                                      Map<String, String> composedEnvironment,
@@ -35,7 +40,8 @@ public final class WorkConnectionEnvironmentResolver {
         environment.putAll(RedisConnectionEnvironmentCodec.output(outputCandidate));
         Map<String, String> frozenEnvironment = Map.copyOf(environment);
         var properties = bindFinalEnvironment.apply(frozenEnvironment);
-        RabbitConnectionEnvironment.decodeConnections(properties);
+        RabbitConnectionEnvironment.decode(properties);
+        workEnvironment.validateConnection(properties);
         resolveRedis("inputs", input, inputCandidate,
             selected(properties, "pockethive.inputs.type", WorkerInputType.REDIS_DATASET.name()),
             RedisConnectionEnvironmentCodec.inputProperties(properties), bootstrap);

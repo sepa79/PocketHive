@@ -7,7 +7,7 @@ import java.util.Objects;
 /**
  * Responsibility: carry the Blocked contract with explicit resource plane.
  * Must not: infer plane from resource names or bypass the owning resource operation.
- * Contract: docs/architecture/work-plane-boundaries.md#connection-split-prerequisite-resource-identity.
+ * Contract: RESP-RUNTIME-CLEANUP — docs/architecture/runtime-responsibilities.md#resp-runtime-cleanup.
  */
 public record Blocked(
     String candidateId,

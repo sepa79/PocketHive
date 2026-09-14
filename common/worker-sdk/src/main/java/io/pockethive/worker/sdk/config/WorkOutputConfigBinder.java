@@ -1,6 +1,8 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.WorkerOutputType;
+import io.pockethive.work.config.WorkIoType;
+import io.pockethive.work.config.binding.WorkOutputConfig;
+
 
 import java.util.Objects;
 import org.springframework.boot.context.properties.bind.Bindable;
@@ -20,7 +22,7 @@ public final class WorkOutputConfigBinder {
         this.binder = Objects.requireNonNull(binder, "binder");
     }
 
-    public <C extends WorkOutputConfig> C bind(WorkerOutputType outputType, Class<C> configType) {
+    public <C extends WorkOutputConfig> C bind(WorkIoType outputType, Class<C> configType) {
         Objects.requireNonNull(outputType, "outputType");
         Objects.requireNonNull(configType, "configType");
         if (configType == WorkOutputConfig.class) {
@@ -33,7 +35,7 @@ public final class WorkOutputConfigBinder {
         return config;
     }
 
-    public String prefix(WorkerOutputType outputType) {
+    public String prefix(WorkIoType outputType) {
         Objects.requireNonNull(outputType, "outputType");
         return "pockethive.outputs." + outputType.settingsKey();
     }

@@ -1,11 +1,10 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.rabbit.api.RabbitResourceNames;
-
-import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.spring.ControllerSettings;
+import io.pockethive.controlplane.spring.MetricsSettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.DockerContainerClient;
@@ -13,31 +12,40 @@ import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
+import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
-import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
+import io.pockethive.orchestrator.runtime.RuntimeManifestObject;
+import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifestFactory;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitResourceBeans;
+import io.pockethive.rabbit.api.RabbitResourceNames;
+import io.pockethive.rabbit.api.RabbitResources;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
-import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import io.pockethive.swarm.model.SwarmStartupArtifactContract;
 import io.pockethive.swarm.model.SwarmStartupArtifactReference;
+import io.pockethive.swarm.model.lifecycle.RemoveError;
+import io.pockethive.swarm.model.lifecycle.RemoveResource;
+import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
+import io.pockethive.swarm.model.lifecycle.ResourcePlane;
+import io.pockethive.topology.work.WorkTopologyChannels;
+import io.pockethive.topology.work.WorkTopologyResolver;
+import io.pockethive.work.config.WorkAdapterEnvironment;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import io.pockethive.rabbit.api.RabbitResources;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import io.pockethive.rabbit.api.RabbitConnections;
 import org.springframework.stereotype.Service;
 
 /**
@@ -49,21 +57,23 @@ import org.springframework.stereotype.Service;
  */
 @Service
 public class ContainerLifecycleManager {
-    private final io.pockethive.topology.work.WorkResourceNamesPort workNames;
+    private final WorkTopologyResolver workTopologyResolver;
 
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
-    private final io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount;
+    private final RuntimeFilesystemMount runtimeFilesystemMount;
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmStore store;
     private final RabbitResources amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
-    private final RabbitConnections rabbitConnection;
+    private final WorkAdapterEnvironment workEnvironment;
+    private final RabbitConnectionSettings rabbitConnection;
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
+    private final RuntimeOwnershipManifestFactory manifestFactory;
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
     @Value("${spring.datasource.url:}")
@@ -81,16 +91,18 @@ public class ContainerLifecycleManager {
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
         SwarmStore store,
-        @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
+        @org.springframework.beans.factory.annotation.Qualifier(RabbitResourceBeans.CONTROL) RabbitResources amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitConnections rabbitConnection,
+        RabbitConnectionSettings rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         RuntimeOwnershipManifestStore manifestStore,
-        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
-        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
-        this.workNames = Objects.requireNonNull(workNames, "workNames");
+        RuntimeFilesystemMount runtimeFilesystemMount,
+        WorkTopologyResolver workTopologyResolver,
+        WorkAdapterEnvironment workEnvironment,
+        RuntimeOwnershipManifestFactory manifestFactory) {
+        this.workTopologyResolver = Objects.requireNonNull(workTopologyResolver, "workTopologyResolver");
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.store = Objects.requireNonNull(store, "store");
@@ -98,51 +110,13 @@ public class ContainerLifecycleManager {
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
         this.rabbitConnection = Objects.requireNonNull(rabbitConnection, "rabbitConnection");
+        this.workEnvironment = Objects.requireNonNull(workEnvironment, "workEnvironment");
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
+        this.manifestFactory = Objects.requireNonNull(manifestFactory, "manifestFactory");
         this.runtimeFilesystemMount = Objects.requireNonNull(runtimeFilesystemMount, "runtimeFilesystemMount");
         this.resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
-    }
-
-    public ContainerLifecycleManager(
-        DockerContainerClient docker,
-        ComputeAdapter computeAdapter,
-        SwarmStore store,
-        @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
-        OrchestratorProperties properties,
-        ControlPlaneProperties controlPlaneProperties,
-        RabbitConnections rabbitConnection,
-        JournalRunMetadataWriter runMetadataWriter,
-        ClickHouseSinkProperties clickHouseSink,
-        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
-        io.pockethive.topology.work.WorkResourceNamesPort workNames) {
-        this(
-            docker,
-            computeAdapter,
-            store,
-            amqp,
-            properties,
-            controlPlaneProperties,
-            rabbitConnection,
-            runMetadataWriter,
-            clickHouseSink,
-            new RuntimeOwnershipManifestStore() {
-                @Override
-                public void save(RuntimeOwnershipManifest manifest) {
-                }
-
-                @Override
-                public java.util.Optional<RuntimeOwnershipManifest> find(String swarmId, String runId) {
-                    return java.util.Optional.empty();
-                }
-
-                @Override
-                public java.util.Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
-                    return java.util.Optional.empty();
-                }
-            },
-            runtimeFilesystemMount, workNames);
     }
 
     public Swarm startSwarm(String swarmId,
@@ -163,14 +137,13 @@ public class ContainerLifecycleManager {
         NetworkMode resolvedNetworkMode = Objects.requireNonNull(networkMode, "networkMode");
         String resolvedRunId = requireNonBlank(runId, "runId");
         MetricsSettings metrics = metricsSettings(properties.getMetrics());
-        var workTopology = workNames.forSwarm(resolvedSwarmId);
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+        var workTopology = workTopologyResolver.resolve(resolvedSwarmId, WorkTopologyChannels.from(templateMetadata.bees()));
+        var manifestResources = manifestFactory.resources(resolvedSwarmId, resolvedInstance, workTopology);
+        ControllerSettings controllerSettings =
+            new ControllerSettings(
                 metrics,
                 resolvedRunId,
-                properties.getDocker().getSocketPath(),
-                workTopology.queuePrefix(),
-                workTopology.hiveExchange());
+                properties.getDocker().getSocketPath());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
                 resolvedSwarmId,
@@ -179,13 +152,15 @@ public class ContainerLifecycleManager {
                 controlPlaneProperties,
                 controllerSettings,
                 rabbitConnection));
+        env.putAll(workEnvironment.connectionEnvironment());
+        env.putAll(workTopology.controllerEnvironment());
         applyClickHouseSinkEnv(env);
         env.put(
-            io.pockethive.swarm.model.RuntimeFilesystemContract.HOST_ROOT_ENV,
+            RuntimeFilesystemContract.HOST_ROOT_ENV,
             runtimeFilesystemMount.hostRoot().toString());
         env.put(
-            io.pockethive.swarm.model.RuntimeFilesystemContract.LOCAL_ROOT_ENV,
-            io.pockethive.swarm.model.RuntimeFilesystemContract.CONTAINER_ROOT);
+            RuntimeFilesystemContract.LOCAL_ROOT_ENV,
+            RuntimeFilesystemContract.CONTAINER_ROOT);
         String resolvedSink = normalizeRuntimeRoot(journalSink);
         if (resolvedSink != null) {
             env.put("POCKETHIVE_JOURNAL_SINK", resolvedSink);
@@ -249,14 +224,10 @@ public class ContainerLifecycleManager {
         }
         swarm.attachStartupArtifact(startupArtifact);
         store.register(swarm);
-        writeRuntimeOwnershipManifest(
-            resolvedSwarmId,
-            resolvedRunId,
-            resolvedInstance,
-            resolvedImage,
-            containerId,
-            templateMetadata,
-            controllerSettings);
+        manifestStore.save(manifestFactory.create(resolvedSwarmId, resolvedRunId, templateMetadata.templateId(),
+            resolvedAdapterType, new RuntimeManifestObject(containerId,
+                resolvedAdapterType == ComputeAdapterType.SWARM_STACK ? "service" : "container", "manager",
+                SWARM_CONTROLLER_ROLE, resolvedInstance, resolvedImage), manifestResources));
         return swarm;
     }
 
@@ -265,58 +236,6 @@ public class ContainerLifecycleManager {
             metrics.getAdapter(),
             metrics.getPublishInterval(),
             metrics.getClickHouse());
-    }
-
-    private void writeRuntimeOwnershipManifest(String swarmId,
-                                               String runId,
-                                               String controllerInstance,
-                                               String controllerImage,
-                                               String controllerRuntimeId,
-                                               SwarmTemplateMetadata templateMetadata,
-                                               ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings) {
-        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(
-            swarmId,
-            controlPlaneProperties.getControlQueuePrefix(), new RabbitResourceNames())
-            .controlQueue(controllerInstance)
-            .map(ControlQueueDescriptor::name)
-            .orElse(null);
-        List<String> workQueues = workQueueSuffixes(templateMetadata.bees()).stream()
-            .map(suffix -> workNames.queueName(controllerSettings.trafficQueuePrefix(), suffix))
-            .distinct().toList();
-        List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
-            ? List.of()
-            : List.of(controllerQueue);
-        RuntimeOwnershipManifest manifest = new RuntimeOwnershipManifest(
-            swarmId,
-            runId,
-            templateMetadata.templateId(),
-            resolvedAdapterType.name(),
-            java.time.Instant.now(),
-            List.of(new RuntimeOwnershipManifest.RuntimeObject(
-                controllerRuntimeId,
-                resolvedAdapterType == ComputeAdapterType.SWARM_STACK ? "service" : "container",
-                "manager",
-                SWARM_CONTROLLER_ROLE,
-                controllerInstance,
-                controllerImage)),
-            new RuntimeOwnershipManifest.RabbitResources(
-                controlQueues,
-                workQueues,
-                List.of(workNames.exchangeName(controllerSettings.trafficHiveExchange()))));
-        manifestStore.save(manifest);
-    }
-
-    private static Set<String> workQueueSuffixes(List<Bee> bees) {
-        Set<String> suffixes = new LinkedHashSet<>();
-        for (Bee bee : bees == null ? List.<Bee>of() : bees) {
-            if (bee == null || bee.work() == null) {
-                continue;
-            }
-            suffixes.addAll(bee.work().in().values());
-            suffixes.addAll(bee.work().out().values());
-        }
-        suffixes.removeIf(value -> value == null || value.isBlank());
-        return suffixes;
     }
 
     private void applyClickHouseSinkEnv(Map<String, String> targetEnv) {
@@ -441,13 +360,13 @@ public class ContainerLifecycleManager {
     public ControllerRuntimeRemoval removeControllerRuntime(String swarmId) {
         Swarm swarm = store.find(swarmId)
             .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
-        var targets = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
-        var failed = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveResource>();
-        var errors = new java.util.ArrayList<io.pockethive.swarm.model.lifecycle.RemoveError>();
+        var targets = new java.util.ArrayList<RemoveResource>();
+        var failed = new java.util.ArrayList<RemoveResource>();
+        var errors = new java.util.ArrayList<RemoveError>();
 
-        var controller = new io.pockethive.swarm.model.lifecycle.RemoveResource(
-            io.pockethive.swarm.model.lifecycle.RemoveResourceType.CONTROLLER_RUNTIME,
-            swarm.getContainerId(), io.pockethive.swarm.model.lifecycle.ResourcePlane.NONE);
+        var controller = new RemoveResource(
+            RemoveResourceType.CONTROLLER_RUNTIME,
+            swarm.getContainerId(), ResourcePlane.NONE);
         try {
             log.info("tearing down controller runtime {} for swarm {}", swarm.getContainerId(), swarmId);
             computeAdapter.stopManager(swarm.getContainerId());
@@ -462,9 +381,9 @@ public class ContainerLifecycleManager {
             .controlQueue(swarm.getInstanceId())
             .map(ControlQueueDescriptor::name)
             .orElseThrow(() -> new IllegalStateException("Controller control queue is not defined"));
-        var queue = new io.pockethive.swarm.model.lifecycle.RemoveResource(
-            io.pockethive.swarm.model.lifecycle.RemoveResourceType.RABBIT_QUEUE,
-            controllerQueue, io.pockethive.swarm.model.lifecycle.ResourcePlane.CONTROL);
+        var queue = new RemoveResource(
+            RemoveResourceType.RABBIT_QUEUE,
+            controllerQueue, ResourcePlane.CONTROL);
         try {
             log.info("deleting swarm-controller control queue {}", controllerQueue);
             amqp.deleteQueue(controllerQueue);
@@ -476,19 +395,19 @@ public class ContainerLifecycleManager {
         return new ControllerRuntimeRemoval(targets, failed, errors);
     }
 
-    private static io.pockethive.swarm.model.lifecycle.RemoveError removeError(
+    private static RemoveError removeError(
         RuntimeException failure,
-        io.pockethive.swarm.model.lifecycle.RemoveResource resource) {
-        return new io.pockethive.swarm.model.lifecycle.RemoveError(
+        RemoveResource resource) {
+        return new RemoveError(
             failure.getClass().getSimpleName(),
             java.util.Objects.toString(failure.getMessage(), failure.getClass().getName()),
             resource);
     }
 
     public record ControllerRuntimeRemoval(
-        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> targetResources,
-        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveResource> failedResources,
-        java.util.List<io.pockethive.swarm.model.lifecycle.RemoveError> errors) {
+        java.util.List<RemoveResource> targetResources,
+        java.util.List<RemoveResource> failedResources,
+        java.util.List<RemoveError> errors) {
         public ControllerRuntimeRemoval {
             targetResources = java.util.List.copyOf(targetResources);
             failedResources = java.util.List.copyOf(failedResources);

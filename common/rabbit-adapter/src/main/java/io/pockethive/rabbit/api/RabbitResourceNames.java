@@ -1,8 +1,5 @@
 package io.pockethive.rabbit.api;
 
-import io.pockethive.topology.work.WorkResourceNamesPort;
-import io.pockethive.topology.work.WorkTopologySettings;
-import io.pockethive.topology.work.WorkAddress;
 import io.pockethive.topology.control.ControlResourceNamesPort;
 import java.util.List;
 import java.util.ArrayList;
@@ -10,9 +7,9 @@ import java.util.ArrayList;
 /**
  * Responsibility: own physical Rabbit names and resolved Work/STOMP addresses, including Work routing realization.
  * Must not: read process configuration, validate adapter tuning or access infrastructure.
- * Contract: docs/architecture/work-plane-boundaries.md#physical-resource-naming-transfer.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
-public final class RabbitResourceNames implements WorkResourceNamesPort, ControlResourceNamesPort {
+public final class RabbitResourceNames implements ControlResourceNamesPort {
     private static final String SWARM_PREFIX = "ph.";
     private static final String HIVE_SUFFIX = ".hive";
 
@@ -21,19 +18,20 @@ public final class RabbitResourceNames implements WorkResourceNamesPort, Control
         return new RabbitStompSubscription(prefix + "#", prefix);
     }
 
-    @Override
-    public WorkTopologySettings forSwarm(String swarmId) {
+    public RabbitWorkTopologySettings forSwarm(String swarmId) {
         String prefix = SWARM_PREFIX + name(swarmId, "swarm id");
-        return new WorkTopologySettings(prefix, prefix + HIVE_SUFFIX);
+        return new RabbitWorkTopologySettings(prefix, prefix + HIVE_SUFFIX);
     }
 
-    @Override
-    public WorkAddress address(String exchange, String prefix, String suffix) {
+    public RabbitWorkTopologySettings topologySettings(String queuePrefix, String hiveExchange) {
+        return new RabbitWorkTopologySettings(name(queuePrefix, "traffic queue prefix"), exchangeName(hiveExchange));
+    }
+
+    public RabbitWorkAddress address(String exchange, String prefix, String suffix) {
         String queue = queueName(prefix, suffix);
-        return new WorkAddress(exchangeName(exchange), queue, queue);
+        return new RabbitWorkAddress(exchangeName(exchange), queue, queue);
     }
 
-    @Override
     public String exchangeName(String configuredName) {
         return name(configuredName, "traffic exchange");
     }
@@ -43,7 +41,6 @@ public final class RabbitResourceNames implements WorkResourceNamesPort, Control
         return value.trim();
     }
 
-    @Override
     public String queueName(String prefix, String suffix) {
         return name(prefix, "traffic queue prefix") + "." + name(suffix, "traffic queue suffix");
     }

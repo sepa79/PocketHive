@@ -1,5 +1,11 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.rabbit.work.RabbitOutputProperties;
+
+import io.pockethive.rabbit.work.RabbitInputProperties;
+
+import io.pockethive.work.config.binding.WorkInputConfig;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 

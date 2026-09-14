@@ -62,6 +62,7 @@ const lifecycleEnumValues = Object.freeze({
     "RABBIT_QUEUE",
     "RABBIT_EXCHANGE",
     "RABBIT_BINDING",
+    "WORK_RESOURCE",
     "NETWORK_BINDING",
     "RUNTIME_DIRECTORY",
     "REGISTRY_ENTRY",

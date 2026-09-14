@@ -46,7 +46,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
-    "pockethive.control-plane.manager.role=swarm-controller"
+    "pockethive.control-plane.manager.role=swarm-controller",
+    // SDK is on the test classpath for the single-process WorkPlaneFlowTest, not in the deployed Controller.
+    "spring.autoconfigure.exclude=io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration"
 })
   @RabbitAvailable
   class SwarmLifecycleManagerIntegrationTest {

@@ -866,6 +866,32 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void failedInitialPrepareKeepsOnlyCompletedDeclarationsForCleanup() throws Exception {
+    var manager = newManager();
+    var plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null,
+        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
+            "outputs", Map.of("type", "NONE")))));
+    var bound = new java.util.ArrayList<String>();
+    var failed = new java.util.concurrent.atomic.AtomicReference<String>();
+    org.mockito.Mockito.doAnswer(call -> {
+      io.pockethive.rabbit.api.RabbitBindingSpec binding = call.getArgument(0);
+      if (!bound.isEmpty()) {
+        failed.set(binding.queue());
+        throw new IllegalStateException("bind failed");
+      }
+      bound.add(binding.queue());
+      return null;
+    }).when(amqp).bind(org.mockito.ArgumentMatchers.any());
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
+        .hasMessage("bind failed");
+    assertThat(manager.snapshotQueueStats()).containsOnlyKeys(bound.getFirst());
+    manager.remove();
+    org.mockito.Mockito.verify(amqp).deleteQueue(bound.getFirst());
+    org.mockito.Mockito.verify(amqp, org.mockito.Mockito.never()).deleteQueue(failed.get());
+    assertThat(manager.snapshotQueueStats()).isEmpty();
+  }
+
+  @Test
   void removeUnregistersQueueMetrics() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
@@ -882,6 +908,7 @@ class SwarmLifecycleManagerTest {
         .gauge()).isNotNull();
 
     manager.remove();
+    assertThat(manager.snapshotQueueStats()).isEmpty();
 
     assertThat(meterRegistry.find("ph_swarm_queue_depth")
         .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
@@ -1159,21 +1186,22 @@ class SwarmLifecycleManagerTest {
     RabbitConnectionSettings rabbitConnection = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     meterRegistry = new SimpleMeterRegistry();
     var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
-    return new SwarmLifecycleManager(amqp, amqp,
+    return new SwarmLifecycleManager(amqp, new io.pockethive.rabbit.work.RabbitWorkResources(amqp, rabbitConnection),
         mapper,
         dockerClient,
         docker,
         rabbit,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
-        new io.pockethive.rabbit.api.RabbitConnections(rabbitConnection, new RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work")),
+        rabbitConnection,
         "inst",
         properties,
         meterRegistry,
         io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
         runtimeMount(),
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
-            .workerWorkConfiguration(properties, new RabbitResourceNames()),
-        new RabbitResourceNames());
+            .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"))),
+        new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(), swarm ->
+            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(properties.getTraffic().queuePrefix(), properties.getTraffic().hiveExchange())));
   }
 
   private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {

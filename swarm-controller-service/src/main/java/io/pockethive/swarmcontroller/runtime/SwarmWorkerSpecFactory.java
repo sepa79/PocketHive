@@ -2,7 +2,7 @@ package io.pockethive.swarmcontroller.runtime;
 
 import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.WorkerSettings;
+import io.pockethive.controlplane.spring.WorkerSettings;
 import io.pockethive.manager.runtime.WorkerSpec;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
@@ -17,7 +17,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.function.Supplier;
-import io.pockethive.rabbit.api.RabbitConnections;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 
 /**
  * Responsibility: assemble worker identity, base environment, SUT context, mounts and the delegated Work result into a spec.
@@ -29,7 +29,7 @@ public final class SwarmWorkerSpecFactory {
 
   private final SwarmControllerProperties properties;
   private final WorkerSettings workerSettings;
-  private final RabbitConnections rabbitConnection;
+  private final RabbitConnectionSettings rabbitConnection;
   private final Supplier<String> controlNetwork;
   private final Supplier<String> templateId;
   private final ClickHouseSinkProperties clickHouseSink;
@@ -39,7 +39,7 @@ public final class SwarmWorkerSpecFactory {
   public SwarmWorkerSpecFactory(
       SwarmControllerProperties properties,
       WorkerSettings workerSettings,
-      RabbitConnections rabbitConnection,
+      RabbitConnectionSettings rabbitConnection,
       Supplier<String> controlNetwork,
       ClickHouseSinkProperties clickHouseSink,
       RuntimeFilesystemMount runtimeFilesystemMount,
@@ -55,7 +55,7 @@ public final class SwarmWorkerSpecFactory {
     this.workConfiguration = Objects.requireNonNull(workConfiguration, "workConfiguration");
   }
 
-  public PlannedSwarmWorker plan(Bee bee, SutEnvironment sutEnvironment) {
+  public PlannedSwarmWorker plan(Bee bee, SutEnvironment sutEnvironment, io.pockethive.topology.work.ResolvedWorkTopology topology) {
     Objects.requireNonNull(bee, "bee");
     workConfiguration.validateDeclaration(bee);
     String beeName = BeeNameGenerator.generate(bee.role(), properties.getSwarmId());
@@ -75,7 +75,7 @@ public final class SwarmWorkerSpecFactory {
     if (hasText(network)) {
       environment.put("CONTROL_NETWORK", network);
     }
-    var work = workConfiguration.compose(bee, enrichConfigWithSut(bee.config(), sutEnvironment), environment);
+    var work = workConfiguration.compose(bee, enrichConfigWithSut(bee.config(), sutEnvironment), environment, topology);
     Map<String, Object> effectiveConfig = work.bootstrapConfig();
     List<String> configuredVolumes = resolveVolumes(effectiveConfig);
     List<String> volumes = new ArrayList<>(configuredVolumes.size() + 1);

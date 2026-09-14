@@ -39,3 +39,18 @@ w aktualnej oficjalnej dokumentacji podczas projektowania implementacji.
   migracji/compatibility, dodatkowego programu PoC, HA ani nowych polityk ACK/retry/DLQ.
 - Orchestrator correctness/reset, Scenario Manager S1–S10, Redis, Docker, journal, auth oraz
   szerszy lifecycle są osobnymi PR-ami. Archiwalny plan Artemis nie przywraca ich do tego zakresu.
+
+## Odłożony dodatek R4 (decyzja użytkownika 2026-09-14)
+
+Przed wdrożeniem innego produkcyjnego WORK uzgodnić manifest natywnych zasobów i ich
+osierocony cleanup. Użytkownik odłożył propozycję `manifest.workResources` (wyłącznie
+`WORK_RESOURCE`/`WORK`), akcji `DELETE_WORK_RESOURCE` i jawnej flagi
+`includeWorkResources` (domyślnie false). Nie są wdrożone ani zatwierdzone.
+`includeRabbit` zachowuje dotychczasowy zakres. Nie podszywać natywnych zasobów pod Rabbit.
+Osobno zatwierdzony typ lifecycle `WORK_RESOURCE` z adresem właściciela pozostaje w kontrakcie.
+Pełna próba Orchestratora z natywnym manifestem pozostaje zależna od tego dodatku.
+
+To luka dla zasobów innego adaptera; istniejący Rabbit orphan cleanup nie jest brakującą
+implementacją tego PR. Osobno odłożono poprawę kompletności listy zasobów w Runtime inspector
+i diagnostyce MCP: [zakres i ograniczenia](../inProgress/runtime-debug-mcp-cleanup-spec.md#deferred-diagnostic-completeness--user-decision-2026-09-14).
+Natywny manifest nie naprawia tej diagnostyki ani rejestru/resetu Orchestratora.

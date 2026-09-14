@@ -9,7 +9,7 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 /**
  * Responsibility: poll an explicitly named queue and expose received message values.
  * Must not: create queues, interpret domain payloads or suppress broker failures.
- * Contract: docs/architecture/work-plane-boundaries.md#5-delivery-and-failure-decisions.
+ * Contract: RESP-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-rabbit-transport.
  */
 public final class SpringRabbitReceiver implements RabbitReceiver {
     private final RabbitTemplate template;

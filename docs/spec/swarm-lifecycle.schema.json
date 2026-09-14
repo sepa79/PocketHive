@@ -329,7 +329,7 @@
     },
     "RemoveResourceType": {
       "type": "string",
-      "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING", "NETWORK_BINDING", "RUNTIME_DIRECTORY", "REGISTRY_ENTRY", "TERMINAL_EVIDENCE"]
+      "enum": ["CONTROLLER_RUNTIME", "WORKER_RUNTIME", "RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING", "WORK_RESOURCE", "NETWORK_BINDING", "RUNTIME_DIRECTORY", "REGISTRY_ENTRY", "TERMINAL_EVIDENCE"]
     },
     "ResourcePlane": { "type": "string", "enum": ["CONTROL", "WORK", "NONE"] },
     "RemoveResource": {
@@ -343,7 +343,11 @@
       },
       "if": { "properties": { "type": { "enum": ["RABBIT_QUEUE", "RABBIT_EXCHANGE", "RABBIT_BINDING"] } } },
       "then": { "properties": { "plane": { "enum": ["CONTROL", "WORK"] } } },
-      "else": { "properties": { "plane": { "const": "NONE" } } }
+      "else": {
+        "if": { "properties": { "type": { "const": "WORK_RESOURCE" } } },
+        "then": { "properties": { "plane": { "const": "WORK" } } },
+        "else": { "properties": { "plane": { "const": "NONE" } } }
+      }
     },
     "RemoveError": {
       "type": "object",

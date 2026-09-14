@@ -14,7 +14,8 @@ import io.pockethive.swarm.model.lifecycle.RemoveResource;
 import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics;
-import io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager;
+import io.pockethive.topology.work.WorkPlaneResources;
+import io.pockethive.topology.work.ResolvedWorkTopology;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -30,7 +31,8 @@ class SwarmRuntimeInfrastructureTest {
 
   private RabbitResources amqp;
   private SwarmControllerProperties properties;
-  private SwarmWorkTopologyManager topology;
+  private WorkPlaneResources resources;
+  private ResolvedWorkTopology topology;
   private ComputeAdapter computeAdapter;
   private SwarmQueueMetrics queueMetrics;
   private SwarmRuntimeInfrastructure infrastructure;
@@ -39,17 +41,19 @@ class SwarmRuntimeInfrastructureTest {
   void setUp() {
     amqp = mock(RabbitResources.class);
     properties = mock(SwarmControllerProperties.class);
-    topology = mock(SwarmWorkTopologyManager.class);
+    resources = mock(WorkPlaneResources.class);
+    topology = new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("selected", "selected.hive"))
+        .resolve(SWARM_ID, Set.of("generated"));
+    var rabbit = new io.pockethive.rabbit.work.RabbitWorkResources(amqp,
+        new io.pockethive.rabbit.api.RabbitConnectionSettings("work", 5672, "guest", "guest", "/"));
+    when(resources.removalTarget(org.mockito.ArgumentMatchers.any())).thenAnswer(call -> rabbit.removalTarget(call.getArgument(0)));
     computeAdapter = mock(ComputeAdapter.class);
     queueMetrics = mock(SwarmQueueMetrics.class);
     when(properties.getSwarmId()).thenReturn(SWARM_ID);
     when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic("configured.hive", "configured-prefix"));
-    var names = mock(io.pockethive.topology.work.WorkResourceNamesPort.class);
-    when(names.queueName(org.mockito.ArgumentMatchers.anyString(), org.mockito.ArgumentMatchers.anyString()))
-        .thenAnswer(call -> "selected." + call.getArgument(1));
-    when(names.exchangeName(org.mockito.ArgumentMatchers.anyString())).thenReturn("selected.hive");
     infrastructure = new SwarmRuntimeInfrastructure(
-        amqp, properties, topology, computeAdapter, queueMetrics, names);
+        amqp, properties, resources, computeAdapter, queueMetrics);
   }
 
   @Test
@@ -58,12 +62,11 @@ class SwarmRuntimeInfrastructureTest {
     Set<String> suffixes = Set.of("generated");
     WorkerSpec worker = new WorkerSpec(
         "generator-1", "generator", "generator:latest", Map.of(), List.of());
-    when(topology.declareWorkExchange()).thenReturn(exchange);
 
-    infrastructure.declareWorkTopology(suffixes);
+    infrastructure.declareWorkTopology(topology);
     infrastructure.provisionWorkers(List.of(worker));
 
-    verify(topology).declareWorkQueues(eq(exchange), eq(suffixes), anySet());
+    verify(resources).ensure(topology);
     verify(computeAdapter).applyWorkers(SWARM_ID, List.of(worker));
   }
 
@@ -85,32 +88,28 @@ class SwarmRuntimeInfrastructureTest {
   }
 
   @Test
+  void removesQueueMetricsBeforeAFollowingExchangeDeletionFails() {
+    var exchange = topology.resources().getFirst();
+    org.mockito.Mockito.doThrow(new IllegalStateException("exchange delete failed")).when(resources).remove(exchange);
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> infrastructure.removeWorkTopology(topology))
+        .hasMessage("exchange delete failed");
+    verify(queueMetrics).unregister(topology.channel("generated").inputAddress());
+  }
+
+  @Test
   void removesDeclaredWorkTopologyUnregistersMetricsAndClearsItsInventory() {
     String exchange = "selected.hive";
-    when(topology.declareWorkExchange()).thenReturn(exchange);
-    doAnswer(invocation -> {
-      Set<String> suffixes = invocation.getArgument(1);
-      Set<String> declared = invocation.getArgument(2);
-      declared.addAll(suffixes);
-      return null;
-    }).when(topology).declareWorkQueues(eq(exchange), eq(Set.of("generated")), anySet());
-    doAnswer(invocation -> {
-      Consumer<String> onQueueDeleted = invocation.getArgument(1);
-      onQueueDeleted.accept("selected.generated");
-      return null;
-    }).when(topology).deleteWorkQueues(eq(Set.of("generated")), org.mockito.ArgumentMatchers.any());
+    when(resources.appliedResources()).thenReturn(Set.of(topology.channel("generated").resource()));
+    infrastructure.declareWorkTopology(topology);
+    assertThat(infrastructure.declaredWorkTopology(topology).channels()).containsOnlyKeys("generated");
 
-    infrastructure.declareWorkTopology(Set.of("generated"));
-    assertThat(infrastructure.declaredQueueSuffixes()).containsExactly("generated");
-
-    List<RemoveResource> removed = infrastructure.removeWorkTopology(
-        infrastructure.declaredQueueSuffixes());
+    List<RemoveResource> removed = infrastructure.removeWorkTopology(topology);
 
     verify(queueMetrics).unregister("selected.generated");
-    verify(topology).deleteWorkExchange();
+    topology.resources().forEach(resource -> verify(resources).remove(resource));
     assertThat(removed).containsExactly(
         new RemoveResource(RemoveResourceType.RABBIT_QUEUE, "selected.generated", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK),
         new RemoveResource(RemoveResourceType.RABBIT_EXCHANGE, "selected.hive", io.pockethive.swarm.model.lifecycle.ResourcePlane.WORK));
-    assertThat(infrastructure.declaredQueueSuffixes()).isEmpty();
+    assertThat(infrastructure.declaredWorkTopology(topology).channels()).isEmpty();
   }
 }

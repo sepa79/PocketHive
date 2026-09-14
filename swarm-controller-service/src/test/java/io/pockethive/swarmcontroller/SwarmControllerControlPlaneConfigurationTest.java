@@ -71,7 +71,7 @@ class SwarmControllerControlPlaneConfigurationTest {
       return properties.controlQueueName(instanceId);
     }
 
-    @Bean
+    @Bean(name = io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER)
     RabbitPublisher rabbitTemplate() {
       return mock(RabbitPublisher.class);
     }

@@ -11,6 +11,35 @@ access, and cleanup evidence.
 
 HiveForge stays deployment-scope only. It must not clean individual bees.
 
+## Deferred diagnostic completeness — user decision 2026-09-14
+
+The current UI Runtime inspector and MCP Rabbit topology/assessment use a bounded
+resource list: names from the persisted ownership manifest, supplemented by worker
+CONTROL queues derived through shared descriptors from current compute labels.
+Presence, message counts and consumer counts are read from Rabbit on each request;
+the Work resource list itself is not a live broker inventory. An additional Work
+queue outside that list is not discovered. A listed queue that disappears is reported
+as absent. The ownership manifest is written during swarm creation, not refreshed
+from controller status or the inspector's Refresh button.
+
+If the manifest is missing, the topology API reports its unavailability and returns
+empty resource lists. The UI currently renders "No exact queues" / "No exact exchanges"
+without explaining the missing source. An empty inspector list therefore does not
+prove that Rabbit resources are absent. This limitation also applies to MCP views
+derived from the same topology/assessment API.
+
+The user explicitly deferred the correction to a separate diagnostics refactor.
+Its scope is an adapter-owned current resource inventory, comparison with recorded
+expected resources, and explicit presentation of unavailable/incomplete evidence.
+UI/MCP must consume the owner's projection without reconstructing resource names;
+diagnostic discovery must not independently authorize orphan deletion. No runtime,
+API or UI behavior changes are authorized by this deferral record.
+
+This work is separate from the [Rabbit isolation PR](work-plane-module-boundaries.md),
+the [native manifest/orphan cleanup extension for Artemis](../todo/work-plane-artemis-3ds.md),
+and [Orchestrator registry/reset design](orchestrator-correctness.md). The ownership
+manifest is not the Controller's filesystem startup artifact or a durable swarm registry.
+
 ## Ownership
 
 | Concern | Owner | Rule |

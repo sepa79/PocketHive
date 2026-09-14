@@ -1,5 +1,7 @@
 package io.pockethive.trigger;
 
+import io.pockethive.work.config.binding.WorkOutputConfig;
+
 import static org.mockito.Mockito.*;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;

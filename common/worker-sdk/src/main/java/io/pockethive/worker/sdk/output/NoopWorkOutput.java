@@ -1,7 +1,8 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.work.api.transport.WorkOutput;
+
 import io.pockethive.work.api.WorkItem;
-import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,10 +17,16 @@ public final class NoopWorkOutput implements WorkOutput {
 
     private static final Logger log = LoggerFactory.getLogger(NoopWorkOutput.class);
 
+    private final String workerName;
+
+    public NoopWorkOutput(String workerName) {
+        this.workerName = java.util.Objects.requireNonNull(workerName, "workerName");
+    }
+
     @Override
-    public void publish(WorkItem item, WorkerDefinition definition) {
+    public void publish(WorkItem item) {
         if (log.isDebugEnabled()) {
-            log.debug("Dropping worker result for '{}' because no output is configured", definition.beanName());
+            log.debug("Dropping worker result for '{}' because no output is configured", workerName);
         }
     }
 }

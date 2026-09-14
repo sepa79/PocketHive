@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.work.api.transport.WorkOutput;
+
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import java.util.Map;
@@ -28,7 +30,7 @@ public final class WorkOutputRegistry {
         Objects.requireNonNull(item, "item");
         WorkOutput output = outputs.get(definition.beanName());
         if (output != null) {
-            output.publish(item, definition);
+            output.publish(item);
         }
     }
 

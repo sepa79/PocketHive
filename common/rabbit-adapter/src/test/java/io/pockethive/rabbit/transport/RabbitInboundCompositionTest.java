@@ -42,6 +42,7 @@ class RabbitInboundCompositionTest {
         when(connections.createConnection()).thenReturn(connection);
         var received = new AtomicReference<RabbitMessage>();
         new ApplicationContextRunner()
+            .withUserConfiguration(io.pockethive.rabbit.config.RabbitWorkConnectionConfiguration.class)
             .withConfiguration(AutoConfigurations.of(RabbitAutoConfiguration.class,
                 RabbitConnectionConfiguration.class, RabbitTransportAutoConfiguration.class))
             .withBean(ConnectionFactory.class, () -> connections)

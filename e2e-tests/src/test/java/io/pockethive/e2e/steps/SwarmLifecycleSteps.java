@@ -71,7 +71,6 @@ import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.NetworkBinding;
-import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.SwarmTemplate;
 import io.pockethive.swarm.model.Work;
 

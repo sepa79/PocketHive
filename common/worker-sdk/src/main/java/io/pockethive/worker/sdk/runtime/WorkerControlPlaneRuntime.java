@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.config.WorkIoType;
 import io.pockethive.controlplane.spring.WorkerControlTopology;
 
 import io.pockethive.work.config.policy.WorkPatchPolicy;
@@ -12,7 +13,6 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
-import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
@@ -23,8 +23,6 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
 import io.pockethive.work.api.WorkerCapability;
-import io.pockethive.work.config.WorkerInputType;
-import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.config.ConfigKeyCanonicalizer;
 import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Instant;
@@ -325,7 +323,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /** Registers validated selected-input startup configuration before control commands or intake. */
-    public void initializeInputStartup(String workerBeanName, io.pockethive.work.config.WorkerInputType inputType,
+    public void initializeInputStartup(String workerBeanName, io.pockethive.work.config.WorkIoType inputType,
                                        Map<String, Object> settings) {
         WorkerState state = stateStore.find(workerBeanName).orElseThrow();
         if (state.definition().input() != inputType) {
@@ -1296,14 +1294,14 @@ public final class WorkerControlPlaneRuntime {
         /**
          * Returns the configured worker input type.
          */
-        public WorkerInputType inputType() {
+        public WorkIoType inputType() {
             return state.definition().input();
         }
 
         /**
          * Returns the configured worker output type.
          */
-        public WorkerOutputType outputType() {
+        public WorkIoType outputType() {
             return state.definition().outputType();
         }
 

@@ -1,25 +1,23 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.work.config.WorkerOutputType;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Binds the worker's output type from configuration.
- * <p>
- * NFF: {@code type} must be configured; there is no fallback to {@link PocketHiveWorker}
- * annotation attributes. IO is driven exclusively from {@code pockethive.outputs.*}.
+ * Responsibility: retain the explicit startup output selection text for the IO catalog.
+ * Must not: infer adapter selection or parse adapter settings.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 @ConfigurationProperties(prefix = "pockethive.outputs")
 public class WorkerOutputTypeProperties {
 
-    private WorkerOutputType type;
+    private String type;
 
-    public WorkerOutputType getType() {
+    public String getType() {
         return type;
     }
 
-    public void setType(WorkerOutputType type) {
+    public void setType(String type) {
         this.type = type;
     }
 }

@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.binding.WorkInputConfig;
+
 import java.util.LinkedHashMap;
 import java.util.Map;
 import io.pockethive.work.local.scheduler.SchedulerSettings;

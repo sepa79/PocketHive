@@ -3,8 +3,8 @@
 Stan: HEAD `4062be40` z bieżącymi lokalnymi zmianami; nie jest to review diffu.
 Nazwa „swarm manager” została odniesiona do `swarm-controller-service` i jego konsumentów
 `common/manager-sdk`. Po doprecyzowaniu celu zakres ograniczono do przygotowania kolejnego PR:
-[WorkPlane Rabbit + Artemis delayed publish dla 3DS](../todo/work-plane-artemis-3ds.md).
-Późniejsze doprecyzowanie zakresu: najpierw [izolacja Rabbit](../inProgress/work-plane-module-boundaries.md)
+WorkPlane Rabbit + Artemis delayed publish dla 3DS (plik w repozytorium: `docs/todo/work-plane-artemis-3ds.md`).
+Późniejsze doprecyzowanie zakresu: najpierw izolacja Rabbit (plik w repozytorium: `docs/inProgress/work-plane-module-boundaries.md`)
 z adapterem testowym, potem Artemis/3DS. WP1–WP3 i granica I/O z WP4 wyznaczają miejsca do
 domknięcia teraz; sam adapter Artemis i kontrakt opóźnienia są poza obecnym refaktorem.
 Kod produkcyjny nie był zmieniany. Pozostałe naprawy i refaktory są osobnymi PR-ami.
@@ -37,8 +37,8 @@ a Orchestrator `RuntimeRemovalPostconditionVerifier:51–52` weryfikuje je przez
 CONTROL/WORK jest identyfikacją plane, nie technologią brokera. Artemis potrzebuje własnej jawnej
 tożsamości zasobów i weryfikacji postcondition; nie oznaczać jego zasobów jako Rabbit.
 
-Źródła: [SwarmLifecycleManager.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmLifecycleManager.java:105),
-[SwarmRuntimeInfrastructure.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmRuntimeInfrastructure.java:92).
+Źródła: `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmLifecycleManager.java:105`,
+`swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmRuntimeInfrastructure.java:92`.
 
 ## WP2 — materializacja ustawień i połączeń ma konkretne założenia Rabbit
 
@@ -58,8 +58,8 @@ nie wymagał konfiguracji nieużywanego Rabbit WORK. Rabbit CONTROL pozostaje wy
 z obecnym kontraktem. Reguły/defaults Rabbit pozostają w module Rabbit; nie kopiować ich do nowego
 adaptera usługi. Zachować finalną walidację przed deklarowaniem zasobów/provisioning.
 
-Źródła: [WorkerWorkConfigurationAdapter.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/infra/configuration/WorkerWorkConfigurationAdapter.java:93),
-[WorkConnectionEnvironmentResolver.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/environment/WorkConnectionEnvironmentResolver.java:38).
+Źródła: `swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/infra/configuration/WorkerWorkConfigurationAdapter.java:93`,
+`swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/environment/WorkConnectionEnvironmentResolver.java:38`.
 
 ## WP3 — nazwa portu jest neutralna, ale kontrakt topologii i statusu opisuje Rabbit
 
@@ -74,8 +74,8 @@ i nie wymuszać fikcyjnego Rabbit exchange. Uzgodnić wynik właściciela topolo
 do konfiguracji, statusu, statystyk oraz usuwania. Istniejący format statusu Rabbit zachować;
 ewentualne nowe pola są jawną zmianą publicznego kontraktu w następnym PR.
 
-Źródła: [WorkResourceNamesPort.java](/home/sepa/PocketHive/common/topology-core/src/main/java/io/pockethive/topology/work/WorkResourceNamesPort.java:9),
-[SwarmWorkBindingsProjector.java](/home/sepa/PocketHive/swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmWorkBindingsProjector.java:63).
+Źródła: `common/topology-core/src/main/java/io/pockethive/topology/work/WorkResourceNamesPort.java:9`,
+`swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/runtime/SwarmWorkBindingsProjector.java:63`.
 
 ## WP4 — I/O ma punkty rozszerzenia, ale nie ma implementacji Artemis ani kontraktu opóźnienia
 
@@ -95,8 +95,8 @@ i odbiór czasowy. Właściciel adaptera interpretuje mechanizm brokera. Nie dod
 ani brokerowych nagłówków do poszczególnych workerów. Wydzielenie kontraktów/mostów I/O ma być
 ograniczone do zależności potrzebnych tej ścieżce; bez całego refaktoru WorkerRuntime.
 
-Źródła: [WorkOutput.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutput.java:13),
-[RabbitWorkOutput.java](/home/sepa/PocketHive/common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RabbitWorkOutput.java:29).
+Źródła: `common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutput.java:13`,
+`common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RabbitWorkOutput.java:29`.
 
 ## Dowody i ograniczenia
 
@@ -115,7 +115,7 @@ Przeszło **14 istniejących testów**: WorkTopologyConfigurationTest (2),
 WorkerWorkConfigurationAdapterTest (4), SwarmWorkBindingsProjectorTest (3),
 SwarmQueueStatsCollectorTest (1), WorkConnectionEnvironmentResolverTest (4).
 Pierwszą próbę zablokowało dołączanie agenta Mockito w sandboxie; ponowiono te same testy
-poza nim i zakończyły się sukcesem. [Log](/tmp/swarm-controller-workplane-review-verified.log).
+poza nim i zakończyły się sukcesem. `/tmp/swarm-controller-workplane-review-verified.log`.
 Maven: `-pl swarm-controller-service -am`, powyższe `-Dtest`, `-Dsurefire.failIfNoSpecifiedTests=false test`.
 Test topologii sprawdza zgodność zadeklarowanych zasobów z ENV i bootstrapem, także gdy routing key
 różni się od nazwy kolejki. Testy używają atrap API brokera, bez bezpośrednich portów usług.

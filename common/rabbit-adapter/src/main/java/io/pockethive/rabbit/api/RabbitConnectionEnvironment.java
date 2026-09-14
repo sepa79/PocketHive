@@ -45,17 +45,23 @@ public final class RabbitConnectionEnvironment {
 
     public static Map<String, String> encode(RabbitConnections connections) {
         var result = new java.util.LinkedHashMap<>(encode(connections.control()));
-        encode(connections.work()).forEach((key, value) -> result.put(key.replace("SPRING_RABBITMQ_", "POCKETHIVE_RABBIT_WORK_"), value));
+        result.putAll(encodeWork(connections.work()));
+        return Map.copyOf(result);
+    }
+
+    public static Map<String, String> encodeWork(RabbitConnectionSettings settings) {
+        var result = new java.util.LinkedHashMap<String, String>();
+        encode(settings).forEach((key, value) -> result.put(key.replace("SPRING_RABBITMQ_", "POCKETHIVE_RABBIT_WORK_"), value));
         return Map.copyOf(result);
     }
 
     public static RabbitConnections decodeConnections(Function<String, String> properties) {
-        if (properties.apply("spring.rabbitmq.addresses") != null) {
-            throw new IllegalStateException("spring.rabbitmq.addresses is unsupported: declare the canonical host/port connection");
-        }
-        var control = decode(properties);
+        return new RabbitConnections(decode(properties), decodeWork(properties));
+    }
+
+    public static RabbitConnectionSettings decodeWork(Function<String, String> properties) {
         try {
-            return new RabbitConnections(control, decode(key -> properties.apply(key.replace("spring.rabbitmq", "pockethive.rabbit.work"))));
+            return decode(key -> properties.apply(key.replace("spring.rabbitmq", "pockethive.rabbit.work")));
         } catch (IllegalStateException invalid) {
             throw new IllegalStateException("pockethive.rabbit.work settings are invalid: " + invalid.getMessage(), invalid);
         }
@@ -73,6 +79,9 @@ public final class RabbitConnectionEnvironment {
 
     public static RabbitConnectionSettings decode(Function<String, String> properties) {
         Objects.requireNonNull(properties, "properties");
+        if (properties.apply("spring.rabbitmq.addresses") != null) {
+            throw new IllegalStateException("spring.rabbitmq.addresses is unsupported: declare the canonical host/port connection");
+        }
         String portText = properties.apply("spring.rabbitmq.port");
         int port;
         try {
