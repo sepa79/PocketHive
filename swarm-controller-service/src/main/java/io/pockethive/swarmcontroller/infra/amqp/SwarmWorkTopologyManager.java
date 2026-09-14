@@ -65,9 +65,6 @@ public final class SwarmWorkTopologyManager {
       if (queueMissing) {
         declaredSuffixes.remove(suffix);
       }
-      RabbitBindingSpec legacyBinding = new RabbitBindingSpec(queueName, address.exchange(), suffix, Map.of());
-      amqp.unbind(legacyBinding);
-
       RabbitQueueSpec queue = new RabbitQueueSpec(queueName, true, false, false, Map.of());
       if (queueMissing || !declaredSuffixes.contains(suffix)) {
         amqp.declareQueue(queue);

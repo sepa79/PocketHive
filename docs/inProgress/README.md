@@ -4,10 +4,14 @@ This directory contains only work that is actively being implemented or is waiti
 
 ## Current plans
 
-- [One Rabbit module](work-plane-module-boundaries.md) — current architecture task:
-  establish `common/rabbit-adapter` as the sole Rabbit owner and migrate Work Plane,
-  Control Plane, diagnostics and other consumers to its API. Java resource operations have
-  been migrated; transport, configuration/naming and non-Java consumers remain.
+- [Functional module boundaries](functional-module-boundaries.md) — current source analysis
+  and proposed repair order for the existing modularity/SSOT requirement. Covers Redis,
+  worker I/O/runtime, Docker, journal/filesystem, ClickHouse, auth/templates, service contracts,
+  lifecycle projections and residual service/tool boundaries. Implementation awaits plan review.
+- [One Rabbit module](work-plane-module-boundaries.md) — Rabbit-specific transfer and remaining gates.
+  Java resources, transport, configuration and physical naming now use `common/rabbit-adapter`.
+  Remaining gates: legacy-cleanup deletion review and browser schema/STOMP validation;
+  test fixtures and legacy debug tooling remain explicitly deferred.
   [Boundary design](../architecture/work-plane-boundaries.md) defines ownership;
   the plan defines order and completion. Former B02–B07/C01–C03 instructions and evidence
   are archived and are not implementation prerequisites. Artemis and Redis SEL-R1 remain deferred.

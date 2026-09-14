@@ -113,11 +113,7 @@ class SwarmLifecycleManagerTest {
         .containsExactlyInAnyOrder(
             queue("qin"),
             queue("qout"));
-    ArgumentCaptor<RabbitBindingSpec> legacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
-    verify(amqp, times(2)).unbind(legacyCaptor.capture());
-    assertThat(legacyCaptor.getAllValues())
-        .extracting(RabbitBindingSpec::routingKey)
-        .containsExactlyInAnyOrder("qin", "qout");
+    verify(amqp, never()).unbind(any());
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<Map<String,String>> labelsCap = ArgumentCaptor.forClass(Map.class);
@@ -222,11 +218,7 @@ class SwarmLifecycleManagerTest {
         .containsExactlyInAnyOrder(
             queue("a"),
             queue("b"));
-    ArgumentCaptor<RabbitBindingSpec> prepareLegacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
-    verify(amqp, times(2)).unbind(prepareLegacyCaptor.capture());
-    assertThat(prepareLegacyCaptor.getAllValues())
-        .extracting(RabbitBindingSpec::routingKey)
-        .containsExactlyInAnyOrder("a", "b");
+    verify(amqp, never()).unbind(any());
   }
 
   @Test
@@ -608,7 +600,7 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void prepareRemovesLegacyBindingsOnSubsequentRuns() throws Exception {
+  void prepareEnsuresCurrentBindingsWithoutUnbindingOnSubsequentRuns() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", Work.ofDefaults("in", "out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
@@ -624,11 +616,7 @@ class SwarmLifecycleManagerTest {
     manager.prepare(mapper.writeValueAsString(plan));
     manager.prepare(mapper.writeValueAsString(plan));
 
-    ArgumentCaptor<RabbitBindingSpec> legacyCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
-    verify(amqp, times(4)).unbind(legacyCaptor.capture());
-    assertThat(legacyCaptor.getAllValues())
-        .extracting(RabbitBindingSpec::routingKey)
-        .containsExactlyInAnyOrder("in", "out", "in", "out");
+    verify(amqp, never()).unbind(any());
 
     ArgumentCaptor<RabbitBindingSpec> bindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
     verify(amqp, times(4)).bind(bindingCaptor.capture());

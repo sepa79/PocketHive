@@ -1,7 +1,12 @@
 # One Rabbit module — migration plan
 
-Status: implementation started, 2026-09-11; no complete-boundary acceptance.
-Branch checkpoint: `0dbddaee`. No existing Rabbit boundary is accepted by this plan.
+Status: Java technology transfer implemented; residual gates remain, rechecked 2026-09-14.
+Startup/E2E checkpoint: `0bfa378c`; legacy binding cleanup was subsequently removed on explicit
+user instruction, with 30 focused tests passing. Full normal E2E passed 39 scenarios on
+2026-09-11 before that deletion. Browser schema/STOMP remains blocked; test fixtures and legacy
+debug tooling retain explicit exclusions. Historical handoff notes below are not current test results.
+The [functional module repair plan](functional-module-boundaries.md) owns sequencing beyond Rabbit;
+this file retains the Rabbit-specific contract and exclusions.
 
 ## Current execution contract
 
