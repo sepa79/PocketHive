@@ -4,6 +4,12 @@ Status: source analysis and implementation proposal, 2026-09-14. Implementation 
 Baseline: `0bfa378c` plus the user-approved removal of legacy Rabbit binding cleanup.
 This continues the existing modularity/SSOT requirement; it does not introduce a new architecture programme.
 
+Delivery priority, clarified 2026-09-14: first close
+[Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) with Rabbit and a stateful
+test adapter. [Artemis and delayed publish for 3DS](../todo/work-plane-artemis-3ds.md) follow separately.
+Other refactors and service correctness findings are separate PRs. The sequence proposed below
+applies only when that work is selected; it does not add prerequisites to Rabbit isolation or Artemis/3DS.
+
 ## Outcome and constraints
 
 Each functionality has one named implementation owner, an explicit supported API, and consumers
@@ -23,6 +29,16 @@ Input/output is broader than Work Plane. Rabbit and a future Artemis may connect
 CSV and scheduler/generator sources do not become Work Plane merely by implementing an input/output
 capability. CSV and scheduler are input-only. Generator business behavior remains in generator-service.
 Do not implement Artemis as part of this repair plan.
+
+## Separate correctness track
+
+The 2026-09-14 Orchestrator path review does not expand this extraction plan into a repair of
+Orchestrator behavior. [Orchestrator correctness](orchestrator-correctness.md) owns O1/O2 evidence
+acceptance fixes and the separately pending reset/registry/lifecycle design. O5 journal, O6 metadata
+resolution, O7 Docker and behavior-preserving O8 configuration ownership stay here. O4 permits moving
+existing workflows out of HTTP; changes to their chronology/outcomes require the correctness track.
+O1/O2 fixes await their separate review; that correctness track does not select the next WorkPlane PR's scope.
+Closing this plan proves owner/API/cutover/deletion, not that all Orchestrator behavior is correct.
 
 ## Evidence and confidence
 
@@ -76,8 +92,10 @@ The two external string references to RabbitTransportAutoConfiguration are Sprin
 not broker-operation bypasses. Work/CP bridges may remain outside the module if they only translate
 owned domain contracts and invoke its API.
 
-Residual gates: review the legacy-cleanup deletion; repair UI canonical schema loading
-and verify actual UI STOMP. E2E/test-fixture naming and legacy Node debug clients remain explicitly
+Aggregate review, including the legacy-cleanup deletion, ran on 2026-09-14. Its three findings
+were corrected; residual gate is separate review of those corrections. UI canonical schema
+loading and actual STOMP were repaired and verified through public ingress on 2026-09-14;
+see the Rabbit plan latest verification. E2E/test-fixture naming and legacy Node debug clients remain explicitly
 deferred for replacement, not secretly included as completed migrations. Accepted indirect CP ENV
 overrides remain an accepted limitation. No claim of repository-wide Rabbit closure including those exclusions.
 
@@ -144,7 +162,7 @@ Gate: concrete local inputs build without SDK implementation/Control Plane inter
 rate/cursor updates, scheduler timing/reset and invalid-candidate state preservation retain behavior.
 Rabbit SDK bridges are checked against the same boundary without reopening Rabbit settlement.
 
-### F03 — Docker technology owner and compute removal postconditions
+### F03 — Docker technology owner
 
 Extend existing docker-client; do not create another Docker library. Move both client configurations,
 Docker runtime inventory/inspection/removal and compute-adapter construction into it. Public operations
@@ -153,11 +171,11 @@ compute modes and current connection settings; AUTO selection behavior needs a s
 if its current implementations disagree—do not silently introduce a fallback while consolidating.
 
 ContainerLifecycleManager/SwarmLifecycleManager retain *when/why* to provision/remove, runtime manifests
-and lifecycle state. Compose through ComputeAdapter and explicit diagnostic ports. Orphan cleanup consumes
-verified absence from the owning removal/postcondition path, not completion of a void request.
+and lifecycle state. Compose through ComputeAdapter and explicit diagnostic ports. The known orphan
+cleanup success defect is recorded in the correctness track; moving this code must not silently change it.
 
 Gate: raw Docker imports allowed only in docker-client/test fixtures; both services use the same client
-construction owner. Surviving resources and failed inspection cannot become REMOVED. Keep HiveGate approval
+construction owner. Removal-result semantics retain the separately approved contract. Keep HiveGate approval
 at its existing boundary; no new approval flow and no live governed cleanup during this refactor.
 
 ### F04 — Journal/storage paths and queries
@@ -202,6 +220,12 @@ identity and rendering behavior preserved; loading templates cannot start a Redi
 
 ### F07 — Service contracts and UI projections
 
+Consolidate the identical metadata resolver currently in SwarmController and
+OrchestratorEndpointAuthorization (O6): both must consume one resolution of bundle/folder metadata,
+with existing grant checks preserved. Consolidate ClickHouse ENV export in F05. For O8 HTTP timeouts,
+move existing policy first; rejection of previously defaulted invalid settings requires a separate
+correctness decision.
+
 Move runtime request/response and variables response ownership from ScenarioManagerClient's nested
 copies to canonical Scenario service contracts, reused or generated for clients. Verify product MCP
 and network-profile clients against the same producer contracts; do not extract unrelated domain models
@@ -210,6 +234,8 @@ into a universal DTO bag. Service URL construction remains with each owning clie
 UI consumes exact network/lifecycle values and server-projected effective permissions/capabilities.
 Remove independent normalizeMode-to-DIRECT and grant/scope implementations once replaced. Repair delivery
 of canonical referenced schemas to UI; do not copy `$defs` manually or disable validation.
+This bootstrap subtask is implemented and browser-verified on 2026-09-14 (Rabbit plan latest verification);
+do not repeat it when executing the rest of F07.
 
 Gate: generated/shared contracts have a drift check; invalid values produce explicit diagnostics; actual
 browser login → schema load → owner-projected STOMP subscription → status update is covered. Existing
@@ -233,6 +259,12 @@ another writer; terminal success comes from canonical postconditions. State owne
 is the acceptance criterion.
 
 ### F09 — Service-local functional boundaries and residual consumers
+
+Scenario Manager path review is recorded in
+[the 2026-09-14 report](../architecture/scenario-manager-code-path-review-2026-09-14.md).
+Its agreed follow-up separates correctness fixes from behavior-preserving extraction, and is
+outside the Rabbit plan. S6/S7/S5 cover bundle export/layout/authoring metadata; S4 and S8 belong
+to F06/F07. Findings remain open while the service-by-service review continues.
 
 For processor, move HTTP pool/TLS/client construction out of ProcessorWorkerImpl into its infrastructure
 owner; keep protocol dispatch, envelope/result contract and transport implementation distinct. Compare
@@ -288,9 +320,10 @@ These inspected paths are evidence for the plan, not blanket acceptance of all 1
    search the repository for alternative owners; delete old callers/helpers; verify restrictions now reject
    the former bypass. A slice with two active owners is unfinished, even if its new module tests pass.
 
-## Suggested next implementation
+## Suggested order within a separately selected refactor PR
 
-Start F01 with the Redis connection/operations inventory and the *minimal* adapter-facing contract cut.
+O1/O2 are implemented in the separate correctness track and await review. When the Redis refactor is selected,
+start F01 with the Redis connection/operations inventory and the *minimal* adapter-facing contract cut.
 It has four concrete client-construction sites and already consolidated configuration to reuse.
 Do not start the broad worker-runtime rewrite first. Finish Redis consumers and restrictions before claiming
 Redis complete. F03/F05 are independent later technology transfers; F04/F07/F08 require their own domain

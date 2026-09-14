@@ -5,6 +5,10 @@ The repository execution plan `docs/inProgress/work-plane-module-boundaries.md`
 owns sequence and completion. This design replaces the previous B02–B07 technology split.
 Current wire and lifecycle contracts in [ARCHITECTURE](../ARCHITECTURE.md) remain effective.
 
+Scope clarification, 2026-09-14: close the remaining WorkPlane boundary using Rabbit and a
+stateful test adapter before implementing Artemis. Section 10 defines that target; the execution
+plan owns its R1–R6 sequence. Artemis and delayed-publish API design are separate later work.
+
 ## 1. What is being separated
 
 Worker input/output is a capability boundary, broader than Work Plane transport.
@@ -27,6 +31,7 @@ Target artifact: `common/rabbit-adapter`; namespace: `io.pockethive.rabbit`.
 | `io.pockethive.rabbit.config` | Sole implementation of Rabbit settings/defaults/normalization/validation and environment projections |
 | `io.pockethive.rabbit.topology` | Physical naming and broker resource operations: declaration, bindings, inspection, removal/purge |
 | `io.pockethive.rabbit.transport` | Connections, publishing, consuming and delivery/settlement mechanisms |
+| `io.pockethive.rabbit.work` (remaining extraction target) | Work-specific adapters implementing neutral I/O/resource contracts through the same Rabbit owners; delegates Work envelope coding to the canonical codec |
 
 One module does not mean one class. Split implementation types by responsibility and
 keep implementation packages inaccessible to consumers through visibility and boundary
@@ -149,12 +154,15 @@ of Work leaves Control untouched; a resource still present on the target plane p
 a broker error is not absence; old unscoped Rabbit targets fail before effects; exported worker
 settings produce the same plane selection as provisioning and transport.
 
-The resource-plane contract addition was approved and implemented. Connection activation now
+The resource-plane contract addition was approved and implemented. Current connection activation
 uses explicit `spring.rabbitmq` Control settings and `pockethive.rabbit.work` Work settings
 (host, port, username, password, virtual-host). Work settings are required and never inherit
 Control values. Both sets are exported by RabbitConnectionEnvironment to Controller/workers.
 Work clients have their own lifecycle and do not receive Control listener/template customizers.
 No deployment is included; existing deployments must explicitly supply the new Work settings.
+The remaining isolation target separates activation: only selected Rabbit WORK requires this
+Work configuration. CONTROL still requires its own Rabbit configuration and never supplies
+implicit WORK settings. This target is not implemented by changing this document.
 
 ## 5. Delivery and failure decisions
 
@@ -232,3 +240,51 @@ it does not reconstruct names. UI subscribes verbatim and normalizes incoming de
 once against the returned prefix before wire-log/domain handling. UI contains no physical
 exchange default or STOMP destination builder. STOMP transport and existing authentication
 remain in place; no SSE or generic broker-management REST surface is introduced.
+
+## 10. Remaining WorkPlane isolation target — Rabbit plus a test adapter
+
+Status: target for the closing refactor, 2026-09-14; current responsibility records still
+describe the implementations that exist. This extends the consumption boundary around the
+existing Rabbit owner. Artemis and the delayed-publish contract remain outside this refactor.
+
+Neutral consumers depend on capabilities for selected Work configuration, topology/resource
+identity, resource operations and observations, and I/O transport. Reuse the appropriate
+contracts in work-config, topology-core and work-api. Local I/O sources/sinks do not acquire
+broker administration duties. A single adapter owner may implement several narrow capabilities;
+there is no requirement for a universal interface or class containing all operations.
+
+Rabbit-specific Work integration belongs to the dedicated `io.pockethive.rabbit.work` package
+inside rabbit-adapter, using that module's existing configuration/naming/resources/transport
+implementations. It implements neutral Work capabilities and delegates WorkItem coding to the
+existing codec. It does not define Work business behavior or depend on worker-sdk/services.
+Generic execution, accepted worker state and output dispatch remain with their existing owners.
+Extract only the neutral data/callback contracts needed to break dependencies on WorkerDefinition
+and WorkerControlPlaneRuntime snapshots. Composition may depend on both implementations and
+contracts; neutral consumers and contracts must not depend on adapter implementation packages.
+
+The selected owner resolves configuration/topology into immutable settings, resource identities
+and explicitly named read-only projections. Provisioning, worker ENV/settings, status, statistics,
+Work diagnostics and cleanup consume that result. No consumer reconstructs resource-name rules,
+requires a fictitious Rabbit exchange for another adapter, or maintains another mutable topology
+authority. Resource identity retains explicit ownership and CONTROL/WORK scope through removal
+and observation. Resource effects remain with the adapter; swarm transitions and cleanup approval
+remain with their domain owners. Existing Rabbit public representations retain their meaning;
+necessary contract amendments are documented/reviewed before implementation without compatibility
+aliases or invented Artemis fields.
+
+The second implementation is a test-only, stateful in-memory fake. It has its own identity and
+addresses and can create/observe/delete resources and move messages through the required Work
+path. Its recorded state determines observations and removal outcomes. It must not report every
+operation as successful regardless of effects or become a production fallback. Explicit test
+composition supplies the fake; production exposes only supported production adapters.
+
+Component tests compose real consumers with shared fake state inside one process and check
+observable contracts, including rejection before effects, accepted-state preservation, message
+flow and verified removal. Separate container processes do not share fake memory; actual stack
+verification uses Rabbit and the official ingress. No test merely asserting bean/module selection
+is required. Source review and the existing import/dependency rules still establish ownership.
+
+Preserve section 5 delivery semantics, section 4 configuration ownership and accepted ENV
+limitations. Standard Spring binding of the already validated Rabbit ENV projection is not a
+competing configuration owner. The withdrawn worker-review W1 does not authorize a new parser
+or stricter direct-startup validation. The execution plan owns the remaining order and acceptance.
