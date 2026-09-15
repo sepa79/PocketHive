@@ -978,7 +978,7 @@ MessageWorkInputFactoryTest, WorkOutputRegistryInitializerTest.
 
 ## RESP-WORK-ADAPTER-SELECTION
 
-**Current module(s):** `common/worker-sdk`; neutral IO type/parser in `common/work-config`.
+**Current module(s):** `common/worker-sdk`; neutral selection/IO types in `common/work-config`; deployment inventory in `common/work-config-composition`.
 
 WorkInputRegistryInitializer selects one input factory; WorkOutputRegistryInitializer selects one output factory. Each owns its distinct direction; WorkOutputRegistry retains the selected outputs and dispatches publication.
 
@@ -989,13 +989,19 @@ wrap these providers for the existing registries; Rabbit factory implementations
 rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
 NONE is an explicit output implementation.
 
+WorkPlaneSelection owns the explicit pockethive.work.type / POCKETHIVE_WORK_TYPE
+bootstrap projection; CurrentWorkPlaneSelection declares the current deployable
+WorkPlane inventory using the existing adapter identities. One deployment selects
+Rabbit or Artemis; no per-swarm registry is introduced. Adapter connection ENV
+includes that owner's selection and is passed through existing provisioning.
+
 **Forbidden:** choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
 
 **Required effect:** Each direction has exactly one matching factory; missing and duplicate matches fail, including NONE cases.
 
 **Verification entrypoints:** `WorkInputRegistryInitializerTest`, `WorkOutputRegistryInitializerTest`; source review against the selection contract. `WorkControlCompositionTest` covers only Scheduler/NONE startup, not factory rejection.
 
-**Migration status:** Current B01 exact-match selection.
+**Migration status:** Current exact-match IO selection and A3 explicit deployment WorkPlane selection.
 
 ## RESP-WORK-STATE
 
@@ -1971,6 +1977,12 @@ ResolvedWorkTopology with native resource identities and channel ENV/status proj
 RabbitWorkTopologyResolver is the production implementation in rabbit.work; RabbitResourceNames
 remains the only Rabbit physical-name formula owner. Explicit settings are supplied at composition.
 
+RabbitControllerTopologyEnvironment owns the existing Controller traffic property
+mapping and delegates validation to RabbitResourceNames. SwarmControllerProperties
+no longer binds this adapter-specific block; selected Rabbit composition consumes
+it. Artemis requires only its own connection/namespace for WORK, while CONTROL
+keeps its existing Rabbit configuration. No wire rename or compatibility path.
+
 Controller worker planning, resource creation, bindings and statistics consume that resolved
 result. WorkPlaneResources exposes native ensure/observe/remove operations; RabbitWorkResources
 owns the existing declaration cache and Rabbit operation mapping. appliedResources is a read-only
@@ -2122,15 +2134,34 @@ and output records are the immutable Work settings and bound configuration value
 `ArtemisSettingValues` owns shared scalar rules. `ArtemisWorkIoType` owns ARTEMIS
 selection identity; `ArtemisEnvironmentKeys` owns its setting/property key literals.
 They must not open connections, reconstruct topology or independently select an
-adapter. Authoring/binding/ENV composition is not implemented in the initial slice.
+adapter. `ArtemisConfiguration` provides the public parser/policy projection,
+`ArtemisInputSettingsParser` and `ArtemisOutputSettingsParser` for boundary maps,
+and `ArtemisInputTuning`/`ArtemisOutputTuning` for AUTHORING without physical destinations.
+All scalar rules remain in ArtemisSettingValues; consumerWindowBytes and persistent
+are explicit required values, including startup binding. `ArtemisConnectionEnvironment`
+owns connection property/ENV mapping; `ArtemisWorkBootstrapEnvironment` combines
+owner-resolved destinations with authored tuning and exports that same resolved result.
+Per-worker overrides of owned Artemis connection/destination/tuning fields are rejected.
+Spring composition supplies these existing ports only for explicit adapter selection;
+parsing a scenario never opens a broker connection.
 Contract: `docs/architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15`.
 
 ## RESP-ARTEMIS-CONNECTION
 
 `ArtemisSessions` owns the Core locator, session factory and opened session lifetime.
+Construction validates/configures the client without opening a broker connection;
+the first explicit session request opens the factory, which subsequent requests reuse.
+A failed initial connection fails that WORK operation. A later explicit operation may
+attempt its own connection; there is no background retry, readiness wait or failover.
+Closing an unused or used owner is terminal and must not open a connection.
 `ArtemisWorkPlane` is the explicit composition entrypoint returning existing Work
-ports; it closes the owned infrastructure. Broker client types must not escape to
-SDK/services. No per-message connection, implicit Rabbit fallback or lifecycle state.
+ports; it closes the owned infrastructure. Orchestrator/Controller port composition,
+configuration export, name resolution and removal-target mapping need no live Artemis.
+CONTROL startup still requires Rabbit independently; Artemis availability is checked
+by operations that use it. This deferred activation was approved for A3-REV-1 on
+2026-09-15 instead of adding an Artemis startup dependency/profile in Compose.
+Broker client types must not escape to SDK/services. No per-message connection,
+implicit Rabbit fallback or swarm lifecycle state.
 
 ## RESP-ARTEMIS-RESOURCE-NAMES
 
@@ -2143,8 +2174,11 @@ create resources or maintain a second mutable topology registry.
 ## RESP-ARTEMIS-RESOURCES
 
 `ArtemisWorkResources` implements WorkPlaneResources using Core resource operations,
-including observations and removal. `ArtemisManagement` owns bounded Core management
-request/response encoding for address deletion, using the library management address
+including observations and removal. It obtains its reusable resource session only
+when ensure/observe/remove performs broker I/O, after validating the request. An
+unavailable broker is an operation error, never an absent resource or successful
+removal. `ArtemisManagement` owns bounded Core management
+request/response encoding for native resource and debug-tap operations, using the library management address
 and requiring a successful reply; it does not discover targets. The resource owner's
 applied set is only a receipt for completed
 bindings during partial prepare, following the existing WorkPlane contract. Broker
@@ -2166,4 +2200,16 @@ message must never settle an earlier unaccepted message (WA-REV-1 correction).
 encoding and sends to its captured resolved address. Their transport factories
 consume typed settings and return the existing Work ports. They must not own worker
 state/execution, select fallback adapters, merge broker headers or add another result
-publication. Service activation and delayed-delivery intent are subsequent slices.
+publication. A3 supplies service/SDK activation. Delayed-delivery intent remains a subsequent slice.
+
+ArtemisWorkDebugTaps opens diagnostic copies of owner-resolved channels;
+ArtemisWorkDebugTap owns the native non-exclusive divert, temporary capture queue,
+message TTL/ring limit and explicit release. Its exact capture-address settings
+must explicitly disable expiry forwarding: expired diagnostic copies are discarded,
+including when the broker supplies a wildcard expiry address. The source WORK
+expiry policy remains unchanged. It never consumes the source queue.
+ArtemisResourceNames owns capture names. Request expiry remains with the existing
+Orchestrator debug service. Explicit close releases the divert, queue, address and
+address settings; it reports management failures. This is not a crash-recovery or
+orphan-cleanup mechanism: broker-side divert/settings may remain after process loss.
+Both Rabbit and Artemis observations currently omit oldest-message age.

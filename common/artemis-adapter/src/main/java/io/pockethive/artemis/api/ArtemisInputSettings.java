@@ -9,12 +9,10 @@ import io.pockethive.work.config.binding.WorkInputConfig;
  * Must not: resolve logical names, open consumers or independently select an adapter.
  * Contract: RESP-ARTEMIS-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-artemis-configuration.
  */
-public record ArtemisInputSettings(String queue, int consumerWindowBytes) implements WorkInputSettings, WorkInputConfig {
+public record ArtemisInputSettings(String queue, Integer consumerWindowBytes) implements WorkInputSettings, WorkInputConfig {
     public ArtemisInputSettings {
         queue = ArtemisSettingValues.requiredText(queue, "queue");
-        if (consumerWindowBytes < 0) {
-            throw new IllegalArgumentException("consumerWindowBytes must be nonnegative");
-        }
+        consumerWindowBytes = ArtemisSettingValues.nonnegative(consumerWindowBytes, "consumerWindowBytes");
     }
 
     @Override public String inboundRoute() { return queue; }

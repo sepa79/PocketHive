@@ -3,6 +3,8 @@ package io.pockethive.artemis.api;
 import io.pockethive.artemis.topology.ArtemisResourceNames;
 import io.pockethive.artemis.transport.ArtemisSessions;
 import io.pockethive.artemis.work.ArtemisWorkInputFactory;
+import io.pockethive.artemis.work.ArtemisWorkDebugTaps;
+import io.pockethive.topology.work.WorkDebugTaps;
 import io.pockethive.artemis.work.ArtemisWorkOutputFactory;
 import io.pockethive.artemis.work.ArtemisWorkResources;
 import io.pockethive.artemis.work.ArtemisWorkTopologyResolver;
@@ -20,16 +22,19 @@ import java.util.Objects;
 public final class ArtemisWorkPlane implements AutoCloseable {
     private final ArtemisSessions sessions;
     private final WorkTopologyResolver topology;
+    private final WorkDebugTaps debugTaps;
     private final WorkPlaneResources resources;
     private final WorkInputTransportFactory inputs;
     private final WorkOutputTransportFactory outputs;
 
     public ArtemisWorkPlane(ArtemisConnectionSettings settings, String namespace) {
         Objects.requireNonNull(settings, "settings");
-        topology = new ArtemisWorkTopologyResolver(new ArtemisResourceNames(namespace));
+        var names = new ArtemisResourceNames(namespace);
+        topology = new ArtemisWorkTopologyResolver(names);
         sessions = new ArtemisSessions(settings);
         try {
             resources = new ArtemisWorkResources(sessions);
+            debugTaps = new ArtemisWorkDebugTaps(sessions, names);
             inputs = new ArtemisWorkInputFactory(sessions);
             outputs = new ArtemisWorkOutputFactory(sessions);
         } catch (RuntimeException failure) {
@@ -37,6 +42,8 @@ public final class ArtemisWorkPlane implements AutoCloseable {
             throw failure;
         }
     }
+
+    public WorkDebugTaps debugTaps() { return debugTaps; }
 
     public WorkTopologyResolver topology() { return topology; }
     public WorkPlaneResources resources() { return resources; }

@@ -49,6 +49,7 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>org.apache.activemq</groupId><artifactId>artemis-server</artifactId><scope>test</scope></dependency>
     <dependency>
       <groupId>io.pockethive</groupId><artifactId>worker-sdk</artifactId><version>${project.version}</version><scope>test</scope>
     </dependency>

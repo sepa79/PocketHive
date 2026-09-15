@@ -25,7 +25,6 @@ class WorkTopologyConfigurationTest {
     @ValueSource(booleans = {false, true})
     void provisionedResourcesMatchWorkerEnvironmentAndBootstrap(boolean distinctRoutingKey) {
         var properties = mock(SwarmControllerProperties.class);
-        when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic(" hive ", " prefix "));
         var names = spy(new RabbitResourceNames());
         String outputRoute = distinctRoutingKey ? "separate.route" : "prefix.out";
         if (distinctRoutingKey) {

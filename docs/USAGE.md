@@ -384,9 +384,39 @@ Manual checks:
 - **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
 - **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.
 
+### WorkPlane selection and local Artemis
+
+Declare `POCKETHIVE_WORK_TYPE` explicitly in the Orchestrator deployment:
+`RABBITMQ` or `ARTEMIS`. It selects one WorkPlane for the deployment and is exported
+to Controllers by the selected owner. Worker input/output choices remain explicit
+in scenario config. No selection is inferred from available brokers or credentials.
+
+The local compose stack now includes `apache/activemq-artemis:2.40.0`, with credentials,
+volume and healthcheck declared in `docker-compose.yml`; it publishes no host ports.
+The normal `build-hive.sh` stack refresh includes this service. The baseline remains
+`POCKETHIVE_WORK_TYPE: RABBITMQ`: full Artemis swarm create/remove still needs A4.
+A3 validates composition/worker transport with an embedded broker; a healthy local
+Artemis container alone is not evidence of a complete PocketHive swarm launch.
+
+Artemis WORK requires these explicit environment fields:
+`POCKETHIVE_WORK_ARTEMIS_BROKERURL`, `POCKETHIVE_WORK_ARTEMIS_USERNAME`,
+`POCKETHIVE_WORK_ARTEMIS_PASSWORD`, `POCKETHIVE_WORK_ARTEMIS_CALLTIMEOUTMILLIS`
+and `POCKETHIVE_WORK_ARTEMIS_NAMESPACE`. Orchestrator/Controller composition reads
+those fields through the adapter owner; worker launch receives the same connection
+and resolved destinations. Authoring/settings are described in
+[the Artemis boundary contract](architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15).
+CONTROL continues to use Rabbit independently. Orchestrator/Controller Work port
+composition does not connect to Artemis or wait for its healthcheck. The first WORK
+operation requiring a native session opens the connection; an unavailable broker
+fails that operation explicitly. There are no background connection retries. After
+a failed initial connection, another explicit operation can try again once the broker
+is available. Configuration and topology projections remain usable without the broker.
+Deployment manifests outside local compose must explicitly declare the selector before
+using these binaries.
+
 ### Rabbit Control and Work connections
 
-Rabbit runtime now requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
+A deployment selecting Rabbit WORK requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
 `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD` and
 `SPRING_RABBITMQ_VIRTUAL_HOST` configure Control. Work uses `POCKETHIVE_RABBIT_WORK_HOST`,
 `POCKETHIVE_RABBIT_WORK_PORT`, `POCKETHIVE_RABBIT_WORK_USERNAME`,
@@ -400,7 +430,7 @@ individual `bee.env` entries: provisioning and worker execution must use the sam
 For physical resource separation, configure distinct brokers or vhosts; separate client
 instances do not isolate two identical queue names within the same broker/vhost.
 
-There is no inheritance from Control to Work. Missing Work fields stop startup. The current
+There is no inheritance from Control to Work. Missing selected Rabbit WORK fields stop startup. The current
 connection contract covers host, port, username, password and virtual-host; TLS/address-list
 propagation is not included. `spring.rabbitmq.addresses` is rejected because it would override
 the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,

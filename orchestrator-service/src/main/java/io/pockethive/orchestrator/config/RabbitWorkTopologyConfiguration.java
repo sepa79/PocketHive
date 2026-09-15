@@ -18,7 +18,8 @@ import org.springframework.context.annotation.Configuration;
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 @Configuration(proxyBeanMethods = false)
-public class WorkTopologyConfiguration {
+@org.springframework.context.annotation.Conditional(io.pockethive.rabbit.api.RabbitWorkPlaneCondition.class)
+public class RabbitWorkTopologyConfiguration {
     @Bean
     WorkDebugTaps workDebugTaps(@Qualifier(RabbitResourceBeans.WORK) RabbitResources resources, RabbitReceiver receiver) {
         return new RabbitWorkDebugTaps(resources, receiver);

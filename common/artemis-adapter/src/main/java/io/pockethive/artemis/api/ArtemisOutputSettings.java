@@ -9,9 +9,10 @@ import io.pockethive.work.config.binding.WorkOutputConfig;
  * Must not: resolve logical names, publish results or independently select an adapter.
  * Contract: RESP-ARTEMIS-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-artemis-configuration.
  */
-public record ArtemisOutputSettings(String address, boolean persistent) implements WorkOutputSettings, WorkOutputConfig {
+public record ArtemisOutputSettings(String address, Boolean persistent) implements WorkOutputSettings, WorkOutputConfig {
     public ArtemisOutputSettings {
         address = ArtemisSettingValues.requiredText(address, "address");
+        persistent = ArtemisSettingValues.requiredBoolean(persistent, "persistent");
     }
 
     @Override public String outboundRoute() { return address; }

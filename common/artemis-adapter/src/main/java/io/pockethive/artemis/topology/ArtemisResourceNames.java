@@ -28,6 +28,16 @@ public final class ArtemisResourceNames {
             + "." + encode(ArtemisSettingValues.requiredText(logicalChannel, "logicalChannel"));
     }
 
+    public String debugTapDivert(String swarmId, String role, String tapId) {
+        return debugTap(swarmId, role, tapId) + ".divert";
+    }
+
+    public String debugTap(String swarmId, String role, String tapId) {
+        return encode(namespace) + "." + encode(ArtemisSettingValues.requiredText(swarmId, "swarmId"))
+            + ".tap." + encode(ArtemisSettingValues.requiredText(role, "role"))
+            + "." + encode(ArtemisSettingValues.requiredText(tapId, "tapId"));
+    }
+
     public static String resourceAddress(WorkResourceIdentity resource) {
         var kind = ArtemisResourceKind.require(resource);
         return RESOURCE_SCHEME + "://" + kind.name().toLowerCase(Locale.ROOT) + "/" + encode(resource.name());

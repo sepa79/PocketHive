@@ -30,6 +30,22 @@ services:
       retries: 24
       start_period: 30s
 
+  artemis:
+    image: apache/activemq-artemis:2.40.0
+    environment:
+      ARTEMIS_USER: &artemis-user pockethive
+      ARTEMIS_PASSWORD: &artemis-password pockethive-local
+      ANONYMOUS_LOGIN: "false"
+      EXTRA_ARGS: "--no-autocreate --no-web --no-amqp-acceptor --no-mqtt-acceptor --no-stomp-acceptor --no-hornetq-acceptor"
+    volumes:
+      - artemis-data:/var/lib/artemis-instance
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --url tcp://localhost:61616 --user $$ARTEMIS_USER --password $$ARTEMIS_PASSWORD --timeout 3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
@@ -334,6 +350,13 @@ services:
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     # all defaulted in application.yml, uncomment to override here
     environment:
+      # One WorkPlane per deployment. Full Artemis create/remove is completed in A4.
+      POCKETHIVE_WORK_TYPE: RABBITMQ
+      POCKETHIVE_WORK_ARTEMIS_BROKERURL: tcp://artemis:61616
+      POCKETHIVE_WORK_ARTEMIS_USERNAME: *artemis-user
+      POCKETHIVE_WORK_ARTEMIS_PASSWORD: *artemis-password
+      POCKETHIVE_WORK_ARTEMIS_CALLTIMEOUTMILLIS: "5000"
+      POCKETHIVE_WORK_ARTEMIS_NAMESPACE: ph.work
       POCKETHIVE_RABBIT_WORK_HOST: rabbitmq
       POCKETHIVE_RABBIT_WORK_PORT: "5672"
       POCKETHIVE_RABBIT_WORK_USERNAME: guest
@@ -453,6 +476,7 @@ services:
 # Volumes
 #------------------------------------------
 volumes:
+  artemis-data:
   rabbitmq-data:
   grafana-data:
   redis-data:

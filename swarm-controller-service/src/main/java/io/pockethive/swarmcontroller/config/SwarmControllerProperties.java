@@ -14,8 +14,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Responsibility: bind explicit Controller settings, including raw traffic prefix and exchange.
- * Must not: own resource naming formulas, configure adapters or perform runtime effects.
+ * Responsibility: bind explicit Controller control, metrics, compute and feature settings.
+ * Must not: require Work adapter settings, own resource names or perform runtime effects.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 @Validated
@@ -26,7 +26,6 @@ public class SwarmControllerProperties {
     private final String role;
     private final String controlExchange;
     private final String controlQueuePrefixBase;
-    private final Traffic traffic;
     private final Metrics metrics;
     private final Docker docker;
     private final Features features;
@@ -41,7 +40,6 @@ public class SwarmControllerProperties {
         this.controlExchange = requireNonBlank(exchange, "exchange");
         this.controlQueuePrefixBase = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
-        this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
         this.docker = Objects.requireNonNull(resolved.docker(), "docker");
         this.features = Objects.requireNonNull(resolved.features(), "features");
@@ -63,10 +61,6 @@ public class SwarmControllerProperties {
         return controlQueuePrefixBase;
     }
 
-    public Traffic getTraffic() {
-        return traffic;
-    }
-
     public Metrics getMetrics() {
         return metrics;
     }
@@ -79,9 +73,6 @@ public class SwarmControllerProperties {
         return features;
     }
 
-    public String hiveExchange() {
-        return traffic.hiveExchange();
-    }
 
 
 
@@ -112,23 +103,16 @@ public class SwarmControllerProperties {
 
     @Validated
     public static final class SwarmController {
-        private final Traffic traffic;
-        private final Metrics metrics;
+            private final Metrics metrics;
         private final Docker docker;
         private final Features features;
 
-        public SwarmController(@Valid Traffic traffic,
-                               @Valid Metrics metrics,
+        public SwarmController(@Valid Metrics metrics,
                                @Valid Docker docker,
                                @Valid Features features) {
-            this.traffic = Objects.requireNonNull(traffic, "traffic");
             this.metrics = Objects.requireNonNull(metrics, "metrics");
             this.docker = Objects.requireNonNull(docker, "docker");
             this.features = features != null ? features : new Features(null);
-        }
-
-        public Traffic traffic() {
-            return traffic;
         }
 
         public Metrics metrics() {
@@ -142,27 +126,6 @@ public class SwarmControllerProperties {
         public Features features() {
             return features;
         }
-    }
-
-    @Validated
-    public static final class Traffic {
-        private final String hiveExchange;
-        private final String queuePrefix;
-
-        public Traffic(@NotBlank String hiveExchange, @NotBlank String queuePrefix) {
-            this.hiveExchange = requireNonBlank(hiveExchange, "hiveExchange");
-            this.queuePrefix = requireNonBlank(queuePrefix, "queuePrefix");
-        }
-
-        public String hiveExchange() {
-            return hiveExchange;
-        }
-
-        public String queuePrefix() {
-            return queuePrefix;
-        }
-
-
     }
 
     @Validated

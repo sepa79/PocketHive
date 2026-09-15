@@ -382,8 +382,19 @@ or stricter direct-startup validation. The execution plan owns the remaining ord
 
 The active Artemis plan is `docs/inProgress/work-plane-artemis-3ds.md`. The first
 slice implements existing Java Work contracts in `common/artemis-adapter`,
-namespace `io.pockethive.artemis`. Service composition is a subsequent slice;
-adding this module alone does not enable ARTEMIS in scenario authoring or runtime.
+namespace `io.pockethive.artemis`. A3 supplies authoring, service and SDK composition.
+One deployment explicitly selects `pockethive.work.type` (`RABBITMQ` or `ARTEMIS`);
+Controller bootstrap receives the owner's selection in `POCKETHIVE_WORK_TYPE`.
+Input/output still declare their own adapter and settings. Rabbit CONTROL remains
+independent. Artemis does not require Rabbit WORK credentials or Controller traffic.
+
+Artemis AUTHORING requires `inputs: {type: ARTEMIS, artemis: {consumerWindowBytes: 0}}`
+and, when selected as output, `outputs: {type: ARTEMIS, artemis: {persistent: true}}`.
+These are examples of explicit choices, not defaults. Physical queue/address fields
+are forbidden in AUTHORING; the topology owner supplies them for RESOLVED and the
+matching worker ENV. All Artemis transport settings are startup-only; normal enable,
+pause and execution controls retain their existing SDK behavior. Provider aggregation
+in work-config-composition keeps Scenario Manager on the neutral parser.
 
 Connection settings require an explicit Core broker URL, username, password and
 positive call timeout. Input settings contain a resolved queue and nonnegative

@@ -22,21 +22,24 @@ public final class ArtemisManagement {
     }
 
     public void deleteAddress(String address) {
+        invoke(ResourceNames.BROKER, DELETE_ADDRESS, address, false);
+    }
+
+    public Object invoke(String resource, String operation, Object... parameters) {
         try {
             session.start();
             try (var requestor = new ClientRequestor(session, ActiveMQDefaultConfiguration.getDefaultManagementAddress())) {
                 var request = session.createMessage(false);
-                ManagementHelper.putOperationInvocation(request, ResourceNames.BROKER, DELETE_ADDRESS, address, false);
+                ManagementHelper.putOperationInvocation(request, resource, operation, parameters);
                 var response = requestor.request(request, timeoutMillis);
-                if (response == null) {
-                    throw new IllegalStateException("Artemis management response timed out");
-                }
+                if (response == null) throw new IllegalStateException("Artemis management response timed out");
                 if (!ManagementHelper.hasOperationSucceeded(response)) {
-                    throw new IllegalStateException("Artemis address removal failed: " + ManagementHelper.getResult(response));
+                    throw new IllegalStateException("Artemis management operation failed: " + ManagementHelper.getResult(response));
                 }
+                return ManagementHelper.getResult(response);
             }
         } catch (Exception failure) {
-            throw new IllegalStateException("Cannot remove Artemis address", failure);
+            throw new IllegalStateException("Cannot execute Artemis management operation " + operation, failure);
         }
     }
 }

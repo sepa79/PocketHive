@@ -51,9 +51,6 @@ class DockerConfigurationTest {
         CONTROL_QUEUE_PREFIX_BASE,
         new SwarmControllerProperties.Manager("swarm-controller"),
         new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Traffic(
-                HIVE_EXCHANGE,
-                TRAFFIC_PREFIX),
             METRICS,
             docker,
             new SwarmControllerProperties.Features(false)));

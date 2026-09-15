@@ -1,6 +1,7 @@
 package io.pockethive.artemis.work;
 
 import io.pockethive.artemis.config.ArtemisEnvironmentKeys;
+import io.pockethive.artemis.config.ArtemisConfigurationFields;
 import io.pockethive.artemis.config.ArtemisSettingValues;
 import io.pockethive.artemis.topology.ArtemisResourceKind;
 import io.pockethive.artemis.topology.ArtemisResourceNames;
@@ -45,7 +46,7 @@ public final class ArtemisWorkTopologyResolver implements WorkTopologyResolver {
             channels.put(logical, new WorkChannelAddress(name, name,
                 Map.of(ArtemisEnvironmentKeys.INPUT_QUEUE, name),
                 Map.of(ArtemisEnvironmentKeys.OUTPUT_ADDRESS, name),
-                Map.of("queue", name), Map.of("address", name), queue));
+                Map.of(ArtemisConfigurationFields.QUEUE, name), Map.of(ArtemisConfigurationFields.ADDRESS, name), queue));
         }
         return new ResolvedWorkTopology(channels, resources,
             Map.of(ArtemisEnvironmentKeys.NAMESPACE, names.namespace()),

@@ -42,9 +42,7 @@ public final class RabbitWorkTopologyResolver implements WorkTopologyResolver {
                     RabbitWorkSettingsBootstrap.OUTPUT_EXCHANGE_ENV, exchange),
                 Map.of("queue", address.queue()), Map.of("routingKey", address.routingKey()), resource));
         }
-        return new ResolvedWorkTopology(channels, resources, Map.of(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", configured.queuePrefix(),
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", exchange),
+        return new ResolvedWorkTopology(channels, resources, io.pockethive.rabbit.api.RabbitControllerTopologyEnvironment.encode(configured),
             Map.of("exchange", exchange));
     }
 }
