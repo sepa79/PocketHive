@@ -175,12 +175,29 @@ Domain state writers consume operation outcomes; Rabbit does not own swarm conve
 
 ### Preserved Work delivery behavior
 
-This migration preserves the pre-extraction behavior by explicit user decision. Work uses
-AUTO acknowledgement when the listener callback returns. With asynchronous execution this
-is after executor submission, not after processing/publication. Existing SDK decode/dispatch
-error reporting swallows those exceptions. Executor rejection retains the historical
-synchronous dispatch path. Disabled invocation returns null as before. STOP retains the
-existing listener lifecycle; no drain/wait-for-completion policy is introduced.
+Human-approved correction, 2026-09-15: Rabbit and Artemis use one SDK executor
+admission path for every maxInFlight value, including one. The limit controls
+concurrent admitted work only; it does not select inline execution or ACK timing.
+A callback waits for capacity, submits exactly one task, then returns for ACK.
+Worker/parser/executor-task failures are reported after admission and never return
+accepted work to the broker. There is no inline dispatch or rejection fallback.
+
+Before stopping a channel, SDK closes admission and wakes waiting callbacks.
+WorkNotAcceptedException identifies only work that was not submitted (paused,
+closed or interrupted admission). Rabbit maps it to native requeue; Artemis leaves
+that delivery unsettled for session close. This is not retry of accepted work.
+Accepted tasks continue; stop does not wait for their completion. Closing an input
+also shuts down its executor without interrupting accepted tasks. Decode failures
+retain their existing consume/report behavior. No wire schema or CONTROL change.
+
+WA-REV corrections approved 2026-09-15: Artemis acknowledges each consumed delivery
+individually, so a later decode failure cannot acknowledge an earlier unaccepted item.
+SDK disable closes admission before waiting for serialized transport lifecycle calls;
+it can therefore wake a capacity waiter inside synchronous channel start. Enable
+opens admission only while applying serialized lifecycle state. Close is terminal.
+The executor retains core worker threads while idle for existing PER_THREAD client
+reuse. Pool sizes are derived from the one admission limit; no separate backlog of
+unadmitted tasks, idle expiry policy or inline execution is introduced.
 
 WorkItem decoding reads only the message body and ignores AMQP transport headers, including
 null-valued entries. The Rabbit message projection must carry those entries without rejecting
@@ -188,8 +205,8 @@ delivery before the SDK callback; envelope headers remain owned by WorkItemJsonC
 
 RabbitPublisher submits via send. The existing publisherConfirms setting remains represented
 and validated but is not activated, as in the pre-extraction implementation. No SIMPLE-confirm
-activation, confirmation timeout, sendConfirmed API, completion-based settlement or admission
-requeue policy is part of this refactor. Correcting these behaviors requires separate scope.
+activation, confirmation timeout, sendConfirmed API or completion-based settlement is
+part of this refactor. The approved not-submitted settlement exception is defined above.
 
 Control Plane receive integration uses `RabbitListenerBinding`: explicit listener id, resolved
 queue, a message callback and a fatal-failure classifier. CP owns its contract-error classification;
@@ -360,3 +377,38 @@ Preserve section 5 delivery semantics, section 4 configuration ownership and acc
 limitations. Standard Spring binding of the already validated Rabbit ENV projection is not a
 competing configuration owner. The withdrawn worker-review W1 does not authorize a new parser
 or stricter direct-startup validation. The execution plan owns the remaining order and acceptance.
+
+## 11. Artemis adapter — approved implementation slice, 2026-09-15
+
+The active Artemis plan is `docs/inProgress/work-plane-artemis-3ds.md`. The first
+slice implements existing Java Work contracts in `common/artemis-adapter`,
+namespace `io.pockethive.artemis`. Service composition is a subsequent slice;
+adding this module alone does not enable ARTEMIS in scenario authoring or runtime.
+
+Connection settings require an explicit Core broker URL, username, password and
+positive call timeout. Input settings contain a resolved queue and nonnegative
+consumer window size in bytes; output settings contain a resolved address and an
+explicit persistence flag. Settings records own validation. No Rabbit settings,
+implicit connection selection, retry/failover or broker auto-creation fallback.
+The existing Spring Boot 3.5.14 BOM owns the initial Artemis client/server version.
+
+One names owner encodes namespace, swarm and logical channel as separate segments
+to avoid separator collisions. Each channel owns an ANYCAST address and queue;
+resolved projections supply names to transport, resource operations and observations.
+Existing WORK_RESOURCE/WORK identities carry the adapter's exact resource URI for
+normal removal. No additional lifecycle enum or manifest field is introduced.
+
+Core sessions are owned and reused by the adapter. Input delivery and output use
+different sessions; concurrent output calls serialize access to the output session.
+Input decodes through WorkItemJsonCodec, calls WorkDeliveryHandler and acknowledges
+after callback return, including reported decode/dispatch failures. Explicitly unaccepted
+deliveries remain unsettled for channel stop under the SDK admission contract above. No worker
+execution, second result publication, transport-header merge or implicit redelivery.
+Stopping and starting an input must release/recreate its consumer while retaining
+its configured callback. Closing the adapter closes sessions and connection resources.
+
+The existing startup artifact and Controller topology remain the start/remove
+path. The Rabbit-only diagnostic ownership manifest is not an Artemis prerequisite.
+Its current coupling to start will be removed in A4, without silently declaring an
+empty inventory complete. Orphan cleanup and diagnostic-manifest replacement are
+separate work. Delayed-delivery API remains subject to the actual 3DS contract.

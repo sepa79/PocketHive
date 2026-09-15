@@ -13,15 +13,16 @@ import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
-import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.util.Set;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import io.pockethive.work.api.transport.WorkNotAcceptedException;
+import static org.mockito.Mockito.timeout;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -48,10 +49,11 @@ import static org.mockito.Mockito.when;
 
 @ExtendWith(MockitoExtension.class)
 class MessageWorkExecutionTest {
-    @Test
-    void callbackReturnsWhileAcceptedItemIsStillExecuting() throws Exception {
+    @ParameterizedTest
+    @ValueSource(ints = {1, 2})
+    void callbackReturnsWhileAcceptedItemIsStillExecuting(int limit) throws Exception {
         var execution = execution(builder());
-        execution.setMaxInFlight(2);
+        execution.setMaxInFlight(limit);
         var started = new java.util.concurrent.CountDownLatch(1);
         var release = new java.util.concurrent.CountDownLatch(1);
         var returned = new java.util.concurrent.CountDownLatch(1);
@@ -81,21 +83,16 @@ class MessageWorkExecutionTest {
     }
 
     @Test
-    void executorRejectionKeepsHistoricalSynchronousDispatch() throws Exception {
+    void closedAdmissionNeverRunsWorkerInline() {
         var execution = execution(builder());
-        var executor = mock(ThreadPoolExecutor.class);
-        var rejection = new RejectedExecutionException("saturated");
-        doThrow(rejection).when(executor).execute(any(Runnable.class));
-        Field pool = MessageWorkExecution.class.getDeclaredField("workExecutor");
-        pool.setAccessible(true);
-        pool.set(execution, executor);
-        Field maximum = MessageWorkExecution.class.getDeclaredField("maxInFlight");
-        maximum.setAccessible(true);
-        ((AtomicInteger) maximum.get(execution)).set(2);
-        execution.onWork(workItem("payload"));
-        verify(dispatcher).dispatch(any(WorkItem.class));
-        verify(errorHandler).accept(rejection);
+        execution.close();
+        assertThatThrownBy(() -> execution.onWork(workItem("payload")))
+            .isInstanceOf(WorkNotAcceptedException.class);
+        verifyNoInteractions(dispatcher, errorHandler, controlPlaneRuntime);
     }
+
+    private final java.util.List<MessageWorkExecution> executions = new java.util.ArrayList<>();
+    @AfterEach void closeExecutors() { executions.forEach(MessageWorkExecution::close); }
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MessageWorkExecutionTest.class);
 
@@ -144,7 +141,7 @@ class MessageWorkExecutionTest {
         assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
 
         ArgumentCaptor<WorkItem> workCaptor = ArgumentCaptor.forClass(WorkItem.class);
-        verify(dispatcher).dispatch(workCaptor.capture());
+        verify(dispatcher, timeout(2000)).dispatch(workCaptor.capture());
         assertThat(workCaptor.getValue().body()).isEqualTo("payload".getBytes(StandardCharsets.UTF_8));
 
         verifyNoInteractions(errorHandler);
@@ -159,8 +156,8 @@ class MessageWorkExecutionTest {
 
         assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
 
-        verify(errorHandler).accept(failure);
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
+        verify(errorHandler, timeout(2000)).accept(failure);
+        verify(controlPlaneRuntime, timeout(2000)).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
     }
 
     @Test
@@ -174,7 +171,7 @@ class MessageWorkExecutionTest {
 
         assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
 
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(dispatchFailure));
+        verify(controlPlaneRuntime, timeout(2000)).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(dispatchFailure));
     }
 
     @Test
@@ -184,8 +181,8 @@ class MessageWorkExecutionTest {
 
         assertThatCode(() -> adapter.onDecodeFailure(inbound, new IllegalArgumentException("invalid envelope"))).doesNotThrowAnyException();
 
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
-        verify(errorHandler).accept(any(Exception.class));
+        verify(controlPlaneRuntime, timeout(2000)).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
+        verify(errorHandler, timeout(2000)).accept(any(Exception.class));
     }
 
     @Test
@@ -197,7 +194,7 @@ class MessageWorkExecutionTest {
 
         assertThatCode(() -> adapter.onDecodeFailure(inbound, new IllegalArgumentException("invalid envelope"))).doesNotThrowAnyException();
 
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
+        verify(controlPlaneRuntime, timeout(2000)).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), any(Throwable.class));
     }
 
     @Test
@@ -209,7 +206,7 @@ class MessageWorkExecutionTest {
 
         assertThatCode(() -> adapter.onWork(inbound)).doesNotThrowAnyException();
 
-        verify(controlPlaneRuntime).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
+        verify(controlPlaneRuntime, timeout(2000)).publishWorkError(eq(workerDefinition.beanName()), any(WorkItem.class), eq(failure));
     }
 
     private MessageWorkInputBuilder baseBuilder() {
@@ -259,6 +256,9 @@ class MessageWorkExecutionTest {
 
     private MessageWorkExecution execution(MessageWorkInputBuilder builder) {
         builder.build(); // Apply the same builder validation/default error reporter as production.
-        return new MessageWorkExecution(builder);
+        var execution = new MessageWorkExecution(builder);
+        execution.resume();
+        executions.add(execution);
+        return execution;
     }
 }

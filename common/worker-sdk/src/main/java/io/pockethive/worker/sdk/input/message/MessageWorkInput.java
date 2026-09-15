@@ -13,7 +13,7 @@ import org.springframework.context.ApplicationListener;
 import org.springframework.context.event.ContextRefreshedEvent;
 
 /**
- * Responsibility: apply desired Work listener state and delegate processing without changing callback-return behavior.
+ * Responsibility: serialize desired Work listener effects while allowing disable to pause admission during transport start.
  * Must not: publish worker results, configure broker clients or define adapter settings.
  * Contract: RESP-WORK-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-transport.
  */
@@ -27,7 +27,9 @@ public final class MessageWorkInput implements WorkInput, ApplicationListener<Co
     private final io.pockethive.controlplane.ControlPlaneIdentity identity;
     private final MessageWorkExecution execution;
     private final AtomicBoolean initialised = new AtomicBoolean(false);
-    private volatile boolean desiredEnabled;
+    private final Object desiredStateLock = new Object();
+    private boolean desiredEnabled;
+    private boolean closed;
 
     MessageWorkInput(MessageWorkInputBuilder builder) {
         this.log = builder.log;
@@ -61,7 +63,7 @@ public final class MessageWorkInput implements WorkInput, ApplicationListener<Co
         if (!initialised.compareAndSet(false, true)) {
             return;
         }
-        desiredEnabled = false;
+        updateDesiredState(false);
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
             updateConcurrency(snapshot);
             toggleListener(snapshot.enabled());
@@ -86,15 +88,26 @@ public final class MessageWorkInput implements WorkInput, ApplicationListener<Co
     private boolean running;
 
     @Override public synchronized void start() {
+        synchronized (desiredStateLock) {
+            if (closed) throw new IllegalStateException("Work input is closed");
+        }
         if (running) return;
         initialiseStateListener();
         running = true;
     }
 
-    @Override public synchronized void stop() {
-        if (!running) return;
+    @Override public void stop() {
         stopListener();
-        running = false;
+        synchronized (this) { running = false; }
+    }
+
+    @Override public void close() {
+        synchronized (desiredStateLock) { closed = true; }
+        try {
+            stop();
+        } finally {
+            execution.close();
+        }
     }
 
     @Override
@@ -104,12 +117,11 @@ public final class MessageWorkInput implements WorkInput, ApplicationListener<Co
 
     private void updateConcurrency(WorkerStateSnapshot snapshot) {
         execution.setMaxInFlight(snapshot.config(MaxInFlightConfig.class)
-            .map(MaxInFlightConfig::maxInFlight).orElse(1));
+            .map(MaxInFlightConfig::maxInFlight).orElse(MessageWorkExecutor.MIN_IN_FLIGHT));
     }
 
     private void toggleListener(boolean enabled) {
-        boolean previous = this.desiredEnabled;
-        this.desiredEnabled = enabled;
+        boolean previous = updateDesiredState(enabled);
         if (previous != enabled && log.isInfoEnabled()) {
             log.info(
                 "{} work lifecycle {} (instance={})",
@@ -120,20 +132,34 @@ public final class MessageWorkInput implements WorkInput, ApplicationListener<Co
         applyListenerState();
     }
 
-    /**
-     * Applies the desired listener state to the Work input channel if it is
-     * already available. The container may not yet be registered when the application context is starting,
-     * in which case the helper logs the desired state and waits for a subsequent refresh event.
-     */
-    private void applyListenerState() {
+    private boolean updateDesiredState(boolean enabled) {
+        synchronized (desiredStateLock) {
+            if (enabled && closed) throw new IllegalStateException("Work input is closed");
+            boolean previous = desiredEnabled;
+            desiredEnabled = enabled;
+            // Never wait for the transport monitor before waking admission waiters.
+            if (!enabled) execution.pause();
+            return previous;
+        }
+    }
+
+    /** Applies transport effects serially; desiredStateLock is never held across a channel call. */
+    private synchronized void applyListenerState() {
+        boolean enabled;
+        synchronized (desiredStateLock) {
+            enabled = desiredEnabled && !closed;
+            // Reopening waits for preceding transport stop; closing does not.
+            if (enabled) execution.resume();
+            else execution.pause();
+        }
         WorkInputChannelState state = channel.state();
         if (state == WorkInputChannelState.NOT_REGISTERED) {
-            log.debug("{} listener not yet registered; desiredEnabled={}", displayName, desiredEnabled);
+            log.debug("{} listener not yet registered; desiredEnabled={}", displayName, enabled);
             return;
         }
-        if (desiredEnabled && state != WorkInputChannelState.RUNNING) {
+        if (enabled && state != WorkInputChannelState.RUNNING) {
             channel.start();
-        } else if (!desiredEnabled && state == WorkInputChannelState.RUNNING) {
+        } else if (!enabled && state == WorkInputChannelState.RUNNING) {
             channel.stop();
         }
     }

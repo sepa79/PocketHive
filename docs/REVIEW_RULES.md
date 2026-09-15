@@ -163,6 +163,12 @@ perform work, tests and evidence, then hand off; they do not run a self-review l
    derived projections, update ordering, concurrency, disable/re-enable and completion
    postconditions. Check changes occurring between ticks/callbacks, not just one steady
    snapshot. Require regression evidence for the reported defect and affected behavior.
+   For a concurrency finding, identify the actual entrypoints, caller threads and
+   applicable configuration that permit the interleaving. A test that invokes public
+   methods from extra threads demonstrates conditional behavior; it does not alone
+   establish a reachable application defect. Check the documented
+   [worker CONTROL execution model](ARCHITECTURE.md#worker-control-command-execution)
+   where applicable. Revalidate that model when the change alters callers or concurrency.
 6. **State the evidence and limits.** Report inspected owners/call paths, relevant
    before/after behavior, tests run and unverified boundaries. A passing build, scanner,
    negative fixture or lack of findings is not proof of complete IO/SSOT isolation.

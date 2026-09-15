@@ -6,7 +6,7 @@ This continues the existing modularity/SSOT requirement; it does not introduce a
 
 Delivery priority, clarified 2026-09-14: first close
 [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) with Rabbit and a stateful
-test adapter. [Artemis and delayed publish for 3DS](../todo/work-plane-artemis-3ds.md) follow separately.
+test adapter. [Artemis and delayed publish for 3DS](../inProgress/work-plane-artemis-3ds.md) follow separately.
 Other refactors and service correctness findings are separate PRs. The sequence proposed below
 applies only when that work is selected; it does not add prerequisites to Rabbit isolation or Artemis/3DS.
 

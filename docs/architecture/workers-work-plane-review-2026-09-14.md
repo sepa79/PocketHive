@@ -4,7 +4,7 @@ Stan: HEAD `4062be40` z bieżącymi lokalnymi zmianami. Review rzeczywistych wyw
 nie diffu. Zakres: dziewięć usług workerów, wspólne SDK oraz używane API Rabbit,
 Pierwotnie pod wspólny zakres WorkPlane + Artemis. Aktualna kolejność:
 domknięcie izolacji Rabbit (plik w repozytorium: `docs/inProgress/work-plane-module-boundaries.md`) z adapterem testowym,
-następnie Artemis/3DS (plik w repozytorium: `docs/todo/work-plane-artemis-3ds.md`). W2/W3 i granice I/O z W4 dotyczą
+następnie Artemis/3DS (plik w repozytorium: `docs/inProgress/work-plane-artemis-3ds.md`). W2/W3 i granice I/O z W4 dotyczą
 obecnego refaktoru; kontrakt opóźnienia i implementacja Artemis są późniejszym etapem.
 Nie zmieniano kodu produkcyjnego ani semantyki dostarczenia.
 

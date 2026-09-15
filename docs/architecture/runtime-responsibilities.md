@@ -1004,6 +1004,8 @@ NONE is an explicit output implementation.
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+The current command execution assumptions are defined in
+[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
 Workers start disabled in WorkerState and input registration receives that state before
 intake. Only accepted worker-level control enablement updates may enable intake;
 input properties and container environment must not provide a second enablement flag.
@@ -1183,7 +1185,8 @@ SchedulerWorkInput delivers revisions even between ticks; TriggerWorkerImpl exec
 **Current module(s):** `common/rabbit-adapter`, internal `SpringRabbitListeners`.
 
 The module owns Work listener containers and their virtual-thread executor.
-Work uses AUTO acknowledgement on callback return, preserving pre-extraction delivery behavior.
+Work uses AUTO acknowledgement on callback return after SDK executor admission.
+Only WorkNotAcceptedException maps to native requeue; accepted-task failures never reach settlement.
 The SDK supplies
 validated RabbitSubscription values and applies desired state through RabbitListeners.
 Prefetch, fixed consumer count, exclusive and explicit startup intent reach the container.
@@ -1262,28 +1265,42 @@ rules shared by parsers and snapshots. Aggregate review pending.
 WorkInputChannel exposes an already configured subscription without broker types or WorkerDefinition.
 WorkDeliveryHandler separates decoded delivery from decode failure reporting. MessageWorkInput
 applies accepted enabled state and max-in-flight configuration; MessageWorkExecution owns the
-existing synchronous/asynchronous dispatch and error reporting. It uses WorkMessageDispatcher;
+dispatch through MessageWorkExecutor and error reporting for every concurrency limit. It uses WorkMessageDispatcher;
 the redundant RabbitWorkDispatcher is removed. WorkOutput accepts only a WorkItem, with the
 selected target already captured by its instance. DefaultWorkerRuntime remains the sole result
 publication path through WorkOutputRegistry. Local scheduled WorkInput lifecycle is unchanged.
+For the application callers and ordering of enable/disable callbacks, see
+[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
 
-**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path, retry,
-requeue, completion-based ACK or an added drain policy.
+**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path,
+inline worker dispatch, retry of accepted work, completion-based ACK or a drain policy.
 
-**Required effect:** the same SDK execution path accepts input from Rabbit or a test-only stateful
+**Required effect:** the same SDK execution path accepts input from Rabbit, Artemis or a test-only stateful
 in-memory channel; disabled workers return null, worker/decode failures are reported and swallowed,
-and executor rejection retains synchronous dispatch.
+and successful admission returns without waiting for task completion, even at maxInFlight=1.
+WorkNotAcceptedException is the neutral not-submitted outcome, not a worker failure.
+MessageWorkExecutor owns capacity, pause/resume and executor lifetime. Pausing wakes
+capacity waiters before channel stop; accepted tasks are not cancelled. Core executor
+threads remain alive while idle to preserve PER_THREAD resources; pool dimensions
+are a projection of the single admission limit. MessageWorkInput records desired
+state under a short lock distinct from serialized transport start/stop, so disable
+can pause admission even during synchronous channel start. Close prevents subsequent
+enablement. Its canonical
+policy is the human-approved correction in work-plane-boundaries.md, 2026-09-15.
 
-**Verification:** MessageWorkInputTest, MessageWorkExecutionTest, DefaultWorkerRuntimeTest;
-stateful fake consumer-path coverage is added with the extraction.
+**Verification:** MessageWorkExecutorTest, MessageWorkExecutionTest, MessageWorkInputTest,
+ArtemisWorkAdmissionTest, RabbitWorkAdmissionTest and DefaultWorkerRuntimeTest.
+Admission component tests use the real SDK path with an embedded Artemis broker or
+the real Spring Rabbit listener backed by a mocked AMQP client, respectively.
 
 The test-only InMemoryWorkTransport indexes explicit single-process resources;
 InMemoryWorkChannel owns each resource's pending items, listener state and removal.
 Concurrent publication, intake and lifecycle operations must preserve that state. A handler
-runs outside resource/index locks; taking an item from pending admits it for dispatch, so
-already admitted work may finish after stop/removal. Removing a stopped resource discards
+runs outside resource/index locks; taking an item from pending reserves a delivery,
+while the handler owns execution admission. Already admitted work may finish after stop/removal. Removing a stopped resource discards
 pending items and invalidates its input/output handles, including after address reuse.
-The fixture does not add retry, requeue, cancellation or a wait for admitted work to finish.
+A delivery rejected before SDK admission is restored to pending without a retry loop.
+The fixture does not retry failures of accepted work, cancel them or wait for them to finish.
 InMemoryWorkTransportTest verifies these effects through its public API.
 
 ## RESP-WORK-RABBIT-TRANSPORT
@@ -1301,8 +1318,9 @@ worker definitions or control snapshots. RabbitWorkInputFactory/RabbitWorkOutput
 rabbit-adapter, mutable output destination or an SDK dependency from rabbit-adapter.
 
 **Required effect:** Work envelopes preserve their canonical format; callback-return AUTO ACK
-is unchanged. publisherConfirms remains represented and inactive. No new input requeue or
-shutdown/drain policy is introduced.
+follows successful executor admission at every limit. Only explicit not-submitted
+admission is returned to the broker. publisherConfirms remains represented and inactive;
+CONTROL and accepted-work failure policy are unchanged.
 
 **Verification:** MessageWorkInputFactoryTest, RabbitWorkItemConverterTest, RabbitWorkOutputTest,
 SpringRabbitTransportTest and SpringRabbitListenersTest.
@@ -2095,3 +2113,57 @@ starting STOMP when schema compilation fails, or treating a root-only digest as 
 
 **Required effect:** Canonical lifecycle refs compile in the browser; malformed events remain
 rejected. Conditional requests reuse the validator only for identical complete schema content.
+
+## RESP-ARTEMIS-CONFIGURATION
+
+`ArtemisConnectionSettings`, `ArtemisInputSettings` and `ArtemisOutputSettings` in
+`common/artemis-adapter` own validation of their disjoint typed values. The input
+and output records are the immutable Work settings and bound configuration values.
+`ArtemisSettingValues` owns shared scalar rules. `ArtemisWorkIoType` owns ARTEMIS
+selection identity; `ArtemisEnvironmentKeys` owns its setting/property key literals.
+They must not open connections, reconstruct topology or independently select an
+adapter. Authoring/binding/ENV composition is not implemented in the initial slice.
+Contract: `docs/architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15`.
+
+## RESP-ARTEMIS-CONNECTION
+
+`ArtemisSessions` owns the Core locator, session factory and opened session lifetime.
+`ArtemisWorkPlane` is the explicit composition entrypoint returning existing Work
+ports; it closes the owned infrastructure. Broker client types must not escape to
+SDK/services. No per-message connection, implicit Rabbit fallback or lifecycle state.
+
+## RESP-ARTEMIS-RESOURCE-NAMES
+
+`ArtemisResourceNames` owns physical channel names and resource URI encoding/decoding.
+`ArtemisResourceKind` owns the supported native kinds and owner check.
+`ArtemisWorkTopologyResolver` projects those values into ResolvedWorkTopology and
+WorkChannelAddress for transport, ENV, status and resource operations. It must not
+create resources or maintain a second mutable topology registry.
+
+## RESP-ARTEMIS-RESOURCES
+
+`ArtemisWorkResources` implements WorkPlaneResources using Core resource operations,
+including observations and removal. `ArtemisManagement` owns bounded Core management
+request/response encoding for address deletion, using the library management address
+and requiring a successful reply; it does not discover targets. The resource owner's
+applied set is only a receipt for completed
+bindings during partial prepare, following the existing WorkPlane contract. Broker
+state is read live; absence differs from an observation error. It must not construct
+physical names, persist manifests, implement orphan cleanup or decide swarm outcomes.
+
+## RESP-WORK-ARTEMIS-TRANSPORT
+
+`ArtemisWorkInputChannel` owns subscription state, canonical WorkItem decoding and
+delivery settlement after callback return. Its channel state is a read-only projection
+of handler registration and the native consumer lifetime: a closed consumer cannot
+remain RUNNING. Explicit start discards a dead subscription and either opens a new
+one or fails; it does not enable automatic recovery. AR-REV-2 correction approved
+2026-09-15. The subsequent approved uniform-admission correction pauses SDK admission
+before channel stop and distinguishes not-submitted deliveries from accepted tasks.
+Native acknowledgements are individual: consuming a later malformed or admitted
+message must never settle an earlier unaccepted message (WA-REV-1 correction).
+`ArtemisWorkOutput` owns canonical
+encoding and sends to its captured resolved address. Their transport factories
+consume typed settings and return the existing Work ports. They must not own worker
+state/execution, select fallback adapters, merge broker headers or add another result
+publication. Service activation and delayed-delivery intent are subsequent slices.

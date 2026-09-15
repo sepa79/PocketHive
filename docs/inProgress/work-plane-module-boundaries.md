@@ -8,6 +8,10 @@ cleanup z R4 zostały jawnie odłożone przez użytkownika. Ten plan zastępuje 
 Review poprawki i normalne E2E wydzielonego pakietu Rabbit przeszły. O1/O2 Orchestratora
 pozostają osobnymi zmianami, poza tym pakietem.
 
+Korekta dalszych prac, 2026-09-15: [aktywny plan Artemis](work-plane-artemis-3ds.md)
+zastępuje wcześniejsze uzależnienie Artemis od natywnego manifestu/orphan cleanupu.
+Te rozszerzenia pozostają osobnym refaktorem; usuwać zależność startu od formatu Rabbit.
+
 ## Cel i granica odbioru
 
 Domknąć jednego właściciela Rabbit oraz pełną granicę WorkPlane. Produkcyjna implementacja
@@ -19,7 +23,7 @@ zasobów → transport → status/statystyki/diagnostyka → usunięcie i sprawd
 Same interfejsy Input/Output albo przeniesienie klas nie zamykają tego zadania.
 
 **Artemis, broker Artemis, delayed publish i projekt jego kontraktu należą do osobnego,
-późniejszego PR:** [Artemis/3DS](../todo/work-plane-artemis-3ds.md). Nie są warunkami odbioru
+późniejszego PR:** [Artemis/3DS](../inProgress/work-plane-artemis-3ds.md). Nie są warunkami odbioru
 izolacji Rabbit. I/O pozostaje szersze od WorkPlane: Redis, CSV i scheduler zachowują obecne role.
 
 ## Punkt wyjścia — zachować działających właścicieli
@@ -154,7 +158,7 @@ Manifest i orphan cleanup pozostają Rabbit-only. Natywny manifest jest odrzucan
 skutkami; fake nie udaje Rabbit. Pełne uruchomienie Orchestratora na fake'u i osierocony
 cleanup natywnych zasobów nie są odbiorem bieżącego zakresu. Zachować jawny zapis luki R4;
 pozostałe testy Controller/worker oraz verifier nie zastępują tej odłożonej próby.
-Szczegóły: `docs/todo/work-plane-artemis-3ds.md`.
+Szczegóły: `docs/inProgress/work-plane-artemis-3ds.md`.
 
 Użytkownik odłożył również poprawę kompletności diagnostyki UI/MCP do osobnego refaktoru.
 Runtime inspector odczytuje aktualny stan zasobów z ograniczonej listy manifestu/deskryptorów;
@@ -266,9 +270,9 @@ Stackowe E2E nie były ponawiane po tej naprawie. Szczegóły i granice dowodów
   zawiera dowody przed/po oraz odróżnia poprawkę od pierwotnego review. Starsze warunki
   innych adapterów I/O pozostają osobnym długiem, opisanym w raporcie.
   Odbiór poprawki i pełne E2E zakończone pozytywnie; nie ma otwartego blokera uzgodnionego zakresu Rabbit.
-- Osobny PR Artemis: natywny manifest i osierocony cleanup dla zasobów innych niż Rabbit.
-  Istniejący Rabbit orphan cleanup pozostaje; zatwierdzony WORK_RESOURCE obsługuje zwykły
-  lifecycle remove. Pełne create przez Orchestrator nadal wymaga obsługi natywnego manifestu.
+- Aktualizacja 2026-09-15: Artemis używa istniejącego startup/remove i zatwierdzonego
+  WORK_RESOURCE. Usunąć zależność startu od manifestu Rabbit, bez jego rozbudowy.
+  Natywny manifest/orphan cleanup nie jest zakresem ani warunkiem PR Artemis.
 - Osobne refaktory: kompletność diagnostyki UI/MCP według odroczenia powyżej oraz
   rejestr/reset Orchestratora według `orchestrator-correctness.md`.
 
