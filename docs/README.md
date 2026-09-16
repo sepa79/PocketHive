@@ -3,8 +3,10 @@
 Welcome to the PocketHive documentation hub. Use these resources to understand the system, explore individual services, and contribute effectively.
 
 ## Architecture
+
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
+- [Global SUTs, Shared Mocks and Continuous Plans (proposed)](todo/global-sut-mocks-spec.md)
 - [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy follow-ups](todo/network-proxy-followups.md)
 - [Documentation index](index.md)

@@ -7,6 +7,7 @@ This directory contains work that is not yet delivered. Completed baselines live
 - `auth-service-followups.md`
 - `config-key-normalisation-plan.md`
 - `control-plane-contract-enforcement-followups.md`
+- [Global SUTs, shared mocks and continuous plans (proposed)](global-sut-mocks-spec.md)
 - `network-proxy-followups.md`
 - `pockethive-mcp-java-migration.md`
 - `scenario-plan-followups.md`

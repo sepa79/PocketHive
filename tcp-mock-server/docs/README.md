@@ -1,6 +1,12 @@
 # TCP Mock Server Enterprise
 
-Enterprise-grade TCP mocking solution with **complete WireMock equivalence** for TCP protocols, plus advanced features for binary protocols, ISO-8583, and high-performance testing.
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
+Historical overview of the TCP Mock implementation and its intended workflows. Current qualification status is defined in [TCP capability qualification](WIREMOCK-PARITY.md).
 
 ## 🚀 Quick Links
 - **[UI User Guide](UI-USER-GUIDE.md)** - Complete UI walkthrough
@@ -154,13 +160,11 @@ services:
 }
 ```
 
-## 🚀 Performance
+## Performance qualification
 
-- **Throughput**: 10,000+ requests/second
-- **Latency**: <5ms average
-- **Concurrent Connections**: 1000+
-- **Memory**: ~200MB baseline
-- **Request History**: 10,000 requests (configurable)
+Throughput, latency, memory use, connection capacity and retained request history
+have not been qualified by this documentation update. Use measured evidence from
+the selected deployment and the limits in [TCP capability qualification](WIREMOCK-PARITY.md).
 
 ## 🔒 Security
 
@@ -213,20 +217,18 @@ For issues or questions:
 
 ## 📦 What's Included
 
-- ✅ Production-ready Java backend
+- Java backend requiring functional qualification
 - ✅ Enterprise UI with 15 modules
 - ✅ 18 example mapping files
 - ✅ Docker and Kubernetes configs
 - ✅ Comprehensive documentation
-- ✅ Test coverage >85%
+- Test coverage is unqualified; no percentage is asserted
 
-## 🎯 Status
+## Status
 
-**Version**: 1.0.0  
-**Status**: ✅ PRODUCTION READY  
-**WireMock Parity**: 100%  
-**Test Coverage**: 85%  
-**Performance**: Validated
+Functional qualification is incomplete. See [TCP capability qualification](WIREMOCK-PARITY.md).
+No runtime tests or performance measurements were run for this documentation update.
+
 
 ---
 
