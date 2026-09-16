@@ -39,8 +39,8 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Supported file/content observation interface required | OPEN |
 | EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Assert config, file content/type/count | OPEN |
 | EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
-| AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | Auth group | OPEN |
-| AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | Auth endpoint matrix through ingress | OPEN |
+| AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
+| AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | AuthReadAcceptanceIT: nine additional protected read routes, anonymous 401 and authenticated 200 | PASS |
 | AU-3 | Viewer has no runnable templates and cannot create swarm. | auth-access: viewer | Auth group | OPEN |
 | AU-4 | Folder runner sees/runs only allowed scenarios, cannot run outside folder. | auth-access: scoped runner | Auth fixture and shared new swarm cleanup | OPEN |
 | AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | Auth endpoint matrix | OPEN |
@@ -128,7 +128,7 @@ Live log: `/tmp/acceptance-scenario-live.log` (3/3, 0.466 s). Evidence under
 - `scenario-templating-3abc81bc-fc89-423d-81b5-96f0819053a5`
 - `scenario-history-7bb40c1d-bdb0-4094-a5bb-2a83b975fb35`
 
-This implementation awaits separate review. Remaining N2 coverage and N3/N4 stay open.
+Scenario authoring passed separate review without findings; committed as `71205fcf`. Remaining N2 coverage and N3/N4 stay open.
 
 Regression after API scope extraction: `local-artemis.properties lifecycle` passed
 3/3. All REMOVE operations succeeded with 16 removed resources, zero remaining/errors
@@ -143,6 +143,29 @@ Rabbit was not re-run in this authoring slice; previous N1/N2 evidence remains a
 
 Controlled negative run: a temporary target selected a nonexistent scenario id.
 All three scenario cases failed with HTTP 404, zero skips; runner exit code 1 is the
-expected result. Log: `/tmp/acceptance-scenario-missing-fixture.log`. The last local
-Failsafe scenario report therefore contains these intentional negative-test errors;
-the successful run is recorded in `/tmp/acceptance-scenario-live.log` above.
+expected result. Log: `/tmp/acceptance-scenario-missing-fixture.log`. The successful run is recorded in `/tmp/acceptance-scenario-live.log` above; a later
+review rerun also passed 44 framework and 3 scenario tests.
+
+
+## Auth read slice — 2026-09-16
+
+AU-1/AU-2 passed through ingress in `AuthReadAcceptanceIT` (13 parameterized cases).
+Each case verifies anonymous 401 and authenticated 200 with local-admin. Nine AU-2
+routes cover capabilities, workspace list, scenario raw, shared network/SUT raw,
+control schema, hive journal, network bindings and proxies. AU-1 covers swarms and
+the canonical Scenario Manager `/api/templates`; the frozen legacy test requested
+`/templates`, which is not the current controller mapping. Additional scenario list
+and detail reads are included. No viewer/runner grant claim is made (AU-3–AU-13 open).
+
+Text endpoints explicitly request text/plain. The initial JSON-only client produced
+406 for scenario raw and selected the JSON /{id} mapping (404) for shared raw paths.
+PocketHiveHttp now supports an explicit Accept value through the same bounded request
+implementation; a framework test reproduces rejection of JSON and acceptance of text.
+No product behavior, security policy, stack configuration or legacy code changed.
+
+Final log: `/tmp/acceptance-auth-read-final.log` — 45 framework tests and 13 deployed
+cases passed, zero errors/failures/skips. Each evidence directory named in that log
+contains anonymous-response.json and authenticated-response.json (no request tokens).
+Import boundary log: `/tmp/acceptance-auth-import-boundaries.log` — 3 passed.
+The new auth slice awaits separate review; no new lifecycle run was needed for these
+read-only endpoints. N2 remains open, and N3/N4 are unchanged.

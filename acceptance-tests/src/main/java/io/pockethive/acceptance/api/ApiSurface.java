@@ -8,7 +8,8 @@ import java.net.URI;
  * Contract: RESP-ACCEPTANCE-HTTP — docs/architecture/acceptance-tests.md#resp-acceptance-http.
  */
 public enum ApiSurface {
-  ORCHESTRATOR("/orchestrator"), SCENARIO_MANAGER("/scenario-manager"), AUTH("/auth-service");
+  ORCHESTRATOR("/orchestrator"), SCENARIO_MANAGER("/scenario-manager"), AUTH("/auth-service"),
+  NETWORK_PROXY_MANAGER("/network-proxy-manager");
 
   private final String prefix;
   ApiSurface(String prefix) { this.prefix = prefix; }

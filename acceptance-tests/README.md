@@ -34,3 +34,10 @@ Target selection does not change the stack's configured WorkPlane. The deploymen
 already use the requested fixture's adapter. The framework neither switches brokers nor
 restarts shared services. Plain Maven tests never run deployed acceptance tests; the new
 runner selects deployed tests explicitly. The old suite remains untouched until N3.
+
+The `auth-read` group uses the same scenario target shape. It checks 13 explicit
+read routes: 401 without credentials and 200 for the selected actor (local-admin in
+the supplied target). It requires the selected scenario, the public Scenario Manager,
+Orchestrator and Network Proxy Manager APIs, and the Postgres-backed hive journal.
+It performs no mutations and does not assert viewer/runner permissions. Each case
+records the two API responses without request credentials or authentication responses.

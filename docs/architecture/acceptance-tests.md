@@ -37,13 +37,15 @@ or embed defaults in individual clients/tests.
 
 **Owner:** `PocketHiveHttp` sends bounded requests to the selected ingress only;
 `ApiSurface` owns the public service prefixes (`/orchestrator`, `/scenario-manager`,
-`/auth-service`) and projects rooted service-relative links, including operationUrl.
+`/auth-service`, `/network-proxy-manager`) and projects rooted service-relative links, including operationUrl.
 `ApiResponse` holds HTTP status/body, `ApiException` identifies an unexpected status.
 **Effect:** preserve expected denial responses as data, reject off-origin operation
 links and redirects, propagate interruption and request failures. The HTTP budget
 covers response headers and the complete body; timeout/interruption cancels the
 in-flight exchange before returning control to resource cleanup. **Must not:**
 infer domain success, log credentials, retry mutations or use direct backend ports.
+Callers can explicitly select the Accept media type for text/raw endpoints; existing
+JSON callers retain application/json. Both use the same bounded request implementation.
 
 ## RESP-ACCEPTANCE-API
 
@@ -125,3 +127,16 @@ through the new runner; plain Maven tests exercise the framework without a live 
 The existing repository import check covers this module. No additional source scanner.
 See the [coverage ledger](../ci/acceptance-coverage.md) for replacement acceptance;
 N1 alone cannot retire the old suite.
+
+## Auth read acceptance slice
+
+`AuthReadAcceptanceIT` owns the explicit GET assertion matrix for AU-1/AU-2.
+Each parameterized case uses the existing ScenarioTarget (common API settings plus
+scenarioId) and ApiRun. The selected actor must be allowed to read every listed API.
+Each route must return 200 with that actor and 401 without credentials; both responses
+are retained as evidence. Scenario IDs are encoded as URI path segments. The matrix
+uses ApiSurface for ingress prefixes and PocketHiveHttp for requests; it introduces
+no alternate HTTP client, login, configuration resolver or authorization calculator.
+It creates no resources and makes no claims about scoped grants or write denial.
+The group requires Scenario Manager, Orchestrator, Network Proxy Manager and the
+Postgres-backed hive journal; unavailable routes fail explicitly.

@@ -42,6 +42,16 @@ public final class PocketHiveHttp implements AutoCloseable {
 
   public ApiResponse request(String method, String path, Object body, String token, Duration budget)
       throws IOException, InterruptedException {
+    return request(method, path, body, token, budget, "application/json");
+  }
+
+  public ApiResponse request(String method, String path, Object body, String token, String accept)
+      throws IOException, InterruptedException {
+    return request(method, path, body, token, requestTimeout, accept);
+  }
+
+  private ApiResponse request(String method, String path, Object body, String token, Duration budget, String accept)
+      throws IOException, InterruptedException {
     URI destination = ingress.resolve(path);
     if (!Objects.equals(ingress.getScheme(), destination.getScheme())
         || !Objects.equals(ingress.getRawAuthority(), destination.getRawAuthority())
@@ -50,7 +60,7 @@ public final class PocketHiveHttp implements AutoCloseable {
     }
     Duration timeout = budget.compareTo(requestTimeout) < 0 ? budget : requestTimeout;
     if (timeout.isNegative() || timeout.isZero()) throw new IllegalArgumentException("HTTP budget exhausted");
-    var request = HttpRequest.newBuilder(destination).timeout(timeout).header("Accept", "application/json");
+    var request = HttpRequest.newBuilder(destination).timeout(timeout).header("Accept", accept);
     if (!token.isEmpty()) request.header("Authorization", "Bearer " + token);
     var publisher = HttpRequest.BodyPublishers.noBody();
     if (body != null) {

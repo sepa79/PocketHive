@@ -453,6 +453,7 @@ Framework component tests use their own HTTP stub; deployed tests use public ing
 ./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties target-state
 # Read-only authoring checks; requires ingress, auth and Scenario Manager only:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties scenarios
+./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties auth-read
 # On a stack already configured for Rabbit WORK:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
 ```

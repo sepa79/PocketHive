@@ -4,7 +4,8 @@ Status: kierunek ustalony przez użytkownika 2026-09-15; projekt wykonania poni�
 N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamknięte,
 oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
 przeszły na obu adapterach; grupa Scenario API
-(SC-1/SC-2/SC-3) także działa przez ingress. Pozostałe pokrycie otwarte.
+(SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
+13/13; ten wycinek czeka na osobne review. Pozostałe pokrycie otwarte.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -220,13 +221,32 @@ Zatrzymany lokalny stack uruchomiono z istniejących kontenerów; nie przebudowy
 produktu ani nie przełączano WorkPlane. Rabbit nie był ponownie wykonywany w tym wycinku.
 
 Logi: `/tmp/acceptance-scenario-component-tests.log`, `/tmp/acceptance-scenario-live.log`,
-`/tmp/acceptance-scenario-lifecycle-regression.log`. Nowe zmiany pozostają do osobnego
-review i poza wykonanym wcześniej commitem. Następna niezależna grupa: auth API,
+`/tmp/acceptance-scenario-lifecycle-regression.log`. Wycinek przeszedł osobne review i został zacommitowany jako `71205fcf`. Następna niezależna grupa: auth API,
 z jawną macierzą endpointów i aktorów zgodnie z AU-1–AU-13. SC-4 (zmienne w ruchu)
 oraz WK-1 (runtime history) nadal wymagają osobnych testów ruchu/konfiguracji workerów.
 
 Kontrolna próba z nieistniejącym scenarioId zakończyła się zgodnie z oczekiwaniem:
 3 błędy HTTP 404, zero skip, kod runnera 1. Log:
 `/tmp/acceptance-scenario-missing-fixture.log`. To celowy test błędnego wejścia;
-ostatni lokalny raport Failsafe zawiera tę próbę, a zielony przebieg grupy zapisano
+zielony przebieg grupy zapisano
 w `/tmp/acceptance-scenario-live.log`.
+
+
+### Następny wycinek N2: auth-read
+
+SC-1–SC-3 przeszły osobne review bez ustaleń (44 testy frameworka + 3 odczyty).
+Commit: `71205fcf`. Implementujemy teraz AU-1/AU-2: jawną macierz odczytów
+przez ingress, z parą 200 dla wybranego uprawnionego aktora i 401 bez credentials.
+Obejmuje listę swarmów/scenariuszy, szczegóły/raw scenariusza, capabilities,
+workspaces, raw network/SUT, CP schema, hive journal i network bindings/proxies.
+Używamy istniejącego targetu scenariusza i ApiRun; brak mutacji i nowych fixtures.
+Pozostałe AU-3–AU-13 wymagają osobnego pokrycia uprawnień i zasobów.
+
+
+Wynik auth-read: 13/13 przez ingress oraz 45 testów frameworka i 3 granic importów
+przeszły. Logi: `/tmp/acceptance-auth-read-final.log`,
+`/tmp/acceptance-auth-import-boundaries.log`. Wspólny klient obsługuje teraz jawny
+Accept dla tekstowych endpointów raw; nie dodano drugiego klienta ani parsera.
+Kod auth-read pozostaje niecommitowany i czeka na osobne review.
+Następny wycinek: jawny aktor viewer i jego grant, odczyty AU-6 oraz brak prawa
+uruchamiania AU-3; potem scoped runner i zasoby zarządzane przez test.

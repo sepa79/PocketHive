@@ -14,6 +14,23 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PocketHiveHttpTest {
+  @Test void requestsTheSelectedRepresentationWithoutChangingTheBody() throws Exception {
+    var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+    server.createContext("/raw", exchange -> {
+      String accept = exchange.getRequestHeaders().getFirst("Accept");
+      byte[] body = "rate: 7.5\n".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders("text/plain".equals(accept) ? 200 : 406, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+      exchange.close();
+    });
+    server.start();
+    try (var http = new PocketHiveHttp(origin(server), Duration.ofSeconds(1))) {
+      assertEquals(406, http.request("GET", "/raw", null, "").status());
+      var response = http.request("GET", "/raw", null, "", "text/plain").expect(200);
+      assertEquals("rate: 7.5\n", response.body());
+    } finally { server.stop(0); }
+  }
+
   @Test void preservesDeniedResponseAsData() throws Exception {
     try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
       ingress.reply("GET", "/api/protected", 403, Map.of("message", "denied"));
