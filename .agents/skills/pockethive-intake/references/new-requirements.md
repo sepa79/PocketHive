@@ -19,7 +19,7 @@ direct answers. Apply the shared workflow and writing guidance loaded by
    journeys; data/authentication; workload; acceptance and measurement; safety,
    ownership and cleanup. Ask only about relevant unresolved decisions using the
    shared interview rules. Do not start a parallel MCP workflow interview.
-5. Apply stakeholder writing, finalise and validate the appropriate stage. Return
+5. Apply stakeholder writing and run `prepare-review` at the appropriate stage. Return
    the document set and a concise review distinguishing accepted facts, proposals
    and remaining decisions.
 

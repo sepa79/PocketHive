@@ -7,6 +7,7 @@ import hashlib
 import json
 from pathlib import Path, PurePosixPath
 import sys
+from urllib.parse import urlsplit
 
 from .errors import IntakeError
 
@@ -59,6 +60,20 @@ class PackageContext:
 
     def document_path(self, root: Path, role: str) -> Path:
         path = root / self.manifest["templates"][role]["output"]
+        self.reject_links(path, root)
+        return path
+
+    def evidence_path(self, root: Path, ref: str) -> Path:
+        path = Path(ref)
+        if urlsplit(ref).scheme and not path.is_absolute():
+            raise IntakeError("EXTERNAL_SOURCE_UNVERIFIED", "Supply a local immutable evidence copy; remote sources are not fetched.")
+        return self.workspace(str(path if path.is_absolute() else root / path))
+
+    def lock_path(self, root: Path) -> Path:
+        name = self.manifest["documentWriteLock"]
+        if not isinstance(name, str) or len(PurePosixPath(name).parts) != 1 or name in (".", "..") or "\\" in name:
+            raise IntakeError("DOCUMENT_PATH", "The write lock must use one declared relative directory name.")
+        path = root / name
         self.reject_links(path, root)
         return path
 

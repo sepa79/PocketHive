@@ -10,8 +10,8 @@ by the user; qualification remains specific to each client and version.
 
 Implementation: [skill folder](../../.agents/skills/pockethive-intake/) and
 [entrypoint](../../.agents/skills/pockethive-intake/SKILL.md).
-Release: [pockethive-intake-1.1.0.zip](../../dist/pockethive-intake-1.1.0.zip)
-with [SHA-256 checksum](../../dist/pockethive-intake-1.1.0.zip.sha256). The design decisions below remain the delivery
+Release: [pockethive-intake-1.2.0.zip](../../dist/pockethive-intake-1.2.0.zip)
+with [SHA-256 checksum](../../dist/pockethive-intake-1.2.0.zip.sha256). The design decisions below remain the delivery
 contract; file presence alone does not establish qualification.
 
 ## Recommendation
@@ -651,7 +651,62 @@ explicit migration of older correlation destinations; the runtime scenario
 schema is unchanged. See the [intake contract](../../.agents/skills/pockethive-intake/contract/intake-contract.md)
 and [template changes](../../.agents/skills/pockethive-intake/references/template-changes.md).
 
+## Amazon Q QA review — templates retained
+
+The follow-up review is addressed in skill guidance and read-only authoring
+notices. All source YAMLs, working templates and schemas remain byte-identical
+to 1.1.0. The [QA guide](../../.agents/skills/pockethive-intake/references/qa-review.md)
+maps each concern to its existing fields and names the remaining limits.
+
+| Review concern | Resolution |
+| --- | --- |
+| Empty bindings despite a populated request sample | A nonblocking notice requests review for participating APIs with structured sample content and no body binding. Samples remain illustrative; complete coverage needs the actual API contract. |
+| Perishable constants | Calendar-shaped constant values receive a review notice. The engineer confirms intended validity and any pre-run check; no expiry or replacement value is inferred. |
+| Unknown versus omitted scope | Both YAML spellings are null. Use the existing question, answer evidence and not-applicable provenance where justified. Token acquisition/reuse stays with its existing owner. |
+| Seeder and cross-bundle dependencies | Use existing dependency references, data preparation and readiness prechecks. This captures prerequisites; it does not enforce an execution graph. |
+| Blank data-use decisions | Existing semantic checks already block handoff for relevant bound datasets. Added regressions cover reuse, concurrency, exhaustion and reset responsibility without defaulting values. |
+| Missing production context | An optional notice connects unknown availability to a selected load KPI with an unknown TPS target. Existing KPI validation remains authoritative; production evidence stays optional. |
+| Unrecorded WireMock smoke gate | Existing prechecks and result records hold the pending check and actual evidence. Missing evidence cannot establish a pass. |
+| Missing idempotency decisions | Existing retry checks remain. The agent explicitly asks about evidence-identified state-changing APIs without guessing from HTTP methods. |
+| Stakeholder cognitive load | Keep packaged ownership/automation policy intact; present business decisions in the existing read-only stakeholder view. No second configuration authority is introduced. |
+
+The key workflow correction is to run `validate` after `finalise` and report its
+actual result. Finalisation verifies metadata writes, not semantic readiness.
+The package supports four binding source types; `variable`, mentioned in the
+review, is not a fifth supported type. Neither supplied review prose nor a
+successful CLI exit establishes that a requirement was accepted or a test ran.
+
 ## Review decision and evidence limits
+
+### Authoring and review friction — 1.2.0
+
+The user authorised friction-reducing improvements with **no template changes**.
+All original YAMLs, four working templates and document schemas remain unchanged.
+The [version 3 CLI contract](../../.agents/skills/pockethive-intake/contract/intake-contract.md#friction-reducing-authoring-operations)
+defines four operations through the existing owners:
+
+| Operation | Practical result |
+| --- | --- |
+| `prepare-review` | One finalise/validate workflow with a derived view of unanswered questions, evidence and grouped diagnostics. An explicit previous snapshot can show changed pointers. |
+| `show-field` | Current section, canonical schema and shared editing policy without loading all templates or duplicating every validation message. |
+| `apply-updates` | Supplied values and exact-target provenance saved together against an expected byte revision. Invalid evidence, overlapping changes and protected targets fail before writes. |
+| `compare-source` | Explicit old/current bundle snapshots compared through the existing inspector. Changed supporting files map to provenance targets; unknown effects stay visible. |
+
+CLI mutations share one cooperative writer lock. Revision checks protect against
+stale batches and detect external edits across reads; external editors are not
+fenced. Writes remain atomic per file, with explicit errors and detectable stale
+hashes after interruption. No database, alternate document schema, autonomous
+approval or fallback path is introduced.
+
+The entrypoint now loads detailed sections on demand. Worked QA examples support
+proportionate test-adequacy decisions in the existing fields. A portable
+[conversation evaluation guide](../../.agents/skills/pockethive-intake/references/evaluation.md)
+and seven synthetic case cards assess source fidelity, missing decisions, resume,
+wording, instruction isolation and engineering judgement. They are maintainer
+qualification resources, not another client interview or claim of vendor support.
+The package qualification report records the checks actually run.
+
+### Continuing limits
 
 Recommend one self-contained `pockethive-intake` ZIP with two intake modes,
 bundled stakeholder writing, mandatory templates and one validator. Git-owned

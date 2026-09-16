@@ -1,0 +1,5 @@
+serviceId: status
+callId: read
+protocol: HTTP
+method: GET
+pathTemplate: /status

@@ -13,7 +13,7 @@ from .pointers import resolve
 from .projections import Projections
 
 
-def populate_from_inspection(package, codec, store, root: Path, docs: dict) -> dict:
+def populate_from_inspection(package, codec, store, root: Path, docs: dict, *, expected_revision: str) -> dict:
     intake = resolve(docs["traceability"], "/instance/intake", document="traceability")
     selected = intake.get("source")
     if intake.get("mode") != "from-bundle" or not selected or selected.get("kind") != "directory":
@@ -32,5 +32,5 @@ def populate_from_inspection(package, codec, store, root: Path, docs: dict) -> d
     projection = Projections(package, codec, store)
     projection.check_question_owner(docs)
     result = TemplatePopulation(package, codec).apply(docs, inspection)
-    artifacts = projection.save(root, docs)
+    artifacts = projection.save(root, docs, expected_revision=expected_revision)
     return {**artifacts, **result}

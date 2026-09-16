@@ -38,8 +38,23 @@ def main() -> int:
         finalise.add_argument("--documents", required=True)
         populate = subparsers.add_parser("populate-from-inspection")
         populate.add_argument("--documents", required=True)
+        review = subparsers.add_parser("prepare-review")
+        review.add_argument("--documents", required=True)
+        review.add_argument("--stage", required=True, choices=("draft", "handoff"))
+        review.add_argument("--previous")
+        field = subparsers.add_parser("show-field")
+        field.add_argument("--documents", required=True)
+        field.add_argument("--document", required=True)
+        field.add_argument("--pointer", required=True)
+        update = subparsers.add_parser("apply-updates")
+        update.add_argument("--documents", required=True)
+        update.add_argument("--input", required=True)
+        compare = subparsers.add_parser("compare-source")
+        compare.add_argument("--documents", required=True)
+        compare.add_argument("--previous-source", required=True)
+        compare.add_argument("--source", required=True)
         verify = subparsers.add_parser("verify-package")
-        for child in (create, inspect, validate, finalise, populate, verify):
+        for child in (create, inspect, validate, finalise, populate, review, field, update, compare, verify):
             child.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                                help="Write safe failure diagnostics to stderr.")
         args = parser.parse_args(namespace=args)
@@ -57,7 +72,7 @@ def main() -> int:
         result.setdefault("warnings", [])
         result["command"] = command
         result["status"] = "error" if result["errors"] else "incomplete" if result["gaps"] else "ok"
-        code = 2 if result["errors"] else 3 if command == "validate" and args.stage == "handoff" and result["gaps"] else 0
+        code = 2 if result["errors"] else 3 if command in ("validate", "prepare-review") and args.stage == "handoff" and result["gaps"] else 0
     except IntakeError as error:
         failure = error
         result, code = {"command": command, "status": "error", "errors": [error.issue], "gaps": [], "warnings": []}, 2

@@ -16,8 +16,7 @@ from .yaml_codec import YamlCodec
 
 
 def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str, source: Path | None) -> dict:
-    if root.exists() and (not root.is_dir() or any(root.iterdir())):
-        raise IntakeError("OUTPUT_EXISTS", "Initialisation requires a new or empty directory; resume existing documents instead.")
+    _require_empty(package, root)
     inspection = None
     if mode == "from-bundle":
         if source is None:
@@ -47,13 +46,16 @@ def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str,
     instance["questions"] = [{"id": key, "targets": targets, "question": question, "owner": None,
                                "blockingStage": "handoff", "status": "open", "answerRef": None}
                               for key, targets, question in initial]
-    try:
-        root.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        raise IntakeError("OUTPUT_CREATE", "Output directory cannot be created.") from None
     store = DocumentStore(package, codec)
-    artifacts = Projections(package, codec, store).save(root, docs)
-    if inspection is not None:
-        store.write_bytes(root / "source-inspection.json", (json.dumps(inspection, indent=2) + "\n").encode())
-        artifacts["inspection"] = "source-inspection.json"
+    with store.mutation(root, create=True):
+        _require_empty(package, root)
+        artifacts = Projections(package, codec, store).save(root, docs)
+        if inspection is not None:
+            store.write_bytes(root / "source-inspection.json", (json.dumps(inspection, indent=2) + "\n").encode())
+            artifacts["inspection"] = "source-inspection.json"
     return artifacts
+
+
+def _require_empty(package: PackageContext, root: Path) -> None:
+    if root.exists() and (not root.is_dir() or any(path != package.lock_path(root) for path in root.iterdir())):
+        raise IntakeError("OUTPUT_EXISTS", "Initialisation requires a new or empty directory; resume existing documents instead.")

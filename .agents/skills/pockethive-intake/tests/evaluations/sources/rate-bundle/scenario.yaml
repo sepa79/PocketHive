@@ -1,0 +1,14 @@
+protocolVersion: "2.0.0"
+id: synthetic-intake-rate
+name: Synthetic intake evidence only
+description: Configured traffic is not an accepted client target.
+template:
+  image: swarm-controller:fixture
+  bees:
+    - role: source-a
+      image: generator:fixture
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 100

@@ -20,15 +20,22 @@ results distinct.
 3. Read [stakeholder writing](references/stakeholder-writing.md) for both modes.
    For a wording-only request, apply it to the existing documents without
    restarting intake or changing their source mode.
-4. Read the [package manifest](contract/manifest.json),
-   [intake contract](contract/intake-contract.md) and relevant schemas, then the
-   four working templates named by the manifest.
-   [Template changes](references/template-changes.md) explain the reviewed corrections.
-   The contract owns paths, field shapes, requiredness and validation. Do not
-   reconstruct those rules in prompts or another script.
+   Use [QA review guidance](references/qa-review.md) while populating or reviewing
+   intake: it covers binding completeness, time-sensitive values, missing
+   decisions and pre-run evidence using the existing templates.
+4. Use the [intake contract](contract/intake-contract.md#friction-reducing-authoring-operations)
+   for the operation being performed. The CLI verifies package hashes and creates
+   drafts from all four mandatory templates. Use `show-field` for the current
+   section's value, canonical schema and editing ownership; read the corresponding
+   template section or detailed contract only when needed. Do not load the manifest
+   hash list, every schema or all templates routinely. The same contract owns paths,
+   field shapes, requiredness and validation; never reconstruct an alternate set.
+   Find unfamiliar fields in the saved YAML before selecting their exact pointers.
 5. Read [PocketHive context](references/pockethive-context.md) when interpreting
    bundles, checking capability limits or preparing a later MCP handoff. Read
    [client guidance](references/clients.md) when loading or qualifying the skill.
+   [Conversation evaluation](references/evaluation.md) is for skill qualification,
+   not an extra client intake step.
 
 ## Work inside the portable package
 
@@ -53,9 +60,9 @@ python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/cli
 python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/intake" --mode from-bundle --source "/client/bundle"
 python3 "/path/to/pockethive-intake/scripts/intake.py" inspect-bundle --source "/client/bundle"
 python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/intake"
-python3 "/path/to/pockethive-intake/scripts/intake.py" finalise --documents "/client/intake"
-python3 "/path/to/pockethive-intake/scripts/intake.py" validate --documents "/client/intake" --stage draft
-python3 "/path/to/pockethive-intake/scripts/intake.py" validate --documents "/client/intake" --stage handoff
+python3 "/path/to/pockethive-intake/scripts/intake.py" prepare-review --documents "/client/intake" --stage draft
+python3 "/path/to/pockethive-intake/scripts/intake.py" show-field --documents "/client/intake" --document requirements --pointer /project/objective
+python3 "/path/to/pockethive-intake/scripts/intake.py" apply-updates --documents "/client/intake" --input "/client/explicit-updates.yaml"
 ```
 
 Run only the commands relevant to the current task. `initialise` saves an
@@ -70,10 +77,28 @@ provenance, then review the reported unsupported or missing facts. The agent
 fills remaining supported fields and evidence using the contract's structures.
 Author questions only in `traceability.instance.questions`; `finalise` creates
 the requirements projection when absent and rejects independently authored
-projection content. `finalise` updates derived document metadata;
+projection content. Use `prepare-review` to resume, group gaps and finalise/validate
+once; select a small question batch from the brief rather than asking one question
+per diagnostic. `show-field` avoids loading unrelated document sections. Use the
+contract's `apply-updates` batch for explicitly supplied facts and their evidence,
+retaining the returned `documentsSha256`. The helper saves the existing YAML family;
+the batch is an editing instruction, not a second source of requirements. It cannot
+infer evidence support, answer questions or record review acceptance for you.
+
+For an evolved bundle, `compare-source --documents DIR --previous-source DIR
+--source DIR` compares explicit snapshots and identifies affected evidence. Review
+the proposed changes before explicitly updating facts and the source identity.
+Missing previous bytes are a limitation; never silently replace the source hash.
+
+The lower-level `finalise` operation updates derived document metadata;
 it reports `reviewContentSha256` for reviewing the current material content and never
 records human acceptance on the user's behalf. Follow the shared workflow to
-bind an actual review to that digest. Validate after editing.
+bind an actual review to that digest. `finalise` success confirms metadata was
+saved; it does not establish complete intake. `prepare-review --stage draft` runs
+both operations; use `--stage handoff` before claiming handoff readiness. The
+lower-level `validate` remains available for read-only checks.
+Report its actual gaps and errors, and review nonblocking notices without
+turning samples, dates or missing values into inferred client facts.
 
 If the runtime or a client tool is unavailable, report that precise limitation.
 Where the client can read the working templates, it may still produce clearly

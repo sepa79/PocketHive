@@ -29,6 +29,18 @@ in chat or exported for sharing; it is not another editable requirements or plan
 store. Edit source documents and regenerate the view. A short summary may link
 to detail but must not imply that omitted conditions were waived.
 
+Use `prepare-review` for the current decisions and source references, then request
+only the field views needed to explain the plan. Identify the returned document
+revision. Its diagnostic groups refer to the single result issue list; avoid
+copying all validation messages into the client summary. For an explicit previous
+document snapshot, `--previous DIR` identifies changed pointers without transferring
+its approval or repeating replaced client values.
+
+Keep packaged `ownership` and `mcpAutomation` policy in the mandatory YAML.
+Explain business choices in the stakeholder review; tooling mechanics belong to
+the NFT team's review. Do not ask the client to approve internal MCP rules or
+split them into a second editable configuration document.
+
 ## Protect test meaning
 
 Preserve all of the following through the writing pass:

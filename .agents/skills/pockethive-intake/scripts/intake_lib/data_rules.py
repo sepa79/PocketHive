@@ -4,19 +4,14 @@ Contract: intake-contract.md and the reviewed data source/usage template section
 """
 from __future__ import annotations
 
-from .applicability import active_execution_rows
+from .applicability import active_apis
 from .errors import IntakeError
 from .input_values import absent
 from .pointers import escape
 
 
-def _active_apis(requirements: dict, plan: dict) -> list[tuple[int, dict]]:
-    active = {row["apiRef"] for _, row in active_execution_rows(plan)}
-    return [(i, api) for i, api in enumerate(requirements["templates"]) if api.get("apiId") in active]
-
-
 def participating_entities(requirements: dict, plan: dict) -> list[tuple[int, dict]]:
-    used = {binding["source"].get("entityRef") for _, api in _active_apis(requirements, plan)
+    used = {binding["source"].get("entityRef") for _, api in active_apis(requirements, plan)
             for binding in api.get("payloadBindings", []) if binding["source"].get("type") == "dataset"}
     return [(i, entity) for i, entity in enumerate(requirements["testData"]["entities"])
             if entity.get("entityId") is not None and entity["entityId"] in used]
@@ -41,7 +36,7 @@ def requires_secrets(requirements: dict, plan: dict) -> bool:
     Redis authentication remains owned by its opaque connectionRef; transport alone
     does not establish a credential requirement.
     """
-    if any(api.get("authorization", {}).get("type") not in (None, "none") for _, api in _active_apis(requirements, plan)):
+    if any(api.get("authorization", {}).get("type") not in (None, "none") for _, api in active_apis(requirements, plan)):
         return True
     for _, entity in participating_entities(requirements, plan):
         selected = _selected_source(entity, plan)
@@ -64,7 +59,7 @@ def check_data(docs: dict) -> tuple[list[dict], list[dict]]:
         if absent(row.get(field)):
             issue(gaps, "DATA_SETTING", role, path + "/" + field, "Supply this explicitly selected data/binding setting.")
 
-    for api_index, api in _active_apis(requirements, plan):
+    for api_index, api in active_apis(requirements, plan):
         for index, binding in enumerate(api.get("payloadBindings", [])):
             path = f"/templates/{api_index}/payloadBindings/{index}"
             for field in ("location", "path"):

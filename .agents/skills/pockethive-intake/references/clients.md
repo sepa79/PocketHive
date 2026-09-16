@@ -75,6 +75,8 @@ For each claimed client/version, retain evidence that it loaded the same package
 revision, produced the four saved documents, preserved unanswered questions and
 ran validation if supported. Exercise interruption/resume and a missing tool.
 Distinguish native discovery, document drafting, CLI validation and MCP access.
+Use the shared [conversation cases and rubric](evaluation.md) for repeatable
+client trials; keep blocked prerequisites and unassessed capabilities explicit.
 
 Vendor references are advisory and may change. They are not runtime dependencies:
 

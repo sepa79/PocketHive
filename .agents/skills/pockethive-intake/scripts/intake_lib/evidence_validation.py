@@ -4,7 +4,6 @@ Must not: infer source meaning, fetch remote sources or authenticate human appro
 from __future__ import annotations
 
 from pathlib import Path
-from urllib.parse import urlsplit
 
 from .bundle_inspector import BundleInspector
 from .errors import IntakeError
@@ -32,14 +31,8 @@ class EvidenceValidation:
             if not ref or not record.get("sha256"):
                 issue(gaps, "SOURCE_REFERENCE", pointer, "Supply an exact source artifact and its byte hash.")
                 return False
-            if urlsplit(ref).scheme and not Path(ref).is_absolute():
-                issue(gaps, "EXTERNAL_SOURCE_UNVERIFIED", pointer, "Supply a local immutable evidence copy; remote sources are not fetched.")
-                return False
-            path = Path(ref)
-            if not path.is_absolute():
-                path = root / path
             try:
-                path = self.package.workspace(str(path))
+                path = self.package.evidence_path(root, ref)
                 if path in {self.package.document_path(root, role) for role in self.package.manifest["templates"]}:
                     raise IntakeError("CIRCULAR_SOURCE", "Generated intake documents cannot be their own supporting evidence.")
                 raw = self.package.read(path)
@@ -54,14 +47,24 @@ class EvidenceValidation:
                     sample_sources.add(ref)
                 return True
             except IntakeError as error:
-                issue(errors, error.issue["code"], pointer, error.issue["message"])
+                collection = gaps if error.issue["code"] == "EXTERNAL_SOURCE_UNVERIFIED" else errors
+                issue(collection, error.issue["code"], pointer, error.issue["message"])
                 return False
 
         intake_source = instance["intake"]["source"]
+        mode = instance["intake"]["mode"]
+        if mode == "from-bundle" and (not intake_source or intake_source["kind"] != "directory"):
+            issue(errors, "INTAKE_SOURCE_MODE", "/instance/intake/source", "from-bundle requires its explicitly selected directory source.")
+        if mode == "new-requirements" and intake_source and intake_source["kind"] != "file":
+            issue(errors, "INTAKE_SOURCE_MODE", "/instance/intake/source", "new-requirements accepts an explicit narrative file source, or no source yet.")
         if intake_source:
             if intake_source["kind"] == "directory":
                 try:
-                    path = self.package.workspace(intake_source["artifactRef"])
+                    if not intake_source.get("artifactRef") or not intake_source.get("sha256"):
+                        raise IntakeError("SOURCE_REFERENCE", "A directory source needs its explicit path and inventory hash.")
+                    if not Path(intake_source["artifactRef"]).is_absolute():
+                        raise IntakeError("INTAKE_SOURCE_PATH", "The selected bundle identity requires an explicit absolute directory path.")
+                    path = self.package.evidence_path(root, intake_source["artifactRef"])
                     result = BundleInspector(self.package, self.codec).inspect(path)
                     if result["sha256"] != intake_source["sha256"]:
                         issue(errors, "SOURCE_HASH", "/instance/intake/source", "Selected bundle inventory has changed; review the changed source explicitly.")

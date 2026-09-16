@@ -1,4 +1,4 @@
-# Intake document and CLI contract — version 2
+# Intake document and CLI contract — version 3
 
 This package owns intake document mechanics only. The four reviewed YAML
 templates and `schemas/` define their structure. `manifest.json` owns package
@@ -18,8 +18,12 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 | `populate-from-inspection --documents DIR` | Populate supported HTTP request-template fields in an existing bundle intake from its recorded source. Reinspect with the canonical inspector and require the recorded source hash. Retain observation provenance, fill only empty fields and reject conflicts before writing. No client adoption, targets, SUT selection or approvals are inferred. |
 | `validate --documents DIR --stage draft` | Validate YAML syntax, schemas, links, projection consistency, source evidence and known semantic constraints. Return unresolved handoff questions while allowing a structurally valid draft. |
 | `validate --documents DIR --stage handoff` | Also require the relevant material inputs, evidence coverage, plan review references and pinned document hashes. A passing check establishes document consistency only. |
-| `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Create an absent projection, refuse independent authored question content and preserve byte-identical output on repeated unchanged input. Never create approvals, adopt proposals or change client facts. |
+| `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Create an absent projection, refuse independent authored question content and preserve byte-identical output on repeated unchanged input. Report authoring review notices. Never create approvals, adopt proposals or change client facts. Run `validate` separately for semantic and handoff checks. |
 | `verify-package` | Verify every manifest-listed package file and original-source checksum. Integrity checks are not a cryptographic signature or authenticity guarantee. |
+| `prepare-review --documents DIR --stage draft\|handoff [--previous DIR]` | Finalise through the existing projection owner, validate the saved revision and return a compact, derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
+| `show-field --documents DIR --document ROLE --pointer POINTER` | Read the exact current field, its canonical schema constraints, editing ownership and relevant existing diagnostics. No document writes or alternate field dictionary. |
+| `apply-updates --documents DIR --input FILE` | Apply an explicit, evidence-linked batch against an expected document revision, validate before persistence and finalise through the existing owners. No inferred values or automatic approval. |
+| `compare-source --documents DIR --previous-source DIR --source DIR` | Inspect two explicitly supplied bundle snapshots, require the previous inventory to match the recorded source, and report changed files/observations plus provenance-linked targets. Never replace the recorded source or author updates. |
 
 `scripts/package.py --output FILE` builds a deterministic ZIP from the manifest.
 `--refresh-manifest` is an explicit maintainer operation after reviewed package
@@ -54,6 +58,110 @@ validation, repair inputs or turn a failed command into success.
 - One YAML codec owns safe round-trip parsing, serialization and reload checks.
   One resolver owns package/document paths. One semantic validator owns intake
   conclusions. No Scenario Manager validation or worker-template engine is copied.
+
+## Friction-reducing authoring operations
+
+These operations preserve every source YAML, working template and document schema.
+They add no client database, second questionnaire or independent readiness rules.
+`DocumentStore` owns the raw document-set revision: `documentsSha256` hashes the
+canonical mapping of document roles to their exact byte hashes. It differs from
+the existing material review digest and detects formatting and ledger changes too.
+
+All CLI document mutations share one exclusive `.intake-write.lock` directory in
+the explicit document root. Lock acquisition fails immediately with `DOCUMENTS_BUSY`;
+there is no retry, stale-lock takeover or age-based guess. Normal completion releases
+the lock. After a killed process, an operator must establish that no writer remains
+before explicitly removing that empty lock directory. Initialisation checks emptiness
+while holding the same lock, excluding only its own lock directory. Cooperating CLI
+writers are serialised; arbitrary external editors are not fenced. Read operations
+compare the input revision before and after reading; changed inputs fail explicitly.
+Writes remain atomic per file, not a four-file transaction.
+
+### Review and field views
+
+`prepare-review` returns the normal validator errors/gaps/warnings plus `brief`:
+source mode, source identity, current review record, provenance-linked field
+references (with their declared evidence kinds), unanswered questions, proposals,
+and diagnostics grouped by question target or document section. Group category
+arrays contain indexes into the result's canonical `errors`, `gaps` and `warnings`
+arrays; messages are emitted once. Answered questions
+are counted rather than asked again; a contradictory validator finding still appears.
+No new question text is generated. The agent selects a small relevant question batch
+from these facts. A source reference never establishes semantic support or adoption.
+
+The brief identifies `documentsSha256`, `reviewContentSha256` and the requested
+stage. Draft gaps do not block saving; handoff gaps produce exit 3 as in `validate`.
+Optional previous-set comparison reports changed exact pointers and the previous
+byte revision, without echoing replaced values or transferring acceptance. The
+stakeholder summary is authored from this brief and requested field views, with
+the same revision identified. It is never a second editable authority.
+
+`show-field` requires a declared role and exact existing JSON Pointer. The schema
+view derives from the existing schema resolver, including applicable structural
+branches; it is guidance, not a second validator. Output explicitly requested field
+content is client data. Only matching field diagnostics appear at the result's
+top level; `validationSummary` reports whole-set error/gap/warning counts without
+duplicating unrelated findings. A successful field read is not document readiness.
+Diagnostics retain their existing redaction policy. Package
+hash verification remains automatic; agents need not load the manifest hash list.
+
+### Explicit update batch
+
+The input is one bounded YAML or JSON object parsed by the canonical YAML codec:
+
+```yaml
+expectedDocumentsSha256: <digest returned by prepare-review or show-field>
+updates:
+  - target: {document: requirements, pointer: /project/objective}
+    value: <exact supplied statement>
+    provenance:
+      target: {document: requirements, pointer: /project/objective}
+      kind: client-statement
+      sources:
+        - artifactRef: /explicit/path/to/client-answer.txt
+          pointer: null
+          sha256: <exact source byte hash>
+      confirmationRef: null
+      calculation: null
+```
+
+Each update replaces one existing field or subtree. Missing paths, duplicate or
+overlapping targets, unknown envelope keys, immutable policy, generated fields and
+administrative identities fail before writing. A business-field update requires
+one exact-target provenance record in the existing canonical shape. It replaces
+that target's previous provenance; intersecting ancestor/descendant provenance
+fails explicitly so broader evidence is not silently retained for changed facts.
+Batch values may be incomplete drafts, but invalid schemas or semantic/evidence
+errors fail without persisting the batch. Supplied local evidence must have valid
+bytes and pointers; absent, remote-only or invalid evidence cannot author new facts.
+Existing unrelated draft gaps remain gaps. A stale human review is reported after
+a material change; the old confirmation is never rebound or erased automatically.
+
+The same batch may explicitly replace existing fields under
+`traceability:/instance/questions` or `/instance/proposals`, or the exact
+`/instance/intake/source`, using `provenance: null`. These already have their own
+canonical evidence structures and validation. An answered question or accepted
+proposal with missing decision evidence is rejected before writing. Bundle mode
+must retain a declared directory source with an absolute identity path; narrative mode permits a file or no source
+yet. The validator owns this relationship; clearing a bundle identity cannot make
+source verification disappear. Review/approval records remain the
+existing explicit human-evidence workflow; this helper cannot set them. It does not
+rewrite answered questions merely because a fact was populated. An empty batch is
+invalid. Stale input revisions return `STALE_DOCUMENTS` before writes. Success
+reports verified persistence and the resulting validation; incomplete intake is
+not silently promoted to readiness.
+
+### Source comparison
+
+`compare-source` reuses `BundleInspector` for both supplied directories. A retained
+hash or old inspection JSON cannot reconstruct missing prior source bytes. A previous
+snapshot whose inventory does not match the recorded bundle returns `SOURCE_HASH`.
+Results identify additions, removals, changed observations and provenance-linked
+targets. Unsupported/unmapped changes remain explicit review limitations. Old
+relative evidence paths resolve only against their declared documents root; original
+bundle evidence paths are related to the recorded source root, not guessed from a
+basename. Both snapshots and the intake remain unchanged. Subsequent selective edits
+use the same explicit update path; no automatic source switch, merge or adoption.
 
 ## Evidence and review
 
@@ -121,6 +229,33 @@ data allocation, async completion, selected-SUT boundaries, proposal/review
 references and unexecuted-result integrity. Unsupported authoring/runtime
 capabilities remain gaps; it never substitutes another protocol or model.
 
+### Authoring review notices
+
+`finalise` is a metadata operation, not a readiness gate. Both `finalise` and
+`validate` use one read-only authoring-advisory owner to return the following
+notices in `warnings`. These notices do not change status, exit codes, document
+bytes, approvals or requiredness. Schemas must pass before these checks run.
+
+| Code | Explicit trigger and limit |
+| --- | --- |
+| `PAYLOAD_BINDINGS_REVIEW` | A participating API has a nonempty object/array `requestSample` but no body binding. Review the body contract. Samples are illustrative; the checker never derives fields, values or a complete request contract from them. A body binding does not prove complete coverage. Opaque strings are not parsed. |
+| `DATE_CONSTANT_REVIEW` | A participating API's explicit constant contains a string in exact `YYYY-MM-DD` form representing a calendar date. Review its intended time semantics and validity for the planned run. The checker traverses typed constant objects/arrays and identifies the exact value pointer. It uses no current clock, field-name guess, expiry interpretation or automatic replacement. Other formats require the engineer's review. |
+| `PRODUCTION_CONTEXT_REVIEW` | Production evidence availability is unknown and a KPI row for a selected-SUT load API has an unknown TPS target. Invite a scoped decision about the target's basis. Production evidence remains optional; this notice neither requires a TPS target for every test nor derives one. |
+
+`payloadBindings` owns authored request-field bindings. Samples never supply
+missing bindings, correlation extraction or literal runtime defaults. Completeness
+requires review against the identified API contract and intended request; it
+cannot be proven against an illustrative sample. No new binding types or
+template fields are introduced by these checks.
+
+Existing semantic owners still enforce selected dataset usage/reset decisions,
+applicable KPI targets and positive-retry idempotency decisions during `validate`.
+The agent records unresolved material decisions once in the question ledger,
+grouping related pointers. Warnings alone neither author nor answer questions.
+See [QA review guidance](../references/qa-review.md) for decisions and evidence
+that use the existing fields. All working templates, source YAMLs and schemas
+remain unchanged for this refinement.
+
 ## Reference integrity
 
 Reference integrity is checked after all four schemas pass. Populated SUT, API,
@@ -178,6 +313,8 @@ confirmation; other byte changes still require refreshed integrity hashes and
 the applicable MCP source-revision handling.
 
 Writes use staged files, readback verification and atomic per-file replacement.
+Final readback must match the prepared document-set byte revision; observed disk
+bytes cannot replace the intended bytes as the definition of successful persistence.
 The four-file set is not a filesystem transaction: an interrupted finalisation
 leaves visible stale hashes and must be explicitly finalised again. It never
 reports success from attempted writes alone. Existing non-empty output directories

@@ -13,15 +13,8 @@ def escape(value: str) -> str:
 
 
 def resolve(value: object, pointer: str, document: str = "") -> object:
-    if pointer == "":
-        return value
-    if not isinstance(pointer, str) or not pointer.startswith("/"):
-        raise IntakeError("POINTER", "Expected an exact JSON Pointer.", document, str(pointer))
     current = value
-    for part in pointer[1:].split("/"):
-        if re.search(r"~(?![01])", part):
-            raise IntakeError("POINTER", "Invalid JSON Pointer escape.", document, pointer)
-        part = part.replace("~1", "/").replace("~0", "~")
+    for part in parts(pointer, document):
         try:
             if isinstance(current, list) and not re.fullmatch(r"0|[1-9][0-9]*", part):
                 raise ValueError
@@ -29,6 +22,29 @@ def resolve(value: object, pointer: str, document: str = "") -> object:
         except (TypeError, KeyError, IndexError, ValueError):
             raise IntakeError("POINTER", "Required field or JSON Pointer does not resolve.", document, pointer) from None
     return current
+
+
+def parts(pointer: str, document: str = "") -> list[str]:
+    if pointer == "":
+        return []
+    if not isinstance(pointer, str) or not pointer.startswith("/"):
+        raise IntakeError("POINTER", "Expected an exact JSON Pointer.", document, str(pointer))
+    result = []
+    for part in pointer[1:].split("/"):
+        if re.search(r"~(?![01])", part):
+            raise IntakeError("POINTER", "Invalid JSON Pointer escape.", document, pointer)
+        result.append(part.replace("~1", "/").replace("~0", "~"))
+    return result
+
+
+def replace(value: object, pointer: str, replacement: object, document: str = "") -> None:
+    tokens = parts(pointer, document)
+    if not tokens:
+        raise IntakeError("POINTER", "Replace a declared field rather than the whole document.", document, pointer)
+    resolve(value, pointer, document)
+    parent = resolve(value, pointer.rsplit("/", 1)[0], document)
+    key = int(tokens[-1]) if isinstance(parent, list) else tokens[-1]
+    parent[key] = replacement
 
 
 def leaves(value: object, pointer: str = ""):

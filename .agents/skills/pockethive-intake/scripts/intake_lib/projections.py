@@ -89,12 +89,20 @@ class Projections:
             hashes[role] = sha256(encoded[role])
         return encoded
 
-    def save(self, root: Path, docs: dict) -> dict:
-        encoded = self.prepare(docs)
+    def save(self, root: Path, docs: dict, *, expected_revision: str | None = None) -> dict:
+        return self.save_prepared(root, self.prepare(docs), expected_revision=expected_revision)
+
+    def save_prepared(self, root: Path, encoded: dict[str, bytes], *, expected_revision: str | None = None) -> dict:
+        """Persist the exact bytes already prepared and checked by the owning workflow."""
+        saved_revision = self.store.revision_bytes(encoded)
+        if expected_revision is not None:
+            self.store.assert_revision(root, expected_revision)
         for role in ("requirements", "plan", "results", "traceability"):
             self.store.write_bytes(self.package.document_path(root, role), encoded[role])
-        self.store.load(root)
+        docs = self.store.load(root)
+        self.store.assert_revision(root, saved_revision)
         policy = json.loads(self.package.read(self.package.asset("contract/provenance-policy.json")))
         return {"documents": {role: self.package.manifest["templates"][role]["output"] for role in encoded},
+                "documentsSha256": saved_revision,
                 "reviewContentSha256": review_digest(self.codec.plain(docs), policy),
                 "traceabilitySha256": sha256(encoded["traceability"])}

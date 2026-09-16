@@ -65,7 +65,7 @@ source snapshots, not as verified Git history.
    improvements as engineering proposals, preserving the original observations.
 4. Reuse any explicit adoption of this bundle for the stated requirement or plan
    scope. Ask the shared workflow's small question batch for remaining decisions.
-5. Apply stakeholder writing, finalise and validate. Return the documents,
+5. Apply stakeholder writing and run `prepare-review` at the requested stage. Return the documents,
    observed validation result and a consolidated review with explicit gaps.
 
 | Source observation | What still needs evidence or a client decision |

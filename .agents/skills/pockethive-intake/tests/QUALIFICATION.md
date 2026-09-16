@@ -120,3 +120,123 @@ is under `/tmp/pockethive-intake-feedback-real-bundle/`. They are evidence paths
 not package dependencies. Original YAML snapshots and bundled libraries remain
 byte-identical to the committed versions. These tests do not qualify an Amazon Q
 model/version or validate/run a PocketHive scenario.
+
+## QA review refinements — 1.1.1, 2026-09-16
+
+All **105 tests passed in 164.806 seconds** using Python 3.12.3 on Linux and
+Bubblewrap 0.9.0. The final code snapshot ran from an extracted ZIP with external
+networking disabled, host home/repository absent, package files read-only and
+site packages unavailable. The isolation probe passed. The command uses the
+same sandbox layout documented in [Amazon Q qualification](AMAZON_Q_QUALIFICATION.md#package-execution-inside-an-os-sandbox).
+
+The suite retains the 89 earlier checks and adds 16 public-CLI regressions:
+
+- `finalise` and `validate` report the same authoring notices without changing
+  answers, approvals, business values or repeated finalisation bytes.
+- Structured samples without body bindings prompt review without becoming a
+  request contract. Opaque strings are not parsed and sample values are not
+  echoed.
+- Nested calendar-date constants retain exact escaped pointers. Quoted and
+  unquoted YAML dates behave consistently; notices do not infer expiry, replace
+  values or expose date values in diagnostic text.
+- API participation, selected SUT, optional production evidence, absent draft
+  sections and schema failures retain their documented applicability.
+- Existing data usage/reset, selected KPI, retry/idempotency and smoke-evidence
+  gates remain effective. A successful metadata save does not imply complete
+  intake or turn an unexecuted test into a pass.
+
+Tested pre-report ZIP SHA-256:
+`d765cfeaa287128f5b5d184d92d3a7359273fb103f8647750daf7b56f178e2d4`.
+The release adds this qualification note and refreshed manifest hashes only;
+its checksum sidecar identifies the final distributable bytes. All original
+YAMLs, working templates and schemas match the 1.1.0 commit byte-for-byte.
+Document versions and the runtime scenario schema remain unchanged.
+
+Independent review found no correctness or SSOT blockers. Package integrity,
+skill frontmatter, Python syntax, local Markdown links and `git diff --check`
+passed. Raw suite logs, the exact command and protected-file hashes are retained
+locally under `/home/tim/.tmp/pip/pockethive-intake-qa-review-1pvpk966/`; these
+are local evidence paths, not package dependencies.
+
+These checks qualify the portable CLI changes. The supplied Amazon Q review
+does not establish its client/version qualification, template faithfulness for
+the named client bundles, actual dependency execution or a successful smoke run.
+
+## Authoring and review improvements — 1.2.0, 2026-09-16
+
+All **152 public CLI tests passed in 235.073 seconds**, exit 0, using Python
+3.12.3 and Bubblewrap 0.9.0 on Linux. The suite ran from an extracted ZIP with
+the package mounted read-only, networking disabled, host home/repository absent,
+and site packages unavailable. It used the sandbox command documented in
+[Amazon Q qualification](AMAZON_Q_QUALIFICATION.md#package-execution-inside-an-os-sandbox).
+
+The final suite retains the 105 earlier tests and adds 47 checks covering:
+
+- Review/resume, grouped diagnostics, exact previous-revision comparison and
+  field views derived from canonical schemas and editing ownership.
+- Sourced edits, explicit answer evidence, protected fields, conflicting
+  provenance, stale batches and invalid input without partial authoring.
+- Concurrent CLI writers, external edits during validation and final readback,
+  interrupted persistence, lock release and visible stale hashes.
+- Explicit source snapshots, additions/removals, provenance-linked impacts,
+  unsupported changes, stable inventory readback and consistent source identity.
+- Configuration versus client targets, partial answers, source instruction
+  isolation and wording edits that preserve structured meaning.
+
+Tested pre-report ZIP SHA-256:
+`f99d97ba6fd0530435efa6519bb3fb0053fdfcd630673df157152f59849c6d6a`.
+The final release adds this report and updated manifest hashes. The checksum
+sidecar identifies the final ZIP; runtime code, tests, templates and schemas
+match the qualified snapshot. Original source assets, all four working templates
+and every document schema were checked against 16 retained file hashes and the
+committed versions: no changes. CLI contract version is 3; document versions
+remain requirements 2, plan 5, traceability 2 and results 2.
+
+On one fresh synthetic draft, `prepare-review` returned 11,191 bytes and a
+focused `/project/objective` view returned 1,314 bytes. The latter retained
+whole-set counts of 0 errors, 31 gaps and 1 warning without emitting unrelated
+findings. These are output-byte observations, not token savings, elapsed-time
+improvement or evidence of stronger model judgement.
+
+### Independent conversation rehearsal
+
+An independent Codex subagent explicitly loaded a sealed package in a disposable
+workspace, created a new intake from a synthetic brief, and resumed it after a
+partial reply. This exercised one conversation; it was not native discovery,
+an Amazon Q/Copilot session or the complete evaluation case suite.
+
+The initial draft had 0 errors and 59 gaps, grouped into three client questions.
+It preserved the reported 100 requests/second as configuration, kept acceptance
+targets unknown, and recorded its proposed load/timings as unapproved. Initial
+authoring required three corrections: an unknown field pointer, an immutable
+narrative target and a protocol value whose case differed from the supplied
+source. These were visible failures/gaps; no unsupported value was silently
+substituted by the CLI.
+
+The supplied follow-up identified only `qa-account-status` and explicitly withheld
+approval. Resume produced 0 errors, 62 gaps and 2 warnings, reflecting newly
+applicable selected-SUT checks. The saved environment ID was not asked again;
+base URL, acceptance, authentication and data decisions remained unresolved.
+Parent inspection confirmed null acceptance targets, draft/pending approvals,
+proposed choices and `not-run` results. No resume command failed.
+
+Rehearsal snapshot ZIP SHA-256:
+`400fa0485601799df28b8f2bc6ad8c686984e6071e4a6d5dfee529ab0ad053ed`.
+This earlier candidate predates the final writer/evidence edge-case corrections;
+the final snapshot is covered by the 152-test run above.
+
+### Evidence and limits
+
+Final review found no remaining blocking findings in the changed owners.
+Skill frontmatter, Python syntax, local links, immutable-file checks and
+`git diff --check` passed. Local raw evidence lives under:
+
+- `/tmp/pockethive-intake-final-qualification-r7w3twbh/`: full suite and command.
+- `/tmp/pockethive-intake-forward-hr2bg6h7/`: synthetic source, drafts and initial/resumed reviews.
+- `/tmp/pockethive-intake-view-measurement-xr3kdypt/`: focused-view byte measurements.
+
+These paths are evidence locations, not package dependencies. The ZIP includes
+the tests, synthetic case cards and reproduction guidance. Writer exclusion is
+cooperative; the four files are not a filesystem transaction. Actual client
+discovery, authenticated vendor conversations, all-case engineering judgement
+and stakeholder comprehension remain separately qualified capabilities.

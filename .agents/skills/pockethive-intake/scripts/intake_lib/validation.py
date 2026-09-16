@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 
+from .authoring_advisories import authoring_advisories
 from .errors import IntakeError
 from .data_rules import check_data
 from .evidence_validation import EvidenceValidation
@@ -30,11 +31,12 @@ class Validation:
             errors.extend(self.schemas.validate(role, self.codec.plain(document)))
         return errors
 
-    def check(self, root, docs):
+    def check(self, root, docs, *, encoded=None):
         errors = self.structure(docs)
         if errors:
             return {"errors": errors, "gaps": [], "warnings": []}
         docs = self.codec.plain(docs)
+        notices = authoring_advisories(docs)
         templates = {role: self.codec.plain(self.codec.parse(self.package.read(self.package.asset(item["path"])), role))
                      for role, item in self.package.manifest["templates"].items()}
         projections = Projections(self.package, self.codec, self.store)
@@ -42,7 +44,9 @@ class Validation:
             projections.check_question_owner(docs)
         except IntakeError as error:
             errors.append(error.issue)
-        raw_hashes = {role: sha256(self.package.read(self.package.document_path(root, role))) for role in ("requirements", "plan", "results")}
+        raw = encoded if encoded is not None else {
+            role: self.package.read(self.package.document_path(root, role)) for role in self.package.manifest["templates"]}
+        raw_hashes = {role: sha256(raw[role]) for role in ("requirements", "plan", "results")}
         for role, assignments in projections.assignments(docs, raw_hashes).items():
             for pointer, expected_value in assignments.items():
                 try:
@@ -62,8 +66,9 @@ class Validation:
         gaps.extend(measure_gaps)
         errors.extend(measure_errors)
         evidence_gaps, evidence_errors, warnings = EvidenceValidation(self.package, self.codec, self.policy, templates).check(root, docs)
+        warnings.extend(notices)
         gaps.extend(evidence_gaps)
         errors.extend(evidence_errors)
         return {"errors": errors, "gaps": gaps, "warnings": warnings,
                 "reviewContentSha256": review_digest(docs, self.policy),
-                "traceabilitySha256": sha256(self.package.read(self.package.document_path(root, "traceability")))}
+                "traceabilitySha256": sha256(raw["traceability"])}

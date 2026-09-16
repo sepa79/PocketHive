@@ -9,7 +9,7 @@ from urllib.parse import urldefrag
 
 from .errors import IntakeError
 from .package_context import PackageContext
-from .pointers import resolve
+from .pointers import escape, parts, resolve
 
 
 class SchemaValidation:
@@ -39,6 +39,61 @@ class SchemaValidation:
             return {key: visit(item, base, stack) for key, item in value.items() if key not in ("$id", "$schema")}
 
         return visit(data, name, chain)
+
+    def field_schema(self, role: str, pointer: str, document: dict) -> dict:
+        """Project structural branches; retain enclosing conditions without deciding them."""
+        schema = self.expanded(self.package.manifest["templates"][role]["schema"])
+        branches, contexts = [], {}
+
+        def visit(node: object, remaining: list[str], value: object, data_path: str, schema_path: str) -> None:
+            if not remaining:
+                branches.append({"schemaPointer": schema_path, "schema": node})
+                return
+            if node is False:
+                return
+            if node is True:
+                node = {}
+            conditions = {key: node[key] for key in ("allOf", "if", "then", "else", "dependentSchemas") if key in node}
+            if conditions:
+                contexts[schema_path] = {"documentPointer": data_path, "schemaPointer": schema_path,
+                                         "constraints": conditions}
+            combinations = [key for key in ("anyOf", "oneOf") if key in node]
+            for combination in combinations:
+                for index, candidate in enumerate(node[combination]):
+                    visit(candidate, remaining, value, data_path, f"{schema_path}/{combination}/{index}")
+            if combinations and not any(key in node for key in ("type", "properties", "items", "additionalProperties")):
+                return
+            token, tail = remaining[0], remaining[1:]
+            data_child = f"{data_path}/{escape(token)}"
+            declared = node.get("type")
+            allowed = [declared] if isinstance(declared, str) else declared
+            if isinstance(value, dict) and (allowed is None or "object" in allowed):
+                if token in node.get("properties", {}):
+                    child, schema_child = node["properties"][token], f"{schema_path}/properties/{escape(token)}"
+                else:
+                    if "additionalProperties" not in node:
+                        branches.append({"schemaPointer": None, "schema": True, "unconstrainedBelow": schema_path})
+                        return
+                    child, schema_child = node["additionalProperties"], f"{schema_path}/additionalProperties"
+                visit(child, tail, value[token], data_child, schema_child)
+            elif isinstance(value, list) and (allowed is None or "array" in allowed):
+                if "items" not in node:
+                    branches.append({"schemaPointer": None, "schema": True, "unconstrainedBelow": schema_path})
+                    return
+                item = node["items"]
+                index = int(token)
+                if isinstance(item, list):
+                    child = item[index] if index < len(item) else node.get("additionalItems", True)
+                    schema_child = f"{schema_path}/items/{index}" if index < len(item) else f"{schema_path}/additionalItems"
+                else:
+                    child, schema_child = item, f"{schema_path}/items"
+                visit(child, tail, value[index], data_child, schema_child)
+
+        resolve(document, pointer, role)
+        visit(schema, parts(pointer, role), document, "", "")
+        if not branches:
+            raise IntakeError("SCHEMA_FIELD", "No canonical schema branch describes this existing field.", role, pointer)
+        return {"schemaBranches": branches, "contextConstraints": list(contexts.values())}
 
     def validate(self, role: str, value: dict) -> list[dict]:
         import fastjsonschema
