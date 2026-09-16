@@ -52,6 +52,7 @@ python3 "/path/to/pockethive-intake/scripts/intake.py" verify-package
 python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/intake" --mode new-requirements
 python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/intake" --mode from-bundle --source "/client/bundle"
 python3 "/path/to/pockethive-intake/scripts/intake.py" inspect-bundle --source "/client/bundle"
+python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/intake"
 python3 "/path/to/pockethive-intake/scripts/intake.py" finalise --documents "/client/intake"
 python3 "/path/to/pockethive-intake/scripts/intake.py" validate --documents "/client/intake" --stage draft
 python3 "/path/to/pockethive-intake/scripts/intake.py" validate --documents "/client/intake" --stage handoff
@@ -63,9 +64,13 @@ documents by editing them, not by initialising over them. New-requirements mode
 can also receive a supplied narrative file through `--source`. Bundle mode takes
 an existing directory, not a ZIP. `inspect-bundle` supplies source observations.
 Initialisation's identifiers and optional bundle inspection metadata are
-administrative; they do not establish client facts or approval.
-The agent fills supported fields and evidence,
-using the contract's structures. `finalise` updates derived document metadata;
+administrative; they do not establish client facts or approval. For bundle mode,
+run `populate-from-inspection` to fill supported observed HTTP fields and their
+provenance, then review the reported unsupported or missing facts. The agent
+fills remaining supported fields and evidence using the contract's structures.
+Author questions only in `traceability.instance.questions`; `finalise` creates
+the requirements projection when absent and rejects independently authored
+projection content. `finalise` updates derived document metadata;
 it reports `reviewContentSha256` for reviewing the current material content and never
 records human acceptance on the user's behalf. Follow the shared workflow to
 bind an actual review to that digest. Validate after editing.
@@ -74,6 +79,12 @@ If the runtime or a client tool is unavailable, report that precise limitation.
 Where the client can read the working templates, it may still produce clearly
 labelled unvalidated drafts. Missing mandatory assets block dependent drafting;
 do not invent a substitute template. Preserve completed independent work.
+
+On a command failure, use `--debug` before or after the subcommand for safe
+exception types and package code locations on stderr. Stdout stays one JSON
+result. Inspect the named document/pointer; do not edit generated fields or
+switch parsers to work around validation. Debug output excludes raw exception
+messages, client payloads and local variables.
 
 ## Return a reviewable result
 

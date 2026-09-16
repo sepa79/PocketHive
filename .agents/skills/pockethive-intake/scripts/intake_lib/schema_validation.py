@@ -42,6 +42,10 @@ class SchemaValidation:
 
     def validate(self, role: str, value: dict) -> list[dict]:
         import fastjsonschema
+        version = self.package.manifest["templates"][role]["version"]
+        if "version" in value and value["version"] != version:
+            return [IntakeError("DOCUMENT_VERSION", f"Expected {role} document version {version}; update explicitly using the current template and contract.",
+                                role, "/version", detail={"expectedVersion": version}).issue]
         if role not in self.compiled:
             schema = self.expanded(self.package.manifest["templates"][role]["schema"])
             self.compiled[role] = fastjsonschema.compile(schema, use_default=False)
@@ -49,5 +53,9 @@ class SchemaValidation:
             self.compiled[role](value)
             return []
         except fastjsonschema.JsonSchemaException as exc:
-            path = "/" + "/".join(str(part).replace("~", "~0").replace("/", "~1") for part in exc.path[1:])
-            return [IntakeError("SCHEMA", "Value does not satisfy the packaged document schema.", role, path).issue]
+            path = "".join("/" + str(part).replace("~", "~0").replace("/", "~1") for part in exc.path[1:])
+            detail = {"rule": exc.rule}
+            if exc.rule in ("type", "enum", "required"):
+                detail["expected"] = exc.rule_definition
+            return [IntakeError("SCHEMA", f"Value does not satisfy the packaged schema constraint: {exc.rule}.",
+                                role, path, detail=detail).issue]

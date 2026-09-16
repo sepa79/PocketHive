@@ -12,22 +12,22 @@ def escape(value: str) -> str:
     return value.replace("~", "~0").replace("/", "~1")
 
 
-def resolve(value: object, pointer: str) -> object:
+def resolve(value: object, pointer: str, document: str = "") -> object:
     if pointer == "":
         return value
     if not isinstance(pointer, str) or not pointer.startswith("/"):
-        raise IntakeError("POINTER", "Expected an exact JSON Pointer.", pointer=str(pointer))
+        raise IntakeError("POINTER", "Expected an exact JSON Pointer.", document, str(pointer))
     current = value
     for part in pointer[1:].split("/"):
         if re.search(r"~(?![01])", part):
-            raise IntakeError("POINTER", "Invalid JSON Pointer escape.", pointer=pointer)
+            raise IntakeError("POINTER", "Invalid JSON Pointer escape.", document, pointer)
         part = part.replace("~1", "/").replace("~0", "~")
         try:
             if isinstance(current, list) and not re.fullmatch(r"0|[1-9][0-9]*", part):
                 raise ValueError
             current = current[int(part)] if isinstance(current, list) else current[part]
         except (TypeError, KeyError, IndexError, ValueError):
-            raise IntakeError("POINTER", "JSON Pointer does not resolve.", pointer=pointer) from None
+            raise IntakeError("POINTER", "Required field or JSON Pointer does not resolve.", document, pointer) from None
     return current
 
 

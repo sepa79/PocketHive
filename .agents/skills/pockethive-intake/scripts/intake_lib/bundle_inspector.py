@@ -53,6 +53,8 @@ class BundleInspector:
                         key in self.rules["numberKeys"] and type(scalar) in (int, float)
                         or key in self.rules["booleanKeys"] and type(scalar) is bool
                         or key in self.rules["enumKeys"] and scalar in self.rules["enumKeys"][key]
+                        or key in self.rules["topLevelStringKeys"] and pointer == "/" + key
+                        and isinstance(scalar, str)
                     )
                     if allowed:
                         observations.append({"artifactRef": relative, "pointer": pointer, "value": scalar,

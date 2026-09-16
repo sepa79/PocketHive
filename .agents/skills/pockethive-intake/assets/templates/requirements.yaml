@@ -17,7 +17,6 @@ ownership:
     - templateMapping
     - mcpAutomation
     - bundleGeneration
-    - openQuestions # Generated read-only from traceability.instance.questions.
 
 
 requirementId: null # Administrative identity assigned at document-set creation.
@@ -83,6 +82,10 @@ templates:
           column: null
       # Other sources: {type: constant, value: <typed value>} or
       # {type: generated, generator: uuid, scope: logical-request}.
+      # Prior sequence response: {type: correlation, correlationRef: account-id}.
+      # Resolve account-id in each destination step's correlations; that step owns
+      # fromStepRef/responsePath/required. This binding alone owns location/path.
+      # Never duplicate extraction settings here or store extracted secret values.
       # Explicitly map every variable and fixed payload field; samples are not binding instructions.
     expectedResponse:
       httpStatuses: []
@@ -179,7 +182,8 @@ kpis:
     maxResponseTimeMs: null # Upper limit at the chosen percentile; not an average.
     measurementWindow: null
 
-openQuestions: [] # Generated read-only; edit traceability.instance.questions.
+# Author questions in traceability.instance.questions.
+# finalise creates openQuestions as a read-only projection; do not add it here.
 
 # NOTE (NFT team): template paths are generated read-only package-manifest projections.
 templateMapping:

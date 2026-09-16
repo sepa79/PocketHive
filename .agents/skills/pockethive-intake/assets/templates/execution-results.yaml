@@ -7,8 +7,8 @@ references:
   requirementsRef: null # FILLED requirements v2 document path.
   requirementsVersion: 2
   requirementsSha256: null
-  planRef: null # FILLED plan v4 path.
-  planVersion: 4
+  planRef: null # FILLED plan v5 path.
+  planVersion: 5
   planRevision: null
   planSha256: null
   generatedBundleSnapshotRef: null

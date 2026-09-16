@@ -5,7 +5,7 @@
   "type": "object",
   "properties": {
     "version": {
-      "const": 4
+      "const": 5
     },
     "templateType": {
       "const": "test-plan"

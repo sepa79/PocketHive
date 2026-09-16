@@ -33,7 +33,7 @@ The executable suite records actual command results. Client-specific skill
 discovery, attachment loading, interactive questions and asynchronous resume
 remain separate manual qualification gates, even when this suite passes.
 
-## Recorded local result — 2026-09-16
+## Recorded local result — 1.0.0, 2026-09-16
 
 The final expanded suite passed **54 distinct tests** using Python 3.12.3 on
 Linux. Command from the PocketHive repository root:
@@ -73,3 +73,50 @@ human assessment of source faithfulness was performed by this automated suite.
 [Amazon Q qualification](AMAZON_Q_QUALIFICATION.md) records the installed IDE/CLI
 checks and a further full-suite run in an OS sandbox. Authentication blocked Q
 agent validation and conversations. Package tests do not remove that gate.
+
+## Amazon Q feedback regressions — 1.1.0, 2026-09-16
+
+The user-reported missing-projection failure was reproduced against the
+committed 1.0.0 package: `finalise` returned `COMMAND_FAILED` after removal of
+`openQuestions` with a null prior digest. The 1.1.0 public-CLI tests verify:
+
+- Raw working templates and removed projections finalise repeatedly without
+  changing output bytes; independent authored questions are not discarded.
+- Schema/projection failures retain document/pointer context. Schema errors
+  identify constraints and expected versions; root pointers stay empty.
+- `--debug` before or after a subcommand keeps stdout as one JSON object and
+  writes safe diagnostics to stderr. Injected exception text and real YAML
+  parser content do not leak; unexpected failures expose their exception type.
+- Explicit HTTP observation population retains provenance, user values and
+  source identity. Conflicts and duplicate identities fail before writes;
+  missing containers have exact pointers. Repeated population is byte-stable.
+- Correlation bindings resolve step-local definitions for exact repeated API
+  occurrences. Unknown, forward, self, duplicate and orphan references fail;
+  incomplete settings remain gaps. Plan version 4 receives an explicit
+  version error for the new version 5 representation.
+
+All **89 tests passed in 132.512 seconds** using Python 3.12.3 on Linux. The
+suite ran from an extracted ZIP in Bubblewrap with external networking disabled,
+the host home/repository absent, the package read-only and site packages
+unavailable. The isolation probe passed. This includes the existing 54 checks
+and 35 additional tests; there is no coverage or throughput claim.
+
+Tested pre-report ZIP SHA-256:
+`bc56e16fc9a2067ac19bc52ba887f93b404fbc5ab8c33dbbdebe528e1349e9fc`.
+The final release adds these notes; its checksum sidecar identifies those bytes.
+The equivalent sandbox command is in
+[the earlier environment record](AMAZON_Q_QUALIFICATION.md).
+
+A read-only smoke check used `scenarios/bundles/http-sequence-six-auth-flow`.
+Population created six HTTP template rows: 30 observed fields and six
+administrative API IDs. Draft validation returned exit 0, `incomplete`, with
+zero errors and 67 gaps; handoff returned exit 3. All 20 source files remained
+byte-identical, and repeating population preserved the document bytes. No SUT,
+workload target, approval or execution result was selected by the operation.
+
+Raw logs and the isolation command were retained locally under
+`/tmp/pockethive-intake-feedback-qualification/`; the real-bundle smoke evidence
+is under `/tmp/pockethive-intake-feedback-real-bundle/`. They are evidence paths,
+not package dependencies. Original YAML snapshots and bundled libraries remain
+byte-identical to the committed versions. These tests do not qualify an Amazon Q
+model/version or validate/run a PocketHive scenario.

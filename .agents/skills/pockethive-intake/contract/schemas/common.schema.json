@@ -63,8 +63,8 @@
         "string",
         "null"
       ],
-      "pattern": "^(?:/.*)?$",
-      "description": "RFC 6901 JSON Pointer; resolution and escape validity are checked semantically."
+      "pattern": "^(?:/(?:[^~]|~[01])*)?(?![\\s\\S])",
+      "description": "RFC 6901 JSON Pointer with valid escapes; exact target resolution is checked semantically."
     },
     "jsonValue": {
       "type": [
@@ -316,6 +316,7 @@
             "dataset",
             "constant",
             "generated",
+            "correlation",
             null
           ]
         },
@@ -333,9 +334,31 @@
         },
         "scope": {
           "$ref": "#/definitions/text"
+        },
+        "correlationRef": {
+          "$ref": "#/definitions/text",
+          "description": "Correlation ID resolved within each destination occurrence of this API; extraction is authored only on that sequence step."
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "correlation"}}, "required": ["type"]},
+          "then": {
+            "properties": {
+              "entityRef": {"type": "null"},
+              "column": {"type": "null"},
+              "value": {"type": "null"},
+              "generator": {"type": "null"},
+              "scope": {"type": "null"}
+            }
+          },
+          "else": {
+            "if": {"properties": {"type": {"enum": ["dataset", "constant", "generated"]}}, "required": ["type"]},
+            "then": {"properties": {"correlationRef": {"type": "null"}}}
+          }
+        }
+      ]
     },
     "binding": {
       "type": "object",
@@ -760,6 +783,9 @@
     "correlation": {
       "type": "object",
       "properties": {
+        "correlationId": {
+          "$ref": "#/definitions/text"
+        },
         "fromStepRef": {
           "$ref": "#/definitions/text"
         },
@@ -767,18 +793,6 @@
           "$ref": "#/definitions/pointer"
         },
         "toStepRef": {
-          "$ref": "#/definitions/text"
-        },
-        "location": {
-          "enum": [
-            "body",
-            "path",
-            "query",
-            "header",
-            null
-          ]
-        },
-        "path": {
           "$ref": "#/definitions/text"
         },
         "required": {

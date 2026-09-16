@@ -10,8 +10,8 @@ by the user; qualification remains specific to each client and version.
 
 Implementation: [skill folder](../../.agents/skills/pockethive-intake/) and
 [entrypoint](../../.agents/skills/pockethive-intake/SKILL.md).
-Release: [pockethive-intake-1.0.0.zip](../../dist/pockethive-intake-1.0.0.zip)
-with [SHA-256 checksum](../../dist/pockethive-intake-1.0.0.zip.sha256). The design decisions below remain the delivery
+Release: [pockethive-intake-1.1.0.zip](../../dist/pockethive-intake-1.1.0.zip)
+with [SHA-256 checksum](../../dist/pockethive-intake-1.1.0.zip.sha256). The design decisions below remain the delivery
 contract; file presence alone does not establish qualification.
 
 ## Recommendation
@@ -632,6 +632,24 @@ The subsequent [Amazon Q and sandbox checks](../../.agents/skills/pockethive-int
 record the actual installed versions and command outcomes. No account was
 available. The full package suite passed with external networking disabled and
 host home/repository files absent; Q model behaviour remains unqualified.
+
+## Amazon Q intake feedback corrections
+
+The 1.1.0 package addresses the reported hands-on friction through the same
+canonical CLI. Missing generated questions can be finalised; conflicting
+independent projection edits retain a precise error. The working template
+omits the generated field. Failures identify schema constraints, document
+pointers and safe exception types; `--debug` adds package code locations on
+stderr while stdout remains JSON.
+
+The explicit `populate-from-inspection` command fills supported observed HTTP
+template fields with source hashes and pointers. It retains existing authored
+values and refuses conflicting facts or a changed source revision. Unsupported
+source shapes remain gaps. Correlation bindings reference the existing sequence
+extraction owner instead of duplicating it. Working plan version 5 requires
+explicit migration of older correlation destinations; the runtime scenario
+schema is unchanged. See the [intake contract](../../.agents/skills/pockethive-intake/contract/intake-contract.md)
+and [template changes](../../.agents/skills/pockethive-intake/references/template-changes.md).
 
 ## Review decision and evidence limits
 

@@ -79,6 +79,14 @@ def check_data(docs: dict) -> tuple[list[dict], list[dict]]:
             elif source.get("type") == "generated":
                 for field in ("generator", "scope"):
                     need(source, field, "requirements", path + "/source")
+            elif source.get("type") == "correlation":
+                need(source, "correlationRef", "requirements", path + "/source")
+                if absent(plan["executionModel"].get("relationship")):
+                    issue(gaps, "CORRELATION_SETTING", "plan", "/executionModel/relationship",
+                          "Declare the sequential plan for this prior-step binding.")
+                if not any(step.get("apiRef") == api.get("apiId") for step in plan["executionModel"]["sequence"]):
+                    issue(gaps, "CORRELATION_SETTING", "plan", "/executionModel/sequence",
+                          "Declare the exact destination occurrences for this prior-step binding.")
 
     for entity_index, entity in participating_entities(requirements, plan):
         base = f"/testData/entities/{entity_index}"

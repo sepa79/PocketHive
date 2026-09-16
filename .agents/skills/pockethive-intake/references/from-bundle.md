@@ -36,7 +36,29 @@ source snapshots, not as verified Git history.
    existing document set. Save all four documents before waiting for business
    answers. The generated source inspection report is read-only metadata, not a
    second source of client requirements.
-2. Populate supported fields with observed configuration and exact provenance.
+2. Run the explicit population operation:
+
+   ```sh
+   python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/intake"
+   ```
+
+   It reinspects the recorded bundle source and requires its inventory hash to
+   remain unchanged. Explicit top-level HTTP request templates populate
+   `requirements.templates`: `serviceId`, `callId`, `protocol`, `method` and
+   `pathTemplate` (retained verbatim as `path`). New API identifiers are
+   administrative links derived from the explicit service/call identity.
+   Existing matching rows retain their identifiers; only null fields are filled.
+   Repeating the operation is idempotent. Conflicting populated values,
+   ambiguous identities or changed source bytes fail before documents are saved.
+
+   Each copied fact retains source-file hash and exact pointer as an unconfirmed
+   bundle observation. Population does not select SUTs or variable profiles,
+   classify APIs as load, fill workload/KPI targets, grant approval or populate
+   execution results. Headers, bodies, auth and data configuration need the
+   agent's source review. Missing/unsupported templates and nested sequence
+   representations remain visible gaps; the operation never invents a substitute.
+
+   Continue the supported source review and fill remaining representable facts.
    Preserve unresolved template expressions; do not select variable profiles or
    evaluate arbitrary expressions to manufacture a value.
 3. Assess whether the observed design meets the stated objective. Record

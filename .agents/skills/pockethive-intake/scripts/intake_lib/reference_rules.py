@@ -6,14 +6,16 @@ from __future__ import annotations
 
 from .applicability import active_execution_rows
 from .errors import IntakeError
-from .pointers import escape, resolve
+from .identity_index import index_identities
+from .pointers import resolve
 
 
-_DUPLICATE_ID = "DUPLICATE_ID"
 _UNKNOWN_REFERENCE = "UNKNOWN_REFERENCE"
 _AMBIGUOUS_REFERENCE = "AMBIGUOUS_REFERENCE"
 _REFERENCE_MISMATCH = "REFERENCE_MISMATCH"
 _TOKEN_DEPENDENCY_CYCLE = "TOKEN_DEPENDENCY_CYCLE"
+_CORRELATION_ORDER = "CORRELATION_ORDER"
+_CORRELATION_MODEL = "CORRELATION_MODEL"
 
 
 class _References:
@@ -46,19 +48,9 @@ class _References:
     def issue(self, code: str, document: str, pointer: str, message: str) -> None:
         self.issues.append(IntakeError(code, message, document, pointer).issue)
 
-    def index(self, rows: list, key: str, document: str, pointer: str) -> dict:
-        indexed = {}
-        for position, row in enumerate(rows):
-            identity = row.get(key)
-            if identity is None:
-                continue
-            path = f"{pointer}/{position}"
-            if identity in indexed:
-                self.issue(_DUPLICATE_ID, document, f"{path}/{escape(key)}",
-                           "Populated identities must be unique within their declared scope.")
-                indexed[identity] = None
-            else:
-                indexed[identity] = (row, path)
+    def index(self, rows: list, key: str | tuple[str, ...], document: str, pointer: str) -> dict:
+        indexed, issues = index_identities(rows, key, document, pointer)
+        self.issues.extend(issues)
         return indexed
 
     def reference(self, value: object, indexed: dict, document: str, pointer: str):
@@ -102,14 +94,7 @@ class _References:
         self.same(run.get("sutId"), self.selected_sut, "results", "/runInfo/sutId")
 
     def local_indexes(self) -> None:
-        pairs = set()
-        for position, api in enumerate(self.requirements.get("templates", [])):
-            pair = (api.get("serviceId"), api.get("callId"))
-            if None not in pair:
-                if pair in pairs:
-                    self.issue(_DUPLICATE_ID, "requirements", f"/templates/{position}/callId",
-                               "A populated serviceId/callId pair must identify one API template.")
-                pairs.add(pair)
+        self.index(self.requirements.get("templates", []), ("serviceId", "callId"), "requirements", "/templates")
         for position, entity in enumerate(self.requirements.get("testData", {}).get("entities", [])):
             path = f"/testData/entities/{position}"
             columns = self.index(entity.get("columns", []), "name", "requirements", f"{path}/columns")
@@ -241,13 +226,50 @@ class _References:
 
     def sequence(self, rows: list, document: str, path: str) -> None:
         steps = self.index(rows, "stepId", document, path)
+        positions = {row["stepId"]: index for index, row in enumerate(rows)
+                     if steps.get(row.get("stepId")) is not None}
         for position, row in enumerate(rows):
             pointer = f"{path}/{position}"
-            self.reference(row.get("apiRef"), self.apis, document, f"{pointer}/apiRef")
+            api = self.reference(row.get("apiRef"), self.apis, document, f"{pointer}/apiRef")
+            correlations = self.index(row.get("correlations", []), "correlationId", document,
+                                      f"{pointer}/correlations")
+            bindings = [] if api is None else [binding for binding in api[0].get("payloadBindings", [])
+                                               if binding["source"].get("type") == "correlation"]
+            binding_refs = {binding["source"]["correlationRef"]: (binding, pointer)
+                            for binding in bindings if binding["source"].get("correlationRef") is not None}
+            for binding in bindings:
+                self.reference(binding["source"].get("correlationRef"), correlations, document,
+                               f"{pointer}/correlations")
             for correlation_position, correlation in enumerate(row.get("correlations", [])):
                 correlation_path = f"{pointer}/correlations/{correlation_position}"
                 for key in ("fromStepRef", "toStepRef"):
                     self.reference(correlation.get(key), steps, document, f"{correlation_path}/{key}")
+                self.same(correlation.get("toStepRef"), row.get("stepId"), document,
+                          f"{correlation_path}/toStepRef")
+                source_position = positions.get(correlation.get("fromStepRef"))
+                if source_position is not None and source_position >= position:
+                    self.issue(_CORRELATION_ORDER, document, f"{correlation_path}/fromStepRef",
+                               "A correlation must read an earlier exact step occurrence in this journey.")
+                if api is not None and all(binding["source"].get("correlationRef") is not None for binding in bindings):
+                    self.reference(correlation.get("correlationId"), binding_refs, document,
+                                   f"{correlation_path}/correlationId")
+
+    def correlation_model(self) -> None:
+        model = self.plan.get("executionModel", {})
+        if model.get("relationship") in (None, "sequential"):
+            return
+        for _, entry in active_execution_rows(self.plan):
+            target = self.apis.get(entry.get("apiRef"))
+            if target is None:
+                continue
+            api, path = target
+            for index, binding in enumerate(api.get("payloadBindings", [])):
+                if binding["source"].get("type") == "correlation":
+                    self.issue(_CORRELATION_MODEL, "requirements", f"{path}/payloadBindings/{index}/source/type",
+                               "A prior-step correlation requires an explicitly sequential plan.")
+        if any(step.get("correlations") for step in model.get("sequence", [])):
+            self.issue(_CORRELATION_MODEL, "plan", "/executionModel/relationship",
+                       "Authored sequence correlations require an explicitly sequential plan.")
 
     def result_references(self) -> None:
         api_rows = self.results.get("apiResults", [])
@@ -298,6 +320,7 @@ class _References:
         self.token_dependencies()
         self.selected_data()
         self.criterion_references()
+        self.correlation_model()
         self.sequence(self.plan.get("executionModel", {}).get("sequence", []), "plan", "/executionModel/sequence")
         self.sequence(self.results.get("actualRunConfig", {}).get("sequence", []), "results", "/actualRunConfig/sequence")
         self.result_references()

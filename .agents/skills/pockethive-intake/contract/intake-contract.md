@@ -1,4 +1,4 @@
-# Intake document and CLI contract — version 1
+# Intake document and CLI contract — version 2
 
 This package owns intake document mechanics only. The four reviewed YAML
 templates and `schemas/` define their structure. `manifest.json` owns package
@@ -15,9 +15,10 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 | `initialise --output DIR --mode from-bundle --source DIR` | Create four partial documents in a new/empty output directory. Inspect the selected bundle as data and save `source-inspection.json`. Generate administrative IDs only; never infer client intent from configuration. |
 | `initialise --output DIR --mode new-requirements [--source FILE]` | Create the same partial documents; optionally record the explicitly supplied narrative file identity. The agent extracts sourced statements and asks about material gaps. |
 | `inspect-bundle --source DIR` | Inventory bounded, regular files and their exact hashes; return only explicitly present, supported configuration observations. Unknown or unparsable content is a visible evidence limitation. Never execute scripts, templates, SQL or requests. |
+| `populate-from-inspection --documents DIR` | Populate supported HTTP request-template fields in an existing bundle intake from its recorded source. Reinspect with the canonical inspector and require the recorded source hash. Retain observation provenance, fill only empty fields and reject conflicts before writing. No client adoption, targets, SUT selection or approvals are inferred. |
 | `validate --documents DIR --stage draft` | Validate YAML syntax, schemas, links, projection consistency, source evidence and known semantic constraints. Return unresolved handoff questions while allowing a structurally valid draft. |
 | `validate --documents DIR --stage handoff` | Also require the relevant material inputs, evidence coverage, plan review references and pinned document hashes. A passing check establishes document consistency only. |
-| `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Refuse independent edits to the generated projection. Never create approvals, adopt proposals or change client facts. |
+| `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Create an absent projection, refuse independent authored question content and preserve byte-identical output on repeated unchanged input. Never create approvals, adopt proposals or change client facts. |
 | `verify-package` | Verify every manifest-listed package file and original-source checksum. Integrity checks are not a cryptographic signature or authenticity guarantee. |
 
 `scripts/package.py --output FILE` builds a deterministic ZIP from the manifest.
@@ -28,7 +29,20 @@ Commands emit one JSON object. `status` is `ok`, `incomplete` or `error`; issues
 have `code`, `document`, `pointer` and `message`. Exit 0 means the requested
 operation completed, including a valid partial draft; exit 3 means handoff is
 incomplete; exit 2 means invalid input, validation errors or failed I/O. No source
-payload, credential, parser excerpt or stack trace is emitted in error messages.
+payload, credential or parser excerpt is emitted in error messages.
+
+Issues may include a `detail` object with safe diagnostic metadata: the failed
+schema rule, expected document version or exception type. Schema and projection
+input checks identify their owning document and JSON Pointer. Unexpected
+failures retain `COMMAND_FAILED` and report the exception type plus a safe cause
+description; raw exception messages can contain client data and are not emitted.
+
+`--debug` is accepted before or after the subcommand. It writes diagnostic JSON
+to stderr, retaining one result JSON object on stdout and the normal exit code.
+Diagnostics include exception classes and package-relative code locations,
+without local variables, source lines, client payloads or absolute source paths.
+Known boundary errors retain their code/document/pointer; debug does not alter
+validation, repair inputs or turn a failed command into success.
 
 ## Ownership
 
@@ -142,7 +156,21 @@ apart from their explicitly renamed sample filename.
 
 Question projection ownership is checked against the previous projection digest
 stored in the traceability instance. Editing the question owner is permitted;
-editing its generated requirements projection independently is rejected.
+editing its generated requirements projection independently is rejected with
+`PROJECTION_EDIT` at `requirements:/openQuestions`.
+
+The working requirements template omits `openQuestions`; author questions only
+in `traceability.instance.questions`. An absent projection has no authored
+content to protect and `finalise` regenerates it from that owner, including after
+removal of a previously generated field. A null stored digest denotes no prior
+projection: an absent/empty projection or one already equal to the owner can be
+generated; different nonempty content is rejected rather than discarded. With
+a stored digest and a present projection, the previous digest must match before
+the owner can refresh it. A missing digest field is malformed metadata, not an
+implicit null. `validate` reports an absent or stale projection and directs the
+caller to `finalise`; it does not create one. Generated nonempty projections
+remain valid saved output.
+
 Finalize in order: requirements, plan, results, traceability. The traceability
 file records the other hashes, never its own. Its external byte hash identifies
 the set for later MCP review. Changed material content invalidates its local
@@ -154,6 +182,45 @@ The four-file set is not a filesystem transaction: an interrupted finalisation
 leaves visible stale hashes and must be explicitly finalised again. It never
 reports success from attempted writes alone. Existing non-empty output directories
 are not overwritten by initialisation.
+
+## Observed draft population
+
+`initialise` establishes the authoring workspace. The explicit
+`populate-from-inspection` operation then reuses the inspector's supported
+observations to populate template identifiers and HTTP protocol/method/path
+fields with exact file hashes and pointers. API identifiers generated by this
+operation are administrative identities, not client requirements. Unsupported
+source shapes and absent declarations remain visible gaps. The operation does
+not evaluate path templates, resolve endpoint context, copy authentication
+payloads or select a different source when the recorded source is unavailable.
+
+Existing authored values, IDs and evidence survive a repeated operation.
+Conflicting populated values or ambiguous identities fail before document
+writes. A changed source revision requires explicit review; neither stale
+inspection JSON nor a new on-disk source silently replaces the recorded input.
+Bundle observations still require scoped client adoption for handoff.
+
+## Correlated request bindings
+
+A requirements payload binding may use
+`source: {type: correlation, correlationRef: account-id}`. The binding owns the
+destination `location` and `path`. Its reference resolves to a `correlationId`
+on each applicable destination sequence step in the plan. That existing sequence
+correlation owns `fromStepRef`, `responsePath`, `toStepRef` and `required`.
+`responsePath` is an exact JSON Pointer, not an expression or prose workaround.
+
+The source step must precede the destination; `toStepRef` must identify the
+containing step. Step IDs identify exact occurrences, including repeated calls
+to one API. Local correlation IDs permit separate explicit source occurrences
+for repeated destination calls. Unknown, ambiguous, orphan or forward references
+fail; incomplete fields remain declared draft gaps. Authentication tokens retain
+their existing owner and are not inferred as ordinary payload correlations.
+
+Working plan version **5** removes the correlation's duplicate `location` and
+`path`: use the requirements binding destination and the step-local reference.
+Version 4 documents require explicit edits to that representation and their
+version before finalisation; there is no implicit migration. Requirements version
+2 gains the additive binding type. Original supplied YAMLs remain unchanged.
 
 ## Scope limits
 

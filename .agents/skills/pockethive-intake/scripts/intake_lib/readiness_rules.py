@@ -162,11 +162,21 @@ def check_readiness(docs: dict) -> tuple[list[dict], list[dict]]:
             for index, step in enumerate(model["sequence"]):
                 for field in ("stepId", "apiRef", "thinkTimeMs"):
                     need("plan", f"/executionModel/sequence/{index}/{field}")
-                if step.get("correlations"):
-                    need("plan", "/executionModel/correlationFailureAction")
         if model["completion"]["mode"] == "asynchronous":
             for field in ("assertionRef", "maxDurationSeconds", "waitPolicyRef"):
                 need("plan", "/executionModel/completion/" + field)
+
+    if any(step.get("correlations") for step in model["sequence"]):
+        need("plan", "/executionModel/relationship")
+        need("plan", "/executionModel/correlationFailureAction")
+    for index, step in enumerate(model["sequence"]):
+        for correlation_index, correlation in enumerate(step.get("correlations", [])):
+            pointer = f"/executionModel/sequence/{index}/correlations/{correlation_index}"
+            for field in ("correlationId", "fromStepRef", "toStepRef", "required"):
+                need("plan", pointer + "/" + field)
+            if correlation.get("responsePath") is None:
+                issue(gaps, "REQUIRED_INPUT", "plan", pointer + "/responsePath",
+                      "Supply the exact response JSON Pointer; an empty string explicitly selects its root.")
 
     for index, entity in participating_entities(requirements, plan):
         base = f"/testData/entities/{index}"

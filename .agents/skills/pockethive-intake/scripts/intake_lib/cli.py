@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 
+from .diagnostics import command_failure, write_debug
 from .errors import IntakeError
 from .package_context import PackageContext
 
@@ -17,8 +18,12 @@ class ArgumentParser(argparse.ArgumentParser):
 
 def main() -> int:
     command = None
+    package = None
+    failure = None
+    args = argparse.Namespace(debug=False)
     try:
         parser = ArgumentParser(description="Create and check sourced PocketHive intake documents; never execute tests.")
+        parser.add_argument("--debug", action="store_true", help="Write safe failure diagnostics to stderr.")
         subparsers = parser.add_subparsers(dest="command", required=True)
         create = subparsers.add_parser("initialise")
         create.add_argument("--output", required=True)
@@ -31,8 +36,13 @@ def main() -> int:
         validate.add_argument("--stage", required=True, choices=("draft", "handoff"))
         finalise = subparsers.add_parser("finalise")
         finalise.add_argument("--documents", required=True)
-        subparsers.add_parser("verify-package")
-        args = parser.parse_args()
+        populate = subparsers.add_parser("populate-from-inspection")
+        populate.add_argument("--documents", required=True)
+        verify = subparsers.add_parser("verify-package")
+        for child in (create, inspect, validate, finalise, populate, verify):
+            child.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
+                               help="Write safe failure diagnostics to stderr.")
+        args = parser.parse_args(namespace=args)
         command = args.command
         package = PackageContext()
         integrity = package.verify()
@@ -49,8 +59,12 @@ def main() -> int:
         result["status"] = "error" if result["errors"] else "incomplete" if result["gaps"] else "ok"
         code = 2 if result["errors"] else 3 if command == "validate" and args.stage == "handoff" and result["gaps"] else 0
     except IntakeError as error:
+        failure = error
         result, code = {"command": command, "status": "error", "errors": [error.issue], "gaps": [], "warnings": []}, 2
-    except (OSError, ValueError, KeyError, TypeError, ImportError, RecursionError):
-        result, code = {"command": command, "status": "error", "errors": [IntakeError("COMMAND_FAILED", "The command failed safely; check package integrity and declared input structure.").issue], "gaps": [], "warnings": []}, 2
+    except Exception as error:
+        failure = error
+        result, code = {"command": command, "status": "error", "errors": [command_failure(error).issue], "gaps": [], "warnings": []}, 2
+    if args.debug and result["errors"]:
+        write_debug(command, result["errors"], failure, package.root if package is not None else None)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return code

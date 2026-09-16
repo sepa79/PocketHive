@@ -45,7 +45,12 @@ class Validation:
         raw_hashes = {role: sha256(self.package.read(self.package.document_path(root, role))) for role in ("requirements", "plan", "results")}
         for role, assignments in projections.assignments(docs, raw_hashes).items():
             for pointer, expected_value in assignments.items():
-                if resolve(docs[role], pointer) != expected_value:
+                try:
+                    current_value = resolve(docs[role], pointer, role)
+                    stale = current_value != expected_value
+                except IntakeError:
+                    stale = True
+                if stale:
                     errors.append(IntakeError("STALE_PROJECTION", "Document reference, hash or generated value is stale; finalise explicitly.", role, pointer).issue)
         errors.extend(check_references(docs))
         gaps, missing_errors = check_readiness(docs)

@@ -3,6 +3,7 @@ Must not: duplicate parsers, validators or projection logic. Contract: intake-co
 """
 from .bundle_inspector import BundleInspector
 from .document_store import DocumentStore
+from .errors import IntakeError
 from .initialisation import initialise
 from .projections import Projections
 from .validation import Validation
@@ -17,7 +18,7 @@ def execute(package, args):
     if args.command == "initialise":
         source = package.workspace(args.source) if args.source else None
         return initialise(package, codec, package.workspace(args.output, write=True), args.mode, source)
-    root = package.workspace(args.documents, write=args.command == "finalise")
+    root = package.workspace(args.documents, write=args.command in ("finalise", "populate-from-inspection"))
     docs = store.load(root)
     validation = Validation(package, codec, store)
     if args.command == "validate":
@@ -25,4 +26,9 @@ def execute(package, args):
     errors = validation.structure(docs)
     if errors:
         return {"errors": errors}
-    return Projections(package, codec, store).save(root, docs)
+    if args.command == "populate-from-inspection":
+        from .population import populate_from_inspection
+        return populate_from_inspection(package, codec, store, root, docs)
+    if args.command == "finalise":
+        return Projections(package, codec, store).save(root, docs)
+    raise IntakeError("ARGUMENTS", "Unknown intake operation; use --help for the command interface.")

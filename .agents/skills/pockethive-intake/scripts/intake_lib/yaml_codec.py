@@ -31,7 +31,10 @@ class YamlCodec:
             value = self.yaml.load(text)
             self.plain(value)
             return value
-        except IntakeError:
+        except IntakeError as error:
+            if not error.issue["document"]:
+                raise IntakeError(error.issue["code"], error.issue["message"], document,
+                                  error.issue["pointer"], detail=error.issue.get("detail")) from None
             raise
         except Exception as exc:
             from ruamel.yaml.constructor import DuplicateKeyError

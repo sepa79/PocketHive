@@ -14,8 +14,9 @@ from .review_digest import review_digest
 from .pointers import resolve
 
 
-def projected_questions(instance: dict) -> list[str]:
-    return [str(question["question"]) for question in instance["questions"] if question["status"] != "answered"]
+def projected_questions(instance: dict) -> list[str | None]:
+    questions = resolve(instance, "/questions", "traceability")
+    return [question["question"] for question in questions if question["status"] != "answered"]
 
 
 class Projections:
@@ -23,10 +24,18 @@ class Projections:
         self.package, self.codec, self.store = package, codec, store
 
     def check_question_owner(self, docs: dict) -> None:
-        instance = docs["traceability"]["instance"]
-        expected = instance["projections"]["openQuestionsSha256"]
+        instance = resolve(docs["traceability"], "/instance", "traceability")
+        expected = resolve(docs["traceability"], "/instance/projections/openQuestionsSha256", "traceability")
+        if "openQuestions" not in docs["requirements"]:
+            return
+        projection = self.codec.plain(docs["requirements"]["openQuestions"])
+        if expected is None:
+            if projection == [] or projection == projected_questions(instance):
+                return
+            raise IntakeError("PROJECTION_EDIT", "Move authored questions to traceability.instance.questions; then remove requirements.openQuestions and finalise.",
+                              "requirements", "/openQuestions")
         current = canonical_hash(self.codec.plain(docs["requirements"]["openQuestions"]))
-        if expected is not None and current != expected:
+        if current != expected:
             raise IntakeError("PROJECTION_EDIT", "Edit traceability questions; requirements.openQuestions is generated.",
                               "requirements", "/openQuestions")
 
@@ -36,10 +45,15 @@ class Projections:
         paths = {role: entry["path"] for role, entry in templates.items()}
         names = {role: entry["output"] for role, entry in templates.items()}
         req, plan = docs["requirements"], docs["plan"]
-        questions = projected_questions(docs["traceability"]["instance"])
-        refs = {"requirementsRef": names["requirements"], "requirementsVersion": req["version"],
+        questions = projected_questions(resolve(docs["traceability"], "/instance", "traceability"))
+        requirement_id = resolve(req, "/requirementId", "requirements")
+        requirement_version = resolve(req, "/version", "requirements")
+        plan_version = resolve(plan, "/version", "plan")
+        plan_id = resolve(plan, "/planId", "plan")
+        plan_revision = resolve(plan, "/revision", "plan")
+        refs = {"requirementsRef": names["requirements"], "requirementsVersion": requirement_version,
                 "requirementsSha256": hashes.get("requirements"), "planRef": names["plan"],
-                "planVersion": plan["version"], "planRevision": plan["revision"],
+                "planVersion": plan_version, "planRevision": plan_revision,
                 "planSha256": hashes.get("plan"), "traceabilityMap": names["traceability"]}
         return {
             "requirements": {
@@ -47,9 +61,9 @@ class Projections:
                 "/bundleGeneration/testPlanRef": names["plan"], "/openQuestions": questions},
             "plan": {
                 "/contract/referenceDocuments": {"requirementsTemplate": paths["requirements"], "executionTemplate": paths["results"], "traceabilityMap": paths["traceability"]},
-                "/requirementId": req["requirementId"], "/requirementsRef": names["requirements"],
-                "/requirementsSnapshot": {"version": req["version"], "sha256": hashes.get("requirements")}},
-            "results": {"/requirementId": req["requirementId"], "/planId": plan["planId"],
+                "/requirementId": requirement_id, "/requirementsRef": names["requirements"],
+                "/requirementsSnapshot": {"version": requirement_version, "sha256": hashes.get("requirements")}},
+            "results": {"/requirementId": requirement_id, "/planId": plan_id,
                         **{"/references/" + key: value for key, value in refs.items()}},
             "traceability": {
                 "/templateRegistry": {"requirements": paths["requirements"], "requirementsSample": self.package.manifest["requirementsSample"], "testPlan": paths["plan"], "testPlanSample": None, "executionResults": paths["results"]},
@@ -63,7 +77,9 @@ class Projections:
         for role in ("requirements", "plan", "results", "traceability"):
             for pointer, value in self.assignments(docs, hashes)[role].items():
                 parent, key = pointer.rsplit("/", 1)
-                container = resolve(docs[role], parent)
+                container = resolve(docs[role], parent, role)
+                if not isinstance(container, dict):
+                    raise IntakeError("PROJECTION_CONTAINER", "Generated fields require an object at this location.", role, parent)
                 # Update existing mappings to retain template comments in round trips.
                 if isinstance(value, dict) and isinstance(container.get(key), dict):
                     container[key].update(value)

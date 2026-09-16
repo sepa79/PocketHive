@@ -1,4 +1,4 @@
-version: 4
+version: 5
 templateType: test-plan
 planId: null # Administrative identity assigned at document-set creation.
 revision: 1
@@ -48,9 +48,13 @@ executionModel:
   rateUnit: null # requests-per-second | journeys-per-second
   arrivalModel: null # open-loop | closed-loop; describe implementation feasibility.
   sequence: [] # For sequential: ordered {stepId, apiRef, thinkTimeMs, correlations: []}.
-  # Each correlation: {fromStepRef, responsePath, toStepRef, location, path, required}.
-  # Step refs identify occurrences, including repeated APIs. State stays within one journey.
-  # responsePath is a JSON Pointer; unsupported extraction remains a capability gap.
+  # Each correlation: {correlationId, fromStepRef, responsePath, toStepRef, required}.
+  # correlationId is unique within this destination step. requirements payloadBindings
+  # use source: {type: correlation, correlationRef: <correlationId>} and alone own location/path.
+  # fromStepRef identifies an earlier exact occurrence; toStepRef equals this stepId.
+  # Repeated APIs resolve their shared correlationRef separately in every destination occurrence.
+  # responsePath is a JSON Pointer (empty string means response root); state stays in one journey.
+  # Store references only, never extracted credentials/values. Auth remains its existing owner.
   correlationFailureAction: null # Required for sequential correlated calls, e.g. abort-journey.
   note: >
     API timelines below apply to open-loop independent request rates. For sequential execution,

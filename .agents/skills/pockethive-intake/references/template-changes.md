@@ -10,7 +10,7 @@ the intake contract defines the checks. This page explains the changes.
 | Working document | Source → working version | Main corrections |
 | --- | --- | --- |
 | Requirements | 1 → 2 | Replace illustrative client values with nulls, preserve source ownership, make unknown production usage explicit, generate open questions from traceability. |
-| Test plan | 3 → 4 | Explicit open/closed workload models, journey occurrences and correlation, data lifetime, async completion, measurement definitions, workload delivery, environment/dependency limits, stop/drain obligations and conditional comparison method. |
+| Test plan | 3 → 5 | Explicit open/closed workload models, journey occurrences and correlation, data lifetime, async completion, measurement definitions, workload delivery, environment/dependency limits, stop/drain obligations and conditional comparison method. |
 | Traceability | 1 → 2 | Keep the supplied guide and add actual instance links: source evidence, proposals, questions, scoped KPI/rule/results coverage and review of exact content. |
 | Execution results | 1 → 2 | Start unexecuted, bind actual document/run snapshots, record delivered workload, dependency observations, stop/drain outcomes and comparison evidence. |
 
@@ -40,3 +40,18 @@ that method. Do not invent a baseline or require repeated runs for every intake.
 
 These additions improve the intake contract. They do not add a new PocketHive
 scenario schema, endpoint resolver, runtime scheduler or results calculator.
+
+## Plan 4 to plan 5
+
+Update an existing plan explicitly before using the current package. For each
+sequence correlation, assign its step-local `correlationId` and retain the exact
+source step, response JSON Pointer, destination step and requiredness. Put the
+destination location/path in its requirements API payload binding, with
+`source: {type: correlation, correlationRef: <correlationId>}`. Remove the duplicate
+location/path from the plan correlation. Review every repeated API occurrence;
+no nearest-step selection or automatic migration occurs. Set the plan's version
+to 5, finalise its derived references and validate the updated document set.
+
+The working requirements template now omits `openQuestions`. Keep questions in
+traceability and let finalisation create that projection. Directly authored
+projection content is rejected with a named document and pointer.

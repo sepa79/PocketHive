@@ -2,6 +2,18 @@
   "description": "Observation allowlist only, never a scenario schema or endpoint resolver. Paths/hashes preserve evidence when a value is not emitted.",
   "numberKeys": ["rate", "perSecond", "requestsPerSecond", "durationSeconds", "timeoutMs", "retries", "maxInFlight", "concurrency", "tps", "thinkTimeMs"],
   "booleanKeys": ["enabled", "keepAlive", "tlsVerify", "fireAndForget"],
+  "topLevelStringKeys": ["serviceId", "callId", "pathTemplate"],
+  "templatePopulation": {
+    "protocol": "HTTP",
+    "identityKeys": ["serviceId", "callId"],
+    "fields": {
+      "serviceId": "serviceId",
+      "callId": "callId",
+      "protocol": "protocol",
+      "method": "method",
+      "pathTemplate": "path"
+    }
+  },
   "enumKeys": {
     "protocol": ["HTTP", "HTTPS", "TCP", "TCPS", "http", "https", "tcp", "tcps"],
     "kind": ["HTTP", "HTTPS", "TCP", "TCPS"],
