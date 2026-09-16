@@ -10,7 +10,7 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Responsibility: resolve an explicitly selected lifecycle, scenario, viewer or runner target file.
+ * Responsibility: resolve an explicitly selected acceptance target file.
  * Must not: read legacy configuration or infer missing values.
  * Contract: RESP-ACCEPTANCE-TARGET — docs/architecture/acceptance-tests.md#resp-acceptance-target.
  */
@@ -73,6 +73,16 @@ public final class TargetLoader {
     return new RunnerTarget(api, values.getProperty("cleanupUsername"), values.getProperty("folder"),
         values.getProperty("scenarioId"), values.getProperty("deniedScenarioId"), values.getProperty("sutId"),
         operations(api, values));
+  }
+
+  public static NetworkAccessTarget loadNetworkAccess(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Properties values = read(actual, Set.of("runnerUsername", "runnerFolder"));
+    ApiTarget api = api(values, actual);
+    if (api.username().equals(values.getProperty("runnerUsername"))) {
+      throw new IllegalArgumentException("Viewer and runner actors must be distinct");
+    }
+    return new NetworkAccessTarget(api, values.getProperty("runnerUsername"), values.getProperty("runnerFolder"));
   }
 
   private static OperationLimits operations(ApiTarget api, Properties values) {

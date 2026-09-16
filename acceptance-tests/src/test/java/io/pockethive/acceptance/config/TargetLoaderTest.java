@@ -95,4 +95,18 @@ class TargetLoaderTest {
         () -> TargetLoader.loadRunner(file(config.replace("deniedScenarioId=outside", "deniedScenarioId=authoring-fixture"))));
     assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadRunner(file(config + "captureTimeout=PT1S\n")));
   }
+
+  @Test void networkAccessNeedsOnlyApiAndActorSettings() throws Exception {
+    String config = SCENARIO.replace("scenarioId=authoring-fixture\n", "")
+        + "runnerUsername=runner\nrunnerFolder=demo\n";
+    var target = TargetLoader.loadNetworkAccess(file(config));
+    assertEquals("runner", target.runnerUsername());
+    assertEquals("demo", target.runnerFolder());
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadNetworkAccess(file(config + "scenarioId=unneeded\n")));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadNetworkAccess(file(config.replace("runnerFolder=demo\n", ""))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadNetworkAccess(file(config.replace("runnerUsername=runner", "runnerUsername=test-actor"))));
+  }
 }

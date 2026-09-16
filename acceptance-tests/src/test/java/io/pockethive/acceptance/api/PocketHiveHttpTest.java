@@ -14,6 +14,29 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PocketHiveHttpTest {
+  @Test void sendsUtf8TextWithoutJsonQuotingAndPreservesDenial() throws Exception {
+    String payload = "- name: żółć\n  enabled: true\n";
+    var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+    server.createContext("/raw", exchange -> {
+      var body = exchange.getRequestBody().readAllBytes();
+      boolean valid = "PUT".equals(exchange.getRequestMethod())
+          && "text/plain".equals(exchange.getRequestHeaders().getFirst("Content-Type"))
+          && "text/plain".equals(exchange.getRequestHeaders().getFirst("Accept"))
+          && "Bearer actor-token".equals(exchange.getRequestHeaders().getFirst("Authorization"))
+          && payload.equals(new String(body, java.nio.charset.StandardCharsets.UTF_8));
+      exchange.sendResponseHeaders(valid ? 403 : 415, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+      exchange.close();
+    });
+    server.start();
+    try (var http = new PocketHiveHttp(origin(server), Duration.ofSeconds(1))) {
+      var response = http.requestText("PUT", "/raw", payload, "actor-token").expect(403);
+      assertEquals(payload, response.body());
+      assertThrows(IllegalArgumentException.class,
+          () -> http.requestText("PUT", "https://unrelated.invalid/raw", payload, "actor-token"));
+    } finally { server.stop(0); }
+  }
+
   @Test void requestsTheSelectedRepresentationWithoutChangingTheBody() throws Exception {
     var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
     server.createContext("/raw", exchange -> {

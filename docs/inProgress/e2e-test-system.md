@@ -5,7 +5,8 @@ N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamkni
 oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
 przeszły na obu adapterach; grupa Scenario API
 (SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
-13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3 i review (commit `a133b554`). Scoped runner AU-4/AU-5 przeszło 2/2; czeka na review. Pozostałe pokrycie otwarte.
+13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3 i review (commit `a133b554`). Scoped runner AU-4/AU-5 przeszło 2/2 i review (commit `5e9e80e5`).
+AU-8/AU-13 przeszło 3/3; czeka na review. Pozostałe pokrycie otwarte.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -287,3 +288,14 @@ zero pozostałości/błędów, registry404); końcowa lista swarmów pusta. Logi
 Dalsze auth: AU-8/AU-13 mogą użyć istniejących aktorów. AU-7/AU-9/AU-10 wymagające
 provisioningu aktorów muszą jawnie rozwiązać cleanup: obecne API admina nie ma DELETE
 użytkownika. Nie dokładamy tego kontraktu ani nie zostawiamy użytkowników po cichu.
+
+
+### Shared network auth AU-8/AU-13
+
+Wykonano trzy przypadki przez ingress: viewer odczytuje network profiles/SUT raw,
+a PUT tego samego tekstu jest odrzucony403; runner dostaje403 dla manual override,
+viewer odczytuje status. Wszystkie readbacki pozostają identyczne. Target wymaga tylko
+API/aktorów, bez scenariuszy i lifecycle. Wspólny klient obsługuje jawne text/plain UTF-8.
+55 testów frameworka i3 deployed zielone: `/tmp/acceptance-network-access.log`.
+Wycinek pozostaje niecommitowany do review. Pozostałe AU-7/AU-9–AU-12 oraz reszta
+N2 nadal otwarte; brak DELETE user w API pozostaje kwestią dla izolowanych fixtures aktorów.

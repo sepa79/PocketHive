@@ -46,12 +46,12 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | ScopedRunnerAcceptanceIT.readsDeploymentViewApis: all six public deployment read endpoints200 with verified scoped runner | PASS |
 | AU-6 | Viewer reads scenario list/detail/raw through ingress. | auth-access: Scenario Manager reads | ViewerAcceptanceIT: selected scenario in list, matching detail id and nonempty raw through ingress | PASS |
 | AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | Independent actors and cleanup of all created artifacts | OPEN |
-| AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | Auth group; rejection before mutation | OPEN |
+| AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | NetworkAccessAcceptanceIT: viewer GET200, same-content text PUT403, byte-for-byte unchanged raw for network profiles and SUT environments | PASS |
 | AU-9 | Admin provisions bundle runner; profile/catalogue expose exact grant; only named bundle runs. | auth-access: bundle runner | New user fixture with cleanup | OPEN |
 | AU-10 | Folder ALL actor manages swarm; RUN-only actor cannot stop it. | auth-access: folder admin | Self-contained actor provisioning; no previous-test dependency | OPEN |
 | AU-11 | Folder admin denied deployment refresh/reset; deployment admin refresh accepted. | auth-access: deployment admin | API authorization test; no new reset behavior | OPEN |
 | AU-12 | Swarm-scoped manager/config/journal/pin/tap access, network conflict and deployment-only journal metadata grants hold. | auth-access: swarm admin | Endpoint matrix includes tap read/close denial and allowed close; canonical operations | OPEN |
-| AU-13 | Runner cannot change manual network override; viewer can read it. | auth-access: manual override | Auth/network API matrix | OPEN |
+| AU-13 | Runner cannot change manual network override; viewer can read it. | auth-access: manual override | NetworkAccessAcceptanceIT: verified runner PUT403, viewer GET200, full manual override status unchanged | PASS |
 | FW-1 | Assertion failure after create still removes exact owned swarm; cleanup failure remains visible. | New framework requirement | SwarmResourceTest and FailureCleanupAcceptanceIT passed (framework + Rabbit + Artemis); includes write failures at CREATE/START/STOP/REMOVE and combined test/cleanup/report failures | PASS |
 | FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Component request/receipt/operation identity, failure/config and full-body HTTP timeout/interruption tests passed; complete wait-budget matrix remains open | PARTIAL |
 
@@ -221,7 +221,29 @@ list was empty. `/tmp/acceptance-runner-viewer-regression.log`: viewer3/3 passed
 
 Stack remained Artemis; only Scenario Manager reload was requested to load the new
 fixture. This auth slice proves CREATE authorization, not worker START or processing;
-RUN-only STOP denial remains AU-10. No Rabbit rerun. New slice awaits separate review.
+RUN-only STOP denial remains AU-10. No Rabbit rerun. Scoped runner passed separate review and was committed as `5e9e80e5`.
 Remaining N2 requirements and N3/N4 stay open. Actor provisioning requirements need a
 supported cleanup contract: the current admin API lists/upserts users and replaces
 grants but exposes no delete operation; do not silently retain generated users.
+
+
+## Shared network authorization slice — 2026-09-16
+
+AU-8/AU-13 passed through ingress: 2 raw config pairs and 1 manual override pair.
+Viewer and runner identities/grants are explicit and checked using ActorAssertions.
+PUT replays observed settings, requiring403 even when the value is unchanged. Raw
+readback must match byte-for-byte; manual status must match as JSON including appliedAt.
+This does not claim that a changed configuration was applied or that every possible
+write payload was exercised. No admin writes, rollback, users or swarms are created.
+
+NetworkAccessTarget contains no unrelated scenario/lifecycle/capture settings.
+PocketHiveHttp adds explicit UTF-8 text bodies through its single bounded exchange;
+existing JSON requests retain their encoding. Framework regression checks exact bytes,
+headers, preserved403 and off-origin rejection. No wire DTO, service dependency or
+second HTTP client was introduced. Shared raw fixture content must be nonempty.
+
+`/tmp/acceptance-network-access.log`: 55 framework tests and3 deployed cases pass,
+zero failures/errors/skips (live cases0.494 s). Each evidence directory records before,
+write-denial and after, with actor profiles and no request tokens.
+Import verification: `/tmp/acceptance-network-import-boundaries.log`.
+New slice is uncommitted and awaits separate review. Remaining N2 and N3/N4 stay open.

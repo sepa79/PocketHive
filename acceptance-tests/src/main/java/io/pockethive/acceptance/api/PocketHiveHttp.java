@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.json.JsonMapper;
 import java.io.IOException;
 import java.net.URI;
+import java.nio.charset.StandardCharsets;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
@@ -52,6 +53,16 @@ public final class PocketHiveHttp implements AutoCloseable {
 
   private ApiResponse request(String method, String path, Object body, String token, Duration budget, String accept)
       throws IOException, InterruptedException {
+    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), token, budget, accept, "application/json");
+  }
+
+  public ApiResponse requestText(String method, String path, String body, String token)
+      throws IOException, InterruptedException {
+    return exchange(method, path, body.getBytes(StandardCharsets.UTF_8), token, requestTimeout, "text/plain", "text/plain");
+  }
+
+  private ApiResponse exchange(String method, String path, byte[] body, String token, Duration budget,
+                               String accept, String contentType) throws IOException, InterruptedException {
     URI destination = ingress.resolve(path);
     if (!Objects.equals(ingress.getScheme(), destination.getScheme())
         || !Objects.equals(ingress.getRawAuthority(), destination.getRawAuthority())
@@ -64,8 +75,8 @@ public final class PocketHiveHttp implements AutoCloseable {
     if (!token.isEmpty()) request.header("Authorization", "Bearer " + token);
     var publisher = HttpRequest.BodyPublishers.noBody();
     if (body != null) {
-      request.header("Content-Type", "application/json");
-      publisher = HttpRequest.BodyPublishers.ofByteArray(json.writeValueAsBytes(body));
+      request.header("Content-Type", contentType);
+      publisher = HttpRequest.BodyPublishers.ofByteArray(body);
     }
     var exchange = client.sendAsync(request.method(method, publisher).build(), HttpResponse.BodyHandlers.ofString());
     try {

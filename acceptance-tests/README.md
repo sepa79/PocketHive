@@ -62,3 +62,13 @@ The new demo/acceptance-runner-artemis fixture must be loaded by Scenario Manage
 the stack must already use Artemis. No accounts/grants are changed and no legacy
 fixtures are used. CREATE is tested; worker START/traffic and RUN-only STOP denial
 remain separate coverage. PocketHive grant assertions are shared with viewer tests.
+
+
+`auth-network` uses `targets/local-network-access.properties`; only ingress, actor
+settings, request timeout and evidence directory are required. The two shared raw
+configuration files must contain replayable content. Viewer reads and attempts to PUT
+that same content; runner attempts to PUT the observed manual override settings.
+All three writes must return403 and readback must remain unchanged. Manual override
+appliedAt is response-only and is omitted from PUT. Exact PocketHive grants are checked.
+These tests verify authorization even for a same-value write, not changed-setting
+application or network effects. They create no swarms, users or broker resources.

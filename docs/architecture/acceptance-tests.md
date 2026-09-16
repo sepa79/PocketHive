@@ -25,8 +25,9 @@ The module does not implement Rabbit/Artemis transport or resource naming.
 **Owner:** `TargetLoader`; `ApiTarget` is the shared immutable ingress/actor/request/report
 projection. `AcceptanceTarget` adds lifecycle limits and HTTP fixture; `ScenarioTarget`
 adds only the authored scenario id. ViewerTarget adds the explicit cleanup actor,
-scenario/SUT and operation limits. RunnerTarget adds explicit folder and denied fixture. The calling suite explicitly selects `load` or
-`loadScenario`, `loadViewer` or `loadRunner`; the resolver never infers a group from fixture names.
+scenario/SUT and operation limits. RunnerTarget adds explicit folder and denied fixture.
+NetworkAccessTarget holds only API and viewer/runner identity settings. The calling suite explicitly selects `load` or
+`loadScenario`, `loadViewer`, `loadRunner` or `loadNetworkAccess`; the resolver never infers a group from fixture names.
 **Effect:** one explicit file supplies ingress, actor, time limits and named fixture;
 missing, unknown or invalid settings fail before any side effects. Required key sets
 are scoped to the selected target kind; common fields are parsed once. `selectedFile`
@@ -171,3 +172,20 @@ removes via the explicit admin. It does not claim message processing or RUN-only
 ActorAssertions owns shared test profile expectations; AuthApi remains the only profile
 transport/decoder. Existing viewer assertions delegate to it with unchanged expectations.
 The new fixture under demo is independent of the frozen legacy suite and uses Artemis.
+
+
+## Network access acceptance slice
+
+NetworkAccessTarget is resolved only by TargetLoader.loadNetworkAccess and contains
+common API settings for the viewer plus runnerUsername/runnerFolder. No scenario,
+SUT, broker or operation/capture settings are required. NetworkAccessAcceptanceIT uses
+ApiRun and ActorAssertions for explicit identities and exact PocketHive grants.
+AU-8 covers two raw configuration read/PUT-denial pairs as viewer. AU-13 covers viewer
+read and runner PUT denial for manual override. Each PUT replays the observed settings;
+expected403 and unchanged readback are both required. This is authorization coverage,
+not proof of applying changed network settings. No admin mutation or rollback is used.
+
+PocketHiveHttp owns explicit text/plain request encoding as well as JSON. Both use the
+same bounded exchange; text is sent as UTF-8 bytes without JSON quoting. The manual
+override request is the public status projection with response-only appliedAt removed;
+no local DTO or policy parser is introduced. Endpoint-specific values remain test data.
