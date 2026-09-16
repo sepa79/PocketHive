@@ -96,6 +96,24 @@ byte revision, without echoing replaced values or transferring acceptance. The
 stakeholder summary is authored from this brief and requested field views, with
 the same revision identified. It is never a second editable authority.
 
+`brief.comparison.ledgerChanges` supplements the exact pointer diff with
+`questions` and `proposals` arrays matched by their existing canonical `id`.
+Each change names `id`, `change`, `previousPointer` and `pointer` (null when the
+row is absent). Questions use `added`, `removed`, `answered`, `reopened` or
+`changed`; proposals use `added`, `removed` or `changed`. `answered` means a
+recorded transition into that status; `reopened` means a recorded transition out
+of it. Other row content changes remain `changed`. Reordering unchanged rows
+produces no ledger change. Removed questions remain removals, never inferred
+answers. The view does not echo replaced content, validate source fidelity,
+change statuses or transfer approval. Existing canonical validation owns record
+shape and identity; ambiguous identities fail explicitly before comparison.
+For stable comparison, null or blank ledger IDs return `IDENTITY_REQUIRED` and
+duplicates retain `DUPLICATE_ID`. This requirement applies to the comparison;
+ordinary draft validation keeps its existing severity and never generates IDs.
+Both snapshots must explicitly contain the question and proposal collections
+for ledger comparison. Missing paths use the canonical `POINTER` diagnostic with
+the snapshot identified; an absent collection is never treated as empty.
+
 `show-field` requires a declared role and exact existing JSON Pointer. The schema
 view derives from the existing schema resolver, including applicable structural
 branches; it is guidance, not a second validator. Output explicitly requested field
@@ -104,6 +122,48 @@ top level; `validationSummary` reports whole-set error/gap/warning counts withou
 duplicating unrelated findings. A successful field read is not document readiness.
 Diagnostics retain their existing redaction policy. Package
 hash verification remains automatic; agents need not load the manifest hash list.
+
+`field.context` contains only overlapping `provenance`, `questions` and
+`proposals` from `traceability.instance`. A target overlaps when it names the
+same document and the exact requested pointer, an ancestor or a descendant.
+A directly requested question/proposal ledger row also includes its own record.
+The same existing validator diagnostics for these linked records are included
+with the field diagnostics, once per canonical diagnostic. Context is a
+read-only projection of the recorded rows, including their source references
+and explicit statuses. No source artifact is fetched or excerpted by this view,
+and a linked reference is never labelled verified solely because it exists.
+
+### Inspection coverage and question selection
+
+`inspect-bundle` and the initial `source-inspection.json` include `coverage`.
+It describes extraction by the existing `BundleInspector`, not performance-test
+coverage, client intent or completed engineering review. `coverage.files` has one
+row per inventoried file: `path`, `status`, `observationCount`,
+`unextractedScalarCount`, `sensitiveScalarCount` and `reviewRequired`. Status is
+`structured`, `not-extracted` or `unreadable`. Counts are null for files whose
+structured contents were not read; a parsed file has exact counts from the
+canonical allowlist traversal. Sensitive contents and their pointers are never
+emitted. A structured file needs source review if it has omitted values or no
+observations; every not-extracted/unreadable file needs source review. A false
+`reviewRequired` only means all scalar values were emitted by extraction, not
+that the source has passed QA review. Non-structured files remain references;
+scripts and binary content are never executed or decoded implicitly.
+
+`coverage.summary` reports `fileCount`, `structuredFileCount`,
+`notExtractedFileCount`, `unreadableFileCount`, `observationCount` and
+`reviewRequiredFileCount`. This output is derived from the same inspection pass
+and adds no parser, editable coverage ledger or alternative validation gate.
+Existing source hashes and observation values are unchanged by this projection.
+Source-review guidance uses a current explicit inspection and its source identity;
+an old saved report never proves current coverage.
+
+Before selecting client questions, inspect supplied evidence for the relevant
+field and distinguish an extraction limitation, conflicting sources and a
+remaining client decision. Record sourced representable facts through the
+existing authoring path. Keep unsupported evidence and unresolved conflicts
+visible; never fill them with guesses or treat configuration as accepted targets.
+Ask only the material decision still needed. These are agent review steps, not
+a client calibration ceremony or another approval gate.
 
 ### Explicit update batch
 

@@ -240,3 +240,73 @@ the tests, synthetic case cards and reproduction guidance. Writer exclusion is
 cooperative; the four files are not a filesystem transaction. Actual client
 discovery, authenticated vendor conversations, all-case engineering judgement
 and stakeholder comprehension remain separately qualified capabilities.
+
+## Source review and evidence context — 1.3.0, 2026-09-16
+
+The **168-test full CLI suite passed in 270.159 seconds**, exit 0, from an
+extracted ZIP under Python 3.12.3 and Bubblewrap 0.9.0. The package was read-only,
+networking disabled, host home/repository absent and site packages unavailable,
+using the sandbox layout documented in `AMAZON_Q_QUALIFICATION.md`.
+
+That candidate's SHA-256 was
+`079cdb64dba1830a2f9a1714a0b3a1edd9265dac18ce1684b52580991fa45d91`.
+Independent review then found that a sparse previous snapshot could reach a
+generic error. The comparison now uses the canonical pointer resolver to name
+the absent collection and snapshot, without inventing an empty ledger.
+
+After that correction, **all 19 comparison/review tests passed in 44.515 seconds**
+in the same sandbox, including the new missing-collection regression. This final
+runtime candidate's SHA-256 was
+`d5b4c4956c9848bc2bbb314e186abded3053dd7e75549075bedcb11f034bef8a`.
+Only the comparison module, its test file, the CLI contract and manifest differed
+from the full-suite candidate. The package now contains 169 distinct tests;
+the entire 169-test suite was not repeated after the focused correction.
+
+The new tests cover:
+
+- Stable question/proposal IDs, reordering, recorded status transitions,
+  removals, duplicate/missing identities and sparse previous snapshots.
+- Exact field context, ancestor/descendant pointers, null scaffold targets,
+  linked canonical diagnostics and unchanged document bytes.
+- Extraction counts, unreadable and unextracted files, omitted sensitive values,
+  unchanged literal observations/inventory identity and current-versus-saved reports.
+
+All 16 original-source, working-template and document-schema hashes remain
+unchanged. Observation rules, dependency/provenance contracts and the existing
+Amazon Q configuration edit were also checked unchanged. Document versions remain
+requirements 2, plan 5, traceability 2 and results 2; CLI contract version remains 3
+with additive views. The final distributable adds this qualification report and
+updated manifest hashes; runtime code, tests, fixtures, templates and schemas
+match the final runtime candidate. Its checksum sidecar identifies the release.
+
+### Independent source-review rehearsal
+
+An independent Codex agent used the full-suite candidate in a disposable workspace
+with the E08 synthetic bundle and nested HTTP source fragment. It saved all four
+documents with `GET /status` and `GET /accounts/status` evidence, kept the configured
+scheduler rate of 100/second as an unapproved observation, and asked three material
+questions without asking the client to repeat the supplied method or path.
+
+The final CLI result was **0 errors, 47 gaps and 1 warning**, with no command
+failures. Parent inspection confirmed null acceptance TPS, unconfirmed review,
+an unaccepted engineering proposal, unchanged source bytes and `not-run` results.
+The agent manually added the nested request to the existing document structure
+because automatic population does not support that source shape. Scheduler facts
+also required source review. These remain visible extraction limitations.
+
+This was one agent rehearsal, not native client discovery or an authenticated
+Amazon Q/Copilot test. The E09 unsupported-claim case was added but not executed.
+No comparative token, throughput or user-friction improvement was measured.
+
+### Review and evidence
+
+Final independent review found no remaining findings in the affected owners.
+The repository-wide ownership search, skill validation, Python syntax checks,
+local Markdown links, protected hashes and `git diff --check` passed. Runtime
+operations, template formats and client authentication were outside this change.
+
+Raw local evidence is retained under
+`/home/tim/.tmp/pip/intake-hivemap-review-vlswqegh/`: `full-suite.log`,
+`affected-suite.log`, their sandbox commands/results and `forward-e08/`.
+These are evidence locations, not package dependencies. The ZIP contains the
+tests and all nine portable evaluation cards.

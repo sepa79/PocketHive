@@ -41,6 +41,7 @@ the held-out variation before measuring it.
 | Source faithfulness | Source-to-field comparison and exact unsupported claims, if any | No invented requirements, defaults, approvals or measured outcomes. |
 | Decision completeness | Expected material gaps and their saved question targets | Relevant unanswered decisions remain visible at the correct stage. |
 | Question efficiency | Actual question batches and questions repeated after an unambiguous answer | No needless repetition; partial answers leave only unresolved parts open. |
+| Source-review efficiency | Relevant source reads before questions, extraction limits and unresolved conflicts | Do not ask for facts already supplied or present extraction omissions as missing client decisions. |
 | Engineering judgement | Proposed test, rationale, unresolved premises and stated limits | Test choices address the explicit objective; proposals stay proposals. |
 | Stakeholder clarity | Reviewer can explain objective, scope, load, acceptance, limits and next decision | Exact units, conditions and uncertainty survive simplification. |
 | Editing reliability | Source/document snapshots, command output and repairs | No silent overwrites, source execution or loss of client work. |
@@ -51,6 +52,13 @@ in the trial report. Do not hide a faithfulness failure inside an average score.
 An unavailable prerequisite is recorded as blocked with the actual reason;
 it is not a passing or failing model response. Keep evidence about package
 mechanics separate from conversation and engineering judgement.
+
+Cases E08 and E09 distinguish source inspection from source faithfulness. Assess
+whether the agent reads omitted evidence and challenges an unsupported claim even
+when document mechanics pass. These judgements require source-to-output review;
+inspection counts and a passing CLI command cannot establish them. For resumed
+reviews, assess change summaries against existing ledger IDs, including reordered
+questions, without treating removal as resolution.
 
 ## Qualify the claimed client surface
 

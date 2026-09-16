@@ -19,6 +19,14 @@ related unresolved decisions into one question with several target pointers.
 Read existing answers first. Never create a question for every diagnostic or
 ask again merely because a nonblocking review notice remains visible.
 
+Apply the [shared source-review steps](intake-workflow.md#ask-only-useful-questions)
+before choosing questions. A valid source pointer and matching hash establish
+where evidence came from, not whether it supports the authored claim. Read the
+claim and source together, including scope and measurement boundaries. Report a
+contradiction even when the CLI returns no errors; correct only what the evidence
+supports and preserve any remaining decision. Inspection coverage cannot replace
+this judgement.
+
 ## Request values and time-sensitive data
 
 `payloadBindings` is the authority for authored request-field bindings.

@@ -52,6 +52,22 @@ Save all four initial documents before waiting for answers. Read existing answer
 and approvals first. Ask again only for material changes, conflicts or ambiguity.
 Do not walk through every field or the entire MCP QA interview.
 
+Before asking, review the supplied evidence relevant to the field. A missing
+extracted observation is not proof that the answer is absent. Use the current
+inspection's source identity and coverage to choose what to read, then distinguish:
+
+| What the review establishes | Next action |
+| --- | --- |
+| The supplied source states the fact | Record the representable fact with its exact source and evidence kind; do not ask the client to repeat it. |
+| Extraction omitted content, or the source shape is unsupported | Inspect the relevant source without executing it. Record supported facts through the existing authoring path; declare remaining access or representation limits. |
+| Sources contradict one another | Retain both references and one scoped conflict question. Do not choose an authority from recency or naming alone. |
+| A material client decision is still absent | Ask for that decision and explain which test choice or conclusion depends on it. |
+
+This is engineering review, not a separate client interview or approval step.
+Configuration remains an observation until explicitly adopted. If a source cannot
+be read, state that limitation; do not claim it contains no answer. Never replace
+an unsupported representation with a guess or ask the client to repair the skill.
+
 Ask one small related batch, normally one to three questions. Explain the effect
 of the answer and offer a recommended engineering option when useful. Ask for an
 unknown client fact directly; do not preselect a guess. Resolve file mechanics,
@@ -71,7 +87,12 @@ not invent an approval for reading, drafting or routine arithmetic.
 On resume, run `prepare-review --stage draft` once against the saved set. Its brief
 groups unresolved decisions and reports previously answered questions; do not
 reinitialise or reconstruct the interview from chat memory. `show-field` retrieves
-the relevant section and its canonical constraints. Record supplied facts and
+the relevant section and its canonical constraints; its `field.context` links the
+recorded provenance, questions and proposals for source review. It does not fetch
+the source or prove the claim. With an explicit previous document set, use
+`prepare-review --previous DIR` and its ID-matched `ledgerChanges` to explain which
+questions or proposals changed. A reordered row is not a new decision, and a
+removed question is not an answer. Record supplied facts and
 their provenance together using `apply-updates` and the exact returned document
 revision. Explicit question edits may accompany a fact update when its evidence
 actually answers that question. Save independent work before asking the next batch.

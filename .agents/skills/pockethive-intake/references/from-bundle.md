@@ -19,6 +19,16 @@ Use the CLI's supported input shape; an unsupported archive or file type is an
 explicit gap, not permission to write another parser. Preserve binary files as
 evidence references when their contents cannot be inspected.
 
+Use `inspect-bundle`'s current `coverage` to separate inventoried files from
+extracted facts. Its `summary` counts files, observations and files needing source
+review. Each file is `structured`, `not-extracted` or `unreadable`; even a
+structured file can contain omitted values. `reviewRequired` concerns extraction
+coverage only: false does not establish source faithfulness or completed QA.
+Sensitive-value counts never authorise copying sensitive content into the intake.
+The [contract](../contract/intake-contract.md#inspection-coverage-and-question-selection)
+owns these fields. Follow the shared workflow's source review before asking about
+an apparent gap; a saved report for old source bytes cannot establish current coverage.
+
 An observation's `artifactRef` is relative to the report's `sourceRoot`. Join
 that declared root explicitly when recording local provenance. Evidence paths
 in the document set must be absolute or relative to its documents directory;
@@ -56,7 +66,8 @@ source snapshots, not as verified Git history.
    classify APIs as load, fill workload/KPI targets, grant approval or populate
    execution results. Headers, bodies, auth and data configuration need the
    agent's source review. Missing/unsupported templates and nested sequence
-   representations remain visible gaps; the operation never invents a substitute.
+   representations remain visible extraction limits; the operation never invents
+   a substitute. These limits do not mean the client omitted the facts.
 
    Continue the supported source review and fill remaining representable facts.
    Preserve unresolved template expressions; do not select variable profiles or

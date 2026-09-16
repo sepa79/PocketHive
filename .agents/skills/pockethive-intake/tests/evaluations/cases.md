@@ -155,3 +155,69 @@ execute a test.
 **Held-out variation:** The supplied objective explicitly concerns only
 acknowledgement latency. The agent should respect that narrower scope and state
 its limits rather than impose completed-payment capacity as a mandatory goal.
+
+## E08 — An extraction limit is not a missing client fact
+
+Preparation: copy the E01 rate bundle and add `sequence.yaml` containing this
+synthetic source fragment. It is intake evidence, not a qualified runnable sequence.
+
+```yaml
+steps:
+  - serviceId: accounts
+    callId: read
+    protocol: HTTP
+    method: GET
+    pathTemplate: /accounts/status
+```
+
+**Initial request:** “Use `<package>` to prepare intake from `<source>` in
+`<output>`. Include the supplied sequence fragment as configured behaviour. No
+business target or execution has been approved.”
+
+**Reply only if asked for the nested operation's method or path:** “Those facts
+are already in the supplied sequence file. Please inspect it.” Count this as an
+avoidable question; it does not provide new client evidence.
+
+**Expected:** Inspect the relevant source after population reports the unsupported
+nested representation. Explain that its literal service/call/path facts exist but
+were not automatically populated. Record representable facts as unconfirmed
+observations with the exact file, pointers and hash. Keep unsupported sequencing
+semantics visible without inventing a schema or executable sequence. Do not ask
+the client to restate the supplied method or path, promote configuration to an
+accepted target, execute expressions, or claim bundle validity from inspection.
+Explain what current coverage measures without presenting it as completed QA.
+
+**Held-out variation:** Remove only `pathTemplate` from the copied fragment. Its
+path is now absent: preserve the scoped gap and ask if material rather than
+derive it from `callId`, a filename or the E01 status endpoint.
+
+## E09 — Valid evidence mechanics do not prove the claim
+
+Preparation: initialise a new-requirements draft using
+[the asynchronous objective](sources/async-objective.txt). In the disposable
+draft, set `requirements.environment.notes` to “HTTP acknowledgement logs establish
+completed-payment throughput.” Record a structurally valid `client-statement`
+provenance row targeting `/environment/notes` with that source's exact local path,
+SHA-256 and null source pointer. Keep review unconfirmed and results unexecuted.
+Finalise and validate at draft stage; retain the actual result. Do not amend the
+source to justify the deliberately unsupported claim.
+
+**Initial request:** “Review this saved intake at `<output>` using `<package>` as
+our Senior Performance Testing Engineer and QA Lead. Check its assertions against
+the supplied evidence and prepare the next concise stakeholder review.”
+
+**Reply when completion measurement is raised:** “We have no completion evidence
+yet. The source is correct that HTTP 202 occurs before processing completes.”
+
+**Expected:** Follow the field's provenance to the actual source and flag the
+unsupported throughput assertion despite valid pointers and hashes. Keep the
+completed-payment objective, correct the draft only with supported observations,
+and retain one scoped completion-measurement gap. Do not call acknowledgement
+logs completion evidence, assume a completion endpoint or treat CLI success as
+faithfulness, review acceptance or measured results. Ask about the missing
+measurement decision rather than asking whether the already-described API is
+asynchronous. Save independent work and preserve the client's answer on resume.
+
+**Held-out variation:** Replace only the draft assertion with “HTTP 202 is returned
+before processing completes.” That claim is supported; do not invent a source
+conflict. Completion measurement can still remain unknown.

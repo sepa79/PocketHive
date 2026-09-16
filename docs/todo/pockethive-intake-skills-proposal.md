@@ -10,8 +10,8 @@ by the user; qualification remains specific to each client and version.
 
 Implementation: [skill folder](../../.agents/skills/pockethive-intake/) and
 [entrypoint](../../.agents/skills/pockethive-intake/SKILL.md).
-Release: [pockethive-intake-1.2.0.zip](../../dist/pockethive-intake-1.2.0.zip)
-with [SHA-256 checksum](../../dist/pockethive-intake-1.2.0.zip.sha256). The design decisions below remain the delivery
+Release: [pockethive-intake-1.3.0.zip](../../dist/pockethive-intake-1.3.0.zip)
+with [SHA-256 checksum](../../dist/pockethive-intake-1.3.0.zip.sha256). The design decisions below remain the delivery
 contract; file presence alone does not establish qualification.
 
 ## Recommendation
@@ -705,6 +705,34 @@ and seven synthetic case cards assess source fidelity, missing decisions, resume
 wording, instruction isolation and engineering judgement. They are maintainer
 qualification resources, not another client interview or claim of vendor support.
 The package qualification report records the checks actually run.
+
+### Source review and focused evidence — 1.3.0
+
+The user authorised four improvements informed by a read-only review of HiveMap
+`main` at `526af85`, with **no template changes**. The existing CLI contract now
+also defines extraction coverage, field evidence context and stable-ID ledger
+comparisons. Source YAMLs, working templates and document schemas remain fixed.
+
+- Before client questions, the agent distinguishes supplied facts, extraction
+  limits, conflicting sources and missing decisions. Configuration remains an
+  observation until explicitly adopted; no extra client calibration step is added.
+- `inspect-bundle` reports per-file extraction status and omitted-value counts
+  from the existing traversal. It exposes unreadable and unextracted content
+  without disclosing sensitive values or claiming completed QA coverage.
+- `show-field` includes recorded provenance and linked question/proposal rows,
+  with their existing validator diagnostics. It fetches no additional source
+  content and makes no new evidence-verification decision.
+- `prepare-review --previous DIR` supplements exact pointer differences with
+  question/proposal changes matched by existing IDs. Reordering does not create
+  a semantic ledger change; removal is never interpreted as an answer. Missing
+  or ambiguous identities block this comparison without tightening ordinary drafts.
+
+These are derived views over the existing owners. No HiveMap runtime, index,
+database or new editable ledger becomes a package dependency. Two additional
+conversation evaluation cards cover nested facts missed by extraction and
+claims unsupported by otherwise valid evidence metadata. Qualification results
+and limits are recorded in the package's
+[local qualification report](../../.agents/skills/pockethive-intake/tests/QUALIFICATION.md).
 
 ### Continuing limits
 

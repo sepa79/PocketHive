@@ -3,35 +3,10 @@ Must not: author questions, assess source fidelity or decide readiness. Contract
 """
 from __future__ import annotations
 
-from .pointers import covers, escape
-
-
-def _changes(previous: object, current: object, pointer: str = "") -> list[dict]:
-    if type(previous) is not type(current):
-        return [{"pointer": pointer, "change": "changed"}]
-    if isinstance(current, dict):
-        changes = []
-        for key in sorted(previous.keys() | current.keys()):
-            target = f"{pointer}/{escape(key)}"
-            if key not in previous:
-                changes.append({"pointer": target, "change": "added"})
-            elif key not in current:
-                changes.append({"pointer": target, "change": "removed"})
-            else:
-                changes.extend(_changes(previous[key], current[key], target))
-        return changes
-    if isinstance(current, list):
-        changes = []
-        for index in range(max(len(previous), len(current))):
-            target = f"{pointer}/{index}"
-            if index >= len(previous):
-                changes.append({"pointer": target, "change": "added"})
-            elif index >= len(current):
-                changes.append({"pointer": target, "change": "removed"})
-            else:
-                changes.extend(_changes(previous[index], current[index], target))
-        return changes
-    return [] if previous == current else [{"pointer": pointer, "change": "changed"}]
+from .errors import IntakeError
+from .pointers import covers
+from .review_comparison import compare_documents
+from .schema_validation import SchemaValidation
 
 
 def _diagnostic_groups(result: dict, questions: list[dict]) -> list[dict]:
@@ -91,10 +66,13 @@ def build_brief(package, codec, store, root, docs, validation_result, stage, pre
         previous = codec.plain(store.load(previous_root))
         store.assert_revision(previous_root, revision)
         store.assert_unlocked(previous_root)
+        errors = SchemaValidation(package).validate("traceability", previous["traceability"])
+        if errors:
+            issue = errors[0]
+            detail = {**issue.get("detail", {}), "snapshot": "previous"}
+            raise IntakeError(**{**issue, "detail": detail})
         brief["comparison"] = {
             "previousDocumentsSha256": revision,
-            "changedFields": [{"document": role, **change}
-                              for role in package.manifest["templates"]
-                              for change in _changes(previous[role], plain[role])],
+            **compare_documents(previous, plain, package.manifest["templates"]),
         }
     return brief

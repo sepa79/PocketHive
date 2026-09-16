@@ -115,7 +115,11 @@ class ReviewViewTests(CliTestCase):
         self.assertEqual(["string", "null"], field["schemaBranches"][0]["schema"]["type"])
         self.assertNotIn("diagnostics", field)
         self.assertTrue(any(issue["code"] == "REQUIRED_INPUT" for issue in output["gaps"]))
-        self.assertTrue(all(issue["document"] == "requirements" and issue["pointer"] == "/project/objective"
+        self.assertEqual(["Q-OBJECTIVE"], [row["id"] for row in field["context"]["questions"]])
+        self.assertTrue(all((issue["document"] == "requirements" and issue["pointer"] == "/project/objective")
+                            or (issue["document"] == "traceability" and (
+                                issue["pointer"] == "/instance/questions/0"
+                                or issue["pointer"].startswith("/instance/questions/0/")))
                             for issue in output["gaps"]))
         self.assertGreater(output["validationSummary"]["gapCount"], len(output["gaps"]))
         self.assertEqual(before, self.document_bytes())
