@@ -51,3 +51,14 @@ or capture settings. The supplied fixture is Artemis. If a regression accepts CR
 SwarmResource observes and removes the owned swarm using the cleanup actor.
 It never switches credentials automatically or recreates users. Other products' grants
 are outside the PocketHive grant assertion. Both actors' profiles are recorded without tokens.
+
+
+`auth-runner` uses `targets/local-runner.properties`: local-runner has deployment VIEW
+and RUN on demo; local-admin owns observation/cleanup. The suite requires both named
+scenarios in the admin runnable catalogue, checks their folders, filters the runner's
+catalogue, creates the allowed fixture and rejects the outside-folder fixture. Existing
+SwarmResource verifies removal. Another case checks six deployment read APIs.
+The new demo/acceptance-runner-artemis fixture must be loaded by Scenario Manager;
+the stack must already use Artemis. No accounts/grants are changed and no legacy
+fixtures are used. CREATE is tested; worker START/traffic and RUN-only STOP denial
+remain separate coverage. PocketHive grant assertions are shared with viewer tests.

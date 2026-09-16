@@ -42,8 +42,8 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
 | AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | AuthReadAcceptanceIT: nine additional protected read routes, anonymous 401 and authenticated 200 | PASS |
 | AU-3 | Viewer has no runnable templates and cannot create swarm. | auth-access: viewer | ViewerAcceptanceIT: exact PocketHive VIEW, empty runnable list, CREATE403 and admin registry404 | PASS |
-| AU-4 | Folder runner sees/runs only allowed scenarios, cannot run outside folder. | auth-access: scoped runner | Auth fixture and shared new swarm cleanup | OPEN |
-| AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | Auth endpoint matrix | OPEN |
+| AU-4 | Folder runner sees/runs only allowed scenarios, cannot run outside folder. | auth-access: scoped runner | ScopedRunnerAcceptanceIT: exact VIEW + RUN-folder grants; admin verifies fixtures, runner catalogue stays in scope, allowed CREATE succeeds, outside CREATE403; verified cleanup | PASS |
+| AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | ScopedRunnerAcceptanceIT.readsDeploymentViewApis: all six public deployment read endpoints200 with verified scoped runner | PASS |
 | AU-6 | Viewer reads scenario list/detail/raw through ingress. | auth-access: Scenario Manager reads | ViewerAcceptanceIT: selected scenario in list, matching detail id and nonempty raw through ingress | PASS |
 | AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | Independent actors and cleanup of all created artifacts | OPEN |
 | AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | Auth group; rejection before mutation | OPEN |
@@ -187,7 +187,7 @@ is a read-only projection so these tests do not require capture settings; existi
 WaitLimits projects the same operation values. TargetLoader remains the single resolver.
 
 Viewer execution: `/tmp/acceptance-viewer-final.log`, 49 framework tests and 3 deployed
-cases passed, zero skips. This slice remains uncommitted and awaits separate review.
+cases passed, zero skips. Viewer slice passed separate review and was committed as `a133b554`.
 N2 beyond these rows and N3/N4 remain open; scoped runner is next.
 
 Lifecycle regression after the resource/limits change passed on Artemis (3/3):
@@ -196,3 +196,32 @@ Lifecycle regression after the resource/limits change passed on Artemis (3/3):
 boundary cases passed: `/tmp/acceptance-viewer-import-boundaries.log`. Rabbit was
 not rerun in this slice. Unexpected viewer acceptance cleanup was exercised with
 framework HTTP fixtures; the deployed viewer correctly received403.
+
+
+## Scoped runner slice — 2026-09-16
+
+AU-4/AU-5 passed: local-runner has exactly PocketHive VIEW on deployment and RUN on
+folder demo. New independent fixture demo/acceptance-runner-artemis is runnable;
+acceptance/http-artemis is outside scope. Admin catalogue must contain both with
+matching inside/outside folders; runner catalogue must contain the allowed fixture,
+exclude the denied fixture and expose only its allowed folder subtree. Allowed CREATE
+succeeds with matching runId; outside CREATE returns POST403 with admin registry404.
+The admin's existing SwarmResource owns observation and verified removal. No account
+or grant mutation, frozen legacy reuse, automatic adapter switch or new cleanup owner.
+
+The second test checks capabilities, workspaces, CP schema, hive journal, network
+bindings and proxies through ingress. Shared ActorAssertions compares exact PocketHive
+grant sets (order-independent), identity and active state; viewer delegates to it.
+
+`/tmp/acceptance-runner-final.log`: 53 framework tests, 2 runner tests passed (13.56 s).
+Allowed swarm REMOVE SUCCEEDED,16 removed resources,0 remaining/errors,registry404;
+evidence directory runner-cleanup-11915bb6-75f0-4d14-9075-5ef16f90acb0. Final public swarm
+list was empty. `/tmp/acceptance-runner-viewer-regression.log`: viewer3/3 passed.
+`/tmp/acceptance-runner-import-boundaries.log`: import checks3/3 passed. Zero skips.
+
+Stack remained Artemis; only Scenario Manager reload was requested to load the new
+fixture. This auth slice proves CREATE authorization, not worker START or processing;
+RUN-only STOP denial remains AU-10. No Rabbit rerun. New slice awaits separate review.
+Remaining N2 requirements and N3/N4 stay open. Actor provisioning requirements need a
+supported cleanup contract: the current admin API lists/upserts users and replaces
+grants but exposes no delete operation; do not silently retain generated users.

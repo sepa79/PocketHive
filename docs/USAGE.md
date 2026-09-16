@@ -455,6 +455,7 @@ Framework component tests use their own HTTP stub; deployed tests use public ing
 ./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties scenarios
 ./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties auth-read
 ./run-acceptance-tests.sh acceptance-tests/targets/local-viewer.properties auth-viewer
+./run-acceptance-tests.sh acceptance-tests/targets/local-runner.properties auth-runner
 # On a stack already configured for Rabbit WORK:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
 ```

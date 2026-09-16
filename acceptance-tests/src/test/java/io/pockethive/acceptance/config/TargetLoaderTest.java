@@ -83,4 +83,16 @@ class TargetLoaderTest {
     assertThrows(IllegalArgumentException.class,
         () -> TargetLoader.loadViewer(file(config.replace("pollInterval=PT0.01S", "pollInterval=PT0S"))));
   }
+
+  @Test void runnerRequiresDistinctFixturesAndExplicitScope() throws Exception {
+    String config = SCENARIO + "cleanupUsername=admin\noperationTimeout=PT2S\npollInterval=PT0.01S\nsutId=test-sut\n"
+        + "folder=allowed\ndeniedScenarioId=outside\n";
+    var target = TargetLoader.loadRunner(file(config));
+    assertEquals("allowed", target.folder());
+    assertEquals("outside", target.deniedScenarioId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadRunner(file(config.replace("folder=allowed\n", ""))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadRunner(file(config.replace("deniedScenarioId=outside", "deniedScenarioId=authoring-fixture"))));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadRunner(file(config + "captureTimeout=PT1S\n")));
+  }
 }

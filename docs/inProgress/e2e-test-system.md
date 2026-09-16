@@ -5,7 +5,7 @@ N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamkni
 oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
 przeszły na obu adapterach; grupa Scenario API
 (SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
-13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3; czeka na review. Pozostałe pokrycie otwarte.
+13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3 i review (commit `a133b554`). Scoped runner AU-4/AU-5 przeszło 2/2; czeka na review. Pozostałe pokrycie otwarte.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -265,3 +265,25 @@ Nowy wycinek pozostaje do review. Następnie scoped runner AU-4/AU-5.
 Regresja lifecycle Artemis: 3/3, każdy REMOVE SUCCEEDED (16 usuniętych zasobów,
 zero pozostałości/błędów, registry404). Trzy testy importów przeszły. Logi:
 `/tmp/acceptance-viewer-lifecycle-regression.log`, `/tmp/acceptance-viewer-import-boundaries.log`.
+
+
+### Scoped runner AU-4/AU-5 — wykonanie
+
+Używamy istniejącego local-runner (VIEW deployment + RUN demo), nowego fixture
+`demo/acceptance-runner-artemis` oraz istniejącego `acceptance/http-artemis` poza zakresem.
+Target deklaruje oba scenariusze, folder, aktorów i limity. Test najpierw potwierdza granty
+oraz dostępność/foldery fixtures w katalogu admina, potem katalog runnera, dozwolone
+CREATE i odmowę poza folderem. Cleanup obsługuje istniejący SwarmResource przez admina.
+Oddzielny przypadek sprawdza sześć odczytów deployment z AU-5. Wspólne asercje profilu
+wyodrębniono do ActorAssertions; nie zmieniamy użytkowników ani grantów produktu.
+Nie deklarujemy START/traffic ani odmowy STOP dla RUN-only w tym wycinku.
+
+
+Wynik runnera: 53 testy frameworka, 2 testy runnera, regresja viewera 3/3 i importy 3/3
+zielone. CREATE w demo przyjęte, poza zakresem403. REMOVE SUCCEEDED (16 zasobów,
+zero pozostałości/błędów, registry404); końcowa lista swarmów pusta. Logi:
+`/tmp/acceptance-runner-final.log`, `/tmp/acceptance-runner-viewer-regression.log`,
+`/tmp/acceptance-runner-import-boundaries.log`. Wycinek pozostaje niecommitowany do review.
+Dalsze auth: AU-8/AU-13 mogą użyć istniejących aktorów. AU-7/AU-9/AU-10 wymagające
+provisioningu aktorów muszą jawnie rozwiązać cleanup: obecne API admina nie ma DELETE
+użytkownika. Nie dokładamy tego kontraktu ani nie zostawiamy użytkowników po cichu.

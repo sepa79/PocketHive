@@ -25,8 +25,8 @@ The module does not implement Rabbit/Artemis transport or resource naming.
 **Owner:** `TargetLoader`; `ApiTarget` is the shared immutable ingress/actor/request/report
 projection. `AcceptanceTarget` adds lifecycle limits and HTTP fixture; `ScenarioTarget`
 adds only the authored scenario id. ViewerTarget adds the explicit cleanup actor,
-scenario/SUT and operation limits. The calling suite explicitly selects `load` or
-`loadScenario` or `loadViewer`; the resolver never infers a group from fixture names.
+scenario/SUT and operation limits. RunnerTarget adds explicit folder and denied fixture. The calling suite explicitly selects `load` or
+`loadScenario`, `loadViewer` or `loadRunner`; the resolver never infers a group from fixture names.
 **Effect:** one explicit file supplies ingress, actor, time limits and named fixture;
 missing, unknown or invalid settings fail before any side effects. Required key sets
 are scoped to the selected target kind; common fields are parsed once. `selectedFile`
@@ -158,3 +158,16 @@ Both paths use the same receipt/state handling. Viewer CREATE denial must be403 
 the admin readback must remain404. An unexpected accepted CREATE remains owned and
 is removed by the configured admin even when the denial assertion fails. No alternate
 cleanup registry, token fallback or direct broker verification is introduced.
+
+
+## Scoped runner acceptance slice
+
+RunnerTarget is a read-only projection resolved by TargetLoader.loadRunner: explicit
+runner/cleanup actors, allowed folder, allowed and denied scenario ids, SUT and operation
+limits. ScopedRunnerAcceptanceIT verifies exact VIEW-deployment and RUN-folder grants,
+catalogue restriction, accepted allowed CREATE and denied outside-folder CREATE, plus
+six deployment read APIs. The runner only creates; existing SwarmResource observes and
+removes via the explicit admin. It does not claim message processing or RUN-only STOP.
+ActorAssertions owns shared test profile expectations; AuthApi remains the only profile
+transport/decoder. Existing viewer assertions delegate to it with unchanged expectations.
+The new fixture under demo is independent of the frozen legacy suite and uses Artemis.

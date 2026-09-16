@@ -89,12 +89,7 @@ class ViewerAcceptanceIT {
   }
 
   private static void requireGrant(ApiRun run, String username, String permission) throws Exception {
-    var profile = new AuthApi(run.http).profile(run.token);
-    run.evidence.record("actor-profile", profile);
-    assertEquals(username, profile.username());
-    assertTrue(profile.active(), "Test actor must be active");
-    assertEquals(List.of(new AuthGrantDto(AuthProduct.POCKETHIVE, permission,
-        PocketHiveResourceTypes.DEPLOYMENT, PocketHiveResourceSelectors.GLOBAL)),
-        profile.grants().stream().filter(grant -> grant.product() == AuthProduct.POCKETHIVE).toList());
+    ActorAssertions.requireGrants(run, username, List.of(new AuthGrantDto(AuthProduct.POCKETHIVE, permission,
+        PocketHiveResourceTypes.DEPLOYMENT, PocketHiveResourceSelectors.GLOBAL)));
   }
 }

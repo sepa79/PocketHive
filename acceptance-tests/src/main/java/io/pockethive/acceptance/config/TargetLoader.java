@@ -10,7 +10,7 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Responsibility: resolve an explicitly selected lifecycle, scenario or viewer target file.
+ * Responsibility: resolve an explicitly selected lifecycle, scenario, viewer or runner target file.
  * Must not: read legacy configuration or infer missing values.
  * Contract: RESP-ACCEPTANCE-TARGET — docs/architecture/acceptance-tests.md#resp-acceptance-target.
  */
@@ -56,12 +56,33 @@ public final class TargetLoader {
     Path actual = file.toRealPath();
     Properties values = read(actual, Set.of("cleanupUsername", "scenarioId", "sutId", "operationTimeout", "pollInterval"));
     ApiTarget api = api(values, actual);
-    if (api.username().equals(values.getProperty("cleanupUsername"))) {
-      throw new IllegalArgumentException("Viewer and cleanup actors must be distinct");
-    }
+    requireDistinctActors(api, values);
     return new ViewerTarget(api, values.getProperty("cleanupUsername"), values.getProperty("scenarioId"),
-        values.getProperty("sutId"), new OperationLimits(api.requestTimeout(),
-            duration(values, "operationTimeout"), duration(values, "pollInterval")));
+        values.getProperty("sutId"), operations(api, values));
+  }
+
+  public static RunnerTarget loadRunner(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Properties values = read(actual, Set.of("cleanupUsername", "folder", "scenarioId", "deniedScenarioId",
+        "sutId", "operationTimeout", "pollInterval"));
+    ApiTarget api = api(values, actual);
+    requireDistinctActors(api, values);
+    if (values.getProperty("scenarioId").equals(values.getProperty("deniedScenarioId"))) {
+      throw new IllegalArgumentException("Allowed and denied scenarios must differ");
+    }
+    return new RunnerTarget(api, values.getProperty("cleanupUsername"), values.getProperty("folder"),
+        values.getProperty("scenarioId"), values.getProperty("deniedScenarioId"), values.getProperty("sutId"),
+        operations(api, values));
+  }
+
+  private static OperationLimits operations(ApiTarget api, Properties values) {
+    return new OperationLimits(api.requestTimeout(), duration(values, "operationTimeout"), duration(values, "pollInterval"));
+  }
+
+  private static void requireDistinctActors(ApiTarget api, Properties values) {
+    if (api.username().equals(values.getProperty("cleanupUsername"))) {
+      throw new IllegalArgumentException("Requesting and cleanup actors must be distinct");
+    }
   }
 
   private static Properties read(Path actual, Set<String> groupKeys) throws IOException {
