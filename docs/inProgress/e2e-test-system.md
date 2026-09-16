@@ -5,7 +5,7 @@ N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamkni
 oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
 przeszły na obu adapterach; grupa Scenario API
 (SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
-13/13; ten wycinek czeka na osobne review. Pozostałe pokrycie otwarte.
+13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3; czeka na review. Pozostałe pokrycie otwarte.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -250,3 +250,18 @@ Accept dla tekstowych endpointów raw; nie dodano drugiego klienta ani parsera.
 Kod auth-read pozostaje niecommitowany i czeka na osobne review.
 Następny wycinek: jawny aktor viewer i jego grant, odczyty AU-6 oraz brak prawa
 uruchamiania AU-3; potem scoped runner i zasoby zarządzane przez test.
+
+
+### Viewer AU-3/AU-6
+
+Wykonano: dokładny grant PocketHive VIEW, odczyty list/detail/raw, pusta lista runnable,
+CREATE403 i odczyt admina404 przed/po próbie. ApiRun/TargetLoader pozostają właścicielami
+sesji/konfiguracji. SwarmResource obsługuje jawnego aktora CREATE i osobnego właściciela
+obserwacji/usuwania; test frameworka potwierdza cleanup po błędnej akceptacji.
+OperationLimits oddziela wymagania operacji od capture. Nowy target local-viewer nie
+wymaga tapów. Log: `/tmp/acceptance-viewer-final.log` (49 + 3 testy zielone).
+Nowy wycinek pozostaje do review. Następnie scoped runner AU-4/AU-5.
+
+Regresja lifecycle Artemis: 3/3, każdy REMOVE SUCCEEDED (16 usuniętych zasobów,
+zero pozostałości/błędów, registry404). Trzy testy importów przeszły. Logi:
+`/tmp/acceptance-viewer-lifecycle-regression.log`, `/tmp/acceptance-viewer-import-boundaries.log`.

@@ -41,7 +41,7 @@ final class LiveRun implements AutoCloseable {
   }
   SwarmResource newSwarm() {
     return new SwarmResource("acceptance-" + UUID.randomUUID(), swarms,
-        new OperationAwaiter(swarms, target.limits(), evidence), target.limits());
+        new OperationAwaiter(swarms, target.limits().operations(), evidence), target.limits().operations());
   }
   TapResource newTap() { return new TapResource(new DebugTapApi(api.http, api.token), target.limits(), evidence); }
   SwarmCreateRequest createRequest() {

@@ -41,10 +41,10 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
 | AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
 | AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | AuthReadAcceptanceIT: nine additional protected read routes, anonymous 401 and authenticated 200 | PASS |
-| AU-3 | Viewer has no runnable templates and cannot create swarm. | auth-access: viewer | Auth group | OPEN |
+| AU-3 | Viewer has no runnable templates and cannot create swarm. | auth-access: viewer | ViewerAcceptanceIT: exact PocketHive VIEW, empty runnable list, CREATE403 and admin registry404 | PASS |
 | AU-4 | Folder runner sees/runs only allowed scenarios, cannot run outside folder. | auth-access: scoped runner | Auth fixture and shared new swarm cleanup | OPEN |
 | AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | Auth endpoint matrix | OPEN |
-| AU-6 | Viewer reads scenario list/detail/raw through ingress. | auth-access: Scenario Manager reads | Auth endpoint matrix | OPEN |
+| AU-6 | Viewer reads scenario list/detail/raw through ingress. | auth-access: Scenario Manager reads | ViewerAcceptanceIT: selected scenario in list, matching detail id and nonempty raw through ingress | PASS |
 | AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | Independent actors and cleanup of all created artifacts | OPEN |
 | AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | Auth group; rejection before mutation | OPEN |
 | AU-9 | Admin provisions bundle runner; profile/catalogue expose exact grant; only named bundle runs. | auth-access: bundle runner | New user fixture with cleanup | OPEN |
@@ -167,5 +167,32 @@ Final log: `/tmp/acceptance-auth-read-final.log` — 45 framework tests and 13 d
 cases passed, zero errors/failures/skips. Each evidence directory named in that log
 contains anonymous-response.json and authenticated-response.json (no request tokens).
 Import boundary log: `/tmp/acceptance-auth-import-boundaries.log` — 3 passed.
-The new auth slice awaits separate review; no new lifecycle run was needed for these
+The auth-read slice passed separate review without findings and was committed as `2ce87f7a`; no new lifecycle run was needed for these
 read-only endpoints. N2 remains open, and N3/N4 are unchanged.
+
+
+## Viewer slice — 2026-09-16
+
+AU-3/AU-6: ViewerAcceptanceIT verifies exact PocketHive deployment VIEW, visible
+fixture in scenario list, matching detail id, nonempty raw, empty runnable templates,
+and CREATE403 with registry404 read before/after by the explicit cleanup admin.
+The supplied target uses local-viewer, local-admin and acceptance-http-artemis.
+AuthApi reads the canonical profile DTO. Grants for other products are separate.
+No user or policy changes are made. A rejected CREATE does not trigger removal.
+
+SwarmResource accepts an explicit requester while retaining its observation/removal
+API. Framework tests exercise unexpected accepted CREATE followed by assertion failure
+and verified removal by the owner, plus rejected CREATE without removal. OperationLimits
+is a read-only projection so these tests do not require capture settings; existing lifecycle
+WaitLimits projects the same operation values. TargetLoader remains the single resolver.
+
+Viewer execution: `/tmp/acceptance-viewer-final.log`, 49 framework tests and 3 deployed
+cases passed, zero skips. This slice remains uncommitted and awaits separate review.
+N2 beyond these rows and N3/N4 remain open; scoped runner is next.
+
+Lifecycle regression after the resource/limits change passed on Artemis (3/3):
+`/tmp/acceptance-viewer-lifecycle-regression.log`. Each REMOVE was SUCCEEDED with
+16 removed resources, zero remaining/errors and verified registry404. Three import
+boundary cases passed: `/tmp/acceptance-viewer-import-boundaries.log`. Rabbit was
+not rerun in this slice. Unexpected viewer acceptance cleanup was exercised with
+framework HTTP fixtures; the deployed viewer correctly received403.

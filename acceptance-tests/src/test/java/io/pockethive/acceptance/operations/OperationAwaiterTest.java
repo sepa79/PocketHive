@@ -25,7 +25,7 @@ class OperationAwaiterTest {
         var evidence = new RunEvidence(reports, "operations")) {
       ingress.reply("GET", "/orchestrator" + receipt.operationUrl(), 200, operation(receipt, OperationType.START, OperationState.DISPATCHED, Map.of()));
       ingress.reply("GET", "/orchestrator" + receipt.operationUrl(), 200, succeeded(receipt, OperationType.START));
-      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits, evidence);
+      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits.operations(), evidence);
       assertEquals(OperationState.SUCCEEDED, waiter.terminal(SWARM, OperationType.START, receipt).state());
     }
   }
@@ -35,7 +35,7 @@ class OperationAwaiterTest {
         var evidence = new RunEvidence(reports, "operations")) {
       ingress.reply("GET", "/orchestrator" + receipt.operationUrl(), 200,
           operation(receipt, OperationType.START, OperationState.FAILED, Map.of("reason", "rejected setup")));
-      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits, evidence);
+      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits.operations(), evidence);
       var result = waiter.terminal(SWARM, OperationType.START, receipt);
       var error = assertThrows(AssertionError.class, () -> OperationAwaiter.requireSucceeded(result));
       assertTrue(error.getMessage().contains(receipt.correlationId()));
@@ -47,7 +47,7 @@ class OperationAwaiterTest {
     try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
         var evidence = new RunEvidence(reports, "operations")) {
       ingress.reply("GET", "/orchestrator" + expected.operationUrl(), 200, succeeded(receipt(), OperationType.START));
-      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits, evidence);
+      var waiter = new OperationAwaiter(new SwarmApi(http, ""), limits.operations(), evidence);
       assertThrows(AssertionError.class, () -> waiter.terminal(SWARM, OperationType.START, expected));
     }
   }

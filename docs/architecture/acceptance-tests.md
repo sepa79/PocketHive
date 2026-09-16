@@ -24,8 +24,9 @@ The module does not implement Rabbit/Artemis transport or resource naming.
 
 **Owner:** `TargetLoader`; `ApiTarget` is the shared immutable ingress/actor/request/report
 projection. `AcceptanceTarget` adds lifecycle limits and HTTP fixture; `ScenarioTarget`
-adds only the authored scenario id. The calling suite explicitly selects `load` or
-`loadScenario`; the resolver never infers a group from fixture names.
+adds only the authored scenario id. ViewerTarget adds the explicit cleanup actor,
+scenario/SUT and operation limits. The calling suite explicitly selects `load` or
+`loadScenario` or `loadViewer`; the resolver never infers a group from fixture names.
 **Effect:** one explicit file supplies ingress, actor, time limits and named fixture;
 missing, unknown or invalid settings fail before any side effects. Required key sets
 are scoped to the selected target kind; common fields are parsed once. `selectedFile`
@@ -49,7 +50,7 @@ JSON callers retain application/json. Both use the same bounded request implemen
 
 ## RESP-ACCEPTANCE-API
 
-**Owners:** `AuthApi` handles dev login; `SwarmApi` maps swarm REST requests/readbacks;
+**Owners:** `AuthApi` handles dev login and the canonical current-user profile; `SwarmApi` maps swarm REST requests/readbacks;
 `ScenarioApi` reads the required scenario. These are distinct endpoint families.
 **Effect:** use canonical auth/create/control/operation/state contracts and exact
 public paths. `SwarmApi` also matches the returned idempotency key with the submitted
@@ -140,3 +141,20 @@ no alternate HTTP client, login, configuration resolver or authorization calcula
 It creates no resources and makes no claims about scoped grants or write denial.
 The group requires Scenario Manager, Orchestrator, Network Proxy Manager and the
 Postgres-backed hive journal; unavailable routes fail explicitly.
+
+
+## Viewer acceptance slice
+
+`ViewerAcceptanceIT` verifies AU-3/AU-6. TargetLoader.loadViewer owns the explicit
+viewer username, cleanupUsername, scenarioId, sutId and operation/request/poll limits.
+ViewerTarget and OperationLimits are immutable projections; WaitLimits exposes its
+operation-only projection for existing lifecycle consumers. Capture settings are not
+required by viewer tests. AuthApi also reads the canonical authenticated user profile.
+Each viewer test requires the exact PocketHive deployment-wide VIEW grant before testing access.
+
+SwarmResource remains the sole acquisition/cleanup owner. Its create overload accepts
+an explicit requesting SwarmApi; its existing API remains the observer/removal actor.
+Both paths use the same receipt/state handling. Viewer CREATE denial must be403 and
+the admin readback must remain404. An unexpected accepted CREATE remains owned and
+is removed by the configured admin even when the denial assertion fails. No alternate
+cleanup registry, token fallback or direct broker verification is introduced.

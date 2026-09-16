@@ -70,4 +70,17 @@ class TargetLoaderTest {
     assertThrows(IllegalArgumentException.class,
         () -> TargetLoader.loadScenario(file(SCENARIO.replace("http://localhost:8088/", "http://localhost:8088/backend/"))));
   }
+
+  @Test void viewerRequiresExplicitObserverAndOperationSettingsButNoCapture() throws Exception {
+    String config = SCENARIO + "cleanupUsername=admin\noperationTimeout=PT2S\npollInterval=PT0.01S\nsutId=test-sut\n";
+    var target = TargetLoader.loadViewer(file(config));
+    assertEquals("admin", target.cleanupUsername());
+    assertEquals(java.time.Duration.ofSeconds(2), target.limits().operation());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadViewer(file(SCENARIO)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadViewer(file(config + "captureTimeout=PT1S\n")));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadViewer(file(config.replace("cleanupUsername=admin", "cleanupUsername=test-actor"))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadViewer(file(config.replace("pollInterval=PT0.01S", "pollInterval=PT0S"))));
+  }
 }

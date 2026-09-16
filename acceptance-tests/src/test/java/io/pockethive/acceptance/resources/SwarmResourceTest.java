@@ -29,7 +29,7 @@ class SwarmResourceTest {
 
   private SwarmResource resource(PocketHiveHttp http, RunEvidence evidence) {
     var api = new SwarmApi(http, "");
-    return new SwarmResource(SWARM, api, new OperationAwaiter(api, limits, evidence), limits);
+    return new SwarmResource(SWARM, api, new OperationAwaiter(api, limits.operations(), evidence), limits.operations());
   }
   private void acquired(ScriptedIngress ingress, ControlResponse create) {
     ingress.reply("POST", BASE + "/create", 202, create)
@@ -260,6 +260,43 @@ class SwarmResourceTest {
       assertEquals(2, failure.getSuppressed().length);
       for (Throwable cause : failure.getSuppressed()) assertTrue(cause.getMessage().contains("different run"));
       // No remove is scripted: foreign run evidence cannot authorize a destructive command.
+    }
+  }
+
+  @Test void acceptedCreateByAnotherActorIsObservedAndRemovedByOwnerAfterAssertionFailure() throws Exception {
+    var create = receipt(); var remove = receipt();
+    try (var requesterIngress = new ScriptedIngress(); var ownerIngress = new ScriptedIngress();
+         var requesterHttp = new PocketHiveHttp(requesterIngress.origin(), limits.request());
+         var ownerHttp = new PocketHiveHttp(ownerIngress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "two-actors")) {
+      requesterIngress.reply("POST", BASE + "/create", 202, create);
+      ownerIngress.reply("GET", "/orchestrator" + create.operationUrl(), 200, succeeded(create, OperationType.CREATE));
+      removed(ownerIngress, remove);
+      var swarm = resource(ownerHttp, evidence);
+      var primary = new AssertionError("Viewer CREATE unexpectedly succeeded");
+      var failure = assertThrows(AssertionError.class, () -> {
+        try (swarm) {
+          swarm.create(createRequest(create), new SwarmApi(requesterHttp, "viewer-token"));
+          throw primary;
+        }
+      });
+      assertSame(primary, failure);
+      assertEquals(0, failure.getSuppressed().length);
+      assertEquals(remove.correlationId(), swarm.removal().correlationId());
+    }
+  }
+
+  @Test void rejectedCreateByAnotherActorDoesNotRequestRemoval() throws Exception {
+    var create = receipt();
+    try (var requesterIngress = new ScriptedIngress(); var ownerIngress = new ScriptedIngress();
+         var requesterHttp = new PocketHiveHttp(requesterIngress.origin(), limits.request());
+         var ownerHttp = new PocketHiveHttp(ownerIngress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "two-actors-denied");
+         var swarm = resource(ownerHttp, evidence)) {
+      requesterIngress.reply("POST", BASE + "/create", 403, Map.of());
+      var failure = assertThrows(ApiException.class,
+          () -> swarm.create(createRequest(create), new SwarmApi(requesterHttp, "viewer-token")));
+      assertEquals(403, failure.response().status());
     }
   }
 }

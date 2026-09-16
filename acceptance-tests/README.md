@@ -41,3 +41,13 @@ the supplied target). It requires the selected scenario, the public Scenario Man
 Orchestrator and Network Proxy Manager APIs, and the Postgres-backed hive journal.
 It performs no mutations and does not assert viewer/runner permissions. Each case
 records the two API responses without request credentials or authentication responses.
+
+
+The `auth-viewer` group uses `targets/local-viewer.properties`. It verifies the exact
+PocketHive VIEW grant, scenario list/detail/raw access, an empty runnable-template
+list and CREATE403 followed by admin registry404. The target explicitly supplies
+viewer and cleanup usernames, scenario/SUT and operation limits; it requires no tap
+or capture settings. The supplied fixture is Artemis. If a regression accepts CREATE,
+SwarmResource observes and removes the owned swarm using the cleanup actor.
+It never switches credentials automatically or recreates users. Other products' grants
+are outside the PocketHive grant assertion. Both actors' profiles are recorded without tokens.

@@ -3,7 +3,7 @@ package io.pockethive.acceptance.resources;
 import io.pockethive.acceptance.api.ApiException;
 import io.pockethive.acceptance.api.ControlReceiptMismatchException;
 import io.pockethive.acceptance.api.SwarmApi;
-import io.pockethive.acceptance.config.WaitLimits;
+import io.pockethive.acceptance.config.OperationLimits;
 import io.pockethive.acceptance.operations.OperationAwaiter;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Responsibility: own one test swarm receipt and verify its canonical removal.
+ * Responsibility: own one test swarm receipt and verify removal, including CREATE by an explicit requesting actor.
  * Must not: guess ownership, retry mutations or implement swarm convergence.
  * Contract: RESP-ACCEPTANCE-RESOURCES — docs/architecture/acceptance-tests.md#resp-acceptance-resources.
  */
@@ -23,7 +23,7 @@ public final class SwarmResource implements AutoCloseable {
   private final String id;
   private final SwarmApi api;
   private final OperationAwaiter operations;
-  private final WaitLimits limits;
+  private final OperationLimits limits;
   private AcquisitionState acquisition = AcquisitionState.NOT_REQUESTED;
   // Null means no receipt/operation has been acquired. Non-null type with null receipt is unconfirmed dispatch.
   private OperationType pendingType;
@@ -31,7 +31,7 @@ public final class SwarmResource implements AutoCloseable {
   private String runId;
   private SwarmOperation removal;
 
-  public SwarmResource(String id, SwarmApi api, OperationAwaiter operations, WaitLimits limits) {
+  public SwarmResource(String id, SwarmApi api, OperationAwaiter operations, OperationLimits limits) {
     this.id = id; this.api = api; this.operations = operations; this.limits = limits;
   }
   public String id() { return id; }
@@ -45,9 +45,13 @@ public final class SwarmResource implements AutoCloseable {
   }
 
   public SwarmOperation create(SwarmCreateRequest request) throws IOException, InterruptedException {
+    return create(request, api);
+  }
+
+  public SwarmOperation create(SwarmCreateRequest request, SwarmApi requester) throws IOException, InterruptedException {
     if (acquisition != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Create already attempted");
     acquisition = AcquisitionState.UNCONFIRMED;
-    return execute(OperationType.CREATE, () -> api.create(id, request));
+    return execute(OperationType.CREATE, () -> requester.create(id, request));
   }
 
   public SwarmOperation start() throws IOException, InterruptedException {

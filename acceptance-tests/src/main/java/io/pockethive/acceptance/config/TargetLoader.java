@@ -10,7 +10,7 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Responsibility: resolve an explicitly selected lifecycle or scenario target file.
+ * Responsibility: resolve an explicitly selected lifecycle, scenario or viewer target file.
  * Must not: read legacy configuration or infer missing values.
  * Contract: RESP-ACCEPTANCE-TARGET — docs/architecture/acceptance-tests.md#resp-acceptance-target.
  */
@@ -50,6 +50,18 @@ public final class TargetLoader {
     Path actual = file.toRealPath();
     Properties values = read(actual, Set.of("scenarioId"));
     return new ScenarioTarget(api(values, actual), values.getProperty("scenarioId"));
+  }
+
+  public static ViewerTarget loadViewer(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Properties values = read(actual, Set.of("cleanupUsername", "scenarioId", "sutId", "operationTimeout", "pollInterval"));
+    ApiTarget api = api(values, actual);
+    if (api.username().equals(values.getProperty("cleanupUsername"))) {
+      throw new IllegalArgumentException("Viewer and cleanup actors must be distinct");
+    }
+    return new ViewerTarget(api, values.getProperty("cleanupUsername"), values.getProperty("scenarioId"),
+        values.getProperty("sutId"), new OperationLimits(api.requestTimeout(),
+            duration(values, "operationTimeout"), duration(values, "pollInterval")));
   }
 
   private static Properties read(Path actual, Set<String> groupKeys) throws IOException {

@@ -1,7 +1,7 @@
 package io.pockethive.acceptance.operations;
 
 import io.pockethive.acceptance.api.SwarmApi;
-import io.pockethive.acceptance.config.WaitLimits;
+import io.pockethive.acceptance.config.OperationLimits;
 import io.pockethive.acceptance.evidence.RunEvidence;
 import io.pockethive.swarm.model.lifecycle.ControlResponse;
 import io.pockethive.swarm.model.lifecycle.OperationState;
@@ -17,9 +17,9 @@ import java.time.Duration;
  */
 public final class OperationAwaiter {
   private final SwarmApi api;
-  private final WaitLimits limits;
+  private final OperationLimits limits;
   private final RunEvidence evidence;
-  public OperationAwaiter(SwarmApi api, WaitLimits limits, RunEvidence evidence) {
+  public OperationAwaiter(SwarmApi api, OperationLimits limits, RunEvidence evidence) {
     this.api = api; this.limits = limits; this.evidence = evidence;
   }
   public SwarmOperation terminal(String swarmId, OperationType type, ControlResponse receipt)

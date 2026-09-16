@@ -7,4 +7,6 @@ import java.time.Duration;
  * Must not: resolve configuration or supply defaults.
  * Contract: RESP-ACCEPTANCE-TARGET — docs/architecture/acceptance-tests.md#resp-acceptance-target.
  */
-public record WaitLimits(Duration request, Duration operation, Duration capture, Duration poll) {}
+public record WaitLimits(Duration request, Duration operation, Duration capture, Duration poll) {
+  public OperationLimits operations() { return new OperationLimits(request, operation, poll); }
+}
