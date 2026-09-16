@@ -30,7 +30,7 @@ class TargetLoaderTest {
   @Test void resolvesAnExplicitFileWithoutEnvironmentDefaults() throws Exception {
     var target = TargetLoader.load(file(TARGET));
     assertEquals("explicit-fixture", target.fixture().templateId());
-    assertEquals(folder.resolve("reports"), target.evidenceDirectory());
+    assertEquals(folder.resolve("reports"), target.api().evidenceDirectory());
   }
   @Test void missingValueFailsBeforeAnyTestRuns() throws Exception {
     assertThrows(IllegalArgumentException.class,
@@ -42,5 +42,32 @@ class TargetLoaderTest {
   @Test void rejectsAnExpiredTapBudget() throws Exception {
     assertThrows(IllegalArgumentException.class,
         () -> TargetLoader.load(file(TARGET.replace("tapTtlSeconds=5", "tapTtlSeconds=1"))));
+  }
+  private static final String SCENARIO = """
+      ingress=http://localhost:8088/
+      username=test-actor
+      requestTimeout=PT1S
+      scenarioId=authoring-fixture
+      evidenceDirectory=reports
+      """;
+
+  @Test void scenarioReadNeedsNoLifecycleOrCaptureSettings() throws Exception {
+    var target = TargetLoader.loadScenario(file(SCENARIO));
+    assertEquals("authoring-fixture", target.scenarioId());
+    assertEquals(folder.resolve("reports"), target.api().evidenceDirectory());
+  }
+  @Test void targetKindsCannotBeSubstitutedOrMixed() throws Exception {
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.load(file(SCENARIO)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadScenario(file(TARGET)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadScenario(file(SCENARIO + "operationTimeout=PT2S\n")));
+  }
+  @Test void scenarioRequiresItsFixtureAndValidCommonSettings() throws Exception {
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadScenario(file(SCENARIO.replace("scenarioId=authoring-fixture\n", ""))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadScenario(file(SCENARIO.replace("requestTimeout=PT1S", "requestTimeout=PT0S"))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadScenario(file(SCENARIO.replace("http://localhost:8088/", "http://localhost:8088/backend/"))));
   }
 }

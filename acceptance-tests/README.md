@@ -15,13 +15,20 @@ See [usage](../docs/USAGE.md#independent-acceptance-framework) for commands and 
 [responsibilities](../docs/architecture/acceptance-tests.md) for boundaries, and the
 [coverage ledger](../docs/ci/acceptance-coverage.md) for remaining replacement requirements.
 
-Current first slice: HTTP lifecycle and failure-after-create cleanup. The HTTP fixture
+Lifecycle coverage: HTTP processing, failure-after-create cleanup and commands at their target state. The HTTP fixture
 contains generator → processor → postprocessor; capture observes the processor result.
 The test verifies processed HTTP responses, canonical lifecycle results and removal.
 It does not claim to have measured postprocessor throughput or CP wire/binding coverage.
 New fixtures are under `scenarios/acceptance`; target files select their exact IDs.
 They use the existing read-only WireMock `/api/test` SUT mapping. Tests neither modify
-that mapping nor contact a backend management port. Each test creates a unique swarm.
+that mapping nor contact a backend management port. Each lifecycle test creates a unique swarm.
+
+The independent `scenarios` group uses `targets/local-scenarios.properties` and reads
+`acceptance-scenario-authoring` through ingress: scheduler rate, templating content
+and all per-worker history policies. It creates no swarm and requires no SUT or running
+WORK broker. Its target has only common API settings and scenarioId; lifecycle settings
+are rejected. `ApiRun` owns shared authenticated HTTP/evidence lifetime; `LiveRun`
+adds lifecycle composition only.
 
 Target selection does not change the stack's configured WorkPlane. The deployment must
 already use the requested fixture's adapter. The framework neither switches brokers nor

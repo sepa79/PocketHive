@@ -6,9 +6,10 @@ This directory contains only work that is actively being implemented or is waiti
 
 - [Nowy framework E2E](e2e-test-system.md) — decyzja użytkownika: budowa od zera,
   bez przenoszenia kroków/helperów i zależności od starego zestawu. N0: wymagania
-  i projekt gotowe; N1: 38 testów frameworka oraz oba testy ingress przeszły na
+  i projekt gotowe; N1: oba testy ingress przeszły na
   Rabbit i Artemis. N2: pierwszy test operacji w osiągniętym stanie też przeszedł
-  na obu adapterach; pozostałe pokrycie otwarte. N3: potwierdzenie zastąpienia;
+  na obu adapterach. Scenario API (SC-1–SC-3) działa; 44 testy frameworka zielone.
+  Pozostałe pokrycie otwarte. N3: potwierdzenie zastąpienia;
   dopiero N4: usunięcie całego starego systemu.
 
 Ready for PR: [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md),

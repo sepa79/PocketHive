@@ -15,9 +15,9 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | --- | --- | --- | --- | --- |
 | SM-1 | Ingress reports platform availability; preserve CONTROL connectivity coverage through an explicit owner test. | deployment-smoke: services healthy | Smoke group; public health and a named CP component test | OPEN |
 | SM-2 | Fresh deployment has no implicit default swarm. | deployment-smoke: default swarm absent | Smoke on explicitly fresh dedicated target; do not assume all targets empty | OPEN |
-| SC-1 | Authored generator rate appears in retrieved template. | scenario-defaults: rate limit | Scenario API test with explicit fixture expectation | OPEN |
-| SC-2 | Authored templating interceptor appears in template. | scenario-defaults: templating | Scenario API test | OPEN |
-| SC-3 | Per-worker history policy survives template read. | history-policy: authoring | Scenario API test, all configured workers/policies | OPEN |
+| SC-1 | Authored generator rate appears in retrieved template. | scenario-defaults: rate limit | ScenarioReadAcceptanceIT.preservesAuthoredSchedulerRate: explicit numeric 7.5 through ingress | PASS |
+| SC-2 | Authored templating interceptor appears in template. | scenario-defaults: templating | ScenarioReadAcceptanceIT.preservesTemplatingConfiguration: full authored templating object through ingress | PASS |
+| SC-3 | Per-worker history policy survives template read. | history-policy: authoring | ScenarioReadAcceptanceIT.preservesEveryWorkersHistoryPolicy: exact four-role map with FULL/LATEST_ONLY/DISABLED through ingress | PASS |
 | WK-1 | Runtime history policies match authoring and real traffic succeeds. | history-policy: runtime | Worker configuration + message tests | OPEN |
 | WK-2 | Processor result headers belong to step history, not global headers. | workitem-headers | Canonical WorkItem assertions after processing | OPEN |
 | SW-1 | Create/start/process/stop/remove succeeds; expected workers present; canonical confirmations correlated; resource provisioning/removal has coverage. | swarm-lifecycle: golden path | HttpLifecycleAcceptanceIT passed on Rabbit and Artemis, including expected worker roles; topology/CP details remain open | PARTIAL |
@@ -105,4 +105,44 @@ Evidence directories under `acceptance-tests/target/runs/`:
 
 The HTTP case observes the processor result, not terminal postprocessor throughput.
 N1 execution is complete; remaining N2 rows, full replacement acceptance and legacy
-removal remain open. The new target-state test awaits a separate review.
+removal remain open. The target-state test passed its separate review without new findings.
+
+## Scenario authoring slice — 2026-09-16
+
+SC-1/SC-2/SC-3 passed in three independent read-only tests via public ingress. New
+fixture `acceptance-scenario-authoring` declares a numeric rate of 7.5, an exact
+templating string and different history policies for four workers. These are authored
+values, not tests of implicit defaults. No worker/swarm is launched; runtime history
+behavior remains WK-1 and is not claimed here. No legacy implementation was reused.
+
+The `scenarios` target needs only ingress, actor, request timeout, report directory
+and scenarioId. TargetLoader remains the sole resolver; ApiRun shares authenticated
+HTTP/evidence lifetime with lifecycle composition. 44 framework tests passed, including
+strict target separation, auth rejection and HTTP close despite report failure.
+The three existing import-boundary cases also passed.
+
+Live log: `/tmp/acceptance-scenario-live.log` (3/3, 0.466 s). Evidence under
+`acceptance-tests/target/runs/`:
+
+- `scenario-rate-05508a6d-84df-49b7-a9d0-1845a82bd580`
+- `scenario-templating-3abc81bc-fc89-423d-81b5-96f0819053a5`
+- `scenario-history-7bb40c1d-bdb0-4094-a5bb-2a83b975fb35`
+
+This implementation awaits separate review. Remaining N2 coverage and N3/N4 stay open.
+
+Regression after API scope extraction: `local-artemis.properties lifecycle` passed
+3/3. All REMOVE operations succeeded with 16 removed resources, zero remaining/errors
+and verified 404. Log: `/tmp/acceptance-scenario-lifecycle-regression.log`. Artifact
+directories under `acceptance-tests/target/runs/`:
+
+- `target-state-lifecycle-d94751b8-01ee-461f-910d-527f2ffbc032`
+- `http-lifecycle-7cb3e502-1943-42f1-b3a0-ee039b4cff85`
+- `failure-cleanup-279c19ec-8e36-415d-bdae-87ae7d705fa6`
+
+Rabbit was not re-run in this authoring slice; previous N1/N2 evidence remains above.
+
+Controlled negative run: a temporary target selected a nonexistent scenario id.
+All three scenario cases failed with HTTP 404, zero skips; runner exit code 1 is the
+expected result. Log: `/tmp/acceptance-scenario-missing-fixture.log`. The last local
+Failsafe scenario report therefore contains these intentional negative-test errors;
+the successful run is recorded in `/tmp/acceptance-scenario-live.log` above.

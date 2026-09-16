@@ -2,7 +2,7 @@
 
 User-approved direction: a new `acceptance-tests` Maven module, Java 21 and JUnit 5.
 It is independent of the frozen `e2e-tests`; temporary coexistence ends only after
-replacement acceptance. These are the N1 implementation responsibility records.
+replacement acceptance. These are the current implementation responsibility records.
 They do not claim complete replacement or a passing deployment run.
 
 ## Boundaries and composition
@@ -22,9 +22,14 @@ The module does not implement Rabbit/Artemis transport or resource naming.
 
 ## RESP-ACCEPTANCE-TARGET
 
-**Owner:** `TargetLoader`; `AcceptanceTarget` is its immutable effective configuration.
+**Owner:** `TargetLoader`; `ApiTarget` is the shared immutable ingress/actor/request/report
+projection. `AcceptanceTarget` adds lifecycle limits and HTTP fixture; `ScenarioTarget`
+adds only the authored scenario id. The calling suite explicitly selects `load` or
+`loadScenario`; the resolver never infers a group from fixture names.
 **Effect:** one explicit file supplies ingress, actor, time limits and named fixture;
-missing, unknown or invalid settings fail before any side effects. Paths resolve
+missing, unknown or invalid settings fail before any side effects. Required key sets
+are scoped to the selected target kind; common fields are parsed once. `selectedFile`
+reads the explicit runner property. Paths resolve
 relative to that file. **Must not:** consult legacy configuration, infer adapter,
 or embed defaults in individual clients/tests.
 
@@ -96,11 +101,20 @@ suppressed alongside an existing test/cleanup failure; write errors are never ig
 
 ## RESP-ACCEPTANCE-RUN
 
-**Owner:** test-scoped `LiveRun` composes target, authentication, API clients and evidence.
-**Effect:** each live test opens and closes its own HTTP client and receives fresh handles.
-`LiveRun.close` closes evidence after the owned taps/swarms and always closes HTTP,
-also when evidence reporting fails. Setup failure preserves both causes on close.
-**Must not:** share mutable test state or implement lifecycle/capture behavior.
+**Owner:** test-scoped `LiveRun` composes lifecycle clients and handles on `ApiRun`.
+**Effect:** load a lifecycle target, require its scenario and supply fresh swarm/tap
+handles. Closing LiveRun delegates to ApiRun after owned resources are closed.
+**Must not:** own authentication/HTTP lifetime, share mutable state or implement
+lifecycle/capture behavior.
+
+## RESP-ACCEPTANCE-API-RUN
+
+**Owner:** test-scoped `ApiRun` owns authenticated HTTP and evidence lifetime.
+**Effect:** receive resolved ApiTarget, log in through AuthApi once and make that
+session available to suite composition. Close evidence and always close HTTP,
+also after setup failure; preserve primary and suppressed failures.
+**Must not:** resolve target files, require a scenario/swarm/SUT, implement lifecycle,
+or infer which test group is running. Read-only scenario tests use this scope directly.
 
 ## Verification
 

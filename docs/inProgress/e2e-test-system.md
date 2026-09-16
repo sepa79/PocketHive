@@ -2,8 +2,9 @@
 
 Status: kierunek ustalony przez użytkownika 2026-09-15; projekt wykonania poniżej.
 N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamknięte,
-oba pierwsze testy przeszły na Rabbit i Artemis. N2: pierwszy przypadek operacji
-w osiągniętym stanie także przeszedł na obu adapterach; pozostałe pokrycie otwarte.
+oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
+przeszły na obu adapterach; grupa Scenario API
+(SC-1/SC-2/SC-3) także działa przez ingress. Pozostałe pokrycie otwarte.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -165,8 +166,7 @@ przed pierwszym START, ponowny STOP oraz ponowny START po osiągnięciu RUNNING.
 Każda komenda ma nowy idempotencyKey i osobny correlationId; operacje muszą zakończyć
 się SUCCEEDED, z tym samym runId i oczekiwanym stanem publicznego API. Kontrakt pozostaje
 w ORCHESTRATOR-REST §3.1–3.2. Test korzysta z istniejących LiveRun, SwarmResource
-oraz OperationAwaiter i wspólnego cleanupu. Przeszedł na obu adapterach; jest materiałem
-do osobnego review. Dokładny replay tego samego klucza i brak ponownej emisji CP nie są
+oraz OperationAwaiter i wspólnego cleanupu. Przeszedł na obu adapterach i osobne review bez nowych ustaleń. Dokładny replay tego samego klucza i brak ponownej emisji CP nie są
 asercjami tego testu i nadal wymagają własnego dowodu w pełnej mapie zastąpienia.
 
 Ostatnie wykonanie: Rabbit 2/2 N1 oraz 1/1 N2, Artemis 3/3 grupy lifecycle, bez błędów
@@ -192,3 +192,41 @@ Redis/TCP/ClickHouse/eksportów, N3 i N4. Capture dowodzi wyniku procesora HTTP;
 nie jest pomiarem throughput postprocessora. Kolejny wycinek to samodzielna grupa
 Scenario API: odczyt zadeklarowanych ustawień/rate/interceptorów/history policy.
 Nie wymaga ona przełączenia Work Plane ani uruchamiania swarma.
+
+## N2 — Scenario API: zakres wykonania 2026-09-16
+
+SC-1/SC-2/SC-3: trzy niezależne odczyty nowego fixture `acceptance-scenario-authoring`
+przez Scenario Manager za publicznym ingress. Asercje: zadeklarowane ratePerSec,
+pełna treść konfiguracji templating oraz komplet czterech ról z przypisanymi FULL,
+LATEST_ONLY i DISABLED. Błąd odpowiedzi lub brak fixture jest błędem testu, bez skip.
+Bez uruchamiania swarma, kontaktu z brokerem lub zapożyczania implementacji starego E2E.
+
+TargetLoader pozostaje jedynym resolverem. Wspólne ustawienia HTTP/aktora/raportów
+mają projekcję ApiTarget; target lifecycle dodaje własne wymagane limity i HttpFixture,
+a ScenarioTarget wymaga tylko scenarioId. Typ odczytu targetu wybiera jawnie suite,
+bez wykrywania grup po nazwach fixture i bez opcjonalnych pól dla nieużywanych funkcji.
+ApiRun posiada wspólny zakres HTTP, logowania i evidence; LiveRun składa na nim
+wyłącznie lifecycle. Nowa grupa nie wymaga konfiguracji operacji, SUT ani capture.
+Weryfikacja obejmuje ścisłe klucze obu targetów, nowe odczyty przez ingress i regresję
+istniejącego lifecycle po rozdzieleniu wspólnego zakresu. Stary E2E pozostaje zamrożony.
+
+Wykonanie 2026-09-16: punkt startowy zapisany w commicie `20adcfaa` na jawne polecenie
+użytkownika; bez push. Następnie dodano ApiTarget/ScenarioTarget, wspólny ApiRun
+i trzy testy ScenarioReadAcceptanceIT. Odczyty przeszły 3/3 przez ingress (0.466 s),
+a wszystkie 44 testy frameworka i trzy testy granic importów są zielone.
+Regresja lifecycle po wydzieleniu zakresu HTTP przeszła na Artemis 3/3, każdy REMOVE
+SUCCEEDED z 16 usuniętymi zasobami, bez pozostałości/błędów i z 404 swarma.
+Zatrzymany lokalny stack uruchomiono z istniejących kontenerów; nie przebudowywano
+produktu ani nie przełączano WorkPlane. Rabbit nie był ponownie wykonywany w tym wycinku.
+
+Logi: `/tmp/acceptance-scenario-component-tests.log`, `/tmp/acceptance-scenario-live.log`,
+`/tmp/acceptance-scenario-lifecycle-regression.log`. Nowe zmiany pozostają do osobnego
+review i poza wykonanym wcześniej commitem. Następna niezależna grupa: auth API,
+z jawną macierzą endpointów i aktorów zgodnie z AU-1–AU-13. SC-4 (zmienne w ruchu)
+oraz WK-1 (runtime history) nadal wymagają osobnych testów ruchu/konfiguracji workerów.
+
+Kontrolna próba z nieistniejącym scenarioId zakończyła się zgodnie z oczekiwaniem:
+3 błędy HTTP 404, zero skip, kod runnera 1. Log:
+`/tmp/acceptance-scenario-missing-fixture.log`. To celowy test błędnego wejścia;
+ostatni lokalny raport Failsafe zawiera tę próbę, a zielony przebieg grupy zapisano
+w `/tmp/acceptance-scenario-live.log`.

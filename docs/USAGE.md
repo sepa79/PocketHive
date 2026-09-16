@@ -451,15 +451,20 @@ Framework component tests use their own HTTP stub; deployed tests use public ing
 ./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties lifecycle
 # Only the target-state lifecycle case (STOP before START; repeated STOP/START):
 ./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties target-state
+# Read-only authoring checks; requires ingress, auth and Scenario Manager only:
+./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties scenarios
 # On a stack already configured for Rabbit WORK:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
 ```
 
 Both runner arguments are required: an explicit target file and a JUnit tag expression.
-Each target declares ingress, local dev actor, fixture, polling/request/operation/capture
-limits, tap lifetime, expected HTTP response and evidence directory. Missing/unknown
-settings fail; no fallback to ENV or the old harness. The local targets require local
-dev login and the existing WireMock SUT. These are declared environment requirements.
+Every target declares ingress, local dev actor, request timeout and evidence directory.
+Lifecycle targets additionally require their HTTP fixture, SUT, operation/capture/poll
+limits, tap lifetime and expected HTTP response. The `local-scenarios` target instead
+requires only `scenarioId`; it needs no swarm, SUT, broker or lifecycle/capture settings.
+Use the matching target and group; mixing target kinds fails explicitly. Missing/unknown
+settings fail; no fallback to ENV or the old harness. Lifecycle targets require the
+existing WireMock SUT; all local targets use explicit dev login.
 The target selects a fixture; it does not reconfigure the deployed WorkPlane.
 
 Before first use, make the new `scenarios/acceptance` bundles available to Scenario
@@ -471,10 +476,12 @@ AUTH_SERVICE_BASE_URL=http://localhost:8088/auth-service POCKETHIVE_AUTH_USERNAM
 ```
 
 This is explicit environment setup, not a dependency invoked by the new framework.
-It does not create compatibility/delegation to the legacy test suite. Each test verifies
-its fixture is available before creating a swarm and uses a unique swarm ID.
+It does not create compatibility/delegation to the legacy test suite. Lifecycle tests
+verify the fixture before creating a uniquely named swarm. Scenario read tests only
+fetch the dedicated `acceptance-scenario-authoring` fixture and assert its authored
+rate, templating and history policies. A missing fixture fails the test, never skips it.
 JUnit reports are in `acceptance-tests/target/surefire-reports` (framework) and
-`acceptance-tests/target/failsafe-reports` (deployed tests). Canonical operation and tap
+`acceptance-tests/target/failsafe-reports` (deployed tests). Scenario, canonical operation and tap
 artifacts are written under the target's evidence directory, resolved relative to the
 target file. No authentication response or token is intentionally logged. Cleanup
 failure is reported alongside the original error, not discarded as a warning. Artifact
