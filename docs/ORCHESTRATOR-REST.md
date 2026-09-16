@@ -513,6 +513,16 @@ missing manifest returns `404 Not Found`.
 
 **Response (200)** is the canonical `RuntimeOwnershipManifest` object.
 
+Scope clarification for Artemis A4: `rabbit` contains only Rabbit resources. With
+Artemis WORK, it retains Rabbit CONTROL queues; empty `rabbit.workQueues` and
+`rabbit.exchanges` do not mean that native WORK resources are absent. The factory
+logs this excluded coverage when projecting a non-Rabbit topology. The Rabbit
+topology snapshot, its assessment check and `includeRabbit` orphan cleanup share
+this Rabbit-only scope. They are not a complete inventory or orphan cleanup of
+Artemis. Ordinary swarm remove uses its existing owner-issued WORK_RESOURCE
+targets and verified postconditions, independently of the manifest. No JSON fields,
+cleanup actions or lifecycle contracts are added by this clarification.
+
 #### 2.9.7 Rabbit topology snapshot
 `POST /api/runtime/debug/rabbit/topology`
 
@@ -855,7 +865,7 @@ When the Controller is ready and the workload is already `STOPPED`, a new `STOP`
 { "idempotencyKey": "uuid-v4" }
 ```
 
-The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and RabbitMQ target through the canonical observation ports, clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
+The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and messaging target through the canonical observation ports (Rabbit CONTROL and the selected WORK adapter), clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
 
 **Response (202)**
 ```json

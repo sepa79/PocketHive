@@ -420,6 +420,9 @@ its configured callback. Closing the adapter closes sessions and connection reso
 
 The existing startup artifact and Controller topology remain the start/remove
 path. The Rabbit-only diagnostic ownership manifest is not an Artemis prerequisite.
-Its current coupling to start will be removed in A4, without silently declaring an
-empty inventory complete. Orphan cleanup and diagnostic-manifest replacement are
-separate work. Delayed-delivery API remains subject to the actual 3DS contract.
+A4 keeps the manifest's Rabbit projection scoped to Rabbit: native WORK_RESOURCE
+entries are omitted with a warning, while CONTROL names and compute identity remain
+recorded. Empty rabbit.workQueues/exchanges say nothing about Artemis resource presence.
+Normal removal uses the Controller's owner-issued targets and Orchestrator's verified
+postconditions. Orphan cleanup and diagnostic-manifest replacement remain separate work.
+Delayed-delivery API remains subject to the actual 3DS contract.

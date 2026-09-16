@@ -350,8 +350,8 @@ services:
       - ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:-/opt/pockethive/scenarios-runtime}:/app/scenarios-runtime
     # all defaulted in application.yml, uncomment to override here
     environment:
-      # One WorkPlane per deployment. Full Artemis create/remove is completed in A4.
-      POCKETHIVE_WORK_TYPE: RABBITMQ
+      # One WorkPlane per deployment; scenario input/output must select the same WORK adapter.
+      POCKETHIVE_WORK_TYPE: ARTEMIS
       POCKETHIVE_WORK_ARTEMIS_BROKERURL: tcp://artemis:61616
       POCKETHIVE_WORK_ARTEMIS_USERNAME: *artemis-user
       POCKETHIVE_WORK_ARTEMIS_PASSWORD: *artemis-password

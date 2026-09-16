@@ -4,28 +4,28 @@ This directory contains only work that is actively being implemented or is waiti
 
 ## Current plans
 
+- [Nowy framework E2E](e2e-test-system.md) — decyzja użytkownika: budowa od zera,
+  bez przenoszenia kroków/helperów i zależności od starego zestawu. N0: wymagania
+  i projekt gotowe; N1: 38 testów frameworka oraz oba testy ingress przeszły na
+  Rabbit i Artemis. N2: pierwszy test operacji w osiągniętym stanie też przeszedł
+  na obu adapterach; pozostałe pokrycie otwarte. N3: potwierdzenie zastąpienia;
+  dopiero N4: usunięcie całego starego systemu.
+
 Ready for PR: [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md),
 with the agreed R4 deferrals, verified with Rabbit and a stateful test adapter.
 [Artemis and delayed delivery for 3DS](work-plane-artemis-3ds.md) are now in progress on
 `codex/artemis-work-plane`. The approved plan preserves startup/remove and excludes
 native ownership-manifest/orphan-cleanup expansion.
-Artemis A1/A2 first slice now has typed settings, collision-free names, resource
-operations and Core transport, with 23 adapter tests and 309 total focused reactor
-tests passing. Service composition and startup decoupling (A3/A4) are next; 3DS delay
-intent remains to be agreed. Other refactors and service correctness findings remain
-separate PRs.
-A1/A2 review found two input lifecycle blockers. AR-REV-2 (stale RUNNING) is fixed.
-The approved AR-REV-1 correction now uses one SDK executor admission path for Rabbit
-and Artemis, including maxInFlight=1, with intended preservation of not-submitted deliveries.
-Follow-up review confirmed the native-state correction and found WA-REV-1/2/3.
-All three now have implemented fixes and before/after regressions: individual ACK,
-pause during synchronous startup, and stable executor threads for PER_THREAD reuse.
-Follow-up review confirms those cases (30 focused tests pass). WA-REV-4 was
-withdrawn as a blocker after tracing actual callers: current CONTROL dispatch is
-serial, and the probe's forced overlap was not shown reachable in application flow.
-Revisit only if CONTROL concurrency or lifecycle callers change. Prior selected
-reactor: 711 passing tests. No stack/E2E run; A3/A4 remain next.
-See [review and implementation evidence](../architecture/work-admission-review-2026-09-15.md).
+A1/A2 and admission fixes are in `7e6c63db`; A3 composition is in `9cc6c827`.
+A4 now permits native WORK startup with a Rabbit-only diagnostic manifest. The local
+Artemis create → traffic → remove path passed through public ingress: 5 sampled HTTP
+200 results, 6 native WORK resources verified absent, no remaining resources/errors.
+A4 has 43 focused passing tests and awaits separate review. A5 delay intent remains
+to be agreed; A6 includes the later 3DS acceptance. Existing normal E2E uses Rabbit;
+the user reported it green before the local switch to Artemis.
+Other refactors remain separate PRs. The serial CONTROL admission model and withdrawn
+concurrency finding remain documented in
+[the admission review](../architecture/work-admission-review-2026-09-15.md).
 
 - [Orchestrator correctness](orchestrator-correctness.md) — separate behavior fixes: O1/O2 evidence
   identity acceptance implemented (74 tests), awaiting review; reset/registry/lifecycle design remains pending.

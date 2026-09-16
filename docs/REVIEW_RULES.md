@@ -219,8 +219,10 @@ Human approval: 2026-09-08, clarified to cover all Java modules. Keep only
 (`common/control-plane-core/src/test/java/io/pockethive/architecture/RepositoryImportBoundaryTest.java`)
 as the custom architecture source-scanning exception. Its one inline rule table owns
 the source import restrictions: module-path regex, forbidden-import regex and rule ID.
-It scans conventional `src/main/java` sources in repository Maven modules, including
-new/untracked sources. Test-source imports are outside this production check; fixture
+It reads module declarations from the root `pom.xml` (and nested module POMs), then
+scans only their conventional `src/main/java` trees, including new/untracked sources.
+It does not traverse unrelated repository/runtime/build trees; source/POM read failures
+remain test errors. Test-source imports are outside this production check; fixture
 modules have explicit scope in the rules. Its location in control-plane-core is only
 the Maven execution host, not its scan scope. Normal root `mvn test` runs it.
 

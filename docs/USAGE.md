@@ -393,10 +393,15 @@ in scenario config. No selection is inferred from available brokers or credentia
 
 The local compose stack now includes `apache/activemq-artemis:2.40.0`, with credentials,
 volume and healthcheck declared in `docker-compose.yml`; it publishes no host ports.
-The normal `build-hive.sh` stack refresh includes this service. The baseline remains
-`POCKETHIVE_WORK_TYPE: RABBITMQ`: full Artemis swarm create/remove still needs A4.
-A3 validates composition/worker transport with an embedded broker; a healthy local
-Artemis container alone is not evidence of a complete PocketHive swarm launch.
+The normal `build-hive.sh` stack refresh includes this service. This branch now selects
+`POCKETHIVE_WORK_TYPE: ARTEMIS` locally after the Rabbit E2E baseline passed.
+`scenarios/e2e/artemis-rest` provides an explicit Artemis input/output scenario with
+SUT `wiremock-local` and network mode `DIRECT`. Its full create, traffic and remove
+path has been verified through the public ingress. Existing Rabbit scenario declarations
+are not converted by the deployment selector. To run the existing normal Rabbit E2E suite,
+explicitly set the local compose selector to `RABBITMQ` and recreate Orchestrator first.
+The ownership manifest covers Rabbit resources only; see the scope clarification in
+[the REST contract](ORCHESTRATOR-REST.md#296-runtime-ownership-manifest).
 
 Artemis WORK requires these explicit environment fields:
 `POCKETHIVE_WORK_ARTEMIS_BROKERURL`, `POCKETHIVE_WORK_ARTEMIS_USERNAME`,
@@ -435,3 +440,46 @@ connection contract covers host, port, username, password and virtual-host; TLS/
 propagation is not included. `spring.rabbitmq.addresses` is rejected because it would override
 the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,
 request a fresh cleanup plan. This code change does not update or deploy environment manifests.
+
+## Independent acceptance framework
+
+The new `acceptance-tests` module is independent of the frozen `e2e-tests`.
+Framework component tests use their own HTTP stub; deployed tests use public ingress.
+
+```bash
+./mvnw -B -ntp -pl acceptance-tests -am test
+./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties lifecycle
+# Only the target-state lifecycle case (STOP before START; repeated STOP/START):
+./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties target-state
+# On a stack already configured for Rabbit WORK:
+./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
+```
+
+Both runner arguments are required: an explicit target file and a JUnit tag expression.
+Each target declares ingress, local dev actor, fixture, polling/request/operation/capture
+limits, tap lifetime, expected HTTP response and evidence directory. Missing/unknown
+settings fail; no fallback to ENV or the old harness. The local targets require local
+dev login and the existing WireMock SUT. These are declared environment requirements.
+The target selects a fixture; it does not reconfigure the deployed WorkPlane.
+
+Before first use, make the new `scenarios/acceptance` bundles available to Scenario
+Manager. For the local bind-mounted stack, refresh its catalogue through ingress:
+
+```bash
+AUTH_SERVICE_BASE_URL=http://localhost:8088/auth-service POCKETHIVE_AUTH_USERNAME=local-admin \
+  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios
+```
+
+This is explicit environment setup, not a dependency invoked by the new framework.
+It does not create compatibility/delegation to the legacy test suite. Each test verifies
+its fixture is available before creating a swarm and uses a unique swarm ID.
+JUnit reports are in `acceptance-tests/target/surefire-reports` (framework) and
+`acceptance-tests/target/failsafe-reports` (deployed tests). Canonical operation and tap
+artifacts are written under the target's evidence directory, resolved relative to the
+target file. No authentication response or token is intentionally logged. Cleanup
+failure is reported alongside the original error, not discarded as a warning. Artifact
+write failures are retained and reported when the test scope closes, after resource
+cleanup; a broken evidence destination still makes the test fail.
+
+See the [coverage ledger](ci/acceptance-coverage.md) before claiming the new system
+replaces the old suite. The first HTTP journey and failure cleanup do not close all groups.

@@ -61,6 +61,10 @@ cover the shared contracts, SDK integration and service consumers touched by the
 current boundary migration. Their current owners and remaining gaps must not be
 confused with the target module layout; adoption is awaiting separate review.
 
+The [independent acceptance framework records](architecture/acceptance-tests.md) own
+new test infrastructure. The frozen legacy suite remains isolated until replacement
+coverage is accepted; it does not supply code to the new framework.
+
 ## 2. Roles (Managers vs. Workers)
 
 PocketHive splits the control plane into **managers** (orchestrator + swarm controllers) and **workers** (generators, moderators, processors, post-processors, triggers, etc.). Managers shape desired state and publish control signals; workers execute workloads and echo health back through the same exchange.

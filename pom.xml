@@ -69,6 +69,7 @@
     <module>http-sequence-service</module>
     <module>db-query-service</module>
     <module>e2e-tests</module>
+    <module>acceptance-tests</module>
     <module>tools/scenario-templating-check</module>
   </modules>
   <dependencyManagement>

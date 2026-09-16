@@ -1,0 +1,37 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>io.pockethive</groupId><artifactId>pockethive-mvp</artifactId><version>${revision}</version><relativePath>..</relativePath></parent>
+  <artifactId>acceptance-tests</artifactId>
+  <properties><maven.compiler.release>21</maven.compiler.release><work.boundary.enforcer.skip>false</work.boundary.enforcer.skip></properties>
+  <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>swarm-model</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-api</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>auth-contracts</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>com.fasterxml.jackson.core</groupId><artifactId>jackson-databind</artifactId></dependency>
+    <dependency><groupId>com.fasterxml.jackson.datatype</groupId><artifactId>jackson-datatype-jsr310</artifactId><version>2.21.3</version></dependency>
+    <dependency><groupId>org.junit.jupiter</groupId><artifactId>junit-jupiter</artifactId><version>5.10.2</version><scope>test</scope></dependency>
+  </dependencies>
+  <build><plugins>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId><version>3.11.0</version></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-surefire-plugin</artifactId></plugin>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId><executions>
+      <execution><id>independent-acceptance</id><goals><goal>enforce</goal></goals><configuration><rules><bannedDependencies><excludes>
+        <exclude>io.pockethive:e2e-tests</exclude>
+        <exclude>io.pockethive:*-service</exclude>
+        <exclude>io.pockethive:rabbit-adapter</exclude>
+        <exclude>io.pockethive:artemis-adapter</exclude>
+      </excludes></bannedDependencies></rules></configuration></execution>
+    </executions></plugin>
+  </plugins></build>
+  <profiles><profile><id>acceptance</id><build><plugins>
+    <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-failsafe-plugin</artifactId>
+      <configuration>
+        <includes><include>**/*AcceptanceIT.java</include></includes>
+        <groups>${acceptance.group}</groups>
+        <systemPropertyVariables><acceptance.target>${acceptance.target}</acceptance.target></systemPropertyVariables>
+        <failIfNoTests>true</failIfNoTests>
+      </configuration>
+      <executions><execution><goals><goal>integration-test</goal><goal>verify</goal></goals></execution></executions>
+    </plugin>
+  </plugins></build></profile></profiles>
+</project>

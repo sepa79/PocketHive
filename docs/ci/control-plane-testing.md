@@ -36,7 +36,9 @@ it easy to plug them into GitHub Actions or other CI runners without extra wirin
 production imports across all repository Maven modules. Its inline table owns these
 source rules; [review rules](../REVIEW_RULES.md#sole-source-scanning-test-exception)
 define the scope and limits. It replaces the former ControlPlane source scanner.
-Maven Surefire supplies the repository root explicitly; no directory guessing is used.
+Maven Surefire supplies the repository root explicitly. Module declarations come from
+the root and nested POMs; traversal is limited to their `src/main/java` trees, so transient
+JVM/build files elsewhere cannot interrupt the scan. No directory guessing is used.
 
 Run through normal root `./mvnw -B -ntp test`, or the focused reactor:
 
@@ -48,3 +50,17 @@ Forbidden imports report the file, line and rule. This check does not prove runt
 behavior or replace relevant codec, startup, lifecycle or ingress behavior checks.
 Module ownership/selection is verified by imports/dependencies and source review,
 following [the boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value).
+
+## New acceptance system
+
+`acceptance-tests` is built independently from the frozen legacy suite. It uses
+Java 21, JUnit 5 and JDK HTTP against official ingress; canonical product contracts
+remain the wire authority. Plain Maven tests verify framework behavior without a
+PocketHive deployment. Live acceptance requires an explicit target file and group.
+No missing-target assumption skips and no automatic legacy execution.
+
+The [framework responsibility records](../architecture/acceptance-tests.md) own the
+implementation boundaries. The [coverage ledger](acceptance-coverage.md) maps current
+requirements to new evidence. The [replacement plan](../inProgress/e2e-test-system.md)
+owns N0–N4, including deletion only after confirmed replacement. This does not alter
+existing control-plane contract tests or authorize direct service-port stack checks.

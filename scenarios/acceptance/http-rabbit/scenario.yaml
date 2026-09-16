@@ -1,0 +1,71 @@
+protocolVersion: "2.0.0"
+id: acceptance-http-rabbit
+name: Acceptance HTTP journey (rabbit)
+description: New acceptance fixture; two WORK links, real HTTP processing and a terminal sink.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 2.0, maxMessages: 0 }
+        outputs:
+          type: RABBITMQ
+        message:
+          bodyType: HTTP
+          method: POST
+          path: /api/test
+          body: acceptance-http-probe
+          headers: {}
+      work:
+        out: { out: requests }
+      ports:
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: RABBITMQ
+          rabbit: { prefetch: 1 }
+        outputs:
+          type: RABBITMQ
+      work:
+        in: { in: requests }
+        out: { out: responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: RABBITMQ
+          rabbit: { prefetch: 1 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in: { in: responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: request-processing
+      from: { role: generator, port: out }
+      to: { role: processor, port: in }
+    - id: response-consumption
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }

@@ -2,16 +2,18 @@ package io.pockethive.architecture;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
+import javax.xml.XMLConstants;
+import javax.xml.parsers.DocumentBuilderFactory;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
 /**
- * Responsibility: Check explicit forbidden imports across all repository Maven production sources.
+ * Responsibility: Check forbidden imports in production source trees declared by the repository Maven POMs.
  * Must not: Parse Java, infer effects/ownership or grow a second scanner or policy framework.
  * Contract: docs/REVIEW_RULES.md, sole source-scanning exception. This table owns import rules.
  * Matches import text only; fully qualified usages and wildcard contents are not resolved.
@@ -24,6 +26,8 @@ class RepositoryImportBoundaryTest {
 
   // Current owners, not the final migration layout. Narrow these module scopes with each slice.
   private static final List<Rule> RULES = List.of(
+      rule("acceptance-no-legacy-or-service-implementation", "acceptance-tests",
+          "io\\.pockethive\\.(e2e|orchestrator|scenarios|rabbit|artemis)\\..*"),
       rule("core-no-infrastructure",
           "common/(work-api|work-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
               + "|topology-core|swarm-model|scenario-validation-contracts)",
@@ -78,24 +82,20 @@ class RepositoryImportBoundaryTest {
   );
 
   @Test
-  void allModulesRespectImportBoundaries() throws IOException {
+  void allModulesRespectImportBoundaries() throws Exception {
     String repositoryRoot = System.getProperty("pockethive.repositoryRoot");
     assertThat(repositoryRoot).as("repository root supplied by Maven Surefire").isNotBlank();
     Path root = Path.of(repositoryRoot);
     assertThat(root.resolve("common/control-plane-core/pom.xml")).isRegularFile();
     List<String> violations = new ArrayList<>();
     int scanned = 0;
-    try (var files = Files.walk(root)) {
-      for (Path file : files.filter(Files::isRegularFile).sorted().toList()) {
-        String relative = root.relativize(file).toString().replace('\\', '/');
-        var source = SOURCE.matcher(relative);
-        if (!source.matches() || !Files.isRegularFile(root.resolve(source.group(1)).resolve("pom.xml"))) {
-          continue;
-        }
-        scanned++;
-        for (String violation : violations(source.group(1), Files.readString(file))) {
-          violations.add(relative + ":" + violation);
-        }
+    for (Path file : productionSources(root).stream().sorted().toList()) {
+      String relative = root.relativize(file).toString().replace('\\', '/');
+      var source = SOURCE.matcher(relative);
+      if (!source.matches()) continue;
+      scanned++;
+      for (String violation : violations(source.group(1), Files.readString(file))) {
+        violations.add(relative + ":" + violation);
       }
     }
     assertThat(scanned).as("Java production files scanned").isPositive();
@@ -116,6 +116,56 @@ class RepositoryImportBoundaryTest {
         .containsExactly("1 [rabbit-client-owner] org.springframework.amqp.rabbit.annotation.EnableRabbit");
     assertThat(violations("new-service", "import org.junit.jupiter.api.Test;"))
         .containsExactly("1 [production-no-test-imports] org.junit.jupiter.api.Test");
+  }
+
+  @Test
+  void sourceDiscoveryFollowsDeclaredModulesAndIgnoresOtherTrees(@TempDir Path root) throws Exception {
+    Files.writeString(root.resolve("pom.xml"), """
+        <project xmlns="http://maven.apache.org/POM/4.0.0"><modules>
+          <module>common/work-api</module><module>aggregate</module><module>resources-only</module>
+        </modules></project>
+        """);
+    Path direct = Files.createDirectories(root.resolve("common/work-api/src/main/java"))
+        .resolve("Untracked.java");
+    Files.writeString(root.resolve("common/work-api/pom.xml"), "<project/>");
+    Files.writeString(direct, "import org.springframework.context.ApplicationContext;");
+    Path nested = Files.createDirectories(root.resolve("aggregate/worker/src/main/java"))
+        .resolve("Worker.java");
+    Files.writeString(root.resolve("aggregate/pom.xml"),
+        "<project><modules><module>worker</module></modules></project>");
+    Files.writeString(root.resolve("aggregate/worker/pom.xml"), "<project/>");
+    Files.writeString(nested, "class Worker {}");
+    Files.createDirectories(root.resolve("resources-only"));
+    Files.writeString(root.resolve("resources-only/pom.xml"), "<project/>");
+    Path generated = Files.createDirectories(root.resolve("build-output/src/main/java"))
+        .resolve("Generated.java");
+    Files.writeString(root.resolve("build-output/pom.xml"), "<not-a-project");
+    Files.writeString(generated, "import org.junit.jupiter.api.Test;");
+    Files.writeString(root.resolve(".attach_pid80970"), "temporary JVM file");
+
+    assertThat(productionSources(root)).containsExactlyInAnyOrder(direct, nested);
+    assertThat(violations("common/work-api", Files.readString(direct)))
+        .containsExactly("1 [core-no-infrastructure] org.springframework.context.ApplicationContext");
+  }
+
+  private static List<Path> productionSources(Path module) throws Exception {
+    var xml = DocumentBuilderFactory.newDefaultInstance();
+    xml.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
+    xml.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    var pom = xml.newDocumentBuilder().parse(module.resolve("pom.xml").toFile());
+    var result = new ArrayList<Path>();
+    Path sources = module.resolve("src/main/java");
+    if (Files.exists(sources)) {
+      try (var files = Files.walk(sources)) {
+        result.addAll(files.filter(path -> path.toString().endsWith(".java"))
+            .filter(Files::isRegularFile).toList());
+      }
+    }
+    var modules = pom.getElementsByTagName("module");
+    for (int i = 0; i < modules.getLength(); i++) {
+      result.addAll(productionSources(module.resolve(modules.item(i).getTextContent().trim()).normalize()));
+    }
+    return result;
   }
 
   private static List<String> violations(String module, String source) {

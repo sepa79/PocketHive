@@ -1,6 +1,6 @@
 # Artemis WorkPlane i opóźnione dostarczenie dla 3DS
 
-Status: A1/A2 i poprawki admission w `7e6c63db`; A3-REV-1/2 poprawione i zweryfikowane; połączenie Artemis odroczone do operacji WORK. A4–A6 pozostają otwarte.
+Status: A1/A2 i admission w `7e6c63db`, A3 w `9cc6c827`. A4 zaimplementowane; create/ruch/remove Artemis przeszły przez publiczny ingress. A4 oczekuje osobnego review; A5–A6 pozostają otwarte.
 Branch: `codex/artemis-work-plane`, punkt wyjścia: `863694be`.
 
 ## Cel i zakres
@@ -113,10 +113,23 @@ adapterach nie jest utratą funkcji przy zmianie WorkPlane.
 
 ### A6 — odbiór całej ścieżki
 
+Aktualizacja kolejności 2026-09-15: użytkownik zdecydował o napisaniu
+[całkowicie nowego frameworka E2E](e2e-test-system.md). Bez przenoszenia starych
+kroków/helperów i bez zależności od starego zestawu. N1 odbiera pierwszy kompletny
+przebieg przez ingress na Rabbit i Artemis; N2 buduje pozostałe wymagane pokrycie.
+Stary zestaw pozostaje zamrożony do potwierdzenia zastąpienia N3, po czym N4 go usuwa.
+N1 wykonane: 38 testów frameworka oraz oba nowe testy ingress przeszły na Rabbit
+i Artemis (create/start/HTTP/stop/remove oraz cleanup po celowym błędzie). Pierwszy
+przypadek N2 — operacje w osiągniętym stanie — także przeszedł na obu adapterach.
+Lokalny stack po odbiorze Rabbit przywrócono do Artemis. Szczegóły i jawne luki
+zawiera mapa pokrycia nowego frameworka. To nie zamyka A6 ani zastąpienia starego zestawu.
+Masowe uruchamianie obecnego harnessu wymagającego Rabbit WORK nie odbiera Artemis.
+
 - Testy zachowania z A1–A5 powstają razem z implementacją. Review śledzi wywołania,
   jednego właściciela i brak alternatywnych ścieżek; zielone testy nie zastępują review.
-- Zbudować lokalny stack przez build-hive.sh; oficjalnym API przejść pełny scenariusz
-  Artemis/3DS, następnie normalny start-e2e-tests.sh dla regresji Rabbit/CONTROL.
+- Zbudować lokalny stack przez build-hive.sh; nowym frameworkiem przez oficjalny
+  ingress sprawdzić Artemis/3DS oraz wspólne zachowania Rabbit/CONTROL według
+  jawnej macierzy wymagań. Ukończenie N1 samo nie zastępuje całego starego zestawu.
 - Zapisać wyniki, ograniczenia i stan etapów. Nie uruchamiać samodzielnego cyklu review/fix.
 
 ## Niezmienne zachowanie i wyłączenia
@@ -484,3 +497,87 @@ Log: `/tmp/artemis-a3-rereview-tests.log`. Nie zmieniano kodu produkcyjnego/test
 Nie uruchamiano pełnego stacka/E2E; A4–A6 i wcześniej odłożony orphan cleanup
 pozostają otwarte. Nie przywracano wycofanego ustalenia o hipotetycznym równoległym
 wywoływaniu komend CONTROL.
+
+## Lokalne przełączenie na Artemis — 2026-09-15
+
+Po zgłoszonym przez użytkownika zielonym normalnym E2E na Rabbit lokalny
+`docker-compose.yml` wybiera jawnie `POCKETHIVE_WORK_TYPE: ARTEMIS`. Odtworzono
+wyłącznie Orchestrator z już zbudowanego obrazu; kod Java nie zmienił się w tym kroku.
+Rabbit pozostaje CONTROL. Przed przełączeniem lista swarmów przez ingress była pusta.
+
+Potwierdzono w uruchomionym kontenerze selektor ARTEMIS, zdrowe kontenery obu brokerów
+i HTTP 200 / status UP z `http://localhost:8088/orchestrator/actuator/health`.
+Próba `create` swarma `artemis-switch-check-20260915` przez oficjalny ingress
+(`local-rest-defaults`, SUT `wiremock-local`, DIRECT) dała HTTP 500:
+`Unsupported resource in current public manifest: WORK_RESOURCE`. Log wskazuje
+`RuntimeOwnershipManifestFactory.resources:41` wywołane przez
+`ContainerLifecycleManager.startSwarm:141`, przed utworzeniem Controllera.
+Ponowny odczyt listy swarmów zwrócił pustą listę; przygotowanie plików runtime
+Scenario Managera nastąpiło przed błędem. Nie wykonywano osobnego cleanupu.
+
+To potwierdzenie znanej blokady A4, nie test transportu Artemis. Użyty szablon
+nadal deklaruje Rabbit input/output; selektor wdrożenia nie konwertuje scenariuszy.
+Kolejny krok: zamknąć zatwierdzone A4 i przygotować jawny scenariusz Artemis
+do pełnego create → traffic → remove. Nie uruchomiono pełnego E2E na Artemis.
+Walidacja Compose i `git diff --check` przeszły. Zmiana bez commita/pusha.
+
+### A4 — zakres bieżącej poprawki
+
+Jedyny właściciel projekcji, RuntimeOwnershipManifestFactory, zachowuje w `rabbit`
+wyłącznie istniejące typy zasobów Rabbit. WORK_RESOURCE pozostaje w rozwiązanej
+topologii i zwykłym remove; jego pominięcie w manifeście jest ostrzegane w logu.
+Jawny zakres projekcji opisuje kanoniczny kontrakt REST i rekord odpowiedzialności.
+Bez nowych pól publicznego API, rejestru, akcji orphan cleanupu ani zmiany ACK.
+Odbiór: regresja odtwarzająca blokadę fabryki, istniejące testy projekcji Rabbit
+i postconditions, a następnie jawny scenariusz Artemis przez ingress.
+
+### A4 — wynik wykonania, 2026-09-15
+
+Zmiana produkcyjna mieści się w RuntimeOwnershipManifestFactory (RESP-RUNTIME-CLEANUP):
+WORK_RESOURCE nie blokuje projekcji Rabbit, pominięty zakres daje jawne ostrzeżenie.
+Kontrola plane i błędy mapowania właściciela nadal przerywają projekcję. Rabbit
+CONTROL, compute identity i dotychczasowa projekcja Rabbit WORK pozostają zachowane.
+Kontrakt JSON bez nowych pól; zakres istniejącego `rabbit` doprecyzowano w REST.
+
+- Regresja przed poprawką: RuntimeOwnershipManifestFactoryTest odtwarza
+  `Unsupported resource in current public manifest: WORK_RESOURCE`.
+- Po poprawce: 43/43 testy, zero błędów/pominięć: fabryka manifestu,
+  ContainerLifecycleManager, weryfikacja nieobecności, reconciliation i assessment.
+  `./mvnw -B -ntp -pl orchestrator-service -am clean test
+  -Dtest=RuntimeOwnershipManifestFactoryTest,ContainerLifecycleManagerTest,RuntimeRemovalPostconditionVerifierTest,RuntimeReconciliationServiceTest,RuntimeAssessmentServiceTest
+  -Dsurefire.failIfNoSpecifiedTests=false`; log `/tmp/artemis-a4-focused.log`.
+- Wdrożenie przez `./build-hive.sh --service orchestrator --quick`
+  (testy uruchomiono osobno); log `/tmp/artemis-a4-deploy.log`.
+- Scenario Manager po reload zaakceptował `artemis-rest` jako `defunct=false`.
+  Wszystkie WORK input/output zgłaszają ARTEMIS i adresy rozwiązanego właściciela.
+- Swarm `artemis-a4-smoke-20260915`, runId `f2ac9948-643d-4e42-ac95-e4cf38c86ab8`:
+  create `97561dbb-1cee-45a1-9fd6-b9f91b17708e` i start
+  `e40edc68-fc9a-47f1-876f-2490abece0c2` zakończyły się SUCCEEDED.
+  Przed startem READY/STOPPED/HEALTHY; po starcie RUNNING/HEALTHY.
+- Publiczny debug tap na wyjściu processora: 5 różnych messageId, HTTP 200,
+  `default generator response`, hopy generator/moderator/processor. Tap zamknięto.
+  Dowód: `/tmp/artemis-a4-capture.json`. Nie jest to pomiar dokładnego throughputu.
+- Zwykły remove z działającego swarma `5b8747f0-918b-4a28-b5e0-bf3be2ef4fa8`:
+  SUCCEEDED, 6 WORK_RESOURCE (3 kolejki i 3 adresy Artemis) potwierdzonych jako
+  nieobecne przez Orchestrator, 4 workery, Controller, 5 kolejek CONTROL, binding,
+  katalog runtime i wpis rejestru usunięte. remainingResources/errors puste; lista
+  swarmów pusta. Dowód: `/tmp/artemis-a4-remove-operation.json`.
+
+Wszystkie wywołania runtime przez `http://localhost:8088` (również auth). Nie
+uruchamiano całego normalnego E2E po A4; jest zestawem Rabbit, zielonym według
+użytkownika przed przełączeniem. Native orphan cleanup, kompletna diagnostyka
+i opóźnienie 3DS pozostają odłożone. Historyczna nieudana próba przełączenia
+pozostawiła pliki przygotowane przez Scenario Managera; nie uruchamiano jej cleanupu.
+
+Dowody granicy do osobnego review: repo-wide wyszukiwanie RuntimeOwnershipManifestFactory,
+new RuntimeRabbitManifest, Unsupported resource in current public manifest i workQueues;
+jedna fabryka produkcyjna. ContainerLifecycleManager konsumuje projekcję; lifecycle
+remove idzie przez Controller → WorkPlaneResources i RuntimeRemovalPostconditionVerifier,
+a RuntimeRabbitResourcePlanner/RuntimeAssessmentService konsumują wyłącznie zakres Rabbit.
+Bez zmiany parserów, nazw, ACK, wykonania workerów i bez dodatkowej biblioteki.
+Implementacja i dowody przekazane do osobnego review, bez pętli self-review.
+
+Końcowe kontrole granic: 3 testy RepositoryImportBoundaryTest oraz 1 istniejący
+ArchitectureTest Orchestratora przeszły, zero błędów/pominięć; razem 47 testów
+weryfikacji A4. Log `/tmp/artemis-a4-boundaries.log`. Maven Enforcer i
+`git diff --check` bez błędów. Zmiana bez commita/pusha.

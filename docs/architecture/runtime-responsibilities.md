@@ -2000,9 +2000,8 @@ Guard consumes accepted channel addresses; external downstream observation alias
 by the same selected owner without being declared as swarm resources. Guard math remains in manager-sdk.
 
 Orchestrator controller bootstrap consumes the selected environment/topology projection.
-RuntimeOwnershipManifestFactory owns projection of that result to the existing public manifest;
-its current Rabbit-only shape is an R4 boundary, not a generic native manifest. Unsupported native
-target kinds must be rejected before compute effects rather than stored as invented Rabbit objects.
+RuntimeOwnershipManifestFactory consumes that result for the Rabbit-only diagnostic projection
+under RESP-RUNTIME-CLEANUP; it does not gate native Work startup.
 RuntimeRemovalPostconditionVerifier reads WORK absence through WorkPlaneResources and CONTROL
 through the existing scoped Rabbit port; it alone classifies observations into removal evidence.
 AmqpRabbitTopologyAdapter projects the current Rabbit cleanup contract through selected WorkPlaneResources
@@ -2080,6 +2079,17 @@ Canonical `RemoveResource` and `ResourcePlane` in swarm-model own the scoped res
 and valid type/plane combinations. CleanupScope carries request scope; Candidate, Blocked and
 CandidateResult carry the planner/execution projections, never a second outcome calculation.
 ScopedRabbitName and RabbitQueueSnapshot/RabbitExchangeSnapshot preserve that identity.
+
+`RuntimeOwnershipManifestFactory` owns projection of compute identity and Rabbit resource intent
+into the existing diagnostic ownership manifest. WORK_RESOURCE targets stay in the resolved
+topology and normal lifecycle removal evidence; the factory excludes them from `rabbit` with
+an explicit coverage warning. It must not gate native Work startup or claim complete native
+inventory. Invalid planes and owner mapping failures still fail before compute effects.
+`rabbit`, its topology snapshot/assessment check and orphan cleanup cover Rabbit resources only.
+Empty Rabbit WORK lists are not evidence that Artemis resources are absent. Native orphan
+cleanup and diagnostic completeness remain deferred; no second inventory or public field is added.
+Verification: `RuntimeOwnershipManifestFactoryTest`, existing `ContainerLifecycleManagerTest`
+and the Artemis A4 public-ingress create/traffic/remove evidence in the active plan.
 
 `RuntimeRabbitResourcePlanner` owns Rabbit cleanup target selection and debug projections
 from the ownership manifest's distinct Control/Work lists. `RuntimeReconciliationService`
