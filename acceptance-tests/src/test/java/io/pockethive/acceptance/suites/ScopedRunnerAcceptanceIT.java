@@ -9,15 +9,18 @@ import io.pockethive.acceptance.resources.SwarmResource;
 import io.pockethive.auth.contract.*;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
+import io.pockethive.swarm.model.lifecycle.WorkloadIntent;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
 
 /**
- * Responsibility: verify folder-scoped RUN through catalogue, CREATE and deployment read APIs.
+ * Responsibility: verify folder-scoped RUN through catalogue, CREATE, STOP denial and deployment read APIs.
  * Must not: provision users, decide lifecycle outcomes or implement cleanup.
- * Contract: docs/architecture/acceptance-tests.md#scoped-runner-acceptance-slice — AU-4/AU-5.
+ * Contract: docs/architecture/acceptance-tests.md#scoped-runner-acceptance-slice — AU-4/AU-5 and RUN-only half of AU-10.
  */
 @Tag("auth-runner")
 class ScopedRunnerAcceptanceIT {
@@ -52,6 +55,49 @@ class ScopedRunnerAcceptanceIT {
         assertEquals("POST", error.response().method());
         error.response().expect(403);
         observer.requireAbsent(denied.id());
+      }
+    }
+  }
+
+  @Test void cannotStopItsRunningSwarm() throws Exception {
+    var target = TargetLoader.loadRunner(TargetLoader.selectedFile());
+    var adminTarget = new ApiTarget(target.api().ingress(), target.cleanupUsername(),
+        target.api().requestTimeout(), target.api().evidenceDirectory());
+    try (var run = runner(target, "runner-stop-denied"); var admin = ApiRun.open(adminTarget, "runner-stop-cleanup")) {
+      ActorAssertions.requireGrants(admin, target.cleanupUsername(), List.of(new AuthGrantDto(AuthProduct.POCKETHIVE,
+          PocketHivePermissionIds.ALL, PocketHiveResourceTypes.DEPLOYMENT, PocketHiveResourceSelectors.GLOBAL)));
+      assertTrue(inFolder(entry(catalogue(admin), target.scenarioId()), target.folder()));
+      var observer = new SwarmApi(admin.http, admin.token);
+      var requester = new SwarmApi(run.http, run.token);
+      try (var swarm = resource(observer, admin, target)) {
+        observer.requireAbsent(swarm.id());
+        swarm.create(request(target.scenarioId(), target.sutId()), requester);
+        swarm.start();
+        var before = observer.state(swarm.id());
+        admin.evidence.record("before-denied-stop", before);
+        assertEquals(swarm.runId(), before.runId());
+        assertEquals(ControllerState.READY, before.controllerState());
+        assertEquals(WorkloadIntent.RUNNING, before.workloadIntent());
+        assertEquals(WorkloadState.RUNNING, before.workloadState());
+        assertNull(before.activeOperation());
+
+        var error = assertThrows(ApiException.class, () -> swarm.stop(requester));
+        run.evidence.record("stop-denial", error.response());
+        assertEquals("POST", error.response().method());
+        error.response().expect(403);
+        var after = observer.state(swarm.id());
+        admin.evidence.record("after-denied-stop", after);
+        assertEquals(before.runId(), after.runId());
+        assertEquals(before.workloadIntent(), after.workloadIntent());
+        assertEquals(before.workloadState(), after.workloadState());
+        assertNull(after.activeOperation());
+
+        swarm.stop();
+        var stopped = observer.state(swarm.id());
+        admin.evidence.record("after-admin-stop", stopped);
+        assertEquals(swarm.runId(), stopped.runId());
+        assertEquals(WorkloadIntent.STOPPED, stopped.workloadIntent());
+        assertEquals(WorkloadState.STOPPED, stopped.workloadState());
       }
     }
   }

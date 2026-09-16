@@ -2012,7 +2012,10 @@ WorkResourceNamesPort is removed. RabbitWorkAddress and RabbitWorkTopologySettin
 types; neutral consumers use ResolvedWorkTopology. WorkDebugTaps/WorkDebugTap now carry selected
 capture operations. RabbitWorkDebugTaps delegates TTL/capacity mapping to RabbitDebugTapSpec;
 Orchestrator DebugTapSession owns bounded samples/lifetime, and DebugTapService maps an explicitly
-unsupported selected capture to HTTP 501 without activating Rabbit.
+unsupported selected capture to HTTP 501 without activating Rabbit. Explicit close
+propagates adapter failure as HTTP 500 instead of claiming success after registry removal;
+the removed registration is not proof of native cleanup. Scheduled expiry keeps its
+existing best-effort policy.
 Neither transfer changes addresses, delivery/ACK, or the accepted environment override policy.
 
 Control names use the neutral ControlResourceNamesPort from topology-core. RabbitResourceNames

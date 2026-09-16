@@ -48,7 +48,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | Independent actors and cleanup of all created artifacts | OPEN |
 | AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | NetworkAccessAcceptanceIT: viewer GET200, same-content text PUT403, byte-for-byte unchanged raw for network profiles and SUT environments | PASS |
 | AU-9 | Admin provisions bundle runner; profile/catalogue expose exact grant; only named bundle runs. | auth-access: bundle runner | New user fixture with cleanup | OPEN |
-| AU-10 | Folder ALL actor manages swarm; RUN-only actor cannot stop it. | auth-access: folder admin | Self-contained actor provisioning; no previous-test dependency | OPEN |
+| AU-10 | Folder ALL actor manages swarm; RUN-only actor cannot stop it. | auth-access: folder admin | Self-contained actor provisioning; no previous-test dependency | PARTIAL — RUN-only STOP denial passes; folder ALL remains OPEN |
 | AU-11 | Folder admin denied deployment refresh/reset; deployment admin refresh accepted. | auth-access: deployment admin | API authorization test; no new reset behavior | OPEN |
 | AU-12 | Swarm-scoped manager/config/journal/pin/tap access, network conflict and deployment-only journal metadata grants hold. | auth-access: swarm admin | Endpoint matrix includes tap read/close denial and allowed close; canonical operations | OPEN |
 | AU-13 | Runner cannot change manual network override; viewer can read it. | auth-access: manual override | NetworkAccessAcceptanceIT: verified runner PUT403, viewer GET200, full manual override status unchanged | PASS |
@@ -247,3 +247,44 @@ zero failures/errors/skips (live cases0.494 s). Each evidence directory records 
 write-denial and after, with actor profiles and no request tokens.
 Import verification: `/tmp/acceptance-network-import-boundaries.log`.
 New slice is uncommitted and awaits separate review. Remaining N2 and N3/N4 stay open.
+
+
+### RUN-only STOP (AU-10 partial)
+
+The third auth-runner case creates an independent allowed-folder swarm as RUN,
+starts it as the explicit admin, requires STOP403 from RUN, and checks the same
+run/workload intent/RUNNING state with no active operation. Admin STOP then succeeds
+and normal resource cleanup verifies REMOVE SUCCEEDED and registry404.
+SwarmResource owns both actors' command receipts;403 does not discard acquired
+ownership. Framework regressions cover denied STOP followed by admin STOP/removal,
+unexpected accepted STOP followed by assertion failure/cleanup, and unknown500
+preventing blind removal.
+
+Evidence: `/tmp/acceptance-runner-stop.log` — 58 framework + 3 deployed runner tests,
+zero failures/errors/skips; `/tmp/acceptance-runner-stop-imports.log` — 3 import tests.
+Both created swarms report REMOVE SUCCEEDED,16 removed/0 remaining/0 errors and404.
+WORK was Artemis; no Rabbit rerun. New work awaits separate review.
+AU-10 remains partial: folder ALL and isolated actor provisioning are not covered.
+AU-8/AU-13 passed separate review and are committed as `5c9ea201`.
+
+
+Review correction: restrict rejected-command clearing to STOP403. REMOVE403 no longer
+causes close to reissue REMOVE; cleanup remains explicitly unverified. The new
+rejectedExplicitRemovalIsNotRetriedByClose regression failed before the fix on an
+unexpected second POST and passes after it. Evidence: `/tmp/acceptance-remove403-red.log`
+and `/tmp/acceptance-remove403-fixed.log` (59 framework +3 deployed runner, no skips).
+AU-10 remains partial; correction awaits separate review, no commit.
+
+
+### Framework review corrections F1–F3 — 2026-09-16
+
+ScenarioApi delegates ID validity to the product and uses shared path-segment encoding.
+TapResource preserves the exact raw samples selected for assertions, including partial
+results after timeout/decode failure. Explicit DebugTapService close now reports adapter
+failure as HTTP 500; registry absence alone cannot turn that failure into successful cleanup.
+
+`/tmp/acceptance-framework-fixes-focused.log`: scenario encoding 3/3, capture 5/5,
+DebugTapService 5/5. `/tmp/acceptance-framework-fixes-lifecycle.log`: full framework 65/65
+and deployed Artemis lifecycle 3/3, no skips. The adapter-close failure response is verified
+through the real controller with MockMvc; the running stack was not rebuilt for that
+product error path. Rabbit was not rerun. No additional coverage rows or N3/N4 are closed.

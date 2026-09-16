@@ -2,8 +2,6 @@ package io.pockethive.acceptance.suites;
 
 import io.pockethive.acceptance.api.ApiSurface;
 import io.pockethive.acceptance.config.TargetLoader;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -23,7 +21,7 @@ class AuthReadAcceptanceIT {
   @MethodSource("readEndpoints")
   void requiresAuthentication(String name, ApiSurface surface, String servicePath, String accept) throws Exception {
     var target = TargetLoader.loadScenario(TargetLoader.selectedFile());
-    String scenarioId = URLEncoder.encode(target.scenarioId(), StandardCharsets.UTF_8).replace("+", "%20");
+    String scenarioId = ApiSurface.pathSegment(target.scenarioId());
     String path = surface.publicPath(servicePath.formatted(scenarioId));
     try (var run = ApiRun.open(target.api(), "auth-read-" + name)) {
       var anonymous = run.http.request("GET", path, null, "", accept);

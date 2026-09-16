@@ -40,6 +40,7 @@ or embed defaults in individual clients/tests.
 **Owner:** `PocketHiveHttp` sends bounded requests to the selected ingress only;
 `ApiSurface` owns the public service prefixes (`/orchestrator`, `/scenario-manager`,
 `/auth-service`, `/network-proxy-manager`) and projects rooted service-relative links, including operationUrl.
+`ApiSurface.pathSegment` encodes opaque identifiers once; clients do not add product ID grammar.
 `ApiResponse` holds HTTP status/body, `ApiException` identifies an unexpected status.
 **Effect:** preserve expected denial responses as data, reject off-origin operation
 links and redirects, propagate interruption and request failures. The HTTP budget
@@ -57,7 +58,7 @@ JSON callers retain application/json. Both use the same bounded request implemen
 public paths. `SwarmApi` also matches the returned idempotency key with the submitted
 request. `ControlReceiptMismatchException` reports a mismatch and retains the
 canonical receipt for bounded observation/cleanup; it is never a successful result.
-**Must not:** decide convergence, own cleanup, create wire DTO copies,
+**Must not:** decide convergence, own cleanup, create wire DTO copies, add scenario-ID validation,
 or call old E2E clients. Dev login is explicit in the local target; no token fallback.
 
 ## RESP-ACCEPTANCE-OPERATIONS
@@ -89,7 +90,10 @@ resource names, invoke reset/orphan cleanup, or delete by prefix.
 
 **Owners:** `DebugTapApi` maps tap HTTP operations; `TapResource` owns one acquired tap,
 its bounded sample wait and close. **Effect:** use a logical target and decode each
-sample with `WorkItemJsonCodec`; close before swarm removal. **Must not:** configure
+sample with `WorkItemJsonCodec`; close before swarm removal. Each wait records numbered
+raw samples selected for its returned WorkItems, under a unique capture artifact prefix.
+These remain available after API ring eviction, later decode failure or timeout; the
+latest tap snapshot remains a separate diagnostic projection. **Must not:** configure
 native broker clients, steal worker deliveries or branch on fixture names.
 
 ## RESP-ACCEPTANCE-EVIDENCE
@@ -167,8 +171,9 @@ RunnerTarget is a read-only projection resolved by TargetLoader.loadRunner: expl
 runner/cleanup actors, allowed folder, allowed and denied scenario ids, SUT and operation
 limits. ScopedRunnerAcceptanceIT verifies exact VIEW-deployment and RUN-folder grants,
 catalogue restriction, accepted allowed CREATE and denied outside-folder CREATE, plus
-six deployment read APIs. The runner only creates; existing SwarmResource observes and
-removes via the explicit admin. It does not claim message processing or RUN-only STOP.
+six deployment read APIs. The catalogue case only creates; existing SwarmResource observes and
+removes via the explicit admin. The additional STOP-denial case is described below;
+this suite does not claim message processing.
 ActorAssertions owns shared test profile expectations; AuthApi remains the only profile
 transport/decoder. Existing viewer assertions delegate to it with unchanged expectations.
 The new fixture under demo is independent of the frozen legacy suite and uses Artemis.
@@ -189,3 +194,20 @@ PocketHiveHttp owns explicit text/plain request encoding as well as JSON. Both u
 same bounded exchange; text is sent as UTF-8 bytes without JSON quoting. The manual
 override request is the public status projection with response-only appliedAt removed;
 no local DTO or policy parser is introduced. Endpoint-specific values remain test data.
+
+
+## RUN-only STOP acceptance slice
+
+ScopedRunnerAcceptanceIT additionally covers the RUN-only denial half of AU-10.
+Each case creates its own allowed-folder swarm, starts it through the configured
+admin, checks canonical RUNNING state, then requires runner STOP403 and unchanged
+run/workload intent/state with no active operation. The admin subsequently performs
+STOP successfully. This does not cover folder ALL or provision new actors.
+
+SwarmResource remains the sole lifecycle receipt and cleanup owner. An explicit
+requester overload for STOP uses the same command tracking as the default actor.
+A STOP dispatch403 clears only that rejected pending command; ownership of an acquired
+swarm remains intact for admin removal. REMOVE403 retains the removal attempt, so
+close reports unverified cleanup without sending another REMOVE. Unexpected accepted STOP is observed before
+cleanup even when the denial assertion fails. Unknown dispatch outcomes still block
+cleanup with an explicit error. No second lifecycle helper or grant mutation is added.

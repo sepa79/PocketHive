@@ -299,4 +299,95 @@ class SwarmResourceTest {
       assertEquals(403, failure.response().status());
     }
   }
+
+  @Test void rejectedExplicitRemovalIsNotRetriedByClose() throws Exception {
+    var create = receipt();
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "remove-denied")) {
+      acquired(ingress, create);
+      ingress.reply("POST", BASE + "/remove", 403, Map.of());
+      var swarm = resource(http, evidence);
+      var failure = assertThrows(ApiException.class, () -> {
+        try (swarm) {
+          swarm.create(createRequest(create));
+          swarm.remove();
+        }
+      });
+      assertEquals(403, failure.response().status());
+      assertEquals(1, failure.getSuppressed().length);
+      assertInstanceOf(AssertionError.class, failure.getSuppressed()[0]);
+      assertTrue(failure.getSuppressed()[0].getMessage().contains("Unconfirmed REMOVE"));
+      assertThrows(IllegalStateException.class, swarm::removal);
+      // No second REMOVE or readback is scripted: rejection must not trigger a retry or claim release.
+    }
+  }
+
+  @Test void rejectedStopByAnotherActorPreservesOwnedSwarmForAdminStopAndRemoval() throws Exception {
+    var create = receipt(); var stop = receipt(); var remove = receipt();
+    try (var requesterIngress = new ScriptedIngress(); var ownerIngress = new ScriptedIngress();
+         var requesterHttp = new PocketHiveHttp(requesterIngress.origin(), limits.request());
+         var ownerHttp = new PocketHiveHttp(ownerIngress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "stop-denied")) {
+      acquired(ownerIngress, create);
+      requesterIngress.reply("POST", BASE + "/stop", 403, Map.of());
+      completed(ownerIngress, "/stop", stop, OperationType.STOP);
+      removed(ownerIngress, remove);
+      var swarm = resource(ownerHttp, evidence);
+      try (swarm) {
+        swarm.create(createRequest(create));
+        var failure = assertThrows(ApiException.class,
+            () -> swarm.stop(new SwarmApi(requesterHttp, "runner-token")));
+        assertEquals(403, failure.response().status());
+        swarm.stop();
+      }
+      assertEquals(remove.correlationId(), swarm.removal().correlationId());
+    }
+  }
+
+  @Test void unexpectedlyAcceptedStopIsObservedBeforeCleanupAfterDenialAssertionFails() throws Exception {
+    var create = receipt(); var stop = receipt(); var remove = receipt();
+    try (var requesterIngress = new ScriptedIngress(); var ownerIngress = new ScriptedIngress();
+         var requesterHttp = new PocketHiveHttp(requesterIngress.origin(), limits.request());
+         var ownerHttp = new PocketHiveHttp(ownerIngress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "stop-accepted")) {
+      acquired(ownerIngress, create);
+      var accepted = acknowledge(requesterIngress, "/stop", stop);
+      ownerIngress.replyWith("GET", "/orchestrator" + stop.operationUrl(), 200,
+          ignored -> operation(accepted.get(), OperationType.STOP, OperationState.DISPATCHED, Map.of()))
+          .replyWith("GET", "/orchestrator" + stop.operationUrl(), 200,
+              ignored -> succeeded(accepted.get(), OperationType.STOP));
+      removed(ownerIngress, remove);
+      var swarm = resource(ownerHttp, evidence);
+      var failure = assertThrows(AssertionError.class, () -> {
+        try (swarm) {
+          swarm.create(createRequest(create));
+          assertThrows(ApiException.class, () -> swarm.stop(new SwarmApi(requesterHttp, "runner-token")));
+        }
+      });
+      assertEquals(0, failure.getSuppressed().length);
+      assertEquals(remove.correlationId(), swarm.removal().correlationId());
+    }
+  }
+
+  @Test void unconfirmedStopDoesNotPermitBlindRemoval() throws Exception {
+    var create = receipt();
+    try (var requesterIngress = new ScriptedIngress(); var ownerIngress = new ScriptedIngress();
+         var requesterHttp = new PocketHiveHttp(requesterIngress.origin(), limits.request());
+         var ownerHttp = new PocketHiveHttp(ownerIngress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "stop-unconfirmed")) {
+      acquired(ownerIngress, create);
+      requesterIngress.reply("POST", BASE + "/stop", 500, Map.of());
+      var failure = assertThrows(ApiException.class, () -> {
+        try (var swarm = resource(ownerHttp, evidence)) {
+          swarm.create(createRequest(create));
+          swarm.stop(new SwarmApi(requesterHttp, "runner-token"));
+        }
+      });
+      assertEquals(500, failure.response().status());
+      assertEquals(1, failure.getSuppressed().length);
+      assertTrue(failure.getSuppressed()[0].getMessage().contains("Unconfirmed STOP"));
+      // No remove is scripted: the STOP dispatch outcome is unknown.
+    }
+  }
+
 }

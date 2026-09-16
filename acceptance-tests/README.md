@@ -60,8 +60,10 @@ catalogue, creates the allowed fixture and rejects the outside-folder fixture. E
 SwarmResource verifies removal. Another case checks six deployment read APIs.
 The new demo/acceptance-runner-artemis fixture must be loaded by Scenario Manager;
 the stack must already use Artemis. No accounts/grants are changed and no legacy
-fixtures are used. CREATE is tested; worker START/traffic and RUN-only STOP denial
-remain separate coverage. PocketHive grant assertions are shared with viewer tests.
+fixtures are used. A third case creates its own swarm, starts it as admin, verifies
+RUN-only STOP403 with unchanged RUNNING state, then verifies admin STOP and removal.
+It does not assert traffic or folder ALL access. PocketHive grant assertions are shared
+with viewer tests.
 
 
 `auth-network` uses `targets/local-network-access.properties`; only ingress, actor

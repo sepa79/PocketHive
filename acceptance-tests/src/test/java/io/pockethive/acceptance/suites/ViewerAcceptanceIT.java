@@ -8,8 +8,6 @@ import io.pockethive.acceptance.resources.SwarmResource;
 import io.pockethive.auth.contract.*;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.lifecycle.SwarmCreateRequest;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Tag;
@@ -35,7 +33,7 @@ class ViewerAcceptanceIT {
       var detail = new ScenarioApi(run.http, run.token).requireScenario(target.scenarioId());
       run.evidence.record("scenario-detail", detail);
       assertEquals(target.scenarioId(), detail.required("id").asText());
-      String id = URLEncoder.encode(target.scenarioId(), StandardCharsets.UTF_8).replace("+", "%20");
+      String id = ApiSurface.pathSegment(target.scenarioId());
       var raw = run.http.request("GET", ApiSurface.SCENARIO_MANAGER.publicPath("/scenarios/" + id + "/raw"),
           null, run.token, "text/plain");
       run.evidence.record("scenario-raw", raw);

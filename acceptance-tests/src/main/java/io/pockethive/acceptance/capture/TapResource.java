@@ -12,9 +12,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 
 /**
- * Responsibility: own one test tap, bounded canonical samples and close.
+ * Responsibility: own one test tap, its bounded sample selection/evidence and close.
  * Must not: infer topology or use a native broker client.
  * Contract: RESP-ACCEPTANCE-CAPTURE — docs/architecture/acceptance-tests.md#resp-acceptance-capture.
  */
@@ -47,6 +48,7 @@ public final class TapResource implements AutoCloseable {
     if (acquisition != AcquisitionState.ACQUIRED) throw new IllegalStateException("Tap not open");
     var deadline = new Deadline(limits.capture(), "Samples from tap " + tapId);
     Map<String, WorkItem> items = new LinkedHashMap<>();
+    String capture = "tap-" + tapId + "-capture-" + UUID.randomUUID();
     while (true) {
       var response = api.read(tapId, deadline.remaining());
       if (!tapId.equals(response.required("tapId").textValue())) throw new AssertionError("Unrelated tap response");
@@ -55,7 +57,9 @@ public final class TapResource implements AutoCloseable {
       if (!samples.isArray()) throw new AssertionError("Tap samples are not an array");
       for (var sample : samples) {
         WorkItem item = codec.fromJson(sample.required("payload").textValue().getBytes(StandardCharsets.UTF_8));
-        items.putIfAbsent(item.messageId(), item);
+        if (items.putIfAbsent(item.messageId(), item) == null) {
+          evidence.record(capture + "-sample-" + items.size(), sample);
+        }
         if (items.size() >= count) return List.copyOf(items.values());
       }
       deadline.pause(limits.poll());

@@ -751,7 +751,11 @@ production access is governed by HiveGate policy outside Orchestrator.
 #### 2.8.3 Close tap
 `DELETE /api/debug/taps/{tapId}`
 
-Deletes the tap queue and returns the last known tap state.
+Closes the adapter-owned tap resources and returns the last known tap state only when
+the adapter close completes successfully. An adapter close failure returns HTTP 500;
+cleanup is then unconfirmed. The tap registration is removed for this close attempt,
+so a later 404 does not turn that failed close into proof of native resource removal.
+There is no automatic retry. Scheduled expiry retains its existing best-effort cleanup.
 
 ### Lifecycle operation conflicts
 

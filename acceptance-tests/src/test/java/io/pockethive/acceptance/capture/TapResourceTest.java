@@ -1,6 +1,8 @@
 package io.pockethive.acceptance.capture;
 
 import static org.junit.jupiter.api.Assertions.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.acceptance.api.ApiException;
 import io.pockethive.acceptance.api.PocketHiveHttp;
 import io.pockethive.acceptance.config.HttpFixture;
 import io.pockethive.acceptance.config.WaitLimits;
@@ -12,6 +14,7 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkItemContractException;
 import io.pockethive.work.api.WorkItemJsonCodec;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
@@ -58,16 +61,89 @@ class TapResourceTest {
   @Test void malformedWorkItemFailsAndStillClosesTheTap() throws Exception {
     try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request())) {
       ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
-          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of(Map.of("payload", "{}"))));
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of(sample("one"), Map.of("payload", "{}"))));
       closure(ingress);
+      var evidence = new RunEvidence(reports, "invalid");
       var failure = assertThrows(WorkItemContractException.class, () -> {
-        try (var evidence = new RunEvidence(reports, "invalid");
+        try (evidence;
           var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
           tap.open("test-swarm", fixture);
           tap.awaitSamples(2);
         }
       });
       assertEquals(0, failure.getSuppressed().length);
+      assertEquals(List.of("one"), selectedSampleIds(evidence));
     }
   }
+
+  @Test void retainsSelectedSamplesWhenTheServerRingEvictsEarlierMessages() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "ring-eviction")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of(sample("A"))))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200,
+              snapshot(List.of(sample("B"), sample("C"), sample("D"))));
+      closure(ingress);
+      var threeSamples = new HttpFixture(fixture.templateId(), fixture.sutId(), fixture.captureRole(),
+          fixture.captureDirection(), fixture.captureIoName(), 3, fixture.tapTtlSeconds(), fixture.expectedResponse());
+      try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
+        tap.open("test-swarm", threeSamples);
+        var selected = tap.awaitSamples(3).stream().map(WorkItem::messageId).toList();
+        assertEquals(List.of("A", "B", "C"), selected);
+        assertEquals(selected, selectedSampleIds(evidence));
+      }
+    }
+  }
+
+  @Test void timeoutPreservesPartialSelectedSamplesAndStillClosesTheTap() throws Exception {
+    var slowPoll = new WaitLimits(limits.request(), limits.operation(), limits.capture(), Duration.ofSeconds(2));
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "partial-timeout")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of(sample("one"))));
+      closure(ingress);
+      var failure = assertThrows(AssertionError.class, () -> {
+        try (var tap = new TapResource(new DebugTapApi(http, ""), slowPoll, evidence)) {
+          tap.open("test-swarm", fixture);
+          tap.awaitSamples(2);
+        }
+      });
+      assertTrue(failure.getMessage().contains("timed out"));
+      assertEquals(0, failure.getSuppressed().length);
+      assertEquals(List.of("one"), selectedSampleIds(evidence));
+    }
+  }
+
+  @Test void tapCloseFailureRemainsVisibleAlongsideTheTestFailure() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "failed-close")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("DELETE", "/orchestrator/api/debug/taps/test-tap", 500, Map.of("message", "close failed"));
+      var primary = new AssertionError("test failure");
+      var failure = assertThrows(AssertionError.class, () -> {
+        try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
+          tap.open("test-swarm", fixture);
+          throw primary;
+        }
+      });
+      assertSame(primary, failure);
+      assertEquals(1, failure.getSuppressed().length);
+      var cleanup = assertInstanceOf(ApiException.class, failure.getSuppressed()[0]);
+      assertEquals(500, cleanup.response().status());
+      // No GET404 or retry is scripted: failed close cannot be converted into success.
+    }
+  }
+
+  private List<String> selectedSampleIds(RunEvidence evidence) throws Exception {
+    try (var paths = Files.list(evidence.directory())) {
+      var ids = new java.util.ArrayList<String>();
+      for (Path file : paths.filter(path -> path.getFileName().toString().contains("-sample-")).sorted().toList()) {
+        var sample = new ObjectMapper().readTree(file.toFile());
+        ids.add(new WorkItemJsonCodec().fromJson(sample.required("payload").asText()
+            .getBytes(StandardCharsets.UTF_8)).messageId());
+      }
+      return ids;
+    }
+  }
+
 }

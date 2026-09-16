@@ -6,7 +6,10 @@ oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym s
 przeszły na obu adapterach; grupa Scenario API
 (SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
 13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3 i review (commit `a133b554`). Scoped runner AU-4/AU-5 przeszło 2/2 i review (commit `5e9e80e5`).
-AU-8/AU-13 przeszło 3/3; czeka na review. Pozostałe pokrycie otwarte.
+AU-8/AU-13 przeszło review i jest w `5c9ea201`. AU-10 RUN-only STOP oraz poprawka
+REMOVE403 przeszły ponowne review; folder ALL pozostaje otwarty. Całościowy review
+frameworka wskazał F1–F3 (walidacja ID, dowody capture, błędy zamknięcia tapu).
+Poprawki wykonane i przetestowane; osobne review F1–F3 bez nowych ustaleń.
 N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
 
 ## Decyzja i granica
@@ -299,3 +302,65 @@ API/aktorów, bez scenariuszy i lifecycle. Wspólny klient obsługuje jawne text
 55 testów frameworka i3 deployed zielone: `/tmp/acceptance-network-access.log`.
 Wycinek pozostaje niecommitowany do review. Pozostałe AU-7/AU-9–AU-12 oraz reszta
 N2 nadal otwarte; brak DELETE user w API pozostaje kwestią dla izolowanych fixtures aktorów.
+
+
+### AU-10 — RUN-only STOP (bieżący wycinek)
+
+AU-8/AU-13 przeszły osobne review i są zapisane w `5c9ea201`.
+Następny wycinek używa istniejącego targetu runnera: własny swarm w demo,
+START admina, STOP runnera403, niezmieniony RUNNING i STOP admina SUCCEEDED.
+SwarmResource zachowuje receipt także przy błędnej akceptacji STOP; jawna odmowa403
+nie blokuje jego cleanupu. Aktor folder ALL i provisioning pozostają otwarte.
+Warunek odbioru: test deployed przez ingress oraz testy cleanupu po odmowie,
+błędnej akceptacji i niepewnym wyniku dispatch. Bez zmian produktu/starego E2E.
+
+
+Wynik: 58 testów frameworka +3 deployed runnera i3 importów zielone, zero skips.
+Oba swarmy usunięte przez canonical REMOVE (16/0/0 i registry404).
+Logi: `/tmp/acceptance-runner-stop.log`, `/tmp/acceptance-runner-stop-imports.log`.
+AU-10 oznaczone PARTIAL; ten wycinek niecommitowany, czeka na osobne review.
+Dalej trzeba ustalić izolowane fixtures aktorów dla folder ALL/bundle RUN;
+AU-7/AU-9/AU-11/AU-12 oraz pozostałe N2/N3/N4 pozostają otwarte.
+
+
+### Korekta po review AU-10
+
+Zawężono reset pending po403 wyłącznie do STOP. REMOVE403 pozostawia ślad próby,
+a close zgłasza brak potwierdzonego cleanupu bez ponawiania POST i bez deklaracji
+usunięcia. Test rejectedExplicitRemovalIsNotRetriedByClose odtworzył regresję przed
+poprawką (niespodziewany drugi POST REMOVE). Właścicielem pozostaje SwarmResource;
+nie zmieniamy polityki produktu ani dodanych wcześniej postconditions.
+
+Weryfikacja poprawki: 59 testów frameworka +3 deployed runnera zielone;
+`/tmp/acceptance-remove403-fixed.log`. Regresja przed poprawką:
+`/tmp/acceptance-remove403-red.log`. Oba swarmy REMOVE SUCCEEDED16/0/0 i registry404.
+Brak zmian granic importów/dependencies; bez ponownego skanu importów. Bez commita.
+
+
+### Poprawki całościowego review frameworka F1–F3
+
+F1: klient scenariuszy przekazuje zakodowany segment ID, bez własnej gramatyki;
+ApiSurface jest wspólnym właścicielem kodowania także dla auth/read/raw.
+F2: TapResource zapisuje wybrane surowe próbki pod osobnymi nazwami dla każdego
+oczekiwania; RunEvidence nadal jedynym właścicielem zapisu. Dowody częściowe pozostają
+po błędzie dekodowania i timeout, niezależnie od ostatniego snapshotu API.
+F3: jawny close w DebugTapService zwraca500 po błędzie adaptera, zamiast pozornego200.
+Nie odtwarza rejestracji i nie ponawia automatycznie operacji; polityka expiry bez zmian.
+Zakres zatwierdzony poleceniem poprawy trzech ustaleń. Regresje: ID z kropką i kodowanie
+segmentu, ring eviction/partial capture, API close success/failure i widoczny błąd cleanupu.
+
+
+Wynik F1–F3: 65 testów frameworka, 5 testów DebugTapService i 3 deployed lifecycle
+na Artemis przeszły, zero błędów/skips. Logi: `/tmp/acceptance-framework-fixes-focused.log`
+i `/tmp/acceptance-framework-fixes-lifecycle.log`. Regresje sprawdzają kodowanie ID,
+zgodność zapisanych/wybranych próbek mimo eviction, częściowe dowody po decode failure
+oraz timeout i zachowanie pierwotnego błędu razem z błędem cleanupu. MockMvc potwierdza
+HTTP 500 rzeczywistego kontrolera po błędzie adaptera. Stack nie był przebudowany:
+nowa ścieżka błędu produktu ma dowód komponentowy, nie deployed. Granice zależności
+nie zmieniły się; testu importów nie powtarzano. Poprawki czekają na osobne review;
+nie wykonano commita ani zmian starego zestawu.
+
+
+Review F1–F3: 65 testów frameworka, 5 obsługi tapów i 3 granic importów przeszły.
+Raport: `/tmp/acceptance-fixes-review.md`; log: `/tmp/acceptance-fixes-review-tests.log`.
+Osobne review nie zgłosiło usterek; użytkownik zatwierdził commit i dalsze N2.

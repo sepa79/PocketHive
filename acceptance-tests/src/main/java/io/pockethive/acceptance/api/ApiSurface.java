@@ -1,9 +1,11 @@
 package io.pockethive.acceptance.api;
 
 import java.net.URI;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 /**
- * Responsibility: project service-relative API links onto the documented public ingress paths.
+ * Responsibility: project API links onto public ingress paths and encode opaque path identifiers.
  * Must not: infer backend ports or switch to an alternative service endpoint.
  * Contract: RESP-ACCEPTANCE-HTTP — docs/architecture/acceptance-tests.md#resp-acceptance-http.
  */
@@ -13,6 +15,10 @@ public enum ApiSurface {
 
   private final String prefix;
   ApiSurface(String prefix) { this.prefix = prefix; }
+
+  public static String pathSegment(String value) {
+    return URLEncoder.encode(value, StandardCharsets.UTF_8).replace("+", "%20");
+  }
 
   public String publicPath(String servicePath) {
     URI link = URI.create(servicePath);

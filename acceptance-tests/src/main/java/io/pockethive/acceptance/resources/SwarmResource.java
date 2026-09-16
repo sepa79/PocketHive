@@ -15,7 +15,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Responsibility: own one test swarm receipt and verify removal, including CREATE by an explicit requesting actor.
+ * Responsibility: own one test swarm receipt and verify removal, including commands by an explicit requesting actor.
  * Must not: guess ownership, retry mutations or implement swarm convergence.
  * Contract: RESP-ACCEPTANCE-RESOURCES — docs/architecture/acceptance-tests.md#resp-acceptance-resources.
  */
@@ -62,10 +62,14 @@ public final class SwarmResource implements AutoCloseable {
   }
 
   public SwarmOperation stop() throws IOException, InterruptedException {
+    return stop(api);
+  }
+
+  public SwarmOperation stop(SwarmApi requester) throws IOException, InterruptedException {
     requireAcquired();
     settleBeforeRemoval();
     return execute(OperationType.STOP,
-        () -> api.stop(id, new ControlRequest(UUID.randomUUID().toString())));
+        () -> requester.stop(id, new ControlRequest(UUID.randomUUID().toString())));
   }
 
   public SwarmOperation remove() throws IOException, InterruptedException {
@@ -113,6 +117,10 @@ public final class SwarmResource implements AutoCloseable {
       if (type == OperationType.CREATE && status >= 400 && status < 500 && status != 408) {
         acquisition = AcquisitionState.REJECTED;
         pendingType = null;
+      } else if (type == OperationType.STOP && status == 403) {
+        // Rejected STOP leaves the acquired swarm available for admin cleanup.
+        pendingType = null;
+        pending = null;
       }
       throw failure;
     }
