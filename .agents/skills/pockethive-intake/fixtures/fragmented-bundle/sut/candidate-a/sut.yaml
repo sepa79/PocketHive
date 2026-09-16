@@ -1,0 +1,7 @@
+id: candidate-a
+name: Synthetic HTTP candidate
+type: sandbox
+endpoints:
+  payments:
+    kind: HTTP
+    baseUrl: https://candidate-a.invalid

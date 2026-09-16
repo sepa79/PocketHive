@@ -1,0 +1,275 @@
+version: 1
+templateType: bundle-generation-input
+basedOn: "docs/ai/PERFORMANCE_TEST_REQUIREMENTS_TEMPLATE_V1.yaml"
+
+ownership:
+  stakeholderFills:
+    - requirementId
+    - project
+    - environment
+    - suts
+    - templates
+    - productionUsage
+    - testData
+    - databases
+    - successCriteria
+    - kpis
+    - openQuestions
+  nftTeamOrMcpFills:
+    - templateMapping
+    - mcpAutomation
+    - bundleGeneration
+
+requirementId: "REQ-wallet-001"
+
+# Fictional example, not an approved or provisioned environment.
+project:
+  name: "Wallet Top-up and Service Status"
+  owner: "Payments Team"
+  objective: "Exercise shared top-up and public status APIs against WireMock or NFT."
+  outOfScope: ["Settlement processing", "Real customer accounts"]
+
+environment:
+  notes: "Run against one selected SUT at a time. NFT window and access require environment-owner approval."
+
+suts:
+  - sutId: "wiremock-local"
+    name: "WireMock"
+    type: "sandbox"
+    endpoints:
+      wallet-api:
+        kind: "HTTP"
+        baseUrl: "http://wiremock:8080"
+    access:
+      owner: "NFT Team"
+      networkPrerequisites: ["PocketHive workers must reach wiremock on the shared test network."]
+      caCertificateRef: null
+      clientCertificateRef: null
+    oauth2:
+      tokenUrl: "http://wiremock:8080/oauth/token"
+      credentialRef: "vault://qa/wallet-wiremock-client"
+  - sutId: "NFT"
+    name: "NFT"
+    type: "uat"
+    endpoints:
+      wallet-api:
+        kind: "HTTP"
+        baseUrl: "https://nft-wallet.example.com"
+    access:
+      owner: "Payments Environment Team"
+      networkPrerequisites: ["Replace illustrative hosts and confirm worker-network allowlisting."]
+      caCertificateRef: null
+      clientCertificateRef: null
+    oauth2:
+      tokenUrl: "https://nft-identity.example.com/oauth/token"
+      credentialRef: "vault://qa/wallet-nft-client"
+
+# Exactly two shared business APIs; OAuth token acquisition is an auth prerequisite.
+templates:
+  - apiId: "API-001"
+    name: "Top-up API"
+    serviceId: "wallet"
+    callId: "topup"
+    endpointRef: "wallet-api"
+    protocol: "HTTP"
+    method: "POST"
+    path: "/api/v1/topup"
+    headersSample:
+      Content-Type: "application/json"
+      Idempotency-Key: "<new UUID per logical operation>"
+    requestSample:
+      accountId: "MOCK-ACC-00000001"
+      amount: 50.25
+      currency: "EUR"
+    responseSample:
+      status: "APPROVED"
+      transactionId: "EXAMPLE-TX-001"
+    authorization:
+      type: "oauth2-client-credentials"
+      scope: "wallet.write"
+      clientAuthentication: "client_secret_basic"
+      tokenRequestSample: "grant_type=client_credentials&scope=wallet.write"
+      tokenResponseSample:
+        access_token: "<runtime token, never committed>"
+        token_type: "Bearer"
+        expires_in: 3600
+      reuse: "per-credential-set"
+      refreshBeforeExpirySeconds: 30
+    payloadBindings:
+      - location: "body"
+        path: "/accountId"
+        source:
+          type: "dataset"
+          entityRef: "DATA-001"
+          column: "account_id"
+      - location: "body"
+        path: "/amount"
+        source: {type: constant, value: 50.25}
+      - location: "body"
+        path: "/currency"
+        source: {type: constant, value: "EUR"}
+      - location: "header"
+        path: "Idempotency-Key"
+        source: {type: generated, generator: uuid, scope: logical-request}
+    expectedResponse:
+      httpStatuses: [200]
+      bodyChecks:
+        - {path: "/status", operator: equals, value: "APPROVED"}
+        - {path: "/transactionId", operator: exists}
+    idempotency:
+      required: true
+      headerName: "Idempotency-Key"
+      rule: "New UUID per logical top-up, retained for any retry of that operation. NFT owner must confirm server retention."
+  - apiId: "API-002"
+    name: "Public service status"
+    serviceId: "wallet"
+    callId: "status"
+    endpointRef: "wallet-api"
+    protocol: "HTTP"
+    method: "GET"
+    path: "/status"
+    headersSample: {Accept: "application/json"}
+    requestSample: {}
+    responseSample: {status: "available"}
+    authorization:
+      type: "none"
+    payloadBindings: []
+    expectedResponse:
+      httpStatuses: [200]
+      bodyChecks:
+        - {path: "/status", operator: equals, value: "available"}
+    idempotency:
+      required: false
+      headerName: null
+      rule: "Read-only readiness call; send no Authorization header and no request body."
+
+# Optional historical evidence, never approval to run at these rates.
+productionUsage:
+  available: true
+  graphUrl: "https://grafana.example.com/d/wallet-production-traffic"
+  measurements:
+    - apiRef: "API-001"
+      sourceEnvironment: "Production"
+      source: "Illustrative daily traffic report"
+      periodStart: "2026-09-01T00:00:00Z"
+      periodEnd: "2026-09-08T00:00:00Z"
+      dailyRequestCount: 864000
+      averageRequestsPerSecond: 10
+      peakRequestsPerSecond: 150
+      peakWindowSeconds: 60
+      notes: "Fictional figures for top-up only; public status figures are unknown."
+
+testData:
+  entities:
+    - entityId: "DATA-001"
+      name: "Synthetic wallet accounts"
+      owner: "Payments Test Data Team"
+      requiredCount: 15000
+      columns:
+        - {name: account_id, type: string}
+      sources:
+        - sutRef: "wiremock-local"
+          type: "generated"
+          generatedColumns:
+            account_id: {type: sequence, prefix: "MOCK-ACC-", start: 1, padTo: 8}
+        - sutRef: "NFT"
+          type: "database-export"
+          databaseRef: "DB-001"
+          queryRef: "SQL-EXPORT-001"
+      usage:
+        reuseAllowed: false
+        maxConcurrentRequestsPerRecord: 1
+        onExhaustion: "stop"
+      sideEffects:
+        mutatesState: true
+        description: "NFT top-ups increase wallet balances. Mock responses do not change real accounts."
+        resetRequired: true
+        resetInstructions: "NFT: approved account reset/reseed procedure required before and after each run. WireMock: remove only this run's stubs and evidence after retention."
+        owner: "Payments Test Data Team"
+
+# NFT-only database. WireMock must not connect to it or export its accounts.
+databases:
+  - dbId: "DB-001"
+    sutRef: "NFT"
+    engine: "postgres"
+    host: "db-nft-wallet.example.com"
+    port: 5432
+    databaseName: "wallet"
+    schema: "public"
+    credentialRef: "vault://qa/wallet-nft-db-readonly"
+    sqlQueries:
+      - queryId: "SQL-EXPORT-001"
+        purpose: "Export 15,000 distinct eligible synthetic account IDs in a deterministic order."
+        sql: |
+          SELECT DISTINCT account_id
+          FROM public.wallet_accounts
+          WHERE status = 'ACTIVE'
+            AND is_test_account = true
+            AND currency = 'EUR'
+            AND account_id IS NOT NULL
+          ORDER BY account_id
+          LIMIT 15000;
+      - queryId: "SQL-COUNT-001"
+        purpose: "Check eligible inventory before export; this query does not produce the dataset."
+        sql: |
+          SELECT COUNT(DISTINCT account_id) AS eligible_count
+          FROM public.wallet_accounts
+          WHERE status = 'ACTIVE' AND is_test_account = true AND currency = 'EUR';
+      - queryId: "SQL-DUP-001"
+        purpose: "Check uniqueness within the same eligible account population."
+        sql: |
+          SELECT COUNT(*) - COUNT(DISTINCT account_id) AS duplicate_count
+          FROM public.wallet_accounts
+          WHERE status = 'ACTIVE' AND is_test_account = true AND currency = 'EUR'
+            AND account_id IS NOT NULL;
+
+successCriteria:
+  - criterionId: "CRIT-001"
+    description: "Top-ups produce the expected successful business response without duplicate logical operations."
+  - criterionId: "CRIT-002"
+    description: "The service remains available without sustained queue buildup during the agreed workload."
+  - criterionId: "CRIT-003"
+    description: "Meet the agreed top-up throughput and response-time goals in the selected environment."
+
+# Illustrative goals for the WireMock sample only, not evidence of NFT/production capacity.
+kpis:
+  - criterionRef: "CRIT-003"
+    apiRef: "API-001"
+    sutRef: "wiremock-local"
+    transactionDefinition: "One completed top-up with HTTP 200, status APPROVED and transactionId present; retries are not extra transactions."
+    targetTps: 5
+    responseTimePercentile: 95
+    maxResponseTimeMs: 500
+    measurementWindow: "Constant 120-second phase: completed successful top-ups per elapsed second; processor request-to-response latency for all attempts started in that phase, followed through drain."
+
+openQuestions:
+  - "NFT: confirm schema/eligibility predicates with the data owner; table and columns here are illustrative."
+  - "NFT: confirm account limits, reset procedure, idempotency retention and maximum safe spend/top-up volume."
+  - "NFT: replace sample URLs and approve the execution window and access prerequisites."
+  - "WireMock and NFT: provision secret references via the NFT plan's approved resolver before any live execution."
+
+# NOTE (NFT team): new documents only; earlier template versions remain unchanged.
+templateMapping:
+  testPlanTemplate: "docs/ai/TEST_PLAN_TEMPLATE_FOR_REQUIREMENT_V1.yaml"
+  testExecutionResultsTemplate: "docs/ai/TEST_EXECUTION_RESULTS_TEMPLATE_FOR_REQUIREMENT_V1.yaml"
+  traceabilityMap: "docs/ai/TEMPLATE_TRACEABILITY_MAP_V1.yaml"
+
+# NOTE (NFT team / MCP): this describes generation intent, not an implemented generator.
+mcpAutomation:
+  inputs: ["this requirements file", "TEST_PLAN_SAMPLE_V1.yaml after approval", "provisioned configuration"]
+  rules:
+    - "Generate wallet/topup.yaml and wallet/status.yaml once, shared by wiremock-local and NFT SUT profiles."
+    - "Read selected SUT, API scheduling, workload, retries and mock handling from the completed plan."
+    - "Bind accountId from DATA-001.account_id; amount/currency are typed constants; generate an idempotency UUID per operation."
+    - "WireMock uses 15,000 generated MOCK-ACC- records; NFT uses the approved export, never a COUNT query as data."
+    - "Do not recycle records, query the wrong environment, or infer readiness from illustrative secrets/SQL."
+    - "Use supported OAuth handling for top-up only; preserve expiry/caching rules and fail protected calls on auth failure."
+    - "Apply HTTP and business assertions; a response sample alone is not a pass condition."
+    - "Resolve all selected-SUT blockers and obtain generation approval before emitting a runnable bundle."
+    - "Run paths.check, bundle.validate and bundle.validate.result; require separate deployment/run approval."
+
+# NOTE (NFT team / MCP): the linked sample plan is intentionally draft, not ready to run.
+bundleGeneration:
+  bundleId: "wallet-topup-status-perf"
+  scenarioId: "wallet-topup-status-perf"
+  testPlanRef: "docs/ai/TEST_PLAN_SAMPLE_V1.yaml"

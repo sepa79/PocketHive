@@ -1,0 +1,17 @@
+version: 1
+definitions:
+  - name: accountId
+    scope: global
+    type: string
+    required: true
+profiles:
+  - id: smoke
+    name: Smoke candidate
+  - id: peak
+    name: Peak candidate
+values:
+  global:
+    smoke:
+      accountId: fixture-smoke-account
+    peak:
+      accountId: fixture-peak-account

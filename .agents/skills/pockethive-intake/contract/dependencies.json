@@ -1,0 +1,20 @@
+{
+  "dependencies": [
+    {
+      "name": "ruamel.yaml",
+      "version": "0.18.16",
+      "wheel": "ruamel.yaml-0.18.16-py3-none-any.whl",
+      "sha256": "048f26d64245bae57a4f9ef6feb5b552a386830ef7a826f235ffb804c59efbba",
+      "source": "https://files.pythonhosted.org/packages/0f/73/bb1bc2529f852e7bf64a2dec885e89ff9f5cc7bbf6c9340eed30ff2c69c5/ruamel.yaml-0.18.16-py3-none-any.whl",
+      "runtime": "pure Python; ruamel YAML uses pure=True; optional clib is intentionally not used"
+    },
+    {
+      "name": "fastjsonschema",
+      "version": "2.21.2",
+      "wheel": "fastjsonschema-2.21.2-py3-none-any.whl",
+      "sha256": "1c797122d0a86c5cace2e54bf4e819c36223b552017172f32c5c024a6b77e463",
+      "source": "https://files.pythonhosted.org/packages/cb/a8/20d0723294217e47de6d9e2e40fd4a9d2f7c4b6ef974babd482a59743694/fastjsonschema-2.21.2-py3-none-any.whl",
+      "runtime": "pure Python; local Draft 7 schemas; validation never inserts defaults"
+    }
+  ]
+}

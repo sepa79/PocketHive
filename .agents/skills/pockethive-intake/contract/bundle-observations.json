@@ -1,0 +1,12 @@
+{
+  "description": "Observation allowlist only, never a scenario schema or endpoint resolver. Paths/hashes preserve evidence when a value is not emitted.",
+  "numberKeys": ["rate", "perSecond", "requestsPerSecond", "durationSeconds", "timeoutMs", "retries", "maxInFlight", "concurrency", "tps", "thinkTimeMs"],
+  "booleanKeys": ["enabled", "keepAlive", "tlsVerify", "fireAndForget"],
+  "enumKeys": {
+    "protocol": ["HTTP", "HTTPS", "TCP", "TCPS", "http", "https", "tcp", "tcps"],
+    "kind": ["HTTP", "HTTPS", "TCP", "TCPS"],
+    "method": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    "arrivalModel": ["open-loop", "closed-loop"]
+  },
+  "sensitiveSegments": ["secret", "password", "token", "credential", "authorization", "cookie", "payload", "requestsample", "responsesample", "headers", "body"]
+}
