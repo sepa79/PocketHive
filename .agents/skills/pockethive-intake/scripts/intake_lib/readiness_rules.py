@@ -28,8 +28,7 @@ def check_readiness(docs: dict) -> tuple[list[dict], list[dict]]:
 
     for pointer in ("/project/name", "/project/owner", "/project/objective", "/successCriteria"):
         need("requirements", pointer)
-    for pointer in ("/owner", "/sutId", "/generation/workerVersion", "/generation/pipeline",
-                    "/generation/bundleId", "/generation/scenarioId"):
+    for pointer in ("/owner", "/sutId", "/generation/workerVersion", "/generation/pipeline"):
         need("plan", pointer)
     for pointer in ("/bundleGeneration/bundleId", "/bundleGeneration/scenarioId"):
         need("requirements", pointer)

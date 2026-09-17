@@ -20,5 +20,12 @@
     "method": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
     "arrivalModel": ["open-loop", "closed-loop"]
   },
+  "endpointDescriptions": {
+    "pointer": "/plan/endpoints",
+    "fields": ["callId", "method", "path", "description"],
+    "matches": {"callId": "callId", "method": "method", "path": "pathTemplate"},
+    "valueField": "description",
+    "targetField": "name"
+  },
   "sensitiveSegments": ["secret", "password", "token", "credential", "authorization", "cookie", "payload", "requestsample", "responsesample", "headers", "body"]
 }

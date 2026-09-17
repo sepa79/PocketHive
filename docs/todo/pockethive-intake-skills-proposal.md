@@ -10,9 +10,10 @@ by the user; qualification remains specific to each client and version.
 
 Implementation: [skill folder](../../.agents/skills/pockethive-intake/) and
 [entrypoint](../../.agents/skills/pockethive-intake/SKILL.md).
-Release: [pockethive-intake-1.3.0.zip](../../dist/pockethive-intake-1.3.0.zip)
-with [SHA-256 checksum](../../dist/pockethive-intake-1.3.0.zip.sha256). The design decisions below remain the delivery
-contract; file presence alone does not establish qualification.
+Release identity and asset paths: [canonical package manifest](../../.agents/skills/pockethive-intake/contract/manifest.json).
+The [packaged intake contract](../../.agents/skills/pockethive-intake/contract/intake-contract.md)
+owns current CLI behaviour and field ownership. This proposal retains the design
+rationale and delivery history; file presence alone does not establish qualification.
 
 ## Recommendation
 

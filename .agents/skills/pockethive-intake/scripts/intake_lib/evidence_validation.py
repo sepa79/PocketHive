@@ -13,12 +13,14 @@ from .review_digest import review_digest
 
 
 class EvidenceValidation:
-    def __init__(self, package, codec, policy, templates) -> None:
+    def __init__(self, package, codec, policy, templates, generated) -> None:
         self.package, self.codec, self.policy, self.templates = package, codec, policy, templates
+        self.generated = generated
         self.sample_hash = sha256(package.read(package.asset(package.manifest["requirementsSample"])))
 
     def check(self, root: Path, docs: dict) -> tuple[list, list, list]:
         gaps, errors, warnings = [], [], []
+        self.inspection = None
         instance = docs["traceability"]["instance"]
         verified = set()
         sample_sources = set()
@@ -69,6 +71,8 @@ class EvidenceValidation:
                     result = BundleInspector(self.package, self.codec).inspect(path)
                     if result["sha256"] != intake_source["sha256"]:
                         issue(errors, "SOURCE_HASH", "/instance/intake/source", "Selected bundle inventory has changed; review the changed source explicitly.")
+                    else:
+                        self.inspection = result
                 except IntakeError as error:
                     issue(errors, error.issue["code"], "/instance/intake/source", error.issue["message"])
             else:
@@ -120,7 +124,7 @@ class EvidenceValidation:
                 issue(gaps, "ANSWER_EVIDENCE", f"/instance/questions/{index}/answerRef", "The answer reference must identify a verified source artifact.")
 
         for role in ("requirements", "plan", "results"):
-            exempt = self.policy["administrativePointers"][role] + self.policy["immutablePointers"][role]
+            exempt = self.policy["administrativePointers"][role] + self.policy["immutablePointers"][role] + list(self.generated[role])
             for pointer, value in leaves(docs[role]):
                 if value is None or value == "" or any(covers(parent, pointer) for parent in exempt):
                     continue

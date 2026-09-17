@@ -132,6 +132,16 @@ material gaps and the validation outcome actually observed. Save drafts before
 waiting for answers. Results remain unexecuted unless identified run evidence
 was supplied. A validator cannot prove that a source supports an assertion.
 
+Use `prepare-review --write-review` for the reproducible stakeholder report beside
+the forms. Review `brief.blankFields` before presenting the draft: populate
+available source facts, inspect extraction limits and explain material unknowns
+through the existing ledger. Its null inventory adds no required fields. Use
+`brief.decisions` to separate current decisions, later execution questions and
+engineering triage. Do not present diagnostic totals as questions for the client.
+The [decision review contract](contract/intake-contract.md#decision-review-and-reproducible-stakeholder-output)
+owns these views. Author intended bundle/scenario IDs in requirements only;
+their plan copies are generated.
+
 The review is a read-only view of the identified YAML revision. Local validation
 does not establish client approval, MCP workflow confirmation, valid runtime
 configuration, readiness to run or a passing test. Follow the existing MCP

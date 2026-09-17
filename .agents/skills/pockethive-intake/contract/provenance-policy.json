@@ -11,7 +11,7 @@
   },
   "reviewExcludedPointers": {
     "requirements": ["/templateMapping", "/bundleGeneration/testPlanRef", "/openQuestions"],
-    "plan": ["/requirementsRef", "/requirementsSnapshot", "/contract/referenceDocuments", "/approval", "/generation/approval"],
+    "plan": ["/requirementsRef", "/requirementsSnapshot", "/contract/referenceDocuments", "/approval", "/generation/approval", "/generation/bundleId", "/generation/scenarioId"],
     "results": ["/references/requirementsRef", "/references/requirementsVersion", "/references/requirementsSha256", "/references/planRef", "/references/planVersion", "/references/planRevision", "/references/planSha256", "/references/traceabilityMap"]
   },
   "reviewLedgerFields": {

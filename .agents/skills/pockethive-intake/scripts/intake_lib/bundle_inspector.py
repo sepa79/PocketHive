@@ -50,12 +50,19 @@ class BundleInspector:
                         sensitive += 1
                         continue
                     key = pointer.rsplit("/", 1)[-1]
+                    labels = self.rules["endpointDescriptions"]
+                    tail = pointer.removeprefix(labels["pointer"] + "/").split("/")
+                    endpoint_field = (relative == self.package.manifest["bundleDescriptor"]
+                                      and pointer.startswith(labels["pointer"] + "/")
+                                      and len(tail) == 2 and tail[0].isdigit()
+                                      and tail[1] in labels["fields"] and isinstance(scalar, str))
                     allowed = (
                         key in self.rules["numberKeys"] and type(scalar) in (int, float)
                         or key in self.rules["booleanKeys"] and type(scalar) is bool
                         or key in self.rules["enumKeys"] and scalar in self.rules["enumKeys"][key]
                         or key in self.rules["topLevelStringKeys"] and pointer == "/" + key
                         and isinstance(scalar, str)
+                        or endpoint_field
                     )
                     if allowed:
                         observations.append({"artifactRef": relative, "pointer": pointer, "value": scalar,

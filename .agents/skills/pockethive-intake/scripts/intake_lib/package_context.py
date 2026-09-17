@@ -63,6 +63,17 @@ class PackageContext:
         self.reject_links(path, root)
         return path
 
+    def review_path(self, root: Path) -> Path:
+        name = self.manifest["reviewOutput"]
+        if (not isinstance(name, str) or not name or len(PurePosixPath(name).parts) != 1
+                or name in (".", "..", self.manifest["documentWriteLock"])
+                or "\\" in name or PurePosixPath(name).is_absolute()
+                or name in {row["output"] for row in self.manifest["templates"].values()}):
+            raise IntakeError("REPORT_PATH", "The generated review must use a distinct relative filename.")
+        path = root / name
+        self.reject_links(path, root)
+        return path
+
     def bundle_intake_path(self, source: Path) -> Path:
         name = self.manifest["bundleIntakeDirectory"]
         if not isinstance(name, str) or not name or len(PurePosixPath(name).parts) != 1 or name in (".", "..") or "\\" in name or PurePosixPath(name).is_absolute():

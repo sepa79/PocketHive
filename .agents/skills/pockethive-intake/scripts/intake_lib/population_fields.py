@@ -17,7 +17,10 @@ from .pointers import resolve
 class TemplatePopulation:
     def __init__(self, package, codec) -> None:
         self.codec = codec
-        self.rules = json.loads(package.read(package.asset("contract/bundle-observations.json")))["templatePopulation"]
+        contract = json.loads(package.read(package.asset("contract/bundle-observations.json")))
+        self.rules = contract["templatePopulation"]
+        self.labels = contract["endpointDescriptions"]
+        self.descriptor = package.manifest["bundleDescriptor"]
         template = package.manifest["templates"]["requirements"]["path"]
         self.blank = codec.parse(package.read(package.asset(template)), "requirements")["templates"][0]
 
@@ -52,7 +55,8 @@ class TemplatePopulation:
                                                    "formula": "API-OBS- + first 16 hexadecimal characters of SHA-256 of the canonical JSON [serviceId, callId] array",
                                                    "unit": "administrative-identifier"}})
                 filled.append(pointer)
-            for source_key, target_key in self.rules["fields"].items():
+            fields_to_copy = {**self.rules["fields"], self.labels["valueField"]: self.labels["targetField"]}
+            for source_key, target_key in fields_to_copy.items():
                 observation = fields.get(source_key)
                 if observation is None:
                     continue
@@ -99,7 +103,32 @@ class TemplatePopulation:
                     gaps.append(IntakeError("TEMPLATE_FIELD_UNAVAILABLE", "This template field has no supported source observation; retain the gap for source review.", artifact, "/" + key).issue)
                     fields.pop(key, None)
             result.append((identity, fields))
+        self._display_names(result, grouped)
         return result
+
+    def _display_names(self, candidates: list, grouped: dict) -> None:
+        endpoints = {}
+        for pointer, observation in grouped.get(self.descriptor, {}).items():
+            prefix = self.labels["pointer"] + "/"
+            if pointer.startswith(prefix):
+                tail = pointer[len(prefix):].split("/")
+                if len(tail) == 2 and tail[0].isdigit() and tail[1] in self.labels["fields"]:
+                    endpoints.setdefault(tail[0], {})[tail[1]] = observation
+        for _, fields in candidates:
+            matching = [endpoint for endpoint in endpoints.values()
+                        if all(key in endpoint and source in fields and endpoint[key]["value"] == fields[source]["value"]
+                               for key, source in self.labels["matches"].items())]
+            if not matching:
+                continue
+            peers = [other for _, other in candidates
+                     if all(source in other and source in fields and other[source]["value"] == fields[source]["value"]
+                            for source in self.labels["matches"].values())]
+            if len(matching) != 1 or len(peers) != 1:
+                raise IntakeError("POPULATION_AMBIGUOUS_DESCRIPTION", "An endpoint display description must match exactly one declaration and one HTTP template.",
+                                  self.descriptor, self.labels["pointer"])
+            label = matching[0].get(self.labels["valueField"])
+            if label is not None and isinstance(label["value"], str) and label["value"].strip():
+                fields[self.labels["valueField"]] = label
 
     def _target(self, rows: list, indexed: dict, identity: tuple) -> int | None:
         if identity in indexed:

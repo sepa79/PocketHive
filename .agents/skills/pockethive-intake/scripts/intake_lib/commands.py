@@ -65,9 +65,17 @@ def _documents(package, codec, store, root, docs, args, revision):
         docs = store.load(root)
         result = validation.check(root, docs)
         previous = package.workspace(args.previous) if args.previous else None
-        brief = build_brief(package, codec, store, root, docs, result, args.stage, previous)
+        brief = build_brief(package, codec, store, root, docs, result, args.stage, previous, inspection=validation.inspection)
         store.assert_revision(root, saved["documentsSha256"])
-        return {**saved, **result, "brief": brief}
+        output = {**saved, **result, "brief": brief}
+        if args.write_review:
+            from .stakeholder_report import write_report
+            try:
+                output["report"] = write_report(package, store, root, codec.plain(docs), brief, result)
+            except IntakeError as error:
+                output["errors"] = [*output["errors"], error.issue]
+                output["report"] = {"persistence": "unverified", "documentsSha256": saved["documentsSha256"]}
+        return output
     if args.command == "show-field":
         from .field_view import field_view
         if args.document not in package.manifest["templates"]:

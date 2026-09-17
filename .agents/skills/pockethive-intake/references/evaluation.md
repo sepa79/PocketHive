@@ -111,3 +111,5 @@ shared evaluation evidence.
 For future changes, add a focused case from the actual failure before expanding
 the workflow. Prefer better examples and deterministic authoring support over
 longer instructions or a mandatory second interview.
+
+Use E10 for the observed name/scope/rate/resume failure. Record each native client trial separately; unavailable authentication remains unqualified, not a simulated pass.

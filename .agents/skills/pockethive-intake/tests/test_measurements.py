@@ -10,6 +10,17 @@ class MeasurementTests(CliTestCase):
     partial_references = reference_fixtures.ReferenceTests.partial_references
     finalise_and_validate = reference_fixtures.ReferenceTests.finalise_and_validate
 
+    def test_missing_mapped_rule_fields_have_one_completeness_owner(self):
+        _, plan, _ = self.mapped_kpis()
+        for key in ("unit", "operator", "threshold", "window"):
+            plan["acceptanceCriteria"][0]["measurableRules"][0][key] = None
+        self.write_document("test-plan.yaml", plan)
+        result = self.finalise_and_validate()
+        for key in ("unit", "operator", "threshold", "window"):
+            pointer = "/acceptanceCriteria/0/measurableRules/0/" + key
+            gaps = [row for row in result["gaps"] if row["document"] == "plan" and row["pointer"] == pointer]
+            self.assertEqual(["REQUIRED_INPUT"], [row["code"] for row in gaps])
+
     def mapped_kpis(self):
         requirements, plan = self.partial_references()
         requirements["successCriteria"] = [{"criterionId": "CRIT-READ", "description": "Synthetic qualification goal"}]

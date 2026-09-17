@@ -32,6 +32,7 @@ class Validation:
         return errors
 
     def check(self, root, docs, *, encoded=None):
+        self.inspection = None
         errors = self.structure(docs)
         if errors:
             return {"errors": errors, "gaps": [], "warnings": []}
@@ -47,7 +48,8 @@ class Validation:
         raw = encoded if encoded is not None else {
             role: self.package.read(self.package.document_path(root, role)) for role in self.package.manifest["templates"]}
         raw_hashes = {role: sha256(raw[role]) for role in ("requirements", "plan", "results")}
-        for role, assignments in projections.assignments(docs, raw_hashes).items():
+        generated = projections.assignments(docs, raw_hashes)
+        for role, assignments in generated.items():
             for pointer, expected_value in assignments.items():
                 try:
                     current_value = resolve(docs[role], pointer, role)
@@ -65,7 +67,9 @@ class Validation:
         measure_gaps, measure_errors = check_measurements(docs)
         gaps.extend(measure_gaps)
         errors.extend(measure_errors)
-        evidence_gaps, evidence_errors, warnings = EvidenceValidation(self.package, self.codec, self.policy, templates).check(root, docs)
+        evidence = EvidenceValidation(self.package, self.codec, self.policy, templates, generated)
+        evidence_gaps, evidence_errors, warnings = evidence.check(root, docs)
+        self.inspection = evidence.inspection
         warnings.extend(notices)
         gaps.extend(evidence_gaps)
         errors.extend(evidence_errors)

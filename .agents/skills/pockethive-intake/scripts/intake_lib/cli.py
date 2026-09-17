@@ -42,6 +42,7 @@ def main() -> int:
         review.add_argument("--documents", required=True)
         review.add_argument("--stage", required=True, choices=("draft", "handoff"))
         review.add_argument("--previous")
+        review.add_argument("--write-review", action="store_true", help="Write the generated stakeholder Markdown projection beside the forms.")
         field = subparsers.add_parser("show-field")
         field.add_argument("--documents", required=True)
         field.add_argument("--document", required=True)

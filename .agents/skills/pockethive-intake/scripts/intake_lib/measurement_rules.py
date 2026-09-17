@@ -105,10 +105,10 @@ def _check_kpi_rule(docs: dict, kpi: dict, field: str, row: dict, index: int,
                   ("transactionDefinition", "transactionDefinition"), ("window", "measurementWindow"))
     for target_field, source_field in dimensions:
         expected, actual = kpi.get(source_field), rule.get(target_field)
-        if absent(expected) or absent(actual):
+        if absent(expected) or (absent(actual) and target_field != "window"):
             _issue(gaps, "KPI_DIMENSION", "plan", pointer + "/" + target_field,
                    "Supply this mapped goal dimension and its explicit stakeholder source.")
-        elif actual != expected:
+        elif not absent(actual) and actual != expected:
             _issue(errors, "KPI_DIMENSION", "plan", pointer + "/" + target_field,
                    "The mapped rule changes a stakeholder API, SUT, transaction or observation-window dimension.")
     for key in ("criterionRef", "apiRef", "sutRef"):
@@ -120,9 +120,6 @@ def _check_kpi_rule(docs: dict, kpi: dict, field: str, row: dict, index: int,
     if not absent(criterion) and criterion != kpi.get("criterionRef"):
         _issue(errors, "KPI_CRITERION", "plan", pointer, "The plan rule belongs to another stakeholder criterion.")
     unit, operators = KPI_CONTRACTS[field]
-    for key in ("unit", "operator", "threshold"):
-        if absent(rule.get(key)):
-            _issue(gaps, "KPI_RULE_VALUE", "plan", pointer + "/" + key, "Supply the mapped numeric acceptance rule.")
     if not absent(rule.get("unit")) and rule["unit"] != unit:
         _issue(errors, "KPI_UNIT", "plan", pointer + "/unit", "Use the canonical unit for this exact stakeholder target.")
     if not absent(rule.get("operator")) and rule["operator"] not in operators:

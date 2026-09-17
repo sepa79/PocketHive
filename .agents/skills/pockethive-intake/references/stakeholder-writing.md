@@ -29,7 +29,10 @@ in chat or exported for sharing; it is not another editable requirements or plan
 store. Edit source documents and regenerate the view. A short summary may link
 to detail but must not imply that omitted conditions were waived.
 
-Use `prepare-review` for the current decisions and source references, then request
+Use `prepare-review --write-review` for the generated stakeholder report and
+current decisions. Its factual content is regenerated from the YAML owners; keep
+engineering explanations in the existing limitations/proposal fields. The CLI
+reports when the previous generated report was stale. Request
 only the field views needed to explain the plan. Identify the returned document
 revision. Its diagnostic groups refer to the single result issue list; avoid
 copying all validation messages into the client summary. For an explicit previous

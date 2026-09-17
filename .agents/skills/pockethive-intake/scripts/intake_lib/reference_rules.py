@@ -86,8 +86,6 @@ class _References:
         generation = self.plan.get("generation", {})
         run = self.results.get("runInfo", {})
         for key in ("bundleId", "scenarioId"):
-            self.same(generation.get(key), self.requirements.get("bundleGeneration", {}).get(key),
-                      "plan", f"/generation/{key}")
             self.same(run.get(key), generation.get(key), "results", f"/runInfo/{key}")
         self.reference(self.selected_sut, self.suts, "plan", "/sutId")
         self.reference(run.get("sutId"), self.suts, "results", "/runInfo/sutId")

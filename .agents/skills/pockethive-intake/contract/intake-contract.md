@@ -1,4 +1,4 @@
-# Intake document and CLI contract — version 3
+# Intake document and CLI contract — version 4
 
 This package owns intake document mechanics only. The four reviewed YAML
 templates and `schemas/` define their structure. `manifest.json` owns package
@@ -20,7 +20,7 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 | `validate --documents DIR --stage handoff` | Also require the relevant material inputs, evidence coverage, plan review references and pinned document hashes. A passing check establishes document consistency only. |
 | `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Create an absent projection, refuse independent authored question content and preserve byte-identical output on repeated unchanged input. Report authoring review notices. Never create approvals, adopt proposals or change client facts. Run `validate` separately for semantic and handoff checks. |
 | `verify-package` | Verify every manifest-listed package file and original-source checksum. Integrity checks are not a cryptographic signature or authenticity guarantee. |
-| `prepare-review --documents DIR --stage draft\|handoff [--previous DIR]` | Finalise through the existing projection owner, validate the saved revision and return a compact, derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
+| `prepare-review --documents DIR --stage draft\|handoff [--previous DIR] [--write-review]` | Finalise through the existing projection owner, validate the saved revision and return a compact, derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
 | `show-field --documents DIR --document ROLE --pointer POINTER` | Read the exact current field, its canonical schema constraints, editing ownership and relevant existing diagnostics. No document writes or alternate field dictionary. |
 | `show-fields --documents DIR --input FILE` | Read a bounded explicit list of fields with one validation pass and shared document revision. See [field help](field-help.md). |
 | `apply-updates --documents DIR --input FILE [--dry-run]` | Apply or preview an explicit, evidence-linked batch against an expected document revision through the existing owners. See [authoring outcomes](authoring-outcomes.md) for persistence and validation results. No inferred values or automatic approval. |
@@ -53,6 +53,11 @@ validation, repair inputs or turn a failed command into success.
 ## Ownership
 
 - Requirements own client goals; plans own proposed/executable choices.
+- Requirements `bundleGeneration.bundleId` and `scenarioId` own intended bundle
+  identity. The corresponding plan generation fields are read-only projections,
+  refreshed by `finalise`; author the requirements fields only. Results retain
+  independently observed run identity. Old plan-only identities require explicit
+  relocation with their evidence before finalisation; conflicting identities fail.
 - `traceability.instance` owns source references, proposals, questions and review
   records. `requirements.openQuestions` is generated from unresolved questions.
 - Results own recorded observations and the existing overall decision rule.
@@ -60,6 +65,50 @@ validation, repair inputs or turn a failed command into success.
 - One YAML codec owns safe round-trip parsing, serialization and reload checks.
   One resolver owns package/document paths. One semantic validator owns intake
   conclusions. No Scenario Manager validation or worker-template engine is copied.
+
+## Decision review and reproducible stakeholder output
+
+`prepare-review` adds read-only `brief.blankFields` and `brief.decisions` views.
+Blank fields are an inventory of editable null leaves, not new required inputs.
+Empty context/diagnostic collections are omitted to keep this view compact.
+Each entry links existing questions, proposals and provenance, and says whether
+it has a recorded explanation, an unanswered question, an available population
+candidate, or still needs review. Recorded not-applicable evidence is not certified
+by this view. Missing extraction is never labelled missing source evidence.
+Only validation owns blockers; scaffold and optional blanks do not become gates.
+
+Population candidates come from a dry application of the same population owner
+to the source inspection already checked by validation. They are offered only
+when the source identity matches. A preview conflict is shown explicitly and
+does not overwrite documents or replace canonical validation findings.
+
+The decision view references existing question IDs, owner and blocking stage.
+Questions for execution are separate from current review/handoff decisions;
+unassigned owners remain unassigned. Unlinked diagnostics are engineering triage,
+not automatically client questions. Diagnostic indexes retain all findings.
+
+`prepare-review --write-review` writes the manifest's `reviewOutput` Markdown
+file inside the document directory. This is an optional reproducible read-only
+projection: stated objective, proposed workload, criteria, recorded limitations,
+prechecks and outstanding decisions, with provenance kinds beside facts. It
+contains no approval or inferred conclusions. Explain what the test can establish
+and cannot establish in the existing objective/plan limitations and proposal
+records; no separate editable summary facts or free-form review state is added.
+The report carries the exact document revision and a content digest. Repeating
+unchanged documents and evidence produces byte-identical output. Before replacement,
+verify the old content digest and report `previousState` as absent, current or
+stale by comparing the canonical rendering. Changed evidence availability can
+make a report stale without changing YAML bytes. A content-digest mismatch is an
+explicit report-edit error, not a reason to overwrite authored content. A file without the generated marker is
+rejected, not overwritten. A stale report is not evidence of the current plan.
+Report failures retain the saved document revision and identify report persistence
+as unverified; they never imply the document save was undone.
+Report persistence is verified separately from document validation; a written
+report can describe an incomplete or invalid draft.
+
+Acceptance-rule missing `unit`, `operator`, `threshold` and `window` checks belong
+to readiness validation. Measurement validation checks populated values against
+the mapped KPI; it does not repeat these missing-field findings.
 
 ## Bundled intake layout
 
@@ -471,6 +520,13 @@ operation are administrative identities, not client requirements. Unsupported
 source shapes and absent declarations remain visible gaps. The operation does
 not evaluate path templates, resolve endpoint context, copy authentication
 payloads or select a different source when the recorded source is unavailable.
+
+The descriptor's explicit `plan.endpoints[].description` can supply a display
+name only when `callId`, `method` and `path` exactly match one supported HTTP
+template's `callId`, `method` and `pathTemplate`. Both sides must be unique;
+ambiguous matches fail before writes. Names retain the description's exact source
+pointer and remain observations. An absent description does not synthesize a name
+from an ID, filename or project name. Nonmatching declarations stay unsupported.
 
 Existing authored values, IDs and evidence survive a repeated operation.
 Conflicting populated values or ambiguous identities fail before document

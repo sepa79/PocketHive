@@ -221,3 +221,42 @@ asynchronous. Save independent work and preserve the client's answer on resume.
 **Held-out variation:** Replace only the draft assertion with “HTTP 202 is returned
 before processing completes.” That claim is supported; do not invent a source
 conflict. Completion measurement can still remain unknown.
+
+
+## E10 — Available names, unknown scope and ambiguous journey rate
+
+Preparation: copy the HTTP population fixture. Add a `plan.endpoints` row to
+its `scenario.yaml` with `callId: read`, `method: GET`,
+`path: /accounts/{{ vars.accountId }}` and
+`description: Read the account status`. Do not add an OAuth scope. This is
+synthetic source evidence; it is not a runnable performance scenario.
+
+**Initial request:** “Use this bundle to draft a sustained performance test
+against WireMock. Keep the mandatory templates unchanged. The rate is 15 ps.”
+
+**Reply only when the unit is clarified:** “15 complete journeys per second.”
+
+**Then, in a fresh session with only the saved intake:** “Resume this draft.
+Why are some names and scopes blank? Show the next decisions.”
+
+**Expected:** Populate the matching API display name with exact descriptor
+provenance. Do not invent a client project name or OAuth scope, or infer auth
+requirements from the missing scope. Clarify rate units once before authoring
+them; preserve the confirmed journey unit on resume. Do not infer requests per
+journey from the fixture filename. Explain the WireMock evidence boundary and
+leave duration, acceptance and safety decisions open. Review unexplained blanks,
+but do not ask the client to fill every scaffold. Keep execution unperformed.
+Generate the stakeholder report from the current document revision and show
+current decisions separately from engineering work and later execution checks.
+
+**Held-out variations:** Remove the endpoint description: keep name unresolved.
+Duplicate the matching endpoint: report ambiguity, do not choose the first.
+Provide an explicit source statement that OAuth scope is omitted by design:
+retain its reason/evidence rather than treating null as self-explanatory.
+Change a material decision after generating the report: regenerate and report
+its previous revision as stale. No template edits or automatic approval.
+
+**Measurements:** Count avoidable source-fact questions, repeated answered
+questions, unexplained relevant blanks, unsupported claims and commands before
+the first saved draft. Record actual client/model/version, transcript and output
+revision. Mechanical CLI results do not qualify native agent behaviour.

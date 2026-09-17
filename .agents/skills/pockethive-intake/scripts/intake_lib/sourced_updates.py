@@ -59,7 +59,7 @@ def apply_updates(package, codec, store, root, docs, validation, input_path, rev
     if structure:
         return _outcome({"errors": structure, "gaps": [], "warnings": []}, revision, dry_run=dry_run)
     projections = Projections(package, codec, store)
-    encoded = projections.prepare(candidate)
+    encoded = projections.prepare(candidate, edited_targets=tuple(targets))
     checked = validation.check(root, candidate, encoded=encoded)
     errors = [issue for issue in checked["errors"] if issue["code"] != "STALE_REVIEW"]
     records = candidate["traceability"]["instance"]["provenance"]

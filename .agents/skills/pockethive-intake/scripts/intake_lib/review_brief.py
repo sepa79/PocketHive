@@ -5,6 +5,8 @@ Contract: intake-contract.md, authoring-outcomes.md.
 from __future__ import annotations
 
 from .errors import IntakeError
+from .blank_review import blank_review
+from .decision_review import decision_review
 from .pointers import covers
 from .review_comparison import compare_documents
 from .schema_validation import SchemaValidation
@@ -43,7 +45,7 @@ def _diagnostic_groups(result: dict, questions: list[dict]) -> list[dict]:
                                 "warningCount": len(group["warnings"])}} for group in groups.values()]
 
 
-def build_brief(package, codec, store, root, docs, validation_result, stage, previous_root=None) -> dict:
+def build_brief(package, codec, store, root, docs, validation_result, stage, previous_root=None, *, inspection=None) -> dict:
     plain = codec.plain(docs)
     instance = plain["traceability"]["instance"]
     questions = instance["questions"]
@@ -62,6 +64,8 @@ def build_brief(package, codec, store, root, docs, validation_result, stage, pre
         "proposals": instance["proposals"],
         "diagnosticGroups": _diagnostic_groups(validation_result, questions),
     }
+    brief["blankFields"] = blank_review(package, codec, store, plain, inspection, validation_result)
+    brief["decisions"] = decision_review(questions, brief["diagnosticGroups"])
     if previous_root is not None:
         store.assert_unlocked(previous_root)
         revision = store.revision(previous_root)

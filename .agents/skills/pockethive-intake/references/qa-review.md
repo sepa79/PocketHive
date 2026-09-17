@@ -58,6 +58,14 @@ in `plan.readiness.prechecks`. There is no `validUntil` binding field.
 
 ## Unknown, omitted and not applicable
 
+Before presenting a draft, review the CLI's `brief.blankFields` inventory with
+the source and recorded questions. `population-available` means the canonical
+mapper can supply the field; use the population operation, not a second mapper.
+`source-review-needed` does not mean the source lacks the answer. An explanation
+or not-applicable record still needs source-faithfulness review. Optional fields
+and unused template scaffolds do not become blockers because they appear here.
+Ask only about applicable material decisions; preserve unknowns visibly.
+
 `scope:`, `scope: null` and `scope: ~` all represent YAML null. Their spelling
 does not encode different decisions. An unknown OAuth scope stays null with a
 scoped question. A confirmed omitted scope retains the API owner's reason in
@@ -116,6 +124,14 @@ status. A passing pre-run check does not turn the load-test result into a pass.
 Do not claim mock correctness or execute a smoke test as part of intake.
 
 ## Keep stakeholder review concise
+
+Use `prepare-review --write-review` to produce the generated report. Put the
+intended conclusion in the existing objective, and evidence limitations in
+`plan.environmentQualification.limitations`. State what the test could establish,
+what it cannot establish and the next decision needed. For a mock target, qualify
+the mock journey/load setup; do not describe it as real-service capacity proof.
+Engineering explanations must remain proposals or sourced observations as
+appropriate. Regenerate the report after edits; its revision must match the forms.
 
 Use the [stakeholder writing guide](stakeholder-writing.md) to present the client
 objective, planned test, acceptance conditions and outstanding decisions.

@@ -11,7 +11,11 @@ from .errors import IntakeError
 from .package_context import PackageContext, canonical_hash, sha256
 from .yaml_codec import YamlCodec
 from .review_digest import review_digest
-from .pointers import resolve
+from .pointers import covers, resolve
+
+
+_IDENTITY_OWNERS = {"/generation/bundleId": "/bundleGeneration/bundleId",
+                    "/generation/scenarioId": "/bundleGeneration/scenarioId"}
 
 
 def projected_questions(instance: dict) -> list[str | None]:
@@ -62,7 +66,8 @@ class Projections:
             "plan": {
                 "/contract/referenceDocuments": {"requirementsTemplate": paths["requirements"], "executionTemplate": paths["results"], "traceabilityMap": paths["traceability"]},
                 "/requirementId": requirement_id, "/requirementsRef": names["requirements"],
-                "/requirementsSnapshot": {"version": requirement_version, "sha256": hashes.get("requirements")}},
+                "/requirementsSnapshot": {"version": requirement_version, "sha256": hashes.get("requirements")},
+                **{target: resolve(req, source, "requirements") for target, source in _IDENTITY_OWNERS.items()}},
             "results": {"/requirementId": requirement_id, "/planId": plan_id,
                         **{"/references/" + key: value for key, value in refs.items()}},
             "traceability": {
@@ -71,8 +76,16 @@ class Projections:
                 **{"/instance/documents/" + role: {"path": names[role], "sha256": hashes.get(role)} for role in ("requirements", "plan", "results")}}
         }
 
-    def prepare(self, docs: dict) -> dict[str, bytes]:
+    def prepare(self, docs: dict, *, edited_targets: tuple[dict, ...] = ()) -> dict[str, bytes]:
         self.check_question_owner(docs)
+        for target, source in _IDENTITY_OWNERS.items():
+            recorded = resolve(docs["plan"], target, "plan")
+            owner = resolve(docs["requirements"], source, "requirements")
+            edited = any(row["document"] == "requirements" and covers(row["pointer"], source) for row in edited_targets)
+            if not edited and recorded is not None and recorded != owner:
+                raise IntakeError("IDENTITY_PROJECTION_CONFLICT",
+                                  "Author intended identity through requirements.bundleGeneration with apply-updates and its evidence; the plan copy is generated.",
+                                  "plan", target)
         encoded, hashes = {}, {}
         for role in ("requirements", "plan", "results", "traceability"):
             for pointer, value in self.assignments(docs, hashes)[role].items():

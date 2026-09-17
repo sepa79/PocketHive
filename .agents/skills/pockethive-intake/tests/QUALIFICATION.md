@@ -365,3 +365,54 @@ Raw local proof is retained under
 test reports. These locations are evidence, not package dependencies. Native
 Amazon Q/Copilot sessions, other hosts and PocketHive runtime bundle validation
 were not qualified by this suite.
+
+
+## Recorded local result — 1.5.0, 2026-09-17
+
+The final runtime candidate passed **213 tests** through the public CLI with
+Python 3.12.3 in Bubblewrap. The package was mounted read-only; the host repository,
+home directory, site packages and external network were unavailable. Four
+independent module shards passed 47, 82, 35 and 49 tests (118.970 seconds total
+wall time). Each shard loaded the sorted `tests/test_*.py` module list at indexes
+`shard::4` with `unittest.defaultTestLoader.loadTestsFromNames`. The existing
+sandbox command above supplies the isolation; each process used `-B -I -S`.
+
+Tested runtime-candidate archive SHA-256:
+`654690fd2428242845ec8ba392e11828c7589623b0271f6b9353b54c77b1b278`.
+The final archive adds these qualification notes and refreshes the manifest;
+its checksum sidecar identifies the distributable bytes.
+
+New checks cover the single intended-identity owner, protected plan projections,
+non-destructive handling of plan-only legacy identities, one completeness finding
+per mapped acceptance field, exact/ambiguous/nonmatching descriptor labels,
+source-change rejection, blank explanations, decision-stage separation, report
+idempotency, stale evidence at unchanged document revision, edited reports and
+symlink protection. Report failures retain the saved document revision. The
+initial run exposed a test assuming an optional scope field existed; the fixture
+was corrected. A saved-intake rehearsal exposed evidence-availability changes at
+unchanged YAML revision; report content integrity now distinguishes those changes
+from independent report edits, with a passing regression.
+
+A scratch rehearsal of the complete `http-sequence-six-auth-flow` bundle and its
+saved intake populated six display names from descriptor descriptions, preserved
+15 journeys/second and unknown OAuth scopes, and returned zero errors, 185 gaps
+and one warning. The generated review identified two recorded current decision
+groups. Repeated report generation preserved bytes. Forms-only copying initially
+left relative evidence unavailable; the successful rehearsal retained the complete
+bundle layout. The working intake and all original scenario assets were unchanged.
+No performance traffic, deployment, mock mutation or approval occurred.
+
+All 16 packaged source/template/schema artifacts were byte-identical to the prior
+commit. Skill frontmatter, 46 local Markdown links, package integrity and
+`git diff --check` passed. Repository-wide owner searches found one implementation
+of the affected projection, population and schema-validation responsibilities.
+The conversation suite adds E10 for names, OAuth scope, ambiguous rate and resume.
+No native Amazon Q/Copilot conversation was run for this release; previous
+account-related limitations remain. These CLI checks do not qualify client-model
+behaviour, and no throughput or runtime readiness is claimed.
+
+Local development evidence is retained at:
+- `/tmp/pockethive-intake-1.5.0-sandbox/` (four logs and summary).
+- `/home/tim/.tmp/pip/intake-1.5-resume-q8ibvh9n/` (saved-intake rehearsal).
+
+These paths are evidence references, not required runtime assets.
