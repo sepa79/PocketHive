@@ -53,7 +53,7 @@ class TapResourceTest {
       closure(ingress);
       try (var evidence = new RunEvidence(reports, "capture");
           var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
-        tap.open("test-swarm", fixture);
+        tap.open("test-swarm", fixture.tap());
         assertEquals(List.of("one", "two"), tap.awaitSamples(2).stream().map(WorkItem::messageId).toList());
       }
     }
@@ -67,7 +67,7 @@ class TapResourceTest {
       var failure = assertThrows(WorkItemContractException.class, () -> {
         try (evidence;
           var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
-          tap.open("test-swarm", fixture);
+          tap.open("test-swarm", fixture.tap());
           tap.awaitSamples(2);
         }
       });
@@ -87,7 +87,7 @@ class TapResourceTest {
       var threeSamples = new WorkFixture(fixture.templateId(), fixture.sutId(), fixture.captureRole(),
           fixture.captureDirection(), fixture.captureIoName(), 3, fixture.tapTtlSeconds(), fixture.expectedResponse());
       try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
-        tap.open("test-swarm", threeSamples);
+        tap.open("test-swarm", threeSamples.tap());
         var selected = tap.awaitSamples(3).stream().map(WorkItem::messageId).toList();
         assertEquals(List.of("A", "B", "C"), selected);
         assertEquals(selected, selectedSampleIds(evidence));
@@ -104,7 +104,7 @@ class TapResourceTest {
       closure(ingress);
       var failure = assertThrows(AssertionError.class, () -> {
         try (var tap = new TapResource(new DebugTapApi(http, ""), slowPoll, evidence)) {
-          tap.open("test-swarm", fixture);
+          tap.open("test-swarm", fixture.tap());
           tap.awaitSamples(2);
         }
       });
@@ -122,7 +122,7 @@ class TapResourceTest {
       var primary = new AssertionError("test failure");
       var failure = assertThrows(AssertionError.class, () -> {
         try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
-          tap.open("test-swarm", fixture);
+          tap.open("test-swarm", fixture.tap());
           throw primary;
         }
       });
@@ -144,7 +144,7 @@ class TapResourceTest {
       closure(ingress);
       var failure = assertThrows(AssertionError.class, () -> {
         try (var tap = new TapResource(new DebugTapApi(http, ""), quietLimits, evidence)) {
-          tap.open("test-swarm", fixture);
+          tap.open("test-swarm", fixture.tap());
           tap.requireEmptyFor(Duration.ofMillis(300));
         }
       });
@@ -160,10 +160,27 @@ class TapResourceTest {
       closure(ingress);
       assertThrows(ApiException.class, () -> {
         try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
-          tap.open("test-swarm", fixture);
+          tap.open("test-swarm", fixture.tap());
           tap.requireEmptyFor(Duration.ofMillis(50));
         }
       });
+    }
+  }
+
+  @Test void missingSamplesTimeOutAndStillCloseTheTap() throws Exception {
+    var shortLimits = new WaitLimits(limits.request(), limits.operation(), Duration.ofMillis(250), Duration.ofSeconds(2));
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "no-samples")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of()));
+      closure(ingress);
+      var error = assertThrows(AssertionError.class, () -> {
+        try (var tap = new TapResource(new DebugTapApi(http, ""), shortLimits, evidence)) {
+          tap.open("test-swarm", fixture.tap());
+          tap.awaitSamples(1);
+        }
+      });
+      assertTrue(error.getMessage().contains("timed out"));
     }
   }
 

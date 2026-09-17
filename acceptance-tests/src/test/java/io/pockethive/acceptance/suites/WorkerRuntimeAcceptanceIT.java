@@ -28,7 +28,7 @@ class WorkerRuntimeAcceptanceIT {
           "This fixture expects the processor to retain only its result step");
       swarm.create(run.createRequest());
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         var samples = tap.awaitSamples(run.target.fixture().samples());
         var workers = WorkerObservations.awaitConfiguredWorkers(run, swarm, policies.keySet());
@@ -56,7 +56,7 @@ class WorkerRuntimeAcceptanceIT {
     try (var run = LiveRun.open("worker-headers"); var swarm = run.newSwarm()) {
       swarm.create(run.createRequest());
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         var state = run.swarms.state(swarm.id());
         assertEquals(swarm.id(), state.id());

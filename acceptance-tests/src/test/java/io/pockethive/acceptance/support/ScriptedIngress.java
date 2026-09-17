@@ -32,8 +32,10 @@ public final class ScriptedIngress implements AutoCloseable {
         assertEquals(next.path(), exchange.getRequestURI().toString());
         JsonNode request = json.readTree(exchange.getRequestBody().readAllBytes());
         if (!next.delay().isZero()) Thread.sleep(next.delay());
-        byte[] body = json.writeValueAsBytes(next.body().apply(request));
-        exchange.getResponseHeaders().set("Content-Type", "application/json");
+        Object response = next.body().apply(request);
+        byte[] body = next.text() ? ((String) response).getBytes(java.nio.charset.StandardCharsets.UTF_8)
+            : json.writeValueAsBytes(response);
+        exchange.getResponseHeaders().set("Content-Type", next.text() ? "text/plain" : "application/json");
         exchange.sendResponseHeaders(next.status(), body.length);
         exchange.getResponseBody().write(body);
       } catch (IOException disconnected) {
@@ -50,11 +52,15 @@ public final class ScriptedIngress implements AutoCloseable {
     return replyAfter(method, path, status, body, Duration.ZERO);
   }
   public ScriptedIngress replyAfter(String method, String path, int status, Object body, Duration delay) {
-    replies.add(new Reply(method, path, status, ignored -> body, delay));
+    replies.add(new Reply(method, path, status, ignored -> body, delay, false));
     return this;
   }
   public ScriptedIngress replyWith(String method, String path, int status, Function<JsonNode, Object> body) {
-    replies.add(new Reply(method, path, status, body, Duration.ZERO));
+    replies.add(new Reply(method, path, status, body, Duration.ZERO, false));
+    return this;
+  }
+  public ScriptedIngress replyText(String method, String path, int status, String body) {
+    replies.add(new Reply(method, path, status, ignored -> body, Duration.ZERO, true));
     return this;
   }
   @Override public void close() {
@@ -62,5 +68,5 @@ public final class ScriptedIngress implements AutoCloseable {
     if (failure.get() != null) throw new AssertionError("Scripted ingress request mismatch", failure.get());
     assertTrue(replies.isEmpty(), "Not all scripted requests were sent: " + replies);
   }
-  private record Reply(String method, String path, int status, Function<JsonNode, Object> body, Duration delay) {}
+  private record Reply(String method, String path, int status, Function<JsonNode, Object> body, Duration delay, boolean text) {}
 }

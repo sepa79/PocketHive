@@ -35,7 +35,7 @@ class HttpProxyAcceptanceIT {
       var boundEndpoint = ProxyAssertions.requireBinding(run, swarm.id(), target, sut, scheme);
       List<WorkItem> samples;
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), fixture);
+        tap.open(swarm.id(), fixture.tap());
         swarm.start();
         samples = tap.awaitSamples(fixture.samples());
       }

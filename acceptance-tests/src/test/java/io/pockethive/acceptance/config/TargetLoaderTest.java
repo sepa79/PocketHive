@@ -51,6 +51,27 @@ class TargetLoaderTest {
       evidenceDirectory=reports
       """;
 
+  @Test void redisFixtureRequiresExplicitConnectionAndNoLifecycleSettings() throws Exception {
+    String config = SCENARIO.replace("scenarioId=authoring-fixture\n", "") + "redisConnectionId=R:redis:6379:0\n";
+    assertEquals("R:redis:6379:0", TargetLoader.loadRedisFixture(file(config)).connectionId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadApi(file(config)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadRedisFixture(file(SCENARIO)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadRedisFixture(file(config.replace("redisConnectionId=R:redis:6379:0", "redisConnectionId="))));
+  }
+
+  @Test void apiTargetRequiresOnlyCommonSettingsAndRejectsFixtureConfiguration() throws Exception {
+    String config = SCENARIO.replace("scenarioId=authoring-fixture\n", "");
+    var target = TargetLoader.loadApi(file(config));
+    assertEquals(folder.resolve("reports"), target.evidenceDirectory());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadApi(file(SCENARIO)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadApi(file(TARGET)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadApi(file(config.replace("username=test-actor\n", ""))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadApi(file(config.replace("requestTimeout=PT1S", "requestTimeout=PT0S"))));
+  }
+
   @Test void scenarioReadNeedsNoLifecycleOrCaptureSettings() throws Exception {
     var target = TargetLoader.loadScenario(file(SCENARIO));
     assertEquals("authoring-fixture", target.scenarioId());
@@ -135,4 +156,52 @@ class TargetLoaderTest {
         () -> TargetLoader.loadTcpTimeout(file(config.replace("mockPassword=test\n", ""))));
   }
 
+  @Test void provisionedAuthRequiresDistinctExplicitScenarioScopes() throws Exception {
+    String config = """
+        ingress=http://localhost:8088/
+        username=admin
+        requestTimeout=PT1S
+        evidenceDirectory=reports
+        folder=fixtures
+        bundle=fixtures/one
+        scenarioId=one
+        siblingScenarioId=two
+        outsideScenarioId=three
+        sutId=sut
+        operationTimeout=PT5S
+        pollInterval=PT0.1S
+        """;
+    var target = TargetLoader.loadProvisionedAuth(file(config));
+    assertEquals("fixtures/one", target.bundle());
+    assertEquals("two", target.siblingScenarioId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProvisionedAuth(file(config.replace("bundle=fixtures/one\n", ""))));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProvisionedAuth(file(config.replace("siblingScenarioId=two", "siblingScenarioId=one"))));
+  }
+  @Test void managementTargetRequiresAnExplicitTapAndEnoughTimeToCloseIt() throws Exception {
+    String config = """
+        ingress=http://localhost:8088/
+        username=admin
+        requestTimeout=PT1S
+        evidenceDirectory=reports
+        folder=fixtures
+        bundle=fixtures/one
+        scenarioId=one
+        siblingScenarioId=two
+        outsideScenarioId=three
+        sutId=sut
+        operationTimeout=PT5S
+        pollInterval=PT0.1S
+        captureRole=generator
+        captureDirection=OUT
+        captureIoName=out
+        sampleCount=1
+        tapTtlSeconds=9
+        """;
+    var target = TargetLoader.loadSwarmAuthorization(file(config));
+    assertEquals("fixtures/one", target.auth().bundle());
+    assertEquals("generator", target.tap().role());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadSwarmAuthorization(file(config.replace("captureIoName=out\n", ""))));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadSwarmAuthorization(file(config.replace("tapTtlSeconds=9", "tapTtlSeconds=8"))));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProvisionedAuth(file(config)));
+  }
 }

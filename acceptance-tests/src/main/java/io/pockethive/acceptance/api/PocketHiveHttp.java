@@ -110,6 +110,10 @@ public final class PocketHiveHttp implements AutoCloseable {
     return json.readValue(response.body(), type);
   }
 
+  public <T> T decode(JsonNode node, Class<T> type) throws IOException {
+    return json.treeToValue(node, type);
+  }
+
   public JsonNode tree(ApiResponse response) throws IOException {
     return json.readTree(response.body());
   }

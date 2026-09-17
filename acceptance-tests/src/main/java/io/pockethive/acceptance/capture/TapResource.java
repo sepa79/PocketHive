@@ -1,6 +1,5 @@
 package io.pockethive.acceptance.capture;
 
-import io.pockethive.acceptance.config.WorkFixture;
 import io.pockethive.acceptance.config.WaitLimits;
 import io.pockethive.acceptance.evidence.RunEvidence;
 import io.pockethive.acceptance.operations.Deadline;
@@ -31,7 +30,11 @@ public final class TapResource implements AutoCloseable {
   public TapResource(DebugTapApi api, WaitLimits limits, RunEvidence evidence) {
     this.api = api; this.limits = limits; this.evidence = evidence;
   }
-  public void open(String swarmId, WorkFixture fixture) throws IOException, InterruptedException {
+  public String id() {
+    if (acquisition != AcquisitionState.ACQUIRED) throw new IllegalStateException("Tap not open");
+    return tapId;
+  }
+  public void open(String swarmId, TapSelection fixture) throws IOException, InterruptedException {
     if (acquisition != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Tap already attempted");
     acquisition = AcquisitionState.UNCONFIRMED;
     var response = api.create(swarmId, fixture);
@@ -39,9 +42,9 @@ public final class TapResource implements AutoCloseable {
     if (tapId == null || tapId.isBlank()) throw new AssertionError("Tap response has no id");
     acquisition = AcquisitionState.ACQUIRED;
     if (!swarmId.equals(response.required("swarmId").textValue())
-        || !fixture.captureRole().equals(response.required("role").textValue())
-        || !fixture.captureDirection().equals(response.required("direction").textValue())
-        || !fixture.captureIoName().equals(response.required("ioName").textValue())) {
+        || !fixture.role().equals(response.required("role").textValue())
+        || !fixture.direction().equals(response.required("direction").textValue())
+        || !fixture.ioName().equals(response.required("ioName").textValue())) {
       throw new AssertionError("Tap response does not match requested logical target");
     }
     evidence.record("tap-" + tapId, response);

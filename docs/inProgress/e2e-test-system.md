@@ -18,7 +18,7 @@ WK-4/WK-5: konfiguracja/overrides przeszły na obu adapterach; full/delta ma dow
 u producentów. Po review i poprawce TTL zapisane w `a3cdf0d5` razem z wcześniejszymi
 wycinkami workerów. NW-1 przeszedł osobne review bez ustaleń. NW-2/NW-3/NW-5 mają
 zielone wykonanie na Rabbit i Artemis (78 testów frameworka, 10 końcowych E2E z regresją
-NW-1); osobne review pakietu bez ustaleń blokujących. Macierz: 23 PASS, 3 PARTIAL, 15 OPEN.
+NW-1); osobne review pakietu bez ustaleń blokujących. AU-9/AU-10/AU-11 mają też PASS na obu adapterach, FW-2 domknięte; nowy pakiet auth/FW czeka na osobne review. Macierz: 27 PASS, 1 PARTIAL, 13 OPEN.
 NW-4 odłożone do deploymentu Swarm/NFS. Użytkownik potwierdził dostępność małego środowiska (1 host) i dużego (4 hosty); lokalny Compose nie dowodzi zachowania między hostami. N3–N4 niewykonane; nie usuwamy starego zestawu.
 Poniższe datowane wpisy zachowują wcześniejsze wyniki i decyzje; bieżące pokrycie
 podaje mapa docs/ci/acceptance-coverage.md.
@@ -599,3 +599,133 @@ Przywrócono Artemis; lista swarmów pusta. Bez zmian produktu i bez commita; no
 czeka na review. Macierz23 PASS/3 PARTIAL/15 OPEN, czyli18 pozycji do domknięcia.
 NW-4 nadal wymaga środowiska NFS. Następny większy pakiet: pozostałe wymagania auth;
 N3/N4 niezamknięte. Bez usuwania legacy E2E.
+
+### 2026-09-17 — kolejny pakiet lokalny: provisioning i zakresy auth
+
+NW-1/2/3/5 po review zapisane w e6883a03. Plan pass następnego pakietu:
+AU-9 (dokładny grant bundle), pełne AU-10 (folder ALL kontra RUN-only) i AU-11
+(refresh/reset uprawnienia). Własne UUID użytkowników, istniejące DTO/API oraz
+SwarmResource/OperationAwaiter; brak alternatywnego silnika uprawnień lub lifecycle.
+Auth nie oferuje DELETE użytkownika: jawny cleanup to brak grantów + inactive +
+odrzucony login. Pozostawiony nieaktywny rekord jest ograniczeniem publicznego API.
+Testy uruchamiamy przez ingress na obu WORK adapterach. NW-4 czeka na Swarm/NFS;
+środowiska 1-host i 4-host są dostępne, deployment nie jest częścią tego pakietu.
+
+Do tego pakietu dokładamy domknięcie FW-2: komponentowe próby limitu z receipt,
+limitu operatora, pozostałego budżetu kolejnego odczytu i braku próbek przed timeoutem.
+Korzystamy z istniejących Deadline/OperationAwaiter/TapResource; nie zmieniamy ich
+semantyki ani nie wprowadzamy kolejnego mechanizmu czekania.
+
+Wykonanie AU-9/AU-10/AU-11 i FW-2 zakończone: po3/3 E2E na Artemis/Rabbit,
+93/93 testy frameworka i3/3 regresji istniejącego scoped runner. Sprawdzone dowody
+usunięcia6 swarmów oraz dezaktywacji8 własnych użytkowników (bez grantów, login401).
+Przywrócono bazowy Artemis. Szczegóły i identyfikatory artefaktów w macierzy.
+Pakiet pozostaje niecommitowany do osobnego review.
+
+Kolejność przed NW-4: AU-7/AU-12; SW-3 i pozostałe dowody właścicieli SW-1/SM-1;
+SM-2 na jawnie świeżym, dedykowanym uruchomieniu. DA-1..4 i EX-1..3 wymagają
+potwierdzenia wspieranych granic przygotowania/odczytu danych. Nie zastępujemy ich
+bezpośrednimi portami Redis/ClickHouse ani czytaniem filesystemu kontenerów.
+Nie oznacza to, że lokalna część planu jest już cała zamknięta. NW-4 zostaje na
+późniejszy deployment przez HiveForge, zgodnie z docs/HIVEFORGE.md.
+
+### 2026-09-17 — AU-7/AU-12: plan wykonania
+
+Rozszerzamy istniejące API/zasoby frameworka o CRUD własnych scenariuszy/folderów
+oraz konfigurację kontrolera, journal, pin, metadane, tap i konflikt network bez SUT.
+Publiczne kontrakty/produkt pozostają bez zmian. Każda operacja asynchroniczna trafia
+przez istniejący SwarmResource/OperationAwaiter. Osobne API HTTP nie może być drugim
+właścicielem cleanupu lub wyniku operacji. Nowe fixtures/targety są jawne dla obu brokerów.
+Runtime materialization sprawdzamy u właściciela w ScenarioManagerAuthFilterTest:
+endpoint czyści cały swarmRoot i nie ma osobnego cleanup API, więc próba na aktywnym
+swarmie niszczyłaby jego startup artifacts. Test komponentowy ma oddzielny temp root
+oraz dowody braku skutku dla VIEW i skopiowanego pliku dla RUN. Nie nazywamy go E2E.
+Pin/metadata journalu pozostają w historii: API nie ma DELETE/unpin; zapisujemy captureId.
+Plan pass: ograniczony zakres auth, istniejące kontrakty/JDK/Jackson, jawne granty,
+unikalne zasoby i weryfikowany cleanup. Nowy pakiet czeka potem na osobne review.
+
+
+Wynik AU-7/AU-12: po3/3 nowych E2E na Artemis i Rabbit,107/107 testów frameworka,
+21/21 ScenarioManagerAuthFilterTest oraz po3/3 regresji lifecycle na obu adapterach.
+Materializacja runtime ma jawne dowody komponentowe; nie udajemy deployed testu.
+Usunięto własne scenariusze/foldery/tapy/swarms, konta pozbawiono grantów i dezaktywowano.
+Dwa piny i metadane pozostają w historii zgodnie z ograniczeniem API; captureId są w macierzy.
+Przywrócono Artemis, publiczna lista swarmów pusta. Pakiet do osobnego review, bez commita.
+Macierz29 PASS/1 PARTIAL/11 OPEN (12 pozycji do domknięcia). Następne: SW-3,
+uzupełnienie SW-1/SM-1, SM-2 na świeżym dedykowanym target. DA/EX wymagają wspieranych
+interfejsów przygotowania/obserwacji; NW-4 nadal czeka na Swarm/NFS. N3/N4 pozostają otwarte.
+
+
+### 2026-09-17 — review auth i SW-3
+
+Review niecommitowanego auth/FW-2: dwa P2 w cleanupie (niepotwierdzony user + pusty
+odczyt oraz CONFIG_UPDATE403 blokujący REMOVE); poprawione,109 testów zielonych.
+Pozostałe sześć passów bez dodatkowych ustaleń; raport /tmp/auth-review-report.md.
+Plan pass SW-3: nowy jawny timeline dla obu adapterów, normalne CREATE/START, potem
+wyłącznie obserwacja zmiany rate, pause/resume generatora i końcowego STOPPED przez
+istniejący WorkerObservations. Journal tylko z API własnego swarma/runu; kroki mają
+potwierdzone efekty w workerach. Dwa krótkie tapy potwierdzają HTTP przed pause i po
+resume; REMOVE pozostaje w SwarmResource. Brak kopii schedulera, CP receivera,
+legacy helperów i zmian produktu. NW-4/deployment nadal poza zakresem.
+
+
+Wynik SW-3: PASS na Artemis/Rabbit. Na adapter: pięć obserwowanych faz, sześć HTTP200,
+pięć kroków journalu we właściwej kolejności i jeden plan-completed. Test wysłał tylko
+CREATE/START/REMOVE (3 SUCCEEDED); końcowy STOPPED pochodzi z planu. Cleanup zweryfikowany.
+Regresja worker-config1/1 na każdym adapterze;109 testów frameworka zielonych. Przywrócono
+Artemis i pustą listę swarmów. Macierz30 PASS/1 PARTIAL/10 OPEN (11 do domknięcia).
+SW-3 do osobnego review, bez commita. Następne: dowody właścicieli SW-1/SM-1 i świeży
+SM-2; nadal wymagane wspierane granice DA/EX, osobny deployment NW-4 oraz N3/N4.
+
+### Next implementation slice: SM-1 and remaining SW-1 evidence
+
+Add a read-only ingress smoke using the existing ApiTarget/HTTP/evidence owners.
+Run named owner tests for CONTROL envelopes, topology effects, exact-key replay and
+no rebroadcast at target state. Mock interaction evidence must remain distinguished
+from real broker evidence. Keep any unproven SW-1 requirement explicit. SM-2 remains
+reserved for a fresh dedicated deployment; NW-4 remains deferred to Docker Swarm.
+
+Wynik SM-1/SW-1: smoke przez ingress1/1, framework110/110 oraz83/83 nazwanych testów
+właścicieli (w tym3 testy granic importów), bez pominięć. Rabbit ma nowy izolowany
+test prawdziwego brokera; Artemis używa istniejących testów z embedded broker.
+Ponowienie tego samego klucza przed/po terminalnym wyniku nie wykonuje komendy ponownie;
+START/RUNNING i STOP/STOPPED nie rozgłaszają ponownie. Konkretne dowody i rozróżnienie
+mock/real/deployed w macierzy. **32 PASS / 0 PARTIAL / 9 OPEN**. Pozostają SM-2, NW-4,
+DA-1..4, EX-1..3. Bez redeploymentu, zmian produktu, commita i push. Pakiet do osobnego
+review. Następny lokalny zakres to rozpoznanie wspieranych granic DA/EX; SM-2 wymaga
+świeżego dedykowanego deploymentu, NW-4 Swarm/NFS. N3/N4 nadal otwarte.
+
+### 2026-09-17 — DA/EX boundary discovery and Redis fixture slice
+
+Plan pass: existing nginx `/redis/` reaches Redis Commander. Deployed UI uses
+GET/POST `apiv2/key/{connectionId}/{key}`, deletion by `?action=delete`. A unique
+probe verified JSON POST creates one list item, GET reports list/length, DELETE
+returns ok and subsequent GET reports type=none. The probe was removed.
+Use this existing boundary with explicit connection id, one UUID-owned key per
+resource, shared HTTP/evidence and verified cleanup. No native Redis client or
+generic command executor. First implement and test resource safety and deployed
+fixture preparation; then add independently authored dataset scenarios/templates
+and assert actual Request Builder/Processor output on both WORK adapters.
+
+EX-1..3: LocalDirectoryClearingExportSink currently writes worker-local files; no
+public finalized-file listing/content observation was found. A supported export
+observation contract still needs separate review; do not replace E2E with container
+filesystem reads. DA-3 has an existing route through Grafana `/grafana/api/ds/query`:
+its provisioned `clickhouse` datasource returned a successful count query scoped to
+a unique nonexistent swarm (0 rows). This proves connectivity/query capability only,
+not successful outcome persistence. No new product endpoint is required for that read.
+This slice changes no product API/deployment/security contracts. NW-4 and
+fresh-deployment SM-2 remain deferred.
+
+Wynik pierwszego wycinka DA:118/118 testów frameworka oraz1/1 deployed
+`RedisFixtureAcceptanceIT`, wyłącznie przez ingress. Dwie unikalne listy, celowy błąd
+po zapisie, usunięcie pierwszej bez zmiany drugiej i końcowe type=none dla obu.
+Log `/tmp/acceptance-redis-fixture.log`; dowody
+`redis-fixture-8e60fe1e-cc2b-4f25-a6b8-7f11458e99e0`. Bez nowych bibliotek, zmian
+produktu i commita. Nowy kod czeka na osobne review.
+
+Macierz nadal32 PASS/9 OPEN: przygotowanie fixtures nie zamyka testów przetwarzania.
+Następne: niezależne scenariusze DA-1/DA-2 z kluczami własnego testu, Request Builder
+i Processor, dokładne payloady z tapów na Rabbit i Artemis. DA-3 może użyć istniejącej
+Grafany; DA-4 łączy te same uchwyty Redis z odczytem własnego ruchu TCP przez ingress
+(bez czyszczenia całego journalu). EX wymaga zaprojektowania publicznego odczytu plików.

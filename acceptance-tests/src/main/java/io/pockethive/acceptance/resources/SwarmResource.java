@@ -3,6 +3,7 @@ package io.pockethive.acceptance.resources;
 import io.pockethive.acceptance.api.ApiException;
 import io.pockethive.acceptance.api.ControlReceiptMismatchException;
 import io.pockethive.acceptance.api.SwarmApi;
+import io.pockethive.acceptance.api.SwarmManagementApi;
 import io.pockethive.acceptance.config.OperationLimits;
 import io.pockethive.acceptance.operations.OperationAwaiter;
 import io.pockethive.swarm.model.lifecycle.ControlRequest;
@@ -72,6 +73,21 @@ public final class SwarmResource implements AutoCloseable {
         () -> requester.stop(id, new ControlRequest(UUID.randomUUID().toString())));
   }
 
+  public SwarmOperation managerEnabled(SwarmManagementApi requester, String instance, boolean enabled)
+      throws IOException, InterruptedException {
+    requireAcquired();
+    settleBeforeRemoval();
+    return execute(OperationType.CONFIG_UPDATE,
+        () -> requester.managerEnabled(id, instance, UUID.randomUUID().toString(), enabled));
+  }
+  public SwarmOperation controllerConfig(SwarmManagementApi requester, String instance, java.util.Map<String, Object> patch)
+      throws IOException, InterruptedException {
+    requireAcquired();
+    settleBeforeRemoval();
+    return execute(OperationType.CONFIG_UPDATE,
+        () -> requester.controllerConfig(id, instance, UUID.randomUUID().toString(), patch));
+  }
+
   public SwarmOperation remove() throws IOException, InterruptedException {
     if (acquisition == AcquisitionState.RELEASED) return removal();
     requireAcquired();
@@ -117,8 +133,8 @@ public final class SwarmResource implements AutoCloseable {
       if (type == OperationType.CREATE && status >= 400 && status < 500 && status != 408) {
         acquisition = AcquisitionState.REJECTED;
         pendingType = null;
-      } else if (type == OperationType.STOP && status == 403) {
-        // Rejected STOP leaves the acquired swarm available for admin cleanup.
+      } else if ((type == OperationType.STOP || type == OperationType.CONFIG_UPDATE) && status == 403) {
+        // Authorization rejected the command before dispatch; admin cleanup remains available.
         pendingType = null;
         pending = null;
       }

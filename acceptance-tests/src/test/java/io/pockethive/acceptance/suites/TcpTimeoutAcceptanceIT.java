@@ -24,7 +24,7 @@ class TcpTimeoutAcceptanceIT {
       swarm.create(run.createRequest());
       String processor = HttpWorkAssertions.processorInstance(run.swarms.state(swarm.id()));
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         for (var item : tap.awaitSamples(run.target.fixture().samples())) {
           var result = TcpWorkAssertions.requireSuccessfulResponse(item, swarm.id(), processor,
@@ -48,7 +48,7 @@ class TcpTimeoutAcceptanceIT {
       swarm.create(run.createRequest());
       String processor = HttpWorkAssertions.processorInstance(run.swarms.state(swarm.id()));
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         run.evidence.record("processor-error", RuntimeErrorObservations.awaitProcessorError(run, swarm, processor));
         tap.requireEmptyFor(target.quietWindow());

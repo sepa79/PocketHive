@@ -1,6 +1,9 @@
 package io.pockethive.scenarios;
 
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.assertj.core.api.Assertions.assertThat;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -56,15 +59,20 @@ class ScenarioManagerAuthFilterTest {
     @TempDir
     static Path tempDir;
 
+    @TempDir
+    static Path runtimeTempDir;
+
     @DynamicPropertySource
     static void properties(DynamicPropertyRegistry registry) {
         registry.add("scenarios.dir", () -> tempDir.toString());
+        registry.add(RuntimeFilesystemContract.LOCAL_ROOT_ENV, () -> runtimeTempDir.toString());
         registry.add("capabilities.dir", () -> tempDir.resolve("capabilities").toString());
     }
 
     @BeforeEach
     void resetStorage() throws Exception {
         cleanDirectory(tempDir);
+        cleanDirectory(runtimeTempDir);
         Files.createDirectories(tempDir.resolve("capabilities"));
         scenarioService.reload();
     }
@@ -627,6 +635,8 @@ class ScenarioManagerAuthFilterTest {
         capabilityCatalogue.reload();
         writeScenario("e2e", "local-rest", "Local Rest");
         scenarioService.reload();
+        var layout = RuntimeFilesystemLayout.of(runtimeTempDir.toString(), runtimeTempDir.toString());
+        String authored = Files.readString(tempDir.resolve("e2e/local-rest/scenario.yaml"));
 
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(PocketHivePermissionIds.VIEW));
         mvc.perform(post("/scenarios/local-rest/runtime")
@@ -640,6 +650,7 @@ class ScenarioManagerAuthFilterTest {
             .andExpect(status().isForbidden())
             .andExpect(jsonPath("$.message").value("PocketHive RUN permission required"));
 
+        assertThat(layout.swarmRoot("view-only")).doesNotExist();
         when(authServiceClient.resolve(anyString())).thenReturn(userWith(
             PocketHivePermissionIds.RUN,
             PocketHiveResourceTypes.FOLDER,
@@ -654,7 +665,18 @@ class ScenarioManagerAuthFilterTest {
                     """))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.scenarioId").value("local-rest"))
-            .andExpect(jsonPath("$.swarmId").value("runner"));
+            .andExpect(jsonPath("$.swarmId").value("runner"))
+            .andExpect(jsonPath("$.runtimeDir").value(layout.swarmRoot("runner").toString()));
+        assertThat(Files.readString(layout.swarmRoot("runner").resolve("scenario.yaml"))).isEqualTo(authored);
+
+        when(authServiceClient.resolve(anyString())).thenReturn(userWith(
+            PocketHivePermissionIds.RUN, PocketHiveResourceTypes.FOLDER, "outside"));
+        mvc.perform(post("/scenarios/local-rest/runtime")
+                .header(HttpHeaders.AUTHORIZATION, "Bearer test-token")
+                .contentType("application/json")
+                .content("{\"swarmId\":\"outside-runner\"}"))
+            .andExpect(status().isForbidden());
+        assertThat(layout.swarmRoot("outside-runner")).doesNotExist();
     }
 
     @Test

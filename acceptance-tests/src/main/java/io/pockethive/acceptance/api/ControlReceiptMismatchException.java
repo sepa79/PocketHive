@@ -10,8 +10,14 @@ import io.pockethive.swarm.model.lifecycle.ControlResponse;
 public final class ControlReceiptMismatchException extends AssertionError {
   private final ControlResponse receipt;
   public ControlReceiptMismatchException(String requestedKey, ControlResponse receipt) {
-    super("Control response idempotencyKey mismatch: requested " + requestedKey
-        + ", received " + receipt.idempotencyKey() + "; operation " + receipt.correlationId());
+    this(receipt, "Control response idempotencyKey mismatch: requested " + requestedKey
+        + ", received " + receipt.idempotencyKey());
+  }
+  public static ControlReceiptMismatchException forDispatch(String expectedTarget, ControlResponse receipt) {
+    return new ControlReceiptMismatchException(receipt, "Control dispatch target mismatch: expected " + expectedTarget);
+  }
+  private ControlReceiptMismatchException(ControlResponse receipt, String description) {
+    super(description + "; operation " + receipt.correlationId());
     this.receipt = receipt;
   }
   public ControlResponse receipt() { return receipt; }

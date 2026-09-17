@@ -30,7 +30,7 @@ class TcpsProxyAcceptanceIT {
       var bound = ProxyAssertions.requireBinding(run, swarm.id(), target, sut, "tcps");
       List<WorkItem> samples;
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), fixture);
+        tap.open(swarm.id(), fixture.tap());
         swarm.start();
         samples = tap.awaitSamples(fixture.samples());
       }

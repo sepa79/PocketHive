@@ -390,4 +390,60 @@ class SwarmResourceTest {
     }
   }
 
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+  void failedConfigObservationIsSettledBeforeRemoval(boolean managerCommand) throws Exception {
+    var create = receipt(); var update = receipt(); var remove = receipt();
+    var accepted = new AtomicReference<ControlResponse>();
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "config-cleanup")) {
+      acquired(ingress, create);
+      String path = managerCommand ? "/orchestrator/api/swarm-managers/" + SWARM + "/enabled"
+          : "/orchestrator/api/components/swarm-controller/controller/config";
+      ingress.replyWith("POST", path, 202, body -> {
+        var receipt = new ControlResponse(update.correlationId(), body.required("idempotencyKey").textValue(),
+            update.operationUrl(), update.outcomeTopic(), update.timeoutMs());
+        accepted.set(receipt);
+        return managerCommand ? Map.of("dispatches", List.of(Map.of("swarm", SWARM, "instanceId", "controller", "response", receipt))) : receipt;
+      }).reply("GET", "/orchestrator" + update.operationUrl(), 500, Map.of())
+          .replyWith("GET", "/orchestrator" + update.operationUrl(), 200,
+              ignored -> operation(accepted.get(), OperationType.CONFIG_UPDATE, OperationState.FAILED, Map.of("reason", "rejected")));
+      removed(ingress, remove);
+      var failure = assertThrows(ApiException.class, () -> {
+        try (var swarm = resource(http, evidence)) {
+          swarm.create(createRequest(create));
+          var api = new SwarmManagementApi(http, "actor-token");
+          if (managerCommand) swarm.managerEnabled(api, "controller", true);
+          else swarm.controllerConfig(api, "controller", Map.of("enabled", true));
+        }
+      });
+      assertEquals(500, failure.response().status());
+      assertEquals(0, failure.getSuppressed().length);
+    }
+  }
+
+  @ParameterizedTest
+  @org.junit.jupiter.params.provider.ValueSource(booleans = {true, false})
+  void deniedConfigDispatchDoesNotBlockAdminRemoval(boolean managerCommand) throws Exception {
+    var create = receipt(); var remove = receipt();
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "config-denied")) {
+      acquired(ingress, create);
+      String path = managerCommand ? "/orchestrator/api/swarm-managers/" + SWARM + "/enabled"
+          : "/orchestrator/api/components/swarm-controller/controller/config";
+      ingress.reply("POST", path, 403, Map.of());
+      removed(ingress, remove);
+      var failure = assertThrows(ApiException.class, () -> {
+        try (var swarm = resource(http, evidence)) {
+          swarm.create(createRequest(create));
+          var requester = new SwarmManagementApi(http, "runner-token");
+          if (managerCommand) swarm.managerEnabled(requester, "controller", true);
+          else swarm.controllerConfig(requester, "controller", Map.of("enabled", true));
+        }
+      });
+      assertEquals(403, failure.response().status());
+      assertEquals(0, failure.getSuppressed().length);
+    }
+  }
+
 }

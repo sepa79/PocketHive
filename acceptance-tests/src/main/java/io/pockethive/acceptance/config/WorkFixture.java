@@ -7,4 +7,8 @@ package io.pockethive.acceptance.config;
  */
 public record WorkFixture(String templateId, String sutId, String captureRole,
     String captureDirection, String captureIoName, int samples, int tapTtlSeconds,
-    String expectedResponse) {}
+    String expectedResponse) {
+  public io.pockethive.acceptance.capture.TapSelection tap() {
+    return new io.pockethive.acceptance.capture.TapSelection(captureRole, captureDirection, captureIoName, samples, tapTtlSeconds);
+  }
+}

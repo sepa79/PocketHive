@@ -13,14 +13,14 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 
 | ID | Required observable behavior | Source feature/case | New coverage / prerequisite | Status |
 | --- | --- | --- | --- | --- |
-| SM-1 | Ingress reports platform availability; preserve CONTROL connectivity coverage through an explicit owner test. | deployment-smoke: services healthy | Smoke group; public health and a named CP component test | OPEN |
+| SM-1 | Ingress reports platform availability; preserve CONTROL connectivity coverage through an explicit owner test. | deployment-smoke: services healthy | PlatformSmokeAcceptanceIT through public ingress; SpringRabbitBrokerTest CONTROL transport on isolated broker, with SpringRabbitControlDeliveryTest policy checks | PASS |
 | SM-2 | Fresh deployment has no implicit default swarm. | deployment-smoke: default swarm absent | Smoke on explicitly fresh dedicated target; do not assume all targets empty | OPEN |
 | SC-1 | Authored generator rate appears in retrieved template. | scenario-defaults: rate limit | ScenarioReadAcceptanceIT.preservesAuthoredSchedulerRate: explicit numeric 7.5 through ingress | PASS |
 | SC-2 | Authored templating interceptor appears in template. | scenario-defaults: templating | ScenarioReadAcceptanceIT.preservesTemplatingConfiguration: full authored templating object through ingress | PASS |
 | SC-3 | Per-worker history policy survives template read. | history-policy: authoring | ScenarioReadAcceptanceIT.preservesEveryWorkersHistoryPolicy: exact four-role map with FULL/LATEST_ONLY through ingress | PASS |
 | WK-1 | Runtime history policies match authoring and real traffic succeeds. | history-policy: runtime | WorkerRuntimeAcceptanceIT: authored policies match fresh runtime observations; actual processor LATEST_ONLY results contain one step at index zero with the correct executing identity. Rabbit/Artemis pass; SDK component tests cover FULL and policy transitions. | PASS |
 | WK-2 | Processor result headers belong to step history, not global headers. | workitem-headers | WorkerRuntimeAcceptanceIT: canonical processor step headers, no global leakage, exact producing instance; Rabbit/Artemis pass | PASS |
-| SW-1 | Create/start/process/stop/remove succeeds; expected workers present; canonical confirmations correlated; resource provisioning/removal has coverage. | swarm-lifecycle: golden path | HttpLifecycleAcceptanceIT passed on Rabbit and Artemis, including expected worker roles; topology/CP details remain open | PARTIAL |
+| SW-1 | Create/start/process/stop/remove succeeds; expected workers present; canonical confirmations correlated; resource provisioning/removal has coverage. | swarm-lifecycle: golden path | HttpLifecycleAcceptanceIT on both adapters plus explicit Rabbit/Artemis broker, CONTROL codec/emitter, lifecycle replay and target-state owner evidence below | PASS |
 | SW-2 | Stop-before-start and repeated start after target state are accepted correctly. | swarm-lifecycle: idempotent target state | TargetStateLifecycleAcceptanceIT passed on Rabbit and Artemis; STOP before START, repeated STOP/START, distinct request keys and operation IDs, same run and expected states. Exact-key replay is not asserted. | PASS |
 | WK-3 | Templated generation produces expected processed response. | swarm-lifecycle: templated generator | TemplatingAcceptanceIT: interceptor output consumed by the generator message template, exact generated request body/headers and successful HTTP response in the same captured WorkItem; two profiles on Rabbit/Artemis | PASS |
 | NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | HttpProxyAcceptanceIT: explicit bundle SUT/profile, canonical binding, current processor config, successful HTTP proxy URLs, binding404 after verified REMOVE; Rabbit/Artemis pass | PASS |
@@ -31,11 +31,11 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | TcpTimeoutAcceptanceIT: paired delayed-response control (8s timeout/5s delay) and error case (500ms timeout), owned run/processor alert through journal, empty result tap for explicit window, verified removal; Rabbit/Artemis | PASS |
 | WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
 | WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
-| DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | Supported Redis fixture setup/observation boundary required | OPEN |
+| DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisListResource fixture preparation/cleanup verified through ingress; Request Builder/Processor pipeline case still required | OPEN |
 | DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Same boundary; assert values, not merely message arrival | OPEN |
-| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | Supported ClickHouse observation required; errors must fail test | OPEN |
+| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | Existing Grafana datasource query through ingress verified; scoped tx-outcome persistence test still required | OPEN |
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | Isolated Redis/TCP data and supported interfaces | OPEN |
-| SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | Scenario plan fixture and fresh operation/state evidence | OPEN |
+| SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Supported file/content observation interface required | OPEN |
 | EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Assert config, file content/type/count | OPEN |
 | EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
@@ -45,22 +45,21 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | AU-4 | Folder runner sees/runs only allowed scenarios, cannot run outside folder. | auth-access: scoped runner | ScopedRunnerAcceptanceIT: exact VIEW + RUN-folder grants; admin verifies fixtures, runner catalogue stays in scope, allowed CREATE succeeds, outside CREATE403; verified cleanup | PASS |
 | AU-5 | Runner can read deployment-view capability/workspace/schema/journal/network endpoints. | auth-access: runner reads | ScopedRunnerAcceptanceIT.readsDeploymentViewApis: all six public deployment read endpoints200 with verified scoped runner | PASS |
 | AU-6 | Viewer reads scenario list/detail/raw through ingress. | auth-access: Scenario Manager reads | ViewerAcceptanceIT: selected scenario in list, matching detail id and nonempty raw through ingress | PASS |
-| AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | Independent actors and cleanup of all created artifacts | OPEN |
+| AU-7 | Runtime materialization grants, folder write/delete grants and deployment-wide scenario create/delete grants are enforced. | auth-access: runtime/workspace/create | ScenarioMutationAuthorizationAcceptanceIT: deployed folder/scenario CRUD and denials on Rabbit/Artemis. ScenarioManagerAuthFilterTest: isolated owner-component runtime materialization, matching RUN and denied VIEW/outside RUN with filesystem postconditions. | PASS |
 | AU-8 | Viewer reads shared network/SUT config and cannot write it. | auth-access: shared config | NetworkAccessAcceptanceIT: viewer GET200, same-content text PUT403, byte-for-byte unchanged raw for network profiles and SUT environments | PASS |
-| AU-9 | Admin provisions bundle runner; profile/catalogue expose exact grant; only named bundle runs. | auth-access: bundle runner | New user fixture with cleanup | OPEN |
-| AU-10 | Folder ALL actor manages swarm; RUN-only actor cannot stop it. | auth-access: folder admin | Self-contained actor provisioning; no previous-test dependency | PARTIAL — RUN-only STOP denial passes; folder ALL remains OPEN |
-| AU-11 | Folder admin denied deployment refresh/reset; deployment admin refresh accepted. | auth-access: deployment admin | API authorization test; no new reset behavior | OPEN |
-| AU-12 | Swarm-scoped manager/config/journal/pin/tap access, network conflict and deployment-only journal metadata grants hold. | auth-access: swarm admin | Endpoint matrix includes tap read/close denial and allowed close; canonical operations | OPEN |
+| AU-9 | Admin provisions bundle runner; profile/catalogue expose exact grant; only named bundle runs. | auth-access: bundle runner | BundleAuthorizationAcceptanceIT: provisions exact VIEW + RUN-bundle actor, verifies profile and sole runnable template, accepts owned CREATE, rejects sibling and outside-folder CREATE; Rabbit/Artemis; verified user revocation/deactivation | PASS |
+| AU-10 | Folder ALL actor manages swarm; RUN-only actor cannot stop it. | auth-access: folder admin | FolderAuthorizationAcceptanceIT: independent RUN-bundle and ALL-folder actors, same runner-created RUNNING swarm, RUN STOP403 with unchanged state, folder START/STOP/REMOVE with canonical success; Rabbit/Artemis. Earlier scoped RUN-folder denial retained. | PASS |
+| AU-11 | Folder admin denied deployment refresh/reset; deployment admin refresh accepted. | auth-access: deployment admin | DeploymentAuthorizationAcceptanceIT: folder refresh/reset403 preserve owned swarm/run/state; deployment refresh202 with explicit REFRESH receipt. No allowed RESET. Rabbit/Artemis. | PASS |
+| AU-12 | Swarm-scoped manager/config/journal/pin/tap access, network conflict and deployment-only journal metadata grants hold. | auth-access: swarm admin | SwarmAuthorizationAcceptanceIT on Rabbit/Artemis: canonical CONFIG_UPDATE, journal/pin readback, metadata grants, tap read/close grants, missing-SUT network409 and verified cleanup. Pins remain as documented history. | PASS |
 | AU-13 | Runner cannot change manual network override; viewer can read it. | auth-access: manual override | NetworkAccessAcceptanceIT: verified runner PUT403, viewer GET200, full manual override status unchanged | PASS |
 | FW-1 | Assertion failure after create still removes exact owned swarm; cleanup failure remains visible. | New framework requirement | SwarmResourceTest and FailureCleanupAcceptanceIT passed (framework + Rabbit + Artemis); includes write failures at CREATE/START/STOP/REMOVE and combined test/cleanup/report failures | PASS |
-| FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Component request/receipt/operation identity, failure/config and full-body HTTP timeout/interruption tests passed; complete wait-budget matrix remains open | PARTIAL |
+| FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Identity/failure/config and full-body HTTP checks plus OperationAwaiterBudgetTest: receipt/configured caps, remaining budget, bounded poll; TapResourceTest: missing samples timeout with closure. 93 framework tests pass. | PASS |
 
 ## Dispositions still required
 
-- Public API alone does not prove CP wire shape, no re-broadcast at target state or physical bindings. Identify specific
-  canonical owner tests; do not drop this coverage under the neutrality label.
-- Exact-key lifecycle replay still needs named owner/integration evidence; the new target-state
-  test intentionally issues new keys and proves those requests receive distinct operations.
+- SW-1 CONTROL wire shape, physical bindings, target-state no-rebroadcast and exact-key
+  replay now have named owner evidence in the SM-1/SW-1 section below. Deployed lifecycle
+  evidence remains separate; no native broker client was added to acceptance-tests.
 - Redis, TCP mapping/journal, ClickHouse and export inspection need supported fixture
   boundaries. This inventory does not approve backend-port access or orphan cleanup.
 - Auth feature cases combine multiple endpoints. AU rows are checklists for those
@@ -673,3 +672,216 @@ including 40 SUCCEEDED operations and verified REMOVE postconditions. E2E was no
 for this source review. The documented wrapper-alert limitation remains; NW-4 and N3/N4
 are not claimed. NW-4 awaits Swarm deployment: user has a one-host and a four-host
 environment; cross-node shared-storage behavior requires the latter.
+
+## Provisioned auth and wait budgets — 2026-09-17
+
+AU-9, AU-10 and AU-11 now have independent acceptance cases on both WORK adapters.
+Explicit targets select allowed bundle, sibling and outside-folder scenarios; no paths
+are inferred from scenario IDs. Canonical auth-contracts DTOs carry user/grant data.
+AuthAdminApi maps public endpoints; AuthUserResource owns only test-created identities.
+The existing catalogue comparisons were extracted into CatalogueAssertions and the
+scoped-runner suite uses that same read/assertion owner. AuthFixture composes existing
+ApiRun, SwarmResource and OperationAwaiter; there is no authorization evaluator or
+alternate lifecycle/cleanup implementation. Product/security code is unchanged.
+
+Per adapter: 3/3 cases, 8 SUCCEEDED operations, 3 verified swarm removals, five 403
+denials (two CREATE, STOP, refresh, reset). Every owned user has readback confirming
+empty grants and inactive status, and a rejected401 login: four users per adapter.
+The Auth API has no DELETE; these eight inactive records remain, deliberately reported
+as deactivation rather than deletion. No configured users were modified.
+
+Evidence logs: /tmp/auth-provisioned-artemis.log, /tmp/auth-provisioned-rabbit.log.
+The artifact audit is /tmp/auth-evidence-summary.json. Principal evidence directories
+under acceptance-tests/target/runs (other actor directories are linked by their logs):
+
+- Artemis: bundle-admin-34cca566-b3a5-40c8-964a-3a121e61236c,
+  folder-admin-c2997303-d5d2-4ad1-9954-2d7380babcd1,
+  folder-manager-f84be6d6-d7c0-4e0d-a6fa-09a46fc635f7,
+  deployment-auth-3a043318-8f70-4153-be50-e923d0e8f6bb.
+- Rabbit: bundle-admin-5b0b1f0e-9115-40a5-ad0f-aa4ad8ac073a,
+  folder-admin-a55cd0e3-6c4b-4698-9613-d58a7a084fac,
+  folder-manager-fd462502-9037-41fe-a487-9f800959eef0,
+  deployment-auth-1f10a363-aaa1-457f-9c4e-b75107305f81.
+
+FW-2 adds actual delayed HTTP responses to prove receipt and configured wait caps,
+remaining budget after a pending response/poll, and no extra read after deadline.
+Missing capture samples time out and still close the tap. User-resource cases prove
+partial acquisition/grant failure cleanup, collision/foreign identity protection,
+revocation failure with continued deactivation, authoritative readback and evidence
+errors. No new wait implementation was added.
+
+Final framework93/93 and dependent reactor pass in /tmp/auth-runner-regression.log;
+the existing auth-runner regression passes3/3 after restoring base Artemis.
+Earlier framework execution is /tmp/auth-framework-final.log (91 tests before the
+last two ownership cases). No full product reactor or product rebuild was needed.
+All deployed requests use official ingress; local WORK switching used only a temporary
+external override. New auth/FW-2 implementation awaits separate review; not committed.
+
+Ledger after that slice: 27 PASS, 1 PARTIAL (SW-1), 13 OPEN. Subsequent AU-7/AU-12
+evidence and the current count follow below; N3/N4 remain open.
+
+
+## Scenario and swarm authorization — 2026-09-17
+
+AU-7: two deployed cases per adapter verify scoped folder CREATE/DELETE, viewer DELETE403,
+deployment-wide scenario CREATE/DELETE and folder actor403. Every created folder/scenario
+has verified deletion through its public API. Runtime materialization uses explicit
+owner-component evidence from ScenarioManagerAuthFilterTest: real filter/materializer,
+mocked auth-profile lookup, isolated runtime root, denied VIEW and outside-folder RUN
+with no filesystem effect, matching RUN with byte-identical scenario output. This is
+not a deployed positive runtime call. Its API clears swarmRoot and has no independent
+cleanup endpoint; the suite does not invoke it on a running swarm.
+
+AU-12: one deployed case per adapter verifies two CONFIG_UPDATE results, scoped journal
+access, pin/readback, deployment-only metadata with unchanged readback after403, tap
+read/close permission separation, and409 when changing network without a bound SUT.
+The two management swarms produced12 SUCCEEDED operations including verified REMOVE
+with no remaining resources/errors. Tap close requires DELETE200 followed by GET404
+in the shared owner; it is asserted by the passing test, not a separate stored receipt.
+Twelve provisioned users have inactive/empty-grant readbacks and login401. Their records
+remain because Auth has no DELETE. No product/security behavior changed.
+
+Evidence directories under acceptance-tests/target/runs:
+
+| Adapter | Folder mutations | Scenario mutations | Swarm management admin |
+| --- | --- | --- | --- |
+| artemis | `folder-mutations-447a8933-a60c-472d-b78b-8c4475b94340` | `scenario-mutations-a1983ce9-cd72-482e-b685-978cfce0d3ba` | `swarm-auth-admin-d668ba7e-11a5-4a9b-98ce-1809827a39ca` |
+| rabbit | `folder-mutations-8b7bb94c-7aa9-4c5d-8464-73f39b91fdb6` | `scenario-mutations-1b154019-bc46-4149-8567-90c338b5119e` | `swarm-auth-admin-387e495f-7ae6-4fed-a84f-0e6ccdac80fa` |
+
+Journal pin/metadata have no public delete/unpin API. Retained captures (recorded under
+each manager's retained-journal-pin.json and verified by pinned-run-readback.json):
+
+- artemis: `c38410f3-a4c6-436d-aa96-9c008ab7c012`, run `d056c88d-1045-47fa-a528-3d196eb4cc68`.
+
+- rabbit: `ba9ab357-555a-48d7-8a1d-976e70c2d4ba`, run `4bebacc6-8388-4542-acf9-bb63e39ab0ba`.
+
+Logs: /tmp/auth-scenario-{artemis,rabbit}.log and
+/tmp/auth-management-{artemis,rabbit}-final.log. Artifact audit:
+/tmp/auth-next-evidence-summary.json. The first Artemis management attempt failed in
+its new assertion because CREATE targets Orchestrator; the corrected assertion uses
+the controller target from START. That failed attempt's swarm and three users also
+have verified cleanup; it created no pin. It is not counted as a passing execution.
+
+Final framework107/107, Scenario Manager auth owner21/21 and dependent reactors pass.
+RepositoryImportBoundaryTest3/3 passes in /tmp/auth-next-imports.log.
+Lifecycle regression3/3 on each adapter verifies the shared TapSelection projection,
+including six actual HTTP result samples,26 SUCCEEDED operations and six removals.
+Logs /tmp/auth-next-http-{rabbit,artemis}.log; audit /tmp/auth-next-lifecycle-summary.json.
+Base Artemis restored, final public swarm list empty. No remote Swarm deployment.
+This implementation and the preceding auth package await separate review and commit.
+
+Ledger after AU-7/AU-12: **29 PASS, 1 PARTIAL (SW-1), 11 OPEN**:12 rows remained.
+The next SW-3 execution is recorded below. SM-2 still requires a dedicated fresh target.
+DA-1..4 and EX-1..3 still need supported preparation/observation boundaries. NW-4 awaits
+Swarm/NFS deployment. N3 replacement acceptance and N4 legacy removal remain open.
+
+
+## Auth/FW-2 review follow-up — 2026-09-17
+
+Separate review found two P2 cleanup defects: unconfirmed user creation was treated as
+resolved by one absent readback; CONFIG_UPDATE403 prevented admin removal by retaining
+a receiptless pending command. Both fixed through the existing resource owners, with
+three failing regression invocations before the fix and all109 framework tests green
+afterwards. No other finding or competing SSOT owner in the pending auth package.
+The six passes and per-owner evidence are in /tmp/auth-review-report.md; execution logs
+/tmp/auth-review-red.log and /tmp/auth-review-green.log. Prior deployed artifacts were
+reread (/tmp/auth-review-evidence.json), not rerun for these error branches. Subsequent
+SW-3 is a new implementation slice, not covered by this review. No commit requested.
+
+
+## Scenario timeline — SW-3 (2026-09-17)
+
+New independent Rabbit/Artemis bundles each author five timeline steps. The acceptance
+test sends CREATE and initial START; the plan then enables workload, sets generator
+rate2→7, pauses it, resumes it and stops the entire workload. There is no test-issued
+STOP/config-update. Each phase has its own fresh state/worker snapshot with matching
+current run and instance identities. Two short taps capture3 successful HTTP responses
+each, before pause and after resume. This proves processing continuity, not a throughput
+measurement of7/s. The exact run journal has all five completed steps in order, one
+completed plan and no plan error, all from the current controller. Journal dispatch
+completion is corroborated by actual worker effects rather than treated as their proof.
+
+| Adapter | Evidence directory under acceptance-tests/target/runs | Operations | HTTP samples |
+| --- | --- | --- | --- |
+| artemis | `scenario-plan-6362f501-374f-427e-b32d-d001b6b40e6f` | 3 SUCCEEDED (CREATE/START/REMOVE) | 6 |
+| rabbit | `scenario-plan-322ee953-0e39-4b82-9256-6193a988a93a` | 3 SUCCEEDED (CREATE/START/REMOVE) | 6 |
+
+Logs: /tmp/plan-{artemis,rabbit}.log. Audited snapshots, ordered journal and removal
+postconditions: /tmp/plan-evidence-summary.json. Both owned swarms were removed with
+nonempty removedResources and empty remainingResources/errors, followed by registry404.
+Each tap closed through the existing DELETE200/GET404 path before the next phase.
+The shared WorkerObservations gained a phase predicate over its already verified
+projection, retaining one Deadline; no new state merger, configuration parser or
+lifecycle implementation. Existing worker-config regression passes1/1 per adapter in
+/tmp/plan-worker-regression-{artemis,rabbit}.log. All109 framework tests and dependent
+reactors pass. Base Artemis restored and final public swarm list empty. No product
+behavior, public contracts, legacy E2E or deployment manifests changed.
+
+Current ledger: **30 PASS, 1 PARTIAL (SW-1), 10 OPEN**:11 rows remain. SW-1/SM-1 owner
+evidence and dedicated fresh SM-2 precede the remaining data/export boundaries and
+NW-4 Swarm/NFS. New SW-3 code awaits its separate review; N3/N4 remain open. No commit.
+
+## Platform smoke and lifecycle owner evidence — SM-1/SW-1 (2026-09-17)
+
+SM-1 public smoke passed on the current Artemis WORK / Rabbit CONTROL deployment.
+`PlatformSmokeAcceptanceIT.ingressReportsPlatformAvailability` records HTTP200/`ok`
+for UI `/healthz` and HTTP200/`UP` for both service actuator health routes, all via
+localhost:8088. No service port or broker connection is used by this suite.
+Evidence: `platform-smoke-ad2c63bb-b037-4494-a8c3-73dfd0aba1e6` under
+acceptance-tests/target/runs; log `/tmp/acceptance-smoke.log`. All110 framework tests pass.
+This does not assert that the deployment is fresh or empty (SM-2).
+
+The remaining SW-1 requirements now have these explicit component proofs, alongside
+the previously recorded Rabbit/Artemis public lifecycle runs:
+
+| Requirement | Owner test and observable evidence | Tests passed |
+| --- | --- | --- |
+| Rabbit physical bindings, idempotent ensure, repair, scoped removal; CONTROL connectivity | `SpringRabbitBrokerTest`: dedicated Testcontainers broker, actual UTF8 persistent delivery through a CONTROL transport binding; WORK message delivery, unbind/ensure/redelivery, verified resource absence and continued delivery for another swarm. No deployment backend access. | 2 |
+| Rabbit declaration/observation/removal and transport failure semantics | `RabbitWorkTopologyTest`, `SpringRabbitResourcesTest`, `SpringRabbitTransportTest`, `SpringRabbitControlDeliveryTest`: mock-based owner contracts; CONTROL settlement policy independent of WORK tuning. These are not physical broker evidence. | 19 |
+| Artemis physical resource and transport behavior | `ArtemisWorkPlaneTest`: real embedded broker, repeated ensure, canonical payload delivery, selected swarm removal with other swarm retained; ACK/error/stop/restart cases. `ArtemisTopologyTest`: owner address/configuration rules. | 12 |
+| CONTROL wire/routing integrity | `ControlPlaneCodecTest`: all envelope families through canonical codec, invalid payload/routing rejected. `ControlPlaneEmitterTest`: actual executor evidence through codec. `ControlPlanePublisherIntegrationTest`: selected exchange/routes using mock RabbitPublisher; not a connectivity claim. | 25 |
+| Exact-key replay and correlated completion | `OperationDispatchServiceTest.exactKeyReplayDoesNotDispatchAgainBeforeOrAfterCompletion`: same operation/correlation, one execution before and after terminal success; `SwarmOperationCoordinatorTest`: exact identity completion, timeout and conflicting-command cases. Other existing dispatch failure tests also pass. | 11 |
+| Target-state command does not rebroadcast | `SwarmLifecycleCommandHandlerTest.confirmsAlreadyAchievedStateWithoutRebroadcastingCommand`: RUNNING/START and STOPPED/STOP return success without calling either lifecycle mutation; existing fresh-convergence cases pass. | 11 |
+| Import boundaries | `RepositoryImportBoundaryTest`, unchanged ownership rules | 3 |
+
+Owner logs: `/tmp/acceptance-rabbit-owner.log` (21 tests),
+`/tmp/acceptance-sw1-owners.log` (62 tests). All pass with zero skips. The broker test
+uses the Rabbit module's existing Spring BOM to resolve its test-only Testcontainers
+dependency. Production behavior and deployment configuration are unchanged.
+
+Current ledger: **32 PASS, 0 PARTIAL, 9 OPEN**. Remaining: SM-2, NW-4, DA-1..4, EX-1..3.
+SM-2 needs a fresh dedicated deployment; NW-4 needs Swarm/NFS; DA/EX need supported
+preparation/observation interfaces. N3/N4 remain open, legacy E2E remains frozen.
+This implementation (and prior SW-3) awaits separate review; no commit or push.
+
+## Data fixture boundary — prerequisite only (2026-09-17)
+
+Redis Commander already has a public ingress route. New RedisCommanderApi uses
+its exact-key HTTP operations with a required connection id; no native Redis client,
+console command executor, first-connection selection or wildcard deletion.
+RedisListResource creates UUID keys and checks absence before mutation; uncertain
+writes and failed deletion postconditions remain visible. The existing acquisition
+state and shared HTTP/evidence owners are reused. One-item list payloads remain opaque;
+Redis Commander's UI-escaped item display is not treated as canonical application data.
+DA-1/DA-2 will assert actual downstream WorkItems.
+
+118 framework tests pass, including collision/no mutation, cleanup after assertion,
+failed write with observable effect, unknown write with absent readback, delete200
+with remaining key, wrong-key response and an already-consumed list. The shared
+ScriptedIngress adds explicit plain-text replies for the real API's `ok` body.
+`RedisFixtureAcceptanceIT` passes against public localhost:8088: creates two isolated
+lists, deliberately fails after the second acquisition, proves that cleanup removes
+only that key, then removes the first. Both absent artifacts are present under
+`redis-fixture-8e60fe1e-cc2b-4f25-a6b8-7f11458e99e0` in acceptance-tests/target/runs.
+Log: `/tmp/acceptance-redis-fixture.log`. No swarm was started or deployment changed.
+
+DA-3 discovery: existing public `/grafana/api/ds/query` with the provisioned ClickHouse
+datasource returned nested status200 and count0 for a unique nonexistent swarm.
+Artifact: `/tmp/acceptance-grafana-boundary.json`. This is only an observation-boundary
+probe; no outcome-write behavior is claimed. Auth/connection selection must be explicit
+in its eventual acceptance target. No transaction API exists in Orchestrator/MCP,
+but adding one is unnecessary for this supported Grafana read path.
+
+EX-1..3 still lack public finalized-file/content observation; the current sink writes
+worker-local files. No container filesystem or direct DB port access is authorized.
+Ledger remains **32 PASS / 9 OPEN**, including all DA rows. This new slice awaits review.

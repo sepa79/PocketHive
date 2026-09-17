@@ -144,3 +144,84 @@ The timeout targets explicitly select the existing slow-response mapping and loc
 TCP mock Basic credentials. Reads use `/tcp-mock/` at ingress; mappings and journals
 are never reset or rewritten. Errors are read from the owned swarm/run journal;
 the processor output tap stays empty for the explicit quiet window after the error.
+
+
+`auth-provisioned` uses `targets/local-auth-provisioned-{artemis,rabbit}.properties`
+with an existing Auth administrator who also has deployment ALL. It independently
+provisions unique bundle RUN and folder ALL actors, checks profile/catalogue/CREATE
+scope, RUN-only STOP denial, folder lifecycle management, and deployment refresh/reset
+authorization. Only deployment refresh is allowed; successful RESET is never invoked.
+The target explicitly names one allowed bundle/scenario, a same-folder sibling and
+an outside-folder fixture. These fixtures must exist in the admin catalogue.
+
+Each test revokes and deactivates its users, verifies stored inactive/empty-grant state
+and requires login401. Auth has no user-delete API: inactive records remain in its
+store until normal environment reset. Existing users are never edited. Swarm cleanup
+uses the existing verified REMOVE. All calls use public ingress and no raw tokens
+are recorded. Separate groups below cover scenario workspace mutations and the
+swarm management endpoint matrix (AU-7/AU-12).
+
+
+`auth-scenario-mutations` uses the same explicit `local-auth-provisioned-{adapter}`
+targets. Two cases create/delete their own folders and scenarios, verify scoped
+denials and read back absence after removal. Scenario content is cloned from the
+selected API projection under a new ID; repository fixtures are never edited.
+
+`auth-swarm-management` uses `local-auth-management-{adapter}.properties` and the
+matching new management bundle. Three provisioned actors exercise manager/controller
+configuration, journal/pin, deployment-only metadata, tap read/close authorization,
+and the missing-SUT network conflict. Both configuration commands use the existing
+operation owner. The fixture explicitly supports CREATE without a bound SUT; no
+network resolver, broker client or alternative cleanup is introduced.
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-auth-provisioned-artemis.properties auth-scenario-mutations
+./run-acceptance-tests.sh acceptance-tests/targets/local-auth-management-artemis.properties auth-swarm-management
+```
+
+Use the corresponding `-rabbit.properties` targets when the deployment selects Rabbit.
+All users are revoked/deactivated; folders, scenarios, taps and swarms have verified
+cleanup. Journal pins and metadata intentionally remain as historical records because
+there is no public delete/unpin API; evidence records the retained capture ID.
+Runtime materialization authorization is covered separately by
+ScenarioManagerAuthFilterTest with an isolated temporary root. The runtime endpoint
+clears a swarm's startup directory and has no independent cleanup API, so these
+acceptance groups do not invoke it on a running swarm or claim deployed runtime coverage.
+
+
+`scenario-plan` uses `local-plan-{artemis,rabbit}.properties`. New independent bundles
+schedule workload enablement, generator rate2→7, generator pause/resume and final workload
+stop. The test sends only CREATE, initial START and cleanup REMOVE. Fresh worker snapshots
+prove each phase; two short taps prove HTTP processing before pause and after resume.
+The exact owned swarm/run journal must contain the five ordered completed steps and
+one completed plan without plan errors. No throughput benchmark is inferred from a rate
+setting. Timeline offsets are explicit in the bundle; the test does not schedule actions.
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-plan-artemis.properties scenario-plan
+./run-acceptance-tests.sh acceptance-tests/targets/local-plan-rabbit.properties scenario-plan
+```
+
+Select only the target matching the deployment's WORK adapter. The final STOPPED state
+must come from the plan; the test never sends STOP to satisfy it. Existing resource
+owners close taps and verify REMOVE/registry absence, including on an assertion failure.
+
+Platform availability through public ingress (read only, no empty-stack assumption):
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-smoke.properties smoke
+```
+
+This checks UI, Orchestrator and Scenario Manager health. CONTROL transport evidence
+is recorded separately in the coverage ledger; SM-2 needs a fresh dedicated deployment.
+
+Redis fixture boundary through the public Redis Commander ingress:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-redis-fixture.properties redis-fixture
+```
+
+The target explicitly selects a Redis Commander connection id. The test creates
+two unique one-item lists, checks cleanup after assertion failure and preserves
+the second list until its own close. It never flushes Redis or deletes by prefix.
+This proves fixture preparation/cleanup, not yet DA worker pipeline coverage.

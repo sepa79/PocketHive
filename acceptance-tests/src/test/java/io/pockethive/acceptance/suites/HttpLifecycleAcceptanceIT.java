@@ -22,7 +22,7 @@ class HttpLifecycleAcceptanceIT {
       assertEquals(Set.of(BeeRoles.GENERATOR, BeeRoles.PROCESSOR, BeeRoles.POSTPROCESSOR),
           created.bees().stream().map(bee -> bee.role()).collect(Collectors.toSet()));
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         var running = run.swarms.state(swarm.id());
         assertEquals(swarm.runId(), running.runId());

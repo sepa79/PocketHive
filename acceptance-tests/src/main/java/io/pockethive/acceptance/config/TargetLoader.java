@@ -29,6 +29,17 @@ public final class TargetLoader {
     return Path.of(selected);
   }
 
+  public static RedisFixtureTarget loadRedisFixture(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Properties values = read(actual, Set.of("redisConnectionId"));
+    return new RedisFixtureTarget(api(values, actual), values.getProperty("redisConnectionId"));
+  }
+
+  public static ApiTarget loadApi(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    return api(read(actual, Set.of()), actual);
+  }
+
   public static AcceptanceTarget load(Path file) throws IOException {
     Path actual = file.toRealPath();
     return lifecycle(read(actual, LIFECYCLE_KEYS), actual);
@@ -101,6 +112,38 @@ public final class TargetLoader {
     return new RunnerTarget(api, values.getProperty("cleanupUsername"), values.getProperty("folder"),
         values.getProperty("scenarioId"), values.getProperty("deniedScenarioId"), values.getProperty("sutId"),
         operations(api, values));
+  }
+
+  private static final Set<String> AUTH_KEYS = Set.of("folder", "bundle", "scenarioId", "siblingScenarioId", "outsideScenarioId",
+      "sutId", "operationTimeout", "pollInterval");
+
+  public static ProvisionedAuthTarget loadProvisionedAuth(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    return provisionedAuth(read(actual, AUTH_KEYS), actual);
+  }
+  public static SwarmAuthorizationTarget loadSwarmAuthorization(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(AUTH_KEYS);
+    keys.addAll(Set.of("captureRole", "captureDirection", "captureIoName", "sampleCount", "tapTtlSeconds"));
+    Properties values = read(actual, keys);
+    var auth = provisionedAuth(values, actual);
+    int ttl = positiveInt(values, "tapTtlSeconds");
+    if (Duration.ofSeconds(ttl).compareTo(auth.limits().request().multipliedBy(8)) <= 0) {
+      throw new IllegalArgumentException("tapTtlSeconds must cover eight authorization request budgets");
+    }
+    return new SwarmAuthorizationTarget(auth, new io.pockethive.acceptance.capture.TapSelection(
+        values.getProperty("captureRole"), values.getProperty("captureDirection"), values.getProperty("captureIoName"),
+        positiveInt(values, "sampleCount"), ttl));
+  }
+  private static ProvisionedAuthTarget provisionedAuth(Properties values, Path actual) {
+    ApiTarget api = api(values, actual);
+    if (new HashSet<>(java.util.List.of(values.getProperty("scenarioId"), values.getProperty("siblingScenarioId"),
+        values.getProperty("outsideScenarioId"))).size() != 3) {
+      throw new IllegalArgumentException("Allowed, sibling and outside scenarios must be distinct");
+    }
+    return new ProvisionedAuthTarget(api, values.getProperty("folder"), values.getProperty("bundle"),
+        values.getProperty("scenarioId"), values.getProperty("siblingScenarioId"), values.getProperty("outsideScenarioId"),
+        values.getProperty("sutId"), operations(api, values));
   }
 
   public static NetworkAccessTarget loadNetworkAccess(Path file) throws IOException {

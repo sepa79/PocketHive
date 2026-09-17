@@ -3,7 +3,6 @@ package io.pockethive.acceptance.capture;
 import com.fasterxml.jackson.databind.JsonNode;
 import io.pockethive.acceptance.api.PocketHiveHttp;
 import io.pockethive.acceptance.api.ApiSurface;
-import io.pockethive.acceptance.config.WorkFixture;
 import java.io.IOException;
 import java.time.Duration;
 import java.util.Map;
@@ -18,10 +17,10 @@ public final class DebugTapApi {
   private final PocketHiveHttp http;
   private final String token;
   public DebugTapApi(PocketHiveHttp http, String token) { this.http = http; this.token = token; }
-  public JsonNode create(String swarmId, WorkFixture fixture) throws IOException, InterruptedException {
+  public JsonNode create(String swarmId, TapSelection fixture) throws IOException, InterruptedException {
     return http.tree(http.request("POST", PATH, Map.of(
-        "swarmId", swarmId, "role", fixture.captureRole(), "direction", fixture.captureDirection(),
-        "ioName", fixture.captureIoName(), "maxItems", fixture.samples(), "ttlSeconds", fixture.tapTtlSeconds()),
+        "swarmId", swarmId, "role", fixture.role(), "direction", fixture.direction(),
+        "ioName", fixture.ioName(), "maxItems", fixture.maxItems(), "ttlSeconds", fixture.ttlSeconds()),
         token).expect(200));
   }
   public JsonNode read(String tapId, Duration budget) throws IOException, InterruptedException {

@@ -151,16 +151,20 @@ class SwarmLifecycleCommandHandlerTest {
         signal, ControlPlaneSignals.SWARM_START, TerminalStatus.REJECTED, List.of());
   }
 
-  @Test
-  void confirmsAlreadyAchievedStateWithoutRebroadcastingCommand() {
-    ControlSignal signal = signal(ControlPlaneSignals.SWARM_START, Map.of());
-    when(lifecycle.getWorkloadState()).thenReturn(WorkloadState.RUNNING);
+  @org.junit.jupiter.params.ParameterizedTest
+  @org.junit.jupiter.params.provider.EnumSource(value = WorkloadState.class, names = {"RUNNING", "STOPPED"})
+  void confirmsAlreadyAchievedStateWithoutRebroadcastingCommand(WorkloadState state) {
+    String operation = state == WorkloadState.RUNNING
+        ? ControlPlaneSignals.SWARM_START : ControlPlaneSignals.SWARM_STOP;
+    ControlSignal signal = signal(operation, Map.of());
+    when(lifecycle.getWorkloadState()).thenReturn(state);
 
-    handler.handle(signal, ControlPlaneSignals.SWARM_START, TEST_SWARM_ID);
+    handler.handle(signal, operation, TEST_SWARM_ID);
 
     verify(lifecycle, never()).start(org.mockito.ArgumentMatchers.anyString());
+    verify(lifecycle, never()).stop();
     verify(results).publishLifecycle(
-        signal, ControlPlaneSignals.SWARM_START, TerminalStatus.SUCCEEDED, List.of());
+        signal, operation, TerminalStatus.SUCCEEDED, List.of());
     verify(statusFullCoordinator, never()).queueAfterLifecycle(org.mockito.ArgumentMatchers.anyLong());
   }
 

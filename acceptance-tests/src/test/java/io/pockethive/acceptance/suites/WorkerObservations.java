@@ -6,6 +6,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.acceptance.operations.Deadline;
 import io.pockethive.acceptance.resources.SwarmResource;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
+import io.pockethive.swarm.model.lifecycle.SwarmStateView;
+import java.util.function.BiPredicate;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -19,14 +21,20 @@ final class WorkerObservations {
   private WorkerObservations() { }
   static List<JsonNode> awaitConfiguredWorkers(LiveRun run, SwarmResource swarm, Set<String> expectedRoles)
       throws Exception {
-    var deadline = new Deadline(run.target.limits().operation(), "Current worker configuration for " + swarm.id());
+    return awaitConfiguredWorkers(run, swarm, expectedRoles, "worker-state", (state, workers) -> {
+      assertEquals(WorkloadState.RUNNING, state.workloadState());
+      return true;
+    });
+  }
+  static List<JsonNode> awaitConfiguredWorkers(LiveRun run, SwarmResource swarm, Set<String> expectedRoles,
+      String phase, BiPredicate<SwarmStateView, List<JsonNode>> matches) throws Exception {
+    var deadline = new Deadline(run.target.limits().operation(), phase + " for " + swarm.id());
     var json = new ObjectMapper();
     while (true) {
       var state = run.swarms.state(swarm.id(), deadline.remaining());
-      run.evidence.record("worker-state", state);
+      run.evidence.record(phase, state);
       assertEquals(swarm.id(), state.id());
       assertEquals(swarm.runId(), state.runId());
-      assertEquals(WorkloadState.RUNNING, state.workloadState());
       JsonNode workers = json.valueToTree(state.observation()).path("workers");
       if (!state.observationStale() && state.observedAt() != null && workers.isArray()
           && workers.size() == expectedRoles.size()) {
@@ -47,7 +55,10 @@ final class WorkerObservations {
               && worker.path("config").isObject() && !worker.path("config").isEmpty();
         }
         assertEquals(expectedRoles, roles);
-        if (complete) return java.util.stream.StreamSupport.stream(workers.spliterator(), false).toList();
+        if (complete) {
+          var snapshot = java.util.stream.StreamSupport.stream(workers.spliterator(), false).toList();
+          if (matches.test(state, snapshot)) return snapshot;
+        }
       }
       deadline.pause(run.target.limits().poll());
     }

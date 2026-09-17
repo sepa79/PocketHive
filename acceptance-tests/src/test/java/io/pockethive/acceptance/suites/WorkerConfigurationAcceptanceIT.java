@@ -38,7 +38,7 @@ class WorkerConfigurationAcceptanceIT {
       swarm.create(run.createRequest());
       List<WorkItem> samples;
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         samples = tap.awaitSamples(run.target.fixture().samples());
       }

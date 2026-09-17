@@ -32,7 +32,7 @@ class TemplatingAcceptanceIT {
       run.evidence.record("expected-rendering", Map.of("profile", profile, "body", expectedBody));
       swarm.create(run.createRequest(profile));
       try (var tap = run.newTap()) {
-        tap.open(swarm.id(), run.target.fixture());
+        tap.open(swarm.id(), run.target.fixture().tap());
         swarm.start();
         var running = run.swarms.state(swarm.id());
         assertEquals(swarm.id(), running.id());

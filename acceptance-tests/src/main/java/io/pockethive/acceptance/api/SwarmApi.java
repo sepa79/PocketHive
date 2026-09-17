@@ -34,11 +34,7 @@ public final class SwarmApi {
     return accepted(http.request("POST", path(swarmId) + action, request, token), request.idempotencyKey());
   }
   private ControlResponse accepted(ApiResponse response, String requestedKey) throws IOException {
-    ControlResponse receipt = http.decode(response.expect(202), ControlResponse.class);
-    if (!requestedKey.equals(receipt.idempotencyKey())) {
-      throw new ControlReceiptMismatchException(requestedKey, receipt);
-    }
-    return receipt;
+    return ControlReceipts.requireKey(http.decode(response.expect(202), ControlResponse.class), requestedKey);
   }
   public SwarmOperation operation(String url, Duration budget) throws IOException, InterruptedException {
     return http.decode(http.request("GET", ApiSurface.ORCHESTRATOR.publicPath(url), null, token, budget).expect(200), SwarmOperation.class);
