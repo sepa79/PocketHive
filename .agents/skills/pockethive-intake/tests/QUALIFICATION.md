@@ -515,3 +515,81 @@ is claimed. All 16 source/template/schema artifacts remain unchanged.
 Local evidence (not a runtime dependency):
 `/home/tim/.tmp/pip/intake-exploratory-7iwuxh3g/` and
 `/home/tim/.tmp/pip/intake-exploratory-fix-suite-1v4tgzgh/`.
+
+## Human-authored form acceptance — 1.7.0, 2026-09-17
+
+All **231 tests passed** from the extracted candidate ZIP in an offline
+Bubblewrap sandbox, with read-only package files, no host home/repository and
+Python 3.12.3 `-B -I -S`. Four shards completed in **109.341 seconds**.
+The 11 new public-CLI tests also passed separately in 6.677 seconds.
+
+`review-input` accepted all five supplied originals together in a bundle's
+`intake/`, without renaming or changing any bytes. A separate check against the
+actual five Downloads files returned exit 0, no errors and explicit selection
+and enrichment gaps. The Downloads files matched the packaged source snapshots.
+
+Regression checks cover partial forms under working filenames, authored raw
+questions, missing metadata, unknown fields/types, blank forms, repeated and
+nonrecursive selection, malformed YAML alongside readable forms, unsafe tags,
+duplicate keys, symlinks, missing/oversized files, redaction and unchanged handoff
+validation. Repeated source review returns the same result and writes no files.
+
+This qualifies source readability and routing into evidence-led authoring. It
+does not prove automatic migration, lossless enrichment of arbitrary client
+fields, semantic completeness, client agreement or native Amazon Q/Copilot
+operation. Enrichment remains explicit; working schemas and readiness checks
+retain their existing ownership. All 16 source/template/schema artifacts remain
+byte-identical to the prior release. Skill structure, local Markdown file links,
+changed Python syntax/ownership headers and `git diff --check` passed.
+
+Local evidence (not a runtime dependency):
+`/home/tim/.tmp/pip/intake-human-suite-0_fmeo04/` and
+`/home/tim/.tmp/pip/intake-originals-review-4p6nhpof/result.json`.
+
+## Enrichment, resume and portable evidence — 1.8.0, 2026-09-17
+
+All **249 public-CLI tests passed** from the extracted candidate ZIP in offline
+Bubblewrap, with the package read-only, host home/repository unavailable, and
+Python 3.12.3 `-B -I -S`. Four shards completed in **140.818 seconds**. The
+initial 245-test candidate also passed; four additional tests cover raw working
+scaffolds, invalid imported questions, snapshot collisions and unrecorded links.
+
+The added checks qualify explicit source-pointer enrichment, archived originals
+before raw working-name replacement, retained untransferred content, protected
+field rejection and failed candidates without publication. Workspace assessment
+distinguishes raw/current/partial/mixed contents. Portable narrative and bundle
+sets were moved with the original paths unavailable; validation, review and
+population continued without reference repairs. Runtime-source change-impact
+links remain intact. Changed/missing evidence, collisions, unverified decision
+links and stale approvals fail explicitly. Repeated portability is byte-stable.
+
+Six independent practitioner sessions exercised raw intake with partial answers
+and correction; existing bundle intake with an actual move; mixed old/new forms
+with explicit scope replacement; one previous-package comparison; and two fresh
+bundle rechecks. Later client replies were withheld until needed. Coordinator
+read-only draft/handoff checks of all six final sets found zero errors; handoff
+remained incomplete and results remained unexecuted. No coordinator repaired
+their saved documents before assessment.
+
+The single raw-form comparison observed approximately 129 versus 136 seconds to
+useful review and one versus two mechanical repairs (new versus old package).
+Clock sampling and concurrent work differed; this is not a performance claim.
+Two bundle practitioners exposed synthetic sensitive fields in tool output.
+After moving targeted-read guidance into the entry instructions, another fresh
+practitioner suppressed headers/bodies before output and completed with zero
+repairs, but still printed the full parsed scenario mapping after redaction;
+source minimisation remains imperfect. One mixed-input narrative recap inherited a confusing proposal label;
+the supplied primary facts remained correct. The original failures are retained,
+and guidance was refined. Neither instructions nor passing mechanical checks
+guarantee model behaviour or stakeholder comprehension.
+
+Tests remain in-process/public-CLI local proof. Native Codex/Q/Copilot surfaces,
+authentication and live PocketHive execution were not qualified. All 16 protected
+source/template/schema files remain unchanged. No commits or pushes were made.
+File writes remain individually verified; the document set is not a directory
+transaction. The shared source/evidence owners continue to govern validation.
+
+The repository review is `docs/ai/intake-enrichment-portability-review-2026-09-17.md`.
+Local evidence (not a package dependency):
+`/home/tim/.tmp/pip/intake-polish-complete-suite-mjpjo9g0/` and
+`/home/tim/.tmp/pip/intake-polish-conversations-jei6tiv_/`.

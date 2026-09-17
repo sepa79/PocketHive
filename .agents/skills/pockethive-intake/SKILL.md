@@ -10,10 +10,20 @@ explain what the proposed test can establish, and ask only for material missing
 decisions. Keep client facts, bundle observations, proposals, approvals and
 measured results distinct. Unknowns remain explicit.
 
+Read this skill and the selected workflow before inspecting client sources;
+do not batch their loading with full source-file dumps. For bundles, start with
+`inspect-bundle` (or the inspection saved by `initialise`). Use its safe observations
+and coverage, then read only needed fields with credentials and request bodies
+suppressed before tool output. Raw source values are not safe to print merely
+because they are fixtures. Keep secrets out of tool output and transcripts.
+
 ## Start with the user's task
 
 - **Existing bundle:** read [from-bundle](references/from-bundle.md).
 - **New requirements:** read [new-requirements](references/new-requirements.md).
+- **Human-authored YAML forms:** use `review-input` first, even when already in
+  `bundle/intake/`. Original names/versions and missing generated metadata are
+  valid starting material. See [human forms](references/human-input.md).
 - **Resume or correct:** open the saved set; do not initialise another intake or
   repeat answered questions. Use the source mode already recorded.
 - **Wording only:** use [stakeholder writing](references/stakeholder-writing.md)
@@ -31,6 +41,11 @@ This package is self-contained. Python **3.10+** is required; dependencies are
 bundled. Resolve the installed skill path explicitly. Keep the four forms and
 their evidence in the scenario's root `intake/`, with runtime assets outside it.
 Never edit packaged templates to record client answers.
+
+When an existing directory's state is unclear, run
+`assess-workspace --documents DIR` once. Follow its content-based guidance for
+raw forms, a saved working set or a mixture. Resolve mechanical choices yourself;
+ask the client only when source authority or requirements are ambiguous.
 
 After unpacking, verify the installation once. Ordinary commands already check
 integrity; a separate verification command is unnecessary on every resume.
@@ -51,7 +66,11 @@ observations and extraction limits before asking the client for facts. Configure
 rates are observations, not accepted performance requirements. Save independent
 work before waiting for answers.
 
-For a **saved set**, start with the smaller review and generated client report:
+For raw forms, use the explicit `enrich-input` workflow in
+[human forms](references/human-input.md). The agent builds the transfer plan;
+the client supplies requirements, never hashes or JSON Pointers.
+
+For a **saved enriched set**, start with the smaller review and generated client report:
 
 ```sh
 python3 "/path/to/pockethive-intake/scripts/intake.py" prepare-review --documents "/client/bundle/intake" --stage draft --view summary --write-review
@@ -88,6 +107,9 @@ journeys per second. Still needed: duration and acceptance limits. Draft saved.â
 Use only facts actually recorded. On correction, explain what changed and what
 still needs a decision; do not restart the interview.
 
+Before delivering a portable set, run `make-portable --documents DIR` before
+the final human review. It retains verified local evidence; then share the whole
+bundle including `intake/`, or the whole narrative intake directory.
 Before claiming handoff readiness, run `prepare-review --stage handoff`. Report
 the actual outcome. Keep results unexecuted without identified run evidence.
 Validation cannot prove source faithfulness, human acceptance or a passing test.

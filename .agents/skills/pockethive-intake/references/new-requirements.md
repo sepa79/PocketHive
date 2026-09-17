@@ -4,6 +4,10 @@ Use `new-requirements` for a client narrative, supplied requirements documents o
 direct answers. Apply the shared workflow and writing guidance loaded by
 `SKILL.md`; this mode adds extraction instructions only.
 
+For raw human YAML forms, begin with [human input review](human-input.md).
+They are valid source material without the skill's generated metadata; do not
+treat them as an already enriched document set.
+
 1. Read the supplied sources and initialise the four document drafts in a
    future bundle's new/empty `intake/` directory, or resume the existing document set.
    This mode does not require or generate a scenario file. An existing

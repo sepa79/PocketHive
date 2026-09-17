@@ -86,6 +86,12 @@ approach”. These labels do not certify a claim or adopt a proposal. Unknown me
 remain explicitly unclassified. Never call all workload settings agreed merely
 because one rate was supplied.
 
+Keep supplied facts and proposed choices in separately sourced narrative rows.
+Avoid repeating a supplied rate or duration inside a broadly labelled proposal
+or limitations subtree: the report would correctly inherit that subtree's label
+and confuse the reader. Explain implications beside the owning facts; keep a
+proposal's rationale focused on the choice being proposed.
+
 Hide unused all-null scaffold rows only in the read-only report. Within populated
 rows retain missing values that explain uncertainty, and preserve zero, false,
 operators and units. Do not change templates, add readiness rules or treat a blank

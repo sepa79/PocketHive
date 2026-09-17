@@ -91,6 +91,19 @@ class PackageContext:
             raise IntakeError("OUTPUT_IN_SOURCE", "Store bundled forms in the reserved intake directory or select an external document directory.",
                               detail={"documentsRoot": str(root), "sourceRoot": str(source), "intakePath": str(intake)})
 
+    def bundle_reference(self, source: Path, root: Path) -> str:
+        self.check_bundle_documents(source, root)
+        return ".." if root == self.bundle_intake_path(source) else str(source)
+
+    def local_name(self, setting: str) -> str:
+        name = self.manifest[setting]
+        if (not isinstance(name, str) or not name or "\\" in name
+                or PurePosixPath(name).is_absolute() or len(PurePosixPath(name).parts) != 1
+                or name in (".", "..", self.manifest["documentWriteLock"])
+                or name in {row["output"] for row in self.manifest["templates"].values()}):
+            raise IntakeError("PACKAGE_PATH", "The configured artifact name must be a distinct local path component.")
+        return name
+
     def evidence_path(self, root: Path, ref: str) -> Path:
         path = Path(ref)
         if urlsplit(ref).scheme and not path.is_absolute():

@@ -18,13 +18,13 @@ from .yaml_codec import YamlCodec
 def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str, source: Path | None) -> dict:
     if mode == "from-bundle" and source is not None:
         package.check_bundle_documents(source, root)
-    _require_empty(package, root)
+    _require_empty(package, codec, root)
     inspection = None
     if mode == "from-bundle":
         if source is None:
             raise IntakeError("SOURCE_REQUIRED", "from-bundle requires an explicit source directory.")
         inspection = BundleInspector(package, codec).inspect(source)
-        selected = {"artifactRef": str(source), "sha256": inspection["sha256"], "kind": "directory"}
+        selected = {"artifactRef": package.bundle_reference(source, root), "sha256": inspection["sha256"], "kind": "directory"}
     elif source is not None:
         selected = {"artifactRef": str(source), "sha256": sha256(package.read(source)), "kind": "file"}
     else:
@@ -48,7 +48,7 @@ def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str,
                               for key, targets, question in initial]
     store = DocumentStore(package, codec)
     with store.mutation(root, create=True):
-        _require_empty(package, root)
+        _require_empty(package, codec, root)
         artifacts = Projections(package, codec, store).save(root, docs)
         if inspection is not None:
             store.write_bytes(root / "source-inspection.json", (json.dumps(inspection, indent=2) + "\n").encode())
@@ -56,18 +56,9 @@ def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str,
     return artifacts
 
 
-def _require_empty(package: PackageContext, root: Path) -> None:
+def _require_empty(package: PackageContext, codec: YamlCodec, root: Path) -> None:
     if root.exists() and (not root.is_dir() or any(path != package.lock_path(root) for path in root.iterdir())):
-        declared = {role: package.document_path(root, role) for role in package.manifest["templates"]}
-        existing = sorted(path.name for path in declared.values() if path.is_file())
-        missing = sorted(path.name for path in declared.values() if not path.is_file())
-        state = "not-directory" if not root.is_dir() else "complete" if not missing else "partial" if existing else "unrelated"
-        action = {
-            "complete": "Resume with prepare-review --documents; initialise never overwrites an existing set.",
-            "partial": "Preserve these files and restore the missing documents from the same intake revision, or initialise a separate empty directory. Do not mix generated identities.",
-            "unrelated": "Select a new or empty document directory; existing unrelated files will not be overwritten.",
-            "not-directory": "Select a new or empty directory; the selected path is a file.",
-        }[state]
+        from .workspace_assessment import assess_workspace
+        detail = assess_workspace(package, codec, root)
         raise IntakeError("OUTPUT_EXISTS", "Initialisation requires a new or empty directory.",
-                          detail={"documentsRoot": str(root), "directoryState": state,
-                                  "existingDocuments": existing, "missingDocuments": missing, "nextAction": action})
+                          detail=detail)

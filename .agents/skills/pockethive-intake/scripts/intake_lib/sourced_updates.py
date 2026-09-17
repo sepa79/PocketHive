@@ -16,6 +16,11 @@ from .projections import Projections
 
 def apply_updates(package, codec, store, root, docs, validation, input_path, revision, *, dry_run=False):
     batch = codec.plain(codec.parse(package.read(input_path), "updates"))
+    return apply_batch(package, codec, store, root, docs, validation, batch, revision, dry_run=dry_run)
+
+
+def apply_batch(package, codec, store, root, docs, validation, batch, revision, *, dry_run=False):
+    """The single authoring path for decoded CLI edits and explicit source transfers."""
     _envelope(batch)
     if batch["expectedDocumentsSha256"] != revision:
         raise IntakeError("STALE_DOCUMENTS", "The edit batch refers to another document revision; read the current set first.")

@@ -125,7 +125,7 @@ class SchemaValidation:
         import fastjsonschema
         version = self.package.manifest["templates"][role]["version"]
         if "version" in value and value["version"] != version:
-            return [IntakeError("DOCUMENT_VERSION", f"Expected {role} document version {version}; update explicitly using the current template and contract.",
+            return [IntakeError("DOCUMENT_VERSION", f"Expected enriched {role} document version {version}; review raw human forms with review-input, then enrich explicitly using the current template and contract.",
                                 role, "/version", detail={"expectedVersion": version}).issue]
         if role not in self.compiled:
             schema = self.expanded(self.package.manifest["templates"][role]["schema"])

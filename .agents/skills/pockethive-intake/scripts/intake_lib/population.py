@@ -19,10 +19,10 @@ def populate_from_inspection(package, codec, store, root: Path, docs: dict, *, e
     if intake.get("mode") != "from-bundle" or not selected or selected.get("kind") != "directory":
         raise IntakeError("POPULATION_SOURCE_MODE", "Population requires a recorded from-bundle directory source.",
                           "traceability", "/instance/intake/source")
-    if not selected.get("artifactRef") or not Path(selected["artifactRef"]).is_absolute():
-        raise IntakeError("POPULATION_SOURCE_PATH", "The recorded bundle source must be an explicit absolute directory.",
+    if not selected.get("artifactRef"):
+        raise IntakeError("POPULATION_SOURCE_PATH", "The recorded bundle source must name an explicit directory.",
                           "traceability", "/instance/intake/source/artifactRef")
-    source = package.workspace(selected["artifactRef"])
+    source = package.evidence_path(root, selected["artifactRef"])
     package.check_bundle_documents(source, root)
     inspection = BundleInspector(package, codec).inspect(source)
     if inspection["sha256"] != selected.get("sha256"):

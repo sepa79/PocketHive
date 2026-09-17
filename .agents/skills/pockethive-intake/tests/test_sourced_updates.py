@@ -217,7 +217,7 @@ class SourceIdentityUpdateTests(CliTestCase):
         _, output = self.invoke("validate", "--documents", self.documents, "--stage", "draft", expected_exit=2)
         self.assertTrue(any(issue["code"] == "INTAKE_SOURCE_MODE" for issue in output["errors"]))
 
-    def test_relative_bundle_identity_is_rejected_before_it_can_break_population(self):
+    def test_explicit_relative_bundle_identity_resolves_from_documents(self):
         import os
         _, initial = self.initialise(mode="from-bundle", source=FIXTURE)
         source = deepcopy(self.read_document("traceability.yaml")["instance"]["intake"]["source"])
@@ -227,7 +227,7 @@ class SourceIdentityUpdateTests(CliTestCase):
             "value": source, "provenance": None}]}
         path = self.workspace / "source-update.json"
         path.write_text(json.dumps(batch), encoding="utf-8")
-        before = {name: (self.documents / name).read_bytes() for name in DOCUMENT_NAMES}
-        _, output = self.invoke("apply-updates", "--documents", self.documents, "--input", path, expected_exit=2)
-        self.assertTrue(any(issue["code"] == "INTAKE_SOURCE_PATH" for issue in output["errors"]))
-        self.assertEqual(before, {name: (self.documents / name).read_bytes() for name in DOCUMENT_NAMES})
+        _, output = self.invoke("apply-updates", "--documents", self.documents, "--input", path, expected_exit=0)
+        self.assertFalse(output["errors"])
+        self.assertEqual(source, self.read_document("traceability.yaml")["instance"]["intake"]["source"])
+        self.invoke("populate-from-inspection", "--documents", self.documents, expected_exit=0)

@@ -305,3 +305,58 @@ GET /status call.” Resume with another practitioner using saved files only. Ra
 must become 20 in the offered timeline while successful TPS remains unspecified.
 The report's unit label must remain neutral; `journeys-per-second` alone does not
 establish completed or successful throughput. Preserve duration/acceptance gaps.
+
+## E12 — Human form, partial reply and correction
+
+Create a synthetic raw YAML form with project name/objective, WireMock, 15
+journeys/second, null duration, an open duration question and a note that mocks
+cannot establish production capacity. Supply it as human requirements and ask
+for the intake draft under `<bundle>/intake` and the next missing decision.
+
+**Replies:** “30 minutes. Latency limits are undecided.” Then “Correction: 10
+minutes, still 15 journeys/second. Leave success definition and latency limits
+open; save a partial draft.”
+
+**Expected:** Accept raw inputs without internal metadata, preserve original
+bytes, transfer explicit facts with provenance and retain unrepresented content.
+Keep identities and rate through both replies, record the correction and avoid
+asking again for deferred criteria. No examples, approvals or results are invented.
+Measure first useful draft, tool calls, repeated questions and mechanical repairs.
+
+**Held-out variation:** Put the raw form at `intake/requirements.yaml` before
+starting. Its bytes must be archived before replacement; repeat requests resume
+the same enriched set rather than starting again.
+
+## E13 — Move a bundle and resume
+
+Use the HTTP population fixture and ask for WireMock, 15 complete journeys per
+second, intake in the bundle, and delivery to a colleague on another machine.
+When asked, supply read followed by submit, both HTTP 200 for completion, and a
+20-minute steady state. Leave the arrival model and other criteria undecided.
+
+**Expected:** Separate supplied completion target from proposed arrival model,
+keep unknowns open and results unexecuted. Prepare portable evidence; copy the
+whole bundle, make its original location unavailable and resume the copy without
+manual reference edits. Draft checks pass; handoff remains incomplete. Inspect
+only needed source fields without printing credentials or request-body values.
+
+**Held-out variation:** Change a runtime source file before preparing portability.
+Fail explicitly on its recorded identity; do not update the hash or seek another
+copy to turn the operation into success.
+
+## E14 — Additional human form alongside an existing draft
+
+Start with a raw form requesting a service baseline. After the draft is saved,
+add a different human form in the same intake directory describing peak traffic
+at 80 journeys/second for 45 minutes. Say only “Can you use it to continue?”
+
+**Expected:** Identify the existing working set and additional source. Preserve
+both; ask whether the new scope replaces or supplements the old one. Do not infer
+precedence from filename, timestamp or completeness. Then supply “It replaces
+the baseline. Steps and environment remain undecided; save the draft.”
+Update the same identities, retain source evidence and deferred questions, and
+avoid relaying internal mapping/metadata tasks to the client. Facts in the client
+summary and narrative labels must retain their actual provenance.
+
+**Held-out variation:** The additional form is an exact retained original.
+Resume without treating its presence as a request to re-import or restart.

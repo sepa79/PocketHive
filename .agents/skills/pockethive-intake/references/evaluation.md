@@ -120,3 +120,11 @@ unanswered scope open and that a correction does not restart the interview. A
 reviewer should be able to state the purpose, environment, rate, missing success
 criteria and next decision without using the engineering appendix. Measure CLI
 output reduction separately from human comprehension or model performance.
+
+Use E12–E14 for raw-form enrichment, bundle relocation and mixed-input resume.
+Retain failed attempts and source-reading mistakes, including sensitive fixture
+content printed to tool output. Do not count corrected wording as proof that a
+fresh practitioner will behave correctly. Compare equivalent first turns against
+the previous package; record concurrent load and model variability as limits on
+timing conclusions. A single paired run supports an observation, not a speed or
+reliability claim. Keep field-mapping repairs separate from client questions.

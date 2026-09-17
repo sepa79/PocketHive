@@ -1,4 +1,4 @@
-# Intake document and CLI contract — version 5
+# Intake document and CLI contract — version 7
 
 This package owns intake document mechanics only. The four reviewed YAML
 templates and `schemas/` define their structure. `manifest.json` owns package
@@ -12,6 +12,10 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 
 | Command | Contract |
 | --- | --- |
+| `assess-workspace --documents DIR` | Read-only start/resume guidance from parsed contents and canonical structural checks. Filenames alone do not establish an enriched set. Return explicit empty/raw/complete/partial/mixed/unrelated/not-directory state; never initialise or repair implicitly. |
+| `enrich-input --output DIR --input FILE --mode new-requirements\|from-bundle [--source BUNDLE]` | Execute an explicit source-pointer transfer plan into a staged draft, preserving source bytes and recording provenance through the existing authoring owners. Publish only a validated candidate. Existing enriched documents are never overwritten. |
+| `make-portable --documents DIR` | Verify recorded evidence, retain local file snapshots under the document directory and replace their declared references with relative paths. A bundled directory source becomes an explicit relative reference. Missing/changed evidence fails before document writes; no search for replacement sources. |
+| `review-input --source PATH [--source PATH ...]` | Read human-authored YAML files or the immediate YAML files in an explicit directory, including bundle `intake/`. Accept partial forms and original filenames/versions without requiring generated metadata. Return a read-only source inventory and explicit enrichment gaps; never assess handoff, migrate, merge or adopt sample values. |
 | `initialise --output DIR --mode from-bundle --source DIR` | Create four partial documents in a new/empty output directory. Inspect the selected bundle as data and save `source-inspection.json`. Generate administrative IDs only; never infer client intent from configuration. |
 | `initialise --output DIR --mode new-requirements [--source FILE]` | Create the same partial documents; optionally record the explicitly supplied narrative file identity. The agent extracts sourced statements and asks about material gaps. |
 | `inspect-bundle --source DIR` | Inventory bounded, regular files and their exact hashes; return only explicitly present, supported configuration observations. Unknown or unparsable content is a visible evidence limitation. Never execute scripts, templates, SQL or requests. |
@@ -65,6 +69,116 @@ validation, repair inputs or turn a failed command into success.
 - One YAML codec owns safe round-trip parsing, serialization and reload checks.
   One resolver owns package/document paths. One semantic validator owns intake
   conclusions. No Scenario Manager validation or worker-template engine is copied.
+
+## Human-authored forms are intake input
+
+Original templates, populated examples and partially completed human forms are
+valid starting material. They need not satisfy the enriched working-document
+schema. Use `review-input` before enrichment; `validate` and `prepare-review`
+operate on the enriched four-document set. Do not use a failed working-schema
+check as a reason to reject a client's source forms.
+
+`review-input` uses the existing YAML codec, path resolver and manifest limits.
+Its input is explicit; it is never a fallback after failed working validation.
+Each `--source` identifies one file or a directory whose immediate `.yaml` and
+`.yml` files are included. It does not recursively search bundles. Repeated
+references to the same resolved path are inspected once. Original filenames and
+versions, absent documents, null fields, unknown fields and missing provenance,
+digests or `traceability.instance` do not cause structural errors at this boundary.
+The packaged schemas supply known `templateType` identities for inventory labels
+only; an absent or unknown identity remains an unclassified source for review.
+Multiple forms of one role are retained and flagged for explicit selection, never
+merged or chosen by name, version or apparent completeness.
+
+The result identifies each readable source by path and byte hash, with its known
+role or null. `assessment: human-input` and `handoffAssessment: not-run` distinguish
+source readability from working-document validation. `ENRICHMENT_REVIEW_REQUIRED`
+is a gap, not an invalid-input error: exit 0 and `status: incomplete` mean the
+sources are readable and remain to be reviewed. No field contents are echoed.
+Broken YAML, duplicate keys, unsafe tags, non-object roots, symlinks, unavailable
+files and resource-limit violations remain actionable errors. Empty YAML/null
+roots are accepted as blank forms with a gap. Per-file failures retain the other
+source findings; limits apply to the entire selected set. No file is written.
+
+Enrichment remains evidence-led authoring through the existing working-document
+owners, not an automatic version bump or lossy generic merge. Preserve originals
+as evidence; keep supplied wording, questions, unknown fields and conflicting
+statements available for review. Record explicit source pointers for transferred
+facts and declare anything not yet representable. Examples are not adopted client
+requirements, and a supplied approval or result is not independently verified by
+reading it. Do not ask the client for internal metadata; the agent supplies that
+during enrichment. Ask only about material ambiguity or missing requirements.
+
+### Explicit enrichment
+
+The agent supplies a JSON/YAML transfer plan; the client does not author this
+mechanical input. Its exact fields are:
+
+```json
+{
+  "sources": [{"id": "client", "path": "/client/form.yaml", "sha256": "<source byte hash>"}],
+  "transfers": [{"source": "client", "pointer": "/project/name", "target": {"document": "requirements", "pointer": "/project/name"}, "kind": "client-statement"}],
+  "questions": [{"source": "client", "pointer": "/openQuestions/0", "targets": [], "blockingStage": "handoff"}],
+  "omissions": [{"source": "client", "pointer": "/version", "reason": "Source format version; working version belongs to the package."}]
+}
+```
+
+Source IDs are unique. Paths resolve explicitly relative to the transfer-plan
+file, or are absolute. Hashes must match. Transfer values are read from exact
+source pointers, never supplied a second time. Each target is checked by the
+canonical authoring policy; generated/policy/review fields cannot be imported.
+Transfer kinds are `client-statement`, `bundle-observation` or
+`engineer-proposal`; adoption remains separate. Questions copy exact source text
+into the existing ledger with stable generated IDs and explicit target/stage.
+Omissions require a stated reason; they acknowledge excluded source scope and
+cannot overlap a transfer or another disposition in that source.
+
+Every remaining populated source leaf is reported as untransferred. Each source
+with untransferred content gets one review-stage ledger question; this is an
+engineering review task, not an automatic client interview. The generated
+`enrichment-report.json` is a read-only receipt containing source hashes,
+transferred pointers, omissions and untransferred pointers, not a second fact or
+question owner. Reuse `apply-updates` for later edits; do not rerun enrichment
+over an enriched set. Initial generic scaffold questions are replaced by the
+explicit imported questions and outstanding source-review tasks.
+
+Original bytes are retained under `evidence/` before publication. Raw forms
+already using the working filenames may be replaced only when the exact prior
+bytes are among the explicitly selected, archived sources. Other existing files
+are retained. Existing working revisions, ambiguous mixtures, symlinks and source
+changes fail explicitly. Staging and candidate checks precede publication; writes
+remain verified per-file replacements, not a whole-directory transaction. A
+partial publication remains visible and is never reported as success. Sources
+are untrusted data: selecting them does not execute their contents or turn sample
+statements into requirements, approvals or results.
+
+### Portable local evidence
+
+One evidence-reference owner enumerates provenance/proposal sources, decision,
+answer, review and coverage references, and the intake source. `make-portable`
+checks each recorded local source hash before copying; the existing evidence
+validator still owns evidence validity. Reference-only paths without a verified
+source record cannot be silently copied or substituted. Remote evidence must be
+retained locally through explicit authoring first.
+
+New bundled intakes record the selected bundle as `..`, relative to `intake/`.
+All consumers resolve that explicit reference through the shared resolver.
+External document sets retain an absolute bundle reference until explicitly
+placed in that bundle's `intake/`; portability never copies an entire runtime
+bundle implicitly. Evidence already inside the selected bundle retains its relative runtime path,
+so source comparison still identifies its consumers. External file evidence is
+content-addressed beneath `evidence/`, with
+its structured-data suffix preserved. Snapshots are immutable evidence, not live
+configuration. Existing snapshot bytes must match; collisions fail.
+
+Relocation changes only declared references, never arbitrary strings in client
+payloads. Digests and projections are refreshed by their existing owner. A
+confirmed review is never rewritten to approve changed material: if the review
+digest changes, `STALE_REVIEW` remains visible. Prepare portability before the
+final human review. Repeating the operation is byte-stable. Copying a prepared
+bundle plus `intake/` requires no reference search, repair or original workspace.
+These guarantees cover declared intake evidence; they do not certify runtime
+assets or arbitrary external links embedded in client text.
 
 ## Decision review and reproducible stakeholder output
 
@@ -353,7 +467,7 @@ The same batch may explicitly replace existing fields under
 `/instance/intake/source`, using `provenance: null`. These already have their own
 canonical evidence structures and validation. An answered question or accepted
 proposal with missing decision evidence is rejected before writing. Bundle mode
-must retain a declared directory source with an absolute identity path; narrative mode permits a file or no source
+must retain an explicit directory source resolved relative to the documents root or as an absolute path; narrative mode permits a file or no source
 yet. The validator owns this relationship; clearing a bundle identity cannot make
 source verification disappear. Review/approval records remain the
 existing explicit human-evidence workflow; this helper cannot set them. It does not

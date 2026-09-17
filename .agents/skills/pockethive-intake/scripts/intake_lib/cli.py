@@ -32,6 +32,17 @@ def main() -> int:
         create.add_argument("--source")
         inspect = subparsers.add_parser("inspect-bundle")
         inspect.add_argument("--source", required=True)
+        human = subparsers.add_parser("review-input", help="Review raw human YAML forms without requiring enriched document metadata.")
+        human.add_argument("--source", required=True, action="append", help="Explicit file or directory of forms; repeat to include separate sources.")
+        assess = subparsers.add_parser("assess-workspace", help="Read contents to choose start, raw enrichment or resume.")
+        assess.add_argument("--documents", required=True)
+        enrich = subparsers.add_parser("enrich-input", help="Stage and publish a sourced draft from an explicit transfer plan.")
+        enrich.add_argument("--output", required=True)
+        enrich.add_argument("--input", required=True)
+        enrich.add_argument("--mode", required=True, choices=("from-bundle", "new-requirements"))
+        enrich.add_argument("--source", help="Explicit runtime bundle for from-bundle mode.")
+        portable = subparsers.add_parser("make-portable", help="Retain verified evidence and prepare relative references for delivery.")
+        portable.add_argument("--documents", required=True)
         validate = subparsers.add_parser("validate")
         validate.add_argument("--documents", required=True)
         validate.add_argument("--stage", required=True, choices=("draft", "handoff"))
@@ -62,7 +73,7 @@ def main() -> int:
         compare.add_argument("--previous-source", required=True)
         compare.add_argument("--source", required=True)
         verify = subparsers.add_parser("verify-package")
-        for child in (create, inspect, validate, finalise, populate, review, field, fields, update, compare, verify):
+        for child in (create, inspect, human, assess, enrich, portable, validate, finalise, populate, review, field, fields, update, compare, verify):
             child.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                                help="Write safe failure diagnostics to stderr.")
         args = parser.parse_args(namespace=args)

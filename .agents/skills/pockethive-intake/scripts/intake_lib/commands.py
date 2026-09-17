@@ -17,13 +17,26 @@ from .yaml_codec import YamlCodec
 
 def execute(package, args):
     codec = YamlCodec(package.manifest["limits"])
+    if args.command == "review-input":
+        from .human_input import review_input
+        return review_input(package, codec, args.source)
     store = DocumentStore(package, codec)
+    if args.command == "assess-workspace":
+        from .workspace_assessment import assess_workspace
+        root = package.workspace(args.documents)
+        store.assert_unlocked(root)
+        return assess_workspace(package, codec, root)
+    if args.command == "enrich-input":
+        from .enrichment import enrich_input
+        source = package.workspace(args.source) if args.source else None
+        return enrich_input(package, codec, package.workspace(args.output, write=True),
+                            package.workspace(args.input), args.mode, source)
     if args.command == "inspect-bundle":
         return BundleInspector(package, codec).inspect(package.workspace(args.source))
     if args.command == "initialise":
         source = package.workspace(args.source) if args.source else None
         return initialise(package, codec, package.workspace(args.output, write=True), args.mode, source)
-    writing = args.command in ("finalise", "populate-from-inspection", "prepare-review") or (
+    writing = args.command in ("finalise", "populate-from-inspection", "prepare-review", "make-portable") or (
         args.command == "apply-updates" and not args.dry_run)
     root = package.workspace(args.documents, write=writing)
     if not writing:
@@ -50,8 +63,8 @@ def _documents(package, codec, store, root, docs, args, revision):
         return {"errors": errors}
     selected = resolve(docs["traceability"], "/instance/intake", document="traceability").get("source")
     if selected and selected["kind"] == "directory":
-        if selected.get("artifactRef") and Path(selected["artifactRef"]).is_absolute():
-            package.check_bundle_documents(package.workspace(selected["artifactRef"]), root)
+        if selected.get("artifactRef"):
+            package.check_bundle_documents(package.evidence_path(root, selected["artifactRef"]), root)
     if args.command == "populate-from-inspection":
         from .population import populate_from_inspection
         return populate_from_inspection(package, codec, store, root, docs, expected_revision=revision)
@@ -59,6 +72,9 @@ def _documents(package, codec, store, root, docs, args, revision):
         result = Projections(package, codec, store).save(root, docs, expected_revision=revision)
         result["warnings"] = authoring_advisories(codec.plain(docs))
         return result
+    if args.command == "make-portable":
+        from .portability import make_portable
+        return make_portable(package, codec, store, root, docs, validation, revision)
     if args.command == "prepare-review":
         from .review_brief import build_brief
         saved = Projections(package, codec, store).save(root, docs, expected_revision=revision)

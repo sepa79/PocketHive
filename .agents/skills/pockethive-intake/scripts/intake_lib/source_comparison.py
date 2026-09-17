@@ -18,10 +18,10 @@ def compare_source(package, codec, store, root: Path, docs: dict,
     if intake.get("mode") != "from-bundle" or not selected or selected.get("kind") != "directory":
         raise IntakeError("SOURCE_COMPARISON_MODE", "Comparison requires a recorded from-bundle directory source.",
                           "traceability", "/instance/intake/source")
-    if not selected.get("artifactRef") or not Path(selected["artifactRef"]).is_absolute():
-        raise IntakeError("SOURCE_COMPARISON_PATH", "The recorded bundle source must name an explicit absolute directory.",
+    if not selected.get("artifactRef"):
+        raise IntakeError("SOURCE_COMPARISON_PATH", "The recorded bundle source must name an explicit directory.",
                           "traceability", "/instance/intake/source/artifactRef")
-    recorded_root = package.workspace(selected["artifactRef"])
+    recorded_root = package.evidence_path(root, selected["artifactRef"])
     inspector = BundleInspector(package, codec)
     previous = inspector.inspect(previous_source)
     if previous["sha256"] != selected.get("sha256"):
