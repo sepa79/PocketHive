@@ -53,15 +53,24 @@ public final class PocketHiveHttp implements AutoCloseable {
 
   private ApiResponse request(String method, String path, Object body, String token, Duration budget, String accept)
       throws IOException, InterruptedException {
-    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), token, budget, accept, "application/json");
+    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), bearer(token), budget, accept, "application/json");
   }
 
   public ApiResponse requestText(String method, String path, String body, String token)
       throws IOException, InterruptedException {
-    return exchange(method, path, body.getBytes(StandardCharsets.UTF_8), token, requestTimeout, "text/plain", "text/plain");
+    return exchange(method, path, body.getBytes(StandardCharsets.UTF_8), bearer(token), requestTimeout, "text/plain", "text/plain");
   }
 
-  private ApiResponse exchange(String method, String path, byte[] body, String token, Duration budget,
+  public ApiResponse getWithBasicAuth(String path, String username, String password)
+      throws IOException, InterruptedException {
+    String credentials = java.util.Base64.getEncoder().encodeToString(
+        (username + ":" + password).getBytes(StandardCharsets.UTF_8));
+    return exchange("GET", path, null, "Basic " + credentials, requestTimeout, "application/json", "application/json");
+  }
+
+  private static String bearer(String token) { return token.isEmpty() ? "" : "Bearer " + token; }
+
+  private ApiResponse exchange(String method, String path, byte[] body, String authorization, Duration budget,
                                String accept, String contentType) throws IOException, InterruptedException {
     URI destination = ingress.resolve(path);
     if (!Objects.equals(ingress.getScheme(), destination.getScheme())
@@ -72,7 +81,7 @@ public final class PocketHiveHttp implements AutoCloseable {
     Duration timeout = budget.compareTo(requestTimeout) < 0 ? budget : requestTimeout;
     if (timeout.isNegative() || timeout.isZero()) throw new IllegalArgumentException("HTTP budget exhausted");
     var request = HttpRequest.newBuilder(destination).timeout(timeout).header("Accept", accept);
-    if (!token.isEmpty()) request.header("Authorization", "Bearer " + token);
+    if (!authorization.isEmpty()) request.header("Authorization", authorization);
     var publisher = HttpRequest.BodyPublishers.noBody();
     if (body != null) {
       request.header("Content-Type", contentType);

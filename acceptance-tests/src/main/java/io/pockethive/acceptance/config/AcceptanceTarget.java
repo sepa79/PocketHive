@@ -5,4 +5,4 @@ package io.pockethive.acceptance.config;
  * Must not: read environment settings or add defaults.
  * Contract: RESP-ACCEPTANCE-TARGET — docs/architecture/acceptance-tests.md#resp-acceptance-target.
  */
-public record AcceptanceTarget(ApiTarget api, WaitLimits limits, HttpFixture fixture) {}
+public record AcceptanceTarget(ApiTarget api, WaitLimits limits, WorkFixture fixture) {}

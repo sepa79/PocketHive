@@ -23,11 +23,13 @@ The module does not implement Rabbit/Artemis transport or resource naming.
 ## RESP-ACCEPTANCE-TARGET
 
 **Owner:** `TargetLoader`; `ApiTarget` is the shared immutable ingress/actor/request/report
-projection. `AcceptanceTarget` adds lifecycle limits and HTTP fixture; `ScenarioTarget`
+projection. `AcceptanceTarget` adds lifecycle limits and WorkFixture; `ScenarioTarget`
 adds only the authored scenario id. ViewerTarget adds the explicit cleanup actor,
 scenario/SUT and operation limits. RunnerTarget adds explicit folder and denied fixture.
+ProxyTarget adds an explicit network profile and endpoint to the shared lifecycle target.
+TcpTimeoutTarget adds explicit mock credentials/mapping and a quiet window.
 NetworkAccessTarget holds only API and viewer/runner identity settings. The calling suite explicitly selects `load` or
-`loadScenario`, `loadViewer`, `loadRunner` or `loadNetworkAccess`; the resolver never infers a group from fixture names.
+`loadScenario`, `loadViewer`, `loadRunner`, `loadProxy`, `loadTcpTimeout` or `loadNetworkAccess`; the resolver never infers a group from fixture names.
 **Effect:** one explicit file supplies ingress, actor, time limits and named fixture;
 missing, unknown or invalid settings fail before any side effects. Required key sets
 are scoped to the selected target kind; common fields are parsed once. `selectedFile`
@@ -39,7 +41,7 @@ or embed defaults in individual clients/tests.
 
 **Owner:** `PocketHiveHttp` sends bounded requests to the selected ingress only;
 `ApiSurface` owns the public service prefixes (`/orchestrator`, `/scenario-manager`,
-`/auth-service`, `/network-proxy-manager`) and projects rooted service-relative links, including operationUrl.
+`/auth-service`, `/network-proxy-manager`, `/tcp-mock`) and projects rooted service-relative links, including operationUrl.
 `ApiSurface.pathSegment` encodes opaque identifiers once; clients do not add product ID grammar.
 `ApiResponse` holds HTTP status/body, `ApiException` identifies an unexpected status.
 **Effect:** preserve expected denial responses as data, reject off-origin operation
@@ -53,7 +55,10 @@ JSON callers retain application/json. Both use the same bounded request implemen
 ## RESP-ACCEPTANCE-API
 
 **Owners:** `AuthApi` handles dev login and the canonical current-user profile; `SwarmApi` maps swarm REST requests/readbacks;
-`ScenarioApi` reads the required scenario. These are distinct endpoint families.
+`ScenarioApi` reads the required scenario and its bundle-local SUT; `NetworkBindingApi`
+reads canonical network bindings and requires their absence after removal. SwarmJournalApi
+reads the explicit run timeline; TcpMockApi reads the explicitly selected existing mock mapping.
+These are distinct endpoint families.
 **Effect:** use canonical auth/create/control/operation/state contracts and exact
 public paths. `SwarmApi` also matches the returned idempotency key with the submitted
 request. `ControlReceiptMismatchException` reports a mismatch and retains the
@@ -112,7 +117,7 @@ suppressed alongside an existing test/cleanup failure; write errors are never ig
 **Owner:** test-scoped `LiveRun` composes lifecycle clients and handles on `ApiRun`.
 Its scenario field is the read-only authoring response already fetched during setup;
 assertions may compare it with runtime observations without resolving configuration.
-**Effect:** load a lifecycle target, require its scenario and supply fresh swarm/tap
+**Effect:** load or receive an already resolved lifecycle target, require its scenario and supply fresh swarm/tap
 handles. Closing LiveRun delegates to ApiRun after owned resources are closed.
 **Must not:** own authentication/HTTP lifetime, share mutable state or implement
 lifecycle/capture behavior.
@@ -218,7 +223,7 @@ cleanup with an explicit error. No second lifecycle helper or grant mutation is 
 ## Worker runtime acceptance slice
 
 WorkerRuntimeAcceptanceIT covers WK-1/WK-2 with an explicitly selected four-worker
-HTTP fixture. Each test owns its swarm and tap through LiveRun, SwarmResource and
+work fixture. Each test owns its swarm and tap through LiveRun, SwarmResource and
 TapResource. Worker history assertions compare authored policies with fresh
 observation.workers[].config from the public SwarmStateView. Instance identifies each
 runtime worker; this fixture explicitly requires one worker per authored role. Every
@@ -268,3 +273,55 @@ worker observation, assertions and STOP run after closure using the captured val
 Full/delta wire shape belongs to component tests
 of WorkerControlPlaneRuntime with ControlPlaneEmitter and ControlPlaneCodec; it
 cannot be inferred from the merged API projection. No new runtime authority is added.
+
+
+## HTTP proxy acceptance slice (NW-1)
+
+`HttpProxyAcceptanceIT` composes the existing lifecycle/capture/worker observers.
+`TargetLoader.loadProxy` requires a network profile and endpoint in addition to the
+ordinary work target, with no defaults or adapter inference. LiveRun accepts this
+resolved lifecycle target and passes an explicit PROXIED mode/profile to the canonical
+SwarmCreateRequest. Separate Rabbit/Artemis scenario bundles author the SUT proxy URL
+and upstream URL. These addresses stay in the SUT fixture; the target selects IDs only.
+
+ScenarioApi reads the bundle SUT using canonical SutEnvironment. NetworkBindingApi
+uses canonical NetworkBinding through public ingress; there is no test wire DTO,
+network resolver, direct proxy admin client or alternate binding writer. Assertions
+compare the explicit authored endpoint with the binding, fresh processor config with
+clientBaseUrl, and successful HttpResultEnvelope baseUrl/URL authority with that same
+binding. URI parsing only inspects explicit fixture/result addresses; it does not
+supply ports, defaults or build effective endpoints. Samples belong to the owned
+swarm and observed processor. The tap closes immediately after sample capture.
+
+SwarmResource performs STOP/REMOVE through the existing owner; NW-1 then explicitly
+requires GET binding404. The suite never clears bindings itself, changes shared
+profiles/manual overrides, or claims native HAProxy/Toxiproxy absence from an API read.
+Successful HTTP through the published proxy address proves the active route; the
+canonical binding404 verifies its removal at the supported API boundary.
+
+
+## Network acceptance extension (NW-2/NW-3/NW-5)
+
+WorkFixture replaces the HTTP-only name for the same immutable scenario/SUT/tap/expected
+response projection, now consumed by HTTP and TCP suites. TargetLoader remains the only
+parser; ProxyTarget selects profile/endpoint, TcpTimeoutTarget adds explicit mock
+credentials, mapping id and quiet window. No legacy alias is retained.
+ProxyAssertions owns read-only source/binding comparisons extracted from NW-1 and shared
+by HTTP/HTTPS/TCPS. It does not resolve endpoints. HTTPS and TCPS verify the TLS scheme,
+authored/runtime TLS configuration and actual protocol-specific result DTOs.
+
+TcpMockApi reads the selected existing mapping through `/tcp-mock/api/mappings` at the
+same ingress, with explicit Basic credentials (no authentication fallback). PocketHiveHttp
+still owns all network IO, complete-body deadlines and same-origin checks. No mock mapping
+or shared request journal is mutated. The slow-response fixture has a paired successful
+request with a longer read timeout and a timeout case with a shorter read timeout.
+
+SwarmJournalApi reads the selected swarm/run via the existing journal REST timeline;
+RuntimeErrorObservations waits for the owned processor's canonical alert projection.
+No second CP receiver, event merge/state machine or duplicated wire DTO. Error evidence
+must match scope, run and runtime.exception; the published alert currently reports the
+wrapper exception, so the test does not claim it exposes the nested SocketTimeoutException.
+The selected mock's explicit delay, successful control case and shorter runtime timeout
+provide the scenario context. TapResource.requireEmptyFor owns the bounded negative
+capture check; TargetLoader validates TTL against START + error wait + quiet window + final bounded read.
+Tap closes before config observation/STOP, and all swarms use canonical verified REMOVE.

@@ -113,3 +113,34 @@ Full/delta CP shape is covered at its producers by WorkerStatusContractTest in
 worker-sdk (real emitter and canonical codec) and SwarmControllerStatusPublisherTest
 (controller metadata). Public worker state is a merged read projection, so the ingress
 suite does not claim to distinguish the CP messages that produced it.
+
+
+HTTP through the managed proxy (NW-1), with explicit scenario-local SUT and profile:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-http-proxy-artemis.properties http-proxy
+./run-acceptance-tests.sh acceptance-tests/targets/local-http-proxy-rabbit.properties http-proxy
+```
+
+Select the target matching the running WORK adapter. These cases use the dedicated
+`acceptance-http-proxy` SUT, compare authored/binding/runtime/result addresses, and
+verify binding404 after canonical swarm REMOVE. They reuse existing lifecycle and
+tap cleanup; no direct proxy administration or broker connection is involved.
+
+
+Network extension (NW-2/NW-3/NW-5), each on the explicitly selected WORK adapter:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-https-proxy-artemis.properties https-proxy
+./run-acceptance-tests.sh acceptance-tests/targets/local-tcps-proxy-artemis.properties tcps-proxy
+./run-acceptance-tests.sh acceptance-tests/targets/local-tcp-delayed-artemis.properties tcp-delayed
+./run-acceptance-tests.sh acceptance-tests/targets/local-tcp-timeout-artemis.properties tcp-timeout
+```
+
+Equivalent `-rabbit.properties` files select independent Rabbit fixtures. Proxy cases
+verify TLS scheme, runtime settings, real responses and binding cleanup. NW-5 requires
+both the successful delayed-response control and the shorter-timeout error case.
+The timeout targets explicitly select the existing slow-response mapping and local
+TCP mock Basic credentials. Reads use `/tcp-mock/` at ingress; mappings and journals
+are never reset or rewritten. Errors are read from the owned swarm/run journal;
+the processor output tap stays empty for the explicit quiet window after the error.

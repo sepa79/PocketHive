@@ -4,7 +4,7 @@ import static org.junit.jupiter.api.Assertions.*;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.acceptance.api.ApiException;
 import io.pockethive.acceptance.api.PocketHiveHttp;
-import io.pockethive.acceptance.config.HttpFixture;
+import io.pockethive.acceptance.config.WorkFixture;
 import io.pockethive.acceptance.config.WaitLimits;
 import io.pockethive.acceptance.evidence.RunEvidence;
 import io.pockethive.acceptance.support.ScriptedIngress;
@@ -26,7 +26,7 @@ class TapResourceTest {
   @TempDir Path reports;
   private final WaitLimits limits = new WaitLimits(Duration.ofSeconds(1), Duration.ofSeconds(2),
       Duration.ofSeconds(1), Duration.ofMillis(1));
-  private final HttpFixture fixture = new HttpFixture("fixture", "sut", BeeRoles.PROCESSOR,
+  private final WorkFixture fixture = new WorkFixture("fixture", "sut", BeeRoles.PROCESSOR,
       "OUT", "out", 2, 5, "{}");
   private Map<String, Object> snapshot(List<Map<String, String>> samples) {
     return Map.of("tapId", "test-tap", "swarmId", "test-swarm", "role", fixture.captureRole(),
@@ -84,7 +84,7 @@ class TapResourceTest {
           .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200,
               snapshot(List.of(sample("B"), sample("C"), sample("D"))));
       closure(ingress);
-      var threeSamples = new HttpFixture(fixture.templateId(), fixture.sutId(), fixture.captureRole(),
+      var threeSamples = new WorkFixture(fixture.templateId(), fixture.sutId(), fixture.captureRole(),
           fixture.captureDirection(), fixture.captureIoName(), 3, fixture.tapTtlSeconds(), fixture.expectedResponse());
       try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
         tap.open("test-swarm", threeSamples);
@@ -131,6 +131,39 @@ class TapResourceTest {
       var cleanup = assertInstanceOf(ApiException.class, failure.getSuppressed()[0]);
       assertEquals(500, cleanup.response().status());
       // No GET404 or retry is scripted: failed close cannot be converted into success.
+    }
+  }
+
+  @Test void emptyWindowStillChecksTheFinalSnapshotAndClosesOnUnexpectedOutput() throws Exception {
+    var quietLimits = new WaitLimits(limits.request(), limits.operation(), limits.capture(), Duration.ofSeconds(1));
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "quiet-window")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 200, snapshot(List.of(sample("unexpected"))));
+      closure(ingress);
+      var failure = assertThrows(AssertionError.class, () -> {
+        try (var tap = new TapResource(new DebugTapApi(http, ""), quietLimits, evidence)) {
+          tap.open("test-swarm", fixture);
+          tap.requireEmptyFor(Duration.ofMillis(300));
+        }
+      });
+      assertTrue(failure.getMessage().contains("Unexpected output"));
+    }
+  }
+
+  @Test void quietWindowCannotTreatAReadFailureAsAbsence() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "quiet-read-failure")) {
+      ingress.reply("POST", "/orchestrator/api/debug/taps", 200, snapshot(List.of()))
+          .reply("GET", "/orchestrator/api/debug/taps/test-tap", 500, Map.of());
+      closure(ingress);
+      assertThrows(ApiException.class, () -> {
+        try (var tap = new TapResource(new DebugTapApi(http, ""), limits, evidence)) {
+          tap.open("test-swarm", fixture);
+          tap.requireEmptyFor(Duration.ofMillis(50));
+        }
+      });
     }
   }
 

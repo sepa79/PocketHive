@@ -1,6 +1,6 @@
 package io.pockethive.acceptance.capture;
 
-import io.pockethive.acceptance.config.HttpFixture;
+import io.pockethive.acceptance.config.WorkFixture;
 import io.pockethive.acceptance.config.WaitLimits;
 import io.pockethive.acceptance.evidence.RunEvidence;
 import io.pockethive.acceptance.operations.Deadline;
@@ -8,6 +8,8 @@ import io.pockethive.acceptance.resources.AcquisitionState;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkItemJsonCodec;
 import java.io.IOException;
+import java.time.Duration;
+import com.fasterxml.jackson.databind.JsonNode;
 import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,7 +31,7 @@ public final class TapResource implements AutoCloseable {
   public TapResource(DebugTapApi api, WaitLimits limits, RunEvidence evidence) {
     this.api = api; this.limits = limits; this.evidence = evidence;
   }
-  public void open(String swarmId, HttpFixture fixture) throws IOException, InterruptedException {
+  public void open(String swarmId, WorkFixture fixture) throws IOException, InterruptedException {
     if (acquisition != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Tap already attempted");
     acquisition = AcquisitionState.UNCONFIRMED;
     var response = api.create(swarmId, fixture);
@@ -50,11 +52,7 @@ public final class TapResource implements AutoCloseable {
     Map<String, WorkItem> items = new LinkedHashMap<>();
     String capture = "tap-" + tapId + "-capture-" + UUID.randomUUID();
     while (true) {
-      var response = api.read(tapId, deadline.remaining());
-      if (!tapId.equals(response.required("tapId").textValue())) throw new AssertionError("Unrelated tap response");
-      evidence.record("tap-" + tapId, response);
-      var samples = response.required("samples");
-      if (!samples.isArray()) throw new AssertionError("Tap samples are not an array");
+      var samples = readSamples(deadline.remaining());
       for (var sample : samples) {
         WorkItem item = codec.fromJson(sample.required("payload").textValue().getBytes(StandardCharsets.UTF_8));
         if (items.putIfAbsent(item.messageId(), item) == null) {
@@ -64,6 +62,24 @@ public final class TapResource implements AutoCloseable {
       }
       deadline.pause(limits.poll());
     }
+  }
+  public void requireEmptyFor(Duration window) throws IOException, InterruptedException {
+    if (acquisition != AcquisitionState.ACQUIRED) throw new IllegalStateException("Tap not open");
+    var deadline = new Deadline(window, "No output from tap " + tapId);
+    while (true) {
+      if (!readSamples(limits.request()).isEmpty()) throw new AssertionError("Unexpected output on tap " + tapId);
+      var left = deadline.remainingOrZero();
+      if (left.isZero()) return;
+      Thread.sleep(left.compareTo(limits.poll()) < 0 ? left : limits.poll());
+    }
+  }
+  private JsonNode readSamples(Duration budget) throws IOException, InterruptedException {
+    var response = api.read(tapId, budget);
+    if (!tapId.equals(response.required("tapId").textValue())) throw new AssertionError("Unrelated tap response");
+    evidence.record("tap-" + tapId, response);
+    var samples = response.required("samples");
+    if (!samples.isArray()) throw new AssertionError("Tap samples are not an array");
+    return samples;
   }
   @Override public void close() throws IOException, InterruptedException {
     switch (acquisition) {

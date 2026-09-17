@@ -31,7 +31,35 @@ public final class TargetLoader {
 
   public static AcceptanceTarget load(Path file) throws IOException {
     Path actual = file.toRealPath();
-    Properties values = read(actual, LIFECYCLE_KEYS);
+    return lifecycle(read(actual, LIFECYCLE_KEYS), actual);
+  }
+
+  public static ProxyTarget loadProxy(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.addAll(Set.of("networkProfileId", "endpointId"));
+    Properties values = read(actual, keys);
+    return new ProxyTarget(lifecycle(values, actual), values.getProperty("networkProfileId"),
+        values.getProperty("endpointId"));
+  }
+
+  public static TcpTimeoutTarget loadTcpTimeout(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.addAll(Set.of("mappingId", "mockUsername", "mockPassword", "quietWindow"));
+    Properties values = read(actual, keys);
+    var lifecycle = lifecycle(values, actual);
+    var quiet = duration(values, "quietWindow");
+    var limits = lifecycle.limits();
+    if (Duration.ofSeconds(lifecycle.fixture().tapTtlSeconds()).compareTo(
+        limits.operation().plus(limits.capture()).plus(quiet).plus(limits.request())) <= 0) {
+      throw new IllegalArgumentException("tapTtlSeconds must cover START + error wait + quiet window + final read");
+    }
+    return new TcpTimeoutTarget(lifecycle, values.getProperty("mappingId"), values.getProperty("mockUsername"),
+        values.getProperty("mockPassword"), quiet);
+  }
+
+  private static AcceptanceTarget lifecycle(Properties values, Path actual) {
     ApiTarget api = api(values, actual);
     WaitLimits limits = new WaitLimits(api.requestTimeout(), duration(values, "operationTimeout"),
         duration(values, "captureTimeout"), duration(values, "pollInterval"));
@@ -40,7 +68,7 @@ public final class TargetLoader {
     if (Duration.ofSeconds(ttl).compareTo(limits.operation().plus(limits.capture())) <= 0) {
       throw new IllegalArgumentException("tapTtlSeconds must exceed operationTimeout + captureTimeout");
     }
-    HttpFixture fixture = new HttpFixture(values.getProperty("templateId"), values.getProperty("sutId"),
+    WorkFixture fixture = new WorkFixture(values.getProperty("templateId"), values.getProperty("sutId"),
         values.getProperty("captureRole"), values.getProperty("captureDirection"),
         values.getProperty("captureIoName"), samples, ttl, values.getProperty("expectedResponse"));
     return new AcceptanceTarget(api, limits, fixture);

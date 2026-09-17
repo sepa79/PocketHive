@@ -15,7 +15,11 @@ powiązania runtime z polityką historii scenariusza. Poprawka odrzucania jawneg
 historyPolicy:null ma 58 zielonych testów. WK-3/SC-4, templating i zmienne
 w rzeczywistym ruchu, przeszły po 2/2 na Rabbit i Artemis oraz osobne review bez findings.
 WK-4/WK-5: konfiguracja/overrides przeszły na obu adapterach; full/delta ma dowód
-u producentów. Wycinek czeka na osobne review. N3–N4 niewykonane; nie usuwamy starego zestawu.
+u producentów. Po review i poprawce TTL zapisane w `a3cdf0d5` razem z wcześniejszymi
+wycinkami workerów. NW-1 przeszedł osobne review bez ustaleń. NW-2/NW-3/NW-5 mają
+zielone wykonanie na Rabbit i Artemis (78 testów frameworka, 10 końcowych E2E z regresją
+NW-1); osobne review pakietu bez ustaleń blokujących. Macierz: 23 PASS, 3 PARTIAL, 15 OPEN.
+NW-4 odłożone do deploymentu Swarm/NFS. Użytkownik potwierdził dostępność małego środowiska (1 host) i dużego (4 hosty); lokalny Compose nie dowodzi zachowania między hostami. N3–N4 niewykonane; nie usuwamy starego zestawu.
 Poniższe datowane wpisy zachowują wcześniejsze wyniki i decyzje; bieżące pokrycie
 podaje mapa docs/ci/acceptance-coverage.md.
 
@@ -534,3 +538,64 @@ Framework66/66 oraz reprodukcja baseline/overrides2/2 zielone: TTL4s, zamknięci
 cały przebieg7.8s, cleanup potwierdzony. To izolowane odtworzenie odpowiedzi API,
 bez ponownego deployed E2E ani zmiany stacka. Dowody w mapie pokrycia. Bez commita;
 poprawka do osobnego review.
+
+
+### N2 — NW-1 HTTP przez proxy — plan pass (2026-09-17)
+
+Poprzednie wycinki WK-1–WK-5/SC-4, naprawy history/identity i F1 TTL tapu zapisano
+na polecenie użytkownika w `a3cdf0d5`. Bez push.
+
+NW-1 dodaje samodzielne fixtures HTTP proxy Rabbit/Artemis i jawny target profilu
+oraz endpointu. Korzysta z istniejących lifecycle, capture, WorkerObservations i
+HTTP assertions. TargetLoader pozostaje jedynym resolverem ustawień testu;
+NetworkBindingApi tylko czyta canonical NetworkBinding przez ingress. ScenarioApi
+czyta bundle-local SutEnvironment, bez alternatywnego źródła konfiguracji.
+
+Odbiór: PROXIED + wybrany profil w CREATE; binding tego swarma wskazuje wybrany
+endpoint i adresy jawnego SUT; świeży config procesora i URL w HttpResultEnvelope
+zgadzają się z bindingiem; trzy poprawne odpowiedzi HTTP; zamknięcie tapu od razu
+po capture; STOP/REMOVE oraz binding404 i registry404. Test nie wylicza portów proxy,
+nie tworzy bindingów bezpośrednio i nie implementuje cleanup sieci. REMOVE produktu
+pozostaje jedynym właścicielem usunięcia. Brak zmian kontraktów/publicznych manifestów,
+nowych zależności i kopiowania legacy E2E. Testy frameworka oraz deployed przez
+ingress na obu adapterach; NW-2++ i N3/N4 pozostają poza tym wycinkiem.
+
+
+Wynik NW-1: framework72/72; deployed HTTP-proxy1/1 na Artemis i1/1 na Rabbit.
+Sześć różnych WorkItems z HTTP200 przez adres proxy; zgodne SUT/binding/config/result;
+osiem operacji SUCCEEDED, verified REMOVE, registry404 i binding404. Przywrócono
+Artemis, publiczna lista swarmów pusta. Dowody i ograniczenia zapisane w mapie pokrycia.
+Bez zmian produktu/starego E2E, bez nowego commita; wycinek do osobnego review.
+Następny: NW-2 HTTPS przez proxy. Pozostałe NW/DA/EX/AU/lifecycle i N3/N4 nadal otwarte.
+
+
+### Review NW-1 i większy wycinek sieciowy (2026-09-17)
+
+NW-1: bez ustaleń w sześciu przeglądach (plan, styl, prostota, security, biblioteki,
+czytelność). Sprawdzono TargetLoader/ProxyTarget, ScenarioApi/NetworkBindingApi,
+LiveRun → SwarmResource/TapResource/WorkerObservations oraz produktowych właścicieli
+SUT resolution i bindingów. Świeże72 testy frameworka zielone; ponownie odczytane
+artefakty obu adapterów potwierdzają sześć HTTP200, osiem operacji SUCCEEDED i binding404.
+Raport `/tmp/nw1-review.md`, testy `/tmp/nw1-review-tests.log`. Nie powtarzano deployed
+NW-1 w samym review; native proxy absence nie wynika z tego testu.
+
+Plan pass kolejnego pakietu: NW-2 HTTPS i NW-3 TCPS przez proxy oraz NW-5 TCP timeout.
+Wspólne asercje bindingu zostają wyodrębnione z NW-1; brak kopiowania resolvera.
+Osobne jawne fixtures/targety dla obu WORK adapterów. HTTPS potwierdza scheme i sslVerify;
+TCPS canonical TcpResultEnvelope, adres i rzeczywistą odpowiedź. Timeout używa
+istniejącego jawnego slow-response mocka, odczytanego przez `/tcp-mock/` ingress;
+wynik to runtime.exception w journalu własnego swarma przy krótszym read timeout,
+a nie niepoprawny WorkItem udający wynik. API journalu zastępuje bezpośredni odbiornik
+CP. Sprawdzamy brak publikacji wyniku w jawnym oknie i verified cleanup. Odczyty mocka
+nie zmieniają globalnych mappingów/journalu. NW-4 pozostaje otwarte: wymaga NFS topology.
+
+
+Wynik większego pakietu: NW-2/NW-3/NW-5 mają PASS na Rabbit i Artemis. Framework78/78;
+pięć przypadków na adapter (HTTP regresja, HTTPS, TCPS, delayed TCP control, TCP timeout),
+łącznie10 zielonych E2E,20 odpowiedzi i40 operacji SUCCEEDED. Dwa przypadki błędu mają
+alert właściwego runId/procesora i pusty tap wyniku przez jawne2s. Wszystkie swarms usunięte;
+proxy binding404 w sześciu przypadkach. Dowody i ograniczenie wrapper exception są w mapie.
+Przywrócono Artemis; lista swarmów pusta. Bez zmian produktu i bez commita; nowy pakiet
+czeka na review. Macierz23 PASS/3 PARTIAL/15 OPEN, czyli18 pozycji do domknięcia.
+NW-4 nadal wymaga środowiska NFS. Następny większy pakiet: pozostałe wymagania auth;
+N3/N4 niezamknięte. Bez usuwania legacy E2E.

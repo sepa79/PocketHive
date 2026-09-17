@@ -23,12 +23,12 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | SW-1 | Create/start/process/stop/remove succeeds; expected workers present; canonical confirmations correlated; resource provisioning/removal has coverage. | swarm-lifecycle: golden path | HttpLifecycleAcceptanceIT passed on Rabbit and Artemis, including expected worker roles; topology/CP details remain open | PARTIAL |
 | SW-2 | Stop-before-start and repeated start after target state are accepted correctly. | swarm-lifecycle: idempotent target state | TargetStateLifecycleAcceptanceIT passed on Rabbit and Artemis; STOP before START, repeated STOP/START, distinct request keys and operation IDs, same run and expected states. Exact-key replay is not asserted. | PASS |
 | WK-3 | Templated generation produces expected processed response. | swarm-lifecycle: templated generator | TemplatingAcceptanceIT: interceptor output consumed by the generator message template, exact generated request body/headers and successful HTTP response in the same captured WorkItem; two profiles on Rabbit/Artemis | PASS |
-| NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | Network group; proxy fixture | OPEN |
-| NW-2 | HTTPS reaches SUT through selected proxy with matching runtime config; binding removed. | swarm-lifecycle: HTTPS proxy | Network group; TLS fixture | OPEN |
-| NW-3 | TCPS reaches SUT through selected proxy with successful result; binding removed. | swarm-lifecycle: TCPS proxy | Network group; TCPS fixture | OPEN |
+| NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | HttpProxyAcceptanceIT: explicit bundle SUT/profile, canonical binding, current processor config, successful HTTP proxy URLs, binding404 after verified REMOVE; Rabbit/Artemis pass | PASS |
+| NW-2 | HTTPS reaches SUT through selected proxy with matching runtime config; binding removed. | swarm-lifecycle: HTTPS proxy | HttpProxyAcceptanceIT HTTPS: actual HTTPS response, explicit sslVerify=false in runtime, authored/binding/result addresses and verified binding removal; Rabbit/Artemis | PASS |
+| NW-3 | TCPS reaches SUT through selected proxy with successful result; binding removed. | swarm-lifecycle: TCPS proxy | TcpsProxyAcceptanceIT: canonical TCP result and exact echo body, TLS scheme and runtime settings, authored/binding/result addresses, verified binding removal; Rabbit/Artemis | PASS |
 | NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | Dedicated network acceptance target supporting NFS topology | OPEN |
 | SC-4 | Scenario variables resolve into generated traffic/template rendering. | swarm-lifecycle: variables | TemplatingAcceptanceIT: explicit amber/violet create profiles, global + SUT values, exact typed JSON and eval/header results from actual generated traffic; Rabbit/Artemis | PASS |
-| NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | Supported isolated TCP setup/observation interface must be specified | OPEN |
+| NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | TcpTimeoutAcceptanceIT: paired delayed-response control (8s timeout/5s delay) and error case (500ms timeout), owned run/processor alert through journal, empty result tap for explicit window, verified removal; Rabbit/Artemis | PASS |
 | WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
 | WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
 | DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | Supported Redis fixture setup/observation boundary required | OPEN |
@@ -549,3 +549,127 @@ The probe also asserts DELETE occurs before configuration read and STOP, and GET
 after DELETE returns404. Evidence: `/tmp/Wk45TapLifetimeProbe.java` and
 `/tmp/wk45-tap-fix-repro.log`. These are isolated regression checks, not new deployed
 E2E runs. The shared stack was not changed. No commit; fix awaits separate review.
+
+
+## N2 execution evidence: HTTP proxy NW-1 (2026-09-17)
+
+Previous worker/history/templating slices and the tap-lifetime correction are committed
+as `a3cdf0d5`. NW-1 is a subsequent uncommitted slice ready for separate review.
+
+- Framework: `./mvnw -pl acceptance-tests -am test` — 72/72 framework tests passed,
+  dependent modules green. Six added cases cover explicit proxy target requirements,
+  canonical binding decoding/encoded public path, rejection of 200/401/500 as absence,
+  and bundle SUT read with no fallback after404. Log: `/tmp/nw1-framework-tests.log`.
+- Artemis: `./run-acceptance-tests.sh acceptance-tests/targets/local-http-proxy-artemis.properties http-proxy`
+  — 1/1 deployed case passed, log `/tmp/nw1-artemis.log`;
+  run `acceptance-tests/target/runs/http-proxy-d96ac0b8-9ffc-43ce-9181-85d9fce264e3`.
+- Rabbit: `./run-acceptance-tests.sh acceptance-tests/targets/local-http-proxy-rabbit.properties http-proxy`
+  — 1/1 deployed case passed, log `/tmp/nw1-rabbit.log`;
+  run `acceptance-tests/target/runs/http-proxy-93269ca2-3ccc-48a4-b479-e562f97a519e`.
+
+Each run records the scenario and bundle SUT, the binding before/after lifecycle,
+fresh worker configuration and three distinct raw WorkItems. Authored endpoint,
+binding.clientBaseUrl, processor.config.baseUrl and HttpResultEnvelope.request.baseUrl
+agree; actual request URL is `http://haproxy:18090/api/test`, with HTTP200 and the exact
+expected response. Binding profile is explicitly passthrough, effective mode PROXIED,
+and upstream matches the fixture. All eight CREATE/START/STOP/REMOVE operations
+SUCCEEDED with matching owned identities; REMOVE had nonempty removedResources and
+empty remainingResources/errors, followed by registry404 and explicit binding404.
+The tap closed directly after capture, before configuration observation and STOP.
+
+Local Artemis WORK was restored; public swarm list is empty. No product/legacy E2E
+changes, native broker connections, proxy management-port checks or new dependencies.
+The deletion claim is canonical API absence; native proxy-state verification belongs
+to the product's owner. NW-2–NW-5 and other open rows/N3/N4 remain open. Next: NW-2
+HTTPS through the selected proxy. Git diff whitespace check passed.
+
+
+## N2 network extension — NW-2/NW-3/NW-5 (2026-09-17)
+
+NW-1 received separate six-pass review with no findings (`/tmp/nw1-review.md`), fresh
+72 framework tests and reread execution evidence before this extension. The new
+extension remains uncommitted and requires its own review.
+
+Framework: 78 tests pass, including Basic-auth ingress restriction/no credential
+fallback, explicit journal run selection, required TCP mock configuration and total
+tap lifetime, selected mock mapping, final negative-capture snapshot and read-failure
+propagation. All dependent reactor modules passed. Existing production artifacts and
+local stack were used; no product, security/compose or frozen E2E changes.
+
+Final execution: five cases per WORK adapter, ten passed through localhost:8088.
+For each group/adapter the command was:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-<group>-<adapter>.properties <group>
+```
+
+| Group | Adapter | Evidence directory |
+| --- | --- | --- |
+| http-proxy | artemis | `acceptance-tests/target/runs/http-proxy-c6ba341e-8ecf-490a-a2d4-cbc24fe88ac4` |
+| https-proxy | artemis | `acceptance-tests/target/runs/https-proxy-bb05e44e-d8cc-48f0-9249-5d64404dbcdd` |
+| tcps-proxy | artemis | `acceptance-tests/target/runs/tcps-proxy-7118633b-d168-47e2-9fd0-597815a28d41` |
+| tcp-delayed | artemis | `acceptance-tests/target/runs/tcp-delayed-bb0bb2ee-fb79-427e-bf5d-55f7b1a7d9e6` |
+| tcp-timeout | artemis | `acceptance-tests/target/runs/tcp-timeout-2bf9fc86-2d2c-4b6b-9ac0-b295b04cf034` |
+| http-proxy | rabbit | `acceptance-tests/target/runs/http-proxy-ae58c1e5-4ab9-4117-8a5c-9338ba2d17fd` |
+| https-proxy | rabbit | `acceptance-tests/target/runs/https-proxy-bc49b126-d6d6-4943-9e86-e9270fb0d2a5` |
+| tcps-proxy | rabbit | `acceptance-tests/target/runs/tcps-proxy-41cfd29a-706d-4628-89e2-2cffc3cea0e6` |
+| tcp-delayed | rabbit | `acceptance-tests/target/runs/tcp-delayed-91e5cbed-232f-46f0-84e4-37ebd31ca6c0` |
+| tcp-timeout | rabbit | `acceptance-tests/target/runs/tcp-timeout-664d17a6-5d80-4062-82b9-aabd0ab5cfa2` |
+
+Logs: `/tmp/network-<group>-<adapter>-final.log`; audited artifact summary:
+`/tmp/network-evidence-artemis-rabbit.json`. Ten owned swarms, 40 correlated operations
+SUCCEEDED, 20 distinct successful result samples (18 proxy samples and two delayed
+TCP controls). Every REMOVE had nonempty removedResources, empty remaining/errors,
+and registry404. All six proxy runs also have explicit binding404.
+
+NW-2 uses local HTTPS stub with explicitly authored sslVerify=false; both the result
+scheme/URL and fresh runtime configuration must match. NW-3 sends an explicit
+canonical tcp.request via the generator's SIMPLE body, receives the exact echo body,
+and checks tcps scheme/endpoint and explicit TLS setting against the owner binding.
+No test TCP clients, native broker access, endpoint resolver or new dependencies.
+
+NW-5 uses the existing slow-response mapping, read-only through `/tcp-mock/api/mappings`
+with explicit Basic credentials. Both fixtures use the same SUT, message and transport
+settings except readTimeoutMs (8000/500). The control receives the expected body after
+at least5000ms; the short-timeout case has the owned processor/runtime run's work-phase
+runtime.exception, a messageId, and no output in the2s quiet window after the alert.
+The published alert exposes the wrapper IllegalStateException/Processor request failed;
+this test does not claim that nested SocketTimeoutException is present in the API.
+No mapping mutation or shared mock-journal reset; no error WorkItem or ACK change.
+
+WorkFixture is the renamed common immutable journey fixture (no HttpFixture alias).
+ProxyAssertions compares source/owner observations; TargetLoader alone reads settings.
+TcpMockApi and SwarmJournalApi only read their endpoint families; PocketHiveHttp owns
+Basic/Bearer transport, deadlines and origin restriction. TapResource owns positive and
+negative capture, and the timeout target reserves START + error wait + quiet window +
+final read in TTL. Taps close before config wait and STOP; removal stays SwarmResource.
+
+Artemis WORK restored; public swarm list empty. Matrix now23 PASS,3 PARTIAL,15 OPEN
+(18 rows to finish). NW-4 remains OPEN: local shared-volume HAProxy is not the required
+cross-node NFS topology. N3/N4 and all other open rows remain unchanged. Next sizeable
+slice can cover remaining auth requirements; NW-4 still needs a dedicated NFS target.
+
+
+## Network package review — 2026-09-17
+
+No findings in the separate review of NW-1/NW-2/NW-3/NW-5. All six passes from
+docs/REVIEW_RULES.md passed: scope/acceptance matches the plan; responsibility headers
+and implementation units agree; common proxy comparisons and capture reuse existing
+owners; HTTP credentials stay same-origin and out of evidence; only existing/JDK
+libraries are used; positive/negative paths and cleanup remain explicit.
+
+Owner evidence: TargetLoader alone parses target settings; PocketHiveHttp alone sends
+bounded HTTP; ScenarioApi/NetworkBindingApi/TcpMockApi/SwarmJournalApi only read public
+projections; TapResource owns capture lifetime; RuntimeErrorObservations compares the
+owned processor/run alert without reconstructing CP state. Repository-wide source
+search and call-path review retain SwarmNetworkBindingService as endpoint resolver,
+NetworkBindingService as binding writer, WorkerControlPlaneRuntime/Alerts as error
+producer, and SwarmResource/OperationAwaiter as the existing acceptance operation and
+cleanup consumers. No alternate transport resolver or domain outcome owner was added.
+
+Fresh dependent reactor and 78 framework tests pass (`/tmp/network-review-tests.log`);
+all ten previously executed final E2E artifacts rechecked (`/tmp/network-review-evidence.json`),
+including 40 SUCCEEDED operations and verified REMOVE postconditions. E2E was not rerun
+for this source review. The documented wrapper-alert limitation remains; NW-4 and N3/N4
+are not claimed. NW-4 awaits Swarm deployment: user has a one-host and a four-host
+environment; cross-node shared-storage behavior requires the latter.

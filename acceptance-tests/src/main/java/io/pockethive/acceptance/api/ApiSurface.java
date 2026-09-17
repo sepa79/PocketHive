@@ -11,7 +11,7 @@ import java.nio.charset.StandardCharsets;
  */
 public enum ApiSurface {
   ORCHESTRATOR("/orchestrator"), SCENARIO_MANAGER("/scenario-manager"), AUTH("/auth-service"),
-  NETWORK_PROXY_MANAGER("/network-proxy-manager");
+  NETWORK_PROXY_MANAGER("/network-proxy-manager"), TCP_MOCK("/tcp-mock");
 
   private final String prefix;
   ApiSurface(String prefix) { this.prefix = prefix; }

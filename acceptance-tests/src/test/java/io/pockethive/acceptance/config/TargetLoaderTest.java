@@ -109,4 +109,30 @@ class TargetLoaderTest {
     assertThrows(IllegalArgumentException.class,
         () -> TargetLoader.loadNetworkAccess(file(config.replace("runnerUsername=runner", "runnerUsername=test-actor"))));
   }
+
+  @Test void proxyRequiresItsProfileAndEndpointWithoutWeakeningLifecycleValidation() throws Exception {
+    String config = TARGET + "networkProfileId=passthrough\nendpointId=default\n";
+    var target = TargetLoader.loadProxy(file(config));
+    assertEquals("passthrough", target.networkProfileId());
+    assertEquals("default", target.endpointId());
+    assertEquals("explicit-fixture", target.lifecycle().fixture().templateId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProxy(file(TARGET)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.load(file(config)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadProxy(file(config.replace("endpointId=default", "endpointId="))));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadProxy(file(config.replace("tapTtlSeconds=5", "tapTtlSeconds=1"))));
+  }
+
+  @Test void timeoutTargetRequiresExplicitMockSettingsAndCoversTheEntireTapLifetime() throws Exception {
+    String config = TARGET + "mockUsername=admin\nmockPassword=test\nmappingId=slow\nquietWindow=PT2S\n";
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadTcpTimeout(file(config)));
+    var target = TargetLoader.loadTcpTimeout(file(config.replace("tapTtlSeconds=5", "tapTtlSeconds=8")));
+    assertEquals("slow", target.mappingId());
+    assertEquals(java.time.Duration.ofSeconds(2), target.quietWindow());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadTcpTimeout(file(TARGET)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadTcpTimeout(file(config.replace("mockPassword=test\n", ""))));
+  }
+
 }

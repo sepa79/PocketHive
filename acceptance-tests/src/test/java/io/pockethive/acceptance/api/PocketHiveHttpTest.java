@@ -14,6 +14,24 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PocketHiveHttpTest {
+  @Test void sendsOnlyExplicitBasicCredentialsAndKeepsTheIngressBoundary() throws Exception {
+    var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+    server.createContext("/tcp-mock/api/mappings", exchange -> {
+      boolean valid = "Basic dGVzdDpwYXNz".equals(exchange.getRequestHeaders().getFirst("Authorization"));
+      byte[] body = "[]".getBytes(java.nio.charset.StandardCharsets.UTF_8);
+      exchange.sendResponseHeaders(valid ? 200 : 401, body.length);
+      try (var output = exchange.getResponseBody()) { output.write(body); }
+      exchange.close();
+    });
+    server.start();
+    try (var http = new PocketHiveHttp(origin(server), Duration.ofSeconds(1))) {
+      assertEquals(200, http.getWithBasicAuth("/tcp-mock/api/mappings", "test", "pass").status());
+      assertEquals(401, http.getWithBasicAuth("/tcp-mock/api/mappings", "test", "wrong").status());
+      assertThrows(IllegalArgumentException.class,
+          () -> http.getWithBasicAuth("https://unrelated.invalid/api/mappings", "test", "pass"));
+    } finally { server.stop(0); }
+  }
+
   @Test void sendsUtf8TextWithoutJsonQuotingAndPreservesDenial() throws Exception {
     String payload = "- name: żółć\n  enabled: true\n";
     var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);

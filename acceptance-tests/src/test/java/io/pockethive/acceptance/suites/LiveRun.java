@@ -24,6 +24,9 @@ final class LiveRun implements AutoCloseable {
   final JsonNode scenario;
   final RunEvidence evidence;
   final SwarmApi swarms;
+  final ScenarioApi scenarios;
+  final NetworkBindingApi networkBindings;
+  final SwarmJournalApi journal;
   private final ApiRun api;
   private LiveRun(AcceptanceTarget target, ApiRun api, JsonNode scenario) {
     this.target = target;
@@ -31,9 +34,14 @@ final class LiveRun implements AutoCloseable {
     this.api = api;
     evidence = api.evidence;
     swarms = new SwarmApi(api.http, api.token);
+    scenarios = new ScenarioApi(api.http, api.token);
+    networkBindings = new NetworkBindingApi(api.http, api.token);
+    journal = new SwarmJournalApi(api.http, api.token);
   }
   static LiveRun open(String testName) throws Exception {
-    var target = TargetLoader.load(TargetLoader.selectedFile());
+    return open(testName, TargetLoader.load(TargetLoader.selectedFile()));
+  }
+  static LiveRun open(String testName, AcceptanceTarget target) throws Exception {
     var api = ApiRun.open(target.api(), testName);
     try {
       var scenario = new ScenarioApi(api.http, api.token).requireScenario(target.fixture().templateId());
@@ -47,11 +55,15 @@ final class LiveRun implements AutoCloseable {
     return new SwarmResource("acceptance-" + UUID.randomUUID(), swarms,
         new OperationAwaiter(swarms, target.limits().operations(), evidence), target.limits().operations());
   }
+  TcpMockApi tcpMock(String username, String password) { return new TcpMockApi(api.http, username, password); }
   TapResource newTap() { return new TapResource(new DebugTapApi(api.http, api.token), target.limits(), evidence); }
   SwarmCreateRequest createRequest() { return createRequest(null); }
   SwarmCreateRequest createRequest(String variablesProfileId) {
+    return createRequest(variablesProfileId, NetworkMode.DIRECT, null);
+  }
+  SwarmCreateRequest createRequest(String variablesProfileId, NetworkMode mode, String networkProfileId) {
     return SwarmCreateRequest.of(target.fixture().templateId(), UUID.randomUUID().toString(), false,
-        target.fixture().sutId(), variablesProfileId, NetworkMode.DIRECT, null);
+        target.fixture().sutId(), variablesProfileId, mode, networkProfileId);
   }
   @Override public void close() throws IOException {
     api.close();

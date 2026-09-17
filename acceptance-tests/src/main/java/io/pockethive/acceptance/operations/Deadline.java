@@ -17,8 +17,11 @@ public final class Deadline {
     this.budget = budget;
     this.description = description;
   }
+  public Duration remainingOrZero() {
+    return Duration.ofNanos(Math.max(0L, budget.toNanos() - (System.nanoTime() - started)));
+  }
   public Duration remaining() {
-    long remaining = budget.toNanos() - (System.nanoTime() - started);
+    long remaining = remainingOrZero().toNanos();
     if (remaining <= 0) throw new AssertionError(description + " timed out after " + budget);
     return Duration.ofNanos(remaining);
   }
