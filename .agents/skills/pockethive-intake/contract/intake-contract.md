@@ -1,4 +1,4 @@
-# Intake document and CLI contract — version 4
+# Intake document and CLI contract — version 5
 
 This package owns intake document mechanics only. The four reviewed YAML
 templates and `schemas/` define their structure. `manifest.json` owns package
@@ -20,7 +20,7 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 | `validate --documents DIR --stage handoff` | Also require the relevant material inputs, evidence coverage, plan review references and pinned document hashes. A passing check establishes document consistency only. |
 | `finalise --documents DIR` | Refresh derived question projection and cross-document paths/hashes in dependency order. Create an absent projection, refuse independent authored question content and preserve byte-identical output on repeated unchanged input. Report authoring review notices. Never create approvals, adopt proposals or change client facts. Run `validate` separately for semantic and handoff checks. |
 | `verify-package` | Verify every manifest-listed package file and original-source checksum. Integrity checks are not a cryptographic signature or authenticity guarantee. |
-| `prepare-review --documents DIR --stage draft\|handoff [--previous DIR] [--write-review]` | Finalise through the existing projection owner, validate the saved revision and return a compact, derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
+| `prepare-review --documents DIR --stage draft\|handoff [--previous DIR] [--write-review] [--view full\|summary]` | Finalise through the existing projection owner, validate the saved revision and return a derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
 | `show-field --documents DIR --document ROLE --pointer POINTER` | Read the exact current field, its canonical schema constraints, editing ownership and relevant existing diagnostics. No document writes or alternate field dictionary. |
 | `show-fields --documents DIR --input FILE` | Read a bounded explicit list of fields with one validation pass and shared document revision. See [field help](field-help.md). |
 | `apply-updates --documents DIR --input FILE [--dry-run]` | Apply or preview an explicit, evidence-linked batch against an expected document revision through the existing owners. See [authoring outcomes](authoring-outcomes.md) for persistence and validation results. No inferred values or automatic approval. |
@@ -67,6 +67,35 @@ validation, repair inputs or turn a failed command into success.
   conclusions. No Scenario Manager validation or worker-template engine is copied.
 
 ## Decision review and reproducible stakeholder output
+
+`--view summary` is the normal conversational entrypoint. The default `full`
+retains the detailed interface. Both run the same validation and return identical
+status, exit code, document/review digests and persistence outcomes. Summary keeps
+all errors, current review, questions, proposals, comparison and report outcome.
+It replaces gap/warning arrays and indexed diagnostic groups with `diagnostics`
+counts and groups containing their existing descriptors/counts. It omits
+`brief.evidenceFields` and the blank-field rows, retaining blank counts and
+population-preview issues. No dangling diagnostic indexes are returned. Counts
+are findings or ledger records, never a count of independent client decisions.
+Use `--view full` for all diagnostics/blank targets and `show-field(s)` for a
+selected section. An absent array in summary means omitted detail, not no gaps.
+The summary is a presentation projection after canonical status/exit calculation;
+it does not decide readiness or change saved documents.
+Failures before package verification retain the standard error envelope; they
+must not import an absent or unverified summary module while reporting that error.
+
+The generated report leads with purpose, scope, target, workload, acceptance,
+execution status and recorded current decisions. It presents provenance in plain
+language without converting observations or proposals into agreement. Empty
+all-null scaffold rows are omitted from presentation only; unknown children in
+populated rows remain visible, including zero and false values. Full acceptance
+conditions, phase order, limitations and execution decisions remain in the report.
+Engineering diagnostics, prechecks, question IDs/owners/stages and revision hashes
+appear in the appendix. Only the existing validator decides readiness; report
+headings and omission of scaffold rows have no effect on requiredness.
+Rate-unit labels remain neutral: `journeys-per-second` does not by itself mean
+successful completions. Offered starts and completed outcomes retain their
+separately recorded workload and measurement meanings.
 
 `prepare-review` adds read-only `brief.blankFields` and `brief.decisions` views.
 Blank fields are an inventory of editable null leaves, not new required inputs.

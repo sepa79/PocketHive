@@ -113,3 +113,10 @@ the workflow. Prefer better examples and deterministic authoring support over
 longer instructions or a mandatory second interview.
 
 Use E10 for the observed name/scope/rate/resume failure. Record each native client trial separately; unavailable authentication remains unqualified, not a simulated pass.
+
+Use E11 to assess the client experience: count independent decisions inside each
+prompt, not just ledger rows or question marks. Verify that a partial reply leaves
+unanswered scope open and that a correction does not restart the interview. A
+reviewer should be able to state the purpose, environment, rate, missing success
+criteria and next decision without using the engineering appendix. Measure CLI
+output reduction separately from human comprehension or model performance.

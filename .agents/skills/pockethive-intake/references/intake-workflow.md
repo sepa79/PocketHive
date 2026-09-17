@@ -73,6 +73,27 @@ of the answer and offer a recommended engineering option when useful. Ask for an
 unknown client fact directly; do not preselect a guess. Resolve file mechanics,
 identifiers and exact calculations from the contract and task context yourself.
 
+Count independent decisions, not question marks or ledger rows. “Duration,
+thresholds, monitoring, credentials, ownership and cleanup?” is several decisions.
+Start with the next choice that changes the test design, for example: “How long
+should the steady-state phase last? You can give a duration, leave it open, or ask
+me to recommend one.” Do not force these options when a direct question is easier.
+Discuss acceptance next; retain later execution prerequisites in their existing
+stage. Do not downgrade a required handoff decision to make the draft look ready.
+
+Keep newly authored questions independently answerable with exact affected targets.
+When resuming a broad existing question, ask only its unanswered part using its
+existing ID and context. Do not automatically split/re-ID history or mark the whole
+question answered after one partial reply. Record that reply at its owning fact
+with provenance; keep the broad question open until all its material scope is
+answered. No new question queue or conversation-state file is needed.
+
+After a reply, briefly say what was recorded, which decision remains and whether
+the save succeeded. Do not repeat the entire plan. For a correction, reuse the
+existing source/proposal context and change only its supported scope; review any
+now-stale acceptance. “15 journeys per second” does not supply a duration or adopt
+an open-loop proposal. “Leave it open” is a deferred answer, not permission to guess.
+
 Record questions, affected pointers and blocking stages in the traceability
 instance. The requirements question list is a generated projection; update its
 owner and finalise rather than editing both copies. Bind replies to the relevant
@@ -84,7 +105,7 @@ acceptance can adopt several named proposals within its stated scope. Preserve
 existing approvals only while their scope and input revision remain valid. Do
 not invent an approval for reading, drafting or routine arithmetic.
 
-On resume, run `prepare-review --stage draft` once against the saved set. Its brief
+On resume, run `prepare-review --stage draft --view summary` once against the saved set. Its brief
 groups unresolved decisions and reports previously answered questions; do not
 reinitialise or reconstruct the interview from chat memory. `show-field` retrieves
 the relevant section and its canonical constraints; its `field.context` links the
@@ -127,7 +148,9 @@ can still have gaps; successful process exit does not establish complete intake.
 `prepare-review --stage draft` finalises and validates once. Use its handoff stage
 before reporting a completed authoring handoff. The lower-level `finalise` and
 read-only `validate` operations retain the same responsibilities.
-Review the actual `errors`, `gaps` and `warnings`, even when exit status is zero.
+Review the actual findings, even when exit status is zero. Summary exposes all
+errors and diagnostic counts/groups; request `--view full` for gap/warning details
+and blank targets, then `show-field(s)` for the current section.
 Use [QA review guidance](qa-review.md) to address the findings with existing
 fields and proportionate, grouped questions.
 Draft gaps do not justify fabricated values. Optional production evidence and future execution results do not block

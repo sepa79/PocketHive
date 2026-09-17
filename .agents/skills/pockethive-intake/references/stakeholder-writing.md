@@ -71,3 +71,26 @@ material changed; never update an old confirmation to a new digest automatically
 Check that a stakeholder can identify objective, scope, load, acceptance, limits
 and outstanding decisions without knowing PocketHive internals. This needs
 human judgement; a parser cannot establish clarity or source faithfulness.
+
+## Client summary and engineering detail
+
+Lead with purpose, target/scope, workload, acceptance and the next decision. Use
+recorded limitations to explain what remains unproven. Put tooling, hashes,
+validation totals and pre-run implementation detail in the engineering appendix.
+Do not compress away exceptions, abort conditions or measurement boundaries.
+
+Present evidence kinds as plain labels: client-statement → “Supplied by you”,
+bundle-observation → “Observed in the bundle”, engineer-proposal → “Proposed
+approach”. These labels do not certify a claim or adopt a proposal. Unknown means
+“Not yet specified”; not-run means “Test not run”. Unclassified populated facts
+remain explicitly unclassified. Never call all workload settings agreed merely
+because one rate was supplied.
+
+Hide unused all-null scaffold rows only in the read-only report. Within populated
+rows retain missing values that explain uncertainty, and preserve zero, false,
+operators and units. Do not change templates, add readiness rules or treat a blank
+optional OAuth scope as a newly mandatory client decision.
+
+On resume or correction, show the meaningful change and the next unresolved
+choice. Use `--previous` only when an actual earlier document snapshot is supplied;
+otherwise use the current saved ledger without pretending a comparison occurred.

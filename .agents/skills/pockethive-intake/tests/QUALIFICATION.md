@@ -416,3 +416,102 @@ Local development evidence is retained at:
 - `/home/tim/.tmp/pip/intake-1.5-resume-q8ibvh9n/` (saved-intake rehearsal).
 
 These paths are evidence references, not required runtime assets.
+
+## Stakeholder and conversation polish — 1.6.0, 2026-09-17
+
+The final runtime candidate passed **220 tests** through the public CLI from an
+extracted ZIP, with Python 3.12.3 in Bubblewrap 0.9.0. The package was read-only;
+network, home/repository mounts and site packages were unavailable. Four sorted
+module shards (`shard::4`, as in 1.5.0) passed 51, 79, 46 and 44 tests in
+**108.350 seconds total wall time**. Candidate archive SHA-256:
+`60304aed45bee239a5d510de3c6f62a975233dad9c7001ebfe5ae4df97673108`.
+The final distributable changes only this qualification record and its manifest
+hash from that candidate; its checksum sidecar identifies the release bytes.
+
+The seven additional regressions cover summary/full outcome equivalence at draft
+and handoff stages; report-save failures; structural errors; missing summary code
+while reporting package-integrity failure; hidden unused scaffold with visible
+validation gaps; partial acceptance with zero/operator/window preservation; and
+separate supplied/proposed workload facts with escaped source markup. The report
+renderer and persistence owner are separate; summary formatting consumes the
+canonical result after status and exit-code calculation. No new requiredness,
+question state, approval or validation owner was introduced.
+
+A scratch copy of the saved six-auth bundle intake returned **0 errors, 185 gaps
+and 1 warning** in both full and summary views. On the same revision, public CLI
+JSON output was **210,859 bytes full versus 12,960 bytes summary**, a **93.85%**
+reduction. Current questions, proposals, review record, canonical error outcomes
+and document revision were preserved. Repeated report generation was byte-identical.
+This measures output bytes for one saved intake, not model tokens, speed or human
+comprehension. The known draft gaps remained unresolved; no traffic or approval
+was produced. Client facts and original backup/source files were not modified.
+
+The entrypoint shrank from 148 to 109 lines, with conditional detail linked from
+existing references. E11 adds a staged interview case for independent decisions,
+partial replies, correction and resume. It has **not** been run as a native-client
+conversation trial. Amazon Q/Copilot authentication and cross-client interview
+qualification remain outstanding. A mechanical test suite cannot establish that
+human interaction is optimal; stakeholder comprehension still needs client review.
+
+All **16** source/template/schema artifacts remained byte-identical to HEAD
+`90f1aead`. Skill validation, Python syntax, **46** local Markdown file links,
+repository ownership search and `git diff --check` passed. The source and working
+YAML templates and document schemas were not edited.
+
+Local development evidence (not package dependencies):
+
+- `/home/tim/.tmp/pip/intake-polish-suite-r11csbji/`: four offline test logs and summary.
+- `/tmp/intake-polish-review-7es4ffsw/`: saved-bundle rehearsal, full/summary JSON and generated report.
+
+## Exploratory conversations and wording correction — 1.6.1, 2026-09-17
+
+Local practitioner simulations exercised **six conversations and 15 client turns**:
+four intake scenarios (ambiguous/corrected journey rates; asynchronous payment
+criteria; conflicting/injected bundle content; binary TCP requirements) and two
+conceptual boundary questions. Three saved intakes were then continued by a
+different practitioner as part of those turns, covering explicit rate clarification,
+changed source evidence and preservation of a human-edited report.
+
+The coordinator checked **13 saved document checkpoints**, running **26 read-only
+public CLI stage validations**. Every checkpoint had zero validation errors at its
+original workspace; every intentionally incomplete handoff remained blocked with
+exit 3. Run status stayed `not-run`, approvals/reviews stayed draft, and proposals
+were not adopted. The precise payment criterion (`p95 < 250 ms`, `10m`, minimum
+1,000 completed payments) survived the wording and resume operations. This is
+synthetic agent evidence, not independent human acceptance or native-client proof.
+
+The trials found a misleading report label: `journeys-per-second` displayed as
+“Complete journeys per second” even when the client explicitly specified offered
+starts. Version 1.6.1 uses “Journeys per second”. The failing 1.6.0 report was retained;
+replaying the exact saved intake with the fix changed no YAML bytes and preserved
+all gaps. The focused eight report tests passed. The complete **220-test** public
+CLI suite then passed offline from the extracted 1.6.1 candidate in **106.522
+seconds** total wall time, using the existing four-shard Bubblewrap recipe.
+Candidate SHA-256:
+`eb4cdb4e80de8a5c93615372a48d315d1ae012086a4b05ed8b5dd90e98d55de7`.
+The final release adds these notes, the E11 regression clarification and refreshed
+manifest hashes; runtime code is identical to that qualified candidate.
+
+An additional isolated relocation probe failed with `BUNDLE_DIRECTORY` and
+`MISSING_FILE` because the generated set retained absolute/external source and
+evidence paths. The validator failed safely; automatic portability of a completed
+bundle plus intake is **not established**. The contract permits absolute paths, so
+this is an authoring/handoff friction finding, not a schema violation. The skill
+ZIP itself remained self-contained and passed integrity checks.
+
+Two agent authoring mistakes (an object used for `answerRef`, then a wrong field
+pointer) were rejected and corrected without coordinator repair. Updating a
+mixed-provenance timeline also needed explicit manual refinement of its existing
+ledger records. Neither error silently changed facts or introduced a new owner.
+These remain useful friction signals rather than evidence of optimal usability.
+
+Only one practitioner context was newly spawned; two reused previous completed
+contexts because of the agent thread limit. Later expected replies/outcomes were
+withheld. The finite, adaptive exploration did not run the guide's complete
+three-fresh-session/native-client comparison protocol. No universal correctness,
+independent comprehension, latency improvement or Amazon Q/Copilot qualification
+is claimed. All 16 source/template/schema artifacts remain unchanged.
+
+Local evidence (not a runtime dependency):
+`/home/tim/.tmp/pip/intake-exploratory-7iwuxh3g/` and
+`/home/tim/.tmp/pip/intake-exploratory-fix-suite-1v4tgzgh/`.

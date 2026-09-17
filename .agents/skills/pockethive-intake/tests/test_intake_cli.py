@@ -114,7 +114,10 @@ runpy.run_path(script, run_name='__main__')
             self.fail(f"CLI did not return its JSON contract: {result.stdout!r}; stderr={result.stderr!r}")
         self.assertIn(output["status"], {"ok", "incomplete", "error"})
         self.assertIsInstance(output["errors"], list)
-        self.assertIsInstance(output["gaps"], list)
+        if output.get("view") == "summary":
+            self.assertIsInstance(output["diagnostics"]["counts"]["gaps"], int)
+        else:
+            self.assertIsInstance(output["gaps"], list)
         self.assertFalse(self.marker.exists(), "Intake executed source material")
         return result, output
 

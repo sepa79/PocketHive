@@ -20,6 +20,7 @@ def main() -> int:
     command = None
     package = None
     failure = None
+    summary_view = None
     args = argparse.Namespace(debug=False)
     try:
         parser = ArgumentParser(description="Create and check sourced PocketHive intake documents; never execute tests.")
@@ -42,6 +43,8 @@ def main() -> int:
         review.add_argument("--documents", required=True)
         review.add_argument("--stage", required=True, choices=("draft", "handoff"))
         review.add_argument("--previous")
+        review.add_argument("--view", choices=("full", "summary"), default="full",
+                            help="Summary keeps decisions and diagnostic counts; full includes all field evidence and findings.")
         review.add_argument("--write-review", action="store_true", help="Write the generated stakeholder Markdown projection beside the forms.")
         field = subparsers.add_parser("show-field")
         field.add_argument("--documents", required=True)
@@ -66,6 +69,9 @@ def main() -> int:
         command = args.command
         package = PackageContext()
         integrity = package.verify()
+        if command == "prepare-review" and args.view == "summary":
+            from .review_summary import review_summary
+            summary_view = review_summary
         if command == "verify-package":
             result = integrity
         else:
@@ -86,5 +92,7 @@ def main() -> int:
         result, code = {"command": command, "status": "error", "errors": [command_failure(error).issue], "gaps": [], "warnings": []}, 2
     if args.debug and result["errors"]:
         write_debug(command, result["errors"], failure, package.root if package is not None else None)
+    if summary_view is not None:
+        result = summary_view(result)
     print(json.dumps(result, ensure_ascii=False, indent=2))
     return code

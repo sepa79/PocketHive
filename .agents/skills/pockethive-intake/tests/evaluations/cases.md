@@ -260,3 +260,48 @@ its previous revision as stale. No template edits or automatic approval.
 questions, unexplained relevant blanks, unsupported claims and commands before
 the first saved draft. Record actual client/model/version, transcript and output
 revision. Mechanical CLI results do not qualify native agent behaviour.
+
+## E11 — Small decisions, partial replies and a stakeholder review
+
+Use E10's saved draft after its rate-unit clarification, or a synthetic intake
+with that exact supplied rate and unknown duration/acceptance. Keep an existing
+broad open question covering duration, acceptance and safety, with exact targets.
+Keep the open-loop model as an unaccepted proposal. Do not prepare new answers.
+
+**Initial request:** “Resume the saved draft. Make this easy for our client to
+review. Ask me only what matters next.”
+
+**Reply to the duration question:** “Leave duration open for now.”
+
+**Then:** “Actually use 20 journeys per second. Everything else stays open.”
+
+**Expected:** Start from saved evidence and the summary view; obtain full/field
+views only for the current engineering task. Present purpose, target, rate,
+unknown duration/acceptance and the next small decision in normal language.
+Do not present diagnostic counts or all-null scaffold rows as a client checklist.
+Ask at most three independently answerable, related choices per prompt; do not
+bundle duration, limits, ownership and tooling in one sentence. Offer a reasoned
+proposal if requested, without adopting it. Record the new rate and evidence,
+leave duration/acceptance open, preserve the broad question's unresolved status
+and do not ask for the rate unit again. Say what changed, what remains open and
+whether the save succeeded. Preserve unexecuted results and unconfirmed review.
+Regenerate the report without rewriting its independent YAML owners.
+
+**Held-out variation:** The reply supplies “20 requests per second in total”.
+This explicitly changes the unit; review the affected workload facts and ask
+only about genuinely ambiguous allocation. Do not retain the old journey unit
+or divide by an assumed journey length.
+
+**Measurements:** Retain time and commands to useful saved draft, independent
+decisions per prompt (not question marks), repeated answered questions, manual
+repairs and reviewer comprehension of scope, rate, missing criteria and next
+choice. Compare summary/full output bytes on the same revision separately from
+agent latency or token costs. No authentication means native-client behaviour
+is unqualified; mechanical report checks do not establish interview quality.
+
+**Exploratory regression found after E11:** Follow with “Offer 20 journey starts
+per second; this is not a successful-completion target. Each journey is one
+GET /status call.” Resume with another practitioner using saved files only. Rates
+must become 20 in the offered timeline while successful TPS remains unspecified.
+The report's unit label must remain neutral; `journeys-per-second` alone does not
+establish completed or successful throughput. Preserve duration/acceptance gaps.
