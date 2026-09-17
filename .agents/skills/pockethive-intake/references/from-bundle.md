@@ -42,14 +42,17 @@ source snapshots, not as verified Git history.
 
 ## Produce useful drafts
 
-1. Initialise a new/empty output directory using the selected mode, or resume the
+1. Initialise the bundle's new/empty `intake/` directory using the selected mode, or resume the
    existing document set. Save all four documents before waiting for business
    answers. The generated source inspection report is read-only metadata, not a
-   second source of client requirements.
+   second source of client requirements. Keep forms and their supporting intake
+   artifacts in this directory so they travel with the bundle. The canonical
+   inspector excludes only this root-relative directory from scenario-source
+   hashing; edits to runtime files still invalidate the recorded source identity.
 2. Run the explicit population operation:
 
    ```sh
-   python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/intake"
+   python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/bundle/intake"
    ```
 
    It reinspects the recorded bundle source and requires its inventory hash to

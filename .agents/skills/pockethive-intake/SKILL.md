@@ -45,8 +45,11 @@ source checkout is required. Python **3.10 or later** is an explicit validator
 prerequisite; dependencies are bundled. Do not download replacements, install a
 different parser or claim validation from a manual review.
 
-Resolve package assets through the CLI's package resolver. Inputs and generated
-documents have separate roots; never write client answers into packaged assets.
+Resolve package assets through the CLI's package resolver. Keep forms with the
+scenario in its root `intake/` directory; never write client answers into packaged
+skill assets. The inspector excludes that one directory from scenario-source hashes;
+forms and their evidence keep their own integrity checks. Keep runtime assets outside
+`intake/`. See the [bundled layout](contract/intake-contract.md#bundled-intake-layout).
 Keep the resulting YAML in the client's authoring workspace for Git review.
 Do not commit, push or modify client/global configuration implicitly.
 
@@ -56,13 +59,13 @@ directory is the skill root.
 
 ```sh
 python3 "/path/to/pockethive-intake/scripts/intake.py" verify-package
-python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/intake" --mode new-requirements
-python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/intake" --mode from-bundle --source "/client/bundle"
+python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/bundle/intake" --mode new-requirements
+python3 "/path/to/pockethive-intake/scripts/intake.py" initialise --output "/client/bundle/intake" --mode from-bundle --source "/client/bundle"
 python3 "/path/to/pockethive-intake/scripts/intake.py" inspect-bundle --source "/client/bundle"
-python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/intake"
-python3 "/path/to/pockethive-intake/scripts/intake.py" prepare-review --documents "/client/intake" --stage draft
-python3 "/path/to/pockethive-intake/scripts/intake.py" show-field --documents "/client/intake" --document requirements --pointer /project/objective
-python3 "/path/to/pockethive-intake/scripts/intake.py" apply-updates --documents "/client/intake" --input "/client/explicit-updates.yaml"
+python3 "/path/to/pockethive-intake/scripts/intake.py" populate-from-inspection --documents "/client/bundle/intake"
+python3 "/path/to/pockethive-intake/scripts/intake.py" prepare-review --documents "/client/bundle/intake" --stage draft
+python3 "/path/to/pockethive-intake/scripts/intake.py" show-field --documents "/client/bundle/intake" --document requirements --pointer /project/objective
+python3 "/path/to/pockethive-intake/scripts/intake.py" apply-updates --documents "/client/bundle/intake" --input "/client/bundle/intake/explicit-updates.yaml"
 ```
 
 Run only the commands relevant to the current task. `initialise` saves an
@@ -79,16 +82,27 @@ Author questions only in `traceability.instance.questions`; `finalise` creates
 the requirements projection when absent and rejects independently authored
 projection content. Use `prepare-review` to resume, group gaps and finalise/validate
 once; select a small question batch from the brief rather than asking one question
-per diagnostic. `show-field` avoids loading unrelated document sections. Use the
+per diagnostic; group counts show where findings are concentrated. `show-field`
+avoids loading unrelated document sections; use `show-fields` for several explicit
+targets in one validation pass. Pointer failures provide schema hints without
+silently choosing a different field. Read [field help](contract/field-help.md) for
+the bulk input shape. Use the
 contract's `apply-updates` batch for explicitly supplied facts and their evidence,
 retaining the returned `documentsSha256`. The helper saves the existing YAML family;
 the batch is an editing instruction, not a second source of requirements. It cannot
 infer evidence support, answer questions or record review acceptance for you.
+Optional `apply-updates --dry-run` checks the same candidate without saving it.
+Read `applied` and `persistence` separately from validation: a saved edit can
+make a previous review stale. Do not retry a saved batch with its old revision.
+See [authoring outcomes](contract/authoring-outcomes.md) when interpreting results.
 
 For an evolved bundle, `compare-source --documents DIR --previous-source DIR
 --source DIR` compares explicit snapshots and identifies affected evidence. Review
 the proposed changes before explicitly updating facts and the source identity.
 Missing previous bytes are a limitation; never silently replace the source hash.
+The [source comparison contract](contract/intake-contract.md#source-comparison)
+explains explicit current-source review when a historical snapshot is unavailable.
+Population cannot repair changed source bytes.
 
 The lower-level `finalise` operation updates derived document metadata;
 it reports `reviewContentSha256` for reviewing the current material content and never

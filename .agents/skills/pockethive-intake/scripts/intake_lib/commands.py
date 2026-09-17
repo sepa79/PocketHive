@@ -2,12 +2,14 @@
 Must not: duplicate parsers, validators or projection logic. Contract: intake-contract.md.
 """
 from contextlib import nullcontext
+from pathlib import Path
 
 from .authoring_advisories import authoring_advisories
 from .bundle_inspector import BundleInspector
 from .document_store import DocumentStore
 from .errors import IntakeError
 from .initialisation import initialise
+from .pointers import resolve
 from .projections import Projections
 from .validation import Validation
 from .yaml_codec import YamlCodec
@@ -21,7 +23,8 @@ def execute(package, args):
     if args.command == "initialise":
         source = package.workspace(args.source) if args.source else None
         return initialise(package, codec, package.workspace(args.output, write=True), args.mode, source)
-    writing = args.command in ("finalise", "populate-from-inspection", "apply-updates", "prepare-review")
+    writing = args.command in ("finalise", "populate-from-inspection", "prepare-review") or (
+        args.command == "apply-updates" and not args.dry_run)
     root = package.workspace(args.documents, write=writing)
     if not writing:
         store.assert_unlocked(root)
@@ -33,7 +36,8 @@ def execute(package, args):
         if not writing:
             store.assert_unlocked(root)
             store.assert_revision(root, revision)
-        result.setdefault("documentsSha256", store.revision(root) if writing else revision)
+        if "documentsSha256" not in result:
+            result["documentsSha256"] = store.revision(root) if writing else revision
         return result
 
 
@@ -44,6 +48,10 @@ def _documents(package, codec, store, root, docs, args, revision):
     errors = validation.structure(docs)
     if errors:
         return {"errors": errors}
+    selected = resolve(docs["traceability"], "/instance/intake", document="traceability").get("source")
+    if selected and selected["kind"] == "directory":
+        if selected.get("artifactRef") and Path(selected["artifactRef"]).is_absolute():
+            package.check_bundle_documents(package.workspace(selected["artifactRef"]), root)
     if args.command == "populate-from-inspection":
         from .population import populate_from_inspection
         return populate_from_inspection(package, codec, store, root, docs, expected_revision=revision)
@@ -69,7 +77,12 @@ def _documents(package, codec, store, root, docs, args, revision):
         return view
     if args.command == "apply-updates":
         from .sourced_updates import apply_updates
-        return apply_updates(package, codec, store, root, docs, validation, package.workspace(args.input), revision)
+        return apply_updates(package, codec, store, root, docs, validation, package.workspace(args.input), revision,
+                             dry_run=args.dry_run)
+    if args.command == "show-fields":
+        from .field_views import field_views
+        return field_views(package, codec, store, root, docs, validation.check(root, docs),
+                           package.workspace(args.input), revision)
     if args.command == "compare-source":
         from .source_comparison import compare_source
         return compare_source(package, codec, store, root, docs, package.workspace(args.previous_source), package.workspace(args.source))

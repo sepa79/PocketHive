@@ -65,6 +65,7 @@ class EvidenceValidation:
                     if not Path(intake_source["artifactRef"]).is_absolute():
                         raise IntakeError("INTAKE_SOURCE_PATH", "The selected bundle identity requires an explicit absolute directory path.")
                     path = self.package.evidence_path(root, intake_source["artifactRef"])
+                    self.package.check_bundle_documents(path, root)
                     result = BundleInspector(self.package, self.codec).inspect(path)
                     if result["sha256"] != intake_source["sha256"]:
                         issue(errors, "SOURCE_HASH", "/instance/intake/source", "Selected bundle inventory has changed; review the changed source explicitly.")

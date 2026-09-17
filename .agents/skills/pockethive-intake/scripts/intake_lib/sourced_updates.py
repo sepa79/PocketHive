@@ -1,6 +1,6 @@
 """Responsibility: apply explicit revision-bound field edits with their evidence.
 Must not: infer source meaning, accept reviews or own schema/projection validation.
-Contract: intake-contract.md, explicit update batch.
+Contract: intake-contract.md, authoring-outcomes.md, explicit update batch.
 """
 from __future__ import annotations
 
@@ -8,12 +8,13 @@ from copy import deepcopy
 import re
 
 from .authoring_policy import AuthoringPolicy
+from .diagnostics import command_failure
 from .errors import IntakeError
 from .pointers import covers, replace, resolve
 from .projections import Projections
 
 
-def apply_updates(package, codec, store, root, docs, validation, input_path, revision):
+def apply_updates(package, codec, store, root, docs, validation, input_path, revision, *, dry_run=False):
     batch = codec.plain(codec.parse(package.read(input_path), "updates"))
     _envelope(batch)
     if batch["expectedDocumentsSha256"] != revision:
@@ -56,7 +57,7 @@ def apply_updates(package, codec, store, root, docs, validation, input_path, rev
         replace(candidate[role], pointer, deepcopy(update["value"]), role)
     structure = validation.structure(candidate)
     if structure:
-        return {"applied": False, "errors": structure}
+        return _outcome({"errors": structure, "gaps": [], "warnings": []}, revision, dry_run=dry_run)
     projections = Projections(package, codec, store)
     encoded = projections.prepare(candidate)
     checked = validation.check(root, candidate, encoded=encoded)
@@ -76,11 +77,39 @@ def apply_updates(package, codec, store, root, docs, validation, input_path, rev
                   and issue["document"] == "traceability" and
                   any(covers(path, issue["pointer"]) or covers(issue["pointer"], path) for path in ledger_paths))
     if errors:
-        return {**checked, "applied": False, "errors": errors}
+        return _outcome({**checked, "errors": errors}, revision, dry_run=dry_run)
+    if dry_run:
+        store.assert_revision(root, revision)
+        return {**_outcome(checked, revision, dry_run=True), "updatedTargets": targets}
     saved = projections.save_prepared(root, encoded, expected_revision=revision)
-    checked = validation.check(root, store.load(root))
-    store.assert_revision(root, saved["documentsSha256"])
-    return {**saved, **checked, "applied": True, "updatedTargets": targets}
+    try:
+        checked = validation.check(root, store.load(root))
+        store.assert_revision(root, saved["documentsSha256"])
+    except Exception as error:
+        # Persistence is already verified. Report the later failure without
+        # turning it into a claim that the documents were never written.
+        issue = error.issue if isinstance(error, IntakeError) else command_failure(error).issue
+        checked = {"errors": [issue], "gaps": [], "warnings": []}
+    return {**saved, **_outcome(checked, revision, dry_run=False, saved=saved), "updatedTargets": targets}
+
+
+def _outcome(checked: dict, revision: str, *, dry_run: bool, saved: dict | None = None) -> dict:
+    applied = saved is not None
+    result = {
+        **checked,
+        "preview": dry_run,
+        "applied": applied,
+        "persistence": {"state": "verified" if applied else "not-written",
+                        "checkedDocumentsSha256": revision,
+                        "savedDocumentsSha256": saved["documentsSha256"] if applied else None},
+        "validation": {"subject": "saved-documents" if applied else "candidate",
+                       "errorCount": len(checked["errors"]), "gapCount": len(checked["gaps"]),
+                       "warningCount": len(checked["warnings"])},
+    }
+    if any(issue["code"] == "STALE_REVIEW" for issue in checked["errors"]):
+        result["nextAction"] = ("Obtain a fresh explicit human review of the changed content; "
+                                "the previous confirmation is unchanged. Read the current document revision before further edits.")
+    return result
 
 
 def _keys(value: object, required: set[str], pointer: str) -> None:

@@ -41,7 +41,8 @@ def _ledger_index(document: dict, collection: str, snapshot: str) -> dict:
     try:
         rows = resolve(document, f"/instance/{collection}", "traceability")
     except IntakeError as error:
-        raise IntakeError(**error.issue, detail={"snapshot": snapshot}) from None
+        detail = {**error.issue.get("detail", {}), "snapshot": snapshot}
+        raise IntakeError(**{**error.issue, "detail": detail}) from None
     indexed, issues = index_identities(rows, "id", "traceability",
                                        f"/instance/{collection}", require_present=True)
     if issues:

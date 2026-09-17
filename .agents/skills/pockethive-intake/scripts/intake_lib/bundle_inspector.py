@@ -1,4 +1,4 @@
-"""Responsibility: inventory an explicit bundle and report safe observations and extraction counts.
+"""Responsibility: inventory scenario source outside reserved intake artifacts and report safe observations.
 Must not: resolve endpoints, infer adapters or execute source content. Contract: bundle-observations.json; intake-contract.md.
 """
 from __future__ import annotations
@@ -24,16 +24,12 @@ class BundleInspector:
             raise IntakeError("BUNDLE_DIRECTORY", "Bundle source must be an existing directory.")
         if not (root / self.package.manifest["bundleDescriptor"]).is_file():
             raise IntakeError("SCENARIO_SOURCE", "The selected bundle must explicitly contain scenario.yaml.")
+        intake = self.package.bundle_intake_path(root)
         inventory, observations, limitations = [], [], []
         coverage = []
         total = 0
-        for path in sorted(root.rglob("*")):
+        for path in self._source_paths(root, intake):
             relative = path.relative_to(root).as_posix()
-            if any(part in (".git", "__pycache__") for part in path.relative_to(root).parts):
-                continue
-            self.package.reject_links(path, root)
-            if path.is_dir():
-                continue
             if len(inventory) >= self.package.manifest["limits"]["bundleFiles"]:
                 raise IntakeError("BUNDLE_LIMIT", "Bundle has too many files.")
             data = self.package.read(path)
@@ -72,6 +68,25 @@ class BundleInspector:
                 limitations.append(IntakeError(exc.issue["code"], "File inventoried, but structured observations could not be read.", relative).issue)
                 coverage.append(file_coverage(relative, UNREADABLE, None, None, None))
         return {"sourceRoot": str(root), "sha256": canonical_hash(inventory), "files": inventory,
+                "excludedDirectories": [intake.relative_to(root).as_posix() + "/"],
                 "observations": observations, "limitations": limitations,
                 "coverage": coverage_view(coverage),
                 "claims": {"clientIntentConfirmed": False, "scenarioValidated": False, "scriptsExecuted": False}}
+
+    def _source_paths(self, root: Path, intake: Path):
+        pending = [root]
+        while pending:
+            path = pending.pop()
+            if path.name in (".git", "__pycache__") and path != root:
+                continue
+            self.package.reject_links(path, root)
+            if path == intake:
+                continue
+            if path.is_dir():
+                try:
+                    pending.extend(reversed(sorted(path.iterdir())))
+                except OSError:
+                    raise IntakeError("BUNDLE_DIRECTORY", "A source directory cannot be read.",
+                                      path.relative_to(root).as_posix()) from None
+            else:
+                yield path

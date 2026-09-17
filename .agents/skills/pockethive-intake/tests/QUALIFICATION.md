@@ -310,3 +310,58 @@ Raw local evidence is retained under
 `affected-suite.log`, their sandbox commands/results and `forward-e08/`.
 These are evidence locations, not package dependencies. The ZIP contains the
 tests and all nine portable evaluation cards.
+
+## Bundled forms and second Q feedback — 1.4.0, 2026-09-17
+
+The corrected package passed **201 tests** in **316.283 seconds** under Python
+3.12.3 on Linux, using the existing Bubblewrap 0.9.0 recipe: network unavailable,
+package mounted read-only, no home/repository mount, and Python `-B -I -S`.
+The suite ran through the public CLI from an extracted ZIP. The qualified runtime
+candidate SHA-256 was
+`08d95cf87353e2e7ebce3dcbadbe5a20fe1494f487fb2f2cbbe5bf2eb08fe518`.
+
+The 32 added regressions cover:
+
+- Forms in bundle-root `intake/`: repeated population/review keeps the source
+  inventory stable; runtime-file changes and separately referenced intake evidence
+  changes still fail their respective hash checks. Only root `intake/` is excluded.
+- Invalid layouts, reserved-path files/symlinks and resumed misplaced document
+  sets fail explicitly. New requirements can precede the scenario descriptor.
+- Saved-versus-preview outcomes, stale reviews, stale input revisions, source
+  changes during saving and preservation of existing writer locks.
+- Diagnostic-group counts, bounded pointer/schema hints without private dynamic
+  keys, and strict bulk field reads through the same owners. The fixture read audit
+  confirms several requested fields inspect source files as often as one field;
+  this is not a throughput benchmark or a cache.
+- Complete, partial, unrelated and non-directory initialisation targets receive
+  actionable diagnostics without replacement or mixed administrative identities.
+
+The initial full run exposed four failing subcases in two existing tests. Added
+pointer metadata collided with comparison snapshot metadata, and the layout
+preflight changed a missing-container pointer. Both were corrected before the
+passing full run; the existing sparse-comparison regression now asserts both the
+snapshot and resolved ancestor.
+
+All 16 tracked source/template/schema files were byte-identical to `e8f28763`;
+the pre-existing Amazon Q configuration edit was also preserved. Skill validation,
+Python syntax, local Markdown file links and `git diff --check` passed. The final
+release differs from the qualified runtime candidate only in this evidence record,
+the contract's clarification of explicit workspace paths in diagnostics, and the
+corresponding manifest hashes.
+
+An independent agent rehearsal used the packaged instructions and a disposable
+copy of the HTTP fixture. It saved the four YAMLs and a stakeholder review under
+the bundle's `intake/`, populated two HTTP templates, previewed/applied sourced
+edits and returned three grouped questions. Final draft review exited 0 with
+0 errors, 52 gaps and 1 warning; results stayed `not-run`, choices remained
+unaccepted and the scenario-source hash stayed unchanged. An agent-authored bulk
+input key typo was rejected explicitly and corrected using the contract. No
+package defect prevented saving the partial draft. This is a local agent rehearsal,
+not native-client qualification; its report also retains representation limits.
+
+Raw local proof is retained under
+`/home/tim/.tmp/pip/intake-bundled-feedback-hwlmduhf/`: `full-suite-r3.log`,
+`sandbox-command-r3.json`, `full-suite-r3-result.json`, protected hashes and focused
+test reports. These locations are evidence, not package dependencies. Native
+Amazon Q/Copilot sessions, other hosts and PocketHive runtime bundle validation
+were not qualified by this suite.

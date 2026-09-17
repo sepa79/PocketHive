@@ -46,15 +46,19 @@ def main() -> int:
         field.add_argument("--documents", required=True)
         field.add_argument("--document", required=True)
         field.add_argument("--pointer", required=True)
+        fields = subparsers.add_parser("show-fields")
+        fields.add_argument("--documents", required=True)
+        fields.add_argument("--input", required=True)
         update = subparsers.add_parser("apply-updates")
         update.add_argument("--documents", required=True)
         update.add_argument("--input", required=True)
+        update.add_argument("--dry-run", action="store_true", help="Validate and preview the candidate without saving documents.")
         compare = subparsers.add_parser("compare-source")
         compare.add_argument("--documents", required=True)
         compare.add_argument("--previous-source", required=True)
         compare.add_argument("--source", required=True)
         verify = subparsers.add_parser("verify-package")
-        for child in (create, inspect, validate, finalise, populate, review, field, update, compare, verify):
+        for child in (create, inspect, validate, finalise, populate, review, field, fields, update, compare, verify):
             child.add_argument("--debug", action="store_true", default=argparse.SUPPRESS,
                                help="Write safe failure diagnostics to stderr.")
         args = parser.parse_args(namespace=args)

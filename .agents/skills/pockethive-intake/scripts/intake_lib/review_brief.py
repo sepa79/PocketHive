@@ -1,5 +1,6 @@
 """Responsibility: derive a compact review/resume view from saved intake evidence.
-Must not: author questions, assess source fidelity or decide readiness. Contract: intake-contract.md.
+Must not: author questions, assess source fidelity or decide readiness.
+Contract: intake-contract.md, authoring-outcomes.md.
 """
 from __future__ import annotations
 
@@ -38,7 +39,8 @@ def _diagnostic_groups(result: dict, questions: list[dict]) -> list[dict]:
             if key not in groups:
                 groups[key] = {**descriptor, "errors": [], "gaps": [], "warnings": []}
             groups[key][category].append(issue_index)
-    return list(groups.values())
+    return [{**group, "counts": {"errorCount": len(group["errors"]), "gapCount": len(group["gaps"]),
+                                "warningCount": len(group["warnings"])}} for group in groups.values()]
 
 
 def build_brief(package, codec, store, root, docs, validation_result, stage, previous_root=None) -> dict:

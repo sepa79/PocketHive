@@ -41,7 +41,12 @@ class DocumentStore:
 
     def assert_unlocked(self, root: Path) -> None:
         if self.package.lock_path(root).exists():
-            raise IntakeError("DOCUMENTS_BUSY", "Another CLI writer holds the document lock; resume after it completes.")
+            raise self._busy(root)
+
+    def _busy(self, root: Path) -> IntakeError:
+        return IntakeError("DOCUMENTS_BUSY", "Another writer or an interrupted operation owns the document lock.",
+                           detail={"lockPath": str(self.package.lock_path(root)),
+                                   "nextAction": "Wait for an active writer to finish. If interrupted, establish that no writer remains, inspect the document set for partial writes, then explicitly remove only the empty abandoned lock directory. Never infer staleness from its age."})
 
     @contextmanager
     def mutation(self, root: Path, *, create: bool = False):
@@ -54,16 +59,18 @@ class DocumentStore:
         try:
             lock.mkdir()
         except FileExistsError:
-            raise IntakeError("DOCUMENTS_BUSY", "Another writer or an interrupted operation owns the lock; never infer that it is stale.") from None
+            raise self._busy(root) from None
         except OSError:
-            raise IntakeError("WRITE_LOCK", "Cannot acquire the document write lock in the selected directory.") from None
+            raise IntakeError("WRITE_LOCK", "Cannot acquire the document write lock in the selected directory.",
+                              detail={"lockPath": str(lock), "nextAction": "Check the explicit document directory and its write permissions; do not bypass locking."}) from None
         try:
             yield
         finally:
             try:
                 lock.rmdir()
             except OSError:
-                raise IntakeError("WRITE_LOCK_RELEASE", "The document write lock could not be released; inspect it explicitly.") from None
+                raise IntakeError("WRITE_LOCK_RELEASE", "The document write lock could not be released; inspect it explicitly.",
+                                  detail={"lockPath": str(lock), "nextAction": "Establish that no writer remains and inspect the saved documents and lock before removing only an empty abandoned lock directory."}) from None
 
     @staticmethod
     def write_bytes(path: Path, data: bytes) -> None:

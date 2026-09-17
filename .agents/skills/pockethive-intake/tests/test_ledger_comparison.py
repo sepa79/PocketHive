@@ -196,5 +196,6 @@ class LedgerComparisonTests(CliTestCase):
                 self.assertEqual("traceability", issue["document"])
                 self.assertEqual("/instance/proposals" if missing == "proposals" else "/instance/questions", issue["pointer"])
                 self.assertEqual("previous", issue["detail"]["snapshot"])
+                self.assertEqual("" if missing == "instance" else "/instance", issue["detail"]["resolvedAncestor"])
                 self.assertEqual(before, self.document_bytes(previous))
                 self.assertNotIn("brief", output)

@@ -1,5 +1,5 @@
 """Responsibility: resolve local canonical schemas and validate document structure.
-Must not: download schemas, insert defaults or decide domain readiness. Contract: schemas/*.schema.json.
+Must not: download schemas, insert defaults or decide domain readiness. Contract: schemas/*.schema.json, field-help.md.
 """
 from __future__ import annotations
 
@@ -94,6 +94,32 @@ class SchemaValidation:
         if not branches:
             raise IntakeError("SCHEMA_FIELD", "No canonical schema branch describes this existing field.", role, pointer)
         return {"schemaBranches": branches, "contextConstraints": list(contexts.values())}
+
+    def field_children(self, role: str, pointer: str, document: dict) -> dict:
+        """Project bounded schema property names; never list client-defined keys."""
+        keys = set()
+
+        def declared(node: object) -> None:
+            if not isinstance(node, dict):
+                return
+            keys.update(node.get("properties", {}))
+            for combination in ("anyOf", "oneOf", "allOf"):
+                for child in node.get(combination, []):
+                    declared(child)
+            for condition in ("if", "then", "else"):
+                declared(node.get(condition))
+            for child in node.get("dependentSchemas", {}).values():
+                declared(child)
+
+        value = resolve(document, pointer, role)
+        if isinstance(value, dict):
+            for branch in self.field_schema(role, pointer, document)["schemaBranches"]:
+                declared(branch["schema"])
+        maximum = self.package.manifest["limits"]["fieldHintKeys"]
+        result = {"schemaChildKeys": sorted(keys)[:maximum], "schemaChildKeysTruncated": len(keys) > maximum}
+        if isinstance(value, list):
+            result["arrayLength"] = len(value)
+        return result
 
     def validate(self, role: str, value: dict) -> list[dict]:
         import fastjsonschema

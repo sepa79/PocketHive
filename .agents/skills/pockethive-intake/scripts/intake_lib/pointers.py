@@ -1,5 +1,5 @@
 """Responsibility: resolve exact JSON Pointers and enumerate scalar facts.
-Must not: infer path aliases or domain applicability. Contract: intake-contract.md.
+Must not: infer path aliases or domain applicability. Contract: intake-contract.md, field-help.md.
 """
 from __future__ import annotations
 
@@ -14,13 +14,16 @@ def escape(value: str) -> str:
 
 def resolve(value: object, pointer: str, document: str = "") -> object:
     current = value
+    ancestor = ""
     for part in parts(pointer, document):
         try:
             if isinstance(current, list) and not re.fullmatch(r"0|[1-9][0-9]*", part):
                 raise ValueError
             current = current[int(part)] if isinstance(current, list) else current[part]
         except (TypeError, KeyError, IndexError, ValueError):
-            raise IntakeError("POINTER", "Required field or JSON Pointer does not resolve.", document, pointer) from None
+            raise IntakeError("POINTER", "Required field or JSON Pointer does not resolve.", document, pointer,
+                              detail={"resolvedAncestor": ancestor}) from None
+        ancestor += "/" + escape(part)
     return current
 
 

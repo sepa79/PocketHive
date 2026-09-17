@@ -63,6 +63,23 @@ class PackageContext:
         self.reject_links(path, root)
         return path
 
+    def bundle_intake_path(self, source: Path) -> Path:
+        name = self.manifest["bundleIntakeDirectory"]
+        if not isinstance(name, str) or not name or len(PurePosixPath(name).parts) != 1 or name in (".", "..") or "\\" in name or PurePosixPath(name).is_absolute():
+            raise IntakeError("BUNDLE_INTAKE_DIRECTORY", "The bundle intake directory must use one declared relative directory name.")
+        path = source / name
+        self.reject_links(path, source)
+        if path.exists() and not path.is_dir():
+            raise IntakeError("BUNDLE_INTAKE_DIRECTORY", "The reserved bundle intake path must be a directory.",
+                              detail={"intakePath": str(path)})
+        return path
+
+    def check_bundle_documents(self, source: Path, root: Path) -> None:
+        intake = self.bundle_intake_path(source)
+        if root.is_relative_to(source) and root != intake:
+            raise IntakeError("OUTPUT_IN_SOURCE", "Store bundled forms in the reserved intake directory or select an external document directory.",
+                              detail={"documentsRoot": str(root), "sourceRoot": str(source), "intakePath": str(intake)})
+
     def evidence_path(self, root: Path, ref: str) -> Path:
         path = Path(ref)
         if urlsplit(ref).scheme and not path.is_absolute():

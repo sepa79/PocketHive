@@ -22,7 +22,8 @@ explicitly from `vendor/`; no installation, network or alternative parser is use
 | `verify-package` | Verify every manifest-listed package file and original-source checksum. Integrity checks are not a cryptographic signature or authenticity guarantee. |
 | `prepare-review --documents DIR --stage draft\|handoff [--previous DIR]` | Finalise through the existing projection owner, validate the saved revision and return a compact, derived review brief. Optional previous documents are an explicit read-only comparison source. Never answer questions or grant approval. |
 | `show-field --documents DIR --document ROLE --pointer POINTER` | Read the exact current field, its canonical schema constraints, editing ownership and relevant existing diagnostics. No document writes or alternate field dictionary. |
-| `apply-updates --documents DIR --input FILE` | Apply an explicit, evidence-linked batch against an expected document revision, validate before persistence and finalise through the existing owners. No inferred values or automatic approval. |
+| `show-fields --documents DIR --input FILE` | Read a bounded explicit list of fields with one validation pass and shared document revision. See [field help](field-help.md). |
+| `apply-updates --documents DIR --input FILE [--dry-run]` | Apply or preview an explicit, evidence-linked batch against an expected document revision through the existing owners. See [authoring outcomes](authoring-outcomes.md) for persistence and validation results. No inferred values or automatic approval. |
 | `compare-source --documents DIR --previous-source DIR --source DIR` | Inspect two explicitly supplied bundle snapshots, require the previous inventory to match the recorded source, and report changed files/observations plus provenance-linked targets. Never replace the recorded source or author updates. |
 
 `scripts/package.py --output FILE` builds a deterministic ZIP from the manifest.
@@ -44,7 +45,8 @@ description; raw exception messages can contain client data and are not emitted.
 `--debug` is accepted before or after the subcommand. It writes diagnostic JSON
 to stderr, retaining one result JSON object on stdout and the normal exit code.
 Diagnostics include exception classes and package-relative code locations,
-without local variables, source lines, client payloads or absolute source paths.
+without local variables, source lines, client payloads or absolute implementation
+file paths. Explicit workspace paths in layout and lock diagnostics are retained.
 Known boundary errors retain their code/document/pointer; debug does not alter
 validation, repair inputs or turn a failed command into success.
 
@@ -58,6 +60,58 @@ validation, repair inputs or turn a failed command into success.
 - One YAML codec owns safe round-trip parsing, serialization and reload checks.
   One resolver owns package/document paths. One semantic validator owns intake
   conclusions. No Scenario Manager validation or worker-template engine is copied.
+
+## Bundled intake layout
+
+Keep the four forms with their scenario in the bundle-root `intake/` directory:
+
+```text
+bundle/
+  scenario.yaml
+  templates/
+  intake/
+    requirements.yaml
+    test-plan.yaml
+    traceability.yaml
+    execution-results.yaml
+    source-inspection.json
+```
+
+`manifest.json.bundleIntakeDirectory` owns this reserved directory name;
+`PackageContext` resolves it and checks document placement. `from-bundle`
+initialisation accepts `--source /client/bundle --output /client/bundle/intake`.
+An explicitly selected external document directory also remains supported.
+The bundle root itself and other directories inside its source tree are invalid
+document roots (`OUTPUT_IN_SOURCE`), including on resume and explicit source updates.
+No directory is inferred from a filename or found by searching other roots.
+New-requirements intake can start in a future bundle's `intake/` before a scenario
+exists; it retains narrative mode until an explicit later authoring task.
+
+`BundleInspector` excludes exactly the root-relative `intake/` subtree from
+scenario-source inventory, hashing, observations and coverage. It prunes that
+directory before traversal and reports `excludedDirectories: ["intake/"]` even
+when absent. A symbolic link or non-directory at that reserved path fails explicitly.
+Other directories named `intake`, such as `templates/intake/`, remain source.
+The reserved directory must contain forms and supporting intake artifacts only;
+runtime scenario assets belong outside it. No arbitrary exclusion flag is provided.
+Inspection, population, source comparison and source validation use this same owner.
+Adding or editing forms, review output, the write lock or the saved inspection report
+there cannot change the recorded scenario-source hash.
+
+Intake integrity remains separate: document revisions, projections, review digests
+and explicitly referenced evidence files retain their existing byte checks, including
+evidence stored under `intake/`. A bundle archive includes the forms. This inspection
+hash is not the runtime bundle digest or ZIP digest; those may include every file.
+Existing recorded hashes are never silently refreshed when the inspection scope or
+source changes. Review and explicitly update the source identity and affected evidence.
+Moving/copying a bundle does not automatically rebind existing absolute source or
+evidence paths; review those references explicitly at the destination.
+
+Retain old source snapshots outside the bundle: runtime descriptor discovery is
+recursive and a second `scenario.yaml` can make a bundle ambiguous. The runtime
+validator also scans YAML/JSON for variable references, including intake prose.
+Use the supported PocketHive validation at authoring handoff; this skill does not
+change runtime validation or declare a bundle deployable.
 
 ## Friction-reducing authoring operations
 
@@ -77,7 +131,26 @@ writers are serialised; arbitrary external editors are not fenced. Read operatio
 compare the input revision before and after reading; changed inputs fail explicitly.
 Writes remain atomic per file, not a four-file transaction.
 
+Lock failures include `detail.lockPath` and `detail.nextAction`. Busy-lock guidance
+requires establishing that no writer remains, inspecting the document set for partial
+writes, and explicitly removing only an empty abandoned lock. No command guesses that
+a lock is stale or removes it automatically. These explicit workspace paths are safe
+diagnostic metadata; errors still omit source contents and credentials.
+
+`initialise` keeps `OUTPUT_EXISTS` for a nonempty target and reports
+`detail.directoryState`: `complete`, `partial`, `unrelated` or `not-directory`.
+`existingDocuments` and `missingDocuments` contain only canonical document filenames;
+complete means all four regular files exist, not that they validate. `nextAction`
+directs callers to resume a complete set, restore a partial set from one consistent
+revision, or select a new/empty directory. It never overwrites work or invents the
+missing documents' identities. Additional files alone are not an existing intake.
+
 ### Review and field views
+
+Safe pointer help and bulk field views are defined in [field help](field-help.md).
+Per-group counts and update preview/persistence results are defined in
+[authoring outcomes](authoring-outcomes.md). They project the existing owners;
+neither introduces another schema or readiness calculation.
 
 `prepare-review` returns the normal validator errors/gaps/warnings plus `brief`:
 source mode, source identity, current review record, provenance-linked field
@@ -222,6 +295,14 @@ relative evidence paths resolve only against their declared documents root; orig
 bundle evidence paths are related to the recorded source root, not guessed from a
 basename. Both snapshots and the intake remain unchanged. Subsequent selective edits
 use the same explicit update path; no automatic source switch, merge or adoption.
+
+If the exact previous bytes are unavailable, historical comparison is unavailable.
+First try a retained snapshot or explicitly selected Git revision and verify its
+inventory matches. Otherwise inspect the current source, review the affected facts
+and all supporting provenance, then explicitly update those records and
+`/instance/intake/source` through the existing authoring workflow. Record the missing
+historical evidence as a limitation. `populate-from-inspection` requires the old
+recorded hash and cannot repair source drift; refreshing only the hash is not review.
 
 ## Evidence and review
 

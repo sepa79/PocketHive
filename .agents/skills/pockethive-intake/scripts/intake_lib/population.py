@@ -23,8 +23,7 @@ def populate_from_inspection(package, codec, store, root: Path, docs: dict, *, e
         raise IntakeError("POPULATION_SOURCE_PATH", "The recorded bundle source must be an explicit absolute directory.",
                           "traceability", "/instance/intake/source/artifactRef")
     source = package.workspace(selected["artifactRef"])
-    if root == source or root.is_relative_to(source):
-        raise IntakeError("OUTPUT_IN_SOURCE", "Place generated documents outside the selected source directory.")
+    package.check_bundle_documents(source, root)
     inspection = BundleInspector(package, codec).inspect(source)
     if inspection["sha256"] != selected.get("sha256"):
         raise IntakeError("SOURCE_HASH", "Selected bundle bytes changed; review the changed source explicitly.",

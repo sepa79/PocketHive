@@ -16,6 +16,8 @@ from .yaml_codec import YamlCodec
 
 
 def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str, source: Path | None) -> dict:
+    if mode == "from-bundle" and source is not None:
+        package.check_bundle_documents(source, root)
     _require_empty(package, root)
     inspection = None
     if mode == "from-bundle":
@@ -27,8 +29,6 @@ def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str,
         selected = {"artifactRef": str(source), "sha256": sha256(package.read(source)), "kind": "file"}
     else:
         selected = None
-    if source is not None and (root == source or root.is_relative_to(source)):
-        raise IntakeError("OUTPUT_IN_SOURCE", "Place generated documents outside the selected source directory.")
     docs = {role: codec.parse(package.read(package.asset(item["path"])), role)
             for role, item in package.manifest["templates"].items()}
     token = uuid4().hex[:12]
@@ -58,4 +58,16 @@ def initialise(package: PackageContext, codec: YamlCodec, root: Path, mode: str,
 
 def _require_empty(package: PackageContext, root: Path) -> None:
     if root.exists() and (not root.is_dir() or any(path != package.lock_path(root) for path in root.iterdir())):
-        raise IntakeError("OUTPUT_EXISTS", "Initialisation requires a new or empty directory; resume existing documents instead.")
+        declared = {role: package.document_path(root, role) for role in package.manifest["templates"]}
+        existing = sorted(path.name for path in declared.values() if path.is_file())
+        missing = sorted(path.name for path in declared.values() if not path.is_file())
+        state = "not-directory" if not root.is_dir() else "complete" if not missing else "partial" if existing else "unrelated"
+        action = {
+            "complete": "Resume with prepare-review --documents; initialise never overwrites an existing set.",
+            "partial": "Preserve these files and restore the missing documents from the same intake revision, or initialise a separate empty directory. Do not mix generated identities.",
+            "unrelated": "Select a new or empty document directory; existing unrelated files will not be overwritten.",
+            "not-directory": "Select a new or empty directory; the selected path is a file.",
+        }[state]
+        raise IntakeError("OUTPUT_EXISTS", "Initialisation requires a new or empty directory.",
+                          detail={"documentsRoot": str(root), "directoryState": state,
+                                  "existingDocuments": existing, "missingDocuments": missing, "nextAction": action})

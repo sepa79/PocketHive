@@ -5,7 +5,8 @@ direct answers. Apply the shared workflow and writing guidance loaded by
 `SKILL.md`; this mode adds extraction instructions only.
 
 1. Read the supplied sources and initialise the four document drafts in a
-   new/empty output directory, or resume the existing document set. An existing
+   future bundle's new/empty `intake/` directory, or resume the existing document set.
+   This mode does not require or generate a scenario file. An existing
    narrative file can be supplied through `--source`. Identify
    each source without inventing an author, approval or business context. Keep
    results unexecuted unless the user supplies identified execution evidence.
