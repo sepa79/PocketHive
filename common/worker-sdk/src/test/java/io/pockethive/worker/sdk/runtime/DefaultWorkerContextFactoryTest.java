@@ -58,8 +58,8 @@ class DefaultWorkerContextFactoryTest {
         assertThat(observabilityContext).isNotNull();
         assertThat(observabilityContext.getTraceId()).isNotBlank();
         assertThat(observabilityContext.getHops()).isEmpty();
-        assertThat(observabilityContext.getSwarmId()).isEqualTo("swarm-1");
-        assertThat(context.info().instanceId()).isEqualTo("instance-1");
+        assertThat(observabilityContext.getSwarmId()).isEqualTo("swarm-config");
+        assertThat(context.info().instanceId()).isEqualTo("instance-config");
     }
 
     @Test
@@ -80,11 +80,11 @@ class DefaultWorkerContextFactoryTest {
         assertThat(observabilityContext).isSameAs(inbound);
         assertThat(observabilityContext.getTraceId()).isNotBlank();
         assertThat(observabilityContext.getHops()).isEmpty();
-        assertThat(observabilityContext.getSwarmId()).isEqualTo("swarm-2");
+        assertThat(observabilityContext.getSwarmId()).isEqualTo("swarm-config");
     }
 
     @Test
-    void fallsBackToConfiguredIdentityWhenHeadersMissing() {
+    void usesConfiguredIdentityWithoutExplicitMessageHeaders() {
         WorkItem message = WorkItem.text(MESSAGE_INFO, "payload").build();
 
         WorkerContext context = factory.createContext(DEFINITION, state, message);
@@ -94,19 +94,34 @@ class DefaultWorkerContextFactoryTest {
     }
 
     @Test
-    void failsWhenNoHeadersOrConfiguredIdentity() {
-        DefaultWorkerContextFactory noIdentityFactory = new DefaultWorkerContextFactory(
-            type -> {
-                throw new IllegalStateException("No bean registered for " + type.getName());
-            },
+    void preservesIncomingTraceContextWithoutUsingItAsExecutingIdentity() {
+        ObservabilityContext inbound = new ObservabilityContext();
+        inbound.setTraceId("trace-from-producer");
+        inbound.setSwarmId("origin-swarm");
+        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload")
+            .header("swarmId", "origin-swarm")
+            .header("instanceId", "origin-instance")
+            .observabilityContext(inbound)
+            .build();
+
+        WorkerContext context = factory.createContext(DEFINITION, state, message);
+
+        assertThat(context.info().swarmId()).isEqualTo("swarm-config");
+        assertThat(context.info().instanceId()).isEqualTo("instance-config");
+        assertThat(context.observabilityContext()).isSameAs(inbound);
+        assertThat(inbound.getTraceId()).isEqualTo("trace-from-producer");
+        assertThat(inbound.getSwarmId()).isEqualTo("origin-swarm");
+        assertThat(message.headers()).containsEntry("swarmId", "origin-swarm")
+            .containsEntry("instanceId", "origin-instance");
+    }
+
+    @Test
+    void requiresConfiguredIdentityAtConstruction() {
+        assertThatThrownBy(() -> new DefaultWorkerContextFactory(
+            type -> { throw new IllegalStateException("Unexpected bean lookup"); },
             new SimpleMeterRegistry(),
-            ObservationRegistry.create()
-        );
-
-        WorkItem message = WorkItem.text(MESSAGE_INFO, "payload").build();
-
-        assertThatThrownBy(() -> noIdentityFactory.createContext(DEFINITION, state, message))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("swarmId");
+            ObservationRegistry.create(),
+            null
+        )).isInstanceOf(NullPointerException.class).hasMessage("identity");
     }
 }

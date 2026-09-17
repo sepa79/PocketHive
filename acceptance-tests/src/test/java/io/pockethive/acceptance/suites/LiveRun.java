@@ -1,5 +1,6 @@
 package io.pockethive.acceptance.suites;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import io.pockethive.acceptance.api.*;
 import io.pockethive.acceptance.capture.DebugTapApi;
 import io.pockethive.acceptance.capture.TapResource;
@@ -20,11 +21,13 @@ import java.util.UUID;
  */
 final class LiveRun implements AutoCloseable {
   final AcceptanceTarget target;
+  final JsonNode scenario;
   final RunEvidence evidence;
   final SwarmApi swarms;
   private final ApiRun api;
-  private LiveRun(AcceptanceTarget target, ApiRun api) {
+  private LiveRun(AcceptanceTarget target, ApiRun api, JsonNode scenario) {
     this.target = target;
+    this.scenario = scenario;
     this.api = api;
     evidence = api.evidence;
     swarms = new SwarmApi(api.http, api.token);
@@ -33,8 +36,9 @@ final class LiveRun implements AutoCloseable {
     var target = TargetLoader.load(TargetLoader.selectedFile());
     var api = ApiRun.open(target.api(), testName);
     try {
-      api.evidence.record("fixture", new ScenarioApi(api.http, api.token).requireScenario(target.fixture().templateId()));
-      return new LiveRun(target, api);
+      var scenario = new ScenarioApi(api.http, api.token).requireScenario(target.fixture().templateId());
+      api.evidence.record("fixture", scenario);
+      return new LiveRun(target, api, scenario);
     } catch (Exception | Error failure) {
       try (api) { throw failure; }
     }
@@ -44,9 +48,10 @@ final class LiveRun implements AutoCloseable {
         new OperationAwaiter(swarms, target.limits().operations(), evidence), target.limits().operations());
   }
   TapResource newTap() { return new TapResource(new DebugTapApi(api.http, api.token), target.limits(), evidence); }
-  SwarmCreateRequest createRequest() {
+  SwarmCreateRequest createRequest() { return createRequest(null); }
+  SwarmCreateRequest createRequest(String variablesProfileId) {
     return SwarmCreateRequest.of(target.fixture().templateId(), UUID.randomUUID().toString(), false,
-        target.fixture().sutId(), null, NetworkMode.DIRECT, null);
+        target.fixture().sutId(), variablesProfileId, NetworkMode.DIRECT, null);
   }
   @Override public void close() throws IOException {
     api.close();

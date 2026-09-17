@@ -362,10 +362,10 @@ Manual checks:
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides directly inside each bee's `config` map. The Scenario Manager passes those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap. No environment variables are used for logical scenario settings.
-- The `WorkItem` history policy is also configurable per worker via `config.historyPolicy` (values: `FULL`, `LATEST_ONLY`, `DISABLED`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
+- The `WorkItem` history policy is declared per worker via `config.historyPolicy` (values: `FULL`, `LATEST_ONLY`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
   - `FULL` – every logical stage (scheduler seed, templating, worker onMessage, processor) appends a new step; history is preserved end-to-end.
   - `LATEST_ONLY` – previous steps are collapsed so only the latest step remains (reindexed to `0`).
-  - `DISABLED` – history snapshots are dropped after each hop, but the current step is still retained as a single baseline.
+  - Runtime uses the accepted worker `config.historyPolicy`, including scenario configuration and later control updates. Missing means `FULL`; an update without this field preserves the current policy. Explicit worker-config reset restores the default. Invalid policy values reject the update. The separate `pockethive.worker.history-policy` service setting has been removed.
 - Example snippet:
   ```yaml
   config:
@@ -457,8 +457,17 @@ Framework component tests use their own HTTP stub; deployed tests use public ing
 ./run-acceptance-tests.sh acceptance-tests/targets/local-viewer.properties auth-viewer
 ./run-acceptance-tests.sh acceptance-tests/targets/local-runner.properties auth-runner
 ./run-acceptance-tests.sh acceptance-tests/targets/local-network-access.properties auth-network
+# Worker history configuration and processor header separation:
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-artemis.properties workers
+./run-acceptance-tests.sh acceptance-tests/targets/local-templating-artemis.properties templating
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-artemis.properties worker-config
+./run-acceptance-tests.sh acceptance-tests/targets/local-worker-overrides-artemis.properties worker-overrides
 # On a stack already configured for Rabbit WORK:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-rabbit.properties workers
+./run-acceptance-tests.sh acceptance-tests/targets/local-templating-rabbit.properties templating
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-rabbit.properties worker-config
+./run-acceptance-tests.sh acceptance-tests/targets/local-worker-overrides-rabbit.properties worker-overrides
 ```
 
 Both runner arguments are required: an explicit target file and a JUnit tag expression.

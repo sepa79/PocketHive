@@ -162,6 +162,41 @@ Gate: concrete local inputs build without SDK implementation/Control Plane inter
 rate/cursor updates, scheduler timing/reset and invalid-candidate state preservation retain behavior.
 Rabbit SDK bridges are checked against the same boundary without reopening Rabbit settlement.
 
+#### Runtime defects exposed by independent acceptance tests (2026-09-16)
+
+Executing identity is repaired in worker-sdk (2026-09-16, uncommitted, pending separate
+review). The initial captures paired the processor role with the generator instance:
+DefaultWorkerContextFactory preferred incoming headers to configured identity.
+The factory now requires ControlPlaneIdentity, uses its swarm/instance directly and
+has no identity-less construction path. Spring supplies workerControlPlaneIdentity.
+Message origin, existing step authors and incoming trace context remain separate.
+Owner: RESP-WORK-CONTEXT. SDK/context/composition tests 19/19; deployed worker cases
+Artemis 2/2 and Rabbit 2/2, with verified removal. No broker adapter or ACK change.
+
+Before removal of DISABLED, the mixed-policy fixture reported processor historyPolicy=DISABLED through
+WorkerState.rawConfig and Controller observations, while captured results still retain
+three steps. DefaultWorkerContextFactory.resolveHistoryPolicy reads only startup
+PocketHiveWorkerProperties, independently of the accepted control-plane configuration.
+The user reopened this repair on 2026-09-16: runtime must honor scenario policy.
+WorkerRuntimeConfiguration now parses the merged candidate before acceptance; WorkerState
+stores it with the raw configuration and DefaultWorkerContextFactory reads its parsed policy.
+The separate startup property/resolver is removed. FULL/LATEST_ONLY operations are unchanged.
+WorkerHistoryPolicyTest covers actual retained steps across config updates, reset and rejection;
+WorkerRuntimeAcceptanceIT now checks retained steps in captured processor results. Fresh
+verification is recorded in the coverage ledger; previous configuration echoes alone do not
+prove this behavior. No production parser or fallback chain belongs in the E2E framework.
+
+Evidence and exact test outcomes: docs/ci/acceptance-coverage.md, worker runtime slice.
+The original tests changed no product behavior; subsequent SDK repairs address identity and the explicitly reopened scenario-policy wiring.
+
+User decision (2026-09-16): implement only the executing-identity repair, with SDK
+regressions and deployed verification. History-policy behavior and configuration
+ownership are explicitly deferred pending a separate usage/semantics discussion;
+the observation above remains open and is not authorization to change history.
+The subsequent user decision removes only redundant DISABLED, retaining FULL and
+LATEST_ONLY unchanged. Current fixtures use LATEST_ONLY; the startup-versus-scenario
+configuration mismatch above remains deferred.
+
 ### F03 — Docker technology owner
 
 Extend existing docker-client; do not create another Docker library. Move both client configurations,

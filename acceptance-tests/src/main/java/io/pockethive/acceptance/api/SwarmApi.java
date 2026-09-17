@@ -46,6 +46,9 @@ public final class SwarmApi {
   public SwarmStateView state(String swarmId) throws IOException, InterruptedException {
     return http.decode(http.request("GET", path(swarmId), null, token).expect(200), SwarmStateView.class);
   }
+  public SwarmStateView state(String swarmId, Duration budget) throws IOException, InterruptedException {
+    return http.decode(http.request("GET", path(swarmId), null, token, budget).expect(200), SwarmStateView.class);
+  }
   public void requireAbsent(String swarmId) throws IOException, InterruptedException {
     http.request("GET", path(swarmId), null, token).expect(404);
   }

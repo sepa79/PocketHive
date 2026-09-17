@@ -5,10 +5,21 @@ import static io.pockethive.acceptance.support.OperationFixtures.*;
 import io.pockethive.acceptance.support.ScriptedIngress;
 import io.pockethive.swarm.model.lifecycle.*;
 import java.time.Duration;
+import java.net.http.HttpTimeoutException;
+import java.util.Map;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 
 class SwarmApiTest {
+  @Test void stateReadHonorsTheRemainingObservationBudget() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(3))) {
+      ingress.replyAfter("GET", "/orchestrator/api/swarms/" + SWARM, 200, Map.of(), Duration.ofMillis(600));
+      assertThrows(HttpTimeoutException.class,
+          () -> new SwarmApi(http, "").state(SWARM, Duration.ofMillis(100)));
+    }
+  }
+
   @ParameterizedTest
   @EnumSource(value = OperationType.class, names = {"CREATE", "START", "STOP", "REMOVE"})
   void rejectsAReceiptForADifferentSubmittedKey(OperationType type) throws Exception {

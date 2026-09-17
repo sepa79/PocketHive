@@ -51,7 +51,7 @@ template:
       image: processor:latest
       config:
         enabled: true
-        historyPolicy: DISABLED
+        historyPolicy: LATEST_ONLY
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         mode: THREAD_COUNT
         threadCount: 1

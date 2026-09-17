@@ -17,20 +17,20 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | SM-2 | Fresh deployment has no implicit default swarm. | deployment-smoke: default swarm absent | Smoke on explicitly fresh dedicated target; do not assume all targets empty | OPEN |
 | SC-1 | Authored generator rate appears in retrieved template. | scenario-defaults: rate limit | ScenarioReadAcceptanceIT.preservesAuthoredSchedulerRate: explicit numeric 7.5 through ingress | PASS |
 | SC-2 | Authored templating interceptor appears in template. | scenario-defaults: templating | ScenarioReadAcceptanceIT.preservesTemplatingConfiguration: full authored templating object through ingress | PASS |
-| SC-3 | Per-worker history policy survives template read. | history-policy: authoring | ScenarioReadAcceptanceIT.preservesEveryWorkersHistoryPolicy: exact four-role map with FULL/LATEST_ONLY/DISABLED through ingress | PASS |
-| WK-1 | Runtime history policies match authoring and real traffic succeeds. | history-policy: runtime | Worker configuration + message tests | OPEN |
-| WK-2 | Processor result headers belong to step history, not global headers. | workitem-headers | Canonical WorkItem assertions after processing | OPEN |
+| SC-3 | Per-worker history policy survives template read. | history-policy: authoring | ScenarioReadAcceptanceIT.preservesEveryWorkersHistoryPolicy: exact four-role map with FULL/LATEST_ONLY through ingress | PASS |
+| WK-1 | Runtime history policies match authoring and real traffic succeeds. | history-policy: runtime | WorkerRuntimeAcceptanceIT: authored policies match fresh runtime observations; actual processor LATEST_ONLY results contain one step at index zero with the correct executing identity. Rabbit/Artemis pass; SDK component tests cover FULL and policy transitions. | PASS |
+| WK-2 | Processor result headers belong to step history, not global headers. | workitem-headers | WorkerRuntimeAcceptanceIT: canonical processor step headers, no global leakage, exact producing instance; Rabbit/Artemis pass | PASS |
 | SW-1 | Create/start/process/stop/remove succeeds; expected workers present; canonical confirmations correlated; resource provisioning/removal has coverage. | swarm-lifecycle: golden path | HttpLifecycleAcceptanceIT passed on Rabbit and Artemis, including expected worker roles; topology/CP details remain open | PARTIAL |
 | SW-2 | Stop-before-start and repeated start after target state are accepted correctly. | swarm-lifecycle: idempotent target state | TargetStateLifecycleAcceptanceIT passed on Rabbit and Artemis; STOP before START, repeated STOP/START, distinct request keys and operation IDs, same run and expected states. Exact-key replay is not asserted. | PASS |
-| WK-3 | Templated generation produces expected processed response. | swarm-lifecycle: templated generator | New templating fixture | OPEN |
+| WK-3 | Templated generation produces expected processed response. | swarm-lifecycle: templated generator | TemplatingAcceptanceIT: interceptor output consumed by the generator message template, exact generated request body/headers and successful HTTP response in the same captured WorkItem; two profiles on Rabbit/Artemis | PASS |
 | NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | Network group; proxy fixture | OPEN |
 | NW-2 | HTTPS reaches SUT through selected proxy with matching runtime config; binding removed. | swarm-lifecycle: HTTPS proxy | Network group; TLS fixture | OPEN |
 | NW-3 | TCPS reaches SUT through selected proxy with successful result; binding removed. | swarm-lifecycle: TCPS proxy | Network group; TCPS fixture | OPEN |
 | NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | Dedicated network acceptance target supporting NFS topology | OPEN |
-| SC-4 | Scenario variables resolve into generated traffic/template rendering. | swarm-lifecycle: variables | New variables fixture and WorkItem assertions | OPEN |
+| SC-4 | Scenario variables resolve into generated traffic/template rendering. | swarm-lifecycle: variables | TemplatingAcceptanceIT: explicit amber/violet create profiles, global + SUT values, exact typed JSON and eval/header results from actual generated traffic; Rabbit/Artemis | PASS |
 | NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | Supported isolated TCP setup/observation interface must be specified | OPEN |
-| WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | API worker config assertions + canonical CP contract coverage; preserve both | OPEN |
-| WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | New override fixture; worker configuration API evidence | OPEN |
+| WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
+| WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
 | DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | Supported Redis fixture setup/observation boundary required | OPEN |
 | DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Same boundary; assert values, not merely message arrival | OPEN |
 | DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | Supported ClickHouse observation required; errors must fail test | OPEN |
@@ -158,7 +158,7 @@ the canonical Scenario Manager `/api/templates`; the frozen legacy test requeste
 and detail reads are included. No viewer/runner grant claim is made (AU-3–AU-13 open).
 
 Text endpoints explicitly request text/plain. The initial JSON-only client produced
-406 for scenario raw and selected the JSON /{id} mapping (404) for shared raw paths.
+406 for scenario raw and selected the JSON `/{id}` mapping (404) for shared raw paths.
 PocketHiveHttp now supports an explicit Accept value through the same bounded request
 implementation; a framework test reproduces rejection of JSON and acceptance of text.
 No product behavior, security policy, stack configuration or legacy code changed.
@@ -288,3 +288,264 @@ DebugTapService 5/5. `/tmp/acceptance-framework-fixes-lifecycle.log`: full frame
 and deployed Artemis lifecycle 3/3, no skips. The adapter-close failure response is verified
 through the real controller with MockMvc; the running stack was not rebuilt for that
 product error path. Rabbit was not rerun. No additional coverage rows or N3/N4 are closed.
+
+
+## Worker runtime WK-1/WK-2 — initial execution before identity repair
+
+Two independent `workers` cases use new four-role fixtures for Rabbit and Artemis.
+The history case compares all authored history policies with non-stale public worker
+observations for the same run. The header case checks canonical processor status,
+success and duration in the step, and absence of step-header keys from global headers.
+Both use the existing swarm/tap ownership and removal verification. Shared HTTP
+assertions now also match the producer instance to the processor reported by the API;
+this strengthens the existing HTTP lifecycle case and currently exposes the same defect.
+
+Artemis first execution: 66 framework tests pass; both deployed cases fail because
+`ph.step.service=processor` is paired with the generator's `ph.step.instance`.
+Log: `/tmp/acceptance-workers-artemis.log`. Both failed tests removed their swarms
+successfully. History policy comparison itself passed for all four workers.
+
+The saved payloads also reveal three retained steps although the processor's reported
+policy is DISABLED. Source trace confirms two configuration paths: accepted raw config
+reported in status versus startup PocketHiveWorkerProperties read during invocation.
+Current source additionally confirms message headers override configured executing
+identity. These are product defects, not adapter-specific naming problems or test
+configuration defaults. Follow-ups are recorded under F02 in
+`docs/inProgress/functional-module-boundaries.md`; product code remains unchanged.
+No WK row or full replacement gate is declared passed by these failing tests.
+
+
+Rabbit execution with aggregated assertions: 66 framework tests pass; both deployed
+cases fail only on producing-instance identity. Successful HTTP response/body and step
+header placement assertions execute despite that failure and pass. Log:
+`/tmp/acceptance-workers-rabbit.log`. Both adapters retain three steps for the processor
+configured DISABLED; this additional finding comes from saved canonical capture evidence
+and the source trace, not a currently asserted step-count condition.
+
+All four test swarms were removed with SUCCEEDED, no remaining resources/errors and
+registry404: 20 removed resources per Artemis swarm, 18 per Rabbit swarm. These counts
+are observed evidence, never fixture-specific cleanup rules. Evidence directories:
+
+- Artemis: worker-history-c87a2d95-49ae-4ba3-a49a-84284411cde9,
+  worker-headers-eef6d084-11ef-43fc-b0f6-b6f0cc1d1c42.
+- Rabbit: worker-history-0350d283-ebcc-4a49-9ec3-843fb8573485,
+  worker-headers-adb5f4da-3c0b-40af-82fb-ed4bea024145.
+
+The local WorkPlane was temporarily switched through an external compose override,
+then restored to the repository's Artemis configuration. Final public swarm list is
+empty. No product code, checked-in deployment config or frozen legacy code changed.
+The final assertion aggregation ran on Rabbit; Artemis above is the preceding run.
+No full-reactor run or fresh import scan: dependency/import boundaries are unchanged.
+This uncommitted slice awaits separate review and product defect resolution.
+
+
+## Executing-worker identity repair — 2026-09-16
+
+Current result supersedes the identity failures above: configured ControlPlaneIdentity
+is the sole executing swarm/instance source in DefaultWorkerContextFactory; Spring
+supplies workerControlPlaneIdentity. Header precedence and identity-less constructors
+were removed. Existing step authors, origin headers and trace context are preserved.
+History-policy resolution/retention is unchanged and explicitly deferred by the user.
+WK-1 proves the authored/accepted-config projection plus real HTTP traffic, not retention.
+
+Regression: `/tmp/worker-identity-before.log` reproduced 5 failures in 6 SDK cases;
+`/tmp/worker-identity-after.log` passes 19 SDK/context/composition cases. Deployed logs
+`/tmp/worker-identity-artemis.log` and `/tmp/worker-identity-rabbit.log` each pass 66
+framework cases and 2 worker cases, 0 skips. Exact evidence under acceptance-tests/target/runs:
+
+- Artemis: worker-history-571d84d9-debc-4325-a300-4aa4b9befa9c,
+  worker-headers-ef03b091-0dba-447b-942a-95913965f784.
+- Rabbit: worker-history-decc570d-18b0-4e4c-a6d9-cf3d09de5acd,
+  worker-headers-135f1960-2fe7-4cf2-a934-370f6179f279.
+
+All four REMOVE operations succeeded with empty remainingResources/errors and
+registry404; removed-resource counts were 20/20 on Artemis and 18/18 on Rabbit.
+The stack was rebuilt from current source, temporarily switched using an external
+override, then restored to Artemis. Final public swarm list is empty.
+The rebuild exposed documentation-publication issues: the coverage page is now in
+the explicit Docusaurus include list and its literal `/{id}` path is marked as code.
+Java/image packaging and the corrected UI build passed; no full-reactor test run.
+Dependency/import boundaries are unchanged. Existing lifecycle was not separately
+rerun; its shared producer assertion is exercised by these worker cases.
+N3/N4 and the deferred history-policy finding remain open. No commit or review verdict.
+
+
+## Removal of redundant history policy — 2026-09-16
+
+User approved removal of DISABLED only. FULL and LATEST_ONLY retain their existing
+behavior; configuration selection and the deferred scenario/runtime mismatch are
+unchanged. Fixtures previously declaring DISABLED now explicitly declare LATEST_ONLY.
+The historical execution evidence above predates this two-policy contract.
+
+Verification: `/tmp/history-two-policies-tests.log` passes WorkItem/codec 13 and
+framework 66; `/tmp/history-two-policies-sdk.log` passes 7 SDK/context/composition
+cases. `/tmp/history-two-policies-authoring.log` passes 3 ScenarioReadAcceptanceIT
+cases through ingress after scenario reload, including the two-policy four-role map
+(evidence: scenario-history-2218eae0-01f3-4af5-9b89-adc84b3a9305). No skips.
+No new worker-image rebuild or deployed worker/lifecycle rerun for this enum removal;
+the earlier Rabbit/Artemis runtime evidence remains dated to the preceding slice.
+
+
+## Scenario-selected runtime history — 2026-09-16
+
+The user reopened the deferred wiring defect: runtime must honor scenario
+config.historyPolicy. WorkerRuntimeConfiguration parses the complete merged candidate;
+WorkerState stores the raw map and its parsed policy together. DefaultWorkerContextFactory
+captures the accepted policy at invocation start. The separate service property and
+bean/role policy resolver are removed. WorkItem FULL/LATEST_ONLY operations and transport
+ACK behavior are unchanged. Unknown/nontext policy values are rejected before state
+acceptance; omission preserves an existing policy through merge, and explicit worker
+config reset restores the absent-field FULL default.
+
+WorkerHistoryPolicyTest drives canonical CP commands through real runtime/state/context
+and WorkerInvocation: actual retained steps, FULL/LATEST_ONLY updates, partial patch,
+disable/re-enable, reset, in-progress invocation snapshot and rejection preserving
+accepted raw/typed config, enablement and listener-visible state. The existing rejection
+notification can repeat the previous snapshot; it never exposes the rejected candidate.
+WorkerRuntimeConfigurationTest covers immutable raw/policy consistency and invalid
+input at the parser boundary. The pre-fix regression produced 10 failures in 11 cases
+(`/tmp/history-runtime-before.log`). Focused SDK checks passed 78 cases; the full selected
+reactor passed worker-sdk 270, framework 66, Work API 21 and dependent module tests,
+including RepositoryImportBoundaryTest 3 (`/tmp/history-runtime-modules.log`).
+
+Full local rebuild succeeded with build-hive.sh --quick (`/tmp/history-runtime-build.log`).
+The strengthened worker acceptance case asserts one retained processor result step at
+index zero for the authored LATEST_ONLY policy. It does not calculate production retention
+rules or resolve effective configuration. Both deployed workers cases passed with no skips
+on each adapter (`/tmp/history-runtime-artemis.log`, `/tmp/history-runtime-rabbit.log`).
+Evidence directories under acceptance-tests/target/runs:
+
+- Artemis: worker-history-f5749c1c-12a2-4a61-945e-bfa24377f94a,
+  worker-headers-4b68d1bb-9efc-4d4c-b46b-a2ef90d88452.
+- Rabbit: worker-history-ee419bc3-50bb-47ad-9976-ac72a56ac9ba,
+  worker-headers-0f02cfb8-4055-4815-838f-12fb92267130.
+
+Each run captured three one-step results; all four REMOVE operations SUCCEEDED with
+empty remainingResources/errors and verified registry404. Removed-resource counts
+were 20/20 for Artemis and 18/18 for Rabbit, recorded evidence rather than test constants.
+Rabbit was selected only by the external local override; the base Artemis stack was
+restored afterwards. Final public swarm list is empty. This closes the scenario/runtime
+history wiring defect; N3/N4 and the unrelated deferred service refactors remain open.
+FULL and dynamic policy changes are proven by SDK component tests; the deployed slice
+proves scenario-selected LATEST_ONLY. No full root-reactor test or separate review verdict
+is claimed. No commit or push.
+
+
+## Templating and selected variables WK-3/SC-4 — 2026-09-17
+
+New `templating` group and explicit `acceptance-templating-rabbit` / `acceptance-templating-artemis`
+fixtures use two independent profile cases, amber and violet. Every case creates its own
+swarm, captures three distinct processor results, and verifies the last generator step
+as canonical HttpRequestEnvelope alongside the successful HttpResultEnvelope. The test
+checks exact rendered JSON (including string/int/bool values, +1 and conditional eval),
+request headers, POST/path and executing generator/processor identities. The interceptor
+produces the source field; the generator message template combines it with profile and
+SUT variables. Expected values are fixed examples; no runtime expression evaluator or
+variables resolver is reimplemented in acceptance code. This verifies generated request
+content and successful processing, not an independent SUT-side body journal.
+
+LiveRun accepts an explicit variablesProfileId through its existing canonical create
+factory. TargetLoader and the HTTP, capture, evidence, operation and removal owners
+are unchanged. The fixture uses the existing read-only WireMock mapping; tests neither
+edit SUT state nor connect to backend management ports. The frozen legacy framework
+and production implementation were not changed by this test slice.
+
+Verification: 66 framework tests pass, and TemplatingAcceptanceIT passes 2/2 on Artemis
+and 2/2 on Rabbit, zero failures/errors/skips. Logs: `/tmp/acceptance-templating-components.log`,
+`/tmp/acceptance-templating-artemis.log`, `/tmp/acceptance-templating-rabbit.log`.
+The local stack was rebuilt from current source with build-hive.sh --quick
+(`/tmp/acceptance-templating-build.log`). Rabbit was selected by an external local compose
+override only; the repository deployment configuration remains Artemis. The base
+Artemis Orchestrator was restored and its public swarm list is empty
+(`/tmp/acceptance-templating-restore-artemis.log`).
+
+Evidence under acceptance-tests/target/runs:
+
+- Artemis amber: templating-amber-6965018d-9e0b-46ae-995b-e3806c734461.
+- Artemis violet: templating-violet-00d94d48-3e08-4135-b414-c9d423b59426.
+- Rabbit amber: templating-amber-1a17105e-34b0-4a40-b9c9-ad818db2cecc.
+- Rabbit violet: templating-violet-4bcfccb9-867a-4bf5-b1e6-c6dc63f66ac7.
+
+All four REMOVE operations were SUCCEEDED with empty remainingResources/errors and
+verified registry404. Recorded removed counts were 16 per Artemis run and 15 per Rabbit
+run; these remain execution evidence, never adapter constants in the test. Each run
+retains its fixture, expected profile/body, three actual samples and canonical operations.
+No full root-reactor test or new import-boundary scan: no dependency/import permission
+changed. Full/delta status, overrides, variables validation/multi-SUT matrix and N3/N4
+are not claimed by this slice. Separate WK-3/SC-4 review on 2026-09-17 found no findings;
+66 framework tests and persisted evidence rechecked, without repeating deployed E2E; no commit.
+
+
+## Worker configuration and overrides WK-4/WK-5 — 2026-09-17
+
+WorkerConfigurationAcceptanceIT adds two explicitly selected groups: worker-config
+on the existing workers fixtures, and worker-overrides on independent four-worker
+fixtures with their own SUT files. Both run unchanged on explicit Rabbit/Artemis targets.
+The test compares authored fields with fresh observation.workers[].config, requires
+current runId and instance membership in bees, and checks template/image/container/stack
+metadata. Runtime-added defaults/addresses are not reconstructed. BaseUrl assertions
+are concrete expected rendering examples. Each case additionally captures three real
+successful HTTP results. This proves reported configuration and successful traffic;
+it does not measure throughput, broker persistence or each tuning option's external effect.
+
+WorkerObservations now owns the common bounded observation wait shared with WK-1;
+its former local implementation is removed. No second config resolver, CP receiver,
+wire model, operation-success calculator or cleanup owner is introduced.
+WorkerStatusContractTest exercises each worker role through real WorkerControlPlaneRuntime,
+ControlPlaneEmitter and ControlPlaneCodec: full includes accepted config/runtime,
+delta omits config, next full still includes the accepted config. Controller metadata
+is asserted at SwarmControllerStatusPublisherTest through its canonical codec. This
+wire evidence is component-level; the API view merges statuses and cannot prove it alone.
+
+Execution:
+
+- Framework: 66/66, `/tmp/worker-config-framework.log` (also each runner invocation).
+- WorkerStatusContractTest: 4/4; SwarmControllerStatusPublisherTest: 6/6,
+  `/tmp/worker-config-component.log`.
+- Artemis: baseline 1/1 and overrides 1/1, `/tmp/worker-config-artemis.log` and
+  `/tmp/worker-overrides-artemis.log`.
+- Rabbit: baseline 1/1 plus WK-1/WK-2 regression 2/2,
+  `/tmp/worker-config-rabbit.log`; overrides 1/1, `/tmp/worker-overrides-rabbit.log`.
+- No failures/errors/skips in the final runs. The initial override fixture lacked its
+  bundle-local SUT and CREATE returned400; the fixture was completed before these runs.
+  No product behavior changed to make the tests pass.
+
+Run evidence under acceptance-tests/target/runs:
+
+- Artemis baseline: worker-config-1ecddd21-36db-48f8-b33c-ec72b2efe22e.
+- Artemis overrides: worker-overrides-de09957a-f584-4f7d-9c5e-95f36c439051.
+- Rabbit baseline: worker-config-0861c873-893b-40ee-b275-d126c9e09161.
+- Rabbit overrides: worker-overrides-4a165294-c356-40ca-95ab-e47b394f0c05.
+- Rabbit history regression: worker-history-e8bae35e-0817-455f-95a0-d2736a655e2f.
+- Rabbit header regression: worker-headers-041d1c07-4a2e-42ba-9138-46345702a14c.
+
+All six runs retain three raw samples and CREATE/START/STOP/REMOVE SUCCEEDED evidence.
+Each REMOVE has empty remainingResources/errors and the suite verifies registry404.
+The stopped local stack was started with its existing current-source images; only
+fixtures/tests/docs changed in this slice. The temporary Rabbit WORK override was
+outside the repository; base Artemis was restored and the public swarm list is empty
+(`/tmp/worker-config-restore-artemis.log`).
+
+No full root reactor or import-boundary rerun: no dependency/import permission changed.
+Production/legacy implementations are unchanged by this slice. Independent review is
+pending, no commit. Networking, data/export, remaining authorization/lifecycle and N3/N4
+remain open; this does not assert complete replacement of the frozen framework.
+
+
+### WK-4/WK-5 review F1 fix — tap lifetime
+
+WorkerConfigurationAcceptanceIT now closes its tap immediately after obtaining the
+samples. Worker observation, assertions and STOP run after verified tap closure;
+captured WorkItems remain available for comparison. No TTL increase, tolerated404,
+product behavior or cleanup-owner change.
+
+Verification: framework66/66 and its dependent module tests pass
+(`/tmp/wk45-tap-fix-tests.log`). The review's expiry reproduction now passes both
+baseline and overrides using the unchanged acceptance methods against a disposable
+scripted ingress replaying recorded Rabbit evidence. Each of START, configuration
+read and STOP is delayed2.4s with operation/request3s and tapTTL4s: tap closes at2.6s,
+the full flow finishes at7.8s, assertions pass and swarm cleanup remains verified.
+The probe also asserts DELETE occurs before configuration read and STOP, and GET
+after DELETE returns404. Evidence: `/tmp/Wk45TapLifetimeProbe.java` and
+`/tmp/wk45-tap-fix-repro.log`. These are isolated regression checks, not new deployed
+E2E runs. The shared stack was not changed. No commit; fix awaits separate review.

@@ -8,8 +8,12 @@ This directory contains only work that is actively being implemented or is waiti
   bez przenoszenia kroków/helperów i zależności od starego zestawu. N0: wymagania
   i projekt gotowe; N1: oba testy ingress przeszły na
   Rabbit i Artemis. N2: pierwszy test operacji w osiągniętym stanie też przeszedł
-  na obu adapterach. Scenario API (SC-1–SC-3) działa; 44 testy frameworka zielone.
-  Pozostałe pokrycie otwarte. N3: potwierdzenie zastąpienia;
+  na obu adapterach. Scenario API (SC-1–SC-3), wybrane grupy auth, worker runtime
+  (WK-1/WK-2) oraz templating/variables (WK-3/SC-4) mają dowody wykonania.
+  Templating przeszedł osobne review. Ostatni wycinek WK-4/WK-5: konfiguracja/overrides
+  po 2/2 na każdym adapterze, framework 66/66, statusy SDK/controller 10/10 i regresja
+  WK-1/WK-2 Rabbit 2/2. Do osobnego review; następny wycinek: NW-1 HTTP proxy.
+  Pozostałe pokrycie otwarte; bieżące wyniki i luki wskazuje mapa acceptance-coverage. N3: potwierdzenie zastąpienia;
   dopiero N4: usunięcie całego starego systemu.
 
 Ready for PR: [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md),

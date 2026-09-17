@@ -38,6 +38,12 @@ in the applicable current plan; archived adoption reports describe their origina
 
 WorkItem owns immutable payload/step history; WorkItemBuilder constructs it and WorkStep/HistoryPolicy/WorkPayloadEncoding express that model.
 
+HistoryPolicy contains FULL (retain all recorded steps) and LATEST_ONLY (retain the
+current step, reindexed to zero). These operations preserve the current payload and
+its headers. The redundant DISABLED value was removed by user decision on 2026-09-16;
+there is no compatibility alias. Retention operations remain unchanged; selection of
+the effective policy belongs to RESP-WORK-STATE, not to the WorkItem model.
+
 Worker functions and transport codecs use the same item model; payload JSON convenience conversion is distinct from envelope serialization.
 
 **Forbidden:** perform transport IO or reimplement the Work envelope codec.
@@ -135,12 +141,20 @@ SDK composition supplies the Spring bean inventory and IO binders; WorkerInfo is
 DefaultWorkerContextFactory implements WorkerContextFactory and creates the read view passed to business workers.
 
 The view exposes the selected worker state, history policy and observability facilities; it does not own accepted configuration.
+It captures the already parsed HistoryPolicy from WorkerState when an invocation starts.
+It must not parse scenario fields or consult a separate service-level policy setting.
+
+The executing worker's swarm and instance come exclusively from the required configured
+ControlPlaneIdentity (the workerControlPlaneIdentity bean in Spring composition).
+Incoming WorkItem headers describe message origin and cannot override WorkerInfo.
+New steps use the executing identity; existing step authors and incoming trace context
+remain unchanged. The factory has no identity-less construction path.
 
 **Forbidden:** mutate accepted configuration, select IO implementations or provision resources.
 
 **Required effect:** An invocation receives the selected worker's state and facilities; reading the view does not apply a configuration update.
 
-**Verification entrypoints:** `DefaultWorkerContextFactoryTest`.
+**Verification entrypoints:** `DefaultWorkerContextFactoryTest`, `WorkerInvocationTest`; deployed producer identity in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current SDK implementation; narrower runtime ports are B03/B07.
 
@@ -156,7 +170,8 @@ Worker functions contribute data; WorkerControlPlaneRuntime builds/emits the con
 
 **Required effect:** Worker contributions appear in emitted status without overriding the runtime's reserved control state.
 
-**Verification entrypoints:** `WorkerStatusPublisherTest`.
+**Verification entrypoints:** `WorkerStatusPublisherTest`, `WorkerStatusContractTest`
+(SDK → emitter → canonical codec: full/config/runtime, delta without config, next full preserves config).
 
 **Migration status:** Current; canonical worker state is separately scoped under RESP-WORK-STATE.
 
@@ -951,6 +966,8 @@ WorkerDefinitionDiscovery binds that class and consumes its route projection; it
 switches on Rabbit properties. RabbitInputProperties/RabbitOutputProperties retain their typed
 fields, Rabbit-owned defaults and canonical parser delegation in `io.pockethive.rabbit.work`.
 WorkIoBindingConfiguration declares the SDK-owned Scheduler/CSV/Redis/NONE bindings.
+PocketHiveWorkerProperties holds worker business configuration binding. It no longer
+contains a separate history-policy value; accepted runtime policy belongs to RESP-WORK-STATE.
 WorkIoType carries the declared IO name/settings key. Existing enums implement this contract;
 test composition can explicitly supply its own type. WorkIoTypeParser owns boundary name
 normalization and rejects absent/ambiguous definitions. Startup type properties retain raw
@@ -1029,11 +1046,29 @@ must match WorkerDefinition. Problems or deferred RESOLVED paths reject the comm
 preserve state/listener-visible configuration. A candidate containing only non-Work roots
 does not invoke the Work parser and passes through this boundary unchanged.
 
+WorkerRuntimeConfiguration owns parsing the common runtime field `config.historyPolicy`
+from the complete merged worker configuration. It accepts the exact HistoryPolicy names
+FULL and LATEST_ONLY, defaults an absent field to FULL, and rejects invalid values before
+any accepted-state write, enablement, reseeding or ready result. Explicit runtime fields
+in an incoming patch pass through the same policy parser before general null filtering;
+`historyPolicy: null` is invalid, not an omitted field. Rejected candidates
+never reach listener-visible configuration; the existing failure notification may
+republish the previously accepted snapshot.
+ConfigMerger builds that immutable candidate; WorkerControlPlaneRuntime remains the
+accepted-state writer. WorkerState stores the raw map and its parsed policy together;
+the latter is a read-only derivation, never independently writable. Partial updates
+preserve an accepted policy; explicit worker-config reset returns to the absent-field
+default. Each invocation retains the policy captured when its context was created.
+The former `pockethive.worker.history-policy` property and startup-bean selection are
+removed without a compatibility path. Worker property beans must not maintain a
+second effective-policy value or default outside accepted configuration.
+
 **Forbidden:** let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
 
 **Required effect:** Accepted control updates reach the worker state and its snapshots; one accepted revision/state owner must survive B03 extraction.
 
-**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`.
+**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`,
+`WorkerHistoryPolicyTest`, `WorkerRuntimeConfigurationTest`; real retained steps in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current implementation mixes control update, status and configuration concerns. B02/B03 separate them; this record does not certify that separation.
 

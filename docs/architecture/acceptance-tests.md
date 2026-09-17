@@ -110,6 +110,8 @@ suppressed alongside an existing test/cleanup failure; write errors are never ig
 ## RESP-ACCEPTANCE-RUN
 
 **Owner:** test-scoped `LiveRun` composes lifecycle clients and handles on `ApiRun`.
+Its scenario field is the read-only authoring response already fetched during setup;
+assertions may compare it with runtime observations without resolving configuration.
 **Effect:** load a lifecycle target, require its scenario and supply fresh swarm/tap
 handles. Closing LiveRun delegates to ApiRun after owned resources are closed.
 **Must not:** own authentication/HTTP lifetime, share mutable state or implement
@@ -211,3 +213,58 @@ swarm remains intact for admin removal. REMOVE403 retains the removal attempt, s
 close reports unverified cleanup without sending another REMOVE. Unexpected accepted STOP is observed before
 cleanup even when the denial assertion fails. Unknown dispatch outcomes still block
 cleanup with an explicit error. No second lifecycle helper or grant mutation is added.
+
+
+## Worker runtime acceptance slice
+
+WorkerRuntimeAcceptanceIT covers WK-1/WK-2 with an explicitly selected four-worker
+HTTP fixture. Each test owns its swarm and tap through LiveRun, SwarmResource and
+TapResource. Worker history assertions compare authored policies with fresh
+observation.workers[].config from the public SwarmStateView. Instance identifies each
+runtime worker; this fixture explicitly requires one worker per authored role. Every
+observed worker must match the current run, be non-stale and report its configuration.
+SwarmApi supports the remaining observation budget through the same HTTP/state decoder.
+Deadline bounds waiting for complete observations; no native CP subscriber is introduced.
+
+HttpWorkAssertions owns shared test assertions for captured successful HTTP results
+and swarm/processor identity, using canonical WorkItem and HttpResultEnvelope. It never
+constructs outcomes. The header case checks canonical OutcomeHeaders and keeps all
+observed processor step-header keys out of global headers. The history case also requires
+the captured processor result to contain exactly one step at index zero, as selected by
+the fixture's LATEST_ONLY policy. This verifies retention, not only configuration echo.
+FULL and policy-update/reset/rejection behavior are covered through the SDK control-to-invocation
+component test. These tests do not assert full/delta CP wire shape.
+No product config resolver, wire DTO, lifecycle or broker cleanup implementation is added.
+
+
+## Templating and scenario variables acceptance slice
+
+TemplatingAcceptanceIT owns WK-3/SC-4 assertions over two explicit variable profiles
+in independent Rabbit/Artemis fixtures. LiveRun passes the selected profile to the
+canonical SwarmCreateRequest; it does not resolve variables. Existing SwarmResource
+and TapResource own lifecycle, sample capture, evidence and cleanup. The test uses
+FULL history to read the generated HttpRequestEnvelope and processed HttpResultEnvelope
+from the same captured WorkItem, checks concrete rendered JSON/header values, and
+verifies the producing workers against the current swarm/run. Expected values are
+fixed test examples, not another templating engine or effective-configuration resolver.
+The existing SUT mapping is read-only; there is no direct broker/SUT management access.
+
+
+## RESP-ACCEPTANCE-WORKERS
+
+WorkerObservations owns bounded waiting for a complete, fresh, current-run worker
+configuration projection from the public SwarmStateView. It verifies the fixture's
+one-instance-per-role expectation against bees and observation.workers. WK-1 and
+WorkerConfigurationAcceptanceIT share this observer; it never merges CP messages,
+resolves configuration or decides lifecycle success.
+
+WorkerConfigurationAcceptanceIT owns WK-4/WK-5 comparisons of explicitly authored
+fields against runtime configuration and runtime metadata. Fixed expected baseUrl
+examples test rendering without reproducing the resolver. Existing workers fixtures
+provide baseline configuration; worker-overrides fixtures explicitly select different
+values and adapter tuning. Both capture successful HTTP results and use the existing
+SwarmResource/TapResource cleanup. The tap closes immediately after sample capture;
+worker observation, assertions and STOP run after closure using the captured values.
+Full/delta wire shape belongs to component tests
+of WorkerControlPlaneRuntime with ControlPlaneEmitter and ControlPlaneCodec; it
+cannot be inferred from the merged API projection. No new runtime authority is added.

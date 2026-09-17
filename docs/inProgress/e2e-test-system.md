@@ -10,7 +10,14 @@ AU-8/AU-13 przeszło review i jest w `5c9ea201`. AU-10 RUN-only STOP oraz popraw
 REMOVE403 przeszły ponowne review; folder ALL pozostaje otwarty. Całościowy review
 frameworka wskazał F1–F3 (walidacja ID, dowody capture, błędy zamknięcia tapu).
 Poprawki wykonane i przetestowane; osobne review F1–F3 bez nowych ustaleń.
-N3–N4 niewykonane. Stary zestaw pozostaje bez zmian.
+WK-1/WK-2 przeszły na Rabbit i Artemis po naprawie tożsamości producenta i
+powiązania runtime z polityką historii scenariusza. Poprawka odrzucania jawnego
+historyPolicy:null ma 58 zielonych testów. WK-3/SC-4, templating i zmienne
+w rzeczywistym ruchu, przeszły po 2/2 na Rabbit i Artemis oraz osobne review bez findings.
+WK-4/WK-5: konfiguracja/overrides przeszły na obu adapterach; full/delta ma dowód
+u producentów. Wycinek czeka na osobne review. N3–N4 niewykonane; nie usuwamy starego zestawu.
+Poniższe datowane wpisy zachowują wcześniejsze wyniki i decyzje; bieżące pokrycie
+podaje mapa docs/ci/acceptance-coverage.md.
 
 ## Decyzja i granica
 
@@ -203,7 +210,7 @@ Nie wymaga ona przełączenia Work Plane ani uruchamiania swarma.
 SC-1/SC-2/SC-3: trzy niezależne odczyty nowego fixture `acceptance-scenario-authoring`
 przez Scenario Manager za publicznym ingress. Asercje: zadeklarowane ratePerSec,
 pełna treść konfiguracji templating oraz komplet czterech ról z przypisanymi FULL,
-LATEST_ONLY i DISABLED. Błąd odpowiedzi lub brak fixture jest błędem testu, bez skip.
+LATEST_ONLY. Błąd odpowiedzi lub brak fixture jest błędem testu, bez skip.
 Bez uruchamiania swarma, kontaktu z brokerem lub zapożyczania implementacji starego E2E.
 
 TargetLoader pozostaje jedynym resolverem. Wspólne ustawienia HTTP/aktora/raportów
@@ -364,3 +371,166 @@ nie wykonano commita ani zmian starego zestawu.
 Review F1–F3: 65 testów frameworka, 5 obsługi tapów i 3 granic importów przeszły.
 Raport: `/tmp/acceptance-fixes-review.md`; log: `/tmp/acceptance-fixes-review-tests.log`.
 Osobne review nie zgłosiło usterek; użytkownik zatwierdził commit i dalsze N2.
+
+
+### N2 — worker runtime WK-1/WK-2
+
+Zreviewowane AU-10/F1–F3 zapisano w `bb551f1f`. Następny wycinek: dwa samodzielne
+testy grupy workers, nowe jawne fixtures czterech workerów dla Rabbit i Artemis.
+WK-1 porównuje config.historyPolicy z autoringu z publicznym observation.workers
+po starcie i poprawnym ruchu HTTP. Obserwacje muszą być aktualne, z tym samym runId,
+kompletem unikalnych instancji i konfiguracją każdego workera. WK-2 potwierdza wynik
+HTTP i przenosi asercję header separation na kanoniczne WorkItem/OutcomeHeaders.
+
+LiveRun zachowa już odczytany scenario jako projekcję tylko do odczytu; SwarmApi
+przekaże pozostały deadline do istniejącej ścieżki GET state. Wspólne asercje wyniku
+HTTP będą w HttpWorkAssertions, bez nowego klienta/parsera. Capture i REMOVE pozostają
+u dotychczasowych właścicieli. Plan nie przenosi starego harnessu ani nie dodaje
+odbiornika CP. Warunek odbioru: wykonanie przez ingress i dowód cleanupu; pokrycie
+obu brokerów zostanie zapisane osobno. Brak jeszcze twierdzenia o pełnym/delta statusie,
+rzeczywistej liczbie kroków historii, wszystkich ustawieniach WK-4/WK-5 czy N3/N4.
+
+
+Pierwsze uruchomienie, przed naprawą identity: WK-1/WK-2 ujawniły defekty produktu: ph.step.instance procesora wskazuje generator,
+a zgłoszone DISABLED nadal zachowuje poprzednie kroki. Przyczyny potwierdzone w
+DefaultWorkerContextFactory (message headers przed configured identity; history z
+PocketHiveWorkerProperties zamiast accepted config). Nie osłabiono asercji i nie
+zmieniono SDK. Nowe testy pozostają czerwone; wspólne asercje HTTP wykrywają ten sam
+problem również w istniejącym lifecycle. Szczegóły i dalsze naprawy: F02 planu
+functional-module-boundaries; wyniki obu adapterów są w mapie pokrycia.
+
+
+Wynik worker slice: framework 66/66, E2E Artemis 0/2 i Rabbit 0/2 — ten sam błąd
+instancji producenta. Po agregacji asercji na Rabbit wszystkie pozostałe sprawdzenia
+HTTP/nagłówków przeszły. Capture obu adapterów potwierdza również trzy kroki mimo
+DISABLED. Każdy REMOVE SUCCEEDED, remaining/errors puste, registry404; lokalny stack
+przywrócony na Artemis, lista swarmów pusta. Logi `/tmp/acceptance-workers-artemis.log`
+i `/tmp/acceptance-workers-rabbit.log`. Bez zmian produktu i bez następnego commita;
+wycinek do review, blokery SDK jawnie zapisane jako osobna naprawa.
+
+
+### Naprawa executing identity — 2026-09-16
+
+Zatwierdzony wyłącznie punkt 1: fabryka kontekstu wymaga ControlPlaneIdentity i nie
+wybiera swarm/instance z nagłówków wiadomości; usunięto konstruktory bez identity.
+SDK/context/composition 19/19, framework 66/66 i workers 2/2 na każdym z Rabbit/Artemis.
+Wszystkie cztery swarms usunięte, lokalny stack przywrócony na Artemis z pustą listą.
+Szczegóły bieżącego dowodu zastępującego czerwone uruchomienia są w mapie pokrycia.
+HistoryPolicy odłożone decyzją użytkownika do rozmowy o użyciu/semantyce; brak zmian
+polityki i brak twierdzenia o retencji kroków. N3/N4 pozostają otwarte.
+Zmiany nie są commitowane; następny etap to osobny review.
+
+
+### Dwie polityki historii — decyzja 2026-09-16
+
+Usuwamy wyłącznie redundantne DISABLED. FULL i LATEST_ONLY zachowują dotychczasowe
+operacje; brak aliasu zgodności, nowego parsera lub zmian doboru polityki runtime.
+Jawne fixtures i oczekiwania testów korzystają z LATEST_ONLY zamiast usuniętej wartości.
+Wcześniejsze dowody z DISABLED opisują stan sprzed tej decyzji; rozjazd pomiędzy
+raportowaną konfiguracją a ustawieniem startowym pozostaje odłożony.
+
+Weryfikacja tego wycinka: WorkItem/kodek 13, framework 66, SDK 7 i odczyt scenariuszy
+przez ingress 3 — wszystkie zielone. Bez rebuilda workerów i bez zmiany statusu N3/N4.
+
+
+### Runtime honoruje politykę scenariusza — 2026-09-16
+
+Użytkownik otworzył odłożoną naprawę: runtime musi honorować config.historyPolicy.
+Plan przed implementacją: ConfigMerger tworzy kompletny kandydat; jedna
+WorkerRuntimeConfiguration parsuje wspólną politykę, a WorkerControlPlaneRuntime
+akceptuje ją razem z raw config w WorkerState. Fabryka kontekstu odczytuje gotowy
+enum dla danej inwokacji. Usuwamy osobną właściwość startową i wybór po beanie/roli.
+FULL przy braku pola, patch zachowuje poprzednią politykę, reset przywraca FULL;
+niepoprawne wartości odrzucamy przed zmianą stanu i efektami. Nie zmieniamy operacji
+WorkItem, semantyki ACK ani adapterów Rabbit/Artemis.
+
+Plan pass: usuwa przyczynę rozjazdu i drugi tor konfiguracji. Kontrakt właściciela
+jest w RESP-WORK-STATE/CONTEXT. Dowód: test komend CP przez rzeczywisty runtime i
+WorkerInvocation (retencja, zmiana FULL/LATEST_ONLY, patch, reset, odrzucenie), oraz
+asercja rzeczywistych kroków w istniejącym deployed worker slice. Wyniki dopiszemy
+po wykonaniu; poprzednie przebiegi nie są dowodem tej zmiany.
+
+
+Wynik naprawy: SDK 270/270, framework 66/66 i testy zależności zielone;
+pełny lokalny build-hive.sh --quick zakończony. Workers E2E 2/2 na Artemis i 2/2
+na Rabbit, już z asercją faktycznego jednego kroku wyniku LATEST_ONLY. Wszystkie
+REMOVE zakończone SUCCEEDED, remaining/errors puste, registry404. Przywrócono Artemis,
+lista swarmów pusta. Szczegóły i dokładne logi w mapie pokrycia, sekcja
+Scenario-selected runtime history. Odłożony rozjazd polityki jest naprawiony;
+FULL/aktualizacje/reset/odrzucenie mają dowód komponentowy, LATEST_ONLY również
+deployed. N3/N4 pozostają otwarte. Bez commita; zmiana do osobnego review.
+
+
+### N2 — templating i zmienne WK-3/SC-4 — 2026-09-17
+
+Zatwierdzony następny wycinek: nowa grupa `templating` z niezależnymi fixtures
+Rabbit i Artemis. Dwa samodzielne przypadki wybierają różne profile variables.yaml
+przez kanoniczne SwarmCreateRequest. Każdy tworzy własny swarm generator → processor
+→ postprocessor, otwiera tap przed START i wymaga trzech różnych wyników HTTP.
+FULL zachowuje wygenerowany HttpRequestEnvelope obok wyniku procesora. Asercje
+sprawdzają dokładny JSON z interceptora templating, nagłówki generatora, wybrany
+profil/global+SUT variables, typy liczb/bool i wynik eval. Oczekiwane wartości są
+stałymi przykładami testu; test nie wykonuje szablonu ani resolvera zmiennych.
+
+LiveRun rozszerza istniejącą fabrykę żądania create o jawny variablesProfileId.
+TargetLoader, API, capture, codec, oczekiwanie operacji i cleanup mają dotychczasowych
+właścicieli. Bez nowego parsera YAML/konfiguracji, odbiornika brokera, modyfikacji SUT
+ani zapożyczeń ze starego E2E. Wybrany SUT używa istniejącego read-only /api/test.
+Odbiór: component build oraz oba profile na każdym adapterze przez ingress;
+kanoniczny REMOVE SUCCEEDED, brak pozostałości/błędów i registry404.
+Plan pass: ten wycinek zamyka rzeczywistą treść ruchu WK-3/SC-4, bez roszczenia
+do całej macierzy walidacji variables, WK-4/WK-5 lub N3/N4. Wyniki po wykonaniu.
+
+
+Wynik WK-3/SC-4: framework 66/66, deployed templating Artemis 2/2 i Rabbit 2/2,
+bez pominięć. Każdy profil sprawdził trzy rzeczywiste wiadomości z dokładnym JSON,
+nagłówkami i poprawnym wynikiem HTTP. Cztery REMOVE SUCCEEDED, remaining/errors
+puste i registry404. Przywrócono Artemis; publiczna lista swarmów jest pusta. Dokładne dowody są w mapie pokrycia, sekcja z 2026-09-17.
+Bez zmian produktu/starego E2E w tym wycinku, bez commita. Osobne review zakończone bez findings;
+następne WK-4/WK-5: konfiguracja/overrides oraz jawne pokrycie full/delta CP u właściciela.
+
+
+### N2 — konfiguracja workerów WK-4/WK-5 — 2026-09-17
+
+Plan pass: istniejące fixtures workers są wariantem bazowym; nowe jawne fixtures
+worker-overrides zmieniają ustawienia wszystkich czterech ról, w tym scheduler
+oraz tuning wybranego adaptera. Osobne targety Rabbit/Artemis, bez automatycznej
+konwersji konfiguracji. Grupy worker-config i worker-overrides korzystają z tych
+samych właścicieli lifecycle, tap i cleanup. Porównanie pól jawnie napisanych w
+scenariuszu z observation.workers[].config nie dodaje defaults ani resolvera.
+Wyrenderowany baseUrl sprawdzamy na konkretnym oczekiwanym przykładzie, a poprawne
+wywołanie HTTP stanowi dodatkowy dowód działania. Nie odtwarzamy nazw zasobów.
+
+Oczekiwanie na świeżą konfigurację bieżącego runId zostaje wydzielone z WK-1 do
+jednego WorkerObservations, używanego przez obie grupy. WK-4 sprawdza też metadata
+każdego runtime workera. Full/delta są sprawdzane u producenta: SDK emituje rzeczywistym
+ControlPlaneEmitter i canonical codec; full zawiera config/runtime, delta nie zawiera
+config, kolejny full nadal zawiera zaakceptowany config. Metadata controllera ma dowód
+u SwarmControllerStatusPublisher z kanonicznym codec. Nie tworzymy odbiornika CP w frameworku ani nowych kontraktów.
+Odbiór: testy frameworka/producenta statusów, oba warianty przez ingress na obu
+adapterach, verified REMOVE i registry404. Produkt i stare E2E poza tym wycinkiem.
+
+
+Wynik WK-4/WK-5: framework 66/66, statusy SDK 4/4, controller 6/6. Deployed baseline
+oraz overrides przeszły po 1/1 na każdym adapterze; regresja WK-1/WK-2 na Rabbit 2/2.
+Sześć niezależnych swarmów, 18 próbek, 24 operacje SUCCEEDED, verified REMOVE bez
+remaining/errors i registry404. Przywrócono Artemis, lista swarmów pusta. Szczegółowe
+artefakty i ograniczenia są w mapie pokrycia. Bez zmian produktu, bez commita; do osobnego
+review. Następny niezależny wycinek N2: NW-1 (HTTP przez wybrany proxy, konfiguracja,
+binding i jego usunięcie); pozostałe NW/DA/EX/AU/lifecycle i N3/N4 nadal otwarte.
+
+
+### WK-4/WK-5 — poprawka review F1 (TTL tapu)
+
+Zakres zatwierdzony przez użytkownika: zamknąć tap bezpośrednio po pobraniu próbek.
+Oczekiwanie na konfigurację, asercje i STOP następują poza zakresem otwartego tapu;
+zachowujemy pobrane WorkItem do asercji. Bez zmiany TTL, interpretacji404 ani właścicieli
+cleanup. Odbiór: kompilacja/testy frameworka oraz reprodukcja wolnego START/STOP
+z review przechodząca po poprawce. Bez nowych zmian zachowania produktu.
+
+
+F1 poprawione: tap zamyka się przed obserwacją konfiguracji/asercjami/STOP.
+Framework66/66 oraz reprodukcja baseline/overrides2/2 zielone: TTL4s, zamknięcie po2.6s,
+cały przebieg7.8s, cleanup potwierdzony. To izolowane odtworzenie odpowiedzi API,
+bez ponownego deployed E2E ani zmiany stacka. Dowody w mapie pokrycia. Bez commita;
+poprawka do osobnego review.

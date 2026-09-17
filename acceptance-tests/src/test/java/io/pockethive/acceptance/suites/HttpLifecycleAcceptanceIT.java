@@ -1,11 +1,9 @@
 package io.pockethive.acceptance.suites;
 
 import static org.junit.jupiter.api.Assertions.*;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
 import io.pockethive.swarm.model.lifecycle.WorkloadState;
-import io.pockethive.work.api.HttpResultEnvelope;
 import io.pockethive.work.api.WorkItem;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -31,15 +29,9 @@ class HttpLifecycleAcceptanceIT {
         assertEquals(WorkloadState.RUNNING, running.workloadState());
         var samples = tap.awaitSamples(run.target.fixture().samples());
         assertEquals(run.target.fixture().samples(), samples.stream().map(WorkItem::messageId).distinct().count());
-        ObjectMapper json = new ObjectMapper();
+        String processor = HttpWorkAssertions.processorInstance(running);
         for (WorkItem item : samples) {
-          assertEquals(swarm.id(), item.observabilityContext().orElseThrow().getSwarmId());
-          assertEquals(BeeRoles.PROCESSOR, item.stepHeaders().get(WorkItem.STEP_SERVICE_HEADER));
-          HttpResultEnvelope result = item.asJson(HttpResultEnvelope.class);
-          assertEquals(HttpResultEnvelope.OUTCOME_HTTP_RESPONSE, result.outcome().type());
-          assertEquals(200, result.outcome().status());
-          assertNull(result.outcome().error());
-          assertEquals(json.readTree(run.target.fixture().expectedResponse()), json.readTree(result.outcome().body()));
+          HttpWorkAssertions.requireSuccessfulResponse(item, swarm.id(), processor, run.target.fixture().expectedResponse());
         }
       }
       swarm.stop();

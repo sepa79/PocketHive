@@ -74,3 +74,42 @@ All three writes must return403 and readback must remain unchanged. Manual overr
 appliedAt is response-only and is omitted from PUT. Exact PocketHive grants are checked.
 These tests verify authorization even for a same-value write, not changed-setting
 application or network effects. They create no swarms, users or broker resources.
+
+
+The `workers` group uses `targets/local-workers-artemis.properties` or
+`targets/local-workers-rabbit.properties` on a stack already selecting that adapter.
+The new four-worker fixtures exercise FULL and LATEST_ONLY policies.
+Each case creates its own swarm and captures real HTTP results. The history case
+compares authored policies with fresh, instance-identified runtime observations of
+all workers in the current run and checks that the processor's LATEST_ONLY result actually
+contains one step reindexed to zero. The header case asserts processor status/success/duration
+in the current step and absence of processor step-header keys from global headers.
+These cover scenario-selected LATEST_ONLY retention, configuration/traffic and header placement;
+they do not claim postprocessor throughput or CONTROL full/delta wire-shape coverage.
+Cleanup remains the same explicit tap close and verified swarm REMOVE as lifecycle.
+
+
+The `templating` group uses `targets/local-templating-artemis.properties` or
+`targets/local-templating-rabbit.properties`. Two independent cases explicitly select
+the amber/violet variables profiles in the matching new bundle. Each captures three
+processed results with FULL history and verifies the generated canonical HTTP request:
+exact interceptor-rendered JSON, numeric/boolean eval results, SUT-scoped customer and
+rendered request headers, alongside the successful processor response and identities.
+No template evaluator or variable resolver lives in the test framework. The existing
+read-only SUT mapping and the same tap/swarm cleanup owners are used.
+
+
+`worker-config` reuses the `local-workers-{artemis,rabbit}.properties` targets for
+WK-4 baseline configuration. `worker-overrides` uses
+`local-worker-overrides-{artemis,rabbit}.properties` for WK-5. Select the group and
+target explicitly on a stack already using the matching adapter. Each test compares
+all four workers' authored fields, including generator scheduler and adapter tuning,
+against fresh runtime configuration for the exact current instances/run. Runtime-only
+settings remain owned by the product. Concrete expected processor URLs test rendering;
+no template or topology resolver lives here. Both cases capture three successful HTTP
+results and require the existing tap close, verified REMOVE and registry404.
+
+Full/delta CP shape is covered at its producers by WorkerStatusContractTest in
+worker-sdk (real emitter and canonical codec) and SwarmControllerStatusPublisherTest
+(controller metadata). Public worker state is a merged read projection, so the ingress
+suite does not claim to distinguish the CP messages that produced it.

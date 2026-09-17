@@ -41,7 +41,7 @@ class ScenarioReadAcceptanceIT {
     assertEquals(Map.of(
         BeeRoles.GENERATOR, HistoryPolicy.FULL.name(),
         BeeRoles.MODERATOR, HistoryPolicy.LATEST_ONLY.name(),
-        BeeRoles.PROCESSOR, HistoryPolicy.DISABLED.name(),
+        BeeRoles.PROCESSOR, HistoryPolicy.LATEST_ONLY.name(),
         BeeRoles.POSTPROCESSOR, HistoryPolicy.FULL.name()), actual);
   }
 
