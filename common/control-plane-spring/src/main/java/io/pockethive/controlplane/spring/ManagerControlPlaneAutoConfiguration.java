@@ -5,6 +5,7 @@ import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.consumer.SelfFilter;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.util.List;
@@ -69,10 +70,10 @@ public class ManagerControlPlaneAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ControlPlanePublisher.class)
-    ManagerControlPlane managerControlPlane(ObjectMapper objectMapper,
+    ManagerControlPlane managerControlPlane(ControlPlaneCodec codec,
         ControlPlanePublisher publisher,
         @Qualifier("managerControlPlaneIdentity") ObjectProvider<ControlPlaneIdentity> identityProvider) {
-        ManagerControlPlane.Builder builder = ManagerControlPlane.builder(publisher, objectMapper);
+        ManagerControlPlane.Builder builder = ManagerControlPlane.builder(publisher, codec);
         ControlPlaneProperties.ManagerProperties manager = properties.getManager();
         if (manager.isListenerEnabled()) {
             ControlPlaneIdentity identity = identityProvider.getIfAvailable();

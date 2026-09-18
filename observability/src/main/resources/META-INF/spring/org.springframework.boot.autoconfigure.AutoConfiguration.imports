@@ -1,1 +1,2 @@
 io.pockethive.observability.metrics.ClickHouseMetricsAutoConfiguration
+io.pockethive.observability.PocketHiveJacksonAutoConfiguration

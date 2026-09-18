@@ -11,9 +11,9 @@ import {
 
 describe("topicMatchesPattern", () => {
   it("matches star and hash wildcards", () => {
-    expect(topicMatchesPattern("event.#", "event.ready.swarm.foo")).toBe(true);
-    expect(topicMatchesPattern("event.*.swarm.foo", "event.ready.swarm.foo")).toBe(true);
-    expect(topicMatchesPattern("event.*.swarm.foo", "event.ready.swarm.bar")).toBe(false);
+    expect(topicMatchesPattern("event.#", "event.outcome.swarm-start.foo")).toBe(true);
+    expect(topicMatchesPattern("event.*.swarm-start.foo", "event.outcome.swarm-start.foo")).toBe(true);
+    expect(topicMatchesPattern("event.*.swarm-start.foo", "event.outcome.swarm-start.bar")).toBe(false);
   });
 });
 
@@ -24,7 +24,7 @@ describe("parseRecordedEntries", () => {
     writeFileSync(
       file,
       [
-        JSON.stringify({ routingKey: "event.ready.swarm.foo", body: "ok" }),
+        JSON.stringify({ routingKey: "event.outcome.swarm-start.foo", body: "ok" }),
         "not-json",
         JSON.stringify({ routingKey: "signal.status-request.foo.ALL.ALL", body: "ping" })
       ].join("\n"),
@@ -33,7 +33,7 @@ describe("parseRecordedEntries", () => {
 
     const entries = parseRecordedEntries(file, "event.#");
     expect(entries).toHaveLength(1);
-    expect(entries[0].routingKey).toBe("event.ready.swarm.foo");
+    expect(entries[0].routingKey).toBe("event.outcome.swarm-start.foo");
   });
 });
 

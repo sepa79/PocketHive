@@ -6,7 +6,6 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
@@ -255,7 +254,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Publish a control-plane outcome (kind=event,type=outcome) for non-error worker journal entries.
+     * Publish a non-terminal {@code kind=journal,type=work-journal} event for worker lifecycle evidence.
      * This is intended for informational lifecycle events that must be visible in journal projections
      * without polluting alert channels.
      */
@@ -292,13 +291,13 @@ public final class WorkerControlPlaneRuntime {
             context.put("traceId", normalizedTraceId);
         }
 
-        emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
-                journalSignal,
-                journalCorrelationId,
-                normalizeBlank(idempotencyKey),
-                io.pockethive.control.CommandState.status(journalStatus))
-            .details(context)
-            .build());
+        context.put("status", journalStatus);
+        emitter.emitJournal(new ControlPlaneEmitter.JournalContext(
+            journalSignal,
+            journalCorrelationId,
+            requireNonBlank(idempotencyKey, "idempotencyKey"),
+            context,
+            null));
     }
 
     private static String requireNonBlank(String value, String field) {
@@ -448,7 +447,9 @@ public final class WorkerControlPlaneRuntime {
                 state.updateConfig(typedConfig, mergeResult.replaced(), enabled);
                 state.updateRawConfig(mergeResult.rawConfig());
                 RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
-                Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
+                Map<String, Object> appliedConfig = mergeResult.replaced()
+                    ? mergeResult.rawConfig()
+                    : mergeResult.previousRaw();
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig);
                 } else {
@@ -553,15 +554,7 @@ public final class WorkerControlPlaneRuntime {
     private record FilteredConfigUpdate(Map<String, Object> values, boolean reseedRequested) { }
 
     private String resolveSignalName(WorkerStatusRequest request) {
-        ControlSignal signal = request.signal();
-        if (signal != null && signal.type() != null && !signal.type().isBlank()) {
-            return signal.type();
-        }
-        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
-        if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
-            return routingKey.type();
-        }
-        return "n/a";
+        return request.signal().type();
     }
     private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();

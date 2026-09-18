@@ -45,10 +45,16 @@ ControlPlaneEmitter emitter = ControlPlaneEmitter.using(
     publisher,
     runtime
 );
-emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
-    "config-sync", correlationId, commandId, CommandState.status("Ready"))
-    .result("ok")
-    .build());
+emitter.emitResult(new ControlPlaneEmitter.ResultContext(
+    "config-update", correlationId, idempotencyKey,
+    new TerminalResult(
+        TerminalStatus.SUCCEEDED, false,
+        Map.of(
+            "target", new Target("processor", "processor-1"),
+            "requestedEnabled", true,
+            "observedEnabled", true,
+            "appliedConfigSha256", appliedConfigSha256)),
+    Instant.now()));
 ```
 
 The emitter guarantees routing keys and payload schemas remain consistent across services.
@@ -199,7 +205,7 @@ business logic rather than wiring.
 ## 5. Migration checklist
 
 1. Add the `worker-sdk` dependency to your worker/manager service.
-2. Rely on the RabbitMQ topology that the control-plane auto-configuration supplies—no bespoke queue declarations are required. **Do not declare the hive traffic exchange (`ph.{swarmId}.hive`) or its work queues**; the Swarm Controller is the sole owner of those bindings (see [Architecture §2.1](/ARCHITECTURE) and the [AsyncAPI spec](../spec/asyncapi.yaml)).
+2. Rely on the RabbitMQ topology that the control-plane auto-configuration supplies—no bespoke queue declarations are required. **Do not declare the hive traffic exchange (`ph.{swarmId}.hive`) or its work queues**; the Swarm Controller is the sole owner of those bindings (see [Architecture §2.1](/system-architecture) and the [AsyncAPI spec](../spec/asyncapi.yaml)).
 3. Replace manual JSON payload builders with `ControlPlaneEmitter` helpers.
 4. Configure `pockethive.control-plane.*` properties for your service roles.
 5. Update unit tests to use `ControlPlaneTestFixtures` for canonical descriptors and identities.

@@ -1,5 +1,12 @@
 # Templating Guide: Advanced
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Experienced scenario and request-template authors |
+| Prerequisites | Completion of [Templating Guide: Basics](templating-basics.md); Redis access for sequence examples |
+| Expected outcome | A validated advanced template that uses only explicitly current helpers |
+| Last verified source | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
+
 This guide covers advanced patterns for deterministic IDs, weighted
 routing, request templates, and validation workflow.
 
@@ -31,14 +38,18 @@ body: |
    - prefix width with `0` for zero-padding (for example `%06d`)
 
 Sequences advance like an odometer: the rightmost token changes
-fastest. After max value, sequence wraps in range.
+fastest. A fresh key renders the zero value first.
 
 ### Sequence behavior
 
-- **Wrapping**: `(value - 1) % max + 1` keeps values in range `1..max`.
+- **Displayed index**: Redis `INCR=1` formats as index `0`; a fresh default
+  `%010d` key therefore renders `0000000000`.
+- **Wrapping**: the internal ordinal wraps in `1..max`, while formatted output
+  spans the corresponding zero-based range `0..max-1`.
 - **Thread safety**: Redis `INCR` is atomic across threads/processes.
-- **Persistence**: counters persist across swarm restarts; delete
-  `ph:seq:<key>` to reset.
+- **Persistence**: counters persist across swarm restarts; use the guarded
+  one-shot [reset procedure](#reset-destructive-one-shot-only) rather than
+  deleting a live shared key.
 
 ### Format strings
 
@@ -52,12 +63,12 @@ Examples:
 
 | Format | Mode | Output Examples |
 | --- | --- | --- |
-| `%010d` | numeric | `0000000001`, `0000000002`, `0000000123` |
+| `%010d` | numeric | `0000000000`, `0000000001`, `0000000002` |
 | `%6S` | alpha | `AAAAAA`, `AAAAAB`, `AAAAAC` |
-| `%4s%2d` | alpha | `aaaa01`, `aaaa02`, `aaab01` |
-| `%8S` | alphanum | `AAAAAAAA`, `AAAAAAAB`, `0000000A` |
+| `%4s%02d` | alpha | `aaaa00`, `aaaa01`, `aaaa02` |
+| `%8S` | alphanum | `AAAAAAAA`, `AAAAAAAB`, `AAAAAAAC` |
 | `%4S` | hex | `0000`, `0001`, `FFFF` |
-| `TXN-%06d` | numeric | `TXN-000001`, `TXN-000002` |
+| `TXN-%06d` | numeric | `TXN-000000`, `TXN-000001` |
 
 Modes:
 
@@ -81,12 +92,18 @@ body: |
   }
 ```
 
-### Reset
+For a fresh `my-key`, `startOffset=1000` first renders `000999`, then
+`001000`. The offset is applied to the internal one-based ordinal before the
+formatter converts it to a zero-based display value.
 
-```yaml
-headers:
-  x-reset: "{{ eval(\"#resetSequence('my-key')\") }}"
-```
+### Reset (destructive, one-shot only)
+
+`#resetSequence('my-key')` deletes the shared Redis key `ph:seq:my-key`.
+Never place it in a normal body or header: that would execute on every render
+and repeatedly destroy the counter. If a controlled test reset is required,
+stop every producer that shares the key, invoke the helper through a dedicated
+one-shot template, verify the deletion, and remove that template before
+restarting producers.
 
 ### Redis configuration
 
@@ -127,10 +144,13 @@ body: |
   MSG{{ eval("#sequence('tcp-msg-seq', 'numeric', '%08d')") }}|DATA|END
 ```
 
-## 2. Proposed weighted helpers (Pebble)
+## 2. Weighted helpers (Pebble)
 
-This is a proposal for shorthand weighted selection without chained
-`#randInt(...)` calls.
+> [!IMPORTANT]
+> **Current at tested source `0524165e`:** `pickWeighted(...)` and
+> `pickWeightedSeeded(...)` are registered Pebble functions, and a worker
+> `config-update` can request `templating.reseed`. These functions are Pebble
+> expressions; do not wrap them in `eval(...)`.
 
 ### `pickWeighted(...)`
 
@@ -164,7 +184,7 @@ Rules:
 - seed applies on first call per label in a worker instance,
 - stream can be reset by config-update.
 
-#### `reseed` via `config-update` (proposal)
+#### `reseed` via `config-update`
 
 ```json
 {
@@ -237,3 +257,13 @@ The tool exits non-zero on failures.
 - Only registered helpers are callable.
 - Keep heavy logic in workers or templates, not deeply nested
   expressions.
+
+## Troubleshooting
+
+Run the canonical checks in [Authoring and Test Tools](integrations/authoring-and-test-tools.md). For runtime rendering evidence, use the [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Apply the current helpers to a complete bundle using
+[Create your first scenario](onboarding/first-scenario.md). Treat only helpers
+documented as current for the same source boundary as available.

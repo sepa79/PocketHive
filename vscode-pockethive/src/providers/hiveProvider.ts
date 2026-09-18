@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { swarmList, type SwarmSummary } from '../mcp/tools';
+import { swarmList } from '../mcp/tools';
+import type { SwarmSummary } from '../types';
 import { getActiveEnvironment } from '../config';
 import { isMcpRunning } from '../mcp/manager';
 
@@ -32,11 +33,11 @@ export class HiveProvider implements vscode.TreeDataProvider<HiveNode> {
     }
 
     const { swarm } = node;
-    const status = swarm.status ?? 'UNKNOWN';
+    const status = swarm.workloadState;
     const item = new vscode.TreeItem(swarm.id, vscode.TreeItemCollapsibleState.None);
     item.id = swarm.id;
     item.description = status;
-    item.tooltip = `Template: ${swarm.templateId ?? '—'}\nStatus: ${status}\nHealth: ${swarm.health ?? '—'}`;
+    item.tooltip = `Template: ${swarm.templateId ?? '—'}\nController: ${swarm.controllerState}\nWorkload: ${swarm.workloadState}\nHealth: ${swarm.health}`;
     item.iconPath = statusIcon(status);
     item.contextValue = `swarm-${status.toLowerCase()}`;
     item.command = {

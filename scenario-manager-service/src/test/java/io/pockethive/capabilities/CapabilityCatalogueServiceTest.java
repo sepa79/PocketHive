@@ -1,5 +1,7 @@
 package io.pockethive.capabilities;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -54,16 +56,32 @@ class CapabilityCatalogueServiceTest {
     }
 
     @Test
-    void bundledCapabilityConfigDoesNotPublishDefaults() throws Exception {
+    void bundledCapabilityConfigPublishesCanonicalAuthoringDefaults() throws Exception {
         CapabilityCatalogueService catalogue = new CapabilityCatalogueService(Path.of("capabilities"));
         catalogue.reload();
 
-        assertThat(catalogue.allManifests())
-                .isNotEmpty()
-                .allSatisfy(manifest -> assertThat(manifest.config())
-                        .allSatisfy(entry -> assertThat(entry.defaultValue())
-                                .as("%s:%s", manifest.role(), entry.name())
-                                .isNull()));
+        assertThat(defaultValue(catalogue, "io-scheduler", "inputs.scheduler.maxMessages"))
+                .isEqualTo(JsonNodeFactory.instance.numberNode(0));
+        assertThat(defaultValue(catalogue, "request-builder", "passThroughOnMissingTemplate"))
+                .isEqualTo(JsonNodeFactory.instance.booleanNode(false));
+        assertThat(defaultValue(catalogue, "processor", "inputs.type"))
+                .isEqualTo(JsonNodeFactory.instance.textNode("RABBITMQ"));
+        assertThat(defaultValue(catalogue, "processor", "outputs.type"))
+                .isEqualTo(JsonNodeFactory.instance.textNode("RABBITMQ"));
+        assertThat(defaultValue(catalogue, "postprocessor", "forwardToOutput"))
+                .isEqualTo(JsonNodeFactory.instance.booleanNode(false));
+        assertThat(defaultValue(catalogue, "postprocessor", "txOutcomeSinkMode"))
+                .isEqualTo(JsonNodeFactory.instance.textNode("NONE"));
+        assertThat(defaultValue(catalogue, "postprocessor", "dropTxOutcomeWithoutCallId"))
+                .isEqualTo(JsonNodeFactory.instance.booleanNode(true));
+    }
+
+    private JsonNode defaultValue(CapabilityCatalogueService catalogue, String role, String name) {
+        return catalogue.findByImageName(role).orElseThrow().config().stream()
+                .filter(entry -> name.equals(entry.name()))
+                .findFirst()
+                .orElseThrow()
+                .defaultValue();
     }
 
     @Test

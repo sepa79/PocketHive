@@ -36,7 +36,11 @@ final class SwarmWorkersAggregator {
 
     String key = key(role, instance);
     WorkerSnapshot previous = byKey.get(key);
-    boolean enabled = dataNode.path("enabled").asBoolean(true);
+    JsonNode enabledNode = dataNode.get("enabled");
+    if (enabledNode == null || !enabledNode.isBoolean()) {
+      throw new IllegalArgumentException("worker status data.enabled must be a boolean");
+    }
+    boolean enabled = enabledNode.asBoolean();
     long tps = dataNode.path("tps").asLong(0L);
 
     JsonNode ioStateNode = dataNode.path("ioState").path("work");

@@ -37,7 +37,7 @@ One JSON (or YAML) **manifest per image**:
   "image": {
     "name": "ghcr.io/pockethive/generator",
     "tag": "1.12.0",
-    "digest": "sha256:abcd..."   // optional but preferred if known
+    "digest": "sha256:abcd..."
   },
   "role": "generator",
   "config": [
@@ -58,6 +58,8 @@ One JSON (or YAML) **manifest per image**:
 }
 ```
 
+`image.digest` is optional, but preferred when the digest is known.
+
 **Notes**
 - Manifests are indexed by canonical `image.name` and, when declared, by `image.digest`.
   Scenario template validation matches canonical image names; the capabilities API also
@@ -70,7 +72,7 @@ One JSON (or YAML) **manifest per image**:
   runtime config editing; `false` means the field is authoring/startup configuration only. Runtime
   enforcement may narrow an offered field further: `inputs.redis.listName` is shown by the generic
   editor but may be changed only for an already-disabled, single-source Redis dataset worker. The UI
-  must block submission unless swarm status is explicitly `STOPPED`; MCP agents must establish the same
+  must block submission unless workload intent and fresh workload observation are both explicitly `STOPPED`; MCP agents must establish the same
   precondition with `swarm_get` rather than inferring completion from an accepted Stop request.
   For `inputs.*` / `outputs.*`, `true` is allowed only on operational live IO fields documented in
   `docs/ARCHITECTURE.md`. Except for the documented disabled-only Redis single-source `listName`, IO

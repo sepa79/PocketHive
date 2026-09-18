@@ -12,14 +12,7 @@ public final class RuntimeCleanupContracts {
         String swarmId,
         String runId,
         Boolean includeRunning,
-        Boolean includeRabbit,
-        Boolean overrideRegisteredSwarmState) {
-        public PlanRequest(String swarmId,
-                           String runId,
-                           Boolean includeRunning,
-                           Boolean includeRabbit) {
-            this(swarmId, runId, includeRunning, includeRabbit, false);
-        }
+        Boolean includeRabbit) {
     }
 
     public record ExecuteRequest(
@@ -27,33 +20,11 @@ public final class RuntimeCleanupContracts {
         String runId,
         Boolean includeRunning,
         Boolean includeRabbit,
-        Boolean overrideRegisteredSwarmState,
         String candidateSetHash,
         List<String> candidateIds,
         String idempotencyKey,
         String reason,
         String actor) {
-        public ExecuteRequest(String swarmId,
-                              String runId,
-                              Boolean includeRunning,
-                              Boolean includeRabbit,
-                              String candidateSetHash,
-                              List<String> candidateIds,
-                              String idempotencyKey,
-                              String reason,
-                              String actor) {
-            this(
-                swarmId,
-                runId,
-                includeRunning,
-                includeRabbit,
-                false,
-                candidateSetHash,
-                candidateIds,
-                idempotencyKey,
-                reason,
-                actor);
-        }
     }
 
     public record Plan(
@@ -62,32 +33,10 @@ public final class RuntimeCleanupContracts {
         String runId,
         boolean includeRunning,
         boolean includeRabbit,
-        boolean overrideRegisteredSwarmState,
         String candidateSetHash,
         String executionRisk,
         List<Candidate> candidates,
         List<Blocked> blocked) {
-        public Plan(String computeAdapter,
-                    String swarmId,
-                    String runId,
-                    boolean includeRunning,
-                    boolean includeRabbit,
-                    String candidateSetHash,
-                    String executionRisk,
-                    List<Candidate> candidates,
-                    List<Blocked> blocked) {
-            this(
-                computeAdapter,
-                swarmId,
-                runId,
-                includeRunning,
-                includeRabbit,
-                false,
-                candidateSetHash,
-                executionRisk,
-                candidates,
-                blocked);
-        }
     }
 
     public record Candidate(
@@ -139,6 +88,8 @@ public final class RuntimeCleanupContracts {
         RuntimeCleanupAction action,
         String resourceId,
         RuntimeCleanupStatus status,
+        String correlationId,
+        String operationUrl,
         String error) {
     }
 }

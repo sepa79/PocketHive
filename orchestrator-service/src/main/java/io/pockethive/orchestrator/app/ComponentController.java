@@ -1,7 +1,6 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.control.ControlSignal;
-import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
@@ -9,10 +8,12 @@ import io.pockethive.controlplane.messaging.ControlSignals;
 import io.pockethive.controlplane.messaging.SignalMessage;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.observability.ControlPlaneJson;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
-import io.pockethive.orchestrator.domain.IdempotencyStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.swarm.model.lifecycle.ControlResponse;
+import io.pockethive.swarm.model.lifecycle.OperationType;
+import io.pockethive.swarm.model.lifecycle.SwarmOperation;
+import io.pockethive.swarm.model.lifecycle.Target;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
@@ -22,10 +23,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
+import java.time.Duration;
 import java.util.Map;
-import java.util.Optional;
-import java.util.UUID;
 
 /**
  * REST endpoint for component-level actions.
@@ -37,21 +36,24 @@ public class ComponentController {
     private static final Logger log = LoggerFactory.getLogger(ComponentController.class);
 
 	    private final ControlPlanePublisher controlPublisher;
-	    private final IdempotencyStore idempotency;
+	    private final OperationDispatchService operations;
+	    private final ControlResponseFactory controlResponses;
 	    private final String originInstanceId;
 	    private final SwarmStore store;
         private final OrchestratorEndpointAuthorization endpointAuthorization;
 
 	    public ComponentController(
 	        ControlPlanePublisher controlPublisher,
-	        IdempotencyStore idempotency,
+	        OperationDispatchService operations,
 	        SwarmStore store,
 	        ControlPlaneProperties controlPlaneProperties,
+            ControlResponseFactory controlResponses,
             OrchestratorEndpointAuthorization endpointAuthorization) {
 	        this.controlPublisher = controlPublisher;
-	        this.idempotency = idempotency;
+	        this.operations = operations;
 	        this.store = store;
 	        this.originInstanceId = requireOrigin(controlPlaneProperties);
+            this.controlResponses = controlResponses;
             this.endpointAuthorization = endpointAuthorization;
 	    }
 
@@ -61,93 +63,87 @@ public class ComponentController {
                                                         @RequestBody ConfigUpdateRequest request) {
         String path = "/api/components/" + role + "/" + instance + "/config";
         logRestRequest("POST", path, request);
-        String swarmId = request.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            endpointAuthorization.requireManageDeployment();
-        } else {
-            endpointAuthorization.requireManageSwarm(swarmId);
+        String swarmId = requireText("swarmId", request.swarmId());
+        String targetRole = requireText("role", role);
+        String targetInstance = requireText("instance", instance);
+        endpointAuthorization.requireManageSwarm(swarmId);
+        if (store.find(swarmId).isEmpty()) {
+            return ResponseEntity.notFound().build();
         }
-        String scope = scope(role, instance, swarmId);
-        String swarmSegment = segmentOrAll(swarmId);
-        String newCorrelation = UUID.randomUUID().toString();
-        Optional<String> existing = idempotency.reserve(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
-        ResponseEntity<ControlResponse> response;
-        if (existing.isPresent()) {
-            String correlation = existing.get();
-            log.info("[CTRL] reuse config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
-                role, instance, correlation, request.idempotencyKey(), scope);
-            response = accepted(correlation, request.idempotencyKey(), swarmSegment, role, instance);
-        } else {
-            Map<String, Object> patch = request.patch();
-            if (patch != null && patch.isEmpty()) {
-                patch = null;
-            }
-	            ControlSignal payload = ControlSignals.configUpdate(
-	                originInstanceId,
-	                ControlScope.forInstance(swarmId, role, instance),
-	                newCorrelation,
-	                request.idempotencyKey(),
-	                patch);
-            String jsonPayload = toJson(payload);
-            try {
-                sendControl(routingKey(swarmSegment, role, instance), jsonPayload, ControlPlaneSignals.CONFIG_UPDATE);
-            } catch (RuntimeException e) {
-                idempotency.rollback(scope, ControlPlaneSignals.CONFIG_UPDATE, request.idempotencyKey(), newCorrelation);
-                throw e;
-            }
-            log.info("[CTRL] issue config-update role={} instance={} correlation={} idempotencyKey={} scope={}",
-                role, instance, newCorrelation, request.idempotencyKey(), scope);
-            response = accepted(newCorrelation, request.idempotencyKey(), swarmSegment, role, instance);
+        Target target = new Target(targetRole, targetInstance);
+        Map<String, Object> patch = request.patch();
+        if (patch != null && patch.isEmpty()) {
+            patch = null;
         }
+        Map<String, Object> configPatch = patch;
+        var enabledExpectation = enabledExpectation(configPatch);
+        var reservation = operations.dispatch(
+            swarmId,
+            OperationType.CONFIG_UPDATE,
+            target,
+            request.idempotencyKey(),
+            Duration.ofMillis(CONFIG_UPDATE_TIMEOUT_MS),
+            correlation -> {
+	              operations.registerConfigExpectation(correlation, enabledExpectation);
+	              ControlSignal payload = ControlSignals.configUpdate(
+	                  originInstanceId,
+	                  ControlScope.forInstance(swarmId, targetRole, targetInstance),
+	                  correlation,
+	                  request.idempotencyKey(),
+	                  configPatch);
+              sendControl(routingKey(swarmId, targetRole, targetInstance), payload, ControlPlaneSignals.CONFIG_UPDATE);
+            });
+        SwarmOperation operation = reservation.operation();
+        log.info("[CTRL] {} config-update role={} instance={} correlation={} idempotencyKey={} swarm={}",
+            reservation.reused() ? "reuse" : "issue", targetRole, targetInstance,
+            operation.correlationId(), operation.idempotencyKey(), swarmId);
+        ResponseEntity<ControlResponse> response = accepted(operation);
         logRestResponse("POST", path, response);
         return response;
+    }
+
+    private static io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation enabledExpectation(
+        Map<String, Object> patch) {
+        if (patch == null || !patch.containsKey("enabled")) {
+            return io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation.UNCHANGED;
+        }
+        Object value = patch.get("enabled");
+        if (!(value instanceof Boolean enabled)) {
+            throw new IllegalArgumentException("patch.enabled must be a boolean");
+        }
+        return io.pockethive.orchestrator.domain.SwarmOperationCoordinator.ConfigEnabledExpectation.fromRequested(enabled);
     }
 
     private static String routingKey(String swarmId, String role, String instance) {
         return ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, instance);
     }
 
-    private static String scope(String role, String instance, String swarmId) {
-        if (swarmId != null && !swarmId.isBlank()) {
-            return swarmId;
-        }
-        return role + ":" + instance;
-    }
-
-    private ResponseEntity<ControlResponse> accepted(String correlationId,
-                                                      String idempotencyKey,
-                                                      String swarmSegment,
-                                                      String role,
-                                                      String instance) {
-        ConfirmationScope scope = new ConfirmationScope(swarmSegment, role, instance);
-        ControlResponse.Watch watch = new ControlResponse.Watch(
-            ControlPlaneRouting.event("outcome", ControlPlaneSignals.CONFIG_UPDATE, scope),
-            List.of(ControlPlaneRouting.event("alert", "alert", scope))
-        );
-        ControlResponse response = new ControlResponse(correlationId, idempotencyKey, watch, CONFIG_UPDATE_TIMEOUT_MS);
+    private ResponseEntity<ControlResponse> accepted(SwarmOperation operation) {
+        ControlResponse response = controlResponses.create(
+            operation, Duration.ofMillis(CONFIG_UPDATE_TIMEOUT_MS));
         return ResponseEntity.accepted().body(response);
-    }
-
-    private static String segmentOrAll(String swarmId) {
-        return (swarmId == null || swarmId.isBlank()) ? "ALL" : swarmId;
     }
 
     public record ConfigUpdateRequest(String idempotencyKey,
                                       Map<String, Object> patch,
                                       String notes,
                                       String swarmId) {
+        public ConfigUpdateRequest {
+            idempotencyKey = requireText("idempotencyKey", idempotencyKey);
+            swarmId = requireText("swarmId", swarmId);
+        }
     }
 
-    private String toJson(ControlSignal signal) {
-        return ControlPlaneJson.write(
-            signal,
-            "control signal %s for role %s".formatted(
-                signal.type(), signal.scope() != null ? signal.scope().role() : "n/a"));
+    private static String requireText(String field, String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return value.trim();
     }
 
-    private void sendControl(String routingKey, String payload, String context) {
+    private void sendControl(String routingKey, ControlSignal payload, String context) {
         String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-        log.info("[CTRL] {} rk={} payload={}", label, routingKey, snippet(payload));
+        log.info("[CTRL] {} rk={} type={} correlationId={}", label, routingKey, payload.type(), payload.correlationId());
         controlPublisher.publishSignal(new SignalMessage(routingKey, payload));
     }
 

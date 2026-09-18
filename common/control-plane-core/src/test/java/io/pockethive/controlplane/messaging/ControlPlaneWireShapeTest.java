@@ -20,13 +20,14 @@ class ControlPlaneWireShapeTest {
   @Test
   void publisherUsesCanonicalWireShape() throws Exception {
     AmqpTemplate template = mock(AmqpTemplate.class);
-    AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(template, "ph.control");
+    AmqpControlPlanePublisher publisher = new AmqpControlPlanePublisher(
+        template, "ph.control", io.pockethive.controlplane.codec.ControlPlaneCodec.create());
 
 	    var signal = ControlSignals.statusRequest(
 	        "origin",
 	        ControlScope.forInstance("sw1", "role", "inst"),
 	        "corr-1",
-	        null);
+	        "idem-1");
 	    publisher.publishSignal(new SignalMessage("signal.status-request.sw1.role.inst", signal));
 
     ArgumentCaptor<Object> payload = ArgumentCaptor.forClass(Object.class);
@@ -47,6 +48,6 @@ class ControlPlaneWireShapeTest {
     assertThat(node.has("correlationId")).isTrue();
     assertThat(node.get("correlationId").asText()).isEqualTo("corr-1");
     assertThat(node.has("idempotencyKey")).isTrue();
-    assertThat(node.get("idempotencyKey").isNull()).isTrue();
+    assertThat(node.get("idempotencyKey").asText()).isEqualTo("idem-1");
   }
 }

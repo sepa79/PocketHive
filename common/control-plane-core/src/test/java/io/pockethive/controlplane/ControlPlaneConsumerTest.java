@@ -5,6 +5,8 @@ import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.consumer.ControlPlaneConsumer;
 import io.pockethive.controlplane.consumer.DuplicateSignalGuard;
 import io.pockethive.controlplane.consumer.SelfFilter;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import io.pockethive.controlplane.codec.ControlPlaneContractException;
 import org.junit.jupiter.api.Test;
 
 import java.time.Clock;
@@ -20,11 +22,12 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 class ControlPlaneConsumerTest {
 
     private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
+    private final ControlPlaneCodec codec = ControlPlaneCodec.create();
 
     @Test
     void appliesDuplicateSuppression() throws Exception {
         MutableClock clock = new MutableClock(Instant.parse("2024-01-01T00:00:00Z"));
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .duplicateGuard(DuplicateSignalGuard.create(Duration.ofMinutes(1), 32, clock))
             .clock(clock)
@@ -33,7 +36,7 @@ class ControlPlaneConsumerTest {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "idemp",
             null);
-        String payload = mapper.writeValueAsString(signal);
+        String payload = codec.encode(signal, "signal.config-update.swarm.generator.gen-1");
 
         AtomicInteger processed = new AtomicInteger();
         consumer.consume(payload, "signal.config-update.swarm.generator.gen-1", env -> processed.incrementAndGet());
@@ -48,7 +51,7 @@ class ControlPlaneConsumerTest {
 
     @Test
     void selfFilterSkipsInstance() throws Exception {
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
@@ -56,7 +59,7 @@ class ControlPlaneConsumerTest {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id",
             null);
-        String payload = mapper.writeValueAsString(signal);
+        String payload = codec.encode(signal, "signal.config-update.swarm.generator.gen-1");
 
         AtomicInteger processed = new AtomicInteger();
         boolean result = consumer.consume(payload, "signal.config-update.swarm.generator.gen-1", env -> processed.incrementAndGet());
@@ -66,8 +69,27 @@ class ControlPlaneConsumerTest {
     }
 
     @Test
+    void validatesBeforeApplyingSelfFilter() {
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
+            .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
+            .selfFilter(SelfFilter.skipSelfInstance())
+            .build();
+
+        ControlSignal signal = ControlSignal.forInstance(
+            "config-update", "swarm", "generator", "gen-1", "gen-1", "corr", "id",
+            null);
+        String valid = codec.encode(signal, "signal.config-update.swarm.generator.gen-1");
+        String invalid = valid.substring(0, valid.length() - 1) + ",\"unexpected\":true}";
+
+        assertThatThrownBy(() -> consumer.consume(
+            invalid, "signal.config-update.swarm.generator.gen-1", env -> { }))
+            .isInstanceOf(ControlPlaneContractException.class)
+            .hasMessageContaining("schema");
+    }
+
+    @Test
     void selfFilterProcessesWhenOriginDiffers() throws Exception {
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .selfFilter(SelfFilter.skipSelfInstance())
             .build();
@@ -75,7 +97,7 @@ class ControlPlaneConsumerTest {
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "generator", "gen-1", "gen-2", "corr", "id",
             null);
-        String payload = mapper.writeValueAsString(signal);
+        String payload = codec.encode(signal, "signal.config-update.swarm.generator.gen-1");
 
         AtomicInteger processed = new AtomicInteger();
         boolean result = consumer.consume(payload, "signal.config-update.swarm.generator.gen-1", env -> processed.incrementAndGet());
@@ -86,7 +108,7 @@ class ControlPlaneConsumerTest {
 
     @Test
     void rejectsNullPayload() {
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .build();
 
@@ -97,28 +119,28 @@ class ControlPlaneConsumerTest {
 
     @Test
     void rejectsBlankRoutingKey() throws Exception {
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-1"))
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "generator", "gen-1", "orchestrator-1", "corr", "id",
             null);
-        assertThatThrownBy(() -> consumer.consume(mapper.writeValueAsString(signal), "  ", env -> { }))
+        assertThatThrownBy(() -> consumer.consume("{}", "  ", env -> { }))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("routingKey must not be null or blank");
     }
 
     @Test
     void processesValidPayload() throws Exception {
-        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(mapper)
+        ControlPlaneConsumer consumer = ControlPlaneConsumer.builder(codec)
             .identity(new ControlPlaneIdentity("swarm", "generator", "gen-2"))
             .build();
 
         ControlSignal signal = ControlSignal.forInstance(
             "config-update", "swarm", "generator", "gen-2", "orchestrator-1", "corr", "id",
             null);
-        String payload = mapper.writeValueAsString(signal);
+        String payload = codec.encode(signal, "signal.config-update.swarm.generator.gen-2");
 
         AtomicInteger processed = new AtomicInteger();
         boolean consumed = consumer.consume(payload, "signal.config-update.swarm.generator.gen-2", env -> processed.incrementAndGet());

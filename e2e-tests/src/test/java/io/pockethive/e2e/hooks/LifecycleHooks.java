@@ -2,11 +2,12 @@ package io.pockethive.e2e.hooks;
 
 import io.pockethive.e2e.clients.RabbitSubscriptions;
 import io.pockethive.e2e.config.EnvironmentConfig;
+import io.pockethive.e2e.contracts.ControlPlaneAuditScope;
 import io.pockethive.e2e.contracts.ControlEventsContractAudit;
+import io.pockethive.e2e.contracts.ControlPlaneCoverageExpectations;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture;
 import io.cucumber.java.AfterAll;
 import io.cucumber.java.BeforeAll;
-import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,28 +25,29 @@ public final class LifecycleHooks {
   @BeforeAll
   public static void beforeAll() {
     LOGGER.info("Starting PocketHive e2e harness (skeleton mode).");
-    try {
-      var endpoints = EnvironmentConfig.loadServiceEndpoints();
-      RabbitSubscriptions rabbit = RabbitSubscriptions.from(endpoints.rabbitMq(), endpoints.controlPlane());
-      capture = new ControlPlaneMessageCapture(rabbit.connectionFactory(), endpoints.controlPlane().exchange());
-    } catch (IllegalStateException ex) {
-      LOGGER.info("Skipping control-plane capture init: {}", ex.getMessage());
+    ControlPlaneCoverageExpectations.reset();
+    ControlPlaneAuditScope auditScope = ControlPlaneAuditScope.fromSystemProperty();
+    if (auditScope.requiresAllFamilies()) {
+      ControlPlaneCoverageExpectations.requireAllFamilies();
     }
+    LOGGER.info("Control-plane audit scope={}", auditScope);
+    var endpoints = EnvironmentConfig.loadServiceEndpoints();
+    RabbitSubscriptions rabbit = RabbitSubscriptions.from(endpoints.rabbitMq(), endpoints.controlPlane());
+    capture = new ControlPlaneMessageCapture(rabbit.connectionFactory(), endpoints.controlPlane().exchange());
   }
 
   @AfterAll
   public static void afterAll() {
     ControlPlaneMessageCapture current = capture;
     capture = null;
-    if (current != null) {
-      try {
-        List<ControlPlaneMessageCapture.CapturedMessage> messages = current.messages();
-        LOGGER.info("Control-plane capture collected {} message(s)", messages.size());
-        ControlEventsContractAudit.assertAllValid(messages);
-      } finally {
-        current.close();
-      }
+    if (current == null) {
+      throw new IllegalStateException("Control-plane capture was not initialised");
     }
+    current.close();
+    var messages = current.messages();
+    LOGGER.info("Control-plane capture collected {} message(s)", messages.size());
+    ControlEventsContractAudit.assertAllValid(
+        messages, ControlPlaneCoverageExpectations.snapshot());
     LOGGER.info("Stopping PocketHive e2e harness (skeleton mode).");
   }
 }

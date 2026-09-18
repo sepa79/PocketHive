@@ -78,7 +78,7 @@ class WorkerControlPlaneRuntimeTest {
             Set.of(WorkerCapability.SCHEDULER)
         );
         stateStore.getOrCreate(definition);
-        controlPlane = WorkerControlPlane.builder(MAPPER)
+        controlPlane = WorkerControlPlane.builder(io.pockethive.controlplane.codec.ControlPlaneCodec.create())
             .identity(IDENTITY)
             .build();
         runtime = new WorkerControlPlaneRuntime(controlPlane, stateStore, MAPPER, emitter, IDENTITY,
@@ -142,7 +142,7 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-	    void workerConfigAccessibleAfterUpdate() throws Exception {
+    void workerConfigAccessibleAfterUpdate() throws Exception {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
 	        Map<String, Object> args = Map.of(
@@ -170,10 +170,38 @@ class WorkerControlPlaneRuntimeTest {
         assertThat(runtime.workerEnabled(definition.beanName())).isTrue();
         Map<String, Object> rawConfig = runtime.workerRawConfig(definition.beanName());
         assertThat(rawConfig).containsEntry("ratePerSec", 12.5);
-        ArgumentCaptor<ControlPlaneEmitter.ReadyContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
-	        verify(emitter).emitReady(captor.capture());
+        ArgumentCaptor<ControlPlaneEmitter.ResultContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ResultContext.class);
+	        verify(emitter).emitResult(captor.capture());
 	        assertThat(captor.getValue().signal()).isEqualTo("config-update");
 	    }
+
+    @Test
+    void broadcastConfigUpdateResultIdentifiesTheConcreteWorkerExecutor() throws Exception {
+        String correlationId = UUID.randomUUID().toString();
+        String idempotencyKey = UUID.randomUUID().toString();
+        ControlSignal signal = ControlSignal.forSwarm(
+            "config-update",
+            IDENTITY.swarmId(),
+            ORIGIN,
+            correlationId,
+            idempotencyKey,
+            Map.of("enabled", true));
+
+        boolean handled = runtime.handle(
+            MAPPER.writeValueAsString(signal),
+            ControlPlaneRouting.signal(
+                "config-update",
+                IDENTITY.swarmId(),
+                signal.scope().role(),
+                signal.scope().instance()));
+
+        assertThat(handled).isTrue();
+        ArgumentCaptor<ControlPlaneEmitter.ResultContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.ResultContext.class);
+        verify(emitter).emitResult(captor.capture());
+        assertThat(captor.getValue().result().context().get("target"))
+            .isEqualTo(new io.pockethive.swarm.model.lifecycle.Target(IDENTITY.role(), IDENTITY.instanceId()));
+    }
 
 	    @Test
 	    void configUpdateReseedClearsSeededSelectionsWithoutPersistingDirective() throws Exception {
@@ -214,7 +242,7 @@ class WorkerControlPlaneRuntimeTest {
 	    }
 
 	    @Test
-	    void configUpdateValidationFailureEmitsErrorContext() throws Exception {
+	    void configUpdateValidationFailureEmitsFailureContext() throws Exception {
 	        String correlationId = UUID.randomUUID().toString();
 	        String idempotencyKey = UUID.randomUUID().toString();
         Map<String, Object> args = Map.of(
@@ -237,14 +265,14 @@ class WorkerControlPlaneRuntimeTest {
         boolean handled = runtime.handle(payload, routingKey);
 
         assertThat(handled).isTrue();
-        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-        verify(emitter).emitError(captor.capture());
-        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        ArgumentCaptor<ControlPlaneEmitter.FailureContext> captor = ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+        verify(emitter).emitFailure(captor.capture());
+        ControlPlaneEmitter.FailureContext ctx = captor.getValue();
         assertThat(ctx.signal()).isEqualTo("config-update");
         assertThat(ctx.correlationId()).isEqualTo(correlationId);
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
         assertThat(ctx.phase()).isEqualTo("apply");
-        assertThat(ctx.details()).containsEntry("worker", definition.beanName());
+        assertThat(ctx.result().context()).containsEntry("requestedEnabled", true);
     }
 
     @Test
@@ -297,11 +325,11 @@ class WorkerControlPlaneRuntimeTest {
         boolean handled = ioRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
 
         assertThat(handled).isTrue();
-        verify(emitter, times(0)).emitReady(any());
-        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-        verify(emitter).emitError(captor.capture());
-        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        verify(emitter, times(0)).emitResult(any());
+        ArgumentCaptor<ControlPlaneEmitter.FailureContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+        verify(emitter).emitFailure(captor.capture());
+        ControlPlaneEmitter.FailureContext ctx = captor.getValue();
         assertThat(ctx.signal()).isEqualTo("config-update");
         assertThat(ctx.correlationId()).isEqualTo(correlationId);
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
@@ -335,7 +363,7 @@ class WorkerControlPlaneRuntimeTest {
             Map.of("inputs", Map.of("redis", Map.of("listName", "ph:dataset:next")))
         );
 
-        verify(emitter).emitReady(any());
+        verify(emitter).emitResult(any());
         assertThat(redisInputConfig(ioRuntime, ioDefinition)).containsEntry("listName", "ph:dataset:next");
         assertThat(ioRuntime.workerEnabled(ioDefinition.beanName())).isFalse();
     }
@@ -363,10 +391,10 @@ class WorkerControlPlaneRuntimeTest {
             Map.of("inputs", Map.of("redis", Map.of("listName", "ph:dataset:next")))
         );
 
-        verify(emitter, times(0)).emitReady(any());
-        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-        verify(emitter).emitError(captor.capture());
+        verify(emitter, times(0)).emitResult(any());
+        ArgumentCaptor<ControlPlaneEmitter.FailureContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+        verify(emitter).emitFailure(captor.capture());
         assertThat(captor.getValue().message())
             .contains("inputs.redis.listName")
             .contains("stop the swarm first");
@@ -423,11 +451,11 @@ class WorkerControlPlaneRuntimeTest {
         boolean handled = ioRuntime.handle(MAPPER.writeValueAsString(signal), routingKey);
 
         assertThat(handled).isTrue();
-        verify(emitter, times(0)).emitReady(any());
-        ArgumentCaptor<ControlPlaneEmitter.ErrorContext> captor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.ErrorContext.class);
-        verify(emitter).emitError(captor.capture());
-        ControlPlaneEmitter.ErrorContext ctx = captor.getValue();
+        verify(emitter, times(0)).emitResult(any());
+        ArgumentCaptor<ControlPlaneEmitter.FailureContext> captor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.FailureContext.class);
+        verify(emitter).emitFailure(captor.capture());
+        ControlPlaneEmitter.FailureContext ctx = captor.getValue();
         assertThat(ctx.signal()).isEqualTo("config-update");
         assertThat(ctx.correlationId()).isEqualTo(correlationId);
         assertThat(ctx.idempotencyKey()).isEqualTo(idempotencyKey);
@@ -522,12 +550,12 @@ class WorkerControlPlaneRuntimeTest {
     }
 
     @Test
-    void publishWorkJournalEventEmitsOutcomeReadyContext() {
+    void publishWorkJournalEventEmitsNonTerminalJournalContext() {
         ObservabilityContext trace = ObservabilityContextUtil.init("worker", IDENTITY.instanceId(), IDENTITY.swarmId());
         runtime.publishWorkJournalEvent(
             definition.beanName(),
             "corr-1",
-            null,
+            "idem-1",
             "work-journal",
             "recorded",
             "clearing-export-created",
@@ -535,14 +563,15 @@ class WorkerControlPlaneRuntimeTest {
             trace.getTraceId(),
             Map.of("event", "created", "fileName", "batch-0001.dat"));
 
-        ArgumentCaptor<ControlPlaneEmitter.ReadyContext> contextCaptor =
-            ArgumentCaptor.forClass(ControlPlaneEmitter.ReadyContext.class);
-        verify(emitter).emitReady(contextCaptor.capture());
-        ControlPlaneEmitter.ReadyContext ready = contextCaptor.getValue();
-        assertThat(ready.signal()).isEqualTo("work-journal");
-        assertThat(ready.correlationId()).isEqualTo("corr-1");
-        assertThat(ready.state().status()).isEqualTo("recorded");
-        assertThat(ready.details())
+        ArgumentCaptor<ControlPlaneEmitter.JournalContext> contextCaptor =
+            ArgumentCaptor.forClass(ControlPlaneEmitter.JournalContext.class);
+        verify(emitter).emitJournal(contextCaptor.capture());
+        ControlPlaneEmitter.JournalContext journal = contextCaptor.getValue();
+        assertThat(journal.type()).isEqualTo("work-journal");
+        assertThat(journal.correlationId()).isEqualTo("corr-1");
+        assertThat(journal.idempotencyKey()).isEqualTo("idem-1");
+        assertThat(journal.data())
+            .containsEntry("status", "recorded")
             .containsEntry("worker", definition.beanName())
             .containsEntry("messageId", "mid-2")
             .containsEntry("callId", "clearing-export-created")
@@ -1065,7 +1094,7 @@ class WorkerControlPlaneRuntimeTest {
 			            IDENTITY.instanceId(),
 			            ORIGIN,
 			            UUID.randomUUID().toString(),
-			            null,
+		            UUID.randomUUID().toString(),
 			            null);
 
 	        boolean handled = runtime.handle(MAPPER.writeValueAsString(signal), routingKey);
@@ -1178,15 +1207,21 @@ class WorkerControlPlaneRuntimeTest {
         return (Map<String, Object>) inputs.get("redis");
     }
 
-	        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {
-	            StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
-	                .type(type)
-	                .origin(IDENTITY.instanceId())
-	                .swarmId(IDENTITY.swarmId())
-	                .runtime(RUNTIME_META);
-	            context.customiser().accept(builder);
-	            return builder.toJson();
-	        }
+		        private String buildEnvelopeJson(ControlPlaneEmitter.StatusContext context, String type) {
+		            StatusEnvelopeBuilder builder = new StatusEnvelopeBuilder()
+		                .type(type)
+		                .origin(IDENTITY.instanceId())
+		                .swarmId(IDENTITY.swarmId())
+		                .role(IDENTITY.role())
+		                .instance(IDENTITY.instanceId())
+		                .runtime(RUNTIME_META);
+		            context.customiser().accept(builder);
+		            try {
+		                return MAPPER.writeValueAsString(builder.toEnvelope());
+		            } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+		                throw new IllegalStateException("Cannot serialize status test fixture", exception);
+		            }
+		        }
 
         private Map<String, Object> buildSnapshot(ControlPlaneEmitter.StatusContext context) throws Exception {
             @SuppressWarnings("unchecked")

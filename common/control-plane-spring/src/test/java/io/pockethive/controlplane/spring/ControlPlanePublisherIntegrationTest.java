@@ -6,7 +6,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 
-import io.pockethive.control.CommandState;
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
@@ -23,6 +22,8 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
 
 class ControlPlanePublisherIntegrationTest {
 
@@ -52,14 +53,17 @@ class ControlPlanePublisherIntegrationTest {
             ControlPlaneEmitter emitter = ControlPlaneEmitter.worker(identity, publisher, settings, runtime);
             ConfirmationScope scope = new ConfirmationScope("swarm-A", "generator", "gen-1");
 
-            ControlPlaneEmitter.ReadyContext ready = ControlPlaneEmitter.ReadyContext.builder(
+            ControlPlaneEmitter.ResultContext result = new ControlPlaneEmitter.ResultContext(
                     "swarm-start",
                     "corr-1",
                     "idem-1",
-                    new CommandState(null, null, null))
-                .timestamp(Instant.parse("2024-01-01T00:00:00Z"))
-                .build();
-            emitter.emitReady(ready);
+                    new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of(
+                        "target", Map.of("role", "generator", "instance", "gen-1"),
+                        "requestedWorkloadState", "RUNNING",
+                        "observedWorkloadState", "RUNNING",
+                        "nonConvergedWorkers", List.of())),
+                    Instant.parse("2024-01-01T00:00:00Z"));
+            emitter.emitResult(result);
 
 	            ControlSignal signal = ControlSignal.forInstance(
 	                "config-update",
@@ -79,7 +83,7 @@ class ControlPlanePublisherIntegrationTest {
 
             List<String> routes = routingCaptor.getAllValues();
             assertThat(routes).contains(signalKey,
-                ControlPlaneRouting.event("outcome", "swarm-start", scope));
+                ControlPlaneRouting.event("result", "swarm-start", scope));
             assertThat(payloadCaptor.getAllValues()).allSatisfy(payload -> assertThat(payload).isNotNull());
         });
     }

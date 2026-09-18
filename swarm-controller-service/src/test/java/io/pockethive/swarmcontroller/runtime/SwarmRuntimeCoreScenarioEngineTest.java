@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.manager.scenario.ScenarioEngine;
+import io.pockethive.manager.scenario.ManagerRuntimeView;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
@@ -17,6 +18,7 @@ import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Manager;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Metrics;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.SwarmController;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties.Traffic;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import java.lang.reflect.Field;
 import java.time.Duration;
 import org.junit.jupiter.api.Test;
@@ -51,8 +53,6 @@ class SwarmRuntimeCoreScenarioEngineTest {
     ControlPlanePublisher controlPublisher = mock(ControlPlanePublisher.class);
     io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager topology =
         new io.pockethive.swarmcontroller.infra.amqp.SwarmWorkTopologyManager(amqp, props);
-    io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner provisioner =
-        mock(io.pockethive.swarmcontroller.infra.docker.WorkloadProvisioner.class);
     io.pockethive.manager.ports.ComputeAdapter computeAdapter =
         mock(io.pockethive.manager.ports.ComputeAdapter.class);
     io.pockethive.swarmcontroller.infra.amqp.SwarmQueueMetrics queueMetrics =
@@ -70,16 +70,16 @@ class SwarmRuntimeCoreScenarioEngineTest {
         docker,
         rabbitProps,
         props,
-        meterRegistry,
         controlPublisher,
         topology,
-        provisioner,
         computeAdapter,
         queueMetrics,
         configFanout,
         SwarmJournal.noop(),
         "inst",
-        new ClickHouseSinkProperties());
+        new ClickHouseSinkProperties(),
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemMount.of(
+            "/opt/pockethive/scenarios-runtime"));
 
     // Replace the internal ScenarioEngine with a spy so we can observe ticks.
     ScenarioEngine engineSpy = mock(ScenarioEngine.class);
@@ -111,6 +111,20 @@ class SwarmRuntimeCoreScenarioEngineTest {
     core.updateHeartbeat("generator", "gen-1", System.currentTimeMillis());
 
     verify(engine).tick();
+  }
+
+  @Test
+  void scenarioViewProjectsTheControllerStateMachine() throws Exception {
+    SwarmRuntimeCore core = newCoreWithScenarioSpy();
+
+    core.fail("worker observation failed");
+
+    ManagerRuntimeView view = core.scenarioRuntimeView();
+    org.assertj.core.api.Assertions.assertThat(view.workloadState()).isEqualTo(WorkloadState.UNKNOWN);
+    org.assertj.core.api.Assertions.assertThat(view.metrics().desired()).isEqualTo(core.getMetrics().desired());
+    org.assertj.core.api.Assertions.assertThat(view.metrics().healthy()).isEqualTo(core.getMetrics().healthy());
+    org.assertj.core.api.Assertions.assertThat(view.metrics().running()).isEqualTo(core.getMetrics().running());
+    org.assertj.core.api.Assertions.assertThat(view.metrics().enabled()).isEqualTo(core.getMetrics().enabled());
   }
 
   private static Object getPrivate(Object target, String fieldName) throws Exception {

@@ -21,7 +21,7 @@ as `pockethive_logs`.
 
 | Source | MCP tool | Proves | Does not prove |
 |---|---|---|---|
-| Swarm state | `swarm.get`, `swarm.list` | Swarm exists, lifecycle state, template binding | Payload correctness |
+| Swarm state | `swarm.get`, `swarm.list` | Swarm exists; runtime/workload intent; controller/workload observation; health; active operation; template binding | Payload correctness |
 | Journal | `debug.journal` | Lifecycle events, worker events, reported runtime errors | Full payload content |
 | Queue depths | `debug.queues` | Backlog, drain state, message movement pressure | Request success |
 | Tap samples | `debug.tap`, `debug.tap.read`, `debug.tap.close` | Representative WorkItem payload flow through a role/edge | Complete population coverage |

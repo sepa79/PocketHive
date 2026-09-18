@@ -537,6 +537,7 @@
     }
   },
   "scripts": {
+    "prebuild": "node ../scripts/generate-swarm-lifecycle-contract.mjs --check",
     "build": "tsc -p ./",
     "test": "npm run build && node scripts/check-command-targets.mjs && node scripts/check-workflow-boundary.mjs",
     "watch": "tsc -watch -p ./",
@@ -553,6 +554,7 @@
     "cheerio": "1.0.0-rc.12"
   },
   "dependencies": {
+    "@pockethive/swarm-lifecycle-contract": "file:../packages/swarm-lifecycle-contract",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "yaml": "^2.9.0"
   }

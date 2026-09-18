@@ -3,12 +3,13 @@
 **Base:** `/api` • MIME: `application/json` • Auth: Bearer JWT (RBAC enforced)
 
 ## Idempotency & correlation
-Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Server generates **`correlationId`** per attempt and returns:
+Client sends **`idempotencyKey`** (UUID v4) per new logical action and reuses it when retrying that action. The Orchestrator creates one **`correlationId`** for the accepted operation and returns that same operation identity for duplicates:
 ```json
 {
   "correlationId": "uuid-v4",
   "idempotencyKey": "uuid-v4",
-  "watch": { "successTopic": "...", "errorTopics": ["..."] },
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.<command>.<swarmId>.orchestrator.<instance>",
   "timeoutMs": 180000
 }
 ```
@@ -23,10 +24,17 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 [
   {
     "id": "demo",
-    "status": "RUNNING",
-    "health": "RUNNING",
-    "heartbeat": "2024-03-15T12:00:00Z",
-    "workEnabled": true,
+    "runId": "run-20260722-123455Z",
+    "runtimeIntent": "PRESENT",
+    "workloadIntent": "RUNNING",
+    "controllerState": "READY",
+    "workloadState": "RUNNING",
+    "health": "HEALTHY",
+    "runtimeResourceState": "PRESENT",
+    "observedAt": "2026-07-22T12:00:00Z",
+    "observationStale": false,
+    "activeOperation": null,
+    "observation": null,
     "templateId": "baseline-demo",
     "controllerImage": "ghcr.io/pockethive/swarm-controller:1.2.3",
     "bees": [
@@ -44,81 +52,133 @@ Client sends **`idempotencyKey`** (UUID v4) per new action (reuse on retry). Ser
 ### 2.2 Fetch swarm
 `GET /api/swarms/{swarmId}`
 
-**Response (200)** — cached swarm-controller `status-full` snapshot (after delta aggregation).
+**Response (200)** — Orchestrator projection joining owned intent/operation state with the cached Controller observation. The raw Controller envelope is retained under `observation`; it is evidence, not the swarm state authority.
 ```json
 {
-  "receivedAt": "2026-01-22T12:34:56Z",
-  "staleAfterSec": 30,
-  "envelope": {
-    "timestamp": "2026-01-22T12:34:55Z",
-    "version": "1",
-    "kind": "metric",
-    "type": "status-full",
-    "origin": "swarm-controller-instance",
-    "scope": {
-      "swarmId": "demo",
-      "role": "swarm-controller",
-      "instance": "demo-marshal-bee-1234"
-    },
-    "correlationId": null,
-    "idempotencyKey": null,
-    "runtime": {
-      "templateId": "baseline-demo",
-      "runId": "run-20260122-123455Z",
-      "containerId": null,
-      "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
-      "stackName": null
-    },
-    "data": {
-      "enabled": true,
-      "config": {},
-      "startedAt": "2026-01-22T12:00:00Z",
-      "io": {},
-      "ioState": {},
-      "context": {
-        "swarmStatus": "RUNNING",
-        "swarmHealth": "RUNNING",
-        "workers": [
-          {
-            "role": "generator",
-            "instance": "demo-generator-1",
-            "enabled": true,
-            "tps": 10,
-            "lastSeenAt": "2026-01-22T12:34:55Z",
-            "stale": false,
-            "ioState": {
-              "work": {
-                "input": "ok",
-                "output": "ok"
-              }
-            },
-            "runtime": {
-              "templateId": "baseline-demo",
-              "runId": "run-20260122-123455Z",
-              "containerId": null,
-              "image": "ghcr.io/pockethive/generator:1.2.3",
-              "stackName": null
-            },
-            "config": {
-              "inputs": {
-                "type": "SCHEDULER",
-                "ratePerSecond": 10
+  "id": "demo",
+  "runId": "run-20260722-123455Z",
+  "runtimeIntent": "PRESENT",
+  "workloadIntent": "RUNNING",
+  "controllerState": "READY",
+  "workloadState": "RUNNING",
+  "health": "HEALTHY",
+  "runtimeResourceState": "PRESENT",
+  "observedAt": "2026-07-22T12:34:56Z",
+  "observationStale": false,
+  "activeOperation": null,
+  "observation": {
+    "receivedAt": "2026-07-22T12:34:56Z",
+    "staleAfterSec": 30,
+    "envelope": {
+      "timestamp": "2026-07-22T12:34:55Z",
+      "version": "2",
+      "kind": "metric",
+      "type": "status-full",
+      "origin": "swarm-controller-instance",
+      "scope": {
+        "swarmId": "demo",
+        "role": "swarm-controller",
+        "instance": "demo-marshal-bee-1234"
+      },
+      "correlationId": null,
+      "idempotencyKey": null,
+      "runtime": {
+        "templateId": "baseline-demo",
+        "runId": "run-20260722-123455Z",
+        "containerId": null,
+        "image": "ghcr.io/pockethive/swarm-controller:1.2.3",
+        "stackName": null
+      },
+      "data": {
+        "config": {},
+        "startedAt": "2026-07-22T12:00:00Z",
+        "io": {},
+        "ioState": {},
+        "context": {
+          "controllerState": "READY",
+          "workloadState": "RUNNING",
+          "health": "HEALTHY",
+          "startupReady": true,
+          "startupArtifactSha256": "sha256-hex",
+          "watermarkAt": "2026-07-22T12:34:55Z",
+          "expectedWorkers": [
+            { "swarmId": "demo", "role": "generator", "instance": "demo-generator-1" }
+          ],
+          "workers": [
+            {
+              "role": "generator",
+              "instance": "demo-generator-1",
+              "enabled": true,
+              "tps": 10,
+              "lastSeenAt": "2026-07-22T12:34:55Z",
+              "stale": false,
+              "ioState": {
+                "work": {
+                  "input": "ok",
+                  "output": "ok"
+                }
+              },
+              "runtime": {
+                "templateId": "baseline-demo",
+                "runId": "run-20260722-123455Z",
+                "containerId": null,
+                "image": "ghcr.io/pockethive/generator:1.2.3",
+                "stackName": null
+              },
+              "config": {
+                "inputs": {
+                  "type": "SCHEDULER",
+                  "ratePerSecond": 10
+                }
               }
             }
-          }
-        ]
+          ]
+        }
       }
     }
   }
 }
 ```
 
-Returns `404` when the swarm id is unknown or no `status-full` has been cached yet.
+Returns `404` only when the swarm id is unknown. Before a fresh Controller observation exists, the owned intent remains available and observed axes are explicitly `UNKNOWN`; absence of status is never treated as absence of the swarm.
 
-`data.context.workers[].instance` is the runtime worker identity for component
+`observation.envelope.data.context.workers[].instance` is the runtime worker identity for component
 selection. `role` is the required routing segment for component actions, but
 clients must not join or deduplicate workers by `role`. Runtime worker payloads
 must not expose or require a second `beeId` identity.
+
+### 2.2.1 Fetch operation
+
+`GET /api/swarms/{swarmId}/operations/{correlationId}`
+
+Returns the Orchestrator-owned operation independently of RabbitMQ delivery or UI subscription timing.
+
+```json
+{
+  "swarmId": "demo",
+  "type": "START",
+  "target": { "role": "swarm-controller", "instance": "demo-marshal-bee-1234" },
+  "correlationId": "uuid-v4",
+  "idempotencyKey": "uuid-v4",
+  "state": "SUCCEEDED",
+  "createdAt": "2026-07-22T12:30:08Z",
+  "dispatchedAt": "2026-07-22T12:30:09Z",
+  "deadlineAt": "2026-07-22T12:33:08Z",
+  "completedAt": "2026-07-22T12:30:11Z",
+  "terminalResult": {
+    "status": "Succeeded",
+    "retryable": false,
+    "context": {
+      "target": { "role": "swarm-controller", "instance": "demo-marshal-bee-1234" },
+      "requestedWorkloadState": "RUNNING",
+      "observedWorkloadState": "RUNNING",
+      "nonConvergedWorkers": []
+    }
+  }
+}
+```
+
+Operation types are `CREATE`, `START`, `STOP`, `REMOVE` and `CONFIG_UPDATE`. States are `ACCEPTED`, `DISPATCHED`, `SUCCEEDED`, `REJECTED`, `FAILED` and `TIMED_OUT`. `terminalResult` is `null` until terminal. Returns `404` when either the swarm operation or correlation id is unknown.
 
 ### 2.3 Swarm journal (timeline)
 `GET /api/swarms/{swarmId}/journal`
@@ -331,13 +391,16 @@ plan -> execute
 ```
 
 Registered swarms are cleanup candidates only through `LIFECYCLE_REMOVE_SWARM`.
-`NEW`/`CREATING`/`READY` are allowed as lifecycle remove/abort candidates;
-`STARTING`/`RUNNING`/`STOPPING` must be explicitly stopped first; stuck
-`REMOVING` requires lifecycle recovery.
-For rare break-glass cleanup, clients may set
-`overrideRegisteredSwarmState=true` on both plan and execute. The override is
-part of the `candidateSetHash`, marks lifecycle removal high risk, and still
-uses only `LIFECYCLE_REMOVE_SWARM`.
+This candidate invokes the same canonical filesystem-backed `REMOVE` operation;
+it is not a second deletion protocol. `REMOVE` sets workload intent to `STOPPED`
+and the Controller converges disablement before cleanup, so a separate stop is
+not required. Any non-terminal lifecycle operation blocks a new remove operation.
+Cleanup execution reports this candidate as `DISPATCHED` with the canonical
+`correlationId` and `operationUrl`; it does not report `REMOVED` before the
+filesystem result completes that operation. All direct Docker and RabbitMQ
+candidates belonging to a registered swarm remain blocked.
+There is no registered-swarm override that bypasses operation ownership or
+manufactures success without verified cleanup evidence.
 
 Unregistered labeled Docker resources are treated as orphan cleanup candidates
 only inside the requested `swarmId`/`runId` scope. They still require
@@ -365,7 +428,7 @@ tools, without impacting existing scenario, workflow, or swarm lifecycle tools.
 **Response (200)**
 ```json
 {
-  "runtimeDebugContractVersion": "3",
+  "runtimeDebugContractVersion": "4",
   "cleanupContractVersion": "3",
   "runtimeDebugReadsBackedByOrchestrator": true,
   "cleanupPlanHasExecutionRisk": true,
@@ -455,7 +518,25 @@ worker or manager. Deployment-wide service versions are not used.
 Returns a bounded inspect summary for one worker or manager runtime. Raw bind
 host paths and environment variables are not returned.
 
-#### 2.9.6 Rabbit topology snapshot
+#### 2.9.6 Runtime ownership manifest
+`POST /api/runtime/debug/manifest`
+
+Returns the canonical runtime ownership manifest selected by exact `swarmId`
+and optional `runId`. Orchestrator owns manifest storage, selection and JSON
+shape; clients must not read, locate or parse manifest files themselves. A
+missing manifest returns `404 Not Found`.
+
+**Request**
+```json
+{
+  "swarmId": "demo",
+  "runId": "optional"
+}
+```
+
+**Response (200)** is the canonical `RuntimeOwnershipManifest` object.
+
+#### 2.9.7 Rabbit topology snapshot
 `POST /api/runtime/debug/rabbit/topology`
 
 Reads exact RabbitMQ topology for one PocketHive swarm through Orchestrator.
@@ -508,8 +589,7 @@ returns no Rabbit resources instead of guessing by prefix.
   "swarmId": "demo",
   "runId": "optional",
   "includeRunning": false,
-  "includeRabbit": true,
-  "overrideRegisteredSwarmState": false
+  "includeRabbit": true
 }
 ```
 
@@ -521,7 +601,6 @@ returns no Rabbit resources instead of guessing by prefix.
   "runId": "run-1",
   "includeRunning": false,
   "includeRabbit": true,
-  "overrideRegisteredSwarmState": false,
   "candidateSetHash": "sha256:...",
   "executionRisk": "standard",
   "candidates": [
@@ -563,7 +642,6 @@ production access is governed by HiveGate policy outside Orchestrator.
   "runId": "run-1",
   "includeRunning": false,
   "includeRabbit": true,
-  "overrideRegisteredSwarmState": false,
   "candidateSetHash": "sha256:...",
   "candidateIds": ["docker:container:abc"],
   "idempotencyKey": "uuid-v4",
@@ -603,12 +681,22 @@ production access is governed by HiveGate policy outside Orchestrator.
 
 Deletes the tap queue and returns the last known tap state.
 
+### Lifecycle operation conflicts
+
+Only one non-terminal lifecycle operation may exist for a swarm. A `create`, `start`, `stop`, or
+`remove` request that conflicts with a different active lifecycle operation returns `409 Conflict`.
+The response body is the canonical active `SwarmOperation`, allowing the caller to follow its
+`correlationId` instead of retrying or replacing it implicitly.
+
+Create authorization is evaluated before lifecycle-operation lookup or reservation. A rejected
+`create` request returns its authorization error and does not create or expose an operation record.
+
 ## 3.0 Create swarm
 `POST /api/swarms/{swarmId}/create`
 
 **Behavior**
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
-- After the first controller `event.metric.status-full.<swarmId>.swarm-controller.<controllerInstance>`, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** (echo ids).
+- Emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** only after Controller state is `READY`, workload observation is `STOPPED`, every expected worker is fresh and bootstrap-acknowledged, and the reported startup artifact digest matches the launch record.
 - On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.{type}` if applicable.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
@@ -620,20 +708,21 @@ Deletes the tap queue and returns the last known tap state.
   "autoPullImages": true,
   "sutId": "optional; bundle-local SUT id",
   "variablesProfileId": "optional; required when variables.yaml defines profiles",
-  "notes": "optional"
+  "networkMode": "DIRECT",
+  "networkProfileId": null
 }
 ```
+
+Every property in this request is required. When no SUT, variables profile or network profile applies, clients must send that field explicitly as `null`; omission is invalid. Values must already be canonical: leading or trailing whitespace is rejected rather than normalized. `autoPullImages` must be a boolean; `null` is rejected. `networkMode` must be `DIRECT` or `PROXIED`; it is never inferred. `PROXIED` also requires explicit non-null `sutId` and `networkProfileId`. `DIRECT` requires `networkProfileId` to be `null`.
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": {
-    "successTopic": "event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>",
-    "errorTopics": ["event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"]
-  },
-  "timeoutMs": 120000
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>",
+  "timeoutMs": 300000
 }
 ```
 
@@ -651,25 +740,22 @@ Deletes the tap queue and returns the last known tap state.
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
-**Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → internal **result:** `event.result.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` → public **outcome:** `event.outcome.swarm-start.<swarmId>.orchestrator.<orchestratorInstance>`.
 
-Clients must correlate by `correlationId` and watch every entry in `errorTopics`; the orchestrator-scoped topic reports confirmation timeouts and finalization failures that cannot be emitted by the swarm controller.
+Clients watch the Orchestrator outcome and correlate it by the returned `correlationId`. `data.status` is terminal and may be `Succeeded`, `Rejected`, `Failed` or `TimedOut`; the topic is therefore not a success-only channel. Alerts are diagnostic and never replace the terminal outcome.
+
+When the Controller is ready and the workload is already `RUNNING`, a new `START` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast enablement again. An exact retry reuses the original operation as described in [Idempotency & correlation](#idempotency--correlation).
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": {
-    "successTopic": "event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopics": [
-      "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>",
-      "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
-    ]
-  },
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.swarm-start.<swarmId>.orchestrator.<orchestratorInstance>",
   "timeoutMs": 180000
 }
 ```
@@ -679,25 +765,22 @@ Clients must correlate by `correlationId` and watch every entry in `errorTopics`
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
-**Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`
+**Signal:** `signal.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → internal **result:** `event.result.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>` → public **outcome:** `event.outcome.swarm-stop.<swarmId>.orchestrator.<orchestratorInstance>`.
 
-Clients must correlate by `correlationId` and watch every entry in `errorTopics`; the orchestrator-scoped topic reports confirmation timeouts and finalization failures that cannot be emitted by the swarm controller.
+Completion requires fresh post-dispatch status from every expected worker with `enabled=false`. Dispatch acceptance is not completion.
+
+When the Controller is ready and the workload is already `STOPPED`, a new `STOP` request succeeds as an idempotent no-op. It creates its own operation for a new `idempotencyKey`, but does not broadcast disablement again. The lifecycle-operation conflict rule still applies while another lifecycle operation is non-terminal.
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": {
-    "successTopic": "event.outcome.swarm-stop.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopics": [
-      "event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>",
-      "event.alert.{type}.<swarmId>.orchestrator.<orchestratorInstance>"
-    ]
-  },
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.swarm-stop.<swarmId>.orchestrator.<orchestratorInstance>",
   "timeoutMs": 90000
 }
 ```
@@ -707,21 +790,18 @@ Clients must correlate by `correlationId` and watch every entry in `errorTopics`
 
 **Request**
 ```json
-{ "idempotencyKey": "uuid-v4", "notes": "optional" }
+{ "idempotencyKey": "uuid-v4" }
 ```
 
-**Signal:** `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` → **Outcome:** `event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>`  
-**Post‑success:** tear down the Controller runtime for this swarm.
+The Orchestrator first creates the immutable filesystem request under `<runtime-root>/<swarmId>/operations/remove/<correlationId>/request.json`. `signal.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>` is only a repeatable wake-up. The Controller writes the matching `pockethive/swarm-remove-result/v2` `result.json`, whose `targetResources` are action evidence rather than an absence claim. The Orchestrator verifies every Controller-reported compute and RabbitMQ target through the canonical observation ports, clears the Network Proxy Manager binding with the active operation identity and requires a subsequent canonical binding read to be absent, then removes and verifies Controller-specific runtime targets. It then deletes the runtime directory and registry entry, and synchronously persists terminal audit evidence with the captured `runId`. Only after those postconditions pass may it publish `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>`. Missing or partial evidence is failure/timeout, never success.
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": {
-    "successTopic": "event.outcome.swarm-remove.<swarmId>.swarm-controller.<controllerInstance>",
-    "errorTopics": ["event.alert.{type}.<swarmId>.swarm-controller.<controllerInstance>"]
-  },
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>",
   "timeoutMs": 180000
 }
 ```
@@ -736,95 +816,27 @@ Clients must correlate by `correlationId` and watch every entry in `errorTopics`
 {
   "idempotencyKey": "uuid-v4",
   "patch": { "enabled": true },
-  "swarmId": "optional; omit to use ALL",
+  "swarmId": "required",
   "notes": "optional"
 }
 ```
 
-**Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → **Outcome:** `event.outcome.config-update.<swarmId>.<role>.<instance>` (check `data.status`) → **Alerts:** `event.alert.{type}.<swarmId>.<role>.<instance>`
+**Signal:** `signal.config-update.<swarmId>.<role>.<instance>` → internal target **result:** `event.result.config-update.<swarmId>.<role>.<instance>` → public **outcome:** `event.outcome.config-update.<swarmId>.orchestrator.<orchestratorInstance>`.
 
 For UI-originated edits, resolve `{role}/{instance}` from the selected runtime
 worker in `status-full.data.context.workers[]`. `instance` is the runtime worker
 identity; `role` alone is not a stable target.
-
-**Response (202)** — same envelope.
-
-### 4.2 Status request
-`POST /api/components/{role}/{instance}/status-request`
-
-**Request**
-```json
-{ "idempotencyKey": "uuid-v4" }
-```
-
-**Signal:** `signal.status-request.<swarmId>.<role>.<instance>` → component emits `event.metric.status-full.<swarmId>.<role>.<instance>` (no outcome).
 
 **Response (202)**
 ```json
 {
   "correlationId": "…",
   "idempotencyKey": "…",
-  "watch": { "infoTopic": "event.metric.status-full.<swarmId>.<role>.<instance>" },
-  "timeoutMs": 10000
+  "operationUrl": "/api/swarms/<swarmId>/operations/<correlationId>",
+  "outcomeTopic": "event.outcome.config-update.<swarmId>.orchestrator.<orchestratorInstance>",
+  "timeoutMs": 60000
 }
 ```
-
-### 4.3 Swarm manager enable/disable (fan-out)
-`POST /api/swarm-managers/enabled`
-
-**Behavior**
-- Publishes `signal.config-update.<swarmId>.swarm-controller.<instance>` per registered controller with `data.enabled`.
-- Controllers keep their control plane sessions alive even when workloads are disabled.
-- The response lists each dispatch with watch topics for outcomes and alerts.
-
-**Request**
-```json
-{
-  "idempotencyKey": "uuid-v4",
-  "enabled": false,
-  "notes": "optional"
-}
-```
-
-**Response (202)**
-```json
-{
-  "dispatches": [
-    {
-      "swarm": "demo",
-      "instanceId": "swarm-controller-demo-1",
-      "reused": false,
-      "response": {
-        "correlationId": "…",
-        "idempotencyKey": "…",
-        "watch": {
-          "successTopic": "event.outcome.config-update.<swarmId>.swarm-controller.<instance>",
-          "errorTopics": ["event.alert.{type}.<swarmId>.swarm-controller.<instance>"]
-        },
-        "timeoutMs": 60000
-      }
-    }
-  ]
-}
-```
-
-#### 4.3.1 Single swarm enable/disable
-`POST /api/swarm-managers/{swarmId}/enabled`
-
-**Behavior**
-- Same as the bulk endpoint, but targets a single swarm controller instance.
-- Returns `404` if the swarm has not registered a controller instance.
-
-**Request**
-```json
-{
-  "idempotencyKey": "uuid-v4",
-  "enabled": true,
-  "notes": "optional"
-}
-```
-
-**Response (202)** — same shape as the bulk fan-out response.
 
 ## 5. Control-plane sync (debug-only)
 These endpoints are intended for local diagnostics and should be secured behind admin access or removed before exposing the orchestrator publicly.

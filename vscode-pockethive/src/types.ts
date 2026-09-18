@@ -1,8 +1,14 @@
 export type SwarmSummary = {
   id: string;
-  status?: string;
-  health?: string;
-  heartbeat?: string;
+  runId: string;
+  runtimeIntent: string;
+  workloadIntent: string;
+  controllerState: string;
+  workloadState: string;
+  health: string;
+  runtimeResourceState: string;
+  observedAt?: string;
+  observationStale: boolean;
   templateId?: string;
 };
 

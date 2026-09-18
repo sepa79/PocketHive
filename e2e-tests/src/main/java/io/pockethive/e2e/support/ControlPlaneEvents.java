@@ -1,6 +1,5 @@
 package io.pockethive.e2e.support;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,6 +20,7 @@ import com.rabbitmq.client.Delivery;
 
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
+import io.pockethive.controlplane.codec.ControlPlaneContractException;
 
 /**
  * Collects control-plane outcomes/alerts/status metrics from RabbitMQ for later assertions.
@@ -93,7 +93,7 @@ public final class ControlPlaneEvents implements AutoCloseable {
       } else {
         LOGGER.debug("Ignoring unsupported control-plane message on {}", routingKey);
       }
-    } catch (IOException ex) {
+    } catch (ControlPlaneContractException ex) {
       LOGGER.warn("Failed to parse control-plane payload on {}", routingKey, ex);
     }
   }

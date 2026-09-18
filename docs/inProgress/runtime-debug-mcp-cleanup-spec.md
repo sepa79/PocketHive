@@ -64,7 +64,7 @@ flowchart LR
 | Docker cleanup requires PocketHive labels | Avoids deleting foreign resources |
 | RabbitMQ cleanup uses exact manifest/descriptor names | No prefix guessing |
 | Registered swarm-controller cleanup uses lifecycle removal | Do not bypass swarm lifecycle |
-| Active registered swarms must be stopped before cleanup | Prevents accidental live swarm removal |
+| Registered swarms are removed only through the canonical `REMOVE` operation | The Controller converges workload disablement before cleanup; no raw live deletion path exists |
 | Execute requires `candidateSetHash` | Blocks stale plans |
 | Execute requires `idempotencyKey` | Prevents repeat deletion work |
 | Running resources require `includeRunning=true` | Makes high-risk cleanup explicit |
@@ -146,7 +146,6 @@ Default tool names use underscores. Dotted names are legacy/conceptual unless
 | `runId` | No | Omit only for broader high-risk cleanup |
 | `includeRunning` | No | Default `false` |
 | `includeRabbit` | No | Default `true` |
-| `overrideRegisteredSwarmState` | No | Default `false`; emergency only |
 
 `runtime_cleanup_execute`:
 
@@ -157,7 +156,6 @@ Default tool names use underscores. Dotted names are legacy/conceptual unless
 | `runId` | No | Same scope as plan |
 | `includeRunning` | No | Same scope as plan |
 | `includeRabbit` | No | Same scope as plan |
-| `overrideRegisteredSwarmState` | No | Must match plan |
 | `candidateSetHash` | Yes | From current plan |
 | `candidateIds` | Yes | Execute only selected candidates |
 | `idempotencyKey` | Yes | Reuse returns prior evidence |
@@ -170,10 +168,8 @@ REST examples live in `docs/ORCHESTRATOR-REST.md`.
 
 | State | Result | Risk |
 | --- | --- | --- |
-| Registered swarm in `NEW`/`CREATING`/`READY`/`STOPPED`/`FAILED` | `LIFECYCLE_REMOVE_SWARM` candidate | Remove/abort through lifecycle |
-| Running registered swarm (`STARTING`/`RUNNING`/`STOPPING`) | Blocked | Must explicitly stop first |
-| Registered swarm in `REMOVING` state | Blocked | Needs lifecycle recovery |
-| `overrideRegisteredSwarmState=true` for `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` | `LIFECYCLE_REMOVE_SWARM` candidate | Emergency high risk |
+| Registered swarm with no non-terminal lifecycle operation | `LIFECYCLE_REMOVE_SWARM` candidate | Canonical filesystem-backed remove/abort; remove converges workload to `STOPPED` before cleanup |
+| Registered swarm with a non-terminal lifecycle operation | Blocked | The operation coordinator permits only one lifecycle operation |
 | Registered controller Docker resource | Blocked | Must use lifecycle |
 | Unregistered stopped labeled runtime in requested `swarmId`/`runId` | Docker candidate | Orphan cleanup |
 | Unregistered swarm with ownership-manifest Rabbit resources | Rabbit candidate | Exact manifest names only |
@@ -188,17 +184,11 @@ REST examples live in `docs/ORCHESTRATOR-REST.md`.
 | Candidate hash changed before execute | Reject execute | No mutation |
 | Same idempotency key and same input | Return prior evidence | No repeat mutation |
 
-Stuck registered swarms stay on the lifecycle path. Runtime cleanup may abort
-pre-run swarms, and remove stopped/failed swarms, through
-`LIFECYCLE_REMOVE_SWARM`; it does not bypass stop or recovery for swarms in
-running or `REMOVING` states.
-
-Emergency override is explicit and hash-bound. Operators must set
-`overrideRegisteredSwarmState=true` on both plan and execute, select the
-`LIFECYCLE_REMOVE_SWARM` candidate, and provide an execute `reason`. Override is
-intended for HiveGate-governed break-glass workflows only; it still uses
-Orchestrator lifecycle removal and never enables raw registered-controller
-Docker/Rabbit deletion.
+Registered swarms stay on the operation path. Runtime cleanup may abort a
+pre-ready swarm or remove a running/stopped swarm through `LIFECYCLE_REMOVE_SWARM`.
+The remove operation first sets workload intent to `STOPPED` and converges
+disablement. Runtime cleanup does not bypass that convergence, operation
+ownership, the filesystem request/result contract or terminal evidence.
 
 Unregistered labeled resources are treated as orphans only inside the requested
 scope. Docker candidates require `pockethive.managed=true`, exact `swarmId`,
@@ -233,7 +223,7 @@ Runtime debug must have zero scenario-path impact.
 - PocketHive MCP does not approve its own destructive tool.
 - Register `runtime_cleanup_execute` behind HiveGate for production use.
 - HiveGate policy should bind `swarmId`, `runId`, `includeRunning`,
-  `includeRabbit`, `overrideRegisteredSwarmState`, `candidateSetHash`,
+  `includeRabbit`, `candidateSetHash`,
   `candidateIds`, and `idempotencyKey`.
 - No MCP or ChatGPT approval widget is part of this feature. Governance belongs
   in HiveGate or the production control plane that invokes the execute tool.

@@ -43,7 +43,7 @@ class RuntimeDebugControllerTest {
     void capabilitiesExposeScopedRuntimeDebugContract() throws Exception {
         mvc().perform(get("/api/runtime/debug/capabilities"))
             .andExpect(status().isOk())
-            .andExpect(jsonPath("$.runtimeDebugContractVersion").value("3"))
+            .andExpect(jsonPath("$.runtimeDebugContractVersion").value("4"))
             .andExpect(jsonPath("$.cleanupContractVersion").value("3"))
             .andExpect(jsonPath("$.runtimeDebugReadsBackedByOrchestrator").value(true))
             .andExpect(jsonPath("$.cleanupPlanHasExecutionRisk").value(true))
@@ -160,6 +160,34 @@ class RuntimeDebugControllerTest {
         ArgumentCaptor<RabbitTopologyRequest> captor = ArgumentCaptor.forClass(RabbitTopologyRequest.class);
         verify(reconciliationService).rabbitTopology(captor.capture());
         org.assertj.core.api.Assertions.assertThat(captor.getValue().swarmId()).isEqualTo("sw1");
+    }
+
+    @Test
+    void ownershipManifestDelegatesToOrchestratorReconciliationService() throws Exception {
+        when(reconciliationService.ownershipManifest(any(RabbitTopologyRequest.class))).thenReturn(
+            new RuntimeOwnershipManifest(
+                "sw1",
+                "run-1",
+                "template-1",
+                "DOCKER_SINGLE",
+                java.time.Instant.parse("2026-07-23T09:00:00Z"),
+                List.of(),
+                new RuntimeOwnershipManifest.RabbitResources(List.of(), List.of(), List.of())));
+
+        mvc().perform(post("/api/runtime/debug/manifest")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("""
+                    {
+                      "swarmId": "sw1",
+                      "runId": "run-1"
+                    }
+                    """))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.swarmId").value("sw1"))
+            .andExpect(jsonPath("$.runId").value("run-1"))
+            .andExpect(jsonPath("$.templateId").value("template-1"));
+
+        verify(reconciliationService).ownershipManifest(any(RabbitTopologyRequest.class));
     }
 
     private MockMvc mvc() {

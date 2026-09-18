@@ -100,11 +100,7 @@ public class ScenarioDefaultsSteps {
     Map<String, Object> config = target.config();
     assertNotNull(config, "Bee config was not returned");
 
-    @SuppressWarnings("unchecked")
-    Map<String, Object> worker = (Map<String, Object>) config.get("worker");
-    assertNotNull(worker, "Bee config did not include 'worker' block");
-
-    Object policyObj = worker.get("historyPolicy");
+    Object policyObj = config.get("historyPolicy");
     assertNotNull(policyObj, "Bee config did not include 'historyPolicy'");
 
     String actual = policyObj.toString();
@@ -156,6 +152,6 @@ public class ScenarioDefaultsSteps {
     if (alias.isEmpty() || actual.isEmpty()) {
       return false;
     }
-    return alias.equals(actual) || actual.contains(alias) || alias.contains(actual);
+    return alias.equals(actual);
   }
 }

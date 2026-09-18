@@ -4,7 +4,7 @@ import java.util.List;
 import java.util.Map;
 
 public final class RuntimeDebugContracts {
-    public static final String RUNTIME_DEBUG_CONTRACT_VERSION = "3";
+    public static final String RUNTIME_DEBUG_CONTRACT_VERSION = "4";
     public static final String CLEANUP_CONTRACT_VERSION = "3";
 
     private RuntimeDebugContracts() {

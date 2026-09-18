@@ -200,9 +200,6 @@ public final class WorkItem {
      */
     public WorkItem addStepHeader(String name, Object value) {
         Objects.requireNonNull(name, "name");
-        if (value == null && (STEP_SERVICE_HEADER.equals(name) || STEP_INSTANCE_HEADER.equals(name))) {
-            throw new IllegalArgumentException("Cannot remove required step header " + name);
-        }
         List<WorkStep> newSteps;
         if (this.steps == null || this.steps.isEmpty()) {
             throw new IllegalStateException("Cannot add step header without any steps");
@@ -463,9 +460,6 @@ public final class WorkItem {
 
         public Builder stepHeader(String name, Object value) {
             Objects.requireNonNull(name, "name");
-            if (value == null && (STEP_SERVICE_HEADER.equals(name) || STEP_INSTANCE_HEADER.equals(name))) {
-                throw new IllegalArgumentException("Cannot remove required step header " + name);
-            }
             if (steps == null || steps.isEmpty()) {
                 throw new IllegalStateException("Cannot set step header without any steps");
             }
@@ -511,14 +505,6 @@ public final class WorkItem {
             List<WorkStep> effectiveSteps = this.steps;
             if (effectiveSteps == null || effectiveSteps.isEmpty()) {
                 throw new IllegalStateException("WorkItem must include at least one explicit step");
-            }
-            for (WorkStep step : effectiveSteps) {
-                Map<String, Object> stepHeaders = step.headers();
-                if (!stepHeaders.containsKey(STEP_SERVICE_HEADER) || !stepHeaders.containsKey(STEP_INSTANCE_HEADER)) {
-                    throw new IllegalStateException(
-                        "WorkItem step headers must include " + STEP_SERVICE_HEADER + " and "
-                            + STEP_INSTANCE_HEADER + ": " + stepHeaders);
-                }
             }
             return new WorkItem(copy, messageId, contentType, context, effectiveSteps);
         }

@@ -8,6 +8,7 @@ import { createServer } from "node:http";
 import net from "node:net";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { parse } from "yaml";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -202,6 +203,7 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     requestJournalReset: false,
     stopCalls: 0,
     createCalls: 0,
+    createOperationCalls: 0,
     startCalls: 0,
     readyPolls: 0,
     requestJournalReads: 0,
@@ -232,24 +234,24 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     return body ? JSON.parse(body) : null;
   }
 
-  function swarmStatus() {
+  function swarmStateView() {
     if (!state.started && !state.stopped) state.readyPolls += 1;
     const ready = state.stopped || state.started || state.readyPolls >= readyAfterPolls;
     const running = state.started && !state.stopped;
     const stopped = state.stopped;
     return {
-      envelope: {
-        runtime: { templateId: bundleId },
-        data: {
-          context: {
-            state: stopped ? "STOPPED" : running ? "RUNNING" : ready ? "READY" : "CREATING",
-            swarmStatus: stopped ? "STOPPED" : running ? "RUNNING" : ready ? "READY" : "CREATING",
-            swarmHealth: "RUNNING",
-            totals: { desired: 4, healthy: ready ? 4 : 0, running: running ? 4 : 0, enabled: running ? 4 : 0 },
-            workers: [],
-          },
-        },
-      },
+      id: "agent-live-stack",
+      runId: "run-1",
+      runtimeIntent: "PRESENT",
+      workloadIntent: running ? "RUNNING" : "STOPPED",
+      controllerState: ready ? "READY" : "PROVISIONING",
+      workloadState: running ? "RUNNING" : ready ? "STOPPED" : "UNAVAILABLE",
+      health: ready ? "HEALTHY" : "UNKNOWN",
+      runtimeResourceState: "PRESENT",
+      observationStale: !ready,
+      templateId: bundleId,
+      bees: [],
+      observation: { workers: [] },
     };
   }
 
@@ -368,23 +370,51 @@ async function withFakePocketHiveStack(bundleId, fn, options = {}) {
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/create") {
       await requestJson(req);
       state.createCalls += 1;
-      return send(res, 200, { accepted: true });
+      return send(res, 202, {
+        correlationId: "create-corr",
+        idempotencyKey: "create-idem",
+        operationUrl: "/api/swarms/agent-live-stack/operations/create-corr",
+        outcomeTopic: "event.outcome.swarm-create.agent-live-stack.orchestrator.orch-1",
+        timeoutMs: 120000,
+      });
+    }
+    if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/operations/create-corr") {
+      state.createOperationCalls += 1;
+      return send(res, 200, { state: "SUCCEEDED" });
+    }
+    if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/operations/start-corr") {
+      return send(res, 200, { state: "SUCCEEDED" });
+    }
+    if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/operations/stop-corr") {
+      return send(res, 200, { state: "SUCCEEDED" });
     }
     if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack") {
-      return send(res, 200, swarmStatus());
+      return send(res, 200, swarmStateView());
     }
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/start") {
       await requestJson(req);
       state.startCalls += 1;
       state.started = true;
       if (requestOnStart) addExpectedRequest();
-      return send(res, 200, { accepted: true });
+      return send(res, 202, {
+        correlationId: "start-corr",
+        idempotencyKey: "start-idem",
+        operationUrl: "/api/swarms/agent-live-stack/operations/start-corr",
+        outcomeTopic: "event.outcome.swarm-start.agent-live-stack.orchestrator.orch-1",
+        timeoutMs: 180000,
+      });
     }
     if (req.method === "POST" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/stop") {
       await requestJson(req);
       state.stopCalls += 1;
       state.stopped = true;
-      return send(res, 200, { accepted: true });
+      return send(res, 202, {
+        correlationId: "stop-corr",
+        idempotencyKey: "stop-idem",
+        operationUrl: "/api/swarms/agent-live-stack/operations/stop-corr",
+        outcomeTopic: "event.outcome.swarm-stop.agent-live-stack.orchestrator.orch-1",
+        timeoutMs: 90000,
+      });
     }
     if (req.method === "GET" && url.pathname === "/orchestrator/api/swarms/agent-live-stack/journal/page") {
       return send(res, 200, { items: [], nextCursor: null, hasMore: false });
@@ -1009,6 +1039,17 @@ test("workflow gates generation until a normalized plan is complete, then genera
     assert.equal(generated.ok, true);
     assert.equal(generated.generationSanity.ok, true);
     assert.equal(existsSync(resolve(root, "agent-complete", "scenario.yaml")), true);
+    const scenario = parse(readFileSync(resolve(root, "agent-complete", "scenario.yaml"), "utf8"));
+    const bees = Object.fromEntries(scenario.template.bees.map((bee) => [bee.role, bee]));
+    assert.equal(bees.generator.config.inputs.scheduler.maxMessages, 0);
+    assert.equal(bees["request-builder"].config.passThroughOnMissingTemplate, false);
+    assert.equal(bees.processor.config.inputs.type, "RABBITMQ");
+    assert.equal(bees.processor.config.outputs.type, "RABBITMQ");
+    assert.deepEqual(bees.postprocessor.config, {
+      forwardToOutput: false,
+      txOutcomeSinkMode: "NONE",
+      dropTxOutcomeWithoutCallId: true,
+    });
 
     const generatedStatus = await call(client, "workflow_status", { workflowId: started.workflowId });
     assert.equal(generatedStatus.activeRole.id, "tester");
@@ -1466,6 +1507,10 @@ test("workflow CSV datasets generate runtime CSV input config and sample artifac
     const scenario = readFileSync(join(root, "agent-csv-evidence", "scenario.yaml"), "utf8");
     assert.match(scenario, /inputs:\n\s+type: CSV_DATASET\n\s+csv:/);
     assert.match(scenario, /filePath: \/app\/scenario\/datasets\/sample\.csv/);
+    assert.match(scenario, /delimiter: ","/);
+    assert.match(scenario, /charset: UTF-8/);
+    assert.match(scenario, /startupDelaySeconds: 0/);
+    assert.match(scenario, /tickIntervalMs: 1000/);
     assert.doesNotMatch(scenario, /outputs:\n\s+type: CSV_DATASET/);
   });
 });
@@ -1667,6 +1712,12 @@ test("workflow modify mode patches and validates an existing active-root bundle"
 
   await withScenarioManagerValidationClient(root, async (client) => {
     await call(client, "bundle_scaffold", { bundleId: "agent-modify", pattern: "rest-simple", sutType: "none" });
+    const scaffold = parse(readFileSync(resolve(root, "agent-modify", "scenario.yaml"), "utf8"));
+    const scaffoldBees = Object.fromEntries(scaffold.template.bees.map((bee) => [bee.role, bee]));
+    assert.equal(scaffoldBees.generator.config.inputs.scheduler.maxMessages, 0);
+    assert.equal(scaffoldBees.processor.config.inputs.type, "RABBITMQ");
+    assert.equal(scaffoldBees.processor.config.outputs.type, "RABBITMQ");
+    assert.equal(scaffoldBees.postprocessor.config.txOutcomeSinkMode, "NONE");
 
     const missingBundle = await callError(client, "workflow_start", {
       sourceType: "plain-instructions",
@@ -1737,12 +1788,14 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         const deploy = await call(client, "workflow_deploy", {
           workflowId: started.workflowId,
           swarmId: "agent-live-stack",
+          captureTapSample: true,
           readyTimeoutSec: 2,
         });
         assert.equal(deploy.ok, true);
         assert.equal(deploy.evidence.mockConfig.wiremock.loaded, 1);
         assert.equal(state.mappings.length, 1);
         assert.equal(state.requestJournalReset, true);
+        assert.equal(state.tapCreates, 1);
 
         const verified = await call(client, "workflow_verify", {
           workflowId: started.workflowId,
@@ -1772,6 +1825,15 @@ test("workflow deploy loads mock config and verify settles live evidence", async
         assert.equal(result.proof.traffic.flow.matched, true);
         assert.equal(result.proof.traffic.tapFlow.observed[0], "GET /hello");
         assert.equal(result.proof.mocks.wiremockRequests, 1);
+
+        const crossSwarmVerify = await call(client, "workflow_verify_start", {
+          workflowId: started.workflowId,
+          swarmId: "different-live-stack",
+          includeTapSample: true,
+          stopAfterObservation: false,
+        });
+        assert.equal(crossSwarmVerify.evidence.preArmedTap.swarmId, "different-live-stack");
+        assert.equal(state.tapCreates, 2);
 
         const strict = await call(client, "workflow_verify", {
           workflowId: started.workflowId,
@@ -1895,8 +1957,12 @@ test("workflow async deploy job survives slow readiness without blocking one too
         assert.equal(state.mappings.length, 1);
 
         step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
-        assert.equal(step.phase, "wait-ready");
+        assert.equal(step.phase, "wait-create");
         assert.equal(state.createCalls, 1);
+
+        step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
+        assert.equal(step.phase, "wait-ready");
+        assert.equal(state.createOperationCalls, 1);
 
         step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "running");
@@ -1914,9 +1980,13 @@ test("workflow async deploy job survives slow readiness without blocking one too
         assert.equal(state.startCalls, 0);
 
         step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
-        assert.equal(step.status, "succeeded");
-        assert.equal(step.phase, "complete");
+        assert.equal(step.status, "running");
+        assert.equal(step.phase, "wait-start");
         assert.equal(state.startCalls, 1);
+
+        step = await call(client, "workflow_deploy_resume", { workflowId: started.workflowId, operationId: created.operationId });
+        assert.equal(step.status, "succeeded", JSON.stringify(step));
+        assert.equal(step.phase, "complete");
 
         const status = await call(client, "workflow_deploy_status", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(status.status, "succeeded");
@@ -2069,8 +2139,12 @@ test("workflow async verify job observes, stops, and settles in resumable steps"
 
         step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "running");
-        assert.equal(step.phase, "settle");
+        assert.equal(step.phase, "wait-stop");
         assert.equal(state.stopCalls, 1);
+
+        step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
+        assert.equal(step.status, "running");
+        assert.equal(step.phase, "settle");
 
         step = await call(client, "workflow_verify_resume", { workflowId: started.workflowId, operationId: created.operationId });
         assert.equal(step.status, "succeeded");

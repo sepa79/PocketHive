@@ -5,8 +5,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.networknt.schema.ValidationMessage;
 import io.pockethive.controlplane.schema.ControlEventsSchemaValidator;
 import io.pockethive.e2e.contracts.ControlPlaneMessageCapture.CapturedMessage;
-import java.time.Duration;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
@@ -16,8 +16,6 @@ public final class ControlEventsContractAudit {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
   private static final Set<String> LIFECYCLE_SIGNALS = Set.of(
-      "swarm-template",
-      "swarm-plan",
       "swarm-start",
       "swarm-stop",
       "swarm-remove"
@@ -27,20 +25,22 @@ public final class ControlEventsContractAudit {
   }
 
   public static void assertAllValid(List<CapturedMessage> messages) {
-    assertAllValid(messages, Duration.ZERO);
+    assertAllValid(messages, new AuditExpectation(List.of(), Set.of()));
   }
 
-  public static void assertAllValid(List<CapturedMessage> messages, Duration settleTime) {
-    List<CapturedMessage> payloads = messages == null ? List.of() : messages;
-    if (settleTime != null && !settleTime.isZero() && !settleTime.isNegative()) {
-      try {
-        Thread.sleep(settleTime.toMillis());
-      } catch (InterruptedException e) {
-        Thread.currentThread().interrupt();
-      }
-    }
+  public static void assertAllValid(
+      List<CapturedMessage> messages, List<ExpectedOperation> expectedOperations) {
+    assertAllValid(messages, new AuditExpectation(expectedOperations, Set.of()));
+  }
 
+  public static void assertAllValid(
+      List<CapturedMessage> messages, AuditExpectation expectation) {
+    List<CapturedMessage> payloads = messages == null ? List.of() : messages;
+    AuditExpectation resolvedExpectation = expectation == null
+        ? new AuditExpectation(List.of(), Set.of())
+        : expectation;
     List<String> failures = new ArrayList<>();
+    List<JsonNode> validEnvelopes = new ArrayList<>();
     for (CapturedMessage message : payloads) {
       if (message == null) {
         continue;
@@ -54,14 +54,109 @@ public final class ControlEventsContractAudit {
           failures.add("schema invalid rk=" + routingKey + " errors=" + errors);
           continue;
         }
+        routingIdentityCheck(node, routingKey, failures);
         semanticChecks(node, routingKey, failures);
+        validEnvelopes.add(node);
       } catch (Exception ex) {
         failures.add("parse failed rk=" + routingKey + " err=" + ex.getMessage() + " payload=" + snippet(json));
       }
     }
+    commandFlowCoverage(
+        validEnvelopes, resolvedExpectation.expectedOperations(), failures);
+    familyCoverage(validEnvelopes, resolvedExpectation.requiredFamilies(), failures);
 
     if (!failures.isEmpty()) {
       Assertions.fail("Control-plane contract audit failed:\n- " + String.join("\n- ", failures));
+    }
+  }
+
+  private static void familyCoverage(
+      List<JsonNode> envelopes,
+      Set<ControlPlaneMessageFamily> requiredFamilies,
+      List<String> failures) {
+    for (ControlPlaneMessageFamily family : requiredFamilies) {
+      boolean observed = envelopes.stream().anyMatch(
+          envelope -> family.matchesEnvelope(
+              envelope.path("kind").asText(""), envelope.path("type").asText("")));
+      if (!observed) {
+        failures.add("coverage missing family=" + family.familyName());
+      }
+    }
+  }
+
+  private static void commandFlowCoverage(
+      List<JsonNode> envelopes,
+      List<ExpectedOperation> expectedOperations,
+      List<String> failures) {
+    for (ExpectedOperation command : expectedOperations) {
+      if (command.signalRequired() && !hasMatchingSignal(envelopes, command)) {
+        failures.add("coverage missing family=signal type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+      if (command.resultRequired() && !hasMatchingOperation(envelopes, "result", command)) {
+        failures.add("coverage missing family=result type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+      if (!hasMatchingOperation(envelopes, "outcome", command)) {
+        failures.add("coverage missing family=outcome type=" + command.type()
+            + " correlationId=" + command.correlationId());
+      }
+    }
+  }
+
+  private static boolean hasMatchingSignal(
+      List<JsonNode> envelopes, ExpectedOperation command) {
+    return envelopes.stream().anyMatch(
+        envelope -> matchesOperation(envelope, ControlPlaneMessageFamily.SIGNAL.familyName(), command));
+  }
+
+  private static boolean hasMatchingOperation(
+      List<JsonNode> envelopes, String kind, ExpectedOperation command) {
+    return envelopes.stream().anyMatch(envelope -> matchesOperation(envelope, kind, command));
+  }
+
+  private static boolean matchesOperation(
+      JsonNode envelope, String kind, ExpectedOperation command) {
+    return kind.equals(envelope.path("kind").asText(""))
+        && command.type().equals(envelope.path("type").asText(""))
+        && command.swarmId().equals(envelope.path("scope").path("swarmId").asText(""))
+        && command.correlationId().equals(envelope.path("correlationId").asText(""))
+        && command.idempotencyKey().equals(envelope.path("idempotencyKey").asText(""));
+  }
+
+  public record ExpectedOperation(
+      String type,
+      String swarmId,
+      String correlationId,
+      String idempotencyKey,
+      boolean signalRequired,
+      boolean resultRequired) {
+
+    public ExpectedOperation {
+      type = requireExpectationText(type, "type");
+      swarmId = requireExpectationText(swarmId, "swarmId");
+      correlationId = requireExpectationText(correlationId, "correlationId");
+      idempotencyKey = requireExpectationText(idempotencyKey, "idempotencyKey");
+    }
+
+    private static String requireExpectationText(String value, String field) {
+      if (value == null || value.isBlank()) {
+        throw new IllegalArgumentException(field + " must not be blank");
+      }
+      return value.trim();
+    }
+  }
+
+  /** Explicit operation and message-family postconditions for a complete E2E audit. */
+  public record AuditExpectation(
+      List<ExpectedOperation> expectedOperations,
+      Set<ControlPlaneMessageFamily> requiredFamilies) {
+
+    public AuditExpectation {
+      expectedOperations = expectedOperations == null ? List.of() : List.copyOf(expectedOperations);
+      requiredFamilies = requiredFamilies == null || requiredFamilies.isEmpty()
+          ? Set.of()
+          : Set.copyOf(EnumSet.copyOf(requiredFamilies));
     }
   }
 
@@ -82,13 +177,6 @@ public final class ControlEventsContractAudit {
       if (status.isMissingNode() || status.isNull() || status.asText("").isBlank()) {
         failures.add("semantic invalid rk=" + routingKey
             + " reason=outcome missing data.status payload=" + snippet(node.toString()));
-      }
-      if ("config-update".equals(normalizedType)) {
-        JsonNode enabled = data.path("enabled");
-        if (enabled.isMissingNode() || enabled.isNull()) {
-          failures.add("semantic invalid rk=" + routingKey
-              + " reason=config-update outcome missing data.enabled payload=" + snippet(node.toString()));
-        }
       }
     }
 
@@ -137,6 +225,38 @@ public final class ControlEventsContractAudit {
               + " reason=swarm-controller status-full missing context.bindings.work.edges payload=" + snippet(node.toString()));
         }
       }
+    }
+  }
+
+  private static void routingIdentityCheck(JsonNode node, String routingKey, List<String> failures) {
+    String kind = node.path("kind").asText("");
+    String type = node.path("type").asText("");
+    JsonNode scope = node.path("scope");
+    String[] parts = routingKey == null ? new String[0] : routingKey.split("\\.");
+    if (parts.length < 5) {
+      failures.add("routing invalid rk=" + routingKey + " reason=too few segments");
+      return;
+    }
+
+    String routedSwarm = parts[parts.length - 3];
+    String routedRole = parts[parts.length - 2];
+    String routedInstance = parts[parts.length - 1];
+    String routedType = String.join(".", java.util.Arrays.copyOfRange(parts, 1, parts.length - 3));
+    String expectedPrefix = "signal".equals(kind) ? "signal" : "event";
+    String expectedType = "signal".equals(kind)
+        ? type
+        : ("event".equals(kind) ? type + "." + type : kind + "." + type);
+
+    if (!expectedPrefix.equals(parts[0])
+        || !expectedType.equals(routedType)
+        || !scope.path("swarmId").asText("").equals(routedSwarm)
+        || !scope.path("role").asText("").equals(routedRole)
+        || !scope.path("instance").asText("").equals(routedInstance)) {
+      failures.add("routing/envelope mismatch rk=" + routingKey
+          + " expected=" + expectedPrefix + "." + expectedType + "."
+          + scope.path("swarmId").asText("") + "."
+          + scope.path("role").asText("") + "."
+          + scope.path("instance").asText(""));
     }
   }
 

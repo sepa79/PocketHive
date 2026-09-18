@@ -1,0 +1,56 @@
+---
+title: Use optional Redis dataset hand-offs
+pagination_label: Use optional Redis
+description: Worked examples for state transitions inside one swarm and between multiple swarms.
+---
+
+import {
+  RedisBasicLoopExplorer,
+  RedisMultiSwarmExplorer,
+} from "@site/src/components/InteractivePocketHiveExplorer";
+
+# Use optional Redis dataset hand-offs
+
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors evaluating Redis-backed state hand-offs |
+| Prerequisites | Understand scenario bundles and swarms; use Redis only when the scenario explicitly requires shared dataset state |
+| Expected outcome | Choose between a one-swarm loop and a multi-swarm hand-off without treating either pattern as required architecture |
+| Last verified source | `rewrite/lifecycle-control-plane` at `0524165e` (unreleased) |
+
+This is a worked example, not a required PocketHive architecture. Use it when a
+scenario needs durable, observable hand-off states backed by Redis lists.
+
+## One-swarm loop
+
+A worker can read a record from `Ready`, perform an authorization-like
+operation, and move it to `TopUpNeeded` when follow-up work is required. A
+later operation returns the record to `Ready`.
+
+<RedisBasicLoopExplorer />
+
+## Multi-swarm hand-off
+
+Two swarms can cooperate through the same named dataset states:
+
+- Swarm A reads from `Ready` and writes to `TopUpNeeded`.
+- Swarm B waits on `TopUpNeeded`, performs its operation, and writes back to
+  `Ready`.
+
+Each swarm still has its own control plane and lifecycle. Redis provides the
+work-data hand-off between them.
+
+<RedisMultiSwarmExplorer />
+
+## Troubleshooting
+
+Confirm the scenario declares the intended Redis dataset names and that each
+swarm is healthy before inspecting Redis directly. Use the
+[operator troubleshooting workflow](../operators/observability-troubleshooting.md)
+and treat Redis Commander as a focused diagnostic surface, not the source of
+swarm lifecycle truth.
+
+## Next step
+
+For contract details, see [scenario patterns](../../scenarios/SCENARIO_PATTERNS.md)
+and [worker configuration](../workers-advanced.md).

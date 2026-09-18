@@ -1,32 +1,39 @@
 package io.pockethive.worker.sdk.api;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.pockethive.observability.ObservabilityContext;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
+/** Sole JSON Schema, serialization and deserialization boundary for WorkItem envelopes. */
 public final class WorkItemJsonCodec {
-    private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
+    private static final JsonMapper MAPPER = JsonMapper.builder()
+        .findAndAddModules()
+        .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+        .build();
     private static final String VERSION = "1";
+    private static final WorkItemSchemaValidator SCHEMA_VALIDATOR = WorkItemSchemaValidator.create(MAPPER);
 
     public byte[] toJson(WorkItem item) {
-        WorkItemEnvelope envelope = toEnvelope(item);
         try {
-            return MAPPER.writeValueAsBytes(envelope);
+            JsonNode node = MAPPER.valueToTree(toEnvelope(item));
+            SCHEMA_VALIDATOR.validate(node);
+            return MAPPER.writeValueAsBytes(node);
+        } catch (WorkItemContractException exception) {
+            throw exception;
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to serialize WorkItem envelope", ex);
+            throw new WorkItemContractException("Cannot serialize canonical WorkItem envelope", ex);
         }
     }
 
-    public WorkItemEnvelope toEnvelope(WorkItem item) {
+    private WorkItemEnvelope toEnvelope(WorkItem item) {
         Objects.requireNonNull(item, "item");
-        ObservabilityContext observability = item.observabilityContext()
-            .orElseThrow(() -> new IllegalStateException("WorkItem must include observability context"));
+        ObservabilityContext observability = item.observabilityContext().orElse(null);
         List<WorkItemStepEnvelope> steps = new ArrayList<>();
         for (WorkStep step : item.steps()) {
-            validateStepHeaders(step.headers());
             steps.add(new WorkItemStepEnvelope(
                 step.index(),
                 step.payload(),
@@ -46,24 +53,26 @@ public final class WorkItemJsonCodec {
 
     public WorkItem fromJson(byte[] payload) {
         Objects.requireNonNull(payload, "payload");
-        WorkItemEnvelope envelope;
         try {
-            envelope = MAPPER.readValue(payload, WorkItemEnvelope.class);
+            JsonNode node = MAPPER.readTree(payload);
+            if (node == null) {
+                throw new WorkItemContractException("WorkItem payload must contain a JSON value");
+            }
+            SCHEMA_VALIDATOR.validate(node);
+            WorkItemEnvelope envelope = MAPPER.treeToValue(node, WorkItemEnvelope.class);
+            return fromValidatedEnvelope(envelope);
+        } catch (WorkItemContractException exception) {
+            throw exception;
         } catch (Exception ex) {
-            throw new IllegalStateException("Failed to deserialize WorkItem envelope", ex);
+            throw new WorkItemContractException("Cannot deserialize canonical WorkItem envelope", ex);
         }
-        return fromEnvelope(envelope);
     }
 
-    public WorkItem fromEnvelope(WorkItemEnvelope envelope) {
+    private WorkItem fromValidatedEnvelope(WorkItemEnvelope envelope) {
         Objects.requireNonNull(envelope, "envelope");
-        if (!VERSION.equals(envelope.version())) {
-            throw new IllegalArgumentException("Unsupported WorkItem envelope version: " + envelope.version());
-        }
         List<WorkItemStepEnvelope> steps = envelope.steps();
         List<WorkStep> decodedSteps = new ArrayList<>();
         for (WorkItemStepEnvelope step : steps) {
-            validateStepHeaders(step.headers());
             decodedSteps.add(new WorkStep(
                 step.index(),
                 step.payload(),
@@ -78,16 +87,5 @@ public final class WorkItemJsonCodec {
             .observabilityContext(envelope.observability())
             .steps(decodedSteps)
             .build();
-    }
-
-    private static void validateStepHeaders(Map<String, Object> headers) {
-        if (headers == null) {
-            throw new IllegalStateException("WorkItem step headers must be present");
-        }
-        if (!headers.containsKey(WorkItem.STEP_SERVICE_HEADER) || !headers.containsKey(WorkItem.STEP_INSTANCE_HEADER)) {
-            throw new IllegalStateException(
-                "WorkItem step headers must include " + WorkItem.STEP_SERVICE_HEADER + " and "
-                    + WorkItem.STEP_INSTANCE_HEADER + ": " + headers);
-        }
     }
 }

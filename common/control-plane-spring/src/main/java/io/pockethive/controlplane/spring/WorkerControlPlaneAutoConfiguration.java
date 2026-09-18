@@ -1,10 +1,10 @@
 package io.pockethive.controlplane.spring;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.consumer.SelfFilter;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.payload.RoleContext;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
@@ -85,9 +85,9 @@ public class WorkerControlPlaneAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnProperty(prefix = "pockethive.control-plane.worker.listener", name = "enabled", havingValue = "true", matchIfMissing = true)
-    WorkerControlPlane workerControlPlane(ObjectMapper objectMapper,
+    WorkerControlPlane workerControlPlane(ControlPlaneCodec codec,
         @Qualifier("workerControlPlaneIdentity") ControlPlaneIdentity identity) {
-        WorkerControlPlane.Builder builder = WorkerControlPlane.builder(objectMapper).identity(identity);
+        WorkerControlPlane.Builder builder = WorkerControlPlane.builder(codec).identity(identity);
         WorkerControlPlaneProperties.Worker worker = properties.getWorker();
         if (worker.isSkipSelfSignals()) {
             builder.selfFilter(SelfFilter.skipSelfInstance());

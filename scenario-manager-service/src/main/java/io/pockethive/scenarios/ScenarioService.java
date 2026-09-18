@@ -3,6 +3,7 @@ package io.pockethive.scenarios;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.capabilities.CapabilityCatalogueService;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.scenarios.validation.BundleValidationException;
 import io.pockethive.scenarios.validation.BundleValidationInput;
 import io.pockethive.scenarios.validation.BundleValidationResult;
@@ -10,6 +11,7 @@ import io.pockethive.scenarios.validation.BundleValidationSource;
 import io.pockethive.scenarios.validation.ScenarioBundleValidator;
 import io.pockethive.scenarios.validation.ValidationFinding;
 import io.pockethive.swarm.model.SwarmTemplate;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import jakarta.annotation.PostConstruct;
 import org.springframework.http.MediaType;
 import org.slf4j.Logger;
@@ -35,7 +37,6 @@ import io.pockethive.swarm.model.SutEnvironment;
 @Service
 public class ScenarioService {
     private static final Logger logger = LoggerFactory.getLogger(ScenarioService.class);
-    private static final String SCENARIOS_RUNTIME_ROOT = "scenarios-runtime";
     private static final String DEFAULT_UPLOAD_FOLDER = "bundles";
     private static final String QUARANTINE_FOLDER = "quarantine";
     private static final String UPLOAD_TEMP_PREFIX = "pockethive-scenario-upload-";
@@ -49,7 +50,7 @@ public class ScenarioService {
     private final Path storageDir;
     private final Path testStorageDir;
     private final Path bundleRootDir;
-    private final Path runtimeRootDir;
+    private final RuntimeFilesystemLayout runtimeLayout;
     private final boolean showTestScenarios;
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final ScenarioBundleValidator bundleValidator;
@@ -62,9 +63,10 @@ public class ScenarioService {
                            @Value("${scenarios.show-test:true}") boolean showTestScenarios,
                            @Value("${pockethive.images.default-tag:}") String defaultImageTag,
                            @Value("${pockethive.release.version}") String scenarioManagerVersion,
+                           @Value("${" + RuntimeFilesystemContract.LOCAL_ROOT_ENV + ":}") String runtimeRoot,
                            CapabilityCatalogueService capabilities) throws IOException {
         this(Paths.get(dir),
-             Paths.get(SCENARIOS_RUNTIME_ROOT),
+             RuntimeFilesystemLayout.of(runtimeRoot, runtimeRoot),
              showTestScenarios,
              normalizeTag(defaultImageTag),
              scenarioManagerVersion,
@@ -73,20 +75,20 @@ public class ScenarioService {
 
     ScenarioService(String dir,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), Paths.get(SCENARIOS_RUNTIME_ROOT), true, null, "test", capabilities);
+        this(Paths.get(dir), testLayout(dir), true, null, "test", capabilities);
     }
 
     ScenarioService(String dir,
                     Path runtimeRoot,
                     CapabilityCatalogueService capabilities) throws IOException {
-        this(Paths.get(dir), runtimeRoot, true, null, "test", capabilities);
+        this(Paths.get(dir), testLayout(runtimeRoot), true, null, "test", capabilities);
     }
 
     ScenarioService(String dir,
                     String defaultImageTag,
                     CapabilityCatalogueService capabilities) throws IOException {
         this(Paths.get(dir),
-             Paths.get(SCENARIOS_RUNTIME_ROOT),
+             testLayout(dir),
              true,
              normalizeTag(defaultImageTag),
              "test",
@@ -94,7 +96,7 @@ public class ScenarioService {
     }
 
     private ScenarioService(Path dir,
-                            Path runtimeRoot,
+                            RuntimeFilesystemLayout runtimeLayout,
                             boolean showTestScenarios,
                             String defaultImageTag,
                             String scenarioManagerVersion,
@@ -103,7 +105,7 @@ public class ScenarioService {
         this.storageDir = normalizedDir;
         this.testStorageDir = normalizedDir.resolve("e2e");
         this.bundleRootDir = normalizedDir;
-        this.runtimeRootDir = runtimeRoot.toAbsolutePath().normalize();
+        this.runtimeLayout = runtimeLayout;
         this.showTestScenarios = showTestScenarios;
         Files.createDirectories(this.storageDir);
         if (this.showTestScenarios) {
@@ -111,8 +113,17 @@ public class ScenarioService {
         }
         Files.createDirectories(this.bundleRootDir);
         Files.createDirectories(this.bundleRootDir.resolve(QUARANTINE_FOLDER));
-        Files.createDirectories(this.runtimeRootDir);
+        Files.createDirectories(this.runtimeLayout.localRoot());
         this.bundleValidator = new ScenarioBundleValidator(capabilities, defaultImageTag, scenarioManagerVersion);
+    }
+
+    private static RuntimeFilesystemLayout testLayout(String storageDir) {
+        return testLayout(Paths.get(storageDir).toAbsolutePath().normalize().resolve("runtime"));
+    }
+
+    private static RuntimeFilesystemLayout testLayout(Path runtimeRoot) {
+        String root = runtimeRoot.toAbsolutePath().normalize().toString();
+        return RuntimeFilesystemLayout.of(root, root);
     }
 
     @PostConstruct
@@ -786,7 +797,7 @@ public class ScenarioService {
 	            return true;
 	        }
 	        Path root = bundleRootDir.toAbsolutePath().normalize();
-	        Path runtimeRoot = runtimeRootDir != null ? runtimeRootDir.toAbsolutePath().normalize() : null;
+	        Path runtimeRoot = runtimeLayout.localRoot();
 	        return runtimeRoot != null && runtimeRoot.startsWith(root) && normalized.startsWith(runtimeRoot);
 	    }
 
@@ -868,11 +879,7 @@ public class ScenarioService {
 
     Path runtimeDir(String swarmId) {
         String cleaned = sanitize(swarmId);
-        Path dir = runtimeRootDir.resolve(cleaned).normalize();
-        if (!dir.startsWith(runtimeRootDir)) {
-            throw new IllegalArgumentException("Invalid swarm id");
-        }
-        return dir;
+        return runtimeLayout.swarmRoot(cleaned);
     }
 
     public Path prepareRuntimeDirectory(String scenarioId, String swarmId) throws IOException {
@@ -981,7 +988,7 @@ public class ScenarioService {
         Path normalizedRoot = bundleRoot.toAbsolutePath().normalize();
         Path normalizedStorageDir = storageDir.toAbsolutePath().normalize();
         Path normalizedTestDir = testStorageDir.toAbsolutePath().normalize();
-        Path normalizedRuntimeRoot = runtimeRootDir.toAbsolutePath().normalize();
+        Path normalizedRuntimeRoot = runtimeLayout.localRoot();
         boolean isMainScan = normalizedRoot.equals(normalizedStorageDir);
         boolean runtimeUnderRoot = normalizedRuntimeRoot.startsWith(normalizedRoot);
         try (Stream<Path> stream = Files.walk(bundleRoot)) {

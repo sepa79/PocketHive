@@ -8,7 +8,6 @@ import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.manager.ports.ControlPlanePort;
-import io.pockethive.observability.ControlPlaneJson;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -144,23 +143,11 @@ public final class ConfigFanout {
         correlationId,
         idempotencyKey,
         dataMap);
-    String payload = ControlPlaneJson.write(signal, "config-update signal");
     String routingKey = ControlPlaneRouting.signal(
         ControlPlaneSignals.CONFIG_UPDATE, target.swarmId(), target.role(), target.instance());
-    log.info("{} config-update rk={} correlation={} payload {}",
-        context, routingKey, correlationId, payloadSnippet(payload));
-    controlPlane.publishSignal(routingKey, payload);
-  }
-
-  private static String payloadSnippet(String payload) {
-    if (payload == null) {
-      return "";
-    }
-    String trimmed = payload.strip();
-    if (trimmed.length() > 300) {
-      return trimmed.substring(0, 300) + "…";
-    }
-    return trimmed;
+    log.info("{} config-update rk={} correlation={} target={}",
+        context, routingKey, correlationId, target);
+    controlPlane.publishSignal(routingKey, signal);
   }
 
   private static final class PendingConfig {

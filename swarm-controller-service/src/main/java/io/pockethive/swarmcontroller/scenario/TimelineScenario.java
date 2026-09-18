@@ -265,7 +265,7 @@ public final class TimelineScenario implements Scenario {
           // REST /api/swarms/{id}/start uses. This reuses SwarmRuntimeCore's
           // enableAll()/setSwarmEnabled logic, including config-update fan-out.
           log.info("Scenario step {} enabling entire swarm via lifecycle", step.stepId);
-          context.manager().enableAll();
+          context.lifecycle().enableAll();
           return;
         }
         // Bee-scoped enable (role/instance) – emit a top-level enabled flag
@@ -275,7 +275,7 @@ public final class TimelineScenario implements Scenario {
       case "stop" -> {
         if (swarmLifecycleStep) {
           log.info("Scenario step {} disabling entire swarm via lifecycle", step.stepId);
-          context.manager().setWorkEnabled(false);
+          context.lifecycle().setWorkEnabled(false);
           return;
         }
         // Bee-scoped disable.

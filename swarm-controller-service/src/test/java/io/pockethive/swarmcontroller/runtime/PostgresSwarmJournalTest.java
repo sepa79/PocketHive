@@ -1,12 +1,14 @@
 package io.pockethive.swarmcontroller.runtime;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.swarmcontroller.runtime.SwarmJournal.SwarmJournalEntry;
 import java.time.Instant;
 import java.util.Map;
+import java.util.HashMap;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -61,21 +63,7 @@ class PostgresSwarmJournalTest {
 
   @Test
   void writesEntriesToJournalEventTable() {
-    SwarmJournalEntry entry = new SwarmJournalEntry(
-        Instant.parse("2025-01-01T00:00:00Z"),
-        "sw1",
-        "INFO",
-        SwarmJournal.Direction.IN,
-        "signal",
-        "swarm-start",
-        "swarm-controller",
-        ControlScope.forInstance("sw1", "swarm-controller", "swarm-controller-1"),
-        "c-1",
-        "i-1",
-        "rk-1",
-        Map.of("hello", "world"),
-        null,
-        null);
+    SwarmJournalEntry entry = entry("sw1", Map.of("hello", "world"));
     journal.append(entry);
     journal.flush();
 
@@ -88,5 +76,41 @@ class PostgresSwarmJournalTest {
         "SELECT data::text FROM journal_event WHERE swarm_id = 'sw1' ORDER BY id DESC LIMIT 1",
         String.class);
     assertThat(json).contains("hello").contains("world");
+  }
+
+  @Test
+  void rejectsEntryForAnotherSwarm() {
+    assertThatThrownBy(() -> journal.append(entry("sw2", Map.of())))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("sw1")
+        .hasMessageContaining("sw2");
+  }
+
+  @Test
+  void propagatesSerializationFailureBeforeBuffering() {
+    Map<String, Object> cyclic = new HashMap<>();
+    cyclic.put("self", cyclic);
+
+    assertThatThrownBy(() -> journal.append(entry("sw1", cyclic)))
+        .isInstanceOf(SwarmJournalWriteException.class)
+        .hasMessageContaining("serialise");
+  }
+
+  private static SwarmJournalEntry entry(String swarmId, Map<String, Object> data) {
+    return new SwarmJournalEntry(
+        Instant.parse("2025-01-01T00:00:00Z"),
+        swarmId,
+        "INFO",
+        SwarmJournal.Direction.IN,
+        "signal",
+        "swarm-start",
+        "swarm-controller",
+        ControlScope.forInstance("sw1", "swarm-controller", "swarm-controller-1"),
+        "c-1",
+        "i-1",
+        "rk-1",
+        data,
+        null,
+        null);
   }
 }

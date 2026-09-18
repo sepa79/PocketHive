@@ -1,14 +1,11 @@
 package io.pockethive.controlplane.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 
-import java.io.IOException;
 import java.time.Clock;
 import java.util.Objects;
-import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -19,28 +16,26 @@ public final class ControlPlaneConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(ControlPlaneConsumer.class);
 
-    private final ObjectMapper objectMapper;
+    private final ControlPlaneCodec codec;
     private final ControlPlaneIdentity identity;
     private final DuplicateSignalGuard duplicateGuard;
     private final SelfFilter selfFilter;
     private final Clock clock;
-    private final Function<IOException, RuntimeException> errorMapper;
 
     private ControlPlaneConsumer(Builder builder) {
-        this.objectMapper = Objects.requireNonNull(builder.objectMapper, "objectMapper");
+        this.codec = Objects.requireNonNull(builder.codec, "codec");
         this.identity = builder.identity;
         this.duplicateGuard = builder.duplicateGuard != null ? builder.duplicateGuard : DuplicateSignalGuard.disabled();
         this.selfFilter = builder.selfFilter != null ? builder.selfFilter : SelfFilter.NONE;
         this.clock = builder.clock != null ? builder.clock : Clock.systemUTC();
-        this.errorMapper = builder.errorMapper != null ? builder.errorMapper : RuntimeException::new;
     }
 
     public boolean consume(String payload, String routingKey, ControlSignalHandler handler) {
         Objects.requireNonNull(handler, "handler");
         requireText(payload, "payload");
         requireText(routingKey, "routingKey");
-        ControlSignal signal = parse(payload);
-        ControlSignalEnvelope envelope = new ControlSignalEnvelope(signal, routingKey, payload, clock.instant());
+        ControlSignal signal = parse(payload, routingKey);
+        ControlSignalEnvelope envelope = new ControlSignalEnvelope(signal, routingKey, clock.instant());
         logReceived(envelope);
         if (!selfFilter.shouldProcess(identity, envelope)) {
             log.info(
@@ -72,12 +67,8 @@ public final class ControlPlaneConsumer {
         }
     }
 
-    private ControlSignal parse(String payload) {
-        try {
-            return objectMapper.readValue(payload, ControlSignal.class);
-        } catch (IOException e) {
-            throw errorMapper.apply(e);
-        }
+    private ControlSignal parse(String payload, String routingKey) {
+        return codec.decode(payload, routingKey, ControlSignal.class);
     }
 
     private void logReceived(ControlSignalEnvelope envelope) {
@@ -98,15 +89,7 @@ public final class ControlPlaneConsumer {
     }
 
     private String resolveSignalName(ControlSignalEnvelope envelope) {
-        ControlSignal signal = envelope.signal();
-        if (signal != null && hasText(signal.type())) {
-            return signal.type();
-        }
-        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(envelope.routingKey());
-        if (routingKey != null && hasText(routingKey.type())) {
-            return routingKey.type();
-        }
-        return "n/a";
+        return envelope.signal().type();
     }
 
     private static String describeIdentity(ControlPlaneIdentity identity) {
@@ -131,24 +114,19 @@ public final class ControlPlaneConsumer {
         return value.toString();
     }
 
-    private static boolean hasText(String value) {
-        return value != null && !value.isBlank();
-    }
-
-    public static Builder builder(ObjectMapper objectMapper) {
-        return new Builder(objectMapper);
+    public static Builder builder(ControlPlaneCodec codec) {
+        return new Builder(codec);
     }
 
     public static final class Builder {
-        private final ObjectMapper objectMapper;
+        private final ControlPlaneCodec codec;
         private ControlPlaneIdentity identity;
         private DuplicateSignalGuard duplicateGuard;
         private SelfFilter selfFilter;
         private Clock clock;
-        private Function<IOException, RuntimeException> errorMapper;
 
-        private Builder(ObjectMapper objectMapper) {
-            this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
+        private Builder(ControlPlaneCodec codec) {
+            this.codec = Objects.requireNonNull(codec, "codec");
         }
 
         public Builder identity(ControlPlaneIdentity identity) {
@@ -168,11 +146,6 @@ public final class ControlPlaneConsumer {
 
         public Builder clock(Clock clock) {
             this.clock = clock;
-            return this;
-        }
-
-        public Builder errorMapper(Function<IOException, RuntimeException> errorMapper) {
-            this.errorMapper = errorMapper;
             return this;
         }
 

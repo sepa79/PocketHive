@@ -7,9 +7,14 @@
 - Auth: oauth2_client_credentials.
 - Data source: SCHEDULER.
 
-### Evidence
+### Historical note — not current evidence
 
-- MCP proof run `mcp-six-auth-1778867623757` passed.
-- Evidence file: `evidence/mcp-six-auth-1778867623757.json`.
-- Result: 1 OAuth token request, 6 authenticated business requests, 0 recent unmatched WireMock requests.
-- Cleanup: proof swarm `http-sequence-six-auth-flow-1778867623757` was stopped after evidence collection.
+The wizard record claimed that MCP proof run `mcp-six-auth-1778867623757`
+passed with 1 OAuth token request, 6 authenticated business requests, and 0
+recent unmatched WireMock requests. The referenced
+`evidence/mcp-six-auth-1778867623757.json` is not present in this source tree or
+deployment archive, so do not treat that claim as reproducible evidence.
+
+The record also says the proof swarm was stopped. Stop is not removal or
+verified cleanup; use the current customer lifecycle and retain create, run,
+remove, and absence-verification evidence when this scenario is requalified.

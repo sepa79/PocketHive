@@ -1,13 +1,16 @@
 # PocketHive Guides
 
-This section contains practical guides for day-to-day engineering work.
-It is designed for both human readers and AI agents.
+This section contains practical guides for customers, operators, scenario
+authors, contributors, and AI agents.
+
+## Get started
+
+- `docs/guides/onboarding/start-here.md` - product intro and doc map.
+- `docs/guides/onboarding/quickstart-15min.md` - build the stack, apply startup gates, and start a swarm only when Connectivity is OK.
+- `docs/guides/onboarding/first-scenario.md` - author, validate, and deliberately deploy through PocketHive MCP; stop at the current Connectivity gate, then remove the deployed copy.
 
 ## Worker guides
 
-- `docs/guides/onboarding/start-here.md` - product intro and doc map.
-- `docs/guides/onboarding/quickstart-15min.md` - run stack and start a swarm.
-- `docs/guides/onboarding/first-scenario.md` - copy/validate/reload your first scenario.
 - `docs/guides/workers-basics.md` - start here for worker roles, topology wiring, and minimal scenario setup.
 - `docs/guides/workers-advanced.md` - control-plane behavior, scaling patterns, and production hardening.
 
@@ -18,7 +21,8 @@ It is designed for both human readers and AI agents.
 
 ## Presentation guides
 
-- `docs/guides/presentation/interactive-pockethive-overview.mdx` - clickable system map with animated Redis loop walkthrough.
+- `docs/guides/presentation/interactive-pockethive-overview.mdx` - interactive platform architecture and lifecycle overview.
+- `docs/guides/examples/redis-dataset-patterns.mdx` - optional one-swarm and multi-swarm Redis walkthroughs.
 
 ## Related references
 

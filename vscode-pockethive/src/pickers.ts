@@ -18,8 +18,8 @@ export async function pickSwarmId(): Promise<string | undefined> {
   if (swarms.length > 0) {
     const items = swarms.map((swarm) => ({
       label: swarm.id,
-      description: swarm.status ?? 'unknown',
-      detail: swarm.health ? `health: ${swarm.health}` : undefined,
+      description: swarm.workloadState,
+      detail: `controller: ${swarm.controllerState}, health: ${swarm.health}`,
       swarmId: swarm.id
     }));
 

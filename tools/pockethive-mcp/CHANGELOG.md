@@ -80,11 +80,9 @@
 - Confirmed derived worker control queues obey Orchestrator's running-resource
   cleanup gate instead of becoming RabbitMQ candidates while their worker runtime
   object is blocked.
-- Documented Orchestrator's lifecycle protection for registered swarms: pre-run
-  swarms can be removed through lifecycle, while running swarms and swarms in
-  `REMOVING` state remain blocked.
-- Added `overrideRegisteredSwarmState` passthrough for governed break-glass
-  runtime cleanup plans and executions.
+- Documented that every registered swarm is removed only through the canonical
+  FS-backed lifecycle operation, with cleanup returning its correlation and
+  operation URL instead of claiming synchronous removal.
 - Kept runtime cleanup docs aligned with the PocketHive MCP surface and HiveGate
   governance boundary.
 

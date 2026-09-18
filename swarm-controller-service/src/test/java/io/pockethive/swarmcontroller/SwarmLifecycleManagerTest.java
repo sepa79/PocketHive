@@ -15,12 +15,14 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -149,7 +151,7 @@ class SwarmLifecycleManagerTest {
         .containsEntry(PocketHiveDockerLabels.ROLE, "generator")
         .containsEntry(PocketHiveDockerLabels.INSTANCE, assignedName)
         .containsEntry(PocketHiveDockerLabels.IMAGE, "img1");
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
 
     reset(amqp, docker, rabbit);
 
@@ -165,15 +167,9 @@ class SwarmLifecycleManagerTest {
     assertThat(stopNode.path("correlationId").asText()).isNotBlank();
     assertThat(stopNode.path("idempotencyKey").asText()).isNotBlank();
     assertThat(stopNode.path("data").path("enabled").asBoolean(true)).isFalse();
-    ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        statusPayload.capture());
-    JsonNode statusNode = mapper.readTree(statusPayload.getValue());
-    assertThat(statusNode.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
     verifyNoInteractions(docker);
     verifyNoInteractions(amqp);
-    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
 
     manager.remove();
 
@@ -181,7 +177,7 @@ class SwarmLifecycleManagerTest {
     verify(amqp).deleteQueue(queue("qin"));
     verify(amqp).deleteQueue(queue("qout"));
     verify(amqp).deleteExchange(HIVE_EXCHANGE);
-    assertEquals(SwarmStatus.REMOVED, manager.getStatus());
+    assertEquals(WorkloadState.UNAVAILABLE, manager.getWorkloadState());
   }
 
   @Test
@@ -421,8 +417,11 @@ class SwarmLifecycleManagerTest {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
     try {
       SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
-          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
+          amqp, mapper, dockerClient, docker, rabbit,
+          io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
+          rabbitProperties, "inst", properties, registry,
+          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
+          runtimeMount());
       SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
 
       assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
@@ -489,7 +488,7 @@ class SwarmLifecycleManagerTest {
     assertThat(enableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(enableNode.path("data").path("enabled").asBoolean(false)).isTrue();
     verifyNoMoreInteractions(docker);
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
   }
 
   @Test
@@ -520,7 +519,7 @@ class SwarmLifecycleManagerTest {
     manager.markReady("proc", "p1");
 
     manager.enableAll();
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
 
     reset(rabbit);
 
@@ -534,7 +533,7 @@ class SwarmLifecycleManagerTest {
     assertThat(disableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(disableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(disableNode.path("data").path("enabled").asBoolean(true)).isFalse();
-    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
   }
 
   @Test
@@ -569,11 +568,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.stop();
     ArgumentCaptor<String> fanoutDisable = ArgumentCaptor.forClass(String.class);
-    InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        anyString());
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
     assertThat(fanoutDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -622,11 +617,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.stop();
     ArgumentCaptor<String> broadcastDisable = ArgumentCaptor.forClass(String.class);
-    InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        anyString());
+    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
     JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
     assertThat(broadcastDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(broadcastDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -847,7 +838,7 @@ class SwarmLifecycleManagerTest {
     when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
     when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
 
-    // In real lifecycle the guard is configured during prepare (from swarm-template)
+    // In real lifecycle the guard is configured during prepare from the filesystem startup artifact.
     // and only enabled during start (swarm-start carries no plan payload).
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -1033,7 +1024,6 @@ class SwarmLifecycleManagerTest {
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "ALL"));
@@ -1057,11 +1047,18 @@ class SwarmLifecycleManagerTest {
         dockerClient,
         docker,
         rabbit,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
         rabbitProperties,
         "inst",
         SwarmControllerTestProperties.defaults(bufferGuardEnabled),
         meterRegistry,
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
+        runtimeMount());
+  }
+
+  private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {
+    return io.pockethive.controlplane.filesystem.RuntimeFilesystemMount.of(
+        "/opt/pockethive/scenarios-runtime");
   }
 
   private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {

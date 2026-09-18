@@ -5,9 +5,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.Swarm;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.control.ControlScope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
@@ -20,7 +24,12 @@ import org.springframework.stereotype.Component;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Objects;
+import io.pockethive.swarm.model.lifecycle.ControllerState;
+import io.pockethive.swarm.model.lifecycle.Health;
+import io.pockethive.swarm.model.lifecycle.RuntimeResourceState;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 
 /**
  * Consumes swarm-controller aggregate status events and updates the local store.
@@ -34,6 +43,7 @@ public class ControllerStatusListener {
 
     private final SwarmStore store;
     private final ObjectMapper mapper;
+    private final ControlPlaneCodec codec;
     private final ControlPlaneStatusRequestPublisher statusRequests;
     private final SwarmSignalListener swarmSignals;
     private final HiveJournal hiveJournal;
@@ -41,11 +51,13 @@ public class ControllerStatusListener {
 
     public ControllerStatusListener(SwarmStore store,
                                     ObjectMapper mapper,
+                                    ControlPlaneCodec codec,
                                     ControlPlaneStatusRequestPublisher statusRequests,
                                     SwarmSignalListener swarmSignals,
                                     HiveJournal hiveJournal) {
         this.store = Objects.requireNonNull(store, "store");
         this.mapper = Objects.requireNonNull(mapper, "mapper").findAndRegisterModules();
+        this.codec = Objects.requireNonNull(codec, "codec");
         this.statusRequests = Objects.requireNonNull(statusRequests, "statusRequests");
         this.swarmSignals = Objects.requireNonNull(swarmSignals, "swarmSignals");
         this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
@@ -67,104 +79,84 @@ public class ControllerStatusListener {
                 return;
             }
             String payloadSnippet = snippet(body);
-            if (routingKey.startsWith("event.metric.status-")) {
+            RoutingKey eventKey = ControlPlaneRouting.parseEvent(routingKey);
+            boolean statusFull = eventKey != null
+                && ControlPlaneEventTypes.METRIC_STATUS_FULL.equals(eventKey.type());
+            boolean statusDelta = eventKey != null
+                && ControlPlaneEventTypes.METRIC_STATUS_DELTA.equals(eventKey.type());
+            if (statusFull || statusDelta) {
                 log.debug("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
             } else {
                 log.info("[CTRL] RECV rk={} payload={}", routingKey, payloadSnippet);
             }
-            boolean statusFull = routingKey.startsWith("event.metric.status-full.");
-            boolean statusDelta = routingKey.startsWith("event.metric.status-delta.");
-            JsonNode node = mapper.readTree(body);
-            JsonNode scope = node.path("scope");
-            String swarmId = scope.path("swarmId").asText(null);
-            String role = scope.path("role").asText(null);
-            String controllerInstance = scope.path("instance").asText(null);
-            warnMissingScopeFields(routingKey, body, swarmId, role, controllerInstance);
+            StatusMetric status = codec.decode(body, routingKey, StatusMetric.class);
+            JsonNode node = mapper.valueToTree(status);
+            String swarmId = status.scope().swarmId();
+            String role = status.scope().role();
+            String controllerInstance = status.scope().instance();
             JsonNode data = node.path("data");
             JsonNode context = data.path("context");
-            String swarmStatusText = context.path("swarmStatus").asText(null);
-            String runId = node.path("runtime").path("runId").asText(null);
-
-            boolean discovered = store.ensureDiscoveredSwarm(swarmId, controllerInstance, runId);
             Swarm swarm = swarmId == null ? null : store.find(swarmId).orElse(null);
             boolean controllerScope = SWARM_CONTROLLER_ROLE.equals(role);
 
-            if (controllerScope && swarm != null) {
-                hydrateNetworkMetadata(swarm, context);
+            if (controllerScope && swarm == null) {
+                log.warn("Ignoring controller status for unregistered swarm {} instance={}", swarmId, controllerInstance);
+                return;
+            }
+            if (controllerScope) {
                 if (statusFull) {
-                    store.cacheControllerStatusFull(swarmId, node, Instant.now());
-                    swarmSignals.handleControllerStatusFull(routingKey);
-                    if (discovered) {
-                        requestStatusFull(swarmId);
-                    }
+                    hydrateNetworkMetadata(swarm, context);
+                    Instant observedAt = Instant.now();
+                    store.cacheControllerStatusFull(swarmId, node, observedAt);
+                    updateObservation(swarm, context, observedAt);
+                    swarmSignals.handleControllerStatusFull(routingKey, node);
                 } else if (statusDelta) {
-                    SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, Instant.now());
+                    Instant observedAt = Instant.now();
+                    SwarmStore.DeltaApplyResult result = store.applyControllerStatusDelta(swarmId, node, observedAt);
                     if (result == SwarmStore.DeltaApplyResult.MISSING_BASELINE) {
                         requestStatusFull(swarmId);
                     } else if (result == SwarmStore.DeltaApplyResult.REJECTED_FULL_ONLY_FIELDS) {
                         log.warn("Ignoring status-delta with full-only fields for swarm {} rk={}", swarmId, routingKey);
                         return;
-                    }
-                }
-            } else if (statusDelta && controllerScope && swarmId != null) {
-                requestStatusFull(swarmId);
-                return;
-            }
-
-            if (swarmId != null) {
-                // Workloads enablement is reported as data.enabled on status metrics.
-                JsonNode enabledNode = data.get("enabled");
-                Boolean workloadsEnabled = enabledNode != null && enabledNode.isBoolean()
-                    ? enabledNode.asBoolean()
-                    : null;
-
-                // Derive lifecycle status from controller view so plan‑driven start/stop
-                // keeps the Orchestrator store in sync even when no explicit
-                // /start or /stop REST call was issued.
-                if (swarmStatusText != null && !swarmStatusText.isBlank()) {
-                    String normalized = swarmStatusText.trim().toUpperCase();
-
-                    switch (normalized) {
-                        case "RUNNING" -> {
-                            if (Boolean.TRUE.equals(workloadsEnabled)) {
-                                // Use the existing lifecycle helper so that
-                                // status transitions obey the state machine.
-                                store.markStartConfirmed(swarmId);
-                            }
-                        }
-                        case "STOPPED" -> {
-                            if (Boolean.FALSE.equals(workloadsEnabled)) {
-                                if (discovered) {
-                                    // When rebuilding from controller status events after an orchestrator restart,
-                                    // the newly registered swarm may still be in READY. Walk through the normal
-                                    // state machine to reach STOPPED without tripping illegal transitions.
-                                    store.markStartConfirmed(swarmId);
-                                }
-                                // Plan‑driven stop: make sure we walk through
-                                // STOPPING -> STOPPED so the local state
-                                // machine is satisfied.
-                                //
-                                // Note: during swarm-create we can receive early controller status metrics
-                                // while the local store is still in CREATING. In that case, transitioning
-                                // to STOPPING would be illegal; leave the store status unchanged and let the
-                                // create/template outcome drive the lifecycle.
-                                SwarmLifecycleStatus current = store.find(swarmId).map(Swarm::getStatus).orElse(null);
-                                if (current == SwarmLifecycleStatus.STOPPING) {
-                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
-                                } else if (current != null && current.canTransitionTo(SwarmLifecycleStatus.STOPPING)) {
-                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
-                                    store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
-                                }
-                            }
-                        }
-                        case "FAILED" -> store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
-                        default -> { /* leave store status unchanged for other states */ }
+                    } else if (result == SwarmStore.DeltaApplyResult.MERGED) {
+                        updateObservation(swarm, swarm.getControllerStatusFull().path("data").path("context"), observedAt);
+                        swarmSignals.handleControllerObservation(swarmId);
                     }
                 }
             }
         } catch (Exception e) {
             log.error("Ignoring controller status message due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
-            journalParseError(bestEffortSwarmIdFromBody(body), routingKey, "handler exception", body, e);
+            journalParseError(bestEffortSwarmIdFromRouting(routingKey), routingKey, "handler exception", body, e);
+        }
+    }
+
+    private void updateObservation(Swarm swarm, JsonNode context, Instant observedAt) {
+        ControllerState controllerState = requiredEnum(
+            ControllerState.class, context.path("controllerState").asText(null), "controllerState");
+        WorkloadState workloadState = requiredEnum(
+            WorkloadState.class, context.path("workloadState").asText(null), "workloadState");
+        Health health = requiredEnum(Health.class, context.path("health").asText(null), "health");
+        Map<String, Object> observation = mapper.convertValue(
+            context,
+            new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {});
+        swarm.updateObservation(
+            controllerState,
+            workloadState,
+            health,
+            RuntimeResourceState.PRESENT,
+            observation,
+            observedAt);
+    }
+
+    private static <E extends Enum<E>> E requiredEnum(
+        Class<E> type, String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        try {
+            return Enum.valueOf(type, value.trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException exception) {
+            throw new IllegalArgumentException("Unknown " + field + ": " + value, exception);
         }
     }
 
@@ -207,33 +199,6 @@ public class ControllerStatusListener {
         return trimmed;
     }
 
-    private void warnMissingScopeFields(String routingKey,
-                                        String body,
-                                        String swarmId,
-                                        String role,
-                                        String instance) {
-        java.util.List<String> missing = new java.util.ArrayList<>();
-        if (swarmId == null || swarmId.isBlank()) {
-            missing.add("swarmId");
-        }
-        if (role == null || role.isBlank()) {
-            missing.add("role");
-        }
-        if (instance == null || instance.isBlank()) {
-            missing.add("instance");
-        }
-        if (!missing.isEmpty()) {
-            log.error("Received controller status payload with missing scope fields {}; rk={} payload snippet={}",
-                missing, routingKey, snippet(body));
-            journalParseError(
-                swarmId != null && !swarmId.isBlank() ? swarmId : "hive",
-                routingKey,
-                "missing scope fields: " + String.join(",", missing),
-                body,
-                null);
-        }
-    }
-
     private void journalParseError(String swarmId,
                                   String routingKey,
                                   String reason,
@@ -251,17 +216,11 @@ public class ControllerStatusListener {
             exception);
     }
 
-    private String bestEffortSwarmIdFromBody(String body) {
-        if (body == null || body.isBlank()) {
-            return "hive";
-        }
-        try {
-            JsonNode node = mapper.readTree(body);
-            String swarmId = node.path("scope").path("swarmId").asText(null);
-            return swarmId != null && !swarmId.isBlank() ? swarmId : "hive";
-        } catch (Exception ignored) {
-            return "hive";
-        }
+    private static String bestEffortSwarmIdFromRouting(String routingKey) {
+        var parsed = io.pockethive.controlplane.routing.ControlPlaneRouting.parseEvent(routingKey);
+        return parsed != null && parsed.swarmId() != null && !parsed.swarmId().isBlank()
+            ? parsed.swarmId()
+            : "hive";
     }
 
     private static String textOrNull(JsonNode node) {
@@ -278,7 +237,7 @@ public class ControllerStatusListener {
 
     private static NetworkMode parseNetworkMode(String value) {
         if (value == null || value.isBlank()) {
-            return NetworkMode.DIRECT;
+            throw new IllegalArgumentException("networkMode must be present in controller status");
         }
         return NetworkMode.valueOf(value.trim().toUpperCase(Locale.ROOT));
     }
