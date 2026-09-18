@@ -29,6 +29,20 @@ public final class TargetLoader {
     return Path.of(selected);
   }
 
+  public static ExportTarget loadExport(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.addAll(Set.of("redisConnectionId", "runtimeRoot"));
+    Properties values = read(actual, keys);
+    Path root = Path.of(values.getProperty("runtimeRoot"));
+    if (!root.isAbsolute()) throw new IllegalArgumentException("runtimeRoot must be absolute");
+    root = root.toRealPath();
+    if (!Files.isDirectory(root) || !Files.isReadable(root)) {
+      throw new IllegalArgumentException("runtimeRoot must be an existing readable directory");
+    }
+    return new ExportTarget(lifecycle(values, actual), values.getProperty("redisConnectionId"), root);
+  }
+
   public static WebAuthTarget loadWebAuth(Path file) throws IOException {
     Path actual = file.toRealPath();
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);

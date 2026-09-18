@@ -4,6 +4,7 @@
   <artifactId>acceptance-tests</artifactId>
   <properties><maven.compiler.release>21</maven.compiler.release><work.boundary.enforcer.skip>false</work.boundary.enforcer.skip></properties>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>control-plane-filesystem</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>swarm-model</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-api</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>auth-contracts</artifactId><version>${project.version}</version></dependency>

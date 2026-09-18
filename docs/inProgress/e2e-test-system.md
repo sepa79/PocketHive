@@ -848,3 +848,18 @@ File and manifest paths cannot escape the runtime output directory. Existing REM
 owns deletion, including pending/finalized output; no second cleanup path added.
 69 focused tests passed: 57 exporter, 9 filesystem/layout/removal and 3 import-boundary
 tests, including rejection before IO for escaping file/manifest paths. No redeployment yet; EX-1..3 and matrix remain OPEN.
+
+### 2026-09-18 — output isolation committed; EX-1 implemented
+
+Commit `bba0bcb9` contains reviewed mandatory exporter output directories. EX-1 now
+uses canonical path projection for read-only local output observations and verifies
+twenty distinct records in two finalized files on both Rabbit and Artemis.
+148 framework tests pass; both deployed runs verify content before/after STOP and
+normal REMOVE cleanup,20 absent Redis keys and scenario404. Evidence in coverage ledger.
+Artemis WORK restored. New acceptance changes await separate review, not committed.
+Matrix37 PASS/4 OPEN: EX-2(XML),EX-3(streaming),SM-2,NW-4. NW-4 stays last.
+
+Local rebuild note: build-hive.sh built the requested exporter/Scenario Manager images
+but partial compose-up included dynamic worker clearing-export, which is not a Compose
+service. Completed the already-built Scenario Manager restart with compose. No script
+refactor included in this test slice.

@@ -36,7 +36,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | TxOutcomeAcceptanceIT: persisted rows match captured trace IDs, swarm/sink identity, call ID, status, success and duration; Rabbit and Artemis verified through Grafana ingress | PASS |
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | WebAuthLoopAcceptanceIT: five owned customers, exact TCP XML/response and ordered RED/BAL/TOP/RED per customer; Rabbit and Artemis, seven-key verified cleanup | PASS |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
-| EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Supported file/content observation interface required | OPEN |
+| EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Exact finalized file content under canonical swarm/run/worker runtime directory | PASS |
 | EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Assert config, file content/type/count | OPEN |
 | EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
 | AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
@@ -1002,3 +1002,31 @@ Logs: `/tmp/da4-source-red.log`, `/tmp/da4-source-green.log`,
 `/tmp/da4-source-artemis.log`, `/tmp/da4-source-rabbit.log`.
 Artifact audit: `/tmp/da4-source-evidence-summary.json`.
 Coverage remains36 PASS/5 OPEN. Correction remains uncommitted for separate review.
+
+### EX-1 — actual clearing files, 2026-09-18
+
+Reviewed product output isolation committed as `bba0bcb9`. New acceptance code reads
+through RuntimeFilesystemLayout from an explicitly configured existing host-visible
+runtime root. ExportFiles observes finalized UTF-8 content and pending names, performs
+no writes/cleanup and introduces no layout resolver. Twenty owned single-item Redis
+lists reuse existing acquisition and cleanup handles. Generator routes to Clearing
+Export through the selected Work adapter; lifecycle and data preparation use ingress.
+
+Both runs proved two text files of ten exact, distinct nonce-tagged records, expected
+headers/trailers, no pending files, identical valid content before and after STOP.
+Evidence is saved before REMOVE; four successful lifecycle operations and complete
+resource cleanup are recorded per adapter.
+
+| WORK | Evidence under acceptance-tests/target/runs | Result | Cleanup |
+|---|---|---|---|
+| Artemis | `clearing-export-07b17784-750f-446e-be49-c6786d9781c0` | 2 files,20 exact records | REMOVE succeeded,20 Redis keys absent,scenario404 |
+| Rabbit | `clearing-export-efd1b85e-2644-4172-8abc-d84311eaec5c` | 2 files,20 exact records | REMOVE succeeded,20 Redis keys absent,scenario404 |
+
+148 framework tests pass; focused import-boundary checks pass. Logs:
+`/tmp/export-ex1-artemis.log`, `/tmp/export-ex1-rabbit.log`, `/tmp/export-ex1-tests.log`.
+The initial CREATE rejection was a fixture separator declaration: actual newline was
+considered blank by capability validation; explicit literal `\n` fixed the fixture.
+No product behavior change was needed for acceptance.
+
+Local base restored to Artemis WORK / Rabbit CONTROL. New EX-1 changes are uncommitted
+and await separate review. Matrix: **37 PASS, 0 PARTIAL, 4 OPEN**: EX-2,EX-3,SM-2,NW-4.

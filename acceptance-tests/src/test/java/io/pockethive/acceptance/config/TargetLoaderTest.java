@@ -65,6 +65,16 @@ class TargetLoaderTest {
         () -> TargetLoader.loadTxOutcome(file(TARGET + additions.replace("grafanaPassword=pass", "grafanaPassword="))));
   }
 
+  @Test void exportRequiresAnExplicitExistingLocalRuntimeRoot() throws Exception {
+    String settings = TARGET + "redisConnectionId=R:redis:6379:0\nruntimeRoot=" + folder + "\n";
+    assertEquals(folder.toRealPath(), TargetLoader.loadExport(file(settings)).runtimeRoot());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadExport(file(TARGET)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadExport(file(settings.replace(folder.toString(), "relative"))));
+    assertThrows(java.io.IOException.class,
+        () -> TargetLoader.loadExport(file(settings.replace(folder.toString(), folder.resolve("missing").toString()))));
+  }
+
   @Test void redisDataRequiresLifecycleAndExplicitConnection() throws Exception {
     var target = TargetLoader.loadRedisData(file(TARGET + "redisConnectionId=R:redis:6379:0\n"));
     assertEquals("R:redis:6379:0", target.connectionId());

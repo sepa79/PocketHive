@@ -582,7 +582,7 @@ Run and worker identity prevent unrelated runs/exporters sharing filenames.
 Test observation will use the same layout projected onto the explicitly selected
 host-visible runtime root. It must not reconstruct the layout, discover container
 internals or infer a remote-host path. No separate mount or export root is introduced.
-The output observer and deployed EX-1..3 cases remain to be implemented.
+The output observer is implemented. EX-1 now has Rabbit/Artemis fixtures and an acceptance suite; deployed verification is tracked in the coverage ledger. EX-2/EX-3 remain planned.
 
 Discovery: ClearingExportWorkerImpl returns no output WorkItem. Its batch writer
 publishes file lifecycle metadata/counters, not file bytes. The optional JSONL export
@@ -613,3 +613,27 @@ swarm directory has been removed. Verify cleanup through the canonical REMOVE re
 5. Save observed content as test evidence, remove the swarm normally, then verify
    canonical cleanup. Run both WORK adapters before marking EX rows PASS. Remote
    Swarm/NFS work remains deferred NW-4; no remote filesystem workaround is implied.
+
+### RESP-ACCEPTANCE-EXPORT-FILES
+
+`ExportFiles` reads UTF-8 finalized output and names of pending temporary files for
+one observed swarm/run/worker identity. It obtains its directory exclusively through
+RuntimeFilesystemLayout, using an explicitly selected existing local runtime root.
+`ExportFilesSnapshot` is a read-only observation, not a completion/outcome calculation.
+The temporary suffix comes from the observed exporter configuration. Pending files
+are not opened: they may be renamed during observation. Snapshots are not atomic;
+tests poll with the existing Deadline and decide content/count postconditions.
+Missing worker output directories mean no output yet; a missing/inaccessible selected
+runtime root is an error. Finalized files must be regular files; symlinks are rejected.
+No directory creation/deletion, mount discovery, container access or lifecycle logic
+belongs to this observer. Save snapshots through RunEvidence before normal REMOVE.
+`ExportTarget` extends lifecycle target settings with the explicit local runtime root
+and Redis connection for twenty distinct owned input records.
+
+EX-1 preparation uses twenty UUID Redis lists, each seeded once through the existing
+RedisListResource, and one owned scenario guarded by RedisDatasetResources. This reuses
+canonical acquisition/cleanup without adding a bulk-write or deletion authority.
+The fixture routes Generator → Clearing Export through the selected Work adapter.
+Assertions compare two files of ten exact nonce-tagged records, headers and trailers,
+with no pending files; duplicates cannot replace missing records. Results are checked
+before STOP and once more after STOP, then normal REMOVE releases the runtime tree.
