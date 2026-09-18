@@ -168,6 +168,10 @@ The moved worker-auth profile/reference/material records and enums own their sha
 
 Request templates and worker AuthRuntime share these values; profile file loading remains AuthRuntime behavior.
 
+AuthType.requiredStorageMode is the sole type-to-storage policy consumed by
+authored bundle findings and runtime profile preparation. It does not select or
+connect a storage adapter and does not change serialized profile fields.
+
 **Forbidden:** load files, refresh credentials or select a storage implementation.
 
 **Required effect:** Worker-auth consumers share profile/reference/material types without loading infrastructure from the contracts module.
@@ -1427,17 +1431,114 @@ The output registry delegates to it without requiring Rabbit/Redis output settin
 
 **Current module(s):** `common/worker-sdk`.
 
-AuthRuntime currently loads/validates worker auth profiles, applies auth material and coordinates token refresh through TokenStore and HTTP.
+AuthRuntime activates worker auth profiles, applies auth material and coordinates
+ordinary OAuth refresh through TokenStore and HTTP. It delegates resolved profile
+preparation to RESP-WORK-AUTH-PROFILE-PREPARATION and signed OAuth acquisition to
+RESP-WORK-SIGNED-OAUTH-TOKENS.
 
-Template workers call it; shared profile/claim values live in auth-contracts. File/path and HTTP effects remain here in the current implementation.
+Template workers call it; shared profile/claim values live in auth-contracts.
+YAML reading, profile-file discovery, activation-set tokenKey collision detection
+and Redis store construction remain here. Preparation completes before opening
+the token store. Existing ordinary OAuth request/parser behavior is unchanged.
 
 **Forbidden:** own product auth-service identity/authorization or duplicate token storage/claim behavior.
 
-**Required effect:** Configured auth material/refresh uses the selected TokenStore; its current path/HTTP effects remain visible for later extraction.
+**Required effect:** Configured auth material/refresh uses the selected TokenStore;
+profile resolution, validation, fingerprinting and collision checks precede store
+construction. Current discovery/ordinary HTTP effects remain visible for later extraction.
 
-**Verification entrypoints:** `AuthRuntimeTest`.
+**Verification entrypoints:** `AuthRuntimeTest`, `OAuth2HttpSignatureRuntimeTest`.
 
-**Migration status:** Mixed implementation retained; B06/B07 separate profile parsing, paths, HTTP and storage adapters. No added runtime behavior in this adoption.
+**Migration status:** Profile preparation and signed acquisition have separate
+owners. Discovery, credential application and ordinary OAuth acquisition remain
+in this existing mixed owner; broader B06/B07 separation is not claimed here.
+
+## RESP-WORK-AUTH-PROFILE-PREPARATION
+
+**Current module(s):** `common/worker-sdk`.
+
+AuthProfilePreparation owns worker-context rendering, env/file secret resolution,
+resolved profile validation and cache fingerprints. AuthRuntime supplies the
+auth-contracts profile and selected TemplateRenderer. The shared
+AuthType.requiredStorageMode policy and AuthTokenKeys own storage classification
+and key syntax; RESP-WORK-OAUTH-SIGNATURE owns resolved signing-specific validation.
+
+**Forbidden:** discover/read profile YAML, connect to Redis, acquire tokens, mutate
+downstream requests, or define an alternative auth schema or storage policy.
+
+**Required effect:** Detect missing SUT context before rendering; resolve before
+validation and fingerprinting. Preserve signed file bytes, legacy file trimming,
+legacy fingerprint serialization and signed-only canonical map ordering. Failure
+does not activate profiles or open a token store.
+
+**Verification entrypoints:** `AuthProfilePreparationTest`, `AuthRuntimeTest`,
+`OAuth2HttpSignatureRuntimeTest`.
+
+**Migration status:** This concern moves out of AuthRuntime with its behavior tests.
+Filesystem and environment reads remain explicit SDK effects, not pure domain logic.
+
+## RESP-WORK-OAUTH-SIGNATURE
+
+**Current module(s):** `common/worker-sdk`.
+
+OAuth2HttpSignature owns validation of resolved signed OAuth settings and
+construction of the signed token request, including form encoding, digest,
+canonical signature input and RSA signing. Profile preparation validates before
+activation; the signed token provider requests a fresh signature for acquisition.
+
+**Forbidden:** resolve secret references, perform HTTP/Redis IO, own refresh claims,
+or sign downstream resource requests.
+
+**Required effect:** One validation/signing implementation supplies an HTTPS token
+request; private-key and protocol failures are explicit. Ordinary OAuth stays unsigned.
+
+**Verification entrypoints:** `OAuth2HttpSignatureTest`, `OAuth2HttpSignatureWireTest`.
+
+**Migration status:** Isolated implementation for the new profile; no existing schema changes.
+
+## RESP-WORK-SIGNED-OAUTH-TOKENS
+
+**Current module(s):** `common/worker-sdk`.
+
+OAuth2HttpSignatureTokenProvider owns signed OAuth acquisition, bounded contention,
+strict token-response parsing and refresh-claim coordination through the selected
+TokenStore and HttpClient. OAuth2HttpSignature constructs each token request.
+AuthRuntime alone applies the returned material to downstream requests.
+
+**Forbidden:** implement token persistence/claim arbitration, resolve profiles,
+own product auth-service identity, or change ordinary OAuth acquisition behavior.
+
+**Required effect:** Reuse valid tokens, bound HTTP work by the claim lease, publish
+only under the owned claim and release claims on failure without masking the
+primary error. Do not apply a token whose publication failed.
+
+**Verification entrypoints:** `OAuth2HttpSignatureRuntimeTest`,
+`OAuth2HttpSignatureConcurrencyTest`, `OAuth2HttpSignatureTimeoutTest`,
+`OAuth2HttpSignatureRedisTest`.
+
+**Migration status:** New isolated lifecycle; shared TokenStore retains storage authority.
+
+## RESP-SCENARIO-AUTH-STORAGE-FINDINGS
+
+**Current module(s):** `scenario-manager-service`.
+
+AuthProfileStorageFindings owns the authored profile type/storage boundary and
+maps failures to canonical bundle findings. It consumes AuthType.parse and
+AuthType.requiredStorageMode from auth-contracts and AuthTokenKeys for token-key
+validation. ScenarioBundleValidator delegates each authored profile after
+document parsing and retains bundle/profile-reference visibility.
+
+**Forbidden:** read secret sources, validate resolved signing keys/token endpoints/
+scopes, acquire tokens, or duplicate shared type/storage/token-key policy.
+
+**Required effect:** Preserve existing authored storage parsing/defaults and
+finding codes, paths, messages and ordering while applying the shared type-to-storage policy.
+
+**Verification entrypoints:** `AuthProfileStorageFindingsTest`, signed-auth
+`ScenarioControllerTest` cases.
+
+**Migration status:** Authored storage concern extracted from ScenarioBundleValidator;
+resolved profile preparation stays in the worker SDK.
 
 ## RESP-GENERATOR-WORK
 
@@ -1821,6 +1922,8 @@ ScenarioBundleValidator owns bundle acceptance checks; ScenarioTemplateValidator
 Both use the canonical template API with DisabledSequenceAccess; diagnostic rendering must not decide persisted scenario validity.
 
 Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
+AuthProfileStorageFindings projects authored auth type/storage checks using the
+shared auth-contracts policy; see RESP-SCENARIO-AUTH-STORAGE-FINDINGS.
 RequestTemplateFindings projects its problems into bundle findings; profile existence and
 bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.

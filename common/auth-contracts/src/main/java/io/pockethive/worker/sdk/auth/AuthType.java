@@ -7,7 +7,7 @@ import java.util.Locale;
 /**
  * Supported authorization types for HTTP and TCP protocols.
  * <p>
- * Responsibility: define the AuthType contract.
+ * Responsibility: define auth types, canonical names and their required token storage mode.
  * Must not: configure transport clients or own adapter lifecycle.
  * Contract: RESP-AUTH-VALUES — docs/architecture/runtime-responsibilities.md#resp-auth-values.
  */
@@ -23,7 +23,17 @@ public enum AuthType {
     MESSAGE_FIELD_AUTH,
     STATIC_TOKEN,
     AWS_SIGNATURE_V4,
-    ISO8583_MAC;
+    ISO8583_MAC,
+    OAUTH2_HTTP_SIGNATURE;
+
+    /** Required storage for this type; profile boundaries separately reject NONE as an authored type. */
+    public AuthStorageMode requiredStorageMode() {
+        return switch (this) {
+            case OAUTH2_CLIENT_CREDENTIALS, OAUTH2_PASSWORD_GRANT, OAUTH2_HTTP_SIGNATURE -> AuthStorageMode.REDIS;
+            case NONE, BEARER_TOKEN, BASIC_AUTH, API_KEY, HMAC_SIGNATURE, TLS_CLIENT_CERT,
+                MESSAGE_FIELD_AUTH, STATIC_TOKEN, AWS_SIGNATURE_V4, ISO8583_MAC -> AuthStorageMode.NONE;
+        };
+    }
 
     /**
      * Parses auth type from string, accepting both kebab-case and SCREAMING_SNAKE_CASE.

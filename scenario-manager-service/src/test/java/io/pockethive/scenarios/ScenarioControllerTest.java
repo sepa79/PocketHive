@@ -3107,6 +3107,74 @@ class ScenarioControllerTest {
                 .andExpect(jsonPath("$.findings[0].code").value("AUTH_PROFILES_MISSING"));
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+            "oauth2-http-signature,REDIS,true", "oauth2-http-signature,NONE,false",
+            "OAUTH2_HTTP_SIGNATURE,REDIS,true", "OAUTH2_HTTP_SIGNATURE,NONE,false",
+            "OAUTH2_CLIENT_CREDENTIALS,REDIS,true", "OAUTH2_CLIENT_CREDENTIALS,NONE,false",
+            "OAUTH2_PASSWORD_GRANT,REDIS,true", "OAUTH2_PASSWORD_GRANT,NONE,false"})
+    void bundleValidationRecognizesOAuthProfilesAsRefreshable(String type, String storageMode, boolean valid) throws Exception {
+        String credentials = switch (type) {
+            case "oauth2-http-signature", "OAUTH2_HTTP_SIGNATURE" -> """
+                keyId: signing-key
+                privateKey:
+                  env: TEST_SIGNING_PRIVATE_KEY
+                scopes: [read]
+                """;
+            case "OAUTH2_CLIENT_CREDENTIALS" -> """
+                clientSecret:
+                  env: TEST_CLIENT_SECRET
+                scope: read
+                """;
+            case "OAUTH2_PASSWORD_GRANT" -> """
+                username: example-user
+                password:
+                  env: TEST_USER_PASSWORD
+                scope: read
+                """;
+            default -> throw new IllegalArgumentException("Unexpected test auth type: " + type);
+        };
+        byte[] zip = bundleZip(Map.of(
+                "scenario.yaml", """
+                    protocolVersion: "2.0.0"
+                    id: signed-oauth-demo
+                    name: Signed OAuth demo
+                    template:
+                      image: ctrl-image:latest
+                      bees: []
+                    """,
+                "templates/http/default/account.yaml", """
+                    protocol: HTTP
+                    serviceId: default
+                    callId: account
+                    method: GET
+                    pathTemplate: /accounts
+                    authRef:
+                      profileId: api
+                      applyAs: HTTP_AUTHORIZATION_BEARER
+                    """,
+                "authProfiles.yaml", """
+                    profiles:
+                      api:
+                        type: %s
+                        storage:
+                          mode: %s
+                          tokenKey: signed-api
+                        tokenUrl: https://auth.example.test/token
+                        clientId: client
+                    """.formatted(type, storageMode) + credentials.indent(4)));
+
+        var result = mvc.perform(post("/validation/scenario-bundles")
+                        .contentType("application/zip")
+                        .content(zip)
+                        .accept(MediaType.APPLICATION_JSON))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.ok").value(valid));
+        if (!valid) {
+            result.andExpect(jsonPath("$.findings[0].code").value("AUTH_STORAGE_INVALID"))
+                .andExpect(jsonPath("$.findings[0].path").value("authProfiles.yaml:profiles.api.storage.mode"));
+        }
+    }
     @Test
     void bundleValidationReportsMissingRefreshableAuthTokenKey() throws Exception {
         byte[] zip = bundleZip(Map.of(
