@@ -55,6 +55,7 @@ final class LiveRun implements AutoCloseable {
     return new SwarmResource("acceptance-" + UUID.randomUUID(), swarms,
         new OperationAwaiter(swarms, target.limits().operations(), evidence), target.limits().operations());
   }
+  RedisCommanderApi redis(String connectionId) { return new RedisCommanderApi(api.http, connectionId); }
   TcpMockApi tcpMock(String username, String password) { return new TcpMockApi(api.http, username, password); }
   TapResource newTap() { return new TapResource(new DebugTapApi(api.http, api.token), target.limits(), evidence); }
   SwarmCreateRequest createRequest() { return createRequest(null); }

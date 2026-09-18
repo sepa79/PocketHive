@@ -16,7 +16,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Responsibility: own one test swarm receipt and verify removal, including commands by an explicit requesting actor.
+ * Responsibility: own one test swarm receipt, verify removal and project whether dependent cleanup is safe.
  * Must not: guess ownership, retry mutations or implement swarm convergence.
  * Contract: RESP-ACCEPTANCE-RESOURCES — docs/architecture/acceptance-tests.md#resp-acceptance-resources.
  */
@@ -36,6 +36,12 @@ public final class SwarmResource implements AutoCloseable {
     this.id = id; this.api = api; this.operations = operations; this.limits = limits;
   }
   public String id() { return id; }
+  public boolean permitsDependentCleanup() {
+    return switch (acquisition) {
+      case NOT_REQUESTED, REJECTED, RELEASED -> true;
+      case UNCONFIRMED, ACQUIRED -> false;
+    };
+  }
   public String runId() {
     if (runId == null) throw new IllegalStateException("No observed run for " + id);
     return runId;

@@ -31,8 +31,8 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | TcpTimeoutAcceptanceIT: paired delayed-response control (8s timeout/5s delay) and error case (500ms timeout), owned run/processor alert through journal, empty result tap for explicit window, verified removal; Rabbit/Artemis | PASS |
 | WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
 | WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
-| DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisListResource fixture preparation/cleanup verified through ingress; Request Builder/Processor pipeline case still required | OPEN |
-| DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Same boundary; assert values, not merely message arrival | OPEN |
+| DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisDatasetAcceptanceIT: two isolated records, FULL Generator/Request Builder/Processor history; Rabbit and Artemis verified | PASS |
+| DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Exact seeded JSON survives Generator and rendered HttpRequestEnvelope body; rendered header and HTTP result asserted on both adapters | PASS |
 | DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | Existing Grafana datasource query through ingress verified; scoped tx-outcome persistence test still required | OPEN |
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | Isolated Redis/TCP data and supported interfaces | OPEN |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
@@ -755,8 +755,8 @@ each manager's retained-journal-pin.json and verified by pinned-run-readback.jso
 
 - rabbit: `ba9ab357-555a-48d7-8a1d-976e70c2d4ba`, run `4bebacc6-8388-4542-acf9-bb63e39ab0ba`.
 
-Logs: /tmp/auth-scenario-{artemis,rabbit}.log and
-/tmp/auth-management-{artemis,rabbit}-final.log. Artifact audit:
+Logs: `/tmp/auth-scenario-{artemis,rabbit}.log` and
+`/tmp/auth-management-{artemis,rabbit}-final.log`. Artifact audit:
 /tmp/auth-next-evidence-summary.json. The first Artemis management attempt failed in
 its new assertion because CREATE targets Orchestrator; the corrected assertion uses
 the controller target from START. That failed attempt's swarm and three users also
@@ -766,7 +766,7 @@ Final framework107/107, Scenario Manager auth owner21/21 and dependent reactors 
 RepositoryImportBoundaryTest3/3 passes in /tmp/auth-next-imports.log.
 Lifecycle regression3/3 on each adapter verifies the shared TapSelection projection,
 including six actual HTTP result samples,26 SUCCEEDED operations and six removals.
-Logs /tmp/auth-next-http-{rabbit,artemis}.log; audit /tmp/auth-next-lifecycle-summary.json.
+Logs `/tmp/auth-next-http-{rabbit,artemis}.log`; audit /tmp/auth-next-lifecycle-summary.json.
 Base Artemis restored, final public swarm list empty. No remote Swarm deployment.
 This implementation and the preceding auth package await separate review and commit.
 
@@ -806,14 +806,14 @@ completion is corroborated by actual worker effects rather than treated as their
 | artemis | `scenario-plan-6362f501-374f-427e-b32d-d001b6b40e6f` | 3 SUCCEEDED (CREATE/START/REMOVE) | 6 |
 | rabbit | `scenario-plan-322ee953-0e39-4b82-9256-6193a988a93a` | 3 SUCCEEDED (CREATE/START/REMOVE) | 6 |
 
-Logs: /tmp/plan-{artemis,rabbit}.log. Audited snapshots, ordered journal and removal
+Logs: `/tmp/plan-{artemis,rabbit}.log`. Audited snapshots, ordered journal and removal
 postconditions: /tmp/plan-evidence-summary.json. Both owned swarms were removed with
 nonempty removedResources and empty remainingResources/errors, followed by registry404.
 Each tap closed through the existing DELETE200/GET404 path before the next phase.
 The shared WorkerObservations gained a phase predicate over its already verified
 projection, retaining one Deadline; no new state merger, configuration parser or
 lifecycle implementation. Existing worker-config regression passes1/1 per adapter in
-/tmp/plan-worker-regression-{artemis,rabbit}.log. All109 framework tests and dependent
+`/tmp/plan-worker-regression-{artemis,rabbit}.log`. All109 framework tests and dependent
 reactors pass. Base Artemis restored and final public swarm list empty. No product
 behavior, public contracts, legacy E2E or deployment manifests changed.
 
@@ -885,3 +885,39 @@ but adding one is unnecessary for this supported Grafana read path.
 EX-1..3 still lack public finalized-file/content observation; the current sink writes
 worker-local files. No container filesystem or direct DB port access is authorized.
 Ledger remains **32 PASS / 9 OPEN**, including all DA rows. This new slice awaits review.
+
+### 2026-09-18 — DA-1/DA-2 dataset pipeline
+
+Both local WORK adapters pass RedisDatasetAcceptanceIT through public ingress.
+Each run verifies two distinct customer/account/amount/nonce payloads, both Redis-input
+and Generator history steps, the canonical Request Builder request body and rendered
+header, and Processor HTTP200/body with the owned worker identities. Preparation waits
+for fresh STOPPED/disabled worker observations before opening the tap and seeding lists;
+START follows verified seed readback. This avoids processing finite input during CREATE
+and prevents consumers racing seed readback. No product behavior changed.
+
+| WORK adapter | Evidence directory under acceptance-tests/target/runs | Operations | Samples |
+|---|---|---:|---:|
+| Artemis | `redis-dataset-24006cc9-7bbe-40ff-9ff8-ed8c37d12d78` | 4 SUCCEEDED | 2 |
+| Rabbit | `redis-dataset-b07565de-46d3-48c8-b2b8-0bb00f540b60` | 4 SUCCEEDED | 2 |
+
+Final logs: `/tmp/redis-data-artemis-final.log`, `/tmp/redis-data-rabbit-final.log`.
+Artifact audit: `/tmp/redis-data-evidence-summary.json`. Each run verifies REMOVE with
+nonempty removedResources and empty remainingResources/errors, registry absence,
+scenario404 and both Redis keys absent. Framework119 tests and dependent reactor pass.
+The local rebuild also exposed unescaped brace expressions in this page; formatting
+was corrected and the documentation/UI build passed. Base Artemis restored after tests.
+
+Current ledger: **34 PASS, 0 PARTIAL, 7 OPEN**: DA-3, DA-4, EX-1..3, SM-2, NW-4.
+NW-4 stays last. DA-3 can next verify postprocessor outcomes through the existing
+Grafana/ClickHouse ingress. Legacy E2E deletion remains gated by replacement coverage.
+Implementation awaits separate review; no commit or push in this slice.
+
+### 2026-09-18 — DA cleanup review fixes
+
+Seed/readback now precedes tap creation after confirmed disabled workers. Dependent
+scenario/list cleanup uses the existing SwarmResource acquisition state and retains
+identifiers on unresolved swarm cleanup; seven HTTP regression cases cover that behavior.
+Framework126 tests pass; Artemis E2E `redis-dataset-7230bcc5-d264-4967-a580-f933d5bb77c2` verifies the final successful path and
+all dependency cleanup. Log `/tmp/redis-cleanup-artemis.log`. Rabbit was not rerun in
+this correction slice. Coverage remains34 PASS/7 OPEN; separate review pending.

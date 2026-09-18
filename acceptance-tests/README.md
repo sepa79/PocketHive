@@ -225,3 +225,22 @@ The target explicitly selects a Redis Commander connection id. The test creates
 two unique one-item lists, checks cleanup after assertion failure and preserves
 the second list until its own close. It never flushes Redis or deletes by prefix.
 This proves fixture preparation/cleanup, not yet DA worker pipeline coverage.
+
+### Redis dataset pipeline (DA-1/DA-2)
+
+Run against a local stack configured for the corresponding WORK adapter:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-redis-data-artemis.properties redis-data
+./run-acceptance-tests.sh acceptance-tests/targets/local-redis-data-rabbit.properties redis-data
+```
+
+Each run creates two private Redis lists and an owned scenario through public ingress.
+It checks both exact records in FULL history, the rendered Request Builder HTTP request,
+and the Processor HTTP response. Cleanup removes the swarm before its scenario and lists.
+If CREATE or removal is unconfirmed, dependent cleanup is deferred. The failure and
+`retained-dataset-resources.json` record the swarm/scenario IDs and both Redis keys
+for diagnosis and later cleanup. Definitively rejected or never-attempted CREATE
+still permits fixture cleanup; no automatic retry or orphan cleanup is performed.
+The source scenario is a preparation fixture; its placeholder list names must be replaced
+by the test before launch. NW-4 remains a separate, deferred remote deployment check.

@@ -61,7 +61,7 @@ JSON callers retain application/json. Both use the same bounded request implemen
 ## RESP-ACCEPTANCE-API
 
 **Owners:** `AuthApi` handles dev login and the canonical current-user profile; `AuthAdminApi` maps user/grant administration; `SwarmApi` maps swarm REST requests/readbacks;
-`ScenarioApi` maps scenario CRUD and reads the bundle-local SUT; `ScenarioFolderApi`
+`ScenarioApi` maps scenario CRUD and bundle template/SUT content; `ScenarioFolderApi`
 maps folder CRUD. `SwarmManagementApi` maps manager/component configuration dispatch.
 `NetworkBindingApi` reads canonical network bindings and requires their absence after
 removal. `SwarmJournalApi` maps timeline, run, pin and metadata endpoints; `TcpMockApi`
@@ -97,6 +97,8 @@ readback remains an error, not proof that a late mutation is impossible.
 `SwarmResource` retains an individual test's acquisition receipt, tracks lifecycle
 and CONFIG_UPDATE commands, and closes that exact swarm through canonical remove. `AcquisitionState` describes only the
 handle's ownership certainty, not the product lifecycle.
+`RedisDatasetResources` composes a dataset's dependent scenario/list handles and
+uses SwarmResource's read-only cleanup permission; see the DA-1/DA-2 section.
 **Effect:** register the handle before create; cleanup works after assertion failure,
 waits for accepted remove, checks its published evidence and absence from the API.
 Unconfirmed acquisition or a still-active operation is reported, not guessed around.
@@ -475,3 +477,31 @@ for the downstream WorkItem in DA-1/DA-2.
 `RedisFixtureAcceptanceIT` verifies this boundary through public ingress, including
 cleanup after a deliberate assertion failure and preservation of a second owned key.
 It does not mark DA-1/DA-2/DA-4 complete: those still require worker traffic.
+
+## Redis dataset acceptance (DA-1/DA-2)
+
+RedisDataTarget composes the existing lifecycle target and explicit Redis Commander
+connection id; TargetLoader resolves both. RedisDatasetAcceptanceIT uses LiveRun and
+existing RedisListResource/ScenarioResource/SwarmResource/TapResource scopes. It creates
+two UUID lists and an owned scenario derived from a new independently authored bundle.
+Only that scenario's two input source keys change. Template/SUT text is transferred
+through ScenarioApi's existing public content endpoints, unchanged and read back.
+ScenarioApi remains a thin HTTP mapper; it does not clone bundles or resolve paths.
+LiveRun composes the existing Redis client without another HTTP/configuration owner.
+
+CREATE uses empty sources and disabled workers. The test waits for fresh STOPPED
+observations with every worker disabled, seeds and reads back both records, opens its
+processor tap, then sends START. Seeding does not consume the tap lifetime. This keeps Redis seed readback free of competing consumers and
+prevents finite input from being processed during bootstrap before capture. It asserts both seeded payloads, the canonical Request Builder
+HttpRequestEnvelope and successful processor HttpResultEnvelope from captured FULL
+history. Distinct customer/nonce values bind observations to this test's input. No
+Redis display-value parser or production transformation is reimplemented. It stops
+and removes its swarm before deleting the owned bundle/lists. RedisDatasetResources
+owns this dependency lifetime only; it delegates acquisition/deletion to the existing
+handles. SwarmResource.permitsDependentCleanup projects its existing acquisition
+state: only never-requested, definitively rejected CREATE, or verified removal permits
+dependent cleanup. Unconfirmed CREATE or unresolved removal retains the scenario and
+both list identifiers in retained-dataset-resources evidence and the reported failure.
+No second lifecycle state, automatic retry or orphan cleanup is introduced.
+These acceptance assertions use RESP-ACCEPTANCE-WORKERS and the existing resource
+owners; Request Builder/Redis/Processor behavior stays with product modules.

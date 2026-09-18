@@ -18,6 +18,7 @@ public final class ScenarioResource implements AutoCloseable {
   public ScenarioResource(String id, ScenarioApi observer, RunEvidence evidence) {
     this.id = id; this.observer = observer; this.evidence = evidence;
   }
+  public String id() { return id; }
   public ApiResponse create(JsonNode body, ScenarioApi requester) throws IOException, InterruptedException {
     if (state != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Scenario create already attempted");
     if (!id.equals(body.required("id").textValue())) throw new IllegalArgumentException("Scenario ID differs from owned ID");

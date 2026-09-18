@@ -5,7 +5,7 @@ import java.io.IOException;
 import io.pockethive.swarm.model.SutEnvironment;
 
 /**
- * Responsibility: map scenario CRUD and read its bundle SUT through ingress.
+ * Responsibility: map scenario CRUD and bundle template/SUT content through ingress.
  * Must not: validate product identifiers, create fallback fixtures or infer worker settings.
  * Contract: RESP-ACCEPTANCE-API — docs/architecture/acceptance-tests.md#resp-acceptance-api.
  */
@@ -29,6 +29,24 @@ public final class ScenarioApi {
   }
   public ApiResponse delete(String id) throws IOException, InterruptedException {
     return http.request("DELETE", path(id), null, token);
+  }
+  public String readTemplate(String id, String templatePath) throws IOException, InterruptedException {
+    return http.request("GET", templatePath(id, templatePath), null, token, "text/plain").expect(200).body();
+  }
+  public void writeTemplate(String id, String templatePath, String text) throws IOException, InterruptedException {
+    http.requestText("PUT", templatePath(id, templatePath), text, token).expect(204);
+  }
+  public String readSutRaw(String id, String sutId) throws IOException, InterruptedException {
+    return http.request("GET", sutPath(id, sutId), null, token, "text/plain").expect(200).body();
+  }
+  public void writeSutRaw(String id, String sutId, String text) throws IOException, InterruptedException {
+    http.requestText("PUT", sutPath(id, sutId), text, token).expect(204);
+  }
+  private static String templatePath(String id, String templatePath) {
+    return path(id) + "/template?path=" + ApiSurface.pathSegment(templatePath);
+  }
+  private static String sutPath(String id, String sutId) {
+    return path(id) + "/suts/" + ApiSurface.pathSegment(sutId) + "/raw";
   }
   private static String path(String id) {
     return ApiSurface.SCENARIO_MANAGER.publicPath("/scenarios/" + ApiSurface.pathSegment(id));

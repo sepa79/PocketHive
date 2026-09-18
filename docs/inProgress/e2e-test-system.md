@@ -729,3 +729,46 @@ Następne: niezależne scenariusze DA-1/DA-2 z kluczami własnego testu, Request
 i Processor, dokładne payloady z tapów na Rabbit i Artemis. DA-3 może użyć istniejącej
 Grafany; DA-4 łączy te same uchwyty Redis z odczytem własnego ruchu TCP przez ingress
 (bez czyszczenia całego journalu). EX wymaga zaprojektowania publicznego odczytu plików.
+
+### 2026-09-18 — DA-1/DA-2 implementation plan
+
+NW-4 stays last per user decision. Next local slice: two independently authored
+Rabbit/Artemis dataset bundles, two UUID Redis lists, per-test scenario via existing
+Scenario Manager CRUD/template/SUT APIs. Check actual FULL history: exact Redis
+payloads, rendered Request Builder HTTP envelope, successful processor output and
+owned worker identity. Open tap before seeding, after fresh STOPPED/disabled worker observation; START follows seed; remove swarm before scenario/data.
+Use shared target/HTTP/codec/resource owners, no native clients or product changes.
+
+### 2026-09-18 — DA-1/DA-2 implemented, awaiting review
+
+Redis → Generator → Request Builder → HTTP Processor passes on local Rabbit and
+Artemis with two exact, isolated records and verified cleanup. Shared resource owners,
+canonical WorkItem/HTTP contracts and Scenario Manager content APIs are reused.
+Framework119 tests pass. Evidence and final run IDs are in the coverage ledger.
+Preparation explicitly waits for disabled workers before seeding; finite input must
+not be available during CREATE before capture is installed. The local stack was rebuilt,
+then restored to Artemis WORK after Rabbit verification. No product behavior changed.
+
+Remaining **7 OPEN**: DA-3, DA-4, EX-1..3, SM-2, NW-4. Next local slice: DA-3 outcome
+storage observed through Grafana's existing ClickHouse datasource API. NW-4 remains
+last, per user instruction. Separate review before accepting this implementation.
+
+### 2026-09-18 — review correction: tap lifetime
+
+DA-1/DA-2 seed/readback now precedes tap creation, after fresh STOPPED/disabled
+worker observations. Only START and capture use the tap lifetime. Review finding1
+(dependent fixtures deleted after unresolved swarm removal) remains open pending
+the discussion of recovery; no automatic retry or orphan cleanup added.
+
+### 2026-09-18 — review correction: dependent dataset cleanup
+
+Finding1 implemented: RedisDatasetResources releases existing scenario/list handles
+only when SwarmResource.permitsDependentCleanup allows it from its existing acquisition
+state. No extra lifecycle state or retry. Unconfirmed CREATE, HTTP failure and terminal
+FAILED removal preserve identifiers in retained-dataset-resources evidence and the
+failure report. Definitively rejected/not-attempted CREATE and verified removal still
+clean dependencies. Seven real-handle HTTP regression cases pass, including original
+assertion preservation. Framework126 tests pass; Artemis dataset E2E passes with final
+scenario404 and both Redis keys absent: `redis-dataset-7230bcc5-d264-4967-a580-f933d5bb77c2`.
+Log: `/tmp/redis-cleanup-artemis.log`. Rabbit was not rerun for this cleanup-only fix.
+The earlier tap-budget fix is also exercised. Both corrections await separate review.

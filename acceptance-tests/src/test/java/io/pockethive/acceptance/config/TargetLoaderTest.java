@@ -51,6 +51,15 @@ class TargetLoaderTest {
       evidenceDirectory=reports
       """;
 
+  @Test void redisDataRequiresLifecycleAndExplicitConnection() throws Exception {
+    var target = TargetLoader.loadRedisData(file(TARGET + "redisConnectionId=R:redis:6379:0\n"));
+    assertEquals("R:redis:6379:0", target.connectionId());
+    assertEquals("explicit-fixture", target.lifecycle().fixture().templateId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadRedisData(file(TARGET)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadRedisData(file(TARGET + "redisConnectionId=\n")));
+  }
+
   @Test void redisFixtureRequiresExplicitConnectionAndNoLifecycleSettings() throws Exception {
     String config = SCENARIO.replace("scenarioId=authoring-fixture\n", "") + "redisConnectionId=R:redis:6379:0\n";
     assertEquals("R:redis:6379:0", TargetLoader.loadRedisFixture(file(config)).connectionId());

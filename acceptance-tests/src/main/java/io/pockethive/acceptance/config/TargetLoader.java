@@ -29,6 +29,14 @@ public final class TargetLoader {
     return Path.of(selected);
   }
 
+  public static RedisDataTarget loadRedisData(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.add("redisConnectionId");
+    Properties values = read(actual, keys);
+    return new RedisDataTarget(lifecycle(values, actual), values.getProperty("redisConnectionId"));
+  }
+
   public static RedisFixtureTarget loadRedisFixture(Path file) throws IOException {
     Path actual = file.toRealPath();
     Properties values = read(actual, Set.of("redisConnectionId"));
