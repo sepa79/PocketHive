@@ -772,3 +772,24 @@ assertion preservation. Framework126 tests pass; Artemis dataset E2E passes with
 scenario404 and both Redis keys absent: `redis-dataset-7230bcc5-d264-4967-a580-f933d5bb77c2`.
 Log: `/tmp/redis-cleanup-artemis.log`. Rabbit was not rerun for this cleanup-only fix.
 The earlier tap-budget fix is also exercised. Both corrections await separate review.
+
+### 2026-09-18 — DA-3 plan after DA-1/DA-2 commit
+
+Reviewed DA-1/DA-2 committed as433e470f. Next: real tx-outcome persistence through
+existing Grafana ingress; explicit datasource/table/auth target, scoped observations,
+matching captured HTTP results by trace ID/swarm/sink instance. No new product API,
+no direct DB port, no duplicate outcome calculator. Run on Rabbit and Artemis, keep
+normal telemetry under its existing retention policy. NW-4 remains last.
+
+### 2026-09-18 — DA-3 implemented, awaiting review
+
+Tx-outcome persistence verified through existing Grafana ingress on both WORK adapters.
+Each run starts with an empty observation for a fresh swarm and matches two captured
+processor traces to actual stored rows, with sink identity, call ID, status/success and
+duration checked. No duplicated TxOutcomeEvent or production projection/calculator.
+Framework132 tests pass; four lifecycle operations and removal postconditions verified
+per adapter. Artefacts/IDs are in the coverage ledger. Base Artemis restored.
+
+Matrix35 PASS/6 OPEN: DA-4, EX-1..3, SM-2, NW-4. DA-4 is next local candidate; NW-4 last.
+DA-3 remains uncommitted pending separate review. The reviewed preceding DA-1/DA-2
+package was committed as433e470f at the user's explicit request; no push performed.

@@ -51,6 +51,20 @@ class TargetLoaderTest {
       evidenceDirectory=reports
       """;
 
+  @Test void outcomeObservationRequiresAllExplicitSettings() throws Exception {
+    String additions = "grafanaUsername=user\ngrafanaPassword=pass\ngrafanaDatasourceUid=chosen\noutcomeTable=events\n";
+    var target = TargetLoader.loadTxOutcome(file(TARGET + additions));
+    assertEquals("chosen", target.datasourceUid());
+    assertEquals("events", target.outcomeTable());
+    assertEquals("explicit-fixture", target.lifecycle().fixture().templateId());
+    for (String line : additions.split("\n")) {
+      assertThrows(IllegalArgumentException.class,
+          () -> TargetLoader.loadTxOutcome(file(TARGET + additions.replace(line + "\n", ""))));
+    }
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadTxOutcome(file(TARGET + additions.replace("grafanaPassword=pass", "grafanaPassword="))));
+  }
+
   @Test void redisDataRequiresLifecycleAndExplicitConnection() throws Exception {
     var target = TargetLoader.loadRedisData(file(TARGET + "redisConnectionId=R:redis:6379:0\n"));
     assertEquals("R:redis:6379:0", target.connectionId());

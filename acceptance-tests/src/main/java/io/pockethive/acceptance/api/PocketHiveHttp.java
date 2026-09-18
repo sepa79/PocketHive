@@ -63,9 +63,15 @@ public final class PocketHiveHttp implements AutoCloseable {
 
   public ApiResponse getWithBasicAuth(String path, String username, String password)
       throws IOException, InterruptedException {
+    return requestWithBasicAuth("GET", path, null, username, password, requestTimeout);
+  }
+
+  public ApiResponse requestWithBasicAuth(String method, String path, Object body, String username,
+      String password, Duration budget) throws IOException, InterruptedException {
     String credentials = java.util.Base64.getEncoder().encodeToString(
         (username + ":" + password).getBytes(StandardCharsets.UTF_8));
-    return exchange("GET", path, null, "Basic " + credentials, requestTimeout, "application/json", "application/json");
+    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), "Basic " + credentials,
+        budget, "application/json", "application/json");
   }
 
   private static String bearer(String token) { return token.isEmpty() ? "" : "Bearer " + token; }

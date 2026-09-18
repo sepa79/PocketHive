@@ -244,3 +244,19 @@ for diagnosis and later cleanup. Definitively rejected or never-attempted CREATE
 still permits fixture cleanup; no automatic retry or orphan cleanup is performed.
 The source scenario is a preparation fixture; its placeholder list names must be replaced
 by the test before launch. NW-4 remains a separate, deferred remote deployment check.
+
+### Persisted transaction outcomes (DA-3)
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-tx-outcome-artemis.properties tx-outcome
+./run-acceptance-tests.sh acceptance-tests/targets/local-tx-outcome-rabbit.properties tx-outcome
+```
+
+Select the target matching the stack's WORK adapter. Grafana username/password,
+datasource UID and outcome table are explicit observation settings. The suite uses
+only public ingress, first verifies no rows for its fresh swarm, then matches captured
+HTTP result traces against persisted rows with the same swarm/postprocessor identity,
+call ID, status, success and duration. Postprocessor counters are not persistence
+proof. Grafana nested query failures fail immediately; reads use a bounded deadline.
+The swarm is removed through its normal lifecycle. Outcome rows remain ordinary
+telemetry under the existing database retention policy; tests never delete/truncate them.

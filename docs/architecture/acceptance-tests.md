@@ -47,7 +47,7 @@ or embed defaults in individual clients/tests.
 
 **Owner:** `PocketHiveHttp` sends bounded requests to the selected ingress only;
 `ApiSurface` owns the public service prefixes (`/orchestrator`, `/scenario-manager`,
-`/auth-service`, `/network-proxy-manager`, `/tcp-mock`, `/redis`) and projects rooted service-relative links, including operationUrl.
+`/auth-service`, `/network-proxy-manager`, `/tcp-mock`, `/redis`, `/grafana`) and projects rooted service-relative links, including operationUrl.
 `ApiSurface.pathSegment` encodes opaque identifiers once; clients do not add product ID grammar.
 `ApiResponse` holds HTTP status/body, `ApiException` identifies an unexpected status.
 **Effect:** preserve expected denial responses as data, reject off-origin operation
@@ -60,7 +60,7 @@ JSON callers retain application/json. Both use the same bounded request implemen
 
 ## RESP-ACCEPTANCE-API
 
-**Owners:** `AuthApi` handles dev login and the canonical current-user profile; `AuthAdminApi` maps user/grant administration; `SwarmApi` maps swarm REST requests/readbacks;
+**Owners:** `GrafanaTxOutcomesApi` maps scoped persisted-outcome reads through Grafana (DA-3 section); `AuthApi` handles dev login and the canonical current-user profile; `AuthAdminApi` maps user/grant administration; `SwarmApi` maps swarm REST requests/readbacks;
 `ScenarioApi` maps scenario CRUD and bundle template/SUT content; `ScenarioFolderApi`
 maps folder CRUD. `SwarmManagementApi` maps manager/component configuration dispatch.
 `NetworkBindingApi` reads canonical network bindings and requires their absence after
@@ -505,3 +505,25 @@ both list identifiers in retained-dataset-resources evidence and the reported fa
 No second lifecycle state, automatic retry or orphan cleanup is introduced.
 These acceptance assertions use RESP-ACCEPTANCE-WORKERS and the existing resource
 owners; Request Builder/Redis/Processor behavior stays with product modules.
+
+## Transaction outcome persistence acceptance (DA-3)
+
+TxOutcomeTarget composes the lifecycle target and explicit Grafana credentials,
+datasource UID and outcome table. TargetLoader remains the configuration owner.
+ApiSurface owns the existing public /grafana prefix; PocketHiveHttp extends its
+existing Basic-auth support to bounded JSON POST without a second HTTP transport.
+GrafanaTxOutcomesApi sends a swarm-scoped SELECT through /grafana/api/ds/query and
+maps the returned table frames to read-only JSON rows. It checks nested query errors
+and frame shape; it does not derive transaction success or duplicate TxOutcomeEvent.
+The storage schema remains clickhouse/init/02-ph-tx-outcome-v2.sql; TxOutcomeProjector
+and ClickHouseTxOutcomeSink remain the production projection/write owners.
+
+TxOutcomeAcceptanceIT starts an independently authored scheduler/HTTP fixture with
+CLICKHOUSE_V2 configured on its postprocessor. It verifies an empty observation for
+the fresh swarm, captures actual successful processor WorkItems and their trace IDs,
+and awaits matching persisted rows for the owned swarm and sink instance. Status,
+success, call ID and duration are checked against concrete captured result/header
+values. Fresh worker observations confirm the configured sink. No success is inferred
+from postprocessor counters. Queries and waits are bounded; database rows are retained
+as normal telemetry under the existing table TTL, with no acceptance DELETE or TRUNCATE.
+The same suite runs on explicit Rabbit and Artemis targets. NW-4 remains deferred.

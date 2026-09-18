@@ -29,6 +29,15 @@ public final class TargetLoader {
     return Path.of(selected);
   }
 
+  public static TxOutcomeTarget loadTxOutcome(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.addAll(Set.of("grafanaUsername", "grafanaPassword", "grafanaDatasourceUid", "outcomeTable"));
+    Properties values = read(actual, keys);
+    return new TxOutcomeTarget(lifecycle(values, actual), values.getProperty("grafanaUsername"),
+        values.getProperty("grafanaPassword"), values.getProperty("grafanaDatasourceUid"), values.getProperty("outcomeTable"));
+  }
+
   public static RedisDataTarget loadRedisData(Path file) throws IOException {
     Path actual = file.toRealPath();
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);

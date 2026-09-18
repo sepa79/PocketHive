@@ -33,7 +33,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
 | DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisDatasetAcceptanceIT: two isolated records, FULL Generator/Request Builder/Processor history; Rabbit and Artemis verified | PASS |
 | DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Exact seeded JSON survives Generator and rendered HttpRequestEnvelope body; rendered header and HTTP result asserted on both adapters | PASS |
-| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | Existing Grafana datasource query through ingress verified; scoped tx-outcome persistence test still required | OPEN |
+| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | TxOutcomeAcceptanceIT: persisted rows match captured trace IDs, swarm/sink identity, call ID, status, success and duration; Rabbit and Artemis verified through Grafana ingress | PASS |
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | Isolated Redis/TCP data and supported interfaces | OPEN |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Supported file/content observation interface required | OPEN |
@@ -921,3 +921,34 @@ identifiers on unresolved swarm cleanup; seven HTTP regression cases cover that 
 Framework126 tests pass; Artemis E2E `redis-dataset-7230bcc5-d264-4967-a580-f933d5bb77c2` verifies the final successful path and
 all dependency cleanup. Log `/tmp/redis-cleanup-artemis.log`. Rabbit was not rerun in
 this correction slice. Coverage remains34 PASS/7 OPEN; separate review pending.
+
+### 2026-09-18 — DA-3 persisted transaction outcomes
+
+TxOutcomeAcceptanceIT passes on Rabbit and Artemis. Each fresh swarm first has no
+stored rows; the configured CLICKHOUSE_V2 postprocessor then writes rows matching
+two actual captured HTTP results by trace ID, swarm ID and sink instance. Call ID,
+HTTP status200, processorSuccess1 and exact duration are verified against captured
+WorkItem headers/HttpResultEnvelope. Existing worker observations confirm configured
+sink mode. No postprocessor counter is treated as proof of persistence.
+
+| WORK adapter | Evidence directory under acceptance-tests/target/runs | Matched traces | Observed rows | Operations |
+|---|---|---:|---:|---:|
+| Artemis | `tx-outcome-15b9075a-a7a2-416c-b550-d2977f70c190` | 2 | 3 | 4 SUCCEEDED |
+| Rabbit | `tx-outcome-d50e94fd-e231-4f27-9eae-95ed419cbf7a` | 2 | 3 | 4 SUCCEEDED |
+
+Logs: `/tmp/tx-outcome-artemis.log`, `/tmp/tx-outcome-rabbit.log`.
+Artifact audit: `/tmp/tx-outcome-evidence-summary.json`. The fixture produces continuous
+traffic so additional rows are expected; the two selected traces each have exactly one
+matching row. Both swarm removals have complete canonical resource evidence and registry
+absence. Telemetry remains under the existing ClickHouse table TTL; no database cleanup
+or direct service-port test access. Base Artemis restored; public swarm registry empty.
+
+Framework132 tests pass, including Grafana nested-query errors, malformed/foreign frames,
+empty results, scoped query transport, integer preservation and required target settings.
+No product service, public contract or deployment manifest changed. New API code maps
+only a read-only projection of the existing storage schema; production projection and
+write ownership remain in postprocessor. DA-3 implementation awaits separate review.
+
+Current ledger: **35 PASS, 0 PARTIAL, 6 OPEN**: DA-4, EX-1..3, SM-2, NW-4.
+Next local candidate is DA-4 (five-customer Redis/TCP WebAuth), using the existing Redis
+fixture and public TCP observation boundaries. NW-4 remains last.
