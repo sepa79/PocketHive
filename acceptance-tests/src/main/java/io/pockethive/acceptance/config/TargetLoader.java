@@ -93,9 +93,29 @@ public final class TargetLoader {
 
   public static ProxyTarget loadProxy(Path file) throws IOException {
     Path actual = file.toRealPath();
+    return proxy(read(actual, proxyKeys()), actual);
+  }
+
+  public static BindingRecoveryTarget loadBindingRecovery(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = proxyKeys();
+    keys.add("minimumRejectionDuration");
+    Properties values = read(actual, keys);
+    var proxy = proxy(values, actual);
+    var minimum = duration(values, "minimumRejectionDuration");
+    if (minimum.compareTo(proxy.lifecycle().api().requestTimeout()) >= 0) {
+      throw new IllegalArgumentException("requestTimeout must exceed minimumRejectionDuration");
+    }
+    return new BindingRecoveryTarget(proxy, minimum);
+  }
+
+  private static Set<String> proxyKeys() {
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
     keys.addAll(Set.of("networkProfileId", "endpointId"));
-    Properties values = read(actual, keys);
+    return keys;
+  }
+
+  private static ProxyTarget proxy(Properties values, Path actual) {
     return new ProxyTarget(lifecycle(values, actual), values.getProperty("networkProfileId"),
         values.getProperty("endpointId"));
   }

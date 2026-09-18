@@ -32,6 +32,24 @@ class TargetLoaderTest {
     assertEquals("explicit-fixture", target.fixture().templateId());
     assertEquals(folder.resolve("reports"), target.api().evidenceDirectory());
   }
+  @Test void bindingRecoveryRequiresAnExplicitApplyWaitExpectation() throws Exception {
+    String proxy = TARGET + "networkProfileId=passthrough\nendpointId=selected\n";
+    String settings = proxy + "minimumRejectionDuration=PT0.5S\n";
+    var target = TargetLoader.loadBindingRecovery(file(settings));
+    assertEquals(java.time.Duration.ofMillis(500), target.minimumRejectionDuration());
+    assertEquals("selected", target.proxy().endpointId());
+    assertEquals("explicit-fixture", target.proxy().lifecycle().fixture().templateId());
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadBindingRecovery(file(proxy)));
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProxy(file(settings)));
+  }
+  @Test void bindingRecoveryCannotUseARequestTimeoutShorterThanItsExpectedRejection() throws Exception {
+    for (String duration : new String[]{"PT0S", "PT1S", "PT2S"}) {
+      String settings = TARGET + "networkProfileId=passthrough\nendpointId=selected\nminimumRejectionDuration="
+          + duration + "\n";
+      assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadBindingRecovery(file(settings)));
+    }
+  }
+
   @Test void missingValueFailsBeforeAnyTestRuns() throws Exception {
     assertThrows(IllegalArgumentException.class,
         () -> TargetLoader.load(file(TARGET.replace("username=test-actor\n", ""))));

@@ -2,7 +2,11 @@ package io.pockethive.acceptance.api;
 
 import static org.junit.jupiter.api.Assertions.*;
 import io.pockethive.acceptance.support.ScriptedIngress;
+import com.fasterxml.jackson.databind.json.JsonMapper;
 import io.pockethive.swarm.model.NetworkBinding;
+import io.pockethive.swarm.model.NetworkBindingRequest;
+import io.pockethive.swarm.model.NetworkBindingClearRequest;
+import io.pockethive.swarm.model.ResolvedSutEnvironment;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.ResolvedSutEndpoint;
 import java.time.Duration;
@@ -32,6 +36,38 @@ class NetworkBindingApiTest {
     try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
       ingress.reply("GET", "/network-proxy-manager/api/network/bindings/owned", status, Map.of());
       assertThrows(ApiException.class, () -> new NetworkBindingApi(http, "").requireAbsent("owned"));
+    }
+  }
+
+  @ParameterizedTest @ValueSource(ints = {200, 500})
+  void sendsCanonicalCandidateUnchangedAndPreservesResponse(int status) throws Exception {
+    var endpoint = new ResolvedSutEndpoint("selected", "http", "http://proxy:18090", "invalid:-1", "sut:8080");
+    var candidate = new NetworkBindingRequest("owned-sut", NetworkMode.PROXIED, "selected-profile", "tester",
+        "candidate probe", new ResolvedSutEnvironment("owned-sut", "Owned SUT", "http", Map.of("selected", endpoint)));
+    var expected = JsonMapper.builder().findAndAddModules().build().valueToTree(candidate);
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
+      ingress.replyWith("POST", "/network-proxy-manager/api/network/bindings/owned%20id", status, body -> {
+        assertEquals(expected, body, "The API adapter must not normalize or strip deliberately invalid candidate data");
+        return Map.of("detail", "original response");
+      });
+      var response = new NetworkBindingApi(http, "token").bind("owned id", candidate);
+      assertEquals(status, response.status());
+      assertEquals("original response", http.tree(response).required("detail").textValue());
+    }
+  }
+
+  @ParameterizedTest @ValueSource(ints = {200, 403})
+  void clearUsesTheExactOwnedIdentityAndDoesNotHideDenial(int status) throws Exception {
+    var request = new NetworkBindingClearRequest("owned-sut", "tester", "explicit clear");
+    var expected = JsonMapper.builder().findAndAddModules().build().valueToTree(request);
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
+      ingress.replyWith("POST", "/network-proxy-manager/api/network/bindings/owned%20id/clear", status, body -> {
+        assertEquals(expected, body);
+        return Map.of("detail", "clear response");
+      });
+      var response = new NetworkBindingApi(http, "token").clear("owned id", request);
+      assertEquals(status, response.status());
+      assertEquals("clear response", http.tree(response).required("detail").textValue());
     }
   }
 }

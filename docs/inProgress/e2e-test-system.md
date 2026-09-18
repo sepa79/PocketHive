@@ -1,27 +1,20 @@
 # Nowy framework E2E — budowa od zera i zastąpienie starego zestawu
 
-Status: kierunek ustalony przez użytkownika 2026-09-15; projekt wykonania poniżej.
-N0: projekt i mapa 39 dotychczasowych scenariuszy zapisane. N1: wykonanie zamknięte,
-oba pierwsze testy przeszły na Rabbit i Artemis. N2: operacje w osiągniętym stanie
-przeszły na obu adapterach; grupa Scenario API
-(SC-1/SC-2/SC-3) także działa przez ingress. Auth-read AU-1/AU-2 przeszło
-13/13 i review (commit `2ce87f7a`). Viewer AU-3/AU-6 przeszło 3/3 i review (commit `a133b554`). Scoped runner AU-4/AU-5 przeszło 2/2 i review (commit `5e9e80e5`).
-AU-8/AU-13 przeszło review i jest w `5c9ea201`. AU-10 RUN-only STOP oraz poprawka
-REMOVE403 przeszły ponowne review; folder ALL pozostaje otwarty. Całościowy review
-frameworka wskazał F1–F3 (walidacja ID, dowody capture, błędy zamknięcia tapu).
-Poprawki wykonane i przetestowane; osobne review F1–F3 bez nowych ustaleń.
-WK-1/WK-2 przeszły na Rabbit i Artemis po naprawie tożsamości producenta i
-powiązania runtime z polityką historii scenariusza. Poprawka odrzucania jawnego
-historyPolicy:null ma 58 zielonych testów. WK-3/SC-4, templating i zmienne
-w rzeczywistym ruchu, przeszły po 2/2 na Rabbit i Artemis oraz osobne review bez findings.
-WK-4/WK-5: konfiguracja/overrides przeszły na obu adapterach; full/delta ma dowód
-u producentów. Po review i poprawce TTL zapisane w `a3cdf0d5` razem z wcześniejszymi
-wycinkami workerów. NW-1 przeszedł osobne review bez ustaleń. NW-2/NW-3/NW-5 mają
-zielone wykonanie na Rabbit i Artemis (78 testów frameworka, 10 końcowych E2E z regresją
-NW-1); osobne review pakietu bez ustaleń blokujących. AU-9/AU-10/AU-11 mają też PASS na obu adapterach, FW-2 domknięte; nowy pakiet auth/FW czeka na osobne review. Macierz: 27 PASS, 1 PARTIAL, 13 OPEN.
-NW-4 odłożone do deploymentu Swarm/NFS. Użytkownik potwierdził dostępność małego środowiska (1 host) i dużego (4 hosty); lokalny Compose nie dowodzi zachowania między hostami. N3–N4 niewykonane; nie usuwamy starego zestawu.
-Poniższe datowane wpisy zachowują wcześniejsze wyniki i decyzje; bieżące pokrycie
-podaje mapa docs/ci/acceptance-coverage.md.
+Status na 2026-09-18: N0 i N1 zamknięte. Macierz N2 zawiera **40 PASS / 1 PARTIAL**.
+NW-4 jest napisane i przeszło lokalnie na Rabbit oraz Artemis; pozostaje jego
+wykonanie między hostami na Swarm/NFS, odłożone na koniec.
+EX-3 i SM-2 z poprawkami po review zapisane w `cdf2be57`.
+N3 (potwierdzenie zastąpienia) i N4 (usunięcie legacy) pozostają otwarte.
+
+Przy przygotowaniu N3 agent wykonał Maven clean bez archiwizacji i usunął wcześniejsze
+lokalne artefakty `acceptance-tests/target/runs`. Historyczne wyniki w macierzy nie są
+ponownie wykonanym dowodem; zachowały się logi i część podsumowań. Luka dostępności
+surowych dowodów pozostaje jawna przy odbiorze N3. Użytkownik wskazał kopie na innych
+branchach — należy je sprawdzić przed planowaniem odtworzenia przebiegów. Nowe targety
+zapisują poza `target`.
+
+Bieżące wymagania i wyniki określa [macierz pokrycia](../ci/acceptance-coverage.md).
+Datowane wpisy poniżej zachowują historię, nie zastępują aktualnego statusu.
 
 ## Decyzja i granica
 
@@ -931,3 +924,89 @@ subshells, preserving the operator's prior environment. Six stubbed shell scenar
 verify normal/failure exits and scoped cleanup, without deploying a stack.
 Details and logs are recorded in the coverage ledger. No product change or E2E rerun;
 new changes remain uncommitted for separate review. Matrix40 PASS/1 OPEN: NW-4.
+
+
+### 2026-09-18 — przygotowanie N3/N4 przed NW-4
+
+Commit `cdf2be57` zamyka sprawdzony pakiet EX-3/SM-2. Czysty, niezależny build
+`-pl acceptance-tests -am clean verify` przeszedł: 161 testów frameworka oraz
+jego zależności. Reactor obejmuje dziewięć modułów; nie buduje `e2e-tests`, usług
+produktu ani adapterów brokerów. Runner nadal wywołuje wyłącznie nowy moduł.
+Nie jest to zamknięcie N3 ani osobne review zgodności całej macierzy z asercjami.
+
+**Retencja dowodów:** wykonujący agent nie zabezpieczył `target/runs` przed clean.
+Nie znaleziono pełnej kopii usuniętych katalogów. Pozostałe logi i podsumowania
+nie są odtworzonymi artefaktami. Jawne lokalne targety oraz instrukcja SM-2 wskazują
+teraz `acceptance-tests/runs`; katalog jest wyłączony z Git i kontekstu Docker.
+TargetLoader i RunEvidence zachowują dotychczasowe odpowiedzialności. Nie dodano
+defaultu, walidatora lokalizacji ani nowego mechanizmu archiwizacji do frameworka.
+Przed N3 trzeba rozstrzygnąć wystarczalność zachowanych dowodów lub odtworzyć
+wymagane przebiegi. Nowe wykonania są opisywane osobno w macierzy.
+
+**Zakres późniejszego N4 — nic jeszcze nie usunięto:**
+
+| Element | Ustalona własność i działanie po N3 |
+| --- | --- |
+| `e2e-tests/` | Cały stary moduł: Cucumber, kroki, klienci, wsparcie, konfiguracja i fixtures testowe. Usunąć razem. Zależności Cucumber są zadeklarowane wyłącznie w jego POM. |
+| `start-e2e-tests.sh`, `deploy/e2e-targets/` | Runner i jego profile należą do starego zestawu. Usunąć bez aliasu/delegacji do nowego runnera. |
+| Główny `pom.xml` | Usunąć wpis modułu `e2e-tests`. Zachować wspólne biblioteki produktu oraz `acceptance-tests`. |
+| `RepositoryImportBoundaryTest` | Usunąć osiem wyjątków importów dla nieistniejącego już `e2e-tests`; zachować reguły i pozostałych właścicieli. |
+| `.github/workflows/ci.yml` | CI uruchamia ogólne `mvn test`; nie ma wywołania starego runnera do przepięcia. Usunięcie modułu usuwa go z reactora. Wdrożone acceptance nadal wymagają jawnego targetu. |
+| `scenarios/e2e/` | Nie jest katalogiem wyłącznie starego frameworka. `tools/auth-proving/run-auth-proving.mjs` używa zestawu `auth-proving-*`. Każdy kandydat do usunięcia wymaga sprawdzenia konsumentów; nie kasować katalogu hurtem. |
+| Dokumentacja i historia | Bieżące polecenia mają wskazywać nowy runner. Dawne raporty i changelog pozostają opisem historycznych wykonań, nie uruchamialną zależnością. |
+
+Podstawa inwentaryzacji: wyszukiwanie w całym repozytorium `e2e-tests`,
+`start-e2e-tests`, `e2e-targets`, `cucumber`, `scenarios/e2e` oraz nazw fixtures;
+odczyt POM, obu runnerów, workflow CI, reguł importów i konsumentów auth-proving.
+Nowy moduł ma jawną blokadę zależności od legacy i używa własnych fixtures
+`scenarios/acceptance` oraz `demo/acceptance-runner-artemis`.
+
+**NW-4, rozpoznanie bez deploymentu:** HiveForge udostępnia środowisko `swarm`
+z czterema gotowymi węzłami i współdzielonym NFS. Profil PocketHive to `swarm-full`.
+W zwróconych rejestracjach brak `codex/artemis-work-plane`; projekt development
+wskazuje inną gałąź. Nie przestawiono repozytorium, polityki ani działającego stacka.
+Do wykonania potrzebny jest dostępny przez HiveForge ref/artefakt właściwej wersji,
+publiczny ingress i aktor testowy oraz test NW-4. Samo istnienie czterech węzłów
+nie dowodzi rozdzielenia NPM/HAProxy ani poprawnego zachowania NFS.
+
+
+Weryfikacja retencji i bieżących targetów: 161 testów frameworka oraz pięć wdrożonych
+przypadków (smoke, trzy lifecycle, EX-3) przeszło. Sześć rzeczywistych plików dowodów
+przetrwało późniejszy clean bez zmiany skrótów. Przeszło też sześć wariantów shellowych
+SM-2 z podstawionymi poleceniami. Artefakty i archiwalne raporty JUnit leżą już poza
+`target`; dokładne nowe run IDs podaje macierz. Rabbit i pozostałych grup nie ponawiano.
+Końcowa lista swarmów pusta. Zmiany konfiguracji i dokumentacji czekają na osobne review;
+N3/N4 pozostają otwarte. Nie wdrożono nic na zdalnym Swarmie.
+
+
+### 2026-09-18 — NW-4: lokalne wykonanie zatwierdzone
+
+Użytkownik zatwierdził napisanie NW-4 i sprawdzenie najpierw na lokalnym deploymencie;
+eventualne problemy Swarm będą rozwiązywane podczas późniejszego wykonania.
+Plan: zwykły własny PROXIED swarm → ruch HTTP → STOP → błędny kandydat przez publiczne
+API → jawny błąd apply i identyczny poprzedni binding → nowy tap/START i poprawny ruch
+→ STOP → jawny clear/GET404 → normalny REMOVE. Brak osobnego właściciela cleanupu.
+TargetLoader zachowuje konfigurację, NetworkBindingApi mapuje istniejące endpointy,
+RunEvidence zapisuje dowody poza target. Nie kopiujemy starego harnessu.
+Kontrakt testu zapisano przed implementacją w architecture/acceptance-tests.md,
+sekcja Binding recovery acceptance (NW-4). Nie zmieniamy kontraktów ani kodu produktu.
+
+
+### 2026-09-18 — NW-4 wykonane lokalnie; do osobnego review
+
+Nowy test przeszedł na obu lokalnych WORK adapterach. Błędny kandydat dostał500 po
+10082ms (Artemis) i10049ms (Rabbit); poprzedni binding pozostał identyczny. Osobne tapy
+zarejestrowały po trzy różne poprawne wyniki HTTP przed i po odrzuceniu. Jawny clear
+zwrócił200, potem binding404. Każdy swarm ma sześć SUCCEEDED operacji, kompletny REMOVE
+bez remaining/errors oraz potwierdzone zniknięcie bindingu i wpisu swarma.
+
+177 testów frameworka PASS, w tym zachowane testy odczytu/braku bindingu i nowe testy
+mutacji, negatywnych asercji oraz konfiguracji czasu. `TargetLoader` wspólnie rozwiązuje
+ustawienia ProxyTarget/BindingRecoveryTarget; NetworkBindingApi jedynie przesyła
+kanoniczne DTO i zwraca odpowiedzi. Sprzątanie pozostało w SwarmResource/Orchestrator.
+Nie zmieniono kodu ani kontraktów produktu, nie kopiowano legacy i nie wdrażano na Swarm.
+
+Logi, run IDs i archiwalne raporty JUnit podaje macierz pokrycia. Przywrócono Artemis
+WORK po pustym rejestrze. Bieżący zakres gotowy do osobnego review, bez commita/push.
+Lokalne przypadki funkcjonalne są wykonane; NW-4 pozostaje PARTIAL wyłącznie z powodu
+niewykonanego testu między hostami/NFS. N3/N4 nadal otwarte.

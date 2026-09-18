@@ -63,8 +63,9 @@ JSON callers retain application/json. Both use the same bounded request implemen
 **Owners:** `GrafanaTxOutcomesApi` maps scoped persisted-outcome reads through Grafana (DA-3 section); `AuthApi` handles dev login and the canonical current-user profile; `AuthAdminApi` maps user/grant administration; `SwarmApi` maps swarm REST requests/readbacks;
 `ScenarioApi` maps scenario CRUD and bundle template/SUT content; `ScenarioFolderApi`
 maps folder CRUD. `SwarmManagementApi` maps manager/component configuration dispatch.
-`NetworkBindingApi` reads canonical network bindings and requires their absence after
-removal. `SwarmJournalApi` maps timeline, run, pin and metadata endpoints; `TcpMockApi`
+`NetworkBindingApi` maps canonical binding reads and synchronous bind/clear requests;
+mutation responses remain data for the caller, including rejection. It also requires
+absence after removal. The NW-4 suite exercises these mutations only on its owned swarm. `SwarmJournalApi` maps timeline, run, pin and metadata endpoints; `TcpMockApi`
 reads the explicitly selected existing mock mapping and its request journal (DA-4).
 These are distinct endpoint families.
 **Effect:** use canonical auth/create/control/operation/state contracts and exact
@@ -131,6 +132,11 @@ responses/headers, reconstruct domain outcomes or create a custom audit engine.
 file-write errors and throws them on close, so a broken report destination cannot
 interrupt operation observation or removal. JUnit reports this error as primary or
 suppressed alongside an existing test/cleanup failure; write errors are never ignored.
+The target explicitly selects the evidence directory through TargetLoader. Supplied local
+targets store runs in `acceptance-tests/runs`, outside Maven build output, so `clean`
+does not discard acceptance evidence. This is an example configuration, not a resolver
+default or a second path owner. Archive selected evidence before manual removal; JUnit
+reports under `target` remain disposable build output.
 
 ## RESP-ACCEPTANCE-RUN
 
@@ -690,3 +696,48 @@ After evidence collection, remove only this owned project and its named volumes.
 The local procedure runs in a subshell; its project/runtime environment never replaces
 the operator's prior shell settings, on success or failure. The established local
 Artemis stack remains running. NW-4 stays deferred.
+
+
+## Binding recovery acceptance (NW-4)
+
+User-approved local execution comes first; cross-node Swarm/NFS remains a later
+execution of the same behavioral test. Local success does not prove remote filesystem
+propagation. The product apply/rollback contract remains ARCHITECTURE section 2.6.
+
+`BindingRecoveryTarget` is a read-only projection of ProxyTarget plus the explicit
+minimum rejection duration. TargetLoader alone resolves it. The target declares an
+HTTP timeout longer than that bound to observe the server's failure response, rather
+than treating a client timeout as rejection. Supplied targets reuse the independently
+authored HTTP proxy fixtures for the selected WORK adapter; they do not switch brokers.
+The minimum is a test expectation for that deployment, not a product apply-timeout default.
+
+`NetworkBindingRecoveryAcceptanceIT` creates a normal PROXIED swarm through LiveRun
+and SwarmResource. The Orchestrator resolves SUT addresses and applies the valid binding.
+ProxyAssertions checks the public binding against the authored SUT; captured successful
+HTTP results prove traffic uses its client address. The test closes that tap and stops
+the swarm before submitting an invalid candidate through NetworkBindingApi.
+
+The candidate reuses the canonical observed binding/profile and SUT identity, with only
+one selected endpoint's clientAuthority replaced by the explicit malformed fixture
+`invalid:-1`. The test does not resolve production resource names or reproduce the
+HAProxy renderer/port offset. This input currently reaches HAProxy candidate validation;
+a fast parsing/authorization/conflict error must not masquerade as the apply failure.
+The test requires HTTP500 after the configured minimum duration, and exact equality
+of the original and subsequent binding (including appliedAt). It records request,
+response, monotonic duration and both observations through RunEvidence. The bound
+and source trace distinguish this case from an immediate HTTP400; the test does not
+read native configuration files or claim inspection of the applied digest.
+
+A new tap opened after rejection observes successful HTTP results after the same swarm
+restarts, with disjoint message IDs, the same producing worker identity and the same
+proxy request address. After STOP, the test explicitly POSTs clear for its own swarm
+and requires HTTP200 plus GET404. SwarmResource then performs normal verified REMOVE;
+it remains the sole cleanup owner on both success and test-body failure. The test adds
+no synthetic binding registry, standalone binding resource, native client, global
+cleanup or fallback. Existing Orchestrator REMOVE also clears a surviving binding.
+
+Framework tests cover canonical request transport and preserve rejection as data;
+focused assertions reject successful/too-early mutation responses and changed retained
+bindings. The deployed test proves actual proxy processing before and after rejection.
+A later Swarm run must independently establish NPM/HAProxy placement on separate hosts
+and the shared NFS runtime; the API-only test does not infer placement from node count.

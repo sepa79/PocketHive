@@ -33,7 +33,7 @@ observing an empty registry is not evidence of freshness.
 ingress=http://localhost:${SM2_INGRESS_PORT}/
 username=local-admin
 requestTimeout=PT10S
-evidenceDirectory=${PWD}/acceptance-tests/target/runs
+evidenceDirectory=${PWD}/acceptance-tests/runs
 EOF
   cp "$SM2_RUN_DIRECTORY/api.properties" "$SM2_RUN_DIRECTORY/fresh.properties"
   printf 'deploymentId=%s\n' "$COMPOSE_PROJECT_NAME" >> "$SM2_RUN_DIRECTORY/fresh.properties"

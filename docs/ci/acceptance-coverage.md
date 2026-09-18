@@ -10,6 +10,16 @@ A new assertion may cover several old cases, but all observable requirements rem
 accounted for. Rejected or obsolete expectations need an explicit agreed disposition.
 OPEN means not yet demonstrated by the new system, including rows with a named target.
 PASS means the stated row behavior has execution evidence; it does not close other rows or N3.
+PARTIAL names demonstrated behavior with an explicit remaining environment/acceptance gap.
+
+Evidence availability, 2026-09-18: the agent ran Maven clean during N3 preparation
+without archiving `acceptance-tests/target/runs`, deleting the earlier local raw
+artifacts referenced below. Logs and some audit summaries remain, and the historical
+PASS results are retained as historical results. They must not be presented as newly
+replayed tests or as currently available raw evidence. N3 remains open pending its
+evidence assessment/replays and NW-4. New runs use `acceptance-tests/runs` outside
+Maven output and are listed separately; no deleted JSON was reconstructed. The user
+reports copies on other branches; check those during N3 before scheduling replays.
 
 | ID | Required observable behavior | Source feature/case | New coverage / prerequisite | Status |
 | --- | --- | --- | --- | --- |
@@ -26,7 +36,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | HttpProxyAcceptanceIT: explicit bundle SUT/profile, canonical binding, current processor config, successful HTTP proxy URLs, binding404 after verified REMOVE; Rabbit/Artemis pass | PASS |
 | NW-2 | HTTPS reaches SUT through selected proxy with matching runtime config; binding removed. | swarm-lifecycle: HTTPS proxy | HttpProxyAcceptanceIT HTTPS: actual HTTPS response, explicit sslVerify=false in runtime, authored/binding/result addresses and verified binding removal; Rabbit/Artemis | PASS |
 | NW-3 | TCPS reaches SUT through selected proxy with successful result; binding removed. | swarm-lifecycle: TCPS proxy | TcpsProxyAcceptanceIT: canonical TCP result and exact echo body, TLS scheme and runtime settings, authored/binding/result addresses, verified binding removal; Rabbit/Artemis | PASS |
-| NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | Dedicated network acceptance target supporting NFS topology | OPEN |
+| NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | NetworkBindingRecoveryAcceptanceIT passes locally on Rabbit/Artemis, including actual HTTP before/after rejection; cross-node Swarm/NFS execution remains deferred | PARTIAL |
 | SC-4 | Scenario variables resolve into generated traffic/template rendering. | swarm-lifecycle: variables | TemplatingAcceptanceIT: explicit amber/violet create profiles, global + SUT values, exact typed JSON and eval/header results from actual generated traffic; Rabbit/Artemis | PASS |
 | NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | TcpTimeoutAcceptanceIT: paired delayed-response control (8s timeout/5s delay) and error case (500ms timeout), owned run/processor alert through journal, empty result tap for explicit window, verified removal; Rabbit/Artemis | PASS |
 | WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
@@ -55,17 +65,18 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | FW-1 | Assertion failure after create still removes exact owned swarm; cleanup failure remains visible. | New framework requirement | SwarmResourceTest and FailureCleanupAcceptanceIT passed (framework + Rabbit + Artemis); includes write failures at CREATE/START/STOP/REMOVE and combined test/cleanup/report failures | PASS |
 | FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Identity/failure/config and full-body HTTP checks plus OperationAwaiterBudgetTest: receipt/configured caps, remaining budget, bounded poll; TapResourceTest: missing samples timeout with closure. 93 framework tests pass. | PASS |
 
-## Dispositions still required
+## Remaining acceptance gates
 
-- SW-1 CONTROL wire shape, physical bindings, target-state no-rebroadcast and exact-key
-  replay now have named owner evidence in the SM-1/SW-1 section below. Deployed lifecycle
-  evidence remains separate; no native broker client was added to acceptance-tests.
-- Redis, TCP mapping/journal, ClickHouse and export inspection need supported fixture
-  boundaries. This inventory does not approve backend-port access or orphan cleanup.
-- Auth feature cases combine multiple endpoints. AU rows are checklists for those
-  sub-assertions, not permission to replace a whole row with one status check.
-- Existing green Cucumber reports are historical reference only. N3 requires current
-  new evidence, including Rabbit and Artemis for common WORK behavior.
+- NW-4 is implemented and passes on both local WORK adapters; its cross-node
+  Swarm/NFS execution remains outstanding. Local success does not establish NFS behavior.
+- N3 still requires the aggregate requirement/assertion review, including the raw
+  evidence availability gap above. Named owner tests cover CONTROL details; Redis,
+  TCP, ClickHouse and export observation boundaries are already established in the
+  corresponding sections below. No backend-port exception is implied.
+- N4 remains gated by N3. The preparation inventory is in the execution plan;
+  legacy code and fixtures have not been removed.
+- Existing green Cucumber reports are historical reference only. Common WORK
+  behavior requires evidence from both Rabbit and Artemis.
 
 ## Current execution evidence (N1 and first N2 slice)
 
@@ -1169,3 +1180,84 @@ No Docker deployment was performed by these checks. Log: `/tmp/sm2-shell-check.l
 No product/runtime changes or deployed E2E reruns in this correction. Existing deployed
 EX-3 and SM-2 evidence remains separately listed above. Changes await separate review,
 uncommitted. Matrix unchanged: 40 PASS / 1 OPEN (NW-4).
+
+
+### N3 preparation and evidence retention — 2026-09-18
+
+Reviewed EX-3/SM-2 committed as `cdf2be57`. Independent clean verify builds only the
+new framework and its eight reactor predecessors; 161 framework tests pass, no skips.
+Legacy E2E, application services and native adapters are absent from that reactor.
+Source/runner searches found no imports or calls into legacy; the existing Enforcer
+ban remains explicit. This is build/execution evidence, not the aggregate N3 review.
+
+The agent's unarchived clean deleted old `target/runs`; the availability note at the
+top applies to earlier raw artifact links. Surviving logs, partial audit summaries
+and original SM-2 provisioning records are preserved under
+`acceptance-tests/runs/historical-partial-20260918`. They are explicitly incomplete.
+The 42 supplied targets and SM-2 recipe now use `acceptance-tests/runs`. Git/Docker
+exclude that directory; TargetLoader still resolves the explicit setting and
+RunEvidence still owns writes. No runtime Java code or product setting changed.
+
+New executions, with full retained evidence under `acceptance-tests/runs`:
+
+| Check | Result | Run directory |
+| --- | --- | --- |
+| Public ingress health | PASS, 1 test | `platform-smoke-7425ed3e-380c-4abc-a4de-5cb40325f24e` |
+| Artemis HTTP lifecycle | PASS, 3 distinct HTTP results; 4 successful operations | `http-lifecycle-f4196bde-7147-4a65-8b71-3793805c9b45` |
+| Artemis target-state commands | PASS, 7 successful operations | `target-state-lifecycle-813f5493-cf21-4fbd-8f67-591cf7f5dcfb` |
+| Artemis failure-after-create cleanup | PASS, original deliberate exception preserved; CREATE/REMOVE succeeded | `failure-cleanup-1abc3d90-27b8-4336-848c-f1294e09e09e` |
+| Artemis streaming export | PASS, 32 snapshots through 15513ms; one exact twenty-record file before and after STOP | `clearing-export-streaming-be484a69-d891-4732-b4e4-45d3fbe0921d` |
+
+Every REMOVE has nonempty removedResources and empty remainingResources/errors;
+the suites verify registry absence and EX-3 verifies scenario/list cleanup. Final
+public swarm list is empty. No broker switch, product rebuild or remote deployment.
+Rabbit and the rest of the matrix were not replayed in this slice.
+
+Actual smoke artifacts and archived reports (six files) survived a subsequent
+module Maven clean byte-for-byte. JUnit reports and build/runner logs are archived
+under `runs/n3-readiness-20260918`. Six stubbed SM-2 shell variants also pass after
+the path change. An invocation with mistaken tag `export-streaming` failed explicitly
+with “No tests were executed”; the corrected `clearing-export-streaming` run above
+passed. The failed selection is not counted as deployed coverage.
+
+Coverage remains **40 historical PASS / 1 OPEN (NW-4)**. N3 additionally needs its
+aggregate review and resolution of historical raw-evidence availability; N4 remains
+blocked by N3. The execution plan records the legacy ownership inventory and read-only
+HiveForge prerequisites. New configuration/documentation changes await separate review.
+
+
+### NW-4 — local binding recovery on both WORK adapters, 2026-09-18
+
+User explicitly requested implementation and local deployment execution first;
+remote Swarm/NFS remains later. The new NetworkBindingRecoveryAcceptanceIT uses
+normal SwarmResource/LiveRun lifecycle and the existing independent HTTP proxy
+fixtures. CREATE applies the valid binding through the product resolver. Three
+captured HTTP results prove the owned processor uses the selected proxy address.
+
+After STOP the suite submits the deliberately malformed endpoint authority through
+NetworkBindingApi with canonical DTOs. It requires HTTP500 after the explicit apply
+wait bound, exact prior-binding equality including appliedAt, then three different
+successful HTTP results from a new tap after START. STOP precedes explicit clear;
+HTTP200 and GET404 are required, followed by normal verified REMOVE. No synthetic
+binding ownership/cleanup, port selection, native filesystem access or broker client.
+
+| Local WORK | Evidence under acceptance-tests/runs | Rejection | Traffic | Cleanup |
+| --- | --- | --- | --- | --- |
+| Artemis | `network-binding-recovery-3d7f1d27-1a7b-40a3-b465-e1a8f0c54cd2` | HTTP500 after10082ms, bound9000ms | 3 before +3 distinct after, exact previous binding retained | 6 SUCCEEDED operations; REMOVE16 resources, no remaining/errors; binding404 |
+| Rabbit | `network-binding-recovery-dc3295e7-2b28-4cde-a0ad-7ef68557e063` | HTTP500 after10049ms, bound9000ms | 3 before +3 distinct after, exact previous binding retained | 6 SUCCEEDED operations; REMOVE15 resources, no remaining/errors; binding404 |
+
+Final framework suite: **177 tests PASS**, no failures/errors/skips. The API tests
+preserve existing read/absence coverage and add canonical mutation transport plus
+raw rejection/denial responses. New assertion regressions reject wrong statuses,
+fast500, changed endpoint and changed appliedAt; target tests reject missing/invalid
+wait expectations or an insufficient request budget. No product code changed.
+
+Execution logs and JUnit reports are archived inside each new run directory; the
+Rabbit archive also contains the final177 framework test reports. Original logs:
+`/tmp/nw4-focused.log`, `/tmp/nw4-artemis.log`, `/tmp/nw4-rabbit.log`.
+Both adapter changes were explicit local setup after verifying an empty registry;
+Artemis WORK is restored afterward, Rabbit CONTROL unchanged. No remote deployment.
+
+Matrix: **40 PASS / 1 PARTIAL / 0 OPEN**. NW-4's local behavioral test is green;
+its cross-node NFS evidence is still missing. N3 aggregate acceptance and N4 legacy
+removal stay open. Implementation awaits separate review and is uncommitted.

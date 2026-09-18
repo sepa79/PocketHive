@@ -15,6 +15,10 @@ See [usage](../docs/USAGE.md#independent-acceptance-framework) for commands and 
 [responsibilities](../docs/architecture/acceptance-tests.md) for boundaries, and the
 [coverage ledger](../docs/ci/acceptance-coverage.md) for remaining replacement requirements.
 
+Local targets retain run artifacts in `acceptance-tests/runs` across Maven clean.
+See the [evidence contract](../docs/architecture/acceptance-tests.md#resp-acceptance-evidence)
+for ownership and retention; JUnit reports remain under `target`.
+
 Lifecycle coverage: HTTP processing, failure-after-create cleanup and commands at their target state. The HTTP fixture
 contains generator → processor → postprocessor; capture observes the processor result.
 The test verifies processed HTTP responses, canonical lifecycle results and removal.
@@ -279,3 +283,29 @@ the owned swarm/worker and rendered TCP request. The shared journal is never cle
 and mock mappings remain unchanged. All dependencies remain available if swarm
 removal cannot be confirmed. The source scenario contains list placeholders and must
 be prepared by the suite, not launched directly.
+
+
+### Binding apply and recovery (NW-4)
+
+Run `network-binding-recovery` with `targets/local-binding-recovery-artemis.properties`
+or `targets/local-binding-recovery-rabbit.properties` on the matching deployed WORK
+adapter. The test reuses the independent HTTP proxy fixture and the normal owned
+swarm lifecycle. Run proxy groups serially; their selected SUT/listener is a fixture,
+not an allocation pool.
+
+The suite verifies actual HTTP before and after rejection of an invalid HAProxy
+candidate, exact retention of the previous binding, then explicit clear and normal
+swarm removal. It uses a separate tap per traffic phase. `minimumRejectionDuration`
+is an explicit deployment expectation (local: nine seconds for a ten-second apply
+wait); `requestTimeout` must leave room for the server response and rollback. A
+client timeout, a fast validation error or changed retained binding fails the test.
+No native file or backend-port access is used. Local success verifies shared-volume
+behavior; the later remote run must separately establish cross-node NFS placement.
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-binding-recovery-artemis.properties network-binding-recovery
+```
+
+Binding/candidate/clear responses, elapsed rejection time and both traffic captures
+are retained under the explicit evidence directory. SwarmResource remains the cleanup
+owner after any assertion failure; the suite has no standalone binding cleanup path.

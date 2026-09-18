@@ -462,6 +462,8 @@ Framework component tests use their own HTTP stub; deployed tests use public ing
 ./run-acceptance-tests.sh acceptance-tests/targets/local-templating-artemis.properties templating
 ./run-acceptance-tests.sh acceptance-tests/targets/local-workers-artemis.properties worker-config
 ./run-acceptance-tests.sh acceptance-tests/targets/local-worker-overrides-artemis.properties worker-overrides
+# Binding rejection/rollback, real proxy traffic, and explicit clear (NW-4):
+./run-acceptance-tests.sh acceptance-tests/targets/local-binding-recovery-artemis.properties network-binding-recovery
 # On a stack already configured for Rabbit WORK:
 ./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
 ./run-acceptance-tests.sh acceptance-tests/targets/local-workers-rabbit.properties workers
@@ -496,7 +498,10 @@ rate, templating and history policies. A missing fixture fails the test, never s
 JUnit reports are in `acceptance-tests/target/surefire-reports` (framework) and
 `acceptance-tests/target/failsafe-reports` (deployed tests). Scenario, canonical operation and tap
 artifacts are written under the target's evidence directory, resolved relative to the
-target file. No authentication response or token is intentionally logged. Cleanup
+target file. Supplied local targets write to `acceptance-tests/runs`, outside Maven
+clean output and excluded from Git and Docker build contexts. Archive selected run
+directories together with their JUnit reports before manually deleting evidence.
+No authentication response or token is intentionally logged. Cleanup
 failure is reported alongside the original error, not discarded as a warning. Artifact
 write failures are retained and reported when the test scope closes, after resource
 cleanup; a broken evidence destination still makes the test fail.
