@@ -287,6 +287,31 @@ explicit choice: `REPLACE`, or edit and commit a renamed source bundle before
 new validation. The MCP and IDE never rewrite retained ZIP bytes or silently
 suffix an identity.
 
+### Worker OAuth authoring
+
+Author worker authentication in `authProfiles.yaml` and reference the selected
+profile from the request template's `authRef`. For OAuth, use
+`applyAs: HTTP_AUTHORIZATION_BEARER` and include the template's `serviceId`.
+This worker authentication is separate from the OAuth session used to connect a
+client to the MCP.
+
+After confirming the workflow requirements, submit the complete files to
+`scenario_workflow_generate` as `files[{path,content}]`. File contents and their
+UTF-8 digests are preserved without an auth-field mapper. Signed OAuth uses the
+[HTTP Signature profile contract](../AUTH-USER-GUIDE.md#oauth-http-signature):
+keep the exact `keyId`, explicit `scopes` list (including `[]`), optional
+`audience`, secret references, profile ID and Redis token key. Ordinary OAuth
+client-credentials and password-grant files use this same file-preserving flow.
+
+Review and commit the proposed files before the validation/upload lifecycle above.
+Generation and validation-ticket preparation do not validate signing settings or
+read secret references. The upload coordinator verifies the archive against the
+submitted manifest, then delegates bundle validation to Scenario Manager. Only
+an accepted owner result yields a validation receipt. Scenario Manager's structural
+checks do not prove that resolved keys, token exchange or provider behavior will
+succeed; those belong to worker runtime and environment verification. The removed
+Node wizard/import/clone/enrich APIs are not supported authoring paths.
+
 ## Owning documents
 
 - Java migration, tool, workflow, security, and acceptance specification:

@@ -1427,6 +1427,31 @@ The output registry delegates to it without requiring Rabbit/Redis output settin
 
 **Migration status:** Current B01 NONE composition.
 
+## RESP-MCP-CATALOGUE
+
+**Current owner:** `pockethive-mcp-service` `ToolCatalogue` publishes the canonical
+tool descriptors and versioned connected-skill content. `McpToolId` owns tool
+identifiers; the catalogue binds schemas, scopes, owner dispatch metadata and
+skill references to those identifiers.
+
+**Consumers:** MCP discovery/resources and the scope-enforcing invocation facade
+consume these descriptors. Skills guide clients through the existing owner APIs;
+they are not an additional auth-profile schema or validator.
+
+**Forbidden:** execute tools, call owner services, infer runtime configuration,
+resolve secrets, or duplicate worker auth and Scenario Manager validation.
+
+**Required effect:** each tool has one descriptor and discoverable skill content
+with its version and content digest. Auth authoring guidance preserves complete
+file contents and distinguishes proposals, owner validation and runtime acceptance.
+See [the MCP agent contract](../mcp/README.md#agent-contract).
+
+**Verification entrypoints:** `ToolCatalogueTest`, `McpToolExecutionIntegrationTest`,
+and `McpStreamableHttpIntegrationTest`.
+
+**Migration status:** documents the existing catalogue owner; no ownership transfer
+or tool/auth schema change.
+
 ## RESP-WORK-AUTH-RUNTIME
 
 **Current module(s):** `common/worker-sdk`.

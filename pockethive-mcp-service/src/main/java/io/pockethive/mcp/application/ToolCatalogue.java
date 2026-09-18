@@ -18,7 +18,7 @@ import java.util.stream.Collectors;
 /**
  * Responsibility: Publish the canonical MCP tool and connected-skill catalogue and schemas.
  * Must not: Execute tools, call owner services, or infer runtime configuration.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-CATALOGUE — docs/architecture/runtime-responsibilities.md#resp-mcp-catalogue.
  */
 public final class ToolCatalogue {
     private static final ToolCatalogue CANONICAL = buildCanonical();
@@ -320,7 +320,11 @@ public final class ToolCatalogue {
                 # Scenario Bundle authoring
 
                 Generate only after every applicable QA topic is user-provided, user-confirmed from a cited digest, explicitly not applicable with a reason, or mechanically derived from accepted inputs. `scenario_workflow_generate` returns a proposed file set; the client writes it into the active Git repository for human diff review and commit. Preserve every required regular file, including YAML/YML, JSON, CSV, SQL, shell, Markdown, templates, schemas, and fixtures. Never execute bundle content. Requirement or capability changes invalidate generated and validation evidence; a published workflow is immutable and changes require a new workflow.
-                """);
+
+                Author worker OAuth in `authProfiles.yaml` and reference its exact profile ID from a request template's `authRef` with `applyAs: HTTP_AUTHORIZATION_BEARER`. Include the template's required `serviceId`. Pass the complete YAML strings as `files[{path,content}]`; do not translate them into the removed wizard's auth fields. For `OAUTH2_HTTP_SIGNATURE`, preserve `tokenUrl`, `clientId`, `keyId`, `privateKey`, explicit `scopes` (including `[]`), optional `audience`, and the chosen profile ID and Redis token key. Use approved `env` or `file` references for secrets; never request or embed private-key material. Ordinary OAuth profiles keep their own fields and secret references. See `docs/AUTH-USER-GUIDE.md#oauth-http-signature` for the runtime contract.
+
+                Generation preserves proposed text; it does not resolve keys, contact an OAuth issuer or validate signed-profile semantics. Follow the git-publication skill to prepare a validation ticket, upload the exact committed ZIP, and read the owner's validation receipt. Scenario Manager owns structural bundle validation; the worker runtime owns resolved signing settings and token acquisition. Neither a generated proposal nor a validation ticket proves runtime or provider acceptance.
+                """, "1.1.0");
         addSkill(result, "git-publication", "Git bundle validation and publication",
             "Package, validate, and publish the exact committed mixed-file bundle safely.", """
                 # Git bundle validation and publication

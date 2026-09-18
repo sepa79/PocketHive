@@ -39,6 +39,9 @@ import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.MockedStatic;
 
@@ -669,6 +672,89 @@ class McpToolExecutionIntegrationTest {
                 "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"),
             Map.of("path", "templates/request.txt", "content", "  leading\ntrailing  \n", "sha256",
                 "sha256:dad8d8c12ed46c6ddc48b31f103d94d1a12af1df89492ffc9c94e27214771ec3"));
+    }
+
+    @ParameterizedTest(name = "{0}")
+    @MethodSource("oauthAuthoringProfiles")
+    void preservesOAuthProfilesAndBearerReferencesAsExactProposedFiles(String name, String profile) throws Exception {
+        ScenarioWorkflow workflow = fullyAnsweredWorkflow("wf-oauth-files", "as-oauth-files");
+        state.workflows.put(workflow.id(), workflow);
+        state.sessions.put("as-oauth-files",
+            AgentSession.open("as-oauth-files", PRINCIPAL, NOW, Duration.ofHours(1)));
+        when(owners.get("/scenario-manager/api/authoring-contract/fingerprint"))
+            .thenReturn(Map.of("fingerprint", "cap-oauth"));
+        String requestTemplate = """
+            protocol: HTTP
+            serviceId: default
+            callId: accounts
+            method: GET
+            pathTemplate: /accounts
+            authRef:
+              profileId: "tenant:api"
+              applyAs: HTTP_AUTHORIZATION_BEARER
+            """;
+        Map<String, String> authored = Map.of(
+            "authProfiles.yaml", profile,
+            "templates/http/default/accounts.yaml", requestTemplate);
+
+        @SuppressWarnings("unchecked")
+        Map<String, Object> generated = (Map<String, Object>) execute("scenario_workflow_generate", Map.of(
+            "workflowId", workflow.id(), "expectedRevision", workflow.revision(),
+            "files", authored.entrySet().stream()
+                .map(entry -> Map.of("path", entry.getKey(), "content", entry.getValue())).toList()));
+        @SuppressWarnings("unchecked")
+        List<Map<String, Object>> files = (List<Map<String, Object>>) generated.get("files");
+
+        assertThat(files).extracting(file -> file.get("path"))
+            .containsExactly("authProfiles.yaml", "templates/http/default/accounts.yaml");
+        for (Map<String, Object> file : files) {
+            String expected = authored.get(file.get("path"));
+            assertThat(file.get("content")).isEqualTo(expected);
+            assertThat(file.get("sha256")).isEqualTo("sha256:" + java.util.HexFormat.of().formatHex(
+                MessageDigest.getInstance("SHA-256").digest(expected.getBytes(java.nio.charset.StandardCharsets.UTF_8))));
+        }
+        assertThat(state.generatedFiles.get(workflow.id())).isEqualTo(files);
+        assertThat(workflow.state().name()).isEqualTo("GENERATED");
+        assertThat(generated).doesNotContainKeys("validationReceiptId", "receiptId");
+        org.mockito.Mockito.verifyNoInteractions(uploads);
+    }
+
+    private static java.util.stream.Stream<Arguments> oauthAuthoringProfiles() {
+        String shared = """
+            profiles:
+              "tenant:api":
+                type: %s
+                storage:
+                  mode: REDIS
+                  tokenKey: tenant-api
+                tokenUrl: https://issuer.example.test/oauth/token
+                clientId: " client+&=%%é "
+            """;
+        return java.util.stream.Stream.of(
+            Arguments.of("signed empty scopes and file reference", shared.formatted("OAUTH2_HTTP_SIGNATURE") + """
+                    keyId: " key-01 +/= "
+                    privateKey:
+                      file: /run/secrets/oauth-signing-key.pem
+                    scopes: []
+                """),
+            Arguments.of("signed scopes, audience and env reference", shared.formatted("oauth2-http-signature") + """
+                    keyId: provider-key-02
+                    privateKey:
+                      env: OAUTH_SIGNING_PRIVATE_KEY
+                    scopes: [accounts.read, payments.write]
+                    audience: "https://api.example.test/resource?a=+&b=%C3%A9"
+                """),
+            Arguments.of("ordinary client credentials", shared.formatted("OAUTH2_CLIENT_CREDENTIALS") + """
+                    clientSecret:
+                      env: ORDINARY_CLIENT_SECRET
+                    scope: accounts.read
+                """),
+            Arguments.of("ordinary password grant", shared.formatted("OAUTH2_PASSWORD_GRANT") + """
+                    username: example-user
+                    password:
+                      file: /run/secrets/ordinary-password
+                    scope: accounts.read
+                """));
     }
 
     @Test

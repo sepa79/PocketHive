@@ -1,6 +1,12 @@
 package io.pockethive.mcp.adapter.mcp;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.reset;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.when;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,21 +16,38 @@ import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.mcp.application.BundleUploadContract;
 import io.pockethive.mcp.application.BundleUploadCoordinator;
 import io.pockethive.mcp.application.OwnerApiPort;
+import io.pockethive.mcp.application.OwnerValidationResult;
 import io.pockethive.mcp.application.PreparedUpload;
+import io.pockethive.mcp.application.ScenarioBundleOwnerPort;
 import io.pockethive.mcp.application.ValidationUploadTicket;
 import io.pockethive.mcp.domain.BundleFileManifest;
 import io.pockethive.mcp.domain.PrincipalKey;
+import io.pockethive.mcp.domain.QaRequirementTopic;
 import io.pockethive.mcp.domain.SourceMetadata;
 import io.pockethive.mcp.domain.SourceVerification;
+import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipOutputStream;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -79,6 +102,7 @@ class McpStreamableHttpIntegrationTest {
 
     @LocalServerPort int port;
     @Autowired BundleUploadCoordinator uploads;
+    @Autowired ScenarioBundleOwnerPort bundleOwner;
     private final HttpClient client = HttpClient.newHttpClient();
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -479,6 +503,161 @@ class McpStreamableHttpIntegrationTest {
         delete("qa-token", REVISION, transportSessionId);
     }
 
+    @ParameterizedTest
+    @CsvSource({"true,env,false", "false,file,true"})
+    void preservesSignedOAuthFilesThroughUploadAndWaitsForOwnerValidation(
+        boolean accepted, String secretSource, boolean audiencePresent) throws Exception {
+        reset(bundleOwner);
+        HttpResponse<String> initialized = post(initialize(REVISION), "qa-token", REVISION, null,
+            "http://127.0.0.1:" + port);
+        String transport = initialized.headers().firstValue(HttpHeaders.MCP_SESSION_ID).orElseThrow();
+        CountDownLatch ownerCalled = new CountDownLatch(1);
+        CountDownLatch ownerMayReturn = new CountDownLatch(1);
+        AtomicReference<byte[]> ownerArchive = new AtomicReference<>();
+        try {
+            post("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}",
+                "qa-token", REVISION, transport, "http://127.0.0.1:" + port);
+            JsonNode session = callTool(transport, "agent_session_create", Map.of());
+            JsonNode workflow = callTool(transport, "scenario_workflow_create", Map.of(
+                "agentSessionId", session.path("agentSessionId").asText(), "expectedSessionRevision", 0));
+            String workflowId = workflow.path("workflowId").asText();
+            for (QaRequirementTopic topic : QaRequirementTopic.values()) {
+                JsonNode question = callTool(transport, "scenario_workflow_question", Map.of(
+                    "workflowId", workflowId, "topic", topic.name()));
+                workflow = callTool(transport, "scenario_workflow_answer_submit", Map.of(
+                    "workflowId", workflowId, "expectedRevision", question.path("workflowRevision").asLong(),
+                    "topic", topic.name(), "questionId", question.path("questionId").asText(),
+                    "requestedSchemaDigest", question.path("requestedSchemaDigest").asText(),
+                    "disposition", "USER_PROVIDED",
+                    "answer", "Verify signed OAuth file preservation and owner validation: " + topic.name()));
+            }
+
+            String reference = secretSource.equals("env") ? "SIGNING_KEY_TEST" : "/run/secrets/signing-test.pem";
+            String authProfile = """
+                profiles:
+                  signed-http:
+                    type: OAUTH2_HTTP_SIGNATURE
+                    storage: { mode: REDIS, tokenKey: signed-http-test }
+                    tokenUrl: https://issuer.example/oauth/token
+                    clientId: client-test
+                    keyId: "key +/="
+                    privateKey: { %s: "%s" }
+                    scopes: []
+                """.formatted(secretSource, reference)
+                + (audiencePresent ? "    audience: \"https://resource.example/a?x=+&y=1\"\n" : "");
+            Map<String, String> authored = new LinkedHashMap<>();
+            authored.put("scenario.yaml", """
+                protocolVersion: "2.0.0"
+                id: signed-http
+                name: Signed HTTP
+                template:
+                  image: ctrl-image:latest
+                  bees: []
+                """);
+            authored.put("authProfiles.yaml", authProfile);
+            authored.put("templates/http/accounts/get.yaml", """
+                protocol: HTTP
+                serviceId: accounts
+                callId: get
+                method: GET
+                pathTemplate: /accounts
+                headersTemplate: {}
+                bodyTemplate: ""
+                authRef: { profileId: signed-http, applyAs: HTTP_AUTHORIZATION_BEARER }
+                """);
+            JsonNode generated = callTool(transport, "scenario_workflow_generate", Map.of(
+                "workflowId", workflowId, "expectedRevision", workflow.path("revision").asLong(),
+                "files", authored.entrySet().stream()
+                    .map(entry -> Map.of("path", entry.getKey(), "content", entry.getValue())).toList()));
+            Map<String, String> returnedFiles = new LinkedHashMap<>();
+            List<Map<String, Object>> manifest = new ArrayList<>();
+            for (JsonNode file : generated.path("files")) {
+                returnedFiles.put(file.path("path").asText(), file.path("content").asText());
+                manifest.add(Map.of("path", file.path("path").asText(),
+                    "byteCount", file.path("content").asText().getBytes(StandardCharsets.UTF_8).length,
+                    "sha256", file.path("sha256").asText()));
+            }
+            assertThat(returnedFiles).containsExactlyInAnyOrderEntriesOf(authored);
+            workflow = callTool(transport, "scenario_workflow_get", Map.of("workflowId", workflowId));
+            assertThat(workflow.path("state").asText()).isEqualTo("GENERATED");
+            assertThat(workflow.path("validation").isNull()).isTrue();
+            Map<String, Object> source = Map.of("repository", "https://git.example/signed-http",
+                "commit", "a".repeat(40), "bundlePath", "scenarios/signed-http", "verification", "CLIENT_ASSERTED");
+            JsonNode ticket = callTool(transport, "scenario_bundle_validation_prepare", Map.of(
+                "workflowId", workflowId, "expectedRevision", workflow.path("revision").asLong(),
+                "source", source, "fileManifest", manifest));
+            assertThat(ticket.has("validationReceipt")).isFalse();
+            verifyNoInteractions(bundleOwner);
+
+            byte[] archive = zipFiles(returnedFiles);
+            String ownerDigest = "sha256:" + "b".repeat(64);
+            when(bundleOwner.validate(any(Path.class))).thenAnswer(invocation -> {
+                ownerArchive.set(Files.readAllBytes(invocation.getArgument(0, Path.class)));
+                ownerCalled.countDown();
+                assertThat(ownerMayReturn.await(10, TimeUnit.SECONDS)).isTrue();
+                return new OwnerValidationResult(accepted, "signed-http", "Signed HTTP", ownerDigest,
+                    Map.of("valid", accepted));
+            });
+            // The fixture exercises the selected module HTTP interface; no deployed ingress is contacted.
+            URI uploadUrl = URI.create("http://127.0.0.1:" + port
+                + URI.create(ticket.path("uploadUrl").asText()).getPath());
+            HttpRequest uploadRequest = HttpRequest.newBuilder(uploadUrl)
+                .header("Content-Type", "application/zip")
+                .header(BundleUploadContract.UPLOAD_CAPABILITY_HEADER, ticket.path("uploadCapability").asText())
+                .PUT(HttpRequest.BodyPublishers.ofByteArray(archive)).build();
+            var pending = client.sendAsync(uploadRequest, HttpResponse.BodyHandlers.ofString());
+            assertThat(ownerCalled.await(10, TimeUnit.SECONDS)).isTrue();
+            assertThat(ownerArchive.get()).containsExactly(archive);
+            JsonNode waiting = callTool(transport, "scenario_workflow_get", Map.of("workflowId", workflowId));
+            assertThat(waiting.path("state").asText()).isEqualTo("GENERATED");
+            assertThat(waiting.path("validation").isNull()).isTrue();
+            assertThat(pending.isDone()).isFalse();
+            ownerMayReturn.countDown();
+            HttpResponse<String> uploaded = pending.get(10, TimeUnit.SECONDS);
+            JsonNode outcome = mapper.readTree(uploaded.body());
+            if (accepted) {
+                assertThat(uploaded.statusCode()).isEqualTo(200);
+                JsonNode receipt = outcome.path("validationReceipt");
+                assertThat(receipt.path("receiptId").asText()).startsWith("vr-");
+                assertThat(receipt.path("archiveDigest").asText()).isEqualTo("sha256:"
+                    + HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(archive)));
+                assertThat(receipt.path("bundleContentDigest").asText()).isEqualTo(ownerDigest);
+                assertThat(receipt.path("source")).isEqualTo(mapper.valueToTree(source));
+                assertThat(callTool(transport, "scenario_bundle_validation_receipt_get",
+                    Map.of("receiptId", receipt.path("receiptId").asText()))).isEqualTo(receipt);
+            } else {
+                assertThat(uploaded.statusCode()).isEqualTo(400);
+                assertThat(outcome.path("code").asText()).isEqualTo("SCENARIO_BUNDLE_VALIDATION_FAILED");
+                assertThat(outcome.has("validationReceipt")).isFalse();
+            }
+            JsonNode completed = callTool(transport, "scenario_workflow_get", Map.of("workflowId", workflowId));
+            assertThat(completed.path("state").asText()).isEqualTo(accepted ? "VALIDATED" : "GENERATED");
+            assertThat(completed.path("validation").isNull()).isEqualTo(!accepted);
+            verify(bundleOwner).validate(any(Path.class));
+        } finally {
+            ownerMayReturn.countDown();
+            delete("qa-token", REVISION, transport);
+            reset(bundleOwner);
+        }
+    }
+
+    private JsonNode callTool(String transport, String name, Map<String, Object> arguments) throws Exception {
+        return toolResult(post(toolCall(81, name, arguments), "qa-token", REVISION, transport,
+            "http://127.0.0.1:" + port));
+    }
+
+    private static byte[] zipFiles(Map<String, String> files) throws Exception {
+        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+        try (ZipOutputStream zip = new ZipOutputStream(bytes)) {
+            for (var file : files.entrySet()) {
+                zip.putNextEntry(new ZipEntry(file.getKey()));
+                zip.write(file.getValue().getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
+        }
+        return bytes.toByteArray();
+    }
+
     private HttpResponse<String> post(String body, String token, String revision,
                                       String sessionId, String origin) throws Exception {
         HttpRequest.Builder request = HttpRequest.newBuilder(URI.create("http://127.0.0.1:" + port + "/mcp"))
@@ -583,6 +762,9 @@ class McpStreamableHttpIntegrationTest {
             return new OwnerApiPort() {
                 @Override
                 public Object get(String path) {
+                    if ("/scenario-manager/api/authoring-contract/fingerprint".equals(path)) {
+                        return Map.of("fingerprint", "signed-http-contract-test");
+                    }
                     if ("/scenario-manager/api/capabilities?all=true".equals(path)) {
                         return List.of(Map.of("role", "generator"));
                     }
@@ -607,6 +789,12 @@ class McpStreamableHttpIntegrationTest {
                     throw new IllegalArgumentException("unexpected owner DELETE path");
                 }
             };
+        }
+
+        @Bean
+        @Primary
+        ScenarioBundleOwnerPort signedOAuthBundleOwner() {
+            return mock(ScenarioBundleOwnerPort.class);
         }
 
         @Bean
