@@ -20,7 +20,6 @@ headerTemplate: "H|ISSUER-PL|MASTERCARD|{{ now }}"
 recordTemplate: "D|{{ steps.selected.json.clearingId }}|{{ steps.selected.json.panMasked }}|{{ steps.selected.json.amountMinor }}|{{ steps.selected.json.currency }}|{{ steps.selected.json.responseCode }}"
 footerTemplate: "T|{{ recordCount }}"
 
-localTargetDir: "/tmp/pockethive/clearing-out"
 localTempSuffix: ".tmp"
 writeManifest: true
 localManifestPath: "reports/clearing/manifest.jsonl"

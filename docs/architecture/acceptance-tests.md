@@ -558,3 +558,58 @@ substitutes only owned list identifiers and writes its template/SUT through publ
 APIs. Both producer-only keys are reserved before CREATE; the five source lists are
 seeded only while workers are confirmed disabled. The producer-only keys may remain absent until the loop writes
 into them. The swarm is removed before deleting any dataset key or scenario.
+
+## Export observation in the swarm runtime directory (EX-1..3)
+
+Human direction, 2026-09-18: output belongs inside the swarm's own directory. The
+previous proposal for a separate exportHostRoot/exportWorkerRoot and a new bind mount
+is withdrawn. Reuse the existing shared runtime filesystem mount.
+
+Implemented path ownership: RuntimeFilesystemLayout owns the local and published
+worker-output directory below the existing swarm/run directory:
+
+```text
+<runtime-root>/<swarmId>/<runId>/outputs/<workerInstance>/
+```
+
+Human direction, 2026-09-18: this is mandatory for every exporter, including after
+config-update. ClearingExportStorageConfiguration derives the directory from runtime
+identity and the existing mount, then supplies it to LocalDirectoryClearingExportSink.
+localTargetDir is removed from worker configuration and capabilities. RuntimeOutputDirectory
+is an immutable path projection; file names and manifest paths must stay within it.
+Run and worker identity prevent unrelated runs/exporters sharing filenames.
+
+Test observation will use the same layout projected onto the explicitly selected
+host-visible runtime root. It must not reconstruct the layout, discover container
+internals or infer a remote-host path. No separate mount or export root is introduced.
+The output observer and deployed EX-1..3 cases remain to be implemented.
+
+Discovery: ClearingExportWorkerImpl returns no output WorkItem. Its batch writer
+publishes file lifecycle metadata/counters, not file bytes. The optional JSONL export
+manifest is also metadata, not content proof. Orchestrator/MCP has no finalized-file
+download interface. No new product API is proposed merely for E2E observation.
+
+Cleanup remains owned by the existing swarm lifecycle. FilesystemSwarmRemoveStore
+already deletes the whole swarm runtime directory through RuntimeFilesystemLayout.
+Therefore tests must validate finalized file contents and save evidence BEFORE REMOVE;
+they must not add another output-directory deleter or try to inspect files after the
+swarm directory has been removed. Verify cleanup through the canonical REMOVE result.
+
+### Implementation sequence
+
+1. DONE (code and component verification): integrate mandatory output location with
+   the existing layout and exporter composition. Deployed verification remains pending.
+2. Add explicit local output observation for the selected runtime root. Keep normal
+   lifecycle, fresh worker/config and journal access through ingress. The earlier
+   ingress-only rule question applies to direct file observation; the user's location
+   decision does not authorize container inspection or remote-host access.
+3. Independently author Rabbit/Artemis fixtures with exactly20 distinct input records.
+   EX-1: two finalized text files of ten records; verify exact record union, headers
+   and footers. EX-2: applied structured config/schema and two XML files of ten records,
+   checked with standard XML parsing and concrete expected values/totals.
+4. EX-3: set record limit above20 and require one file finalized by the time window,
+   containing all20 records and footer BEFORE STOP, so shutdown cannot stand in for
+   the time trigger. For every mode verify no temporary files remain at completion.
+5. Save observed content as test evidence, remove the swarm normally, then verify
+   canonical cleanup. Run both WORK adapters before marking EX rows PASS. Remote
+   Swarm/NFS work remains deferred NW-4; no remote filesystem workaround is implied.

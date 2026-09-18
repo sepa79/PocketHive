@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.controlplane.filesystem.RuntimeOutputDirectory;
+
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Instant;
@@ -7,6 +9,9 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class LocalDirectoryClearingExportSinkTest {
 
@@ -15,7 +20,7 @@ class LocalDirectoryClearingExportSinkTest {
 
   @Test
   void writesFileAndAppendsManifestWhenEnabled() throws Exception {
-    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
+    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink(new RuntimeOutputDirectory(tempDir));
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
@@ -30,7 +35,6 @@ class LocalDirectoryClearingExportSinkTest {
         "H",
         "D",
         "T",
-        tempDir.toString(),
         ".tmp",
         true,
         "reports/clearing/manifest.jsonl",
@@ -61,7 +65,7 @@ class LocalDirectoryClearingExportSinkTest {
 
   @Test
   void finalizeStreamingIsIdempotentAndDoesNotDuplicateFooter() throws Exception {
-    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
+    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink(new RuntimeOutputDirectory(tempDir));
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
         true,
@@ -75,7 +79,6 @@ class LocalDirectoryClearingExportSinkTest {
         "H",
         "D",
         "T",
-        tempDir.toString(),
         ".tmp",
         false,
         "reports/clearing/manifest.jsonl",
@@ -107,7 +110,7 @@ class LocalDirectoryClearingExportSinkTest {
 
   @Test
   void finalizeStreamingMovesTempFileAtomicallyToFinalLocation() throws Exception {
-    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink();
+    LocalDirectoryClearingExportSink sink = new LocalDirectoryClearingExportSink(new RuntimeOutputDirectory(tempDir));
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
         true,
@@ -121,7 +124,6 @@ class LocalDirectoryClearingExportSinkTest {
         "H",
         "D",
         "T",
-        tempDir.toString(),
         ".tmp",
         false,
         "reports/clearing/manifest.jsonl",
@@ -143,5 +145,40 @@ class LocalDirectoryClearingExportSinkTest {
     assertThat(Files.exists(tempDir.resolve("stream.dat.tmp"))).isFalse();
     assertThat(Files.exists(tempDir.resolve("stream.dat"))).isTrue();
     assertThat(Files.readString(tempDir.resolve("stream.dat"))).isEqualTo("H|x\nD|one\nT|1\n");
+  }
+  @ParameterizedTest
+  @ValueSource(strings = {"../outside.dat", "/tmp/outside.dat"})
+  void rejectsEscapingFileNamesBeforeWriting(String name) {
+    Path output = tempDir.resolve("outputs");
+    var sink = new LocalDirectoryClearingExportSink(
+        new RuntimeOutputDirectory(output));
+    var config = manifestConfig("reports/manifest.jsonl");
+    var file = new ClearingRenderedFile(name, "content", 1, Instant.EPOCH);
+
+    assertThatThrownBy(() -> sink.writeFile(config, file)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> sink.openStreamingFile(config, name, "H", "\n"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(output).doesNotExist();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"../outside.jsonl", "/tmp/outside.jsonl"})
+  void rejectsEscapingManifestBeforeWritingBatchOrOpeningStream(String manifest) {
+    Path output = tempDir.resolve("outputs");
+    var sink = new LocalDirectoryClearingExportSink(
+        new RuntimeOutputDirectory(output));
+    var config = manifestConfig(manifest);
+    var file = new ClearingRenderedFile("clearing.dat", "content", 1, Instant.EPOCH);
+
+    assertThatThrownBy(() -> sink.writeFile(config, file)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> sink.openStreamingFile(config, "clearing.dat", "H", "\n"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThat(output).doesNotExist();
+  }
+
+  private ClearingExportWorkerConfig manifestConfig(String manifest) {
+    return new ClearingExportWorkerConfig("template", false, 0L, 10, 1000L, 100,
+        true, "\n", "out.dat", "H", "D", "T", ".tmp", true, manifest,
+        "/tmp/schemas", null, null);
   }
 }

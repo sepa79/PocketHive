@@ -823,3 +823,28 @@ matched to owned keys for each customer/stage, including return RED. The regress
 rejects another customer's list for each of five customers. Red/green evidence plus
 142 passing framework tests and both Rabbit/Artemis deployed runs are recorded in
 the coverage ledger. Product behavior unchanged; correction not committed.
+
+### 2026-09-18 — DA-4 committed; export layout corrected by human decision
+
+DA-4 committed as ea4f428d. EX-1..3 still require actual finalized-file observation.
+The human requires output inside the swarm directory. The proposed separate test
+export root/mount is withdrawn; use the existing shared runtime filesystem, with one
+output-path projection owned by RuntimeFilesystemLayout. The target run/worker-scoped
+shape and integration sequence are documented in acceptance architecture.
+
+FilesystemSwarmRemoveStore already recursively removes the swarm runtime directory.
+Read/validate/export evidence before REMOVE; do not introduce a second test cleanup
+owner. This correction changes the plan only, not runtime output behavior. Direct
+local-file observation remains distinct from container inspection/remote access.
+Matrix remains36 PASS/5 OPEN; NW-4 remains last.
+
+### EX runtime output implementation — 2026-09-18
+
+Human clarified mandatory swarm-owned output for every exporter, including config-update.
+RuntimeFilesystemLayout now projects swarm/run/worker output directories; exporter
+composition supplies the immutable projection directly to the existing sink.
+Removed localTargetDir from configuration, capabilities and active demo scenarios.
+File and manifest paths cannot escape the runtime output directory. Existing REMOVE
+owns deletion, including pending/finalized output; no second cleanup path added.
+69 focused tests passed: 57 exporter, 9 filesystem/layout/removal and 3 import-boundary
+tests, including rejection before IO for escaping file/manifest paths. No redeployment yet; EX-1..3 and matrix remain OPEN.

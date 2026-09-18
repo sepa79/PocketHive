@@ -1616,6 +1616,13 @@ Existing sink adapters consume the projected transaction; upstream protocol outc
 
 ClearingExportWorkerImpl coordinates batch records; StructuredRecordProjector maps/validates record fields; ClearingExportFileAssembler renders file content/name and delegates XML formatting.
 
+Output location is runtime-owned, not scenario configuration: `ClearingExportStorageConfiguration`
+uses `RuntimeFilesystemLayout` with the mounted container root and current swarm/run/worker
+identity. `LocalDirectoryClearingExportSink` receives that immutable directory. The
+`localTargetDir` field is removed; config updates cannot change the base directory.
+File names, temporary suffixes and manifest paths must resolve inside that directory.
+No migration or compatibility alias is provided. Relative manifest subdirectories remain supported.
+
 The existing batch writer owns file persistence; TemplateRenderer owns expression evaluation. Record mapping and final file assembly are distinct steps.
 
 **Forbidden:** make rendering helpers persist files or create a second template evaluator.
@@ -2261,3 +2268,25 @@ Orchestrator debug service. Explicit close releases the divert, queue, address a
 address settings; it reports management failures. This is not a crash-recovery or
 orphan-cleanup mechanism: broker-side divert/settings may remain after process loss.
 Both Rabbit and Artemis observations currently omit oldest-message age.
+
+## RESP-RUNTIME-FILESYSTEM-LAYOUT
+
+**Current module:** `common/control-plane-filesystem`; environment names and container
+root are declared by `RuntimeFilesystemContract` in `common/swarm-model`.
+
+`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation and
+worker-output paths. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
+The local and published views derive from the same relative path; consumers must not
+reconstruct that path or introduce a second output root. `RuntimeFilesystemMount`
+owns host-to-container mounts. The layout does not create, read or delete files.
+
+`FilesystemSwarmRemoveStore.deleteSwarmRuntime` remains the existing deletion owner
+for the complete swarm tree, including worker outputs. File observers must collect
+content before REMOVE. Clearing exporter composition consumes this projection directly; scenarios do not own
+the output root. `RuntimeOutputDirectory` is its immutable projection for resolving
+relative file names inside a single worker output directory.
+
+**Forbidden:** environment discovery, file IO or lifecycle decisions in the layout;
+consumer-local reconstruction of output paths; a second output-directory cleanup owner.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
