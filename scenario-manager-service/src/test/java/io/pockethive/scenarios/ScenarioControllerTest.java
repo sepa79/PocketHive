@@ -600,7 +600,7 @@ class ScenarioControllerTest {
             .andExpect(jsonPath("$.ok").value(false))
             .andExpect(jsonPath("$.validation.scenarioProtocolVersion").value("1.3.0"))
             .andExpect(jsonPath("$.validation.supportedScenarioProtocolVersion").value("2.0.0"))
-            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value("0.15.35"))
+            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value("0.15.36"))
             .andExpect(jsonPath("$.validation.artifactDigest", org.hamcrest.Matchers.startsWith("sha256:")))
             .andExpect(jsonPath("$.findings[0].message", org.hamcrest.Matchers.containsString("incompatible")));
     }

@@ -2,6 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.15.36]
+Timestamp: 2026-08-14T14:53:59Z
+
+- HTTP Sequence targeting: allow each step to select an enriched SUT HTTP
+  endpoint with `sutEndpointId` or declare an explicit literal `baseUrl`, while
+  unchanged steps continue to use the existing worker-level `baseUrl`.
+- Fail-closed overrides: reject mutually exclusive, unknown, incompatible, or
+  invalid step targets without falling back to the worker target, and resolve
+  every declared base target before execution so invalid later overrides cannot
+  cause partial traffic.
+- URL containment: preserve configured base paths when joining rendered request
+  paths and reject literal, encoded, mixed, and repeatedly encoded traversal
+  segments before HTTP I/O, including encoded slash and backslash separators.
+- Contracts and adoption: publish the additive HTTP Sequence capability fields,
+  retain scenario protocol `2.0.0`, document target precedence and templating,
+  and add a multi-endpoint acceptance scenario covering worker, SUT, and
+  hardcoded targets.
+- Verification: pass 60 HTTP Sequence tests, kill all 84 configured PIT mutants
+  with 100% test strength, and prove the rebuilt image through the official
+  PocketHive ingress with exact receiver-side authority and zero-traffic
+  traversal evidence.
+- Release: bump PocketHive patch version to 0.15.36 for HTTP Sequence
+  multi-endpoint targeting and fail-closed URL containment.
+
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 

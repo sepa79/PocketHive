@@ -382,6 +382,6 @@ test("Scenario Manager validation and claim matrix react to artifact mutation", 
 const validationEvidence = {
   scenarioProtocolVersion: "2.0.0",
   supportedScenarioProtocolVersion: "2.0.0",
-  scenarioManagerVersion: "0.15.35",
+  scenarioManagerVersion: "0.15.36",
   artifactDigest: "sha256:test",
 };
