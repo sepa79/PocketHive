@@ -38,4 +38,18 @@ class ScenarioApiTest {
     }
   }
 
+  @Test
+  void copiesJsonSchemaWithoutDoubleEncodingAndSurfacesRejection() throws Exception {
+    var schema = new com.fasterxml.jackson.databind.ObjectMapper().readTree("{\"schemaId\":\"owned\",\"recordMapping\":{}}");
+    String path = "/scenario-manager/scenarios/owned%2Fone/schema?path=clearing-schemas%2Fcase%201%2Fschema.json";
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
+      ingress.replyWith("PUT", path, 204, request -> { assertEquals(schema, request); return Map.of(); });
+      ingress.reply("GET", path, 200, schema);
+      ingress.reply("PUT", path, 403, Map.of());
+      var api = new ScenarioApi(http, "");
+      api.writeSchema("owned/one", "clearing-schemas/case 1/schema.json", schema);
+      assertEquals(schema, api.readSchema("owned/one", "clearing-schemas/case 1/schema.json"));
+      assertThrows(ApiException.class, () -> api.writeSchema("owned/one", "clearing-schemas/case 1/schema.json", schema));
+    }
+  }
 }

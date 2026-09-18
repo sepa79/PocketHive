@@ -5,7 +5,7 @@ import java.io.IOException;
 import io.pockethive.swarm.model.SutEnvironment;
 
 /**
- * Responsibility: map scenario CRUD and bundle template/SUT content through ingress.
+ * Responsibility: map scenario CRUD and bundle schema/template/SUT content through ingress.
  * Must not: validate product identifiers, create fallback fixtures or infer worker settings.
  * Contract: RESP-ACCEPTANCE-API — docs/architecture/acceptance-tests.md#resp-acceptance-api.
  */
@@ -29,6 +29,13 @@ public final class ScenarioApi {
   }
   public ApiResponse delete(String id) throws IOException, InterruptedException {
     return http.request("DELETE", path(id), null, token);
+  }
+  public JsonNode readSchema(String id, String schemaPath) throws IOException, InterruptedException {
+    return http.tree(http.request("GET", path(id) + "/schema?path=" + ApiSurface.pathSegment(schemaPath),
+        null, token).expect(200));
+  }
+  public void writeSchema(String id, String schemaPath, JsonNode schema) throws IOException, InterruptedException {
+    http.request("PUT", path(id) + "/schema?path=" + ApiSurface.pathSegment(schemaPath), schema, token).expect(204);
   }
   public String readTemplate(String id, String templatePath) throws IOException, InterruptedException {
     return http.request("GET", templatePath(id, templatePath), null, token, "text/plain").expect(200).body();

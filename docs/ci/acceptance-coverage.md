@@ -37,7 +37,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | WebAuthLoopAcceptanceIT: five owned customers, exact TCP XML/response and ordered RED/BAL/TOP/RED per customer; Rabbit and Artemis, seven-key verified cleanup | PASS |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Exact finalized file content under canonical swarm/run/worker runtime directory | PASS |
-| EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Assert config, file content/type/count | OPEN |
+| EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Applied config/schema; exact XML IDs, amounts, counts and totals | PASS |
 | EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
 | AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
 | AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | AuthReadAcceptanceIT: nine additional protected read routes, anonymous 401 and authenticated 200 | PASS |
@@ -1030,3 +1030,29 @@ No product behavior change was needed for acceptance.
 
 Local base restored to Artemis WORK / Rabbit CONTROL. New EX-1 changes are uncommitted
 and await separate review. Matrix: **37 PASS, 0 PARTIAL, 4 OPEN**: EX-2,EX-3,SM-2,NW-4.
+
+### EX-2 — structured XML output, 2026-09-18
+
+Reviewed EX-1 committed as `b7552ea8`. EX-2 reuses its lifecycle, resource handles and
+format-neutral ExportFiles observer. ScenarioApi maps existing schema GET/PUT routes;
+no new product API or service dependency. The owned scenario receives an independently
+authored JSON clearing schema through ingress with read-back equality before CREATE.
+Fresh stopped/disabled workers report structured mode, schema id/version/root and
+batch size10 before twenty inputs are seeded.
+
+Both adapters produced two XML files, each containing ten records. Standard XML
+parsing verified exact twenty distinct IDs (including `<&>`), amounts1..20, marker,
+record counts and per-file totals. Content was verified before and after STOP.
+
+| WORK | Evidence under acceptance-tests/target/runs | Cleanup |
+|---|---|---|
+| Artemis | `clearing-export-xml-636c41d4-d06c-456b-a332-2d8e85f17488` | 4 SUCCEEDED operations,20 Redis keys absent,scenario404 |
+| Rabbit | `clearing-export-xml-c9575f78-f9a6-468e-b035-38dcdd287c9b` | 4 SUCCEEDED operations,20 Redis keys absent,scenario404 |
+
+151 framework tests pass. New negative assertions reject corrupt amounts/totals/counts
+and duplicate/unknown IDs; API tests verify JSON is not double-encoded and rejection
+is propagated. Focused import-boundary tests pass. Logs: `/tmp/export-ex2-unit.log`,
+`/tmp/export-ex2-artemis.log`, `/tmp/export-ex2-rabbit.log`. EX-1 unit assertions also
+passed after sharing the flow; deployed EX-1 was not repeated.
+Local Artemis WORK restored, public swarm registry empty. EX-2 remains uncommitted
+for separate review. Matrix: **38 PASS, 0 PARTIAL, 3 OPEN**: EX-3,SM-2,NW-4.

@@ -863,3 +863,13 @@ Local rebuild note: build-hive.sh built the requested exporter/Scenario Manager 
 but partial compose-up included dynamic worker clearing-export, which is not a Compose
 service. Completed the already-built Scenario Manager restart with compose. No script
 refactor included in this test slice.
+
+### 2026-09-18 — EX-1 committed; EX-2 implemented
+
+EX-1 committed as `b7552ea8`. EX-2 proves applied structured config/schema and two
+actual XML files of ten records on Rabbit and Artemis, with exact IDs/amounts and
+per-file totals. Existing observation, lifecycle and cleanup reused.151 framework
+tests pass, both runs cleaned20 Redis keys and their scenario after successful REMOVE.
+Artifacts/logs recorded in coverage ledger. Artemis restored. New EX-2 changes await
+separate review, uncommitted. No product changes or fresh deployment needed.
+Matrix38 PASS/3 OPEN: EX-3(streaming window),SM-2(fresh deployment),NW-4(remote Swarm last).

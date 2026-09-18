@@ -24,15 +24,20 @@ import org.junit.jupiter.api.Test;
 /**
  * Responsibility: verify actual finalized clearing files from twenty distinct owned inputs.
  * Must not: reconstruct output paths, implement exporter formatting or delete runtime files.
- * Contract: RESP-ACCEPTANCE-EXPORT-FILES — docs/architecture/acceptance-tests.md#resp-acceptance-export-files; EX-1.
+ * Contract: RESP-ACCEPTANCE-EXPORT-FILES — docs/architecture/acceptance-tests.md#resp-acceptance-export-files; EX-1/EX-2.
  */
-@Tag("clearing-export")
 class ClearingExportAcceptanceIT {
-  @Test void twentyRecordsProduceTwoCompleteTextFiles() throws Exception {
+  @Test @Tag("clearing-export")
+  void twentyRecordsProduceTwoCompleteTextFiles() throws Exception { verify(false); }
+
+  @Test @Tag("clearing-export-xml")
+  void twentyRecordsProduceTwoStructuredXmlFiles() throws Exception { verify(true); }
+
+  private void verify(boolean structured) throws Exception {
     var target = TargetLoader.loadExport(TargetLoader.selectedFile());
     String nonce = UUID.randomUUID().toString();
-    List<String> expected = IntStream.range(0, 20).mapToObj(i -> nonce + "-record-" + i).toList();
-    try (var run = LiveRun.open("clearing-export", target.lifecycle())) {
+    List<String> expected = IntStream.range(0, 20).mapToObj(i -> nonce + "-record-" + i + (structured ? "<&>" : "")).toList();
+    try (var run = LiveRun.open(structured ? "clearing-export-xml" : "clearing-export", target.lifecycle())) {
       var lists = IntStream.range(0, 20).mapToObj(i -> new RedisListResource(run.redis(target.connectionId()), run.evidence)).toList();
       var scenario = new ScenarioResource("acceptance-clearing-" + UUID.randomUUID(), run.scenarios, run.evidence);
       var swarm = run.newSwarm();
@@ -47,6 +52,13 @@ class ClearingExportAcceptanceIT {
         run.evidence.record("owned-fixture", owned);
         run.evidence.record("expected-records", expected);
         scenario.create(owned, run.scenarios).expect(201);
+        if (structured) {
+          String schemaPath = "clearing-schemas/acceptance/1/schema.json";
+          var schema = run.scenarios.readSchema(run.target.fixture().templateId(), schemaPath);
+          run.scenarios.writeSchema(scenario.id(), schemaPath, schema);
+          assertEquals(schema, run.scenarios.readSchema(scenario.id(), schemaPath));
+          run.evidence.record("applied-schema", schema);
+        }
         String sutId = run.target.fixture().sutId();
         String sut = run.scenarios.readSutRaw(run.target.fixture().templateId(), sutId);
         run.scenarios.writeSutRaw(scenario.id(), sutId, sut);
@@ -65,13 +77,24 @@ class ClearingExportAcceptanceIT {
         var exporter = workers.stream().filter(w -> BeeRoles.CLEARING_EXPORT.equals(w.required("role").textValue()))
             .findFirst().orElseThrow();
         var config = exporter.required("config");
+        assertEquals(structured ? "structured" : "template", config.required("mode").textValue());
+        if (structured) {
+          assertEquals("acceptance", config.required("schemaId").textValue());
+          assertEquals("1", config.required("schemaVersion").textValue());
+          assertEquals("/app/scenario/clearing-schemas", config.required("schemaRegistryRoot").textValue());
+        }
         assertEquals(10, config.required("maxRecordsPerFile").intValue());
         assertFalse(config.required("streamingAppendEnabled").booleanValue());
         var layout = RuntimeFilesystemLayout.of(target.runtimeRoot().toString(), target.runtimeRoot().toString());
         var files = new ExportFiles(layout, swarm.id(), swarm.runId(), exporter.required("instance").textValue(),
             config.required("localTempSuffix").textValue());
         assertTrue(files.read().finalized().isEmpty());
-        for (int i = 0; i < lists.size(); i++) lists.get(i).seed(expected.get(i));
+        var json = new com.fasterxml.jackson.databind.ObjectMapper();
+        for (int i = 0; i < lists.size(); i++) {
+          String input = structured ? json.writeValueAsString(java.util.Map.of("id", expected.get(i), "amount", i + 1))
+              : expected.get(i);
+          lists.get(i).seed(input);
+        }
         swarm.start();
         var deadline = new Deadline(run.target.limits().capture(), "Two complete export files for " + swarm.id());
         ExportFilesSnapshot snapshot;
@@ -81,12 +104,17 @@ class ClearingExportAcceptanceIT {
           if (snapshot.finalized().size() >= 2 && snapshot.pending().isEmpty()) break;
           deadline.pause(run.target.limits().poll());
         }
-        ClearingTextAssertions.requireRecords(snapshot, expected);
+        requireRecords(snapshot, expected, structured);
         swarm.stop();
-        run.evidence.record("export-files-after-stop", files.read());
-        ClearingTextAssertions.requireRecords(files.read(), expected);
+        var stopped = files.read();
+        run.evidence.record("export-files-after-stop", stopped);
+        requireRecords(stopped, expected, structured);
         swarm.remove();
       }
     }
+  }
+  private void requireRecords(ExportFilesSnapshot files, List<String> expected, boolean structured) throws Exception {
+    if (structured) ClearingXmlAssertions.requireRecords(files, expected);
+    else ClearingTextAssertions.requireRecords(files, expected);
   }
 }

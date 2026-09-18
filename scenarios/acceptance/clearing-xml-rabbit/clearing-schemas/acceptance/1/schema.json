@@ -1,0 +1,39 @@
+{
+  "schemaId": "acceptance",
+  "schemaVersion": "1",
+  "outputFormat": "xml",
+  "fileNameTemplate": "ACCEPTANCE_{{ now }}.xml",
+  "recordMapping": {
+    "id": {
+      "expression": "{{ steps.selected.json.id }}",
+      "required": true,
+      "type": "string"
+    },
+    "amount": {
+      "expression": "{{ steps.selected.json.amount }}",
+      "required": true,
+      "type": "long"
+    }
+  },
+  "headerMapping": {
+    "marker": "acceptance-structured"
+  },
+  "footerMapping": {
+    "recordCount": "{{ recordCount }}",
+    "totalAmount": "{{ totals.sumAmount }}"
+  },
+  "xml": {
+    "declaration": true,
+    "encoding": "UTF-8",
+    "rootElement": "Export",
+    "wrapperElement": "",
+    "headerElement": "Header",
+    "recordsElement": "Records",
+    "recordElement": "Record",
+    "footerElement": "Trailer",
+    "namespaceUri": "",
+    "namespacePrefix": "",
+    "recordNamespaceUri": "",
+    "recordNamespacePrefix": ""
+  }
+}

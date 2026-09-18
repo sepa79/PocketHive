@@ -582,7 +582,7 @@ Run and worker identity prevent unrelated runs/exporters sharing filenames.
 Test observation will use the same layout projected onto the explicitly selected
 host-visible runtime root. It must not reconstruct the layout, discover container
 internals or infer a remote-host path. No separate mount or export root is introduced.
-The output observer is implemented. EX-1 now has Rabbit/Artemis fixtures and an acceptance suite; deployed verification is tracked in the coverage ledger. EX-2/EX-3 remain planned.
+The output observer is implemented. EX-1 now has Rabbit/Artemis fixtures and an acceptance suite; deployed verification is tracked in the coverage ledger. EX-2 structured XML is implemented; deployed evidence is in the coverage ledger. EX-3 remains planned.
 
 Discovery: ClearingExportWorkerImpl returns no output WorkItem. Its batch writer
 publishes file lifecycle metadata/counters, not file bytes. The optional JSONL export
@@ -637,3 +637,13 @@ The fixture routes Generator → Clearing Export through the selected Work adapt
 Assertions compare two files of ten exact nonce-tagged records, headers and trailers,
 with no pending files; duplicates cannot replace missing records. Results are checked
 before STOP and once more after STOP, then normal REMOVE releases the runtime tree.
+
+EX-2 reuses the EX-1 lifecycle/data/file-observation flow. Its independently authored
+JSON clearing schema is read and copied through Scenario Manager's existing schema
+API into the owned scenario, then read back for equality before CREATE. Runtime
+observations must show structured mode, the explicit schema id/version/root and
+batching settings before any input is seeded. Twenty inputs contain distinct IDs
+(including XML special characters) and amounts1..20. Standard JDK XML parsing checks
+two documents, ten records each, exact IDs/amounts, header marker and per-file trailer
+counts/totals. Expectations come from fixture inputs, not the product renderer.
+The observer remains format-neutral; cleanup and storage ownership are unchanged.
