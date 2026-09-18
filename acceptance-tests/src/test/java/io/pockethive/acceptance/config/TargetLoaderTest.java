@@ -93,6 +93,17 @@ class TargetLoaderTest {
         () -> TargetLoader.loadRedisFixture(file(config.replace("redisConnectionId=R:redis:6379:0", "redisConnectionId="))));
   }
 
+  @Test void freshDeploymentRequiresExplicitIdentityAndRejectsOrdinaryTargets() throws Exception {
+    String api = SCENARIO.replace("scenarioId=authoring-fixture\n", "");
+    assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadFreshDeployment(file(api)));
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadFreshDeployment(file(api + "deploymentId=\n")));
+    var target = TargetLoader.loadFreshDeployment(file(api + "deploymentId=owned-fresh-project\n"));
+    assertEquals("owned-fresh-project", target.deploymentId());
+    assertThrows(IllegalArgumentException.class,
+        () -> TargetLoader.loadApi(file(api + "deploymentId=owned-fresh-project\n")));
+  }
+
   @Test void apiTargetRequiresOnlyCommonSettingsAndRejectsFixtureConfiguration() throws Exception {
     String config = SCENARIO.replace("scenarioId=authoring-fixture\n", "");
     var target = TargetLoader.loadApi(file(config));

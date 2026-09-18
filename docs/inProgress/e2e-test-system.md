@@ -873,3 +873,61 @@ tests pass, both runs cleaned20 Redis keys and their scenario after successful R
 Artifacts/logs recorded in coverage ledger. Artemis restored. New EX-2 changes await
 separate review, uncommitted. No product changes or fresh deployment needed.
 Matrix38 PASS/3 OPEN: EX-3(streaming window),SM-2(fresh deployment),NW-4(remote Swarm last).
+
+
+### 2026-09-18 — EX-2 committed; EX-3 implemented
+
+EX-2 committed as `132df24e`. EX-3 verifies applied streaming settings and one actual
+file containing twenty exact records, header/trailer and no pending output before
+STOP, below the100-record limit. Both Rabbit and Artemis finalized about15.6s after
+START with a15s window; the ordinary flush interval is15min. Content remains unchanged
+after STOP. Existing file observation, lifecycle and cleanup owners are reused.
+152 framework tests pass; both deployed runs have four successful lifecycle operations,
+20 absent Redis keys and scenario404. Artifacts and timing limits are in the coverage
+ledger. Artemis WORK restored. No product changes; EX-3 awaits separate review.
+Matrix39 PASS/2 OPEN: SM-2 (fresh dedicated deployment), NW-4 (remote Swarm/NFS last).
+
+
+### 2026-09-18 — EX-3 review P2 corrected
+
+The initial timing assertion used the instant after blocking START returned. A delayed
+confirmation could therefore hide a file finalized too early. StreamingExportObservation
+now samples read-only files concurrently with START, timestamps each snapshot in the
+observer and returns its timeline. The caller checks every sample with finalized output
+against the configured window before STOP. Lifecycle calls and evidence writes remain
+on the caller thread. A single-thread executor is cancelled and closed before cleanup.
+
+Controlled-clock regression covers a file at 5s with START confirmation at 20s (rejected),
+a valid file at 15s before confirmation (accepted), early output accompanied by pending
+files (rejected), and cancellation/join after START failure. Reintroducing the old timing
+semantics produced RED (5000ms replaced by 20000ms); restoring the fix produced GREEN.
+A full framework run also exposed premature observer shutdown with the initial virtual
+executor; a single-thread executor fixed it and the cancellation regression now passes.
+Final deployed evidence is recorded in the coverage ledger. Product code is unchanged.
+
+
+### 2026-09-18 — SM-2 implemented and verified on a fresh local deployment
+
+After the EX-3 correction passed Rabbit/Artemis, the human requested continuation.
+FreshDeploymentAcceptanceIT now verifies a declared fresh target with deployment-wide
+administrator grants and an empty canonical public swarm list. TargetLoader requires
+an explicit deploymentId; no freshness is inferred from the result and no reset is used.
+The test reuses ApiRun, ActorAssertions and SwarmApi. Canonical Compose plus a test-only
+isolation overlay provisioned a separate local project with new network/volumes/runtime
+and public ingress18088. Platform health and SM-2 both passed; creation log, image IDs,
+actor and response are retained in the coverage ledger's artifact directory.
+157 framework tests pass. The disposable project was removed; existing Artemis on8088
+remains available. No production changes or commits. Separate review remains next.
+Matrix40 PASS/1 OPEN: NW-4, the deferred remote Swarm/NFS deployment test.
+
+
+### 2026-09-18 — EX-3 evidence and SM-2 shell-scope P2 corrections
+
+EX-3 now saves its immutable timeline through RunEvidence after joining the observer,
+even on timeout, read failure, START failure or interruption. Original failures survive
+artifact-write errors. Two missing-artifact regressions produced RED before the fix;
+161 framework tests now pass. SM-2's complete procedure and failure recovery run in
+subshells, preserving the operator's prior environment. Six stubbed shell scenarios
+verify normal/failure exits and scoped cleanup, without deploying a stack.
+Details and logs are recorded in the coverage ledger. No product change or E2E rerun;
+new changes remain uncommitted for separate review. Matrix40 PASS/1 OPEN: NW-4.

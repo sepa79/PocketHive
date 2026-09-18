@@ -647,3 +647,46 @@ batching settings before any input is seeded. Twenty inputs contain distinct IDs
 two documents, ten records each, exact IDs/amounts, header marker and per-file trailer
 counts/totals. Expectations come from fixture inputs, not the product renderer.
 The observer remains format-neutral; cleanup and storage ownership are unchanged.
+
+EX-3 uses the same owned data/lifecycle/observer flow with a streaming text fixture:
+twenty records, maxRecordsPerFile100, streamingWindowMs15000 and flushIntervalMs900000.
+Applied configuration is checked before seeding. The test requires exactly one finalized
+file with all twenty records and trailer, no pending files, before issuing STOP.
+A read-only observer starts before the blocking START call and samples concurrently
+until finalized output has no pending files. Each snapshot carries monotonic elapsed
+time from before START. After START settles, the caller writes the timeline and checks
+that no sampled finalized file appeared before the configured window, and completion
+preceded the ordinary flush interval. Late START confirmation cannot replace the
+recorded observation time. This is a conservative bound with polling resolution,
+not an exact first-record timestamp. Existing Deadline owns the observation budget.
+The observer performs no lifecycle calls or evidence writes; it is cancelled and joined
+before resource cleanup on every exit. After joining, the caller always passes an
+immutable copy of the collected timeline to RunEvidence, including on START failure,
+read failure, timeout or interruption. No background evidence writes occur. Existing
+RunEvidence owns write-error deferral so the original failure survives cleanup.
+Content is checked again after STOP.
+
+
+## Fresh deployment smoke (SM-2)
+
+FreshDeploymentAcceptanceIT runs only under the explicit `fresh-deployment` tag and
+requires a FreshDeploymentTarget with a deploymentId in addition to ApiTarget fields.
+This is the operator's declaration of a newly provisioned dedicated environment,
+not a freshness inference from an empty API result. Ordinary API targets are rejected.
+The deployment operator records creation evidence separately; the test performs no
+reset, refresh, deployment or resource cleanup. It requires the selected actor's exact
+DEPLOYMENT/GLOBAL ALL grant through ActorAssertions before reading SwarmApi.list, so
+an authorization-filtered empty list cannot pass as an empty deployment. The canonical
+Orchestrator list must be empty; the response and declared target are saved as evidence.
+Run platform `smoke` alongside it on the same fresh target using its API-only settings.
+
+For local evidence use the canonical docker-compose.yml with the test-only
+acceptance-tests/deployments/fresh-local.compose.yml overlay: a unique Compose project,
+private network and new project-scoped volumes, a new explicit host runtime root, and
+only a separate UI ingress published. Reuse built images; no rebuild is needed.
+The overlay changes isolation settings only, not startup policy or product behavior.
+Launch ui, auth-service, orchestrator and artemis plus their declared dependencies.
+After evidence collection, remove only this owned project and its named volumes.
+The local procedure runs in a subshell; its project/runtime environment never replaces
+the operator's prior shell settings, on success or failure. The established local
+Artemis stack remains running. NW-4 stays deferred.

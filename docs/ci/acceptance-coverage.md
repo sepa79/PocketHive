@@ -14,7 +14,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | ID | Required observable behavior | Source feature/case | New coverage / prerequisite | Status |
 | --- | --- | --- | --- | --- |
 | SM-1 | Ingress reports platform availability; preserve CONTROL connectivity coverage through an explicit owner test. | deployment-smoke: services healthy | PlatformSmokeAcceptanceIT through public ingress; SpringRabbitBrokerTest CONTROL transport on isolated broker, with SpringRabbitControlDeliveryTest policy checks | PASS |
-| SM-2 | Fresh deployment has no implicit default swarm. | deployment-smoke: default swarm absent | Smoke on explicitly fresh dedicated target; do not assume all targets empty | OPEN |
+| SM-2 | Fresh deployment has no implicit default swarm. | deployment-smoke: default swarm absent | FreshDeploymentAcceptanceIT on dedicated fresh local Compose project; global admin profile and empty public swarm list | PASS |
 | SC-1 | Authored generator rate appears in retrieved template. | scenario-defaults: rate limit | ScenarioReadAcceptanceIT.preservesAuthoredSchedulerRate: explicit numeric 7.5 through ingress | PASS |
 | SC-2 | Authored templating interceptor appears in template. | scenario-defaults: templating | ScenarioReadAcceptanceIT.preservesTemplatingConfiguration: full authored templating object through ingress | PASS |
 | SC-3 | Per-worker history policy survives template read. | history-policy: authoring | ScenarioReadAcceptanceIT.preservesEveryWorkersHistoryPolicy: exact four-role map with FULL/LATEST_ONLY through ingress | PASS |
@@ -38,7 +38,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Exact finalized file content under canonical swarm/run/worker runtime directory | PASS |
 | EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Applied config/schema; exact XML IDs, amounts, counts and totals | PASS |
-| EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Assert config and actual finalized output | OPEN |
+| EX-3 | Streaming config applied; time window finalizes one file containing 20 transactions. | swarm-lifecycle: streaming export | Applied config; one complete file before STOP, below record limit; Rabbit + Artemis | PASS |
 | AU-1 | Orchestrator and Scenario Manager reject unauthenticated access. | auth-access: protected APIs | AuthReadAcceptanceIT: /api/swarms and canonical /api/templates, anonymous 401 and authenticated 200 | PASS |
 | AU-2 | Capability, workspace/raw-config, CP schema/journal and network read surfaces reject unauthenticated access. | auth-access: additional APIs | AuthReadAcceptanceIT: nine additional protected read routes, anonymous 401 and authenticated 200 | PASS |
 | AU-3 | Viewer has no runnable templates and cannot create swarm. | auth-access: viewer | ViewerAcceptanceIT: exact PocketHive VIEW, empty runnable list, CREATE403 and admin registry404 | PASS |
@@ -1056,3 +1056,116 @@ is propagated. Focused import-boundary tests pass. Logs: `/tmp/export-ex2-unit.l
 passed after sharing the flow; deployed EX-1 was not repeated.
 Local Artemis WORK restored, public swarm registry empty. EX-2 remains uncommitted
 for separate review. Matrix: **38 PASS, 0 PARTIAL, 3 OPEN**: EX-3,SM-2,NW-4.
+
+
+### EX-3 — streaming window finalization, 2026-09-18
+
+Reviewed EX-2 committed as `132df24e`. EX-3 reuses the existing export observation,
+owned Redis inputs, scenario and swarm lifecycle. Fresh worker configuration confirms
+streaming enabled, window15000ms, record limit100 and ordinary flush interval900000ms.
+Twenty exact records must appear in one finalized file with header/trailer and no
+pending files before STOP. Timing is measured conservatively from the START request,
+not from the first record; the test does not claim an exact first-record timestamp.
+Content remains identical after STOP. No production changes were required.
+
+| WORK | Evidence under acceptance-tests/target/runs | Observed elapsed since START request | Cleanup |
+|---|---|---|---|
+| Artemis | `clearing-export-streaming-d64c2ad2-8bf9-44cc-a691-4ff7e730d08a` | 15554ms | 4 SUCCEEDED operations,20 Redis keys absent,scenario404 |
+| Rabbit | `clearing-export-streaming-fc3aec84-a851-4996-8d01-14b0f7084dcf` | 15555ms | 4 SUCCEEDED operations,20 Redis keys absent,scenario404 |
+
+Both REMOVE results contain removed resources with no remaining resources or errors.
+152 framework tests pass, including rejection of incomplete/duplicated streaming
+records, missing trailer, two batch files and pending-only output. Focused import
+boundary checks pass. Logs: `/tmp/export-ex3-unit.log`, `/tmp/export-ex3-artemis.log`,
+`/tmp/export-ex3-rabbit.log`. Deployed EX-1/EX-2 were not repeated in this slice.
+Artemis WORK restored. EX-3 changes remain uncommitted for separate review.
+Matrix: **39 PASS, 0 PARTIAL, 2 OPEN**: SM-2 (fresh dedicated deployment), NW-4
+(remote Swarm/NFS; explicitly last).
+
+
+### EX-3 — timing review correction, 2026-09-18
+
+The initial runs above retain their observed output/cleanup evidence, but their timing
+check could miss early finalization while START confirmation was pending. The corrected
+observer samples independently of START and timestamps each snapshot at observation.
+The caller saves `streaming-observations.json` and checks every finalized sample before
+STOP. Evidence writing and lifecycle remain on the caller thread; observer cancellation
+and executor shutdown complete before cleanup. The bound still has polling resolution
+and does not claim the exact first-record timestamp.
+
+Controlled regression: file finalized at 5s, START confirmed at 20s. Restoring the old
+post-START timestamp produced RED; the corrected observer retains 5s and rejects it.
+Other checks cover valid finalization, early output with pending files, and joining the
+observer after START failure. An initial full framework run caught a premature join
+with the virtual executor; the final single-thread executor passes that regression.
+
+| WORK | Evidence under acceptance-tests/target/runs | Samples / first-to-final observation | Cleanup |
+|---|---|---|---|
+| Artemis | `clearing-export-streaming-dad7e89a-c244-4d82-97a5-65d688e8776e` | 32 / 1–15514ms | 4 SUCCEEDED operations, 20 keys absent, scenario404 |
+| Rabbit | `clearing-export-streaming-ba4e2f81-1a90-4f2c-a8eb-1efec9e0508f` | 33 / 1–16013ms | 4 SUCCEEDED operations, 20 keys absent, scenario404 |
+
+Both runs verify one exact twenty-record file with header/trailer before STOP and
+unchanged content afterward, with no remaining resources/errors from REMOVE.
+All 156 framework tests pass. Logs: `/tmp/export-ex3-fix-red.log`,
+`/tmp/export-ex3-fix-green.log`, `/tmp/export-ex3-fix-artemis-final.log`,
+`/tmp/export-ex3-fix-rabbit.log`. Final artifact audit: `/tmp/audit-ex3-observations.py`.
+Artemis WORK restored. No product changes. EX-3 remains uncommitted for separate review;
+matrix remains 39 PASS / 2 OPEN (SM-2, NW-4 last).
+
+
+### SM-2 — dedicated fresh deployment, 2026-09-18
+
+A separate Compose project `ph-sm2-0261b9d9e54a` was provisioned from the canonical
+Compose file plus the test-only isolation overlay. It used new project-scoped volumes,
+its own network and fresh `/tmp/ph-sm2-0261b9d9e54a/runtime`, with only UI ingress at
+`http://localhost:18088` published. Selected services: ui, auth-service, orchestrator,
+artemis and their declared dependencies. Existing built images were reused; their IDs
+and the creation log are archived with acceptance evidence. No startup-policy override,
+registry reset or swarm mutation was used. Host Docker daemon and scenario sources
+were shared with the existing local deployment; stateful broker/database volumes were not.
+
+PlatformSmokeAcceptanceIT passed UI, Orchestrator and Scenario Manager health through
+that public ingress. FreshDeploymentAcceptanceIT required an explicit deploymentId,
+verified the actor's exact PocketHive DEPLOYMENT/GLOBAL ALL grant through the existing
+ActorAssertions owner, then read the canonical swarm list through SwarmApi: empty.
+The declared ID does not independently prove freshness; the provisioning evidence does.
+
+| Check | Evidence under acceptance-tests/target/runs |
+|---|---|
+| Public health | `platform-smoke-e81bc464-35ec-4fae-b606-9f25506cacb1` |
+| Fresh deployment, actor and empty swarm list | `fresh-deployment-c14edb78-4b8b-4442-be85-6087ea9a2947` |
+
+157 framework tests pass, including rejection of missing/blank fresh deployment identity
+and ordinary API targets. Logs: `/tmp/sm2-unit.log`, `/tmp/sm2-smoke.log`,
+`/tmp/sm2-fresh.log`, `/tmp/sm2-down.log`. Test-only deployment instructions are in
+`acceptance-tests/deployments/README.md`. The owned Compose project is removed after
+evidence collection; the original Artemis stack remains available on8088.
+No product changes. New SM-2 code and EX-3 correction await separate review, uncommitted.
+Matrix: **40 PASS, 0 PARTIAL, 1 OPEN**: NW-4 (remote Swarm/NFS; explicitly deferred).
+
+
+### EX-3 / SM-2 — failure-path corrections after review, 2026-09-18
+
+EX-3 retains its observed timeline on every exit. StreamingExportObservation joins
+its sampling task, then delegates an immutable snapshot to RunEvidence on the caller
+thread in finally, before swarm cleanup. The success-only duplicate write was removed
+from ClearingExportAcceptanceIT. RunEvidence remains the only artifact writer and
+keeps its deferred write-error behavior; no second error/outcome owner was introduced.
+
+Two new regressions initially failed with missing streaming-observations.json after
+timeout and read failure. Both now pass. Tests also verify saved samples after START
+failure/interruption, observer exit before returning, and a write error suppressed
+without replacing the original read failure. All 161 framework tests pass.
+Logs: `/tmp/ex3-evidence-red.log`, `/tmp/ex3-evidence-green.log`,
+`/tmp/ex3-evidence-framework.log`.
+
+The complete SM-2 runbook now executes in a subshell. It preserves a scoped
+`deployment.env` in the printed temporary run directory for diagnosis/cleanup after
+failure; recovery also runs in a subshell. Six stubbed shell checks cover success,
+deployment failure and test failure, with both absent and pre-existing parent values.
+They verify unchanged parent settings and cleanup targeting the owned project.
+No Docker deployment was performed by these checks. Log: `/tmp/sm2-shell-check.log`.
+
+No product/runtime changes or deployed E2E reruns in this correction. Existing deployed
+EX-3 and SM-2 evidence remains separately listed above. Changes await separate review,
+uncommitted. Matrix unchanged: 40 PASS / 1 OPEN (NW-4).

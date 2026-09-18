@@ -213,7 +213,9 @@ Platform availability through public ingress (read only, no empty-stack assumpti
 ```
 
 This checks UI, Orchestrator and Scenario Manager health. CONTROL transport evidence
-is recorded separately in the coverage ledger; SM-2 needs a fresh dedicated deployment.
+is recorded separately in the coverage ledger. For SM-2 use the
+[dedicated fresh deployment procedure](deployments/README.md); its explicit target
+is rejected by ordinary API suites and cannot be inferred from an empty stack.
 
 Redis fixture boundary through the public Redis Commander ingress:
 

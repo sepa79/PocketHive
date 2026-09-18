@@ -28,4 +28,18 @@ class ClearingTextAssertionsTest {
     var pending = new ExportFilesSnapshot(Map.of("one.txt", first, "two.txt", second), Set.of("third.txt.tmp"));
     assertThrows(AssertionError.class, () -> ClearingTextAssertions.requireRecords(pending, records));
   }
+  @Test void requiresOneCompleteStreamAndRejectsMissingFooterOrDuplicateRecord() {
+    String complete = file(records).replace("T|10", "T|20");
+    ClearingTextAssertions.requireStreamingFile(new ExportFilesSnapshot(Map.of("stream.txt", complete), Set.of()), records);
+    for (String corrupt : List.of(complete.replace("T|20\n", ""),
+        complete.replace("D|record-19", "D|record-18"))) {
+      var files = new ExportFilesSnapshot(Map.of("stream.txt", corrupt), Set.of());
+      assertThrows(AssertionError.class, () -> ClearingTextAssertions.requireStreamingFile(files, records));
+    }
+    var split = new ExportFilesSnapshot(Map.of("one.txt", file(records.subList(0, 10)),
+        "two.txt", file(records.subList(10, 20))), Set.of());
+    assertThrows(AssertionError.class, () -> ClearingTextAssertions.requireStreamingFile(split, records));
+    var unfinished = new ExportFilesSnapshot(Map.of(), Set.of("stream.txt.tmp"));
+    assertThrows(AssertionError.class, () -> ClearingTextAssertions.requireStreamingFile(unfinished, records));
+  }
 }

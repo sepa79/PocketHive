@@ -24,20 +24,30 @@ import org.junit.jupiter.api.Test;
 /**
  * Responsibility: verify actual finalized clearing files from twenty distinct owned inputs.
  * Must not: reconstruct output paths, implement exporter formatting or delete runtime files.
- * Contract: RESP-ACCEPTANCE-EXPORT-FILES — docs/architecture/acceptance-tests.md#resp-acceptance-export-files; EX-1/EX-2.
+ * Contract: RESP-ACCEPTANCE-EXPORT-FILES — docs/architecture/acceptance-tests.md#resp-acceptance-export-files; EX-1..3.
  */
 class ClearingExportAcceptanceIT {
   @Test @Tag("clearing-export")
-  void twentyRecordsProduceTwoCompleteTextFiles() throws Exception { verify(false); }
+  void twentyRecordsProduceTwoCompleteTextFiles() throws Exception { verify(ClearingExportCase.BATCH_TEXT); }
 
   @Test @Tag("clearing-export-xml")
-  void twentyRecordsProduceTwoStructuredXmlFiles() throws Exception { verify(true); }
+  void twentyRecordsProduceTwoStructuredXmlFiles() throws Exception { verify(ClearingExportCase.STRUCTURED_XML); }
 
-  private void verify(boolean structured) throws Exception {
+  @Test @Tag("clearing-export-streaming")
+  void timeWindowFinalizesTwentyRecordsBeforeStop() throws Exception { verify(ClearingExportCase.STREAMING_TEXT); }
+
+  private void verify(ClearingExportCase exportCase) throws Exception {
+    boolean structured = exportCase == ClearingExportCase.STRUCTURED_XML;
+    boolean streaming = exportCase == ClearingExportCase.STREAMING_TEXT;
+    String caseName = switch (exportCase) {
+      case BATCH_TEXT -> "clearing-export";
+      case STRUCTURED_XML -> "clearing-export-xml";
+      case STREAMING_TEXT -> "clearing-export-streaming";
+    };
     var target = TargetLoader.loadExport(TargetLoader.selectedFile());
     String nonce = UUID.randomUUID().toString();
     List<String> expected = IntStream.range(0, 20).mapToObj(i -> nonce + "-record-" + i + (structured ? "<&>" : "")).toList();
-    try (var run = LiveRun.open(structured ? "clearing-export-xml" : "clearing-export", target.lifecycle())) {
+    try (var run = LiveRun.open(caseName, target.lifecycle())) {
       var lists = IntStream.range(0, 20).mapToObj(i -> new RedisListResource(run.redis(target.connectionId()), run.evidence)).toList();
       var scenario = new ScenarioResource("acceptance-clearing-" + UUID.randomUUID(), run.scenarios, run.evidence);
       var swarm = run.newSwarm();
@@ -83,8 +93,12 @@ class ClearingExportAcceptanceIT {
           assertEquals("1", config.required("schemaVersion").textValue());
           assertEquals("/app/scenario/clearing-schemas", config.required("schemaRegistryRoot").textValue());
         }
-        assertEquals(10, config.required("maxRecordsPerFile").intValue());
-        assertFalse(config.required("streamingAppendEnabled").booleanValue());
+        assertEquals(streaming ? 100 : 10, config.required("maxRecordsPerFile").intValue());
+        assertEquals(streaming, config.required("streamingAppendEnabled").booleanValue());
+        if (streaming) {
+          assertEquals(15000L, config.required("streamingWindowMs").longValue());
+          assertEquals(900000L, config.required("flushIntervalMs").longValue());
+        }
         var layout = RuntimeFilesystemLayout.of(target.runtimeRoot().toString(), target.runtimeRoot().toString());
         var files = new ExportFiles(layout, swarm.id(), swarm.runId(), exporter.required("instance").textValue(),
             config.required("localTempSuffix").textValue());
@@ -95,26 +109,44 @@ class ClearingExportAcceptanceIT {
               : expected.get(i);
           lists.get(i).seed(input);
         }
-        swarm.start();
-        var deadline = new Deadline(run.target.limits().capture(), "Two complete export files for " + swarm.id());
         ExportFilesSnapshot snapshot;
-        while (true) {
-          snapshot = files.read();
+        if (streaming) {
+          var observations = StreamingExportObservation.duringStart(swarm::start, files::read,
+              run.target.limits().capture(), run.target.limits().poll(), run.evidence);
+          var completed = observations.getLast();
+          snapshot = completed.files();
           run.evidence.record("export-files", snapshot);
-          if (snapshot.finalized().size() >= 2 && snapshot.pending().isEmpty()) break;
-          deadline.pause(run.target.limits().poll());
+          long windowMs = config.required("streamingWindowMs").longValue();
+          long ordinaryFlushMs = config.required("flushIntervalMs").longValue();
+          run.evidence.record("streaming-finalization-before-stop", java.util.Map.of(
+              "elapsedSinceStartRequestMs", completed.elapsedSinceStartRequestMs(), "windowMs", windowMs,
+              "ordinaryFlushMs", ordinaryFlushMs, "maxRecordsPerFile", 100, "inputRecords", expected.size()));
+          StreamingExportObservation.requireWindow(observations, java.time.Duration.ofMillis(windowMs),
+              java.time.Duration.ofMillis(ordinaryFlushMs));
+        } else {
+          swarm.start();
+          var deadline = new Deadline(run.target.limits().capture(), "Complete export files for " + swarm.id());
+          while (true) {
+            snapshot = files.read();
+            run.evidence.record("export-files", snapshot);
+            if (snapshot.finalized().size() >= 2 && snapshot.pending().isEmpty()) break;
+            deadline.pause(run.target.limits().poll());
+          }
         }
-        requireRecords(snapshot, expected, structured);
+        requireRecords(snapshot, expected, exportCase);
         swarm.stop();
         var stopped = files.read();
         run.evidence.record("export-files-after-stop", stopped);
-        requireRecords(stopped, expected, structured);
+        requireRecords(stopped, expected, exportCase);
         swarm.remove();
       }
     }
   }
-  private void requireRecords(ExportFilesSnapshot files, List<String> expected, boolean structured) throws Exception {
-    if (structured) ClearingXmlAssertions.requireRecords(files, expected);
-    else ClearingTextAssertions.requireRecords(files, expected);
+  private void requireRecords(ExportFilesSnapshot files, List<String> expected, ClearingExportCase exportCase) throws Exception {
+    switch (exportCase) {
+      case STRUCTURED_XML -> ClearingXmlAssertions.requireRecords(files, expected);
+      case BATCH_TEXT -> ClearingTextAssertions.requireRecords(files, expected);
+      case STREAMING_TEXT -> ClearingTextAssertions.requireStreamingFile(files, expected);
+    }
   }
 }

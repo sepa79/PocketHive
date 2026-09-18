@@ -18,6 +18,10 @@ public final class SwarmApi {
   private final String token;
   public SwarmApi(PocketHiveHttp http, String token) { this.http = http; this.token = token; }
 
+  public java.util.List<SwarmStateView> list() throws IOException, InterruptedException {
+    return java.util.List.of(http.decode(http.request("GET", ApiSurface.ORCHESTRATOR.publicPath("/api/swarms"),
+        null, token).expect(200), SwarmStateView[].class));
+  }
   public ControlResponse create(String swarmId, SwarmCreateRequest request) throws IOException, InterruptedException {
     return accepted(http.request("POST", path(swarmId) + "/create", request, token), request.idempotencyKey());
   }

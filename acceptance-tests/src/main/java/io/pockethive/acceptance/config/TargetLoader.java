@@ -75,6 +75,12 @@ public final class TargetLoader {
     return new RedisFixtureTarget(api(values, actual), values.getProperty("redisConnectionId"));
   }
 
+  public static FreshDeploymentTarget loadFreshDeployment(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Properties values = read(actual, Set.of("deploymentId"));
+    return new FreshDeploymentTarget(api(values, actual), values.getProperty("deploymentId"));
+  }
+
   public static ApiTarget loadApi(Path file) throws IOException {
     Path actual = file.toRealPath();
     return api(read(actual, Set.of()), actual);
