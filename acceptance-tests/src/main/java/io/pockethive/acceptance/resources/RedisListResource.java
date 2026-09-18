@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.util.UUID;
 
 /**
- * Responsibility: own one UUID Redis list fixture and verify exact-key cleanup.
+ * Responsibility: own one UUID Redis list fixture, seeded or reserved for a producer, and verify exact-key cleanup.
  * Must not: delete pre-existing keys, flush databases, retry writes or decide dataset behavior.
  * Contract: RESP-ACCEPTANCE-REDIS-FIXTURE — docs/architecture/acceptance-tests.md#redis-fixture-preparation-da-prerequisite.
  */
@@ -26,10 +26,18 @@ public final class RedisListResource implements AutoCloseable {
     evidence.record(key + "-read", value);
     return value;
   }
+  public void reserveForProducer() throws IOException, InterruptedException {
+    requireUnusedAndAbsent();
+    state = AcquisitionState.ACQUIRED;
+    evidence.record(key + "-producer-reservation", java.util.Map.of("key", key));
+  }
+  private void requireUnusedAndAbsent() throws IOException, InterruptedException {
+    if (state != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Redis acquisition already attempted");
+    if (!"none".equals(read().required("type").textValue())) throw new AssertionError("Redis fixture key already exists: " + key);
+  }
   public void seed(String payload) throws IOException, InterruptedException {
     java.util.Objects.requireNonNull(payload, "payload");
-    if (state != AcquisitionState.NOT_REQUESTED) throw new IllegalStateException("Redis seed already attempted");
-    if (!"none".equals(read().required("type").textValue())) throw new AssertionError("Redis fixture key already exists: " + key);
+    requireUnusedAndAbsent();
     state = AcquisitionState.UNCONFIRMED;
     var response = api.createList(key, payload);
     evidence.record(key + "-create", response);

@@ -29,6 +29,15 @@ public final class TargetLoader {
     return Path.of(selected);
   }
 
+  public static WebAuthTarget loadWebAuth(Path file) throws IOException {
+    Path actual = file.toRealPath();
+    Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);
+    keys.addAll(Set.of("redisConnectionId", "mockUsername", "mockPassword"));
+    Properties values = read(actual, keys);
+    return new WebAuthTarget(lifecycle(values, actual), values.getProperty("redisConnectionId"),
+        values.getProperty("mockUsername"), values.getProperty("mockPassword"));
+  }
+
   public static TxOutcomeTarget loadTxOutcome(Path file) throws IOException {
     Path actual = file.toRealPath();
     Set<String> keys = new HashSet<>(LIFECYCLE_KEYS);

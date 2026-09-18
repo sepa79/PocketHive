@@ -65,7 +65,7 @@ JSON callers retain application/json. Both use the same bounded request implemen
 maps folder CRUD. `SwarmManagementApi` maps manager/component configuration dispatch.
 `NetworkBindingApi` reads canonical network bindings and requires their absence after
 removal. `SwarmJournalApi` maps timeline, run, pin and metadata endpoints; `TcpMockApi`
-reads the explicitly selected existing mock mapping.
+reads the explicitly selected existing mock mapping and its request journal (DA-4).
 These are distinct endpoint families.
 **Effect:** use canonical auth/create/control/operation/state contracts and exact
 public paths. `ControlReceipts` alone checks the acknowledgement idempotency key for
@@ -465,7 +465,7 @@ client, glob deletion, flush, connection administration or alternate backend rou
 remains the resolver. This target verifies the fixture boundary, not a WORK adapter.
 
 `RedisListResource` owns a generated UUID key and its acquisition/cleanup lifetime.
-It verifies absence before mutation, retains uncertain writes, and verifies absence
+It verifies absence before mutation or an explicit producer reservation (DA-4), retains uncertain writes, and verifies absence
 after deletion. A pre-existing key must never be deleted; a failed/uncertain write
 followed by absence remains unconfirmed. Successfully acquired lists may disappear
 when consumed. Close never masks the original test failure. RunEvidence records
@@ -527,3 +527,34 @@ values. Fresh worker observations confirm the configured sink. No success is inf
 from postprocessor counters. Queries and waits are bounded; database rows are retained
 as normal telemetry under the existing table TTL, with no acceptance DELETE or TRUNCATE.
 The same suite runs on explicit Rabbit and Artemis targets. NW-4 remains deferred.
+
+## Five-customer Redis WebAuth loop acceptance (DA-4)
+
+WebAuthLoopAcceptanceIT authors an isolated five-customer RED -> shared BAL ->
+shared TOP -> customer RED loop. RedisListResource owns each generated key;
+reserveForProducer checks absence before granting a swarm permission to create an
+initially empty intermediate list. Seeded lists retain their existing write checks.
+RedisDatasetResources accepts a list of handles and retains every dependency until
+SwarmResource permits cleanup; it adds no lifecycle authority. All cleanup failures
+remain visible and all independent handles are closed.
+
+WebAuthTarget composes explicit lifecycle, Redis connection and TCP mock credentials;
+TargetLoader remains their sole resolver. TcpMockApi extends its read-only scope to
+the public request journal with a bounded request budget. No shared journal clear or
+mapping mutation is permitted. The suite matches exact authored XML requests with a
+fresh nonce, customer/account/amount and RED/BAL/TOP stage, requires successful TCP
+results and observes RED/BAL/TOP/RED in timestamp order for each of five customers.
+Each request also exposes the actual Redis input header x-ph-redis-list as the
+fixture-only sourceList XML attribute. Expected source keys come from the owned
+resource handles: customer RED, shared BAL, shared TOP, then the same customer RED.
+A correct customer/stage payload arriving from another customer's list must fail.
+Test-owned request strings are fixture expectations, not a WebAuth protocol parser or
+production renderer. Existing Request Builder and RedisPushSupport remain runtime
+rendering/routing owners. The suite uses one round-robin generator across seven lists;
+weighted multi-generator scheduling is not a DA-4 acceptance condition.
+
+Preparation clones the newly authored acceptance fixture through Scenario Manager,
+substitutes only owned list identifiers and writes its template/SUT through public
+APIs. Both producer-only keys are reserved before CREATE; the five source lists are
+seeded only while workers are confirmed disabled. The producer-only keys may remain absent until the loop writes
+into them. The swarm is removed before deleting any dataset key or scenario.

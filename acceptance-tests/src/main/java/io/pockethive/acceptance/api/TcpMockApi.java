@@ -4,7 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import java.io.IOException;
 
 /**
- * Responsibility: read the selected TCP mock mapping through the public ingress.
+ * Responsibility: read TCP mock mappings and request journal through the public ingress.
  * Must not: mutate mappings/journals, duplicate the mock DTO or fall back to direct ports.
  * Contract: RESP-ACCEPTANCE-API — docs/architecture/acceptance-tests.md#resp-acceptance-api.
  */
@@ -14,6 +14,13 @@ public final class TcpMockApi {
   private final String password;
   public TcpMockApi(PocketHiveHttp http, String username, String password) {
     this.http = http; this.username = username; this.password = password;
+  }
+  public JsonNode requests(java.time.Duration budget) throws IOException, InterruptedException {
+    var response = http.requestWithBasicAuth("GET", ApiSurface.TCP_MOCK.publicPath("/api/requests"),
+        null, username, password, budget);
+    var requests = http.tree(response.expect(200));
+    if (!requests.isArray()) throw new AssertionError("TCP request journal must be an array");
+    return requests;
   }
   public JsonNode requireMapping(String id) throws IOException, InterruptedException {
     var response = http.getWithBasicAuth(ApiSurface.TCP_MOCK.publicPath("/api/mappings"), username, password);

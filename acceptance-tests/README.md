@@ -260,3 +260,20 @@ call ID, status, success and duration. Postprocessor counters are not persistenc
 proof. Grafana nested query failures fail immediately; reads use a bounded deadline.
 The swarm is removed through its normal lifecycle. Outcome rows remain ordinary
 telemetry under the existing database retention policy; tests never delete/truncate them.
+
+### Five-customer Redis WebAuth loop (DA-4)
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-webauth-loop-artemis.properties webauth-loop
+./run-acceptance-tests.sh acceptance-tests/targets/local-webauth-loop-rabbit.properties webauth-loop
+```
+
+Select the matching WORK adapter. Seven UUID Redis keys and a private scenario are
+owned per run. Five records traverse customer RED -> shared BAL -> shared TOP ->
+customer RED; the public TCP mock journal must contain the exact XML, response and
+ordered return through that customer's own Redis key for every customer. The sourceList
+attribute comes from the actual Redis input header, not the payload. Captured processor results additionally verify
+the owned swarm/worker and rendered TCP request. The shared journal is never cleared
+and mock mappings remain unchanged. All dependencies remain available if swarm
+removal cannot be confirmed. The source scenario contains list placeholders and must
+be prepared by the suite, not launched directly.

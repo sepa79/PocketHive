@@ -227,4 +227,13 @@ class TargetLoaderTest {
     assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadSwarmAuthorization(file(config.replace("tapTtlSeconds=9", "tapTtlSeconds=8"))));
     assertThrows(IllegalArgumentException.class, () -> TargetLoader.loadProvisionedAuth(file(config)));
   }
+
+  @Test void webAuthRequiresEveryExplicitObserverSetting() throws Exception {
+    String settings = "redisConnectionId=chosen\nmockUsername=user\nmockPassword=pass\n";
+    assertEquals("chosen", TargetLoader.loadWebAuth(file(TARGET + settings)).connectionId());
+    for (String line : settings.split("\n")) {
+      assertThrows(IllegalArgumentException.class,
+          () -> TargetLoader.loadWebAuth(file(TARGET + settings.replace(line + "\n", ""))));
+    }
+  }
 }

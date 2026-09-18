@@ -45,7 +45,7 @@ class RedisDatasetAcceptanceIT {
       var second = new RedisListResource(run.redis(target.connectionId()), run.evidence);
       var scenario = new ScenarioResource(scenarioId, run.scenarios, run.evidence);
       var swarm = run.newSwarm();
-      try (var dependencies = new RedisDatasetResources(swarm, scenario, first, second, run.evidence); swarm) {
+      try (var dependencies = new RedisDatasetResources(swarm, scenario, java.util.List.of(first, second), run.evidence); swarm) {
         var records = expected.stream().toList();
         ObjectNode owned = run.scenario.deepCopy();
         owned.put("id", scenarioId);

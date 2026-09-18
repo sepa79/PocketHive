@@ -13,28 +13,29 @@ import java.util.Map;
 public final class RedisDatasetResources implements AutoCloseable {
   private final SwarmResource swarm;
   private final ScenarioResource scenario;
-  private final RedisListResource first;
-  private final RedisListResource second;
+  private final List<RedisListResource> lists;
   private final RunEvidence evidence;
 
   public RedisDatasetResources(SwarmResource swarm, ScenarioResource scenario,
-      RedisListResource first, RedisListResource second, RunEvidence evidence) {
+      List<RedisListResource> lists, RunEvidence evidence) {
     this.swarm = swarm;
     this.scenario = scenario;
-    this.first = first;
-    this.second = second;
+    this.lists = List.copyOf(lists);
     this.evidence = evidence;
   }
 
   @Override public void close() throws IOException, InterruptedException {
     if (!swarm.permitsDependentCleanup()) {
       var retained = Map.of("swarmId", swarm.id(), "scenarioId", scenario.id(),
-          "redisKeys", List.of(first.key(), second.key()));
+          "redisKeys", lists.stream().map(RedisListResource::key).toList());
       evidence.record("retained-dataset-resources", retained);
       throw new AssertionError("Dataset cleanup deferred: swarm removal is unconfirmed; retained identifiers " + retained);
     }
-    try (first; second; scenario) {
-      // Close all independent dependencies, preserving any cleanup failures.
-    }
+    closeDependencies(0);
+  }
+  private void closeDependencies(int index) throws IOException, InterruptedException {
+    if (index == lists.size()) { scenario.close(); return; }
+    // Nested scopes preserve suppression and attempt every close, even after a failure.
+    try (var list = lists.get(index)) { closeDependencies(index + 1); }
   }
 }

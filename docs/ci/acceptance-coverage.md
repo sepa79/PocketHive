@@ -34,7 +34,7 @@ PASS means the stated row behavior has execution evidence; it does not close oth
 | DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisDatasetAcceptanceIT: two isolated records, FULL Generator/Request Builder/Processor history; Rabbit and Artemis verified | PASS |
 | DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Exact seeded JSON survives Generator and rendered HttpRequestEnvelope body; rendered header and HTTP result asserted on both adapters | PASS |
 | DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | TxOutcomeAcceptanceIT: persisted rows match captured trace IDs, swarm/sink identity, call ID, status, success and duration; Rabbit and Artemis verified through Grafana ingress | PASS |
-| DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | Isolated Redis/TCP data and supported interfaces | OPEN |
+| DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | WebAuthLoopAcceptanceIT: five owned customers, exact TCP XML/response and ordered RED/BAL/TOP/RED per customer; Rabbit and Artemis, seven-key verified cleanup | PASS |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Supported file/content observation interface required | OPEN |
 | EX-2 | Structured config applied; 20 transactions form two XML files. | swarm-lifecycle: structured export | Assert config, file content/type/count | OPEN |
@@ -952,3 +952,53 @@ write ownership remain in postprocessor. DA-3 implementation awaits separate rev
 Current ledger: **35 PASS, 0 PARTIAL, 6 OPEN**: DA-4, EX-1..3, SM-2, NW-4.
 Next local candidate is DA-4 (five-customer Redis/TCP WebAuth), using the existing Redis
 fixture and public TCP observation boundaries. NW-4 remains last.
+
+### 2026-09-18 — DA-4 five-customer Redis WebAuth loop
+
+New independently authored fixtures verify five customers through customer RED ->
+shared BAL -> shared TOP -> customer RED. A fresh nonce and exact XML bind journal
+observations to each seeded customer/account/amount. Every customer's first four
+requests must follow RED/BAL/TOP/RED and carry the expected TCP response. Captured
+processor results additionally match the owned worker and rendered request. The
+shared TCP journal and mappings are never mutated. One round-robin generator drives
+all seven sources; weighted multi-generator scheduling is outside this row's scope.
+
+| WORK adapter | Evidence directory under acceptance-tests/target/runs | Customers completing loop | Captured results | Cleanup |
+|---|---|---:|---:|---|
+| Artemis | `webauth-loop-86782769-3c4d-4c92-9c0a-b26b8b6f3ad3` | 5 | 5 | 4 SUCCEEDED operations, scenario404, 7 absent Redis keys |
+| Rabbit | `webauth-loop-3c81b290-7471-488f-8520-51fa0553833e` | 5 | 5 | 4 SUCCEEDED operations, scenario404, 7 absent Redis keys |
+
+Framework **141 tests pass**, including seven-dependency retention on failed CREATE /
+REMOVE, all-close attempts with suppressed failures, producer-list reservation and
+collision behavior, journal shape, explicit settings and customer sequence assertions.
+Logs: `/tmp/da4-unit.log`, `/tmp/da4-artemis.log`, `/tmp/da4-rabbit.log`.
+Artifact audit: `/tmp/da4-evidence-summary.json`.
+
+RedisDatasetResources now accepts a collection of the same resource handles; it
+still consumes SwarmResource's cleanup permission and owns no second lifecycle.
+RedisListResource can reserve an absent producer-only key; its existing exact-key
+cleanup verifies absence. No product code, public product contract or deployment
+manifest changed. DA-4 changes await separate review and remain uncommitted.
+
+Current ledger: **36 PASS, 0 PARTIAL, 5 OPEN**: EX-1..3, SM-2, NW-4.
+Next local slice: export observation and EX-1..3. SM-2 needs a fresh dedicated
+installation; NW-4 remains last on remote Swarm/NFS.
+
+### 2026-09-18 — DA-4 review fix: observe the actual customer return key
+
+Fixed the P2 observation gap: both request templates expose sourceList directly from
+x-ph-redis-list. Expected keys come from owned Redis handles for customer RED, shared
+BAL, shared TOP and the same customer's RED return. No production behavior changed.
+A regression for all five customers first failed on missing source-key expectations,
+then passed; replacing only the return source with another customer's key is rejected
+while keeping customer/stage/payload/response intact. Four focused assertions tests and
+all142 framework tests pass. Both deployed DA-4 runs verify exact source keys and
+complete cleanup (four successful operations, scenario404, seven absent Redis keys).
+
+- artemis: `webauth-loop-1f7782b4-be9b-49a1-83fb-6d647b8f0672`
+- rabbit: `webauth-loop-744c3d9a-63f1-43be-8861-9a64a68a25d7`
+
+Logs: `/tmp/da4-source-red.log`, `/tmp/da4-source-green.log`,
+`/tmp/da4-source-artemis.log`, `/tmp/da4-source-rabbit.log`.
+Artifact audit: `/tmp/da4-source-evidence-summary.json`.
+Coverage remains36 PASS/5 OPEN. Correction remains uncommitted for separate review.

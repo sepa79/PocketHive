@@ -20,4 +20,15 @@ class TcpMockApiTest {
       assertThrows(AssertionError.class, () -> api.requireMapping("selected"));
     }
   }
+
+  @Test void journalIsReadOnlyAndRejectsNonArrayResponses() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1))) {
+      var row = Map.of("id", "owned", "message", "request", "response", "OK");
+      ingress.reply("GET", "/tcp-mock/api/requests", 200, List.of(row))
+          .reply("GET", "/tcp-mock/api/requests", 200, Map.of("error", "unavailable"));
+      var api = new TcpMockApi(http, "test", "pass");
+      assertEquals("owned", api.requests(Duration.ofSeconds(1)).get(0).required("id").textValue());
+      assertThrows(AssertionError.class, () -> api.requests(Duration.ofSeconds(1)));
+    }
+  }
 }

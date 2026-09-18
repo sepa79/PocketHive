@@ -793,3 +793,33 @@ per adapter. Artefacts/IDs are in the coverage ledger. Base Artemis restored.
 Matrix35 PASS/6 OPEN: DA-4, EX-1..3, SM-2, NW-4. DA-4 is next local candidate; NW-4 last.
 DA-3 remains uncommitted pending separate review. The reviewed preceding DA-1/DA-2
 package was committed as433e470f at the user's explicit request; no push performed.
+
+### 2026-09-18 — DA-3 committed; DA-4 plan
+
+DA-3 committed as492d63b6 after separate review (32 focused tests, both deployed
+artifact sets audited). DA-4 will verify all five customers through an isolated
+RED/BAL/TOP/RED loop, exact TCP journal observations and captured results. Reuse
+existing Redis/scenario/swarm handles; generalize only the dataset handle collection
+and support explicitly owned initially empty producer lists. No shared data clearing,
+new product APIs or production behavior changes. NW-4 remains deferred.
+
+### 2026-09-18 — DA-4 implemented, awaiting separate review
+
+Both Rabbit and Artemis pass the five-customer RED/BAL/TOP/RED loop through Redis,
+Request Builder, TCP Processor and Redis output. Exact journal payload/response/order
+and captured processor results replace the old any-request check. Seven UUID keys
+and a private scenario are cleaned only after confirmed swarm removal; shared mock
+state is unchanged. Framework141 tests pass; both deployed runs and cleanup artifacts
+are recorded in the coverage ledger. No production code/contract/manifest changed.
+
+DA-3 is committed as492d63b6; DA-4 remains uncommitted for separate review.
+Matrix36 PASS/5 OPEN: EX-1..3, SM-2, NW-4. Next local work is export coverage;
+NW-4 remains explicitly deferred until last.
+
+### 2026-09-18 — DA-4 P2 corrected; awaiting review
+
+Actual Redis source keys now travel in fixture-only sourceList attributes and are
+matched to owned keys for each customer/stage, including return RED. The regression
+rejects another customer's list for each of five customers. Red/green evidence plus
+142 passing framework tests and both Rabbit/Artemis deployed runs are recorded in
+the coverage ledger. Product behavior unchanged; correction not committed.

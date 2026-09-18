@@ -92,4 +92,33 @@ class RedisListResourceTest {
       list.seed("payload");
     }
   }
+
+  @Test void producerReservationDeletesOnlyItsLaterCreatedKey() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1));
+         var evidence = new RunEvidence(reports, "producer")) {
+      var list = resource(http, evidence); String key = list.key();
+      ingress.reply("GET", path(key), 200, absent(key))
+          .reply("GET", path(key), 200, present(key)).replyText("POST", path(key) + "?action=delete", 200, "ok")
+          .reply("GET", path(key), 200, absent(key));
+      try (list) {
+        list.reserveForProducer();
+        assertThrows(IllegalStateException.class, () -> list.seed("cannot overwrite reservation"));
+      }
+    }
+  }
+  @Test void unusedProducerReservationNeedsNoDelete() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1));
+         var evidence = new RunEvidence(reports, "empty-producer"); var list = resource(http, evidence)) {
+      ingress.reply("GET", path(list.key()), 200, absent(list.key()))
+          .reply("GET", path(list.key()), 200, absent(list.key()));
+      list.reserveForProducer();
+    }
+  }
+  @Test void producerReservationCannotClaimAnExistingList() throws Exception {
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), Duration.ofSeconds(1));
+         var evidence = new RunEvidence(reports, "producer-collision"); var list = resource(http, evidence)) {
+      ingress.reply("GET", path(list.key()), 200, present(list.key()));
+      assertThrows(AssertionError.class, list::reserveForProducer);
+    }
+  }
 }

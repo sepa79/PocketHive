@@ -35,12 +35,13 @@ class RedisDatasetResourcesTest {
       var redis = new RedisCommanderApi(http, "connection");
       var first = new RedisListResource(redis, evidence);
       var second = new RedisListResource(redis, evidence);
+      var lists = new java.util.ArrayList<RedisListResource>(List.of(first, second));
+      for (int i = 0; i < 5; i++) lists.add(new RedisListResource(redis, evidence));
       var scenario = new ScenarioResource("owned", scenarios, evidence);
       var swarm = new SwarmResource(SWARM, swarms, new OperationAwaiter(swarms, limits, evidence), limits);
       ingress.reply("GET", scenarioPath, 404, Map.of())
           .reply("POST", "/scenario-manager/scenarios", 201, Map.of("id", "owned"));
-      seed(ingress, first.key());
-      seed(ingress, second.key());
+      for (var list : lists) seed(ingress, list.key());
       var create = receipt();
       switch (outcome) {
         case NOT_CREATED -> { }
@@ -73,15 +74,13 @@ class RedisDatasetResourcesTest {
       if (!retain) {
         ingress.reply("GET", scenarioPath, 200, Map.of("id", "owned"))
             .reply("DELETE", scenarioPath, 204, Map.of()).reply("GET", scenarioPath, 404, Map.of());
-        delete(ingress, second.key());
-        delete(ingress, first.key());
+        for (var list : lists.reversed()) delete(ingress, list.key());
       }
       var bodyFailure = new AssertionError("original test assertion");
       Throwable failure = null;
-      try (var dependencies = new RedisDatasetResources(swarm, scenario, first, second, evidence); swarm) {
+      try (var dependencies = new RedisDatasetResources(swarm, scenario, lists, evidence); swarm) {
         scenario.create(new ObjectMapper().valueToTree(Map.of("id", "owned")), scenarios).expect(201);
-        first.seed("one");
-        second.seed("two");
+        for (var list : lists) list.seed("payload");
         if (outcome != Outcome.NOT_CREATED) swarm.create(createRequest(create));
         if (outcome == Outcome.BODY_FAILURE) throw bodyFailure;
       } catch (Exception | AssertionError observed) { failure = observed; }
@@ -102,7 +101,7 @@ class RedisDatasetResourcesTest {
         var retainedIds = new ObjectMapper().readTree(retained.toFile());
         assertEquals(SWARM, retainedIds.required("swarmId").textValue());
         assertEquals("owned", retainedIds.required("scenarioId").textValue());
-        assertEquals(List.of(first.key(), second.key()), new ObjectMapper().convertValue(retainedIds.required("redisKeys"), List.class));
+        assertEquals(lists.stream().map(RedisListResource::key).toList(), new ObjectMapper().convertValue(retainedIds.required("redisKeys"), List.class));
       } else if (outcome == Outcome.BODY_FAILURE) {
         assertSame(bodyFailure, failure);
         assertEquals(0, failure.getSuppressed().length);
@@ -123,5 +122,29 @@ class RedisDatasetResourcesTest {
     ingress.reply("GET", path(key), 200, Map.of("key", key, "type", "list", "length", 1))
         .replyText("POST", path(key) + "?action=delete", 200, "ok")
         .reply("GET", path(key), 200, Map.of("key", key, "type", "none"));
+  }
+
+  @org.junit.jupiter.api.Test void attemptsEveryIndependentCloseAndPreservesFailures() throws Exception {
+    var limits = new OperationLimits(Duration.ofSeconds(1), Duration.ofSeconds(2), Duration.ofMillis(1));
+    try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
+         var evidence = new RunEvidence(reports, "close-failures")) {
+      var redis = new RedisCommanderApi(http, "connection");
+      var lists = java.util.stream.IntStream.range(0, 7).mapToObj(i -> new RedisListResource(redis, evidence)).toList();
+      var api = new SwarmApi(http, "");
+      var swarm = new SwarmResource(SWARM, api, new OperationAwaiter(api, limits, evidence), limits);
+      var scenario = new ScenarioResource("unused", new ScenarioApi(http, ""), evidence);
+      for (var list : lists) {
+        ingress.reply("GET", path(list.key()), 200, Map.of("key", list.key(), "type", "none"));
+        list.reserveForProducer();
+      }
+      for (int i = 6; i >= 0; i--) {
+        ingress.reply("GET", path(lists.get(i).key()), i == 6 || i == 4 ? 503 : 200,
+            Map.of("key", lists.get(i).key(), "type", "none"));
+      }
+      var failure = assertThrows(ApiException.class,
+          () -> new RedisDatasetResources(swarm, scenario, lists, evidence).close());
+      assertEquals(1, failure.getSuppressed().length);
+      assertInstanceOf(ApiException.class, failure.getSuppressed()[0]);
+    }
   }
 }
