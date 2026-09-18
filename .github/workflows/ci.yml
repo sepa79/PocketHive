@@ -8,6 +8,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      AUTH_REDIS_TEST_HOST: 127.0.0.1
+      AUTH_REDIS_TEST_PORT: '6379'
+      AUTH_OPENSSL_TEST_EXECUTABLE: /usr/bin/openssl
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -23,7 +37,7 @@ jobs:
         run: bash tools/hiveforge-contract-check.sh
 
       - name: Run Maven tests
-        run: mvn -B -ntp test
+        run: ./mvnw -B -ntp test
 
   scoped-java-mutation:
     name: MCP and Auth mutation gates
@@ -40,13 +54,13 @@ jobs:
           cache: maven
 
       - name: Install reactor dependencies
-        run: mvn -B -ntp -DskipTests install
+        run: ./mvnw -B -ntp -DskipTests install
 
       - name: Run PocketHive MCP mutation gate
-        run: mvn -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+        run: ./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
 
       - name: Run Auth Service mutation gate
-        run: mvn -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+        run: ./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
 
   vscode-extension:
     name: VS Code extension (${{ matrix.os }})

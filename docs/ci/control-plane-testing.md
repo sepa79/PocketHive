@@ -48,3 +48,6 @@ Forbidden imports report the file, line and rule. This check does not prove runt
 behavior or replace relevant codec, startup, lifecycle or ingress behavior checks.
 Module ownership/selection is verified by imports/dependencies and source review,
 following [the boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value).
+
+For worker OAuth fixtures and MCP authoring checks, see
+[Authentication regression tests](auth-testing.md).
