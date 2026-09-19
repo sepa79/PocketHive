@@ -33,9 +33,6 @@ import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TopologyEdge;
 import io.pockethive.swarm.model.TopologyEndpoint;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
-import io.pockethive.worker.sdk.auth.AuthStorageMode;
-import io.pockethive.worker.sdk.auth.AuthTokenKeys;
-import io.pockethive.worker.sdk.auth.AuthType;
 import io.pockethive.templating.PebbleTemplateRenderer;
 import io.pockethive.templating.api.TemplateRenderingException;
 import java.io.IOException;
@@ -69,6 +66,7 @@ import org.springframework.stereotype.Component;
  * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
  * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
  * Work diagnostics delegate to the injected neutral parser and its selected providers.
+ * Auth profile storage diagnostics delegate to AuthProfileStorageFindings and shared auth contracts.
  * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
  * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
  * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
@@ -97,6 +95,7 @@ public final class ScenarioBundleValidator {
     private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
     private final WorkConfigurationFindings workConfigurationFindings;
     private final RequestTemplateFindings requestTemplateFindings = new RequestTemplateFindings();
+    private final AuthProfileStorageFindings authProfileStorageFindings = new AuthProfileStorageFindings();
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -1711,82 +1710,9 @@ public final class ScenarioBundleValidator {
                     "Declare type and storage for profile '%s'.".formatted(profileId)));
                 continue;
             }
-            validateAuthProfileStorage(relativePath, profileId, profile, findings);
+            authProfileStorageFindings.validate(relativePath, profileId, profile, findings);
         }
         return new AuthProfilesInfo(Set.copyOf(profileIds));
-    }
-
-    private void validateAuthProfileStorage(
-        String relativePath,
-        String profileId,
-        Map<?, ?> profile,
-        List<ValidationFinding> findings
-    ) {
-        String rawType = stringValue(profile.get("type"));
-        AuthType type;
-        try {
-            type = AuthType.parse(rawType);
-        } catch (IllegalArgumentException e) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' declares unsupported type '%s'.".formatted(profileId, nullToBlank(rawType)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthTypeValues()))));
-            return;
-        }
-        if (type == AuthType.NONE) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' must declare type.".formatted(profileId),
-                "Set a concrete auth profile type."));
-            return;
-        }
-
-        Object storageValue = profile.get("storage");
-        Map<?, ?> storage = storageValue instanceof Map<?, ?> map ? map : Map.of();
-        String rawMode = stringValue(storage.get("mode"));
-        AuthStorageMode mode = AuthStorageMode.NONE;
-        if (rawMode != null && !rawMode.isBlank()) {
-            try {
-                mode = AuthStorageMode.valueOf(normalizeEnumName(rawMode));
-            } catch (IllegalArgumentException e) {
-                findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.mode",
-                    "Auth profile '%s' declares unsupported storage.mode '%s'.".formatted(profileId, rawMode),
-                    "Use one of: %s.".formatted(String.join(", ", supportedAuthStorageModeValues()))));
-                return;
-            }
-        }
-        boolean refreshable = type == AuthType.OAUTH2_CLIENT_CREDENTIALS
-            || type == AuthType.OAUTH2_PASSWORD_GRANT;
-        if (refreshable && mode != AuthStorageMode.REDIS) {
-            findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Refreshable auth profile '%s' must use storage.mode=REDIS.".formatted(profileId),
-                "Set storage.mode: REDIS and provide a tokenKey."));
-        }
-        if (mode == AuthStorageMode.REDIS) {
-            String tokenKey = stringValue(storage.get("tokenKey"));
-            try {
-                AuthTokenKeys.validateTokenKey(tokenKey);
-            } catch (IllegalArgumentException e) {
-                findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.tokenKey",
-                    "Auth profile '%s' must declare a valid storage.tokenKey.".formatted(profileId),
-                    "Use a non-blank tokenKey matching [A-Za-z0-9._:-]{1,128} without '..'."));
-            }
-        }
-        if (!refreshable && mode != AuthStorageMode.NONE) {
-            findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Non-refresh auth profile '%s' must use storage.mode=NONE.".formatted(profileId),
-                "Set storage.mode: NONE."));
-        }
     }
 
     private void checkImageReference(String scenarioId,
@@ -2278,20 +2204,8 @@ public final class ScenarioBundleValidator {
         return value instanceof String text ? text.trim() : null;
     }
 
-    private String normalizeEnumName(String value) {
-        return value == null ? null : value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
-    }
-
     private List<String> supportedAuthApplyAsValues() {
         return Arrays.stream(AuthApplyAs.values()).map(Enum::name).toList();
-    }
-
-    private List<String> supportedAuthTypeValues() {
-        return Arrays.stream(AuthType.values()).filter(type -> type != AuthType.NONE).map(AuthType::key).toList();
-    }
-
-    private List<String> supportedAuthStorageModeValues() {
-        return Arrays.stream(AuthStorageMode.values()).map(Enum::name).toList();
     }
 
     private String nullToBlank(String value) {

@@ -12,7 +12,7 @@ import java.time.Instant;
 /**
  * Responsibility: Define the closed coordination state repository application contract.
  * Must not: Depend on HTTP, MCP transport, or persistence implementations.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-COORDINATION-STATE - docs/architecture/runtime-responsibilities.md#resp-mcp-coordination-state.
  */
 
 public interface CoordinationStateRepository {
@@ -30,11 +30,14 @@ public interface CoordinationStateRepository {
 
     void createWorkflow(AgentSession session, ScenarioWorkflow workflow);
 
-    void saveWorkflow(ScenarioWorkflow workflow, List<Map<String, Object>> generatedFiles);
+    void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision, List<Map<String, Object>> generatedFiles);
 
-    void saveWorkflow(ScenarioWorkflow workflow);
+    void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision);
 
-    void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow);
+    void saveWorkflowAndUploadCoordination(ScenarioWorkflow workflow, long expectedRevision,
+                                           UploadCoordinationSnapshot uploadCoordination);
+
+    void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow, long expectedRevision);
 
     long countOpenSessions(PrincipalKey principal);
 

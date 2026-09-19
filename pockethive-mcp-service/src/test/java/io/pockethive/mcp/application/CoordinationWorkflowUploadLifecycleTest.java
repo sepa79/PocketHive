@@ -47,7 +47,7 @@ class CoordinationWorkflowUploadLifecycleTest {
             CoordinationWorkflowUploadLifecycle lifecycle = new CoordinationWorkflowUploadLifecycle(
                 state, mapper, workflowAccess(state));
 
-            lifecycle.validated(principal, workflow.id(), "sha256:archive", "sha256:content");
+            lifecycle.validated(principal, UploadWorkflowBinding.workflow(workflow), "sha256:archive", "sha256:content", UploadCoordinationSnapshot.empty());
             assertThat(state.findWorkflow(workflow.id())).get().satisfies(validated -> {
                 assertThat(validated.state()).isEqualTo(ScenarioWorkflowState.VALIDATED);
                 assertThat(validated.validation().archiveDigest()).isEqualTo("sha256:archive");
@@ -59,18 +59,18 @@ class CoordinationWorkflowUploadLifecycleTest {
             attempt.verified();
             attempt.ownerCallInFlight();
             attempt.succeeded(java.util.Map.of("id", "safe"));
-            lifecycle.published(principal, workflow.id(), attempt);
+            lifecycle.published(principal, UploadWorkflowBinding.workflow(workflow), attempt);
 
             assertThat(state.findWorkflow(workflow.id())).get().satisfies(published -> {
                 assertThat(published.state()).isEqualTo(ScenarioWorkflowState.PUBLISHED);
                 assertThat(published.publicationReceiptDigest()).matches("sha256:[0-9a-f]{64}");
             });
             assertThatThrownBy(() -> lifecycle.validated(new PrincipalKey(
-                URI.create("https://issuer.example"), "other"), workflow.id(), "a", "b"))
+                URI.create("https://issuer.example"), "other"), UploadWorkflowBinding.workflow(workflow), "a", "b", UploadCoordinationSnapshot.empty()))
                 .isInstanceOf(ToolExecutionException.class)
                 .extracting(error -> ((ToolExecutionException) error).code())
                 .isEqualTo("SCENARIO_WORKFLOW_NOT_FOUND");
-            assertThatThrownBy(() -> lifecycle.validated(principal, "missing", "a", "b"))
+            assertThatThrownBy(() -> lifecycle.validated(principal, new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, "missing", 1, "files", workflow.capabilityFingerprint()), "a", "b", UploadCoordinationSnapshot.empty()))
                 .isInstanceOf(ToolExecutionException.class)
                 .extracting(error -> ((ToolExecutionException) error).code())
                 .isEqualTo("SCENARIO_WORKFLOW_NOT_FOUND");
@@ -83,13 +83,15 @@ class CoordinationWorkflowUploadLifecycleTest {
         CoordinationStateRepository state = mock(CoordinationStateRepository.class);
         ScenarioWorkflow workflow = generatedWorkflow(state, principal);
         when(state.findWorkflow(workflow.id())).thenReturn(java.util.Optional.of(workflow));
+        UploadWorkflowBinding binding = UploadWorkflowBinding.workflow(workflow);
+        workflow.validated(workflow.revision(), "sha256:archive", "sha256:content");
         PublicationAttempt attempt = succeededAttempt(principal);
 
         ObjectMapper failingMapper = mock(ObjectMapper.class);
         when(failingMapper.writeValueAsBytes(any())).thenThrow(new JsonProcessingException("cannot serialize") { });
         CoordinationWorkflowUploadLifecycle serialization =
             new CoordinationWorkflowUploadLifecycle(state, failingMapper, workflowAccess(state));
-        assertThatThrownBy(() -> serialization.published(principal, workflow.id(), attempt))
+        assertThatThrownBy(() -> serialization.published(principal, binding, attempt))
             .isInstanceOf(ToolExecutionException.class)
             .extracting(error -> ((ToolExecutionException) error).code())
             .isEqualTo("PUBLICATION_RECEIPT_SERIALIZATION_FAILED");
@@ -99,7 +101,7 @@ class CoordinationWorkflowUploadLifecycleTest {
         try (MockedStatic<MessageDigest> digests = mockStatic(MessageDigest.class)) {
             digests.when(() -> MessageDigest.getInstance("SHA-256"))
                 .thenThrow(new NoSuchAlgorithmException("missing"));
-            assertThatThrownBy(() -> digest.published(principal, workflow.id(), attempt))
+            assertThatThrownBy(() -> digest.published(principal, binding, attempt))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("SHA-256 is required by Java");
         }
@@ -136,7 +138,7 @@ class CoordinationWorkflowUploadLifecycleTest {
         }
         workflow.readyToGenerate(workflow.revision(), new CapabilityFingerprint("sha256:capabilities", now));
         workflow.generated(workflow.revision(), "sha256:files");
-        state.saveWorkflow(workflow, List.of());
+        state.saveWorkflow(workflow, 0, List.of());
         return workflow;
     }
 }

@@ -2,17 +2,19 @@ package io.pockethive.mcp.adapter.persistence;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import io.pockethive.mcp.application.UploadWorkflowMode;
 import java.util.HashSet;
 import java.util.Set;
 
 /**
  * Responsibility: Migrate persisted coordination documents to the canonical schema version.
  * Must not: Own domain transitions or expose persistence details through public contracts.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-COORDINATION-STATE - docs/architecture/runtime-responsibilities.md#resp-mcp-coordination-state.
  */
 
 final class CoordinationStateSchema {
-    static final int CURRENT_VERSION = 3;
+    static final int CURRENT_VERSION = 4;
+    private static final int LEGACY_WORKFLOW_BINDING_VERSION = 3;
     private static final int LEGACY_RECEIPT_VERSION = 1;
     private static final int LEGACY_UPLOAD_AUTHENTICATION_VERSION = 2;
 
@@ -21,15 +23,40 @@ final class CoordinationStateSchema {
             return new Migration(encodedState, false);
         }
         int version = root.path("schemaVersion").asInt(Integer.MIN_VALUE);
-        if (version != LEGACY_RECEIPT_VERSION && version != LEGACY_UPLOAD_AUTHENTICATION_VERSION) {
+        if (version != LEGACY_RECEIPT_VERSION && version != LEGACY_UPLOAD_AUTHENTICATION_VERSION
+            && version != LEGACY_WORKFLOW_BINDING_VERSION) {
             return new Migration(encodedState, false);
         }
         if (version == LEGACY_RECEIPT_VERSION) {
             removeReceiptsWithoutOwnerIdentity(root);
         }
-        invalidateLegacyUploadTickets(root);
+        if (version != LEGACY_WORKFLOW_BINDING_VERSION) {
+            invalidateLegacyUploadTickets(root);
+        }
+        retireUnboundWorkflowEvidence(root);
         root.put("schemaVersion", CURRENT_VERSION);
         return new Migration(root, true);
+    }
+
+    private static void retireUnboundWorkflowEvidence(ObjectNode root) {
+        JsonNode coordination = root.path("uploadCoordination");
+        if (!(coordination.path("tickets") instanceof ObjectNode tickets)
+            || !(coordination.path("receipts") instanceof ObjectNode receipts)) {
+            throw new IllegalStateException("MCP_STATE_CORRUPT");
+        }
+        Set<String> staleTickets = new HashSet<>();
+        tickets.fields().forEachRemaining(entry -> {
+            if (UploadWorkflowMode.WORKFLOW.name().equals(entry.getValue().path("workflowBinding").path("mode").asText())) {
+                staleTickets.add(entry.getKey());
+            }
+        });
+        staleTickets.forEach(tickets::remove);
+        receipts.elements().forEachRemaining(receipt -> {
+            if (receipt.path("workflowBinding") instanceof ObjectNode binding
+                && UploadWorkflowMode.WORKFLOW.name().equals(binding.path("mode").asText())) {
+                binding.put("mode", UploadWorkflowMode.LEGACY_WORKFLOW.name());
+            }
+        });
     }
 
     private static void removeReceiptsWithoutOwnerIdentity(ObjectNode root) {

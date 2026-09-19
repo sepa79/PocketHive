@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Coordinate bounded bundle upload lifecycle, capacity, recovery, and persistence.
  * Must not: Depend on HTTP, MCP transport, or persistence implementations.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-UPLOAD-COORDINATION - docs/architecture/runtime-responsibilities.md#resp-mcp-upload-coordination.
  */
 
 @Service
@@ -66,16 +66,16 @@ public final class BundleUploadCoordinator {
         this(owner, properties, stateRepository, lifecycle, new UploadCapabilityAuthority());
     }
 
-    public ValidationUploadTicket prepareValidation(PrincipalKey principal, String workflowId,
+    public ValidationUploadTicket prepareValidation(PrincipalKey principal, UploadWorkflowBinding binding,
                                                      SourceMetadata source, BundleFileManifest manifest,
                                                      Instant now) {
-        return prepareValidationWithCapability(principal, workflowId, source, manifest, now).ticket();
+        return prepareValidationWithCapability(principal, binding, source, manifest, now).ticket();
     }
 
     public PreparedUpload<ValidationUploadTicket> prepareValidationWithCapability(
-        PrincipalKey principal, String workflowId, SourceMetadata source, BundleFileManifest manifest,
+        PrincipalKey principal, UploadWorkflowBinding binding, SourceMetadata source, BundleFileManifest manifest,
         Instant now) {
-        return prepareValidation(principal, UploadWorkflowBinding.workflow(workflowId), source, manifest, now);
+        return issueValidation(principal, binding, source, manifest, now);
     }
 
     public ValidationUploadTicket prepareDirectValidation(PrincipalKey principal,
@@ -86,13 +86,14 @@ public final class BundleUploadCoordinator {
 
     public PreparedUpload<ValidationUploadTicket> prepareDirectValidationWithCapability(
         PrincipalKey principal, SourceMetadata source, BundleFileManifest manifest, Instant now) {
-        return prepareValidation(principal, UploadWorkflowBinding.direct(), source, manifest, now);
+        return issueValidation(principal, UploadWorkflowBinding.direct(), source, manifest, now);
     }
 
-    private PreparedUpload<ValidationUploadTicket> prepareValidation(
+    private synchronized PreparedUpload<ValidationUploadTicket> issueValidation(
         PrincipalKey principal, UploadWorkflowBinding binding, SourceMetadata source,
         BundleFileManifest manifest, Instant now) {
         maintain(now);
+        requireCurrentBinding(binding);
         IssuedUploadCapability capability = uploadCapabilities.issue();
         ValidationUploadTicket ticket = new ValidationUploadTicket(id("uv"), principal, binding,
             source, manifest, capability.digest(), now.plus(properties.uploadTicketTtl()));
@@ -110,16 +111,20 @@ public final class BundleUploadCoordinator {
             manifest, expectedArchiveDigest, expectedContentDigest, now).ticket();
     }
 
-    public PreparedUpload<PublicationUploadTicket> preparePublicationWithCapability(
+    public synchronized PreparedUpload<PublicationUploadTicket> preparePublicationWithCapability(
         PrincipalKey principal, String validationReceiptId, PublicationMode mode, String scenarioId,
         SourceMetadata source, BundleFileManifest manifest, String expectedArchiveDigest,
         String expectedContentDigest, Instant now) {
         maintain(now);
         BundleValidationReceipt receipt = receipt(validationReceiptId, principal);
+        requireCurrentBinding(receipt.workflowBinding());
         if (!receipt.source().equals(source) || !receipt.manifest().equals(manifest)
             || !receipt.archiveDigest().equals(expectedArchiveDigest)
             || !receipt.bundleContentDigest().equals(expectedContentDigest)) {
             throw new UploadRejectedException("VALIDATION_RECEIPT_BINDING_MISMATCH");
+        }
+        if (receipt.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
+            lifecycle.requirePublicationCurrent(principal, receipt.workflowBinding());
         }
         String attemptId = id("pa");
         String reconciliationScenarioId = mode == PublicationMode.CREATE ? receipt.scenarioId() : scenarioId;
@@ -184,7 +189,11 @@ public final class BundleUploadCoordinator {
         return receipt(receiptId, principal);
     }
 
-    public PublicationAttempt publicationAttempt(String attemptId, PrincipalKey principal) {
+    public synchronized PublicationAttempt publicationAttempt(String attemptId, PrincipalKey principal) {
+        return PublicationAttempt.restore(attempt(attemptId, principal).snapshot());
+    }
+
+    private PublicationAttempt attempt(String attemptId, PrincipalKey principal) {
         PublicationAttempt attempt = attempts.get(attemptId);
         if (attempt == null || !attempt.principal().equals(principal)) {
             throw new UploadRejectedException("PUBLICATION_ATTEMPT_NOT_FOUND");
@@ -198,11 +207,18 @@ public final class BundleUploadCoordinator {
             throw new UploadRejectedException("PUBLICATION_ATTEMPT_NOT_AMBIGUOUS");
         }
         OwnerScenarioProjection projection = owner.get(attempt.scenarioId());
-        if (attempt.expectedContentDigest().equals(projection.bundleContentDigest())) {
-            attempt.succeeded(projection.ownerResult());
+        return completeReconciliation(attemptId, principal, projection);
+    }
+
+    private synchronized PublicationAttempt completeReconciliation(String attemptId, PrincipalKey principal,
+                                                                   OwnerScenarioProjection projection) {
+        PublicationAttempt current = attempt(attemptId, principal);
+        if (current.state() == PublicationAttemptState.AMBIGUOUS
+            && current.expectedContentDigest().equals(projection.bundleContentDigest())) {
+            current.succeeded(projection.ownerResult());
             persistOrRestore();
         }
-        return attempt;
+        return PublicationAttempt.restore(current.snapshot());
     }
 
     public synchronized void maintain(Instant now) {
@@ -267,7 +283,7 @@ public final class BundleUploadCoordinator {
         return ticket;
     }
 
-    private BundleUploadTicket authenticateCapability(String ticketId, String uploadCapability) {
+    private synchronized BundleUploadTicket authenticateCapability(String ticketId, String uploadCapability) {
         BundleUploadTicket ticket = tickets.get(ticketId);
         if (ticket == null || !uploadCapabilities.matches(uploadCapability, ticket.uploadCapabilityDigest())) {
             throw new UploadAuthenticationException("UPLOAD_AUTHENTICATION_REQUIRED");
@@ -283,56 +299,103 @@ public final class BundleUploadCoordinator {
             || ownerResult.bundleContentDigest() == null || ownerResult.bundleContentDigest().isBlank()) {
             throw new UploadRejectedException("SCENARIO_BUNDLE_VALIDATION_FAILED");
         }
+        return completeValidation(ticket.id(), inspection, ownerResult, now);
+    }
+
+    private synchronized UploadOutcome completeValidation(String ticketId, ArchiveInspection inspection,
+                                                          OwnerValidationResult ownerResult, Instant now) {
+        ValidationUploadTicket ticket = (ValidationUploadTicket) tickets.get(ticketId);
         BundleValidationReceipt receipt = new BundleValidationReceipt(id("vr"), ticket.principal(),
             ticket.workflowBinding(), ticket.source(), ticket.manifest(), inspection.archiveDigest(),
             ownerResult.bundleContentDigest(), ownerResult.scenarioId(), ownerResult.scenarioName(), now);
         receipts.put(receipt.id(), receipt);
         ticket.consume();
-        persistOrRestore();
-        if (ticket.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
-            lifecycle.validated(ticket.principal(), ticket.workflowBinding().workflowId(),
-                inspection.archiveDigest(), ownerResult.bundleContentDigest());
+        try {
+            if (ticket.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
+                lifecycle.validated(ticket.principal(), ticket.workflowBinding(),
+                    inspection.archiveDigest(), ownerResult.bundleContentDigest(), snapshot());
+            } else {
+                persistOrRestore();
+            }
+        } catch (RuntimeException exception) {
+            restore(stateRepository.loadUploadCoordination());
+            throw exception;
         }
         return new ValidationUploadOutcome(BundleValidationReceiptView.from(receipt));
     }
 
     private UploadOutcome publish(PublicationUploadTicket ticket, ArchiveInspection inspection, Path spool) {
-        PublicationAttempt attempt = attempts.get(ticket.attemptId());
-        if (!ticket.expectedArchiveDigest().equals(inspection.archiveDigest())) {
-            throw new UploadRejectedException("PUBLICATION_ARCHIVE_DIGEST_MISMATCH");
-        }
-        attempt.verified();
-        persistOrRestore();
-        attempt.ownerCallInFlight();
-        persistOrRestore();
+        beginPublication(ticket.id(), inspection);
         Object result;
         try {
             result = switch (ticket.mode()) {
                 case CREATE -> owner.create(spool);
                 case REPLACE -> owner.replace(ticket.scenarioId(), spool);
             };
+            if (result == null) {
+                throw new OwnerCallAmbiguousException("PUBLICATION_OWNER_RESULT_MISSING");
+            }
         } catch (OwnerCallRejectedException exception) {
-            attempt.failed();
-            ticket.consume();
-            persistOrRestore();
+            rejectPublication(ticket.id());
             throw new UploadRejectedException("PUBLICATION_OWNER_REJECTED", exception);
         } catch (RuntimeException exception) {
-            attempt.ambiguous();
-            ticket.consume();
-            persistOrRestore();
-            throw new AmbiguousPublicationException(attempt.id(), exception);
+            markPublicationAmbiguous(ticket.id());
+            throw new AmbiguousPublicationException(ticket.attemptId(), exception);
         }
+        return completePublication(ticket.id(), result);
+    }
+
+    private synchronized void beginPublication(String ticketId, ArchiveInspection inspection) {
+        PublicationUploadTicket ticket = (PublicationUploadTicket) tickets.get(ticketId);
+        if (!ticket.expectedArchiveDigest().equals(inspection.archiveDigest())) {
+            throw new UploadRejectedException("PUBLICATION_ARCHIVE_DIGEST_MISMATCH");
+        }
+        if (ticket.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
+            lifecycle.requirePublicationCurrent(ticket.principal(), ticket.workflowBinding());
+        }
+        PublicationAttempt attempt = attempts.get(ticket.attemptId());
+        attempt.verified();
+        persistOrRestore();
+        attempt.ownerCallInFlight();
+        persistOrRestore();
+    }
+
+    private synchronized void rejectPublication(String ticketId) {
+        PublicationUploadTicket ticket = (PublicationUploadTicket) tickets.get(ticketId);
+        attempts.get(ticket.attemptId()).failed();
+        ticket.consume();
+        persistPublication(ticket.attemptId());
+    }
+
+    private synchronized void markPublicationAmbiguous(String ticketId) {
+        PublicationUploadTicket ticket = (PublicationUploadTicket) tickets.get(ticketId);
+        attempts.get(ticket.attemptId()).ambiguous();
+        ticket.consume();
+        persistPublication(ticket.attemptId());
+    }
+
+    private synchronized UploadOutcome completePublication(String ticketId, Object result) {
+        PublicationUploadTicket ticket = (PublicationUploadTicket) tickets.get(ticketId);
+        PublicationAttempt attempt = attempts.get(ticket.attemptId());
         attempt.succeeded(result);
         ticket.consume();
-        persistOrRestore();
+        persistPublication(attempt.id());
         if (ticket.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
             try {
-                lifecycle.published(ticket.principal(), ticket.workflowBinding().workflowId(), attempt);
+                lifecycle.published(ticket.principal(), ticket.workflowBinding(), attempt);
             } catch (RuntimeException exception) {
                 throw new PublicationStateSyncException(attempt.id(), exception);
             }
         }
         return new PublicationUploadOutcome(PublicationAttemptView.from(attempt));
+    }
+
+    private void persistPublication(String attemptId) {
+        try {
+            persistOrRestore();
+        } catch (RuntimeException exception) {
+            throw new AmbiguousPublicationException(attemptId, exception);
+        }
     }
 
     private Path receiveToSpool(InputStream input, long declaredLength) throws IOException {
@@ -362,9 +425,9 @@ public final class BundleUploadCoordinator {
         }
     }
 
-    private void fail(BundleUploadTicket ticket) {
-        BundleUploadTicket current = tickets.getOrDefault(ticket.id(), ticket);
-        if (current.state() == UploadTicketState.RECEIVING) {
+    private synchronized void fail(BundleUploadTicket ticket) {
+        BundleUploadTicket current = tickets.get(ticket.id());
+        if (current != null && current.state() == UploadTicketState.RECEIVING) {
             if (current instanceof PublicationUploadTicket publication) {
                 PublicationAttempt attempt = attempts.get(publication.attemptId());
                 if (attempt.state() == PublicationAttemptState.RECEIVING
@@ -404,7 +467,7 @@ public final class BundleUploadCoordinator {
         primaryFailure.addSuppressed(cleanupFailure);
     }
 
-    private BundleValidationReceipt receipt(String receiptId, PrincipalKey principal) {
+    private synchronized BundleValidationReceipt receipt(String receiptId, PrincipalKey principal) {
         BundleValidationReceipt receipt = receipts.get(receiptId);
         if (receipt == null || !receipt.principal().equals(principal)) {
             throw new UploadRejectedException("VALIDATION_RECEIPT_NOT_FOUND");
@@ -431,19 +494,25 @@ public final class BundleUploadCoordinator {
             if (ticket instanceof PublicationUploadTicket publication) {
                 PublicationAttempt attempt = attempts.get(publication.attemptId());
                 if (attempt != null && attempt.state() == PublicationAttemptState.OWNER_CALL_IN_FLIGHT) {
-                    attempt.ambiguous();
                     ticket.consume();
                 } else {
-                    if (attempt != null && (attempt.state() == PublicationAttemptState.RECEIVING
-                        || attempt.state() == PublicationAttemptState.VERIFIED)) {
-                        attempt.failed();
-                    }
                     ticket.fail();
                 }
             } else {
                 ticket.fail();
             }
             changed = true;
+        }
+        // Schema migration can retire a ticket while retaining a possibly completed owner attempt.
+        for (PublicationAttempt attempt : attempts.values()) {
+            if (attempt.state() == PublicationAttemptState.OWNER_CALL_IN_FLIGHT) {
+                attempt.ambiguous();
+                changed = true;
+            } else if (attempt.state() == PublicationAttemptState.RECEIVING
+                || attempt.state() == PublicationAttemptState.VERIFIED) {
+                attempt.failed();
+                changed = true;
+            }
         }
         deleteOrphanedSpoolFiles();
         if (changed) {
@@ -507,6 +576,12 @@ public final class BundleUploadCoordinator {
             } catch (IOException exception) {
                 throw new IllegalStateException("UPLOAD_SPOOL_DELETE_FAILED", exception);
             }
+        }
+    }
+
+    private static void requireCurrentBinding(UploadWorkflowBinding binding) {
+        if (binding.mode() == UploadWorkflowMode.LEGACY_WORKFLOW) {
+            throw new UploadRejectedException("WORKFLOW_REVALIDATION_REQUIRED");
         }
     }
 

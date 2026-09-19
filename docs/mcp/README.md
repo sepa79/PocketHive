@@ -270,6 +270,31 @@ Invalid, incomplete, stale, or mismatched input fails explicitly. There is no
 create/replace fallback, server-side Git checkout, bundle-root scan, or archive
 execution.
 
+Workflow-bound upload tickets retain the prepared workflow revision, generated
+file-set digest, and capability fingerprint. Validation completion applies only
+to that exact generation. Its receipt retains this identity; publication checks
+the corresponding validated revision both before calling Scenario Manager and
+when recording completion. Regeneration, cancellation, capability changes, or a
+concurrent edit make older tickets stale; no receipt can validate or publish the
+replacement proposal. Regeneration clears prior validation/publication evidence
+from the current workflow projection; historical upload receipts remain separate. Workflow saves compare the persisted revision atomically.
+Validation persists the workflow transition, receipt and consumed ticket in one
+atomic state write, so a failed write leaves no partial accepted evidence.
+If the owner has already published while the workflow changes, the publication
+attempt keeps the verified owner result and reports a workflow state-sync error;
+it does not mark the replacement proposal published or retry the owner write.
+Concurrent upload completion updates the canonical ticket and publication attempt
+after the owner response; another upload's rollback cannot discard that result.
+If saving the owner result itself fails, publication reports an ambiguous durable
+outcome with its attempt ID and retains the in-flight state for restart recovery.
+Owner requests remain concurrent and are not retried by this recovery path.
+
+Coordination-state schema 4 invalidates legacy workflow-bound tickets because
+their prepared generation was not recorded. Existing receipts remain readable
+with explicit `LEGACY_WORKFLOW` binding and cannot authorize publication; clients
+must prepare and validate again. Direct-upload evidence and publication attempts
+are retained; migration never guesses a generation from the current workflow.
+
 The prepare result returns the opaque upload capability exactly once. It
 authorises only one binary `PUT` to that exact ticket before its expiry; it is
 not an MCP access token and cannot call tools or another upload ticket. The MCP
@@ -286,6 +311,31 @@ for their publication confirmation. A conflicting `scenarioId` requires one
 explicit choice: `REPLACE`, or edit and commit a renamed source bundle before
 new validation. The MCP and IDE never rewrite retained ZIP bytes or silently
 suffix an identity.
+
+### Worker OAuth authoring
+
+Author worker authentication in `authProfiles.yaml` and reference the selected
+profile from the request template's `authRef`. For OAuth, use
+`applyAs: HTTP_AUTHORIZATION_BEARER` and include the template's `serviceId`.
+This worker authentication is separate from the OAuth session used to connect a
+client to the MCP.
+
+After confirming the workflow requirements, submit the complete files to
+`scenario_workflow_generate` as `files[{path,content}]`. File contents and their
+UTF-8 digests are preserved without an auth-field mapper. Signed OAuth uses the
+[HTTP Signature profile contract](../AUTH-USER-GUIDE.md#oauth-http-signature):
+keep the exact `keyId`, explicit `scopes` list (including `[]`), optional
+`audience`, secret references, profile ID and Redis token key. Ordinary OAuth
+client-credentials and password-grant files use this same file-preserving flow.
+
+Review and commit the proposed files before the validation/upload lifecycle above.
+Generation and validation-ticket preparation do not validate signing settings or
+read secret references. The upload coordinator verifies the archive against the
+submitted manifest, then delegates bundle validation to Scenario Manager. Only
+an accepted owner result yields a validation receipt. Scenario Manager's structural
+checks do not prove that resolved keys, token exchange or provider behavior will
+succeed; those belong to worker runtime and environment verification. The removed
+Node wizard/import/clone/enrich APIs are not supported authoring paths.
 
 ## Owning documents
 

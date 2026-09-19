@@ -8,6 +8,41 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      AUTH_REDIS_TEST_HOST: 127.0.0.1
+      AUTH_REDIS_TEST_PORT: '6379'
+      AUTH_OPENSSL_TEST_EXECUTABLE: /usr/bin/openssl
+      RABBITMQ_TEST_HOSTNAME: 127.0.0.1
+      RABBITMQ_TEST_PORT: '5672'
+      RABBITMQ_TEST_ADMIN_URI: http://127.0.0.1:15672/api/
+      RABBITMQ_TEST_USER: guest
+      RABBITMQ_TEST_PASSWORD: guest
+      RABBITMQ_TEST_ADMIN_USER: guest
+      RABBITMQ_TEST_ADMIN_PASSWORD: guest
+      RABBITMQ_SERVER_REQUIRED: 'true'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3.13-management-alpine
+        env:
+          # Test-owned broker: the lifecycle fixture uses guest from the host runner.
+          RABBITMQ_SERVER_ADDITIONAL_ERL_ARGS: +S 2:2 -rabbit loopback_users []
+        ports:
+          - 127.0.0.1:5672:5672
+          - 127.0.0.1:15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q check_running"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -22,12 +57,29 @@ jobs:
       - name: Check HiveForge action-root contract
         run: bash tools/hiveforge-contract-check.sh
 
+      - name: Verify independent OpenSSL verifier
+        run: '"$AUTH_OPENSSL_TEST_EXECUTABLE" version'
+
       - name: Run Maven tests
-        run: mvn -B -ntp test
+        run: ./mvnw -B -ntp test
 
   scoped-java-mutation:
-    name: MCP and Auth mutation gates
+    name: MCP, Auth and HTTP Sequence mutation gates
     runs-on: ubuntu-latest
+    env:
+      AUTH_REDIS_TEST_HOST: 127.0.0.1
+      AUTH_REDIS_TEST_PORT: '6379'
+      AUTH_OPENSSL_TEST_EXECUTABLE: /usr/bin/openssl
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,14 +91,20 @@ jobs:
           java-version: '21'
           cache: maven
 
+      - name: Verify independent OpenSSL verifier
+        run: '"$AUTH_OPENSSL_TEST_EXECUTABLE" version'
+
       - name: Install reactor dependencies
-        run: mvn -B -ntp -DskipTests install
+        run: ./mvnw -B -ntp -DskipTests install
 
       - name: Run PocketHive MCP mutation gate
-        run: mvn -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+        run: ./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
 
       - name: Run Auth Service mutation gate
-        run: mvn -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+        run: ./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+
+      - name: Run HTTP Sequence mutation gate
+        run: ./mvnw -B -ntp -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
 
   vscode-extension:
     name: VS Code extension (${{ matrix.os }})

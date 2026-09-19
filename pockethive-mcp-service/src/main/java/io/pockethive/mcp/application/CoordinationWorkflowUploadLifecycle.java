@@ -4,7 +4,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.mcp.domain.PrincipalKey;
 import io.pockethive.mcp.domain.ScenarioWorkflow;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.HexFormat;
@@ -13,7 +12,7 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: Record validated and published bundle evidence on the owning QA workflow.
  * Must not: Authorize workflow access, upload archives, or execute publication.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-UPLOAD-LIFECYCLE - docs/architecture/runtime-responsibilities.md#resp-mcp-upload-lifecycle.
  */
 @Service
 public final class CoordinationWorkflowUploadLifecycle implements BundleUploadLifecycle {
@@ -29,22 +28,32 @@ public final class CoordinationWorkflowUploadLifecycle implements BundleUploadLi
     }
 
     @Override
-    public void validated(PrincipalKey principal, String workflowId, String archiveDigest,
-                          String bundleContentDigest) {
-        ScenarioWorkflow workflow = workflow(principal, workflowId);
-        workflow.validated(workflow.revision(), archiveDigest, bundleContentDigest);
-        state.saveWorkflow(workflow);
+    public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archiveDigest,
+                          String bundleContentDigest, UploadCoordinationSnapshot uploadState) {
+        ScenarioWorkflow workflow = workflows.requireWorkflow(binding.workflowId(), principal);
+        workflow.requireGeneration(binding.preparedRevision(), binding.generatedFileSetDigest(),
+            binding.capabilityFingerprint());
+        workflow.validated(binding.preparedRevision(), archiveDigest, bundleContentDigest);
+        state.saveWorkflowAndUploadCoordination(workflow, binding.preparedRevision(), uploadState);
     }
 
     @Override
-    public void published(PrincipalKey principal, String workflowId, PublicationAttempt attempt) {
-        ScenarioWorkflow workflow = workflow(principal, workflowId);
-        workflow.published(workflow.revision(), digest(attempt));
-        state.saveWorkflow(workflow);
+    public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) {
+        publicationWorkflow(principal, binding);
     }
 
-    private ScenarioWorkflow workflow(PrincipalKey principal, String workflowId) {
-        return workflows.requireWorkflow(workflowId, principal);
+    @Override
+    public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
+        ScenarioWorkflow workflow = publicationWorkflow(principal, binding);
+        workflow.published(binding.preparedRevision() + 1, digest(attempt));
+        state.saveWorkflow(workflow, binding.preparedRevision() + 1);
+    }
+
+    private ScenarioWorkflow publicationWorkflow(PrincipalKey principal, UploadWorkflowBinding binding) {
+        ScenarioWorkflow workflow = workflows.requireWorkflow(binding.workflowId(), principal);
+        workflow.requireValidatedGeneration(binding.preparedRevision() + 1, binding.generatedFileSetDigest(),
+            binding.capabilityFingerprint());
+        return workflow;
     }
 
     private String digest(PublicationAttempt attempt) {

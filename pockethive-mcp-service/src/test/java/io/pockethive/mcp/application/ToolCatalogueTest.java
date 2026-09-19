@@ -74,11 +74,11 @@ class ToolCatalogueTest {
                 "pockethive://tools/catalogue", "pockethive://skills/catalogue");
         assertThat(catalogue.skills().get("qa-no-inference").version()).isEqualTo("1.2.0");
         assertThat(catalogue.skills().values().stream()
-            .filter(skill -> !Set.of("qa-no-inference", "runtime-diagnostics", "live-configuration",
+            .filter(skill -> !Set.of("qa-no-inference", "scenario-authoring", "runtime-diagnostics", "live-configuration",
                 "governed-cleanup").contains(skill.id())))
             .allSatisfy(skill -> assertThat(skill.version()).isEqualTo("1.0.0"));
         assertThat(catalogue.skills().values().stream()
-            .filter(skill -> Set.of("runtime-diagnostics", "live-configuration", "governed-cleanup")
+            .filter(skill -> Set.of("scenario-authoring", "runtime-diagnostics", "live-configuration", "governed-cleanup")
                 .contains(skill.id())))
             .allSatisfy(skill -> assertThat(skill.version()).isEqualTo("1.1.0"));
         assertThat(catalogue.skills().get("qa-no-inference").markdown())

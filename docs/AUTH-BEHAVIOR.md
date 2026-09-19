@@ -81,13 +81,59 @@ Supported profile types:
 - `API_KEY`
 - `OAUTH2_CLIENT_CREDENTIALS`
 - `OAUTH2_PASSWORD_GRANT`
+- `OAUTH2_HTTP_SIGNATURE`
 - `HMAC_SIGNATURE`
 - `AWS_SIGNATURE_V4`
 - `MESSAGE_FIELD_AUTH`
 - `ISO8583_MAC`
 - `TLS_CLIENT_CERT`
 
-Refreshable strategies are OAuth client credentials and OAuth password grant. Static strategies do not write Redis token records.
+Refreshable strategies are OAuth client credentials, OAuth password grant, and OAuth HTTP Signature. Static strategies do not write Redis token records.
+
+### OAuth HTTP Signature
+
+`OAUTH2_HTTP_SIGNATURE` is an isolated client-credentials profile. It signs only
+the token-acquisition POST with RSA-SHA256, using the fixed signing order
+`(request-target) host date digest`. The `Digest` covers the exact form-encoded
+request bytes; the canonical string uses LF separators without a trailing
+newline. The token request carries `Authorization: Signature ...`.
+
+The token endpoint must use HTTPS. The form's exact content type is
+`application/x-www-form-urlencoded;charset=UTF-8`. Keys must be unencrypted
+PKCS#8 RSA PEM with a modulus of at least 2,048 bits; configured identifiers are
+preserved without trimming.
+
+After acquisition, `authRef.applyAs: HTTP_AUTHORIZATION_BEARER` applies the access
+token to downstream requests. Signing headers and private-key material are not
+applied to those requests. The profile reuses existing Redis records, atomic
+leases, and redacted failure reporting, with these isolated lifecycle rules:
+
+- Require a valid Bearer `access_token` string, a case-insensitive `Bearer`
+  `token_type` string, and a positive integer JSON `expires_in` no greater than
+  `2147483647`; no missing-field defaults or invalid tokens enter the cache.
+- Calculate expiry from token-acquisition start and recheck expiry against the
+  current time after token-endpoint I/O, Redis I/O, and refresh metrics callbacks.
+- Reuse a cached token until expiration; `refreshAheadSeconds` and
+  `emergencyRefreshAheadSeconds` are ignored for this profile, and its stored
+  refresh time equals expiration.
+- Check the shared cache again after claiming the refresh lease; when another
+  worker owns the lease, poll every 25 milliseconds with a 30-second deadline
+  for a valid shared token. Redis commands retain their existing timeouts;
+  timeout, interruption, and Redis unavailability fail explicitly.
+- Limit the token HTTP deadline, including complete response-body consumption,
+  to 15 seconds or the remaining lease time minus one second, whichever is
+  shorter. Timeout or interruption cancels the request; an expired lease fails
+  acquisition.
+- Release refresh claims on signing, HTTP, or token-response failure.
+- Compute configuration fingerprints deterministically across JVMs for this
+  profile, preserving shared-token isolation.
+
+This profile has its own `keyId`, RSA `privateKey`, required `scopes` list, and
+optional `audience`. Existing profile fields, schemas, response parsing,
+fingerprints, and refresh behavior remain unchanged. See
+[OAuth HTTP Signature configuration and flow](AUTH-USER-GUIDE.md#oauth-http-signature)
+for the complete configuration, prototype migration guidance, and protocol
+boundary. Actual provider interoperability remains unverified.
 
 ## Application Points
 

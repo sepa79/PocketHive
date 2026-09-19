@@ -33,6 +33,41 @@ import org.slf4j.LoggerFactory;
 
 class AuthRuntimeTest {
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "STATIC_TOKEN,HTTP_AUTHORIZATION_BEARER,Authorization,Bearer test-token",
+        "BASIC_AUTH,HTTP_HEADER,aUtHoRiZaTiOn,Basic YWxpY2U6c2VjcmV0",
+        "API_KEY,HTTP_HEADER,X-Api-Key,test-token"
+    })
+    void replacesAllEffectiveCredentialHeaders(
+        AuthType type, AuthApplyAs applyAs, String headerName, String expected) throws Exception {
+        Path templates = profiles("""
+            profiles:
+              profile:
+                type: %s
+                storage:
+                  mode: NONE
+                token: test-token
+                key: test-token
+                username: alice
+                password: secret
+            """.formatted(type));
+        AuthRef ref = new AuthRef("profile", applyAs, headerName, null, null);
+        Map<String, String> original = Map.of(
+            headerName.toLowerCase(java.util.Locale.ROOT), "old-lower",
+            headerName.toUpperCase(java.util.Locale.ROOT), "old-upper",
+            "X-Correlation-Id", "correlation");
+        var request = new AuthRuntime.MutableHttpRequest("GET", "/test", original, "");
+        try (AuthRuntime runtime = AuthRuntime.forTemplates(templates.toString(), List.of(ref),
+            Map.of(), new TestContext(), (template, context) -> template, new RedisSequenceProperties())) {
+            runtime.applyHttp(ref, request, null, new TestContext());
+        }
+        assertThat(request.headers()).hasSize(2).containsEntry(headerName, expected)
+            .containsEntry("X-Correlation-Id", "correlation")
+            .doesNotContainValue("old-lower").doesNotContainValue("old-upper");
+        assertThat(original).containsValue("old-lower").containsValue("old-upper");
+    }
+
     @Test
     void appliesStaticBearerHeaderFromAuthProfile() throws Exception {
         Path scenario = Files.createTempDirectory("auth-profile");

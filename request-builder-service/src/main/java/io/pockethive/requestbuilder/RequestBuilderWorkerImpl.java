@@ -110,93 +110,95 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
         return handleMissing(config, seed, context);
       }
 
-      AuthRuntime authRuntime = AuthRuntime.forTemplates(
-          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
-      Object envelope;
-      String protocol = definition.protocol();
-      if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
-        MessageTemplate template = MessageTemplate.builder()
-            .bodyType(MessageBodyType.SIMPLE)
-            .bodyTemplate(tcpDef.bodyTemplate())
-            .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
-            .build();
+      try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
+          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+        Object envelope;
+        String protocol = definition.protocol();
+        if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
+          MessageTemplate template = MessageTemplate.builder()
+              .bodyType(MessageBodyType.SIMPLE)
+              .bodyTemplate(tcpDef.bodyTemplate())
+              .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
+              .build();
 
-        MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, effectiveSeed);
+          MessageTemplateRenderer.RenderedMessage rendered =
+              messageTemplateRenderer.render(template, effectiveSeed);
 
-        Map<String, String> headers = new HashMap<>(rendered.headers());
-        String body = rendered.body();
-        List<AuthRef> authApplications = List.of();
-        if (tcpDef.authRef() != null) {
-          switch (tcpDef.authRef().applyAs()) {
-            case TCP_PAYLOAD_PREFIX, HMAC_PAYLOAD_FIELD -> body = authRuntime.applyTcpBody(tcpDef.authRef(), body, effectiveSeed, context);
-            case ISO8583_MAC_FIELD, MTLS_CLIENT_CERT -> authApplications = List.of(tcpDef.authRef());
-            default -> throw new IllegalArgumentException("Unsupported TCP auth applyAs: " + tcpDef.authRef().applyAs());
+          Map<String, String> headers = new HashMap<>(rendered.headers());
+          String body = rendered.body();
+          List<AuthRef> authApplications = List.of();
+          if (tcpDef.authRef() != null) {
+            switch (tcpDef.authRef().applyAs()) {
+              case TCP_PAYLOAD_PREFIX, HMAC_PAYLOAD_FIELD -> body = authRuntime.applyTcpBody(tcpDef.authRef(), body, effectiveSeed, context);
+              case ISO8583_MAC_FIELD, MTLS_CLIENT_CERT -> authApplications = List.of(tcpDef.authRef());
+              default -> throw new IllegalArgumentException("Unsupported TCP auth applyAs: " + tcpDef.authRef().applyAs());
+            }
           }
+
+          envelope = TcpRequestEnvelope.of(
+              new TcpRequest(
+                  tcpDef.behavior(),
+                  body,
+                  headers,
+                  tcpDef.endTag(),
+                  tcpDef.maxBytes(),
+                  authApplications
+              ),
+              tcpDef.resultRules()
+          );
+        } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
+          MessageTemplate template = MessageTemplate.builder()
+              .bodyType(MessageBodyType.HTTP)
+              .pathTemplate(httpDef.pathTemplate())
+              .methodTemplate(httpDef.method())
+              .bodyTemplate(httpDef.bodyTemplate())
+              .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+              .build();
+
+          MessageTemplateRenderer.RenderedMessage rendered =
+              messageTemplateRenderer.render(template, effectiveSeed);
+
+          Map<String, String> headers = new HashMap<>(rendered.headers());
+
+          String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
+          AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
+              method, rendered.path(), headers, rendered.body());
+          if (httpDef.authRef() != null) {
+            authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);
+            headers = authRequest.headers();
+          }
+          String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
+          boolean isJson = contentType.contains("application/json") ||
+                          (contentType.isEmpty() && looksLikeJson(rendered.body()));
+          envelope = HttpRequestEnvelope.of(
+              new HttpRequest(
+                  method,
+                  authRequest.path(),
+                  headers,
+                  resolveBodyValue(rendered.body(), isJson)
+              ),
+              httpDef.resultRules()
+          );
+        } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
+          envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);
+        } else {
+          throw new IllegalStateException("Unsupported template protocol: " + protocol);
         }
 
-        envelope = TcpRequestEnvelope.of(
-            new TcpRequest(
-                tcpDef.behavior(),
-                body,
-                headers,
-                tcpDef.endTag(),
-                tcpDef.maxBytes(),
-                authApplications
-            ),
-            tcpDef.resultRules()
-        );
-      } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
-        MessageTemplate template = MessageTemplate.builder()
-            .bodyType(MessageBodyType.HTTP)
-            .pathTemplate(httpDef.pathTemplate())
-            .methodTemplate(httpDef.method())
-            .bodyTemplate(httpDef.bodyTemplate())
-            .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+        WorkItem httpItem = WorkItem.json(context.info(), envelope)
+            .contentType("application/json")
             .build();
 
-        MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, effectiveSeed);
-
-        Map<String, String> headers = new HashMap<>(rendered.headers());
-
-        String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
-        AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
-            method, rendered.path(), headers, rendered.body());
-        if (httpDef.authRef() != null) {
-          authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);
-          headers = authRequest.headers();
-        }
-        String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
-        boolean isJson = contentType.contains("application/json") ||
-                        (contentType.isEmpty() && looksLikeJson(rendered.body()));
-        envelope = HttpRequestEnvelope.of(
-            new HttpRequest(
-                method,
-                authRequest.path(),
-                headers,
-                resolveBodyValue(rendered.body(), isJson)
-            ),
-            httpDef.resultRules()
-        );
-      } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
-        envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);
-      } else {
-        throw new IllegalStateException("Unsupported template protocol: " + protocol);
+        context.logger().debug("Request Builder rendered serviceId={} callId={} protocol={}",
+            serviceId, callId, protocol);
+        WorkStep step = lastStep(httpItem);
+        WorkItem result = seed.toBuilder()
+            .contentType(httpItem.contentType())
+            .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+            .build();
+        publishStatus(context, config);
+        return result;
       }
-
-      WorkItem httpItem = WorkItem.json(context.info(), envelope)
-          .contentType("application/json")
-          .build();
-
-      context.logger().debug("Request Builder envelope: {}", httpItem.asString());
-      WorkStep step = lastStep(httpItem);
-      WorkItem result = seed.toBuilder()
-          .contentType(httpItem.contentType())
-          .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
-          .build();
-      publishStatus(context, config);
-      return result;
     } catch (Exception ex) {
       var authFailure = AuthFailureException.find(ex);
       if (authFailure.isPresent()) {

@@ -126,13 +126,14 @@ public class TcpProtocolHandler implements ProtocolHandler {
     String requestBody = body.get();
     Map<String, Object> authTransportOptions = Map.of();
     if (request.authApplications() != null && !request.authApplications().isEmpty()) {
-      AuthRuntime authRuntime = AuthRuntime.forApplications(
-          request.authApplications(), Map.of(), processorConfig.authProfileSutContext(), context, templateRenderer, redisProperties);
-      for (AuthRef authRef : request.authApplications()) {
-        if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
-          authTransportOptions = authRuntime.transportOptions(authRef, context);
-        } else {
-          requestBody = authRuntime.applyTcpBody(authRef, requestBody, message, context);
+      try (AuthRuntime authRuntime = AuthRuntime.forApplications(
+          request.authApplications(), Map.of(), processorConfig.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+        for (AuthRef authRef : request.authApplications()) {
+          if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+            authTransportOptions = authRuntime.transportOptions(authRef, context);
+          } else {
+            requestBody = authRuntime.applyTcpBody(authRef, requestBody, message, context);
+          }
         }
       }
     }

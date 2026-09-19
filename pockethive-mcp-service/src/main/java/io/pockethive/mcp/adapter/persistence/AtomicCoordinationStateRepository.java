@@ -34,7 +34,7 @@ import java.time.Instant;
 /**
  * Responsibility: Persist coordination state atomically under an exclusive process lock.
  * Must not: Own domain transitions or expose persistence details through public contracts.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-COORDINATION-STATE - docs/architecture/runtime-responsibilities.md#resp-mcp-coordination-state.
  */
 
 public final class AtomicCoordinationStateRepository implements CoordinationStateRepository, AutoCloseable {
@@ -141,8 +141,8 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
     }
 
     @Override
-    public synchronized void saveWorkflow(ScenarioWorkflow workflow, List<Map<String, Object>> generatedFiles) {
-        requirePresent(state.workflows(), workflow.id(), "SCENARIO_WORKFLOW_NOT_FOUND");
+    public synchronized void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision, List<Map<String, Object>> generatedFiles) {
+        requireWorkflowRevision(workflow.id(), expectedRevision);
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
@@ -152,8 +152,8 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
     }
 
     @Override
-    public synchronized void saveWorkflow(ScenarioWorkflow workflow) {
-        requirePresent(state.workflows(), workflow.id(), "SCENARIO_WORKFLOW_NOT_FOUND");
+    public synchronized void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision) {
+        requireWorkflowRevision(workflow.id(), expectedRevision);
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
         replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows, state.generatedFiles(),
@@ -161,8 +161,18 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
     }
 
     @Override
-    public synchronized void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow) {
-        requirePresent(state.workflows(), workflow.id(), "SCENARIO_WORKFLOW_NOT_FOUND");
+    public synchronized void saveWorkflowAndUploadCoordination(ScenarioWorkflow workflow, long expectedRevision,
+                                                              UploadCoordinationSnapshot uploadCoordination) {
+        requireWorkflowRevision(workflow.id(), expectedRevision);
+        Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
+        workflows.put(workflow.id(), workflow.snapshot());
+        replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, state.sessions(), workflows,
+            state.generatedFiles(), uploadCoordination));
+    }
+
+    @Override
+    public synchronized void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow, long expectedRevision) {
+        requireWorkflowRevision(workflow.id(), expectedRevision);
         Map<String, ScenarioWorkflowSnapshot> workflows = new TreeMap<>(state.workflows());
         workflows.put(workflow.id(), workflow.snapshot());
         Map<String, List<Map<String, Object>>> files = new TreeMap<>(state.generatedFiles());
@@ -224,6 +234,13 @@ public final class AtomicCoordinationStateRepository implements CoordinationStat
             }
         });
         replace(new CoordinationStateDocument(CoordinationStateSchema.CURRENT_VERSION, sessions, workflows, files, state.uploadCoordination()));
+    }
+
+    private void requireWorkflowRevision(String workflowId, long expectedRevision) {
+        requirePresent(state.workflows(), workflowId, "SCENARIO_WORKFLOW_NOT_FOUND");
+        if (state.workflows().get(workflowId).revision() != expectedRevision) {
+            throw new ToolExecutionException("WORKFLOW_VERSION_CONFLICT", workflowId);
+        }
     }
 
     private void replace(CoordinationStateDocument candidate) {
