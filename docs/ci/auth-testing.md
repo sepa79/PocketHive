@@ -8,8 +8,9 @@ external OAuth provider.
 ## Java prerequisites
 
 Use a Java 21 JDK, including its `keytool` executable for disposable TLS fixtures,
-and the repository Maven wrapper (`mvnw.cmd` in Windows PowerShell), which pins
-the Maven version used by CI.
+and the repository Maven wrapper (`./mvnw`), which pins the Maven version used
+by CI. On Windows, run it in WSL with Java 21; this repository does not provide
+`mvnw.cmd`.
 The Redis-backed OAuth integration tests require an isolated Redis
 fixture and explicit connection settings:
 
