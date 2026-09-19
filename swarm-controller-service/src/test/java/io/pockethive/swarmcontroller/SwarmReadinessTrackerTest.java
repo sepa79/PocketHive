@@ -9,27 +9,65 @@ import static org.mockito.Mockito.verifyNoInteractions;
 class SwarmReadinessTrackerTest {
 
   @Test
-  void hasFreshSnapshotsSinceIsSideEffectFree() {
-    SwarmReadinessTracker.StatusRequestCallback callback = mock(SwarmReadinessTracker.StatusRequestCallback.class);
+  void reportsWorkersWithoutFreshMatchingEnablementEvidence() {
+    SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> { });
+    tracker.markReady("gen", "g1");
+    tracker.markReady("proc", "p1");
+    long beforeCommand = tracker.statusObservationRevision();
+    tracker.recordStatusSnapshot("gen", "g1", true);
+    tracker.recordStatusSnapshot("proc", "p1", false);
+
+    assertThat(tracker.nonConvergedWorkersAfter(beforeCommand, true))
+        .containsExactly(new io.pockethive.swarm.model.lifecycle.Target("proc", "p1"));
+  }
+
+  @Test
+  void preCommandMatchingEnablementIsNotConverged() {
+    SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> { });
+    tracker.markReady("gen", "g1");
+    tracker.recordStatusSnapshot("gen", "g1", true);
+    long beforeCommand = tracker.statusObservationRevision();
+
+    assertThat(tracker.nonConvergedWorkersAfter(beforeCommand, true))
+        .containsExactly(new io.pockethive.swarm.model.lifecycle.Target("gen", "g1"));
+  }
+
+  @Test
+  void deltaEnablementCannotReplacePostCommandFullSnapshotEvidence() {
+    SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> { });
+    tracker.markReady("gen", "g1");
+    tracker.recordStatusSnapshot("gen", "g1", true);
+    long beforeCommand = tracker.statusObservationRevision();
+
+    tracker.recordEnabled("gen", "g1", false);
+
+    assertThat(tracker.nonConvergedWorkersAfter(beforeCommand, false))
+        .containsExactly(new io.pockethive.swarm.model.lifecycle.Target("gen", "g1"));
+  }
+
+  @Test
+  void snapshotRevisionCheckIsSideEffectFree() {
+    WorkerStatusRequestCallback callback = mock(WorkerStatusRequestCallback.class);
     SwarmReadinessTracker tracker = new SwarmReadinessTracker(callback);
 
     tracker.markReady("gen", "g1");
-    tracker.recordStatusSnapshot("gen", "g1", 1_000L);
+    tracker.recordStatusSnapshot("gen", "g1", false);
+    long beforeCommand = tracker.statusObservationRevision();
 
-    assertThat(tracker.hasFreshSnapshotsSince(2_000L)).isFalse();
+    assertThat(tracker.hasSnapshotsAfter(beforeCommand)).isFalse();
     verifyNoInteractions(callback);
   }
 
   @Test
-  void hasFreshSnapshotsSinceIsTrueWhenAllSnapshotsAreFresh() {
+  void snapshotRevisionCheckIsTrueWhenAllSnapshotsArePostCommand() {
     SwarmReadinessTracker tracker = new SwarmReadinessTracker((role, instance, reason) -> {
-      throw new AssertionError("callback must not be invoked by hasFreshSnapshotsSince");
+      throw new AssertionError("callback must not be invoked by snapshot revision checks");
     });
 
     tracker.markReady("gen", "g1");
-    tracker.recordStatusSnapshot("gen", "g1", 2_000L);
+    long beforeCommand = tracker.statusObservationRevision();
+    tracker.recordStatusSnapshot("gen", "g1", false);
 
-    assertThat(tracker.hasFreshSnapshotsSince(2_000L)).isTrue();
+    assertThat(tracker.hasSnapshotsAfter(beforeCommand)).isTrue();
   }
 }
-

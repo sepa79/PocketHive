@@ -521,6 +521,7 @@ config:
   - name: inputs.scheduler.maxMessages
     type: number
     required: true
+    default: 0
 `, "utf8");
   await writeFile(join(capabilitiesDir, "io.redis-dataset.latest.yaml"), `schemaVersion: "1.0"
 capabilitiesVersion: "1.0"

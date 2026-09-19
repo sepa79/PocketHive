@@ -10,11 +10,8 @@ In full `SWARM_STACK` mode, dynamic worker services can fail before the worker
 process starts. One confirmed case was Docker rejecting worker tasks because a
 bind mount source path did not exist on the scheduled node.
 
-The immediate operator-visible symptom was:
-
-```text
-Missing outcome for swarm-template correlation=<create-correlation>
-```
+The incomplete bootstrap is visible as `swarm-create` waiting while controller
+status reports `startupReady=false`.
 
 That message is technically downstream of the real failure. The actual Docker
 task error was only visible through `docker service ps`:
@@ -32,7 +29,7 @@ provisioning, PocketHive should surface that directly:
   state, and Docker error,
 - emit or expose a lifecycle failure reason tied to the original correlation id,
 - make E2E diagnostics fail with the Docker task rejection instead of a generic
-  missing outcome timeout,
+  `swarm-create` startup timeout,
 - keep the message explicit rather than adding fallback scheduling behavior.
 
 ## Notes

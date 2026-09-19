@@ -1,71 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "io.pockethive.sut-environments",
-  "title": "PocketHive SUT Environments",
-  "description": "Schema for System Under Test (SUT) environments used by Scenario Manager and Orchestrator.",
+  "title": "PocketHive SUT Environment Registry",
+  "description": "Scenario Manager registry envelope containing canonical SUT Environment values.",
   "type": "array",
   "items": {
-    "type": "object",
-    "additionalProperties": false,
-    "required": ["id", "name", "endpoints"],
-    "properties": {
-      "id": {
-        "type": "string",
-        "description": "Stable environment identifier (e.g. wiremock-local, paytech-reltest)."
-      },
-      "name": {
-        "type": "string",
-        "description": "Human-readable name for the environment."
-      },
-      "type": {
-        "type": "string",
-        "description": "Optional classification (sandbox, dev, uat, prodlike, team-dev, ...)."
-      },
-      "endpoints": {
-        "type": "object",
-        "description": "Map of named endpoints inside this environment.",
-        "propertyNames": {
-          "pattern": "^\\S(?:.*\\S)?$"
-        },
-        "additionalProperties": {
-          "$ref": "#/$defs/sutEndpoint"
-        }
-      },
-      "ui": {
-        "type": "object",
-        "description": "Optional UI hints for rendering this SUT in Hive.",
-        "additionalProperties": false,
-        "properties": {
-          "panelId": {
-            "type": "string",
-            "description": "Name of the UI panel/component to use (e.g. \"wiremock\")."
-          }
-        }
-      }
-    }
-  },
-  "$defs": {
-    "sutEndpoint": {
-      "type": "object",
-      "additionalProperties": false,
-      "required": ["kind", "baseUrl"],
-      "properties": {
-        "kind": {
-          "type": "string",
-          "pattern": "\\S",
-          "description": "Non-blank protocol/shape of the endpoint, for example HTTP, HTTPS, TCP, or TCPS."
-        },
-        "baseUrl": {
-          "type": "string",
-          "pattern": "\\S",
-          "description": "Non-blank URI or protocol-specific authority for this endpoint."
-        },
-        "upstreamBaseUrl": {
-          "type": "string",
-          "pattern": "\\S",
-          "description": "Optional non-blank upstream URI or authority used by proxied network bindings."
-        }
-      }
-    }
+    "$ref": "sut-environment.schema.json"
   }
 }

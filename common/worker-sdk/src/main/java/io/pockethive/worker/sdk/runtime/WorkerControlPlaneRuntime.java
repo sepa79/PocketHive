@@ -1,28 +1,30 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.config.WorkIoType;
+import io.pockethive.controlplane.spring.WorkerControlTopology;
+
+import io.pockethive.work.config.policy.WorkPatchPolicy;
+import io.pockethive.work.config.projection.WorkConfigurationRedactor;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.control.ControlSignal;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.Alerts;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
-import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.controlplane.worker.WorkerConfigCommand;
 import io.pockethive.controlplane.worker.WorkerControlPlane;
 import io.pockethive.controlplane.worker.WorkerSignalListener;
 import io.pockethive.controlplane.worker.WorkerStatusRequest;
 import io.pockethive.swarm.model.BeeConfigKeys;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.ConfigKeyCanonicalizer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -45,6 +47,13 @@ import org.slf4j.LoggerFactory;
  * Integrates the worker runtime with the control-plane helper so configuration updates, status
  * requests, and confirmation events are handled consistently across worker services. Usage guidance
  * lives in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: apply worker control updates and assemble current configuration/status projections.
+ * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
+ * Validates typed/private and Redis connection candidates before accepted-state writes or reseeding.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ * Consumes RESP-WORK-CONFIGURATION-DIAGNOSTICS for config logs and status projections only.
+ * Consumes RESP-WORK-CSV-SETTINGS for the immutable startup baseline used by patch validation.
  */
 public final class WorkerControlPlaneRuntime {
 
@@ -61,7 +70,10 @@ public final class WorkerControlPlaneRuntime {
     private final Map<String, List<Consumer<WorkerStateSnapshot>>> stateListeners = new ConcurrentHashMap<>();
     private final List<Consumer<WorkerStateSnapshot>> globalStateListeners = new CopyOnWriteArrayList<>();
     private final ControlPlaneNotifier notifier;
+    private final WorkerConfigurationLog configurationLog;
     private final TemplateRenderer templateRenderer;
+    private final io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies;
+    private final WorkConfigurationCandidateValidator workConfigurationCandidateValidator;
 
     /**
      * Tracks the most recent status-delta emission so we can derive a per-second throughput
@@ -108,19 +120,10 @@ public final class WorkerControlPlaneRuntime {
         ObjectMapper objectMapper,
         ControlPlaneEmitter emitter,
         ControlPlaneIdentity identity,
-        WorkerControlPlaneProperties.ControlPlane controlPlane
-    ) {
-        this(workerControlPlane, stateStore, objectMapper, emitter, identity, controlPlane, null);
-    }
-
-    public WorkerControlPlaneRuntime(
-        WorkerControlPlane workerControlPlane,
-        WorkerStateStore stateStore,
-        ObjectMapper objectMapper,
-        ControlPlaneEmitter emitter,
-        ControlPlaneIdentity identity,
-        WorkerControlPlaneProperties.ControlPlane controlPlane,
-        TemplateRenderer templateRenderer
+        WorkerControlTopology controlPlane,
+        TemplateRenderer templateRenderer,
+        io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
+        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser
     ) {
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
@@ -129,13 +132,16 @@ public final class WorkerControlPlaneRuntime {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.configMerger = new ConfigMerger(this.objectMapper);
         this.templateRenderer = templateRenderer;
+        this.mutationPolicies = Objects.requireNonNull(mutationPolicies, "mutationPolicies");
+        this.workConfigurationCandidateValidator = new WorkConfigurationCandidateValidator(
+            Objects.requireNonNull(workConfigurationParser, "workConfigurationParser"));
         this.runtimeMeta = buildRuntimeMeta();
-        WorkerControlPlaneProperties.ControlPlane resolvedControlPlane =
+        WorkerControlTopology resolvedControlPlane =
             Objects.requireNonNull(controlPlane, "controlPlane");
         this.controlQueueName = resolvedControlPlane.getControlQueueName();
         this.controlRoutes = resolveControlRoutes(resolvedControlPlane.getRoutes(), identity);
+        this.configurationLog = new WorkerConfigurationLog(log, this.objectMapper);
         this.notifier = new ControlPlaneNotifier(
-            log,
             this.objectMapper,
             emitter,
             identity.role(),
@@ -255,7 +261,7 @@ public final class WorkerControlPlaneRuntime {
     }
 
     /**
-     * Publish a control-plane outcome (kind=event,type=outcome) for non-error worker journal entries.
+     * Publish a non-terminal {@code kind=journal,type=work-journal} event for worker lifecycle evidence.
      * This is intended for informational lifecycle events that must be visible in journal projections
      * without polluting alert channels.
      */
@@ -292,13 +298,13 @@ public final class WorkerControlPlaneRuntime {
             context.put("traceId", normalizedTraceId);
         }
 
-        emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
-                journalSignal,
-                journalCorrelationId,
-                normalizeBlank(idempotencyKey),
-                io.pockethive.control.CommandState.status(journalStatus))
-            .details(context)
-            .build());
+        context.put("status", journalStatus);
+        emitter.emitJournal(new ControlPlaneEmitter.JournalContext(
+            journalSignal,
+            journalCorrelationId,
+            requireNonBlank(idempotencyKey, "idempotencyKey"),
+            context,
+            null));
     }
 
     private static String requireNonBlank(String value, String field) {
@@ -314,6 +320,17 @@ public final class WorkerControlPlaneRuntime {
         }
         String text = value.trim();
         return text.isEmpty() ? null : text;
+    }
+
+    /** Registers validated selected-input startup configuration before control commands or intake. */
+    public void initializeInputStartup(String workerBeanName, io.pockethive.work.config.WorkIoType inputType,
+                                       Map<String, Object> settings) {
+        WorkerState state = stateStore.find(workerBeanName).orElseThrow();
+        if (state.definition().input() != inputType) {
+            throw new IllegalStateException("Startup settings input type must match the worker definition");
+        }
+        state.initializeInputStartup(Objects.requireNonNull(inputType, "inputType"),
+            Objects.requireNonNull(settings, "settings"));
     }
 
     /**
@@ -403,20 +420,19 @@ public final class WorkerControlPlaneRuntime {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
             FilteredConfigUpdate filtered = preprocessConfigUpdate(patch.values());
-            if (filtered.reseedRequested() && templateRenderer != null) {
-                templateRenderer.resetSeededSelections();
-            }
             Map<String, Object> filteredUpdate = filtered.values();
             Map<String, Object> canonicalSource = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
             Map<String, Object> privateUpdate = privateConfigFrom(canonicalSource);
             Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
             boolean previousEnabled = state.enabled();
             try {
+                WorkPatchPolicy patchPolicy = new WorkPatchPolicy(state.definition().beanName(),
+                    mutationPolicies.inputPolicy(state.definition().input()), state.inputStartup(),
+                    mutationPolicies.outputPolicy(state.definition().outputType()), Map.of());
                 if (patch.resetRequested()) {
-                    LiveIoConfigUpdateGuard.validateReset(state.definition(), state.rawConfig());
-                } else {
-                    LiveIoConfigUpdateGuard.validate(
-                        state.definition(),
+                    patchPolicy.validateReset(state.rawConfig());
+                } else if (!state.rawConfig().isEmpty()) {
+                    patchPolicy.validate(
                         state.rawConfig(),
                         canonicalUpdate,
                         previousEnabled
@@ -428,27 +444,28 @@ public final class WorkerControlPlaneRuntime {
                     canonicalUpdate,
                     patch.resetRequested()
                 );
+                workConfigurationCandidateValidator.validate(state, mergeResult.rawConfig());
                 Boolean enabled = command.enabled();
-                if (log.isDebugEnabled()) {
-                    log.debug("Applying config-update for worker={} role={} previousEnabled={} requestedEnabled={} data={}",
-                        state.definition().beanName(),
-                        state.definition().role(),
-                        previousEnabled,
-                        enabled,
-                        canonicalUpdate);
-                }
+                configurationLog.applying(state, enabled, canonicalUpdate);
+                Map<String, Object> candidatePrivateConfig = state.privateConfig();
                 if (patch.resetRequested()) {
-                    state.updatePrivateConfig(Map.of());
-                } else if (state.privateConfig().isEmpty() && !privateUpdate.isEmpty()) {
-                    state.updatePrivateConfig(privateUpdate);
+                    candidatePrivateConfig = Map.of();
+                } else if (candidatePrivateConfig.isEmpty() && !privateUpdate.isEmpty()) {
+                    candidatePrivateConfig = privateUpdate;
                 }
                 Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
-                    ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), state.privateConfig()))
+                    ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), candidatePrivateConfig))
                     : mergeResult.typedConfig();
+                RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
+                if (filtered.reseedRequested() && templateRenderer != null) {
+                    templateRenderer.resetSeededSelections();
+                }
+                state.updatePrivateConfig(candidatePrivateConfig);
                 state.updateConfig(typedConfig, mergeResult.replaced(), enabled);
                 state.updateRawConfig(mergeResult.rawConfig());
-                RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
-                Map<String, Object> appliedConfig = mergeResult.replaced() ? mergeResult.rawConfig() : Map.of();
+                Map<String, Object> appliedConfig = mergeResult.replaced()
+                    ? mergeResult.rawConfig()
+                    : mergeResult.previousRaw();
                 if (hasCorrelation(signal)) {
                     notifier.emitConfigReady(signal, state, appliedConfig);
                 } else {
@@ -477,7 +494,7 @@ public final class WorkerControlPlaneRuntime {
                     previousEnabled,
                     finalEnabled
                 )) {
-                    notifier.logConfigUpdate(
+                    configurationLog.applied(
                         signal,
                         state,
                         mergeResult.diff(),
@@ -553,15 +570,7 @@ public final class WorkerControlPlaneRuntime {
     private record FilteredConfigUpdate(Map<String, Object> values, boolean reseedRequested) { }
 
     private String resolveSignalName(WorkerStatusRequest request) {
-        ControlSignal signal = request.signal();
-        if (signal != null && signal.type() != null && !signal.type().isBlank()) {
-            return signal.type();
-        }
-        ControlPlaneRouting.RoutingKey routingKey = ControlPlaneRouting.parseSignal(request.envelope().routingKey());
-        if (routingKey != null && routingKey.type() != null && !routingKey.type().isBlank()) {
-            return routingKey.type();
-        }
-        return "n/a";
+        return request.signal().type();
     }
     private Object ensureTypedDefault(WorkerDefinition definition, Object defaultConfig, Map<String, Object> rawConfig) {
         Class<?> configType = definition.configType();
@@ -827,7 +836,7 @@ public final class WorkerControlPlaneRuntime {
             builder.data("intervalSeconds", intervalSeconds);
             if (snapshot) {
                 builder.data("startedAt", startedAt);
-                builder.config(configSnapshot);
+                builder.config(WorkConfigurationRedactor.redact(configSnapshot));
             }
             workerStatusData.forEach(builder::data);
         };
@@ -1119,7 +1128,7 @@ public final class WorkerControlPlaneRuntime {
                     augmented.put("outputs", outputsBlock);
                 }
 
-                workerEntry.put("config", augmented);
+                workerEntry.put("config", WorkConfigurationRedactor.redact(augmented));
             }
             Map<String, Object> statusData = state.statusData();
             if (!statusData.isEmpty()) {
@@ -1285,14 +1294,14 @@ public final class WorkerControlPlaneRuntime {
         /**
          * Returns the configured worker input type.
          */
-        public WorkerInputType inputType() {
+        public WorkIoType inputType() {
             return state.definition().input();
         }
 
         /**
          * Returns the configured worker output type.
          */
-        public WorkerOutputType outputType() {
+        public WorkIoType outputType() {
             return state.definition().outputType();
         }
 

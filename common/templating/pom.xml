@@ -26,6 +26,9 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>redis-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>templating-api</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pebbletemplates</groupId>
       <artifactId>pebble</artifactId>

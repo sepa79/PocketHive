@@ -1,3 +1,8 @@
+/**
+ * Responsibility: operate browser STOMP transport using server-provided subscription addresses.
+ * Must not: build broker resource names or interpret domain state.
+ * Contract: RESP-CONTROL-STOMP-INFO — docs/architecture/runtime-responsibilities.md#resp-control-stomp-info.
+ */
 import { recordWireLog } from './wireLogStore'
 import type { ControlPlaneDecoderError, ControlPlaneEnvelope } from './types'
 
@@ -21,6 +26,7 @@ type StompStateListener = (state: StompConnectionState) => void
 type StompGatewayOptions = {
   url: string
   topics: string[]
+  destinationPrefix: string
   connectHeaders?: Record<string, string>
 }
 
@@ -28,6 +34,7 @@ let socket: WebSocket | null = null
 let state: StompConnectionState = 'idle'
 let backoffIndex = 0
 let heartbeatTimer: number | null = null
+let reconnectTimer: number | null = null
 let pendingConnect = false
 let subscriptions: string[] = []
 let invalidCount = 0
@@ -44,12 +51,15 @@ export function startStompGateway(options: StompGatewayOptions) {
 }
 
 export function stopStompGateway() {
+  setState('offline')
+  if (reconnectTimer !== null) window.clearTimeout(reconnectTimer)
+  reconnectTimer = null
+  stopHeartbeat()
   pendingConnect = false
   if (socket) {
     socket.close()
     socket = null
   }
-  setState('offline')
 }
 
 export function subscribeStompMessages(listener: StompListener) {
@@ -75,6 +85,7 @@ function connect(options: StompGatewayOptions) {
   const ws = new WebSocket(options.url)
   socket = ws
   ws.addEventListener('open', () => {
+    if (socket !== ws) return
     backoffIndex = 0
     pendingConnect = false
     sendFrame(
@@ -90,14 +101,17 @@ function connect(options: StompGatewayOptions) {
     )
   })
   ws.addEventListener('message', (event) => {
-    handleFrame(ws, event.data as string)
+    if (socket !== ws) return
+    handleFrame(ws, event.data as string, options.destinationPrefix)
   })
   ws.addEventListener('close', () => {
+    if (socket !== ws) return
     socket = null
     stopHeartbeat()
     scheduleReconnect(options)
   })
   ws.addEventListener('error', () => {
+    if (socket !== ws) return
     socket = null
     stopHeartbeat()
     scheduleReconnect(options)
@@ -114,7 +128,8 @@ function scheduleReconnect(options: StompGatewayOptions) {
   const delay = BACKOFF_DELAYS[Math.min(backoffIndex, BACKOFF_DELAYS.length - 1)]
   backoffIndex += 1
   pendingConnect = true
-  window.setTimeout(() => {
+  reconnectTimer = window.setTimeout(() => {
+    reconnectTimer = null
     if (state === 'offline') {
       return
     }
@@ -122,7 +137,7 @@ function scheduleReconnect(options: StompGatewayOptions) {
   }, jitter(delay))
 }
 
-function handleFrame(ws: WebSocket, raw: string) {
+function handleFrame(ws: WebSocket, raw: string, destinationPrefix: string) {
   const frames = raw.split('\u0000').filter(Boolean)
   for (const frame of frames) {
     const parsed = parseFrame(frame)
@@ -137,14 +152,20 @@ function handleFrame(ws: WebSocket, raw: string) {
     }
     if (parsed.command === 'MESSAGE') {
       const destination = parsed.headers.destination ?? ''
-      const entry = recordWireLog('stomp', destination, parsed.body)
+      if (!destination.startsWith(destinationPrefix)) {
+        invalidCount += 1
+        notifyMetrics()
+        continue
+      }
+      const routingKey = destination.slice(destinationPrefix.length)
+      const entry = recordWireLog('stomp', routingKey, parsed.body)
       if (entry.errors.length > 0) {
         invalidCount += entry.errors.length
         notifyMetrics()
       }
       listeners.forEach((listener) =>
         listener({
-          routingKey: destination,
+          routingKey,
           envelope: entry.envelope,
           errors: entry.errors,
         }),

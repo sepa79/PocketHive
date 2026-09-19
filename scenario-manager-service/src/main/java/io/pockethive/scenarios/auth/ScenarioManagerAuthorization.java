@@ -3,7 +3,7 @@ package io.pockethive.scenarios.auth;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHiveGrantChecks;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
-import io.pockethive.scenarios.ScenarioService;
+import io.pockethive.scenarios.ScenarioAccessDescriptor;
 import java.util.Set;
 import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Component;
@@ -37,15 +37,15 @@ public class ScenarioManagerAuthorization {
         return hasAnyPermission(user, MANAGE_PERMISSIONS);
     }
 
-    public boolean canRead(AuthenticatedUserDto user, ScenarioService.ScenarioAccessDescriptor access) {
+    public boolean canRead(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
         return hasPermissionInScope(user, READ_PERMISSIONS, access);
     }
 
-    public boolean canRun(AuthenticatedUserDto user, ScenarioService.ScenarioAccessDescriptor access) {
+    public boolean canRun(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
         return hasPermissionInScope(user, RUN_PERMISSIONS, access);
     }
 
-    public boolean canManage(AuthenticatedUserDto user, ScenarioService.ScenarioAccessDescriptor access) {
+    public boolean canManage(AuthenticatedUserDto user, ScenarioAccessDescriptor access) {
         return hasPermissionInScope(user, MANAGE_PERMISSIONS, access);
     }
 
@@ -112,7 +112,7 @@ public class ScenarioManagerAuthorization {
 
     private boolean hasPermissionInScope(AuthenticatedUserDto user,
                                          Set<String> permissions,
-                                         ScenarioService.ScenarioAccessDescriptor access) {
+                                         ScenarioAccessDescriptor access) {
         if (user == null) {
             return true;
         }

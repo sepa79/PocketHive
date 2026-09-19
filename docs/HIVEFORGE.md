@@ -98,6 +98,10 @@ DOCKER_REGISTRY
 POCKETHIVE_VERSION
 POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
+POCKETHIVE_PUBLIC_INGRESS
+POCKETHIVE_PUBLIC_HOST
+POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET
+POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
 ```
 
 `DOCKER_REGISTRY` must include the trailing slash and must equal
@@ -105,6 +109,14 @@ POCKETHIVE_STACK_NAME
 `POCKETHIVE_VERSION` must be set explicitly. `latest` is allowed only when the
 operator sets it intentionally; HiveForge must not infer it from a missing
 value.
+
+`POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
+trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
+its exact host value without a scheme or path. The two MCP/Auth Service secrets
+must be supplied through HiveForge secret-backed runtime configuration, must be
+at least 16 characters, and must not be committed or printed in deployment
+evidence. The rendered stack exposes the MCP only as
+`<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
 
 Current HiveForge component requirements are global per component, not
 profile-specific. Because of that, `swarm-full` dedicated root variables are
@@ -165,6 +177,8 @@ Agent sequence:
        POCKETHIVE_VERSION: <release version without leading v>
        POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ghcr.io/sepa79/pockethive
        POCKETHIVE_STACK_NAME: pockethive
+       POCKETHIVE_PUBLIC_INGRESS: https://pockethive.example
+       POCKETHIVE_PUBLIC_HOST: pockethive.example
        POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
@@ -173,6 +187,11 @@ Agent sequence:
        HTTPS_PROXY: http://proxy.example:3128
        NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
+
+   Supply `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
+   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` through the environment's
+   secret mechanism; do not place literal values in the journal or this
+   non-secret runtime map.
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
    environment requires outbound proxy access. PocketHive renders those values

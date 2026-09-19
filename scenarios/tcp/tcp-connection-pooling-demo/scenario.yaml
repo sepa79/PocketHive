@@ -8,6 +8,8 @@ template:
     - role: trigger
       image: trigger:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -38,6 +40,8 @@ template:
     - role: generator-global
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -61,6 +65,8 @@ template:
     - role: generator-per-thread
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -84,6 +90,8 @@ template:
     - role: generator-none
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -107,6 +115,10 @@ template:
     - role: request-builder-global
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -121,6 +133,10 @@ template:
     - role: request-builder-per-thread
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -135,6 +151,10 @@ template:
     - role: request-builder-none
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -221,6 +241,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

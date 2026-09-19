@@ -9,7 +9,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 
 class ControlPlaneContainerEnvironmentFactoryTest {
 
@@ -21,16 +21,14 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         controlPlaneProperties.getWorker().setEnabled(false);
         controlPlaneProperties.setSwarmId("swarm-1");
         controlPlaneProperties.setInstanceId("controller-a");
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(15));
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+        io.pockethive.controlplane.spring.ControllerSettings settings =
+            new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
                 "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive");
-        RabbitProperties rabbitProperties = rabbitProperties();
+                "/var/run/docker.sock");
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
             "swarm-1",
@@ -38,7 +36,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "swarm-controller",
             controlPlaneProperties,
             settings,
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "controller-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_SWARM_ID", "swarm-1");
@@ -67,23 +65,22 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void workerEnvironmentBuildsMap() {
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(20));
-        ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
+        io.pockethive.controlplane.spring.WorkerSettings settings =
+            new io.pockethive.controlplane.spring.WorkerSettings(
                 "swarm-1",
                 "run-1",
                 "ph.control",
                 "ph.control",
-                "ph.swarm-1.hive",
                 metrics);
-        RabbitProperties rabbitProperties = rabbitProperties();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
 
         Map<String, String> env = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
             "processor",
             settings,
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID", "bee-a");
         assertThat(env).containsEntry("POCKETHIVE_CONTROL_PLANE_WORKER_ROLE", "processor");
@@ -104,9 +101,9 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void clickHouseMetricsSettingsPropagateToControllerAndWorker() {
-        ControlPlaneContainerEnvironmentFactory.MetricsSettings metrics =
+        io.pockethive.controlplane.spring.MetricsSettings metrics =
             clickHouseMetrics(Duration.ofSeconds(10));
-        RabbitProperties rabbitProperties = rabbitProperties();
+        RabbitConnectionSettings rabbitConnection = rabbitConnection();
         ControlPlaneProperties controlPlaneProperties = new ControlPlaneProperties();
         controlPlaneProperties.setExchange("ph.control");
         controlPlaneProperties.setControlQueuePrefix("ph.control");
@@ -116,13 +113,11 @@ class ControlPlaneContainerEnvironmentFactoryTest {
             "controller-a",
             "swarm-controller",
             controlPlaneProperties,
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+            new io.pockethive.controlplane.spring.ControllerSettings(
                 metrics,
                 "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive"),
-            rabbitProperties);
+                "/var/run/docker.sock"),
+            rabbitConnection);
 
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(controllerEnv).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
@@ -135,14 +130,13 @@ class ControlPlaneContainerEnvironmentFactoryTest {
         Map<String, String> workerEnv = ControlPlaneContainerEnvironmentFactory.workerEnvironment(
             "bee-a",
             "processor",
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
+            new io.pockethive.controlplane.spring.WorkerSettings(
                 "swarm-1",
                 "run-1",
                 "ph.control",
                 "ph.control",
-                "ph.swarm-1.hive",
                 metrics),
-            rabbitProperties);
+            rabbitConnection);
 
         assertThat(workerEnv).containsEntry("POCKETHIVE_METRICS_ADAPTER", "CLICKHOUSE");
         assertThat(workerEnv).containsEntry("POCKETHIVE_METRICS_CLICKHOUSE_ENDPOINT", "http://clickhouse:8123");
@@ -152,7 +146,7 @@ class ControlPlaneContainerEnvironmentFactoryTest {
 
     @Test
     void clickHouseAdapterRequiresConfiguredSettings() {
-        assertThatThrownBy(() -> new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+        assertThatThrownBy(() -> new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             Duration.ofSeconds(10),
             ClickHouseMetricsSinkProperties.disabled()))
@@ -161,64 +155,32 @@ class ControlPlaneContainerEnvironmentFactoryTest {
     }
 
     @Test
-    void workerEnvironmentFailsForBlankRabbitHost() {
-        ControlPlaneContainerEnvironmentFactory.WorkerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.WorkerSettings(
-                "swarm-1",
-                "run-1",
-                "ph.control",
-                "ph.control",
-                "ph.swarm-1.hive",
-                disabledMetrics(Duration.ofSeconds(30)));
-        RabbitProperties rabbitProperties = new RabbitProperties();
-        rabbitProperties.setHost("");
-
-        assertThatThrownBy(() -> ControlPlaneContainerEnvironmentFactory.workerEnvironment(
-            "bee-a",
-            "processor",
-            settings,
-            rabbitProperties))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("spring.rabbitmq.host");
+    void participantEnvironmentRequiresOnlyControlSettings() {
+        var control = new ControlPlaneProperties();
+        control.setExchange("ph.control");
+        control.setControlQueuePrefix("ph.control");
+        var settings = new ControllerSettings(disabledMetrics(Duration.ofSeconds(30)), "run", "/var/run/docker.sock");
+        var environment = ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
+            "swarm", "controller", "swarm-controller", control, settings, rabbitConnection());
+        assertThat(environment).containsEntry("SPRING_RABBITMQ_HOST", "rabbitmq");
+        assertThat(environment.keySet()).noneMatch(key -> key.startsWith("POCKETHIVE_RABBIT_WORK_")
+            || key.startsWith("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_"));
     }
 
-    @Test
-    void buildsSwarmTrafficQueueNamesFromControllerEnvironmentContract() {
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings settings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
-                disabledMetrics(Duration.ofSeconds(30)),
-                "run-1",
-                "/var/run/docker.sock",
-                "ph.swarm-1",
-                "ph.swarm-1.hive");
-
-        assertThat(settings.trafficQueueName("gen")).isEqualTo("ph.swarm-1.gen");
-        assertThat(settings.trafficQueueNames(List.of("gen", "final", "gen")))
-            .containsExactly("ph.swarm-1.gen", "ph.swarm-1.final");
-        assertThatThrownBy(() -> settings.trafficQueueName(" "))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("traffic queue suffix");
-    }
-
-    private static RabbitProperties rabbitProperties() {
-        RabbitProperties properties = new RabbitProperties();
-        properties.setHost("rabbitmq");
-        properties.setPort(5672);
-        properties.setUsername("guest");
-        properties.setPassword("guest");
-        properties.setVirtualHost("/");
+    private static RabbitConnectionSettings rabbitConnection() {
+        RabbitConnectionSettings properties = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
         return properties;
     }
 
-    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings disabledMetrics(Duration publishInterval) {
-        return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+    private static io.pockethive.controlplane.spring.MetricsSettings disabledMetrics(Duration publishInterval) {
+        return new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.DISABLED,
             publishInterval,
             ClickHouseMetricsSinkProperties.disabled());
     }
 
-    private static ControlPlaneContainerEnvironmentFactory.MetricsSettings clickHouseMetrics(Duration publishInterval) {
-        return new ControlPlaneContainerEnvironmentFactory.MetricsSettings(
+    private static io.pockethive.controlplane.spring.MetricsSettings clickHouseMetrics(Duration publishInterval) {
+        return new io.pockethive.controlplane.spring.MetricsSettings(
             PocketHiveMetricsAdapter.CLICKHOUSE,
             publishInterval,
             clickHouseProperties(

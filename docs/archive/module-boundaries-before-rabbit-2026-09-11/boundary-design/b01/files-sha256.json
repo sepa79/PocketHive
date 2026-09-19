@@ -1,0 +1,1254 @@
+{
+  "base_revision": "e0d378711b6447f8bb3e0f8bbf787f9b06c2b5bb",
+  "method": "Changed tracked and untracked file bytes; null means deleted. This manifest excludes itself. No commit or review acceptance implied.",
+  "files": [
+    {
+      "path": ".github/workflows/ci.yml",
+      "sha256": "925517e853566fc0e34c501f0315bc4dbfa3ec3187b0455a1d9c5d9700ff37ad"
+    },
+    {
+      "path": ".gitignore",
+      "sha256": "d1b4f0ba05eb7d9d7bb39b89a63c64d17d4ca5b939530fe6e6eabb95baa1ba51"
+    },
+    {
+      "path": "clearing-export-service/src/main/java/io/pockethive/clearingexport/ClearingExportFileAssembler.java",
+      "sha256": "5b9be8f22176da099326d04bfe9cd614de39ad671379c5c606d6586d502782f5"
+    },
+    {
+      "path": "clearing-export-service/src/main/java/io/pockethive/clearingexport/ClearingExportWorkerImpl.java",
+      "sha256": "0bb2c3166eb8c6ec7c39e2f339bd80e73f0c4f88e311b57d83e6aee3caf3966b"
+    },
+    {
+      "path": "clearing-export-service/src/main/java/io/pockethive/clearingexport/StructuredRecordProjector.java",
+      "sha256": "e5724c3b6ed69997236db437b706d22d7c7f9f09e2fe5ed11e945fdbac143fbf"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/ClearingExportBatchWriterBeanWiringTest.java",
+      "sha256": "1aa46db6a64dbefe8203d5c5274f8c2941a3f9ef959377384cb8d15f8f83001e"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/ClearingExportBatchWriterHardeningTest.java",
+      "sha256": "865d8a3df4189994dccfd4bd7f25b71d43ab1bf5f7b87ea911778c6cc5ca6677"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/ClearingExportBatchWriterStreamingTest.java",
+      "sha256": "46c9204c9ab85d08fb1d727bd8677d7e0f8998bd5021a3966511c1b0043bf277"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/ClearingExportFileAssemblerTest.java",
+      "sha256": "bc422542062a064e4c533c82addedf80b2030e084ce634e9a125bd1131072ba0"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/ClearingExportWorkerImplTest.java",
+      "sha256": "e8748c54c30773636906a6494db2f47c7e39051fdc6330b427641718664394ae"
+    },
+    {
+      "path": "clearing-export-service/src/test/java/io/pockethive/clearingexport/StructuredRecordProjectorTest.java",
+      "sha256": "bdef5f0087274ad9a8e38b0ccdc26a5a02909885d9964dc2165965924f8975ec"
+    },
+    {
+      "path": "common/auth-contracts/pom.xml",
+      "sha256": "da449b1857803f1fb8e8d323948b5add6bb9af31c57cb09d75bdf6e1e00e8cab"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthApplyAs.java",
+      "sha256": "97de765820d576b8139660f1e379eafe4fee7741c4a7eec3ac90c5024f33f6d0"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthFailureException.java",
+      "sha256": "1e10ac8fc10b63cdac13ef6ec690298771a5b6e0baa88e8fe9b4d8c9eaccc0e3"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthMaterial.java",
+      "sha256": "d8d73a902b70570ebd77f5bc3a55ea3ffd4b39ab2483e97cb7a500ae05dc02e9"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthProfile.java",
+      "sha256": "3730ee3d8156c14162da9eb0b1d08a8350e5aa2663f159f8cfad694529dab270"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthProfileDocument.java",
+      "sha256": "867707b775556a1d3805c551bfdba9a28d0e86d0890c263a911561f545c9ee11"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthProfileRefresh.java",
+      "sha256": "6c3844ed3ed7c98c5e0783335e98623a9bc9c2b24f00e90cf78d98215fae67bb"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthProfileStorage.java",
+      "sha256": "2a6f7a3912806b0c2640571c68ccc92bb4f25e8a15adbc57fd1a76bc998919de"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthRef.java",
+      "sha256": "535cd1b1f8c392b6ced8c1e6777a6a9be478b0e47207db42e951568a92815228"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthStorageMode.java",
+      "sha256": "a778965f1459169c47231effe3caeca535fda1f20e232dbde274d084a208f52f"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthTokenKeys.java",
+      "sha256": "5d1838d07eba28b8f206572aa5327634fe3f7e85bf3f3321d680984867fedc10"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/AuthType.java",
+      "sha256": "7f01e8d4104648af9635a5b36ed7949d3b9ab2934406602584a4fe1450530e48"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/ClaimResult.java",
+      "sha256": "c7502c57ecd04c33a300a79cc2a34fba92a89b3984a39a05a0b937205fb580d3"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/RefreshClaim.java",
+      "sha256": "5fcbed835ab420e0a3afe6a2bf7fe4bec7fc3fd4a256cffae0e02115cc6101b5"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/TokenDueRef.java",
+      "sha256": "f28b51066b480a266f637544cef352eb98f71bdc2be2fe29dd3bbac685d26f8f"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/TokenRecord.java",
+      "sha256": "5ed6be0108eec28b29606341978f0fd5af00912ed678bc1eeb1ad6119c68b16b"
+    },
+    {
+      "path": "common/auth-contracts/src/main/java/io/pockethive/worker/sdk/auth/TokenStore.java",
+      "sha256": "07603cef8a917f74455b2364bbc1e58c312a0b492e58ba1a025749ed37225dd6"
+    },
+    {
+      "path": "common/control-plane-core/pom.xml",
+      "sha256": "43b32a7fdc59f1e58cc29a7ea3ed8dc63b78eea0fc7c60ed80642f9b7813c75c"
+    },
+    {
+      "path": "common/control-plane-core/src/main/java/io/pockethive/controlplane/messaging/AmqpControlPlanePublisher.java",
+      "sha256": null
+    },
+    {
+      "path": "common/control-plane-core/src/test/java/io/pockethive/controlplane/AmqpControlPlanePublisherTest.java",
+      "sha256": null
+    },
+    {
+      "path": "common/control-plane-core/src/test/java/io/pockethive/controlplane/messaging/ControlPlaneWireShapeTest.java",
+      "sha256": null
+    },
+    {
+      "path": "common/control-plane-spring/pom.xml",
+      "sha256": "a875514ff20fc1324cc4b4cb7b4bc9a392f62a25bf3ff6e8c7b22247c2965c5b"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/AmqpControlPlanePublisher.java",
+      "sha256": "d11235e2bd8ba8293053a6f26b475ddaee211127ac395f745dcd21d99c46eea5"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneCommonAutoConfiguration.java",
+      "sha256": "df95c9ec8c4e404461ba86b7abc0bf6a1a6d72f79962f041349caeedb96ad9b5"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneFatalExceptionStrategy.java",
+      "sha256": "30626d751cc32d8f3c0df363442c231aeeb1743d410cf766138a3d02b473836d"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneRabbitListenerConfiguration.java",
+      "sha256": "9a0c245828b19188e6c83078568213427bf296c3238e96b32d82c0d489dc31a4"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneRabbitPoisonMessageCustomizer.java",
+      "sha256": "2d808d160e73727a853c8e1568988057f386a589f905668d27deeb525418adf1"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ControlPlaneTopologyDeclarableFactory.java",
+      "sha256": "3b85fcf80b856d52dc23137e41b6821c6b2a2a36959d6e00b7daeaa2c5dd45e9"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/ManagerControlPlaneAutoConfiguration.java",
+      "sha256": "56dcbb78cf9461993018c2b9255d01d67f83cd377f5a97c30d0b0d4ffed7f5df"
+    },
+    {
+      "path": "common/control-plane-spring/src/main/java/io/pockethive/controlplane/spring/WorkerControlPlaneAutoConfiguration.java",
+      "sha256": "4fd602b3e83896942fd4818209b65ca8908534273fa6e91d08e20e7dc0964489"
+    },
+    {
+      "path": "common/control-plane-spring/src/test/java/io/pockethive/controlplane/AmqpControlPlanePublisherTest.java",
+      "sha256": "69d37b66ce7f3ebc68e8e37a54a31d2038cbb7597ce15aeedef73dd065136ee1"
+    },
+    {
+      "path": "common/control-plane-spring/src/test/java/io/pockethive/controlplane/spring/ControlPlaneRabbitPoisonMessageCustomizerTest.java",
+      "sha256": "315bba92eb0d60f7a569a0b27bc0b93842feee9fa32d82bd358e007b2db07f6b"
+    },
+    {
+      "path": "common/control-plane-spring/src/test/java/io/pockethive/controlplane/spring/ControlPlaneWireShapeTest.java",
+      "sha256": "b000f5dfd6fd98a2a9d958651a9fc73b4f68d205c71b226c27dcb2a346d8aada"
+    },
+    {
+      "path": "common/observability-core/pom.xml",
+      "sha256": "fb30d38806cc935f7b86cb85d1a93583cf1f71f96637611cc775de917a2f0ad2"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/observability/ControlPlaneJson.java",
+      "sha256": "fb00b262ec66844d0446318ac3bd2da2328391b288ec106ce00b7ba6acb53cca"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/observability/Hop.java",
+      "sha256": "9d0458bd85241ec839306f7f6ee1a0c7e1b323654ccc01b47fb153063207a341"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/observability/ObservabilityContext.java",
+      "sha256": "c2267d3ef600c539c2ae219bede8b79155cdc96ea37932c63744908e3c30acc2"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/observability/ObservabilityContextUtil.java",
+      "sha256": "18c3e1ffbf9c09f11134d0057f97f14b80d8033cd19816dd5d51dd97631e20f1"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/observability/StatusEnvelopeBuilder.java",
+      "sha256": "48ae43fc6faf6f92dc26c0f9253b43356a8bb71f4d7e377cade216208d9ab8d6"
+    },
+    {
+      "path": "common/observability-core/src/main/java/io/pockethive/util/BeeNameGenerator.java",
+      "sha256": "9ab5f7b21a7b20641e59333c4af6e63812b19cede036dbe227d1c54dd66ef419"
+    },
+    {
+      "path": "common/observability-core/src/test/java/io/pockethive/observability/ObservabilityContextUtilTest.java",
+      "sha256": "44064e2f36b992c12ae81b1877655845bcb150bdd51ca74fba5f539aa5821a5a"
+    },
+    {
+      "path": "common/observability-core/src/test/java/io/pockethive/observability/StatusEnvelopeBuilderTest.java",
+      "sha256": "f8315146699fe8580ad423899322aab7fa94859fa2cdcf61421f8441621c8e05"
+    },
+    {
+      "path": "common/observability-core/src/test/java/io/pockethive/util/BeeNameGeneratorTest.java",
+      "sha256": "8fdaf3b604c94a89e589b5e898033cb915333b9c94a5a5d647cc3fba5eadc13e"
+    },
+    {
+      "path": "common/request-templates/pom.xml",
+      "sha256": "ce8ba875495ad8fbe0b17a9e72bf8fce85183507edd2c55d79c9f0a21610bf72"
+    },
+    {
+      "path": "common/templating-api/pom.xml",
+      "sha256": "d135c031c95d8221a3407cf536c778c981f7b280459852797321cc706bdecee6"
+    },
+    {
+      "path": "common/templating-api/src/main/java/io/pockethive/templating/api/DisabledSequenceAccess.java",
+      "sha256": "38abc6bfa28f97e12e7c8b5a768a8faca1cca5c1d63097c8601588d20972d3a8"
+    },
+    {
+      "path": "common/templating-api/src/main/java/io/pockethive/templating/api/SequenceAccess.java",
+      "sha256": "4a999e1f8563f511950a799a1ef98f9452dd4232b39d7076b1f254e82cd3feb3"
+    },
+    {
+      "path": "common/templating-api/src/main/java/io/pockethive/templating/api/TemplateRenderer.java",
+      "sha256": "47ec6350905915b38dbc7a29489edd1e8f2f26c948ec42f17a3546756fa7cba0"
+    },
+    {
+      "path": "common/templating-api/src/main/java/io/pockethive/templating/api/TemplateRenderingException.java",
+      "sha256": "d3250a39fafd33f3c0a9a87c5fd4ae7d5b09666089a9591f42066a7304abbfd1"
+    },
+    {
+      "path": "common/templating-api/src/main/java/io/pockethive/templating/api/TemplateSyntaxValidator.java",
+      "sha256": "795c8d7c7b2164b42e75088449ad3d13cdaf13b475f4d5cf074e56de4c634d49"
+    },
+    {
+      "path": "common/templating/pom.xml",
+      "sha256": "df52eb0a8c2174bfbb88d7da776c53f760ab4b24cbf39816d035a80f81085506"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/BlockingTypeLocator.java",
+      "sha256": "0b1bacffefd9163ffc8d013c7316011d4c8fc86350ee0fceadb199ebd663ddee"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/ConfiguredRedisSequenceAccess.java",
+      "sha256": "466736e5e113c5910f258f0746c90b36b0dbabac920304e077c5c22e6ae5f4da"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/MapEntryAccessor.java",
+      "sha256": "7b6d72318f1ae5d4783fdac1d8ed60085914814d8eca87be3956bb4e342de9f7"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/PebbleTemplateRenderer.java",
+      "sha256": "02ce96ac5c5b5478635a9af56a5020456386905452475a669469cf70a62b3ff5"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/PebbleWeightedSelectionExtension.java",
+      "sha256": "a474fc6a08676a21833e718669b8008d503f6e5007b2d687d3624bc01d5ba3f4"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/SequenceFunctions.java",
+      "sha256": "650ae9f8f5cb40c56c6cda199d97cc250824921d6278266fcca11aaa06570f2d"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/SpelFunctions.java",
+      "sha256": "d071cfa2ada3c8e54b09ff16c826731d2b0afd6598096370f782cad25fb1246e"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/SpelTemplateEvaluator.java",
+      "sha256": "90c379dc3b5f3f9b28e1b6cf86cfdb1a6408b34d6258da737d9f72a99413592e"
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/TemplateRenderer.java",
+      "sha256": null
+    },
+    {
+      "path": "common/templating/src/main/java/io/pockethive/templating/TemplateRenderingException.java",
+      "sha256": null
+    },
+    {
+      "path": "common/templating/src/test/java/io/pockethive/templating/PebbleTemplateRendererTest.java",
+      "sha256": "6c00d356ee6f2a5d1e062ffa892c658d45f0dc84c5a5e80c2f2adf14c24fc9f1"
+    },
+    {
+      "path": "common/templating/src/test/java/io/pockethive/templating/SequencePortRenderingTest.java",
+      "sha256": "5a65a6d6e3cc820378e29ca4c64fb4cecd6a85fdb4b57aaf4e43c94ab8cb765a"
+    },
+    {
+      "path": "common/work-api/pom.xml",
+      "sha256": "b5f1d081b49fb5546dc075a05e82e000fdcefe25caa0ad9033651d5126b07984"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HistoryPolicy.java",
+      "sha256": "ea8de58a141d6ae76db65255dc7bd9d915e252704c8abb7d15935cf4987f6833"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpMetrics.java",
+      "sha256": "e28f476c3cfeff30e54dc795960f1bf86b1439d156e2fd73401eb557ff6fd026"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpOutcome.java",
+      "sha256": "4177c6566f271a8996da43b2876b54c0c26e975207f141c377f2f3b717e23a64"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpRequest.java",
+      "sha256": "6ff6ec04331f3725bfc1a0fcbe2de122d75058c69bd11bba18bb9456154609cc"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpRequestEnvelope.java",
+      "sha256": "66dd165fdc9beadca30744f59b627cf51eff76da16215c515e037b81bd8d2985"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpRequestInfo.java",
+      "sha256": "3847d798157b0597d186973b982be93cdb1ebea442f296826ab882df6d99c450"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/HttpResultEnvelope.java",
+      "sha256": "4793e31805e4ba86b56b09386113faf45ebd069459d5a87fd0dfcfea43f34880"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583Metrics.java",
+      "sha256": "45f1d00661c8c0c1bcca1f5f42243dc9ecb868c319f79b8e070f956752a2ce60"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583Outcome.java",
+      "sha256": "e6b7452b514b946361241b4d80d5e646e81f5a1b11fc1b08aaa42b9dc9e4054e"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583Request.java",
+      "sha256": "9f873989415d7dbb4d1a53395251a4b1e68942673be18ae13ec0c12c70ea257a"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583RequestEnvelope.java",
+      "sha256": "89aa044824ca4c258ea76d7856000769bb2e391e61984e85188592e98b27092f"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583RequestInfo.java",
+      "sha256": "618bc02992dbfd8629da0052f9121180618e8b816195e1b8b5fd2fcee78568fd"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/Iso8583ResultEnvelope.java",
+      "sha256": "bf4fe4aa1687639e5dba5d22b8126d3d054d9cb8c878b154937f3687dc134a16"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/IsoSchemaRef.java",
+      "sha256": "3a89ed1641e0786a8f58d90bc01e987a8c01f1d8c5589158baede68b2b4f8bf8"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/MutableStatus.java",
+      "sha256": "379c011f63fd64c8fc834fe34bf1c41b04bb6df24abe87261d2cc37679eb66c2"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/PocketHiveWorker.java",
+      "sha256": "893e420477799d565e372aa7e78202fe9604c7fc015a899823dd1f226c778af8"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/PocketHiveWorkerFunction.java",
+      "sha256": "b5af50a820961266054ee26cb3c19be689246bfeb42c94f8bf3e003cde7139e3"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/ScheduledInvocationPolicy.java",
+      "sha256": "939b4b0fed2a08fe70c057e29abffe2292c749224f0b90ab121732e3d3e4dc32"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/SchedulingConfigState.java",
+      "sha256": "bd51ccc605048c1d5898d1f02369f5623aeea38100c4fe2cafea60c8d0f81244"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/SchedulingState.java",
+      "sha256": "8a9430226769944d5ff4dad22393c8ba508e08db8ce6f2309eb9b51bdb7f67fe"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/StatusPublisher.java",
+      "sha256": "052de48daba7d4d524ca62ae2e12163ceeca84397e12b467ff8d71b57fee5eac"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpMetrics.java",
+      "sha256": "6f1befe815285e2dce5e5965f408ecbc98b47aee14b8ec560eba7f1d2d7aeed6"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpOutcome.java",
+      "sha256": "1aa9156d2d1e41ce2ada10370a2e5b92503a3e6b29a0b45a22e3914711ed3eb0"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpRequest.java",
+      "sha256": "65e36c43d43b1ca2778d6a1aeec2a97832b9efd2b9618b7c56b4d7f50df5a049"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpRequestEnvelope.java",
+      "sha256": "8fda26bad4aa6044b4ac052140f018a0ba3f08f76bfbf61589a226e77012a511"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpRequestInfo.java",
+      "sha256": "9069e033168be0ec37cc2ef5b37e9bfa372b697e505eb82dda680a93c9053eaf"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/TcpResultEnvelope.java",
+      "sha256": "90b1c19f05bebc3bdafa2a427e6c4f830e9c58c1a8502a12d26522718043579a"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItem.java",
+      "sha256": "1c71146530e88d99c89a8ba587540d0c98f6586deb69e55a750060fe3c012ccd"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemBuilder.java",
+      "sha256": "a3f2946c8f87c4c62838f533afb433c1fc2606c7210392256d608d3df44ab3d6"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemContractException.java",
+      "sha256": "3a14a7a18abf2f9d6441f0c4a82508d26b23cce599da4a695138d13e67a96227"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemEnvelope.java",
+      "sha256": "07659424deb6ec0eec47f48bf5f67c055722f8d7f63ad49b77c0612d4f38fa57"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemJsonCodec.java",
+      "sha256": "6136a45b606a54c6b7edd97addf7b37bca08e35e8fa13bed6e889eee332044d1"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemSchemaValidator.java",
+      "sha256": "89c12c3ae60a4d988c733176cf0d9193e677ce5a9df2f6cd9f93795f9599db0a"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkItemStepEnvelope.java",
+      "sha256": "125dcf61691cc228579444b13493442182c471dbc727896fd91e4ea0ae74d3d4"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkPayloadEncoding.java",
+      "sha256": "8341aea739eb280e428b830923109af829c65d7990037b8d199a0c1eb40c5b7d"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkStep.java",
+      "sha256": "d525540b4f1fcd2771ea6bd77ea7fc35b4f00ec559dd1af6e597fe5f23d90034"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkerCapability.java",
+      "sha256": "9aaf12652266cd1f9c570b9bd8cc51064dfedfe6f5eb0630f7fa87acbdd92b01"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkerContext.java",
+      "sha256": "71a5b63318d3dca695e8750526c17fde529eeb72742f035e54bc2cda32b93475"
+    },
+    {
+      "path": "common/work-api/src/main/java/io/pockethive/work/api/WorkerInfo.java",
+      "sha256": "9d71e6afb45bcd77ded6c541f9f3ab947ee729bf4a210df0fef2d054dc0a77af"
+    },
+    {
+      "path": "common/work-api/src/test/java/io/pockethive/work/api/TransportEnvelopeDtosTest.java",
+      "sha256": "5575bb1e7bd8a4ed8fde4bebb725f6c38676e5848355fa7ce1f9e7a8b8b68b1d"
+    },
+    {
+      "path": "common/work-api/src/test/java/io/pockethive/work/api/WorkItemJsonCodecTest.java",
+      "sha256": "1379339bd5c48d7893afb077c2c11157c039b26e41878840a0e9924aefb0493d"
+    },
+    {
+      "path": "common/work-api/src/test/java/io/pockethive/work/api/WorkItemTest.java",
+      "sha256": "f122b0687e9635feee929f80e68643c77f44da66856c4015f4666136280895d1"
+    },
+    {
+      "path": "common/work-api/src/test/java/io/pockethive/work/boundaries/CompiledWorkBoundaryTest.java",
+      "sha256": "5c96f60b3666b43e6a171477ca3c06d203668a1ad0acf272ec5d2f1cebdf86ee"
+    },
+    {
+      "path": "common/work-test-fixtures/pom.xml",
+      "sha256": "aa5b54a0c3f3c4c92533d7e2176acc0c8bc5a245f01d6398b559baaa35d728af"
+    },
+    {
+      "path": "common/work-test-fixtures/src/main/java/io/pockethive/worker/sdk/testing/ControlPlaneTestFixtures.java",
+      "sha256": "6278c22a1de0038ce523944f4cf95d54f6c791b130b70fff1daef918ff29eb12"
+    },
+    {
+      "path": "common/worker-sdk/README.md",
+      "sha256": "667a4f2969ac4759012109a1766dff65997824b2e502846dce36291fb94978da"
+    },
+    {
+      "path": "common/worker-sdk/pom.xml",
+      "sha256": "37e2141dfd6816b1e1a1cc3bebb9225f5ad182beed240859af3afe656a1467f0"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/HistoryPolicy.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/HttpRequestEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/HttpResultEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/Iso8583RequestEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/Iso8583ResultEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/PocketHiveWorkerFunction.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/StatusPublisher.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/TcpRequestEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/TcpResultEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItem.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItemContractException.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItemEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItemJsonCodec.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItemSchemaValidator.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkItemStepEnvelope.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkPayloadEncoding.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkStep.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkerContext.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/api/WorkerInfo.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthFailureException.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthMaterial.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthProfile.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthProfileDocument.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthRef.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/AuthRuntime.java",
+      "sha256": "cd51dd3b4255296ea87cc241e9ea06698d4d6bd5e2f69fcce97abfffb8e3881c"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/ClaimResult.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/RefreshClaim.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/TokenDueRef.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/TokenRecord.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/auth/TokenStore.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfiguration.java",
+      "sha256": "2352d545cd0878ac47a46a5a7399e5c94a56cd642d2551f4eae4e317df239084"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/VirtualThreadRabbitContainerCustomizer.java",
+      "sha256": "76a242815cb97bac0f63ca79f1205a07c17c3453109df2c07ba93fc6aa511b5c"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/WorkerControlQueueListener.java",
+      "sha256": "ebbc9e8d3bfbbb3f7a99d8b546181b41f36146d52292ba42e435039344729b4c"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/autoconfigure/WorkerDefinitionDiscovery.java",
+      "sha256": "8469c6fc735cc80f57975774996eaf6982c64b4e7f1e26f772fa0ca9e9c14ac3"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/PocketHiveWorker.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/PocketHiveWorkerProperties.java",
+      "sha256": "79e7d4dce26e50d7faaddd2b3fa61dcdd3e45eadc23ec9fae35503968cd3c68c"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/WorkOutputConfig.java",
+      "sha256": "db5b5ce44cb8fe022ab93993e8b403d09d53a25a89e6604be0799dd2df413649"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/config/WorkerCapability.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/RateSchedulePolicy.java",
+      "sha256": "476a7b2a2c13ba9bc8e7e6280bd8dae6393ccc06f16eb7e6425ff9b1626194f0"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerState.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerStates.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerWorkInput.java",
+      "sha256": "22d4ed516eb5b4502b6898c9e7dcfea3d9dda97d047a4007f7d15fa8ac225bf5"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerWorkInputBuilder.java",
+      "sha256": "deedfec98e69887f822f1fb840fd6807bc8951a0437588b3e59d61151471f898"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/SchedulerWorkInputFactory.java",
+      "sha256": "14d1dc87845d8187b77f8166c39a6aec98ef6ae3dc97a268413619ff6c87ff22"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/WorkInputRegistryInitializer.java",
+      "sha256": "d09d432f022e0f3b05b7442e547482fed378df70bcc36e40bd7f29acb644a81e"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/WorkMessageDispatcher.java",
+      "sha256": "b6819fbfe655f50443bd75aca0ab7c9c3d8222aa57bfea84cbaacffd72048762"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/csv/CsvDataSetWorkInput.java",
+      "sha256": "01ee3ce1433ad5d240abfdaafdc8caf4b8a0c0748bb5a54fe58ba87ddf6a994d"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/input/redis/RedisDataSetWorkInput.java",
+      "sha256": "40c05e86a868092fda5312f55af741160a83c6afb3621f62e791e34a327c21bd"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/NoopWorkOutput.java",
+      "sha256": "6aa060904e29b0775a890188e82e94b78d1d8f63ca78d466ca57120a519260f6"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RabbitWorkOutput.java",
+      "sha256": "b00491b39d5023abd43e6ef03f87f96e284cc36a19d8e8fe1d5db177a6470e1a"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RedisWorkOutput.java",
+      "sha256": "ebb4c3b70f33f5c114068f4922fa67b0bac113ae13535dda8556bd720065df95"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/RedisWorkOutputFactory.java",
+      "sha256": "74559bf45b9bc27de6fe1552995b53fca13a99865f9acf41a33ce82ea6abb887"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutput.java",
+      "sha256": "b4943acc17e1e3a4c4c11e352bd240ab602cfd3cb99cc297a263874e47dd83e3"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutputRegistry.java",
+      "sha256": "b26bf77200ef0fe1800eb4092befb02c5ebde20452174c0b3d001b5fe6f06e62"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/output/WorkOutputRegistryInitializer.java",
+      "sha256": "263e72eaa7cc18d52d1a576319229e6d9a42fae7f19a85a024571e1e16460896"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/DefaultWorkerContextFactory.java",
+      "sha256": "ad56c3ff32b7806778f0ed51cc2273007365041a1b6028bbaee3777339d55054"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/DefaultWorkerRuntime.java",
+      "sha256": "bd5b2fa2dacc2ab02b93a8e4ae27eac447ac2c1869d06e45d461408815d60b9c"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/RedisPushSupport.java",
+      "sha256": "28eb4d4a294419f6fec0b53808039bbbec78af0b7cfc1c7c5d5cd53a12ac3b56"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/RedisUploaderInterceptor.java",
+      "sha256": "698f38bab2c2bd238a86db04c7314db0e4a080c14019ff134df2f529f8edb66d"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/TemplatingInterceptor.java",
+      "sha256": "258fb6d7faff28384bed0e3b864db0ad9304b63ada3473d7abc18b37afc444d6"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerContextFactory.java",
+      "sha256": "9ebfacadf30bf19a7401e4641a222b336930a87cc59667ad432db2e9530092ad"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerControlPlaneRuntime.java",
+      "sha256": "4e0d261c0c1d2d6d06c5395a5bd980e2943a7d5f857fa8a83033615a9da0a2e0"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerDefinition.java",
+      "sha256": "fd4b046070e958a2aa493a346e95c99b0fbe7fb7275e27b048d68ccd66999bc2"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerInvocation.java",
+      "sha256": "de59638b04ae24b63d8c5e6106081540933c9509ffb132cad51526bfd8371c67"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerInvocationContext.java",
+      "sha256": "3645dc3b04f567bb6698da3898f890f2bfbfe3910d9fd5b1d946af0b9d816727"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerInvocationInterceptor.java",
+      "sha256": "98464a9607d4445f63cfac2325e4867c8173cec356e21fb654cbd2d29055f809"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerMetricsInterceptor.java",
+      "sha256": "5619ee6d53df9c8185a29b61ffe4efa700c2f1c115df96be83fd5be0bee1c421"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerObservabilityInterceptor.java",
+      "sha256": "06ac83f9e81eaa34adaa4868e11612bdf92a04284d3d4d5acaadb45a4d16f0aa"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerRuntime.java",
+      "sha256": "16c3e1998de266d7b51bd1cbc86ac07e7fec32a6029ded06cb56690276f153ad"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerState.java",
+      "sha256": "a1366277d31ca60261039b94dcb39bc6b2d01bdcb726f6b3de0c7d0aab5c6b58"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/runtime/WorkerStatusPublisher.java",
+      "sha256": "e14ae2d29b642b3e6f178feee582813bac882f872e25642d97939fd704e81e89"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/templating/MessageTemplate.java",
+      "sha256": "6467d6702daaf72115c91ed24775ac49656f06e2ea572ea96da22caecdc260b9"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/templating/MessageTemplateRenderer.java",
+      "sha256": "05b3f4507cbc54a5e9cf636acb9756a12fe61aa3acc3bbcf2e60c2dae16413e3"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/testing/ControlPlaneTestFixtures.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapter.java",
+      "sha256": "8a025309e3ff7adb4eb8822b2788671df3debc2183fa3889ee3b6a2b6789bfd8"
+    },
+    {
+      "path": "common/worker-sdk/src/main/java/io/pockethive/worker/sdk/transport/rabbit/RabbitWorkItemConverter.java",
+      "sha256": "a81c460e689c785362a639cf243f68145c30f063e54ea3bfddb7dee01b9ba7c4"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/api/TransportEnvelopeDtosTest.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/api/WorkItemJsonCodecTest.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/api/WorkItemTest.java",
+      "sha256": null
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/auth/AuthRuntimeTest.java",
+      "sha256": "412210d8fc04250d671768b0a0cfa2f6beba7980818f298b27c326e590b56322"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerIoFromConfigTest.java",
+      "sha256": "7473195dcc66f4ce6545a8d451d6fc307e43d6b6c60650858afe17cb879d58fc"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/autoconfigure/PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest.java",
+      "sha256": "118a1080f5875ee26da88a5f266291e357feb5ee425119a3a530c5b11babc14c"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/autoconfigure/WorkControlCompositionTest.java",
+      "sha256": "84690326823abd47510f5588ad3c11e33f55b8d53c7d49c1463d4503f56d2473"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/autoconfigure/WorkControlFactoryPolicyTest.java",
+      "sha256": "147d2a7824c74256ed6dd711dcff569368f67c28a29df5bd729ddd44ad2fe849"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/input/RateSchedulePolicyTest.java",
+      "sha256": "0272e9a955ae031117c4dd052b7605534d9507a4b24fe63ab45c1d966936cbe6"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/input/WorkInputRegistryInitializerTest.java",
+      "sha256": "599cf5c3b224bc2984210d45f26e8f4337f045303f498ad0dc54ad6350b3f76a"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/input/rabbit/RabbitWorkInputListenerConfigurerTest.java",
+      "sha256": "8320dabb37b402580f1f6d8ce6a6960f623079bb36fbcef5c38f1a301b7181b7"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/input/redis/RedisDataSetWorkInputTest.java",
+      "sha256": "7ced2a10fd083abbfad049b87dc37ad83ae861de8bb26a8695ff6fb55ad8e4ac"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/output/RabbitWorkOutputTest.java",
+      "sha256": "31c98043120942054b8294d4e13be9fc2c56f25f09c46687acd8ed9ddb6796a6"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/output/RedisWorkOutputTest.java",
+      "sha256": "6368a94296050516fee4aa3dec6a0722a05726132699d3eefb8d5562b6c7e91e"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/output/WorkOutputRegistryInitializerTest.java",
+      "sha256": "1415e241529907cedcf7488251e70e35aa0ed97754270a9a3aacd1aab9e5d337"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/DefaultWorkerContextFactoryTest.java",
+      "sha256": "2d9f58168af2514d0ea3da8ea4dcba73d0abbd56392d81b080349cf3d79c7c4a"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/DefaultWorkerRuntimeTest.java",
+      "sha256": "64044f43d25178346d089f05a0072fe3bf840428015d1d884be45768b7e99ed4"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/RedisUploaderInterceptorTest.java",
+      "sha256": "1aaef07ce4ad7ef21829c1f735bd6c117529ab2da702a0bfed5d0ac26f9775bb"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/TemplatingInterceptorTest.java",
+      "sha256": "3afbc01d374029d9701857e603378f788f058ac3b60280c8ccb23149c4c09308"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerControlPlaneRuntimeTest.java",
+      "sha256": "2b0503a68c8a853657343b170825d6be9ebf07b82af94f90ddbab306a7dcd305"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerMetricsInterceptorTest.java",
+      "sha256": "cbec1329e3039ba86f563cb8f71584fe7ebf0db8d9f5c4f9c46724a6732037c4"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerObservabilityInterceptorTest.java",
+      "sha256": "8123d6c774a9d35803b6dd3cae79bf81aa30ba83ceb758a1e56b1a48a570deb5"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerRegistryTest.java",
+      "sha256": "d1d63637b25e0c8ce9a37d3fa90e6963da93739c65b54d1cce1ce1a488d97375"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerStateTest.java",
+      "sha256": "d62ee8dd6614977d904db5f6265edc2ce99a67e1d841e02e77a685e5fa429de4"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/runtime/WorkerStatusPublisherTest.java",
+      "sha256": "1707d06446ca92fb6a3d908732b7dfcb3d7ab47403038028f02e34104f88afa5"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/templating/MessageTemplateRendererTest.java",
+      "sha256": "1d8e659f60a8c3269ef79ff45f114f798243f25a61248b6f0a1e713b313b4ec3"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/templating/PebbleTemplateRendererTest.java",
+      "sha256": "6c21f5fcf76c4b2d6cd57edfee9c7dffd0ad13b5c4041badb106e1e37edb7f45"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/transport/rabbit/RabbitMessageWorkerAdapterTest.java",
+      "sha256": "5c903061c300239cd76ed712c6e84ed019f2c2ef599e846bb8171199c9c2a7b6"
+    },
+    {
+      "path": "common/worker-sdk/src/test/java/io/pockethive/worker/sdk/transport/rabbit/RabbitWorkItemConverterTest.java",
+      "sha256": "370e88776870a0a078d8da86c7a3350bdf81d1ea829f65a9e3fe2f7d3a42e9be"
+    },
+    {
+      "path": "db-query-service/src/main/java/io/pockethive/dbquery/DbQueryRunner.java",
+      "sha256": "abf75ea1e819c41a99fc7f9cb1f10e33b15e11ca80a9de291d43d7f732490699"
+    },
+    {
+      "path": "db-query-service/src/main/java/io/pockethive/dbquery/DbQueryWorkerImpl.java",
+      "sha256": "643f487a39235db23993a4dbe37ba035320016a3c77a1d8a16cde37248a30887"
+    },
+    {
+      "path": "db-query-service/src/main/java/io/pockethive/dbquery/DbValueResolver.java",
+      "sha256": "e6d96ad33c598a27926546b5fd5464a5b5cd4ab7965972940d59612a5b76dab0"
+    },
+    {
+      "path": "db-query-service/src/test/java/io/pockethive/dbquery/DbQueryRunnerTest.java",
+      "sha256": "337d7b13c131d56ea1859b5b9548d39d499e93917b052165204677be3d8d1317"
+    },
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "sha256": "88e790c96aa9b7dd9abc78507e96059e0ca643c47686d2428dd88b9d784274f5"
+    },
+    {
+      "path": "docs/architecture/work-plane-boundaries.md",
+      "sha256": "11d03bba42e5ef5911615cceaf75031ff17b37e0c7b8f0a21178c06d75d96126"
+    },
+    {
+      "path": "docs/contracts/result-rules.md",
+      "sha256": "d2e91db09da03cd7e22ea29d770d047e7d3ffcbb5cb9029a448844b341ee223b"
+    },
+    {
+      "path": "docs/inProgress/README.md",
+      "sha256": "2d13e6fa3ca3594d1aa38aa700e6a1c5c5da708b73aed452b6329967f1025d2b"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/README.md",
+      "sha256": "67f20492408b3f0ff6df9f33be743b1091e111d07348f429fff1b2867b23f6b9"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/README.md",
+      "sha256": "1750acf7cadc0e47fadd14b345228ba2acb88b1883148d4294a02c58fcfe621b"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/after-tests.json",
+      "sha256": "2c092502bbc3b246c358d03e2b780e6593a48a18c96c1e0faa6a1a6f2e183be7"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/before-module-graph.json",
+      "sha256": "b44729634b4ef4a2afd56960691cf02dd874a71f76c6ff33d6d047d27a1c1527"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/before-source-inventory.json",
+      "sha256": "3336c94adea3e372480166fc92e1889fdc3a8d1960a3878fad9e389d790ad626"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/before-tests.json",
+      "sha256": "b55d8e36af8c0ca552c936e583c0f4774f32fd20c035ffc98345b4dd88deef04"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/dependencies/auth-contracts.txt",
+      "sha256": "194867e9a9f2cf5ad74611f61980d0672cd22cc1adc7412928b92796b353aa57"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/dependencies/control-plane-core.txt",
+      "sha256": "2094c3b7b318856953c29d273919a09bdc3274c87ab15e233c9df60efe3607d5"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/dependencies/observability-core.txt",
+      "sha256": "5811cafc5e59d3203b83856be257c319f7f71c783de34b91a1bcffbe8a7d7d63"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/dependencies/templating-api.txt",
+      "sha256": "2026feb952f0c1b28068e2f3ef973c93fa6163deaf6ac771ac3382d001a27536"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/b01/dependencies/work-api.txt",
+      "sha256": "ee19ee42fc8ff9e7aef0f66d70d93c815861ac60daa792a048ef7dca55d858ce"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/inventory.py",
+      "sha256": "073c52ae36b8f7efcb6dd217de0fdfcbd46ebd5946d4779a18edcb3eb160a70c"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/module-graph.json",
+      "sha256": "3817014f7086a415df8aec6efac97fbc2313e2ffb2df1369f10e4f20e2374963"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/source-inventory.json",
+      "sha256": "12b62655e2e816425104691cb39224ebc6d19136ba77c9acf60affdda135b1de"
+    },
+    {
+      "path": "docs/inProgress/boundary-design/test_inventory.py",
+      "sha256": "f177f810bca201d0430bb2e99cb21ea0cc194b0b8de5863718f78d03a17df233"
+    },
+    {
+      "path": "docs/inProgress/work-plane-module-boundaries.md",
+      "sha256": "36ad2b8f099e00b93c7eb7903ae4163c12d3b1223e28b12687a3685f8716f535"
+    },
+    {
+      "path": "docs/sdk/worker-sdk-quickstart.md",
+      "sha256": "b56747130a7bb1cdef7b3653a81661c79f8b62b6044b65697baed917ee214826"
+    },
+    {
+      "path": "generator-service/pom.xml",
+      "sha256": "11c9e0c0ba00a2e58565be07b34ebfebbbefd0c15b1fccc23b15ad8edf0237b6"
+    },
+    {
+      "path": "generator-service/src/main/java/io/pockethive/generator/GeneratorWorkerImpl.java",
+      "sha256": "2071d75467d754f261e388ec06233661fbeb7496ebb8fac79c806b90e4166464"
+    },
+    {
+      "path": "generator-service/src/test/java/io/pockethive/generator/GeneratorTest.java",
+      "sha256": "2c8c84c27aa5a1c52080232999d6941c1451553d7f1d8ac1d2f5aca5365fa03e"
+    },
+    {
+      "path": "http-sequence-service/src/main/java/io/pockethive/httpsequence/HttpSequenceRunner.java",
+      "sha256": "23aa9a0f2c98dda7ab390cb827cd170ba8defd357c4318daa32f1487e41e300f"
+    },
+    {
+      "path": "http-sequence-service/src/main/java/io/pockethive/httpsequence/HttpSequenceWorkerImpl.java",
+      "sha256": "27dcd45bd6a7d4dd499e24f277e5b66d91c7aca165f7e0eb8bf618a45b45b96c"
+    },
+    {
+      "path": "http-sequence-service/src/test/java/io/pockethive/httpsequence/HttpSequenceMultiEndpointAcceptanceTest.java",
+      "sha256": "966817283d3952a4be88fffaaad3ac2413fd305f105819ad9f41fc7143197e12"
+    },
+    {
+      "path": "http-sequence-service/src/test/java/io/pockethive/httpsequence/HttpSequenceRunnerTest.java",
+      "sha256": "db31453d4e5cfbee42a740593b3f00da0a0adff091a250440f70866f2ea127c3"
+    },
+    {
+      "path": "moderator-service/pom.xml",
+      "sha256": "e7ba568fa6431e043489ba2d7e18c9bb2dc4ebd2f279c26dcd570370c095bc30"
+    },
+    {
+      "path": "moderator-service/src/main/java/io/pockethive/moderator/ModeratorWorkerImpl.java",
+      "sha256": "e94018e524aca3d88fceac0c0a82bb0f0ae054e7df57258b57169f57319306b9"
+    },
+    {
+      "path": "moderator-service/src/test/java/io/pockethive/moderator/ModeratorTest.java",
+      "sha256": "855a307fbf55c8330471e89a8fac0ff0350325671dd96c613fade457ceff0e3c"
+    },
+    {
+      "path": "observability/pom.xml",
+      "sha256": "9f2c1c86d8fc06709bd14c4a4cf19302e5b538b1473305ca9869d3db7ac211d8"
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/observability/ControlPlaneJson.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/observability/Hop.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/observability/ObservabilityContext.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/observability/ObservabilityContextUtil.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/observability/StatusEnvelopeBuilder.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/main/java/io/pockethive/util/BeeNameGenerator.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/test/java/io/pockethive/observability/ObservabilityContextUtilTest.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/test/java/io/pockethive/observability/StatusEnvelopeBuilderTest.java",
+      "sha256": null
+    },
+    {
+      "path": "observability/src/test/java/io/pockethive/util/BeeNameGeneratorTest.java",
+      "sha256": null
+    },
+    {
+      "path": "orchestrator-service/src/main/java/io/pockethive/orchestrator/app/ControllerStatusListener.java",
+      "sha256": "f3d4a2545cb5942ae6dc5abb064c44cf8751d37bf4e668af33a967e0960db69c"
+    },
+    {
+      "path": "orchestrator-service/src/main/java/io/pockethive/orchestrator/app/SwarmSignalListener.java",
+      "sha256": "0d7118768da805801cf49c912e7d09b8f5a8d1dba36b10eef18634a16fe710fa"
+    },
+    {
+      "path": "pom.xml",
+      "sha256": "59006b56171ce2162b24ef21664f928580c92b734e34fe2010dbebc948e80cb4"
+    },
+    {
+      "path": "postprocessor-service/pom.xml",
+      "sha256": "ce448f5777d050f047e5cc2fc9ae05fd3c02be5506b383498aa1bed1b8ce5171"
+    },
+    {
+      "path": "postprocessor-service/src/main/java/io/pockethive/postprocessor/DetailedTransactionMetrics.java",
+      "sha256": "0b7d7384edaf5c31c0339b11da6a4702bd908a88eec3dee1937fe237c1b781d6"
+    },
+    {
+      "path": "postprocessor-service/src/main/java/io/pockethive/postprocessor/PostProcessorWorkerImpl.java",
+      "sha256": "05e42ecff1a04fbefb2f72612a7f9215b1ab76495cab3f145ab2bcfc98b532e0"
+    },
+    {
+      "path": "postprocessor-service/src/main/java/io/pockethive/postprocessor/TxOutcomeProjector.java",
+      "sha256": "84012f304c5bfa6e661bb89e22e63ff14435fbcd3e88d4d401bfc848fc827193"
+    },
+    {
+      "path": "postprocessor-service/src/test/java/io/pockethive/postprocessor/DetailedTransactionMetricsTest.java",
+      "sha256": "801f653b2e3dd6f49826159544b5cb61effa257916a3fa686868f84d8ba53b70"
+    },
+    {
+      "path": "postprocessor-service/src/test/java/io/pockethive/postprocessor/PostProcessorTest.java",
+      "sha256": "2863899a6eff544b44ad888cb1bf219b9e83b57127f101b1aa5c490e4c07793d"
+    },
+    {
+      "path": "postprocessor-service/src/test/java/io/pockethive/postprocessor/TxOutcomeProjectorTest.java",
+      "sha256": "44ee3212e901ef925920eefc77f88683dff185aa402fcf76fbdf76657b52c41a"
+    },
+    {
+      "path": "processor-service/pom.xml",
+      "sha256": "da599cde6d1b83f06a8bd5c9030cac34e06d0a604d9e4445dc3a25ae8497c798"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java",
+      "sha256": "51effe5fd1ecc2271a85d455623409782603cd5abfe8aa075f3f2c8e3620d603"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/handler/HttpProtocolHandler.java",
+      "sha256": "bd683fc869bfeb712a3c7a3aa81e5830be024a626b3b5e4657f6ca4ba7e991eb"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/handler/Iso8583ProtocolHandler.java",
+      "sha256": "325842a2bf13090954747aa3b3b07c8abb3eca6a3092f97866ddb8fa1ba7182b"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/handler/ProtocolHandler.java",
+      "sha256": "b4eaf51d802787f567d31a4cea1a5bc775653979a2f0569d46cb329763766d4b"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/handler/TcpProtocolHandler.java",
+      "sha256": "6d1cf5795bf108cd0c521369fc9fcd4e6f28ded50037ec4e2c12b110903ba37a"
+    },
+    {
+      "path": "processor-service/src/main/java/io/pockethive/processor/response/ResponseBuilder.java",
+      "sha256": "a4814ad6f25a6ef01c7f551084316b066e4eb5ee6c6d4e3bbf09216e1054e692"
+    },
+    {
+      "path": "processor-service/src/test/java/io/pockethive/processor/ProcessorTest.java",
+      "sha256": "018fd8a728734702bb9b4d0f4bd263b56b799e86b385c2b7a0c25f0616b382ee"
+    },
+    {
+      "path": "request-builder-service/pom.xml",
+      "sha256": "d2f8171b49dae866f47767b1f6c8dc11fc102b9d47498a6386584ad21e805387"
+    },
+    {
+      "path": "request-builder-service/src/main/java/io/pockethive/requestbuilder/Iso8583SchemaPackRegistry.java",
+      "sha256": "264b4e3e7420fe7b6e7cbfb78be6cfb28aeeaab7d2c9ac736a7520d286859865"
+    },
+    {
+      "path": "request-builder-service/src/main/java/io/pockethive/requestbuilder/J8583FieldListXmlCodec.java",
+      "sha256": "6495122fbf0c902fb4ab1401f79938edcbdee1172fd27e01f3a307daef3590d9"
+    },
+    {
+      "path": "request-builder-service/src/main/java/io/pockethive/requestbuilder/RequestBuilderWorkerImpl.java",
+      "sha256": "a087450a901e7befa4f4d4c4257d9d4ffe18e23e2191c7e16f383b35d07a9b06"
+    },
+    {
+      "path": "request-builder-service/src/test/java/io/pockethive/requestbuilder/RequestBuilderWorkerImplTest.java",
+      "sha256": "b08c42716c1824cf42787a7991abe6b40743f14dc9f53612082341470b2853e4"
+    },
+    {
+      "path": "scenario-manager-service/src/main/java/io/pockethive/scenarios/validation/ScenarioBundleValidator.java",
+      "sha256": "1f329ab7bfedd7d61dc74ef2d4af2851fb185c7ab4290368618dd45d02cbaa39"
+    },
+    {
+      "path": "swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmControllerControlPlaneConfiguration.java",
+      "sha256": "ed5c42124b241834dc2cba33f9dc1a4650dbe5b87750ab20e1c62a030e60e459"
+    },
+    {
+      "path": "swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmLifecycleManager.java",
+      "sha256": "8ee1631cfd0b68bab3acc02beee54c1d10f44807f30f641aa505cbc38f66b738"
+    },
+    {
+      "path": "swarm-controller-service/src/main/java/io/pockethive/swarmcontroller/SwarmSignalListener.java",
+      "sha256": "ad893fc347a147f1e4b7aea1f32b3d5bdc3d452ebc50e5ba782bb89aefc20117"
+    },
+    {
+      "path": "tcp-mock-server/pom.xml",
+      "sha256": "a89c50ef19263fef098e275047e9d7eea146fdbd8e481c63989ea083565348f5"
+    },
+    {
+      "path": "tools/check-work-boundaries.py",
+      "sha256": "ee0b94ebb21c664167d5c482a2086529c54c9d3bf01de82fb3642e65ea9d5847"
+    },
+    {
+      "path": "tools/scenario-templating-check/src/main/java/io/pockethive/tools/ScenarioTemplateValidator.java",
+      "sha256": "9be493a467a3505c428e0d5e16687420e02eb6e53fc425a5bccc599e441eecae"
+    },
+    {
+      "path": "tools/tests/test_work_boundaries.py",
+      "sha256": "f48671bda36239be9b6bd1a4170f5c37ffdd9afdf4a39361a7fe3b6ad8c9aa52"
+    },
+    {
+      "path": "tools/work-boundaries.json",
+      "sha256": "a991632ab1e0c3672cf4abf38a18626ededba91628636580e3bbb142cf953cbb"
+    },
+    {
+      "path": "trigger-service/pom.xml",
+      "sha256": "c5bdabbf51df527bff206ba9dc3cd14cf1305d6742986f5cb0858fc5f6229432"
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerSchedulePolicy.java",
+      "sha256": "56d9dcc13d26a77411067448ce451b4ef9440189826204770126c8ea63a013fb"
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerSchedulerState.java",
+      "sha256": null
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerSchedulingConfiguration.java",
+      "sha256": "a3284767a7e58492616c2bffe534d418f10c83900cac1ad33ce456cdac9c8530"
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerWorkInputFactory.java",
+      "sha256": null
+    },
+    {
+      "path": "trigger-service/src/main/java/io/pockethive/trigger/TriggerWorkerImpl.java",
+      "sha256": "339b861bc10118b28d6b447ddf7ddfa2f95716e3e87e04ca7209ed1c00d54990"
+    },
+    {
+      "path": "trigger-service/src/test/java/io/pockethive/trigger/TriggerSchedulePolicyTest.java",
+      "sha256": "13b5a8a1dc674f084fdd527c2b07f9f912c4ea36d230d78a00a610526af928f6"
+    },
+    {
+      "path": "trigger-service/src/test/java/io/pockethive/trigger/TriggerWorkerImplTest.java",
+      "sha256": "e6b143098440dd07e5a60190b9834314a265e9589635f7bc50d3e5428d6ffec5"
+    }
+  ]
+}

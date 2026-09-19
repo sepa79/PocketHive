@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
@@ -14,7 +16,7 @@ class StructuredRecordProjectorTest {
 
   @Test
   void projectsRequiredAndOptionalFields() {
-    StructuredRecordProjector projector = new StructuredRecordProjector(new PebbleTemplateRenderer());
+    StructuredRecordProjector projector = new StructuredRecordProjector(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
     ClearingStructuredSchema schema = new ClearingStructuredSchema(
         TEST_SCHEMA_ID,
         TEST_SCHEMA_VERSION,
@@ -39,7 +41,7 @@ class StructuredRecordProjectorTest {
 
   @Test
   void failsWhenRequiredFieldIsMissing() {
-    StructuredRecordProjector projector = new StructuredRecordProjector(new PebbleTemplateRenderer());
+    StructuredRecordProjector projector = new StructuredRecordProjector(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
     ClearingStructuredSchema schema = new ClearingStructuredSchema(
         TEST_SCHEMA_ID,
         TEST_SCHEMA_VERSION,

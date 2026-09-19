@@ -61,7 +61,8 @@ ClickHouse, WireMock, and Toxiproxy are not published by this workflow.
 
 ## Using Published Images
 
-Create a `.env` file with an explicit registry prefix and version:
+Either export these variables in your shell or create a local `.env` next to
+`docker-compose.yml` with an explicit registry prefix and version:
 
 ```bash
 DOCKER_REGISTRY=ghcr.io/yourorg/pockethive/

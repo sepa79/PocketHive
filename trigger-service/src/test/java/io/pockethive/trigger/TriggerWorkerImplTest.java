@@ -1,12 +1,14 @@
 package io.pockethive.trigger;
 
+import io.pockethive.work.api.MutableStatus;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.net.http.HttpClient;
 import java.net.http.HttpHeaders;

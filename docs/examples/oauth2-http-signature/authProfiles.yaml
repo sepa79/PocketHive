@@ -1,0 +1,22 @@
+# Copy to the scenario root as authProfiles.yaml and replace the example values.
+# See ../../AUTH-USER-GUIDE.md#oauth-http-signature for signing and key requirements.
+profiles:
+  "api:oauth-http-signature":
+    type: OAUTH2_HTTP_SIGNATURE
+    storage:
+      mode: REDIS
+      tokenKey: api-oauth-http-signature
+    refresh:
+      refreshAheadSeconds: 0 # Both refresh-ahead settings are ignored for this profile.
+      emergencyRefreshAheadSeconds: 0
+      leaseSeconds: 30
+    tokenUrl: "https://identity.example.com/oauth/token"
+    clientId: "example-client"
+    keyId: "example-rsa-key"
+    # Unencrypted PKCS#8 RSA PEM with a modulus of at least 2048 bits.
+    privateKey:
+      file: /run/secrets/oauth-signing-key.pem
+    scopes:
+      - accounts.read
+      - payments.read
+    audience: "https://api.example.com" # Optional; omit when not required.

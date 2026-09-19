@@ -1,5 +1,8 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.orchestrator.infra.schema.ControlPlaneSchemaBundle;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -12,6 +15,7 @@ import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
@@ -19,6 +23,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.time.Instant;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -52,7 +57,7 @@ class OrchestratorAdminAuthTest {
     @Test
     void controlPlaneSchemaAllowsReadUser() {
         SwarmStore store = storeWithSwarm("demo-swarm", "demo/tpl-1", "demo");
-        ControlPlaneSchemaController controller = new ControlPlaneSchemaController(endpointAuthorization(store));
+        ControlPlaneSchemaController controller = new ControlPlaneSchemaController(new ControlPlaneSchemaBundle(mapper), endpointAuthorization(store));
 
         try {
             OrchestratorCurrentUserHolder.set(userWith(
@@ -93,7 +98,8 @@ class OrchestratorAdminAuthTest {
             mapper,
             mock(JdbcTemplate.class),
             store,
-            endpointAuthorization(store));
+            endpointAuthorization(store),
+            runtimeLayout());
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {
@@ -229,11 +235,16 @@ class OrchestratorAdminAuthTest {
 
     private static SwarmStore storeWithSwarm(String swarmId, String bundlePath, String folderPath) {
         SwarmStore store = new SwarmStore();
-        Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", "run-1");
+        Swarm swarm = new Swarm(swarmId, "controller-1", "container-1", "run-1", NetworkMode.DIRECT);
         String templateId = bundlePath.substring(bundlePath.lastIndexOf('/') + 1);
         swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", List.of(), bundlePath, folderPath));
         store.register(swarm);
         return store;
+    }
+
+    private static RuntimeFilesystemLayout runtimeLayout() {
+        String root = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize().toString();
+        return RuntimeFilesystemLayout.of(root, root);
     }
 
     private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {

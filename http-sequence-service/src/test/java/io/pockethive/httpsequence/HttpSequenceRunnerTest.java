@@ -1,16 +1,19 @@
 package io.pockethive.httpsequence;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.worker.sdk.auth.AuthFailureException;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -194,6 +197,7 @@ class HttpSequenceRunnerTest {
         """);
     Files.writeString(templates.resolve("A.yaml"), """
         protocol: HTTP
+        serviceId: default
         callId: A
         method: GET
         pathTemplate: /a
@@ -238,6 +242,7 @@ class HttpSequenceRunnerTest {
         """);
     Files.writeString(templates.resolve("A.yaml"), """
         protocol: HTTP
+        serviceId: default
         callId: A
         method: GET
         pathTemplate: /a
@@ -252,7 +257,7 @@ class HttpSequenceRunnerTest {
     HttpSequenceRunner runner = new HttpSequenceRunner(
         new ObjectMapper().findAndRegisterModules(),
         Clock.systemUTC(),
-        new io.pockethive.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
         new TemplateLoader(),
         executor,
         new DefaultHttpSequenceTargetResolver(),
@@ -352,6 +357,29 @@ class HttpSequenceRunnerTest {
     assertThat(executor.targets()).isEmpty();
   }
 
+  @Test
+  void inlineAuthTemplateFailuresThrowOnceThenDropWithoutSending() throws Exception {
+    writeTemplate("A");
+    Files.writeString(tempDir.resolve("A.yaml"), "auth: {}\n", java.nio.file.StandardOpenOption.APPEND);
+    RecordingExecutor executor = new RecordingExecutor();
+    HttpSequenceRunner runner = newRunner(executor);
+    WorkerInfo info = new WorkerInfo("http-sequence", "swarm-1", "inst-1", null, null);
+    WorkItem seed = WorkItem.text(info, "{}").build();
+    WorkerContext context = new TestWorkerContext(info);
+    HttpSequenceWorkerConfig config = new HttpSequenceWorkerConfig(
+        "http://sut", tempDir.toString(), "default", 1,
+        List.of(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of())),
+        new HttpSequenceWorkerConfig.DebugCapture(
+            HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1),
+        Map.of());
+
+    assertThatThrownBy(() -> runner.run(seed, context, config))
+        .isInstanceOf(AuthFailureException.class)
+        .hasMessageContaining("inline auth");
+    assertThat(runner.run(seed, context, config)).isNull();
+    assertThat(executor.calls()).isEmpty();
+  }
+
   private HttpSequenceRunner newRunner(RecordingExecutor executor) {
     ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
     TemplateRenderer templateRenderer = (template, context) -> template == null ? "" : template;
@@ -371,6 +399,7 @@ class HttpSequenceRunnerTest {
   private void writeTemplate(String callId) throws Exception {
     String yaml = """
         protocol: HTTP
+        serviceId: default
         callId: %s
         method: GET
         pathTemplate: /%s

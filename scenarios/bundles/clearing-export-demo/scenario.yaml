@@ -31,6 +31,10 @@ template:
     - role: moderator
       image: moderator:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         mode:
           type: pass-through
           ratePerSec: 0.0
@@ -63,6 +67,10 @@ template:
     - role: clearing-export
       image: clearing-export:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         mode: template
         streamingAppendEnabled: false
         streamingWindowMs: 0

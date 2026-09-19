@@ -41,6 +41,12 @@ pockethive:
 See the [control-plane worker guide](/control-plane/worker-guide#configuration-properties) for the full
 `WorkerControlPlaneProperties` reference, including the environment variables that mirror the IO configuration.
 
+Worker business contracts and the worker annotation are in `io.pockethive.work.api`
+(`work-api`). Keep the SDK dependency in service composition; standalone business code
+can depend on the API without importing Spring or transport clients. Annotation
+`inputConfig`/`outputConfig` overrides have been removed; configure the selected IO
+settings explicitly.
+
 ## 2. Annotate worker beans
 
 Annotate each business implementation with `@PocketHiveWorker`. Queue and transport metadata now
@@ -90,63 +96,34 @@ The SDK provisions the correct `WorkInput`/`WorkOutput` pair for each annotated 
 workers receive the shared `RabbitWorkInput`/`RabbitWorkOutput`, while scheduler-driven roles (generator, trigger)
 receive the built-in scheduler input.
 
-Custom inputs remain possible via `WorkInputFactory` beans. The trigger worker keeps a bespoke factory because it combines
-the scheduler with rate-limit state, but all other services rely on the SDK defaults:
+Supply a service-specific scheduling policy at composition time; do not introduce another factory for the same selected input:
 
 ```java
-@Component
-class TriggerWorkInputFactory implements WorkInputFactory {
-
-  private final WorkerRuntime workerRuntime;
-  private final WorkerControlPlaneRuntime controlPlaneRuntime;
-  private final ControlPlaneIdentity identity;
-  private final TriggerWorkerProperties properties;
-
-  TriggerWorkInputFactory(WorkerRuntime workerRuntime,
-                          WorkerControlPlaneRuntime controlPlaneRuntime,
-                          ControlPlaneIdentity identity,
-                          TriggerWorkerProperties properties) {
-    this.workerRuntime = workerRuntime;
-    this.controlPlaneRuntime = controlPlaneRuntime;
-    this.identity = identity;
-    this.properties = properties;
-  }
-
-  @Override
-  public boolean supports(WorkerDefinition definition) {
-    return definition.input() == WorkerInputType.SCHEDULER
-        && "trigger".equalsIgnoreCase(definition.role());
-  }
-
-  @Override
-  public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
-    SchedulerInputProperties scheduling = config instanceof SchedulerInputProperties props
-        ? props
-        : new SchedulerInputProperties();
-    TriggerSchedulerState schedulerState = new TriggerSchedulerState(properties, scheduling.isEnabled());
-    Logger logger = LoggerFactory.getLogger(definition.beanType());
-    return SchedulerWorkInput.<TriggerWorkerConfig>builder()
-        .workerDefinition(definition)
-        .controlPlaneRuntime(controlPlaneRuntime)
-        .workerRuntime(workerRuntime)
-        .identity(identity)
-        .schedulerState(schedulerState)
-        .scheduling(scheduling)
-        .logger(logger)
-        .build();
+@Configuration(proxyBeanMethods = false)
+class TriggerSchedulingConfiguration {
+  @Bean
+  ScheduledInvocationPolicy<TriggerWorkerConfig> triggerSchedulePolicy() {
+    return new TriggerSchedulePolicy();
   }
 }
 ```
 
-The auto-configured helper registers control-plane listeners, converts AMQP messages via `RabbitWorkItemConverter`,
-publishes `WorkItem` payloads to the traffic exchange declared in `WorkerControlPlaneProperties`, and emits status
-snapshots/deltas for every worker. Only workers with unusual transports need to provide factories like the trigger example
-above; generator, moderator, processor, and postprocessor all run on the shared
-factories documented in `common/worker-sdk/README.md`.
+`ScheduledInvocationPolicy` lives in `io.pockethive.work.api`. Trigger supplies its
+interval/single-request policy; the SDK supplies the generic rate policy when the
+composition has no service-specific policy. Both use the same scheduler input factory.
+Policy implementations receive monotonic tick time and a read-only configuration/
+enablement projection; they neither interpret CP snapshots nor select adapters by role.
+See `trigger-service` for the implementation and parity tests.
+
+The selected Work adapter owns Work delivery. CP listeners use their dedicated factory
+and declare CP queues only; `WorkerControlPlaneProperties` contains no Work exchange
+requirement. `SCHEDULER`, `CSV_DATASET` and `REDIS_DATASET` with `NONE` output need no
+Rabbit Work settings. Input/output factory selection requires exactly one match and
+fails startup on missing or duplicate implementations.
 
 ## 5. Test with control-plane fixtures
 
-Stage 1 introduced `ControlPlaneTestFixtures` to make unit tests deterministic. Use them to construct canonical
+`ControlPlaneTestFixtures` is owned by `io.pockethive:work-test-fixtures`, which must be added with Maven `test` scope. Use them to construct canonical
 identities, topology descriptors, and sample payloads without repeating boilerplate.
 
 `ControlPlaneTestFixtures.workerProperties(...)` returns the validated `WorkerControlPlaneProperties` bean so tests
@@ -166,3 +143,8 @@ Use these hooks to emit custom metrics and propagate trace metadata as shown in 
 `processor-service/src/main/java/io/pockethive/processor/ProcessorWorkerImpl.java`.
 
 For the full roadmap and design rationale, review the Worker SDK simplification plan in the documentation archive.
+
+Scheduling policies receive every configuration revision through `update(state)`;
+that callback must not consume quota. `plan(tickMillis)` uses the latest observed
+state and is the sole quota-consuming operation. Implementations serialize these
+operations so updates between ticks preserve pending requests and disable/reset effects.

@@ -1,8 +1,10 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory.MetricsSettings;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
+import io.pockethive.controlplane.spring.ControllerSettings;
+import io.pockethive.controlplane.spring.MetricsSettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
 import io.pockethive.docker.DockerContainerClient;
@@ -10,49 +12,68 @@ import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
+import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
-import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
+import io.pockethive.orchestrator.runtime.RuntimeManifestObject;
+import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifestFactory;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitResourceBeans;
+import io.pockethive.rabbit.api.RabbitResourceNames;
+import io.pockethive.rabbit.api.RabbitResources;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.NetworkMode;
-import io.pockethive.swarm.model.Bee;
+import io.pockethive.swarm.model.RuntimeFilesystemContract;
+import io.pockethive.swarm.model.SwarmStartupArtifactContract;
+import io.pockethive.swarm.model.SwarmStartupArtifactReference;
+import io.pockethive.swarm.model.lifecycle.RemoveError;
+import io.pockethive.swarm.model.lifecycle.RemoveResource;
+import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
+import io.pockethive.swarm.model.lifecycle.ResourcePlane;
+import io.pockethive.topology.work.WorkTopologyChannels;
+import io.pockethive.topology.work.WorkTopologyResolver;
+import io.pockethive.work.config.WorkAdapterEnvironment;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.core.AmqpAdmin;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
 import org.springframework.stereotype.Service;
 
+/**
+ * Responsibility: adapt swarm container lifecycle operations to the configured runtime infrastructure.
+ * Must not: resolve Rabbit connection fields or duplicate their container environment encoding.
+ * Contract: RESP-ORCHESTRATOR-CONTAINER-LIFECYCLE — docs/architecture/runtime-responsibilities.md#resp-orchestrator-container-lifecycle.
+ * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
+ * Existing compute, manifest and resource cleanup concerns remain CP-N05/C02 debt.
+ */
 @Service
 public class ContainerLifecycleManager {
+    private final WorkTopologyResolver workTopologyResolver;
+
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
-    private static final String SCENARIOS_RUNTIME_DESTINATION = "/app/scenarios-runtime";
+    private final RuntimeFilesystemMount runtimeFilesystemMount;
     private final DockerContainerClient docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmStore store;
-    private final AmqpAdmin amqp;
+    private final RabbitResources amqp;
     private final OrchestratorProperties properties;
     private final ControlPlaneProperties controlPlaneProperties;
-    private final RabbitProperties rabbitProperties;
+    private final WorkAdapterEnvironment workEnvironment;
+    private final RabbitConnectionSettings rabbitConnection;
     private final JournalRunMetadataWriter runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
-    @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:}")
-    private String scenariosRuntimeRootSource;
+    private final RuntimeOwnershipManifestFactory manifestFactory;
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
     @Value("${spring.datasource.url:}")
@@ -70,115 +91,59 @@ public class ContainerLifecycleManager {
         DockerContainerClient docker,
         ComputeAdapter computeAdapter,
         SwarmStore store,
-        AmqpAdmin amqp,
+        @org.springframework.beans.factory.annotation.Qualifier(RabbitResourceBeans.CONTROL) RabbitResources amqp,
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties,
+        RabbitConnectionSettings rabbitConnection,
         JournalRunMetadataWriter runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
-        RuntimeOwnershipManifestStore manifestStore) {
+        RuntimeOwnershipManifestStore manifestStore,
+        RuntimeFilesystemMount runtimeFilesystemMount,
+        WorkTopologyResolver workTopologyResolver,
+        WorkAdapterEnvironment workEnvironment,
+        RuntimeOwnershipManifestFactory manifestFactory) {
+        this.workTopologyResolver = Objects.requireNonNull(workTopologyResolver, "workTopologyResolver");
         this.docker = Objects.requireNonNull(docker, "docker");
         this.computeAdapter = Objects.requireNonNull(computeAdapter, "computeAdapter");
         this.store = Objects.requireNonNull(store, "store");
         this.amqp = Objects.requireNonNull(amqp, "amqp");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.controlPlaneProperties = Objects.requireNonNull(controlPlaneProperties, "controlPlaneProperties");
-        this.rabbitProperties = Objects.requireNonNull(rabbitProperties, "rabbitProperties");
+        this.rabbitConnection = Objects.requireNonNull(rabbitConnection, "rabbitConnection");
+        this.workEnvironment = Objects.requireNonNull(workEnvironment, "workEnvironment");
         this.runMetadataWriter = Objects.requireNonNull(runMetadataWriter, "runMetadataWriter");
         this.clickHouseSink = Objects.requireNonNull(clickHouseSink, "clickHouseSink");
         this.manifestStore = Objects.requireNonNull(manifestStore, "manifestStore");
+        this.manifestFactory = Objects.requireNonNull(manifestFactory, "manifestFactory");
+        this.runtimeFilesystemMount = Objects.requireNonNull(runtimeFilesystemMount, "runtimeFilesystemMount");
         this.resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
     }
 
-    public ContainerLifecycleManager(
-        DockerContainerClient docker,
-        ComputeAdapter computeAdapter,
-        SwarmStore store,
-        AmqpAdmin amqp,
-        OrchestratorProperties properties,
-        ControlPlaneProperties controlPlaneProperties,
-        RabbitProperties rabbitProperties,
-        JournalRunMetadataWriter runMetadataWriter,
-        ClickHouseSinkProperties clickHouseSink) {
-        this(
-            docker,
-            computeAdapter,
-            store,
-            amqp,
-            properties,
-            controlPlaneProperties,
-            rabbitProperties,
-            runMetadataWriter,
-            clickHouseSink,
-            new RuntimeOwnershipManifestStore() {
-                @Override
-                public void save(RuntimeOwnershipManifest manifest) {
-                }
-
-                @Override
-                public java.util.Optional<RuntimeOwnershipManifest> find(String swarmId, String runId) {
-                    return java.util.Optional.empty();
-                }
-
-                @Override
-                public java.util.Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
-                    return java.util.Optional.empty();
-                }
-            });
-    }
-
     public Swarm startSwarm(String swarmId,
                             String image,
                             String instanceId,
-                            SwarmTemplateMetadata templateMetadata) {
-        return startSwarm(
-            swarmId,
-            image,
-            instanceId,
-            Objects.requireNonNull(templateMetadata, "templateMetadata"),
-            false,
-            null,
-            NetworkMode.DIRECT,
-            null);
-    }
-
-    public Swarm startSwarm(String swarmId,
-                            String image,
-                            String instanceId,
-                            SwarmTemplateMetadata templateMetadata,
-                            boolean autoPullImages) {
-        return startSwarm(
-            swarmId,
-            image,
-            instanceId,
-            Objects.requireNonNull(templateMetadata, "templateMetadata"),
-            autoPullImages,
-            null,
-            NetworkMode.DIRECT,
-            null);
-    }
-
-    public Swarm startSwarm(String swarmId,
-                            String image,
-                            String instanceId,
+                            String runId,
                             SwarmTemplateMetadata templateMetadata,
                             boolean autoPullImages,
                             String sutId,
                             NetworkMode networkMode,
-                            String networkProfileId) {
+                            String networkProfileId,
+                            SwarmStartupArtifactReference startupArtifact) {
         Objects.requireNonNull(templateMetadata, "templateMetadata");
+        Objects.requireNonNull(startupArtifact, "startupArtifact");
         String resolvedInstance = requireNonBlank(instanceId, "controller instance");
         String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
         String resolvedImage = resolveImage(image);
-        String runId = java.util.UUID.randomUUID().toString();
+        NetworkMode resolvedNetworkMode = Objects.requireNonNull(networkMode, "networkMode");
+        String resolvedRunId = requireNonBlank(runId, "runId");
         MetricsSettings metrics = metricsSettings(properties.getMetrics());
-        ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings =
-            new ControlPlaneContainerEnvironmentFactory.ControllerSettings(
+        var workTopology = workTopologyResolver.resolve(resolvedSwarmId, WorkTopologyChannels.from(templateMetadata.bees()));
+        var manifestResources = manifestFactory.resources(resolvedSwarmId, resolvedInstance, workTopology);
+        ControllerSettings controllerSettings =
+            new ControllerSettings(
                 metrics,
-                runId,
-                properties.getDocker().getSocketPath(),
-                "ph." + resolvedSwarmId,
-                "ph." + resolvedSwarmId + ".hive");
+                resolvedRunId,
+                properties.getDocker().getSocketPath());
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
                 resolvedSwarmId,
@@ -186,12 +151,16 @@ public class ContainerLifecycleManager {
                 SWARM_CONTROLLER_ROLE,
                 controlPlaneProperties,
                 controllerSettings,
-                rabbitProperties));
+                rabbitConnection));
+        env.putAll(workEnvironment.connectionEnvironment());
+        env.putAll(workTopology.controllerEnvironment());
         applyClickHouseSinkEnv(env);
-        String runtimeRootSource = scenariosRuntimeRootSource;
-        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
-            env.put("POCKETHIVE_SCENARIOS_RUNTIME_ROOT", runtimeRootSource);
-        }
+        env.put(
+            RuntimeFilesystemContract.HOST_ROOT_ENV,
+            runtimeFilesystemMount.hostRoot().toString());
+        env.put(
+            RuntimeFilesystemContract.LOCAL_ROOT_ENV,
+            RuntimeFilesystemContract.CONTAINER_ROOT);
         String resolvedSink = normalizeRuntimeRoot(journalSink);
         if (resolvedSink != null) {
             env.put("POCKETHIVE_JOURNAL_SINK", resolvedSink);
@@ -220,24 +189,28 @@ public class ContainerLifecycleManager {
         putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
+        env.put(
+            SwarmStartupArtifactContract.PATH_ENV,
+            startupArtifact.path());
+        env.put(
+            SwarmStartupArtifactContract.SHA256_ENV,
+            startupArtifact.sha256());
         env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
-        env.put("POCKETHIVE_NETWORK_MODE", NetworkMode.directIfNull(networkMode).name());
+        env.put("POCKETHIVE_NETWORK_MODE", resolvedNetworkMode.name());
         putEnvIfMissing(env, "POCKETHIVE_NETWORK_PROFILE_ID", normalizeRuntimeRoot(networkProfileId));
         if (autoPullImages) {
             log.info("autoPullImages=true, pulling controller image {} before start", resolvedImage);
             docker.pullImage(resolvedImage);
         }
-        env.put("POCKETHIVE_JOURNAL_RUN_ID", runId);
-        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, runId, templateMetadata);
+        env.put("POCKETHIVE_JOURNAL_RUN_ID", resolvedRunId);
+        runMetadataWriter.upsertOnSwarmStart(resolvedSwarmId, resolvedRunId, templateMetadata);
         log.info("launching controller for swarm {} as instance {} using image {} (runId={})",
-            resolvedSwarmId, resolvedInstance, resolvedImage, runId);
+            resolvedSwarmId, resolvedInstance, resolvedImage, resolvedRunId);
         log.info("docker env: {}", redactEnv(env));
         java.util.List<String> volumes = new java.util.ArrayList<>();
         volumes.add(dockerSocket + ":" + dockerSocket);
-        if (runtimeRootSource != null && !runtimeRootSource.isBlank()) {
-            volumes.add(runtimeRootSource + ":" + SCENARIOS_RUNTIME_DESTINATION);
-        }
+        volumes.add(runtimeFilesystemMount.volume());
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,
             resolvedImage,
@@ -245,78 +218,24 @@ public class ContainerLifecycleManager {
             java.util.List.copyOf(volumes));
         String containerId = computeAdapter.startManager(managerSpec);
         log.info("controller container {} ({}) started for swarm {}", containerId, resolvedInstance, resolvedSwarmId);
-        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, runId);
+        Swarm swarm = new Swarm(resolvedSwarmId, resolvedInstance, containerId, resolvedRunId, resolvedNetworkMode);
         if (templateMetadata != null) {
             swarm.attachTemplate(templateMetadata);
         }
+        swarm.attachStartupArtifact(startupArtifact);
         store.register(swarm);
-        writeRuntimeOwnershipManifest(
-            resolvedSwarmId,
-            runId,
-            resolvedInstance,
-            resolvedImage,
-            containerId,
-            templateMetadata,
-            controllerSettings);
-        store.updateStatus(resolvedSwarmId, SwarmLifecycleStatus.CREATING);
+        manifestStore.save(manifestFactory.create(resolvedSwarmId, resolvedRunId, templateMetadata.templateId(),
+            resolvedAdapterType, new RuntimeManifestObject(containerId,
+                resolvedAdapterType == ComputeAdapterType.SWARM_STACK ? "service" : "container", "manager",
+                SWARM_CONTROLLER_ROLE, resolvedInstance, resolvedImage), manifestResources));
         return swarm;
     }
 
-    private static MetricsSettings metricsSettings(OrchestratorProperties.Metrics metrics) {
+    private static MetricsSettings metricsSettings(OrchestratorMetricsProperties metrics) {
         return new MetricsSettings(
             metrics.getAdapter(),
             metrics.getPublishInterval(),
             metrics.getClickHouse());
-    }
-
-    private void writeRuntimeOwnershipManifest(String swarmId,
-                                               String runId,
-                                               String controllerInstance,
-                                               String controllerImage,
-                                               String controllerRuntimeId,
-                                               SwarmTemplateMetadata templateMetadata,
-                                               ControlPlaneContainerEnvironmentFactory.ControllerSettings controllerSettings) {
-        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(
-            swarmId,
-            controlPlaneProperties.getControlQueuePrefix())
-            .controlQueue(controllerInstance)
-            .map(ControlQueueDescriptor::name)
-            .orElse(null);
-        List<String> workQueues = controllerSettings.trafficQueueNames(workQueueSuffixes(templateMetadata.bees()));
-        List<String> controlQueues = controllerQueue == null || controllerQueue.isBlank()
-            ? List.of()
-            : List.of(controllerQueue);
-        RuntimeOwnershipManifest manifest = new RuntimeOwnershipManifest(
-            swarmId,
-            runId,
-            templateMetadata.templateId(),
-            resolvedAdapterType.name(),
-            java.time.Instant.now(),
-            List.of(new RuntimeOwnershipManifest.RuntimeObject(
-                controllerRuntimeId,
-                resolvedAdapterType == ComputeAdapterType.SWARM_STACK ? "service" : "container",
-                "manager",
-                SWARM_CONTROLLER_ROLE,
-                controllerInstance,
-                controllerImage)),
-            new RuntimeOwnershipManifest.RabbitResources(
-                controlQueues,
-                workQueues,
-                List.of(controllerSettings.trafficHiveExchange())));
-        manifestStore.save(manifest);
-    }
-
-    private static Set<String> workQueueSuffixes(List<Bee> bees) {
-        Set<String> suffixes = new LinkedHashSet<>();
-        for (Bee bee : bees == null ? List.<Bee>of() : bees) {
-            if (bee == null || bee.work() == null) {
-                continue;
-            }
-            suffixes.addAll(bee.work().in().values());
-            suffixes.addAll(bee.work().out().values());
-        }
-        suffixes.removeIf(value -> value == null || value.isBlank());
-        return suffixes;
     }
 
     private void applyClickHouseSinkEnv(Map<String, String> targetEnv) {
@@ -438,80 +357,65 @@ public class ContainerLifecycleManager {
         return resolveImage(image);
     }
 
-    public void stopSwarm(String swarmId) {
-        store.find(swarmId).ifPresent(swarm -> {
-            SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == SwarmLifecycleStatus.STOPPING || current == SwarmLifecycleStatus.STOPPED) {
-                log.info("swarm {} already {}", swarmId, current);
-                return;
-            }
-            log.info("marking swarm {} as stopped", swarmId);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPING);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.STOPPED);
-        });
-    }
+    public ControllerRuntimeRemoval removeControllerRuntime(String swarmId) {
+        Swarm swarm = store.find(swarmId)
+            .orElseThrow(() -> new IllegalStateException("Swarm is not registered: " + swarmId));
+        var targets = new java.util.ArrayList<RemoveResource>();
+        var failed = new java.util.ArrayList<RemoveResource>();
+        var errors = new java.util.ArrayList<RemoveError>();
 
-    public void removeSwarm(String swarmId) {
-        store.find(swarmId).ifPresent(swarm -> {
-            log.info("tearing down controller container {} for swarm {}", swarm.getContainerId(), swarmId);
-            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVING);
+        var controller = new RemoveResource(
+            RemoveResourceType.CONTROLLER_RUNTIME,
+            swarm.getContainerId(), ResourcePlane.NONE);
+        try {
+            log.info("tearing down controller runtime {} for swarm {}", swarm.getContainerId(), swarmId);
             computeAdapter.stopManager(swarm.getContainerId());
-            // The swarm-controller's own control queue is declared via the manager
-            // control-plane topology. Delete it from the orchestrator once the
-            // manager has been stopped so we do not race against its AMQP context.
-            try {
-                String basePrefix = controlPlaneProperties.getControlQueuePrefix();
-                SwarmControllerControlPlaneTopologyDescriptor descriptor =
-                    new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix);
-                String controllerQueue = descriptor.controlQueue(swarm.getInstanceId())
-                    .map(ControlQueueDescriptor::name)
-                    .orElse(null);
-                if (controllerQueue != null && !controllerQueue.isBlank()) {
-                    log.info("deleting swarm-controller control queue {}", controllerQueue);
-                    amqp.deleteQueue(controllerQueue);
-                }
-            } catch (Exception ex) {
-                log.warn("Failed to delete swarm-controller control queue for swarm {}: {}", swarmId, ex.getMessage());
-            }
-            boolean manifestQueuesDeleted = deleteManifestRabbitResources(swarmId, swarm.getRunId());
-            if (!manifestQueuesDeleted) {
-                String legacyTrafficPrefix = "ph." + swarmId;
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "gen"));
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "mod"));
-                amqp.deleteQueue(
-                    ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(legacyTrafficPrefix, "final"));
-            }
-            store.updateStatus(swarmId, SwarmLifecycleStatus.REMOVED);
-            swarm.clearTemplate();
-            store.remove(swarmId);
-        });
+            targets.add(controller);
+        } catch (RuntimeException failure) {
+            failed.add(controller);
+            errors.add(removeError(failure, controller));
+        }
+
+        String basePrefix = controlPlaneProperties.getControlQueuePrefix();
+        String controllerQueue = new SwarmControllerControlPlaneTopologyDescriptor(swarmId, basePrefix, new RabbitResourceNames())
+            .controlQueue(swarm.getInstanceId())
+            .map(ControlQueueDescriptor::name)
+            .orElseThrow(() -> new IllegalStateException("Controller control queue is not defined"));
+        var queue = new RemoveResource(
+            RemoveResourceType.RABBIT_QUEUE,
+            controllerQueue, ResourcePlane.CONTROL);
+        try {
+            log.info("deleting swarm-controller control queue {}", controllerQueue);
+            amqp.deleteQueue(controllerQueue);
+            targets.add(queue);
+        } catch (RuntimeException failure) {
+            failed.add(queue);
+            errors.add(removeError(failure, queue));
+        }
+        return new ControllerRuntimeRemoval(targets, failed, errors);
     }
 
-    private boolean deleteManifestRabbitResources(String swarmId, String runId) {
-        return manifestStore.find(swarmId, runId)
-            .map(manifest -> {
-                RuntimeOwnershipManifest.RabbitResources rabbit = manifest.rabbit();
-                for (String queue : rabbit.controlQueues()) {
-                    deleteQueueIfPresent(queue);
-                }
-                for (String queue : rabbit.workQueues()) {
-                    deleteQueueIfPresent(queue);
-                }
-                for (String exchange : rabbit.exchanges()) {
-                    if (exchange != null && !exchange.isBlank()) {
-                        amqp.deleteExchange(exchange);
-                    }
-                }
-                return true;
-            })
-            .orElse(false);
+    private static RemoveError removeError(
+        RuntimeException failure,
+        RemoveResource resource) {
+        return new RemoveError(
+            failure.getClass().getSimpleName(),
+            java.util.Objects.toString(failure.getMessage(), failure.getClass().getName()),
+            resource);
     }
 
-    private void deleteQueueIfPresent(String queue) {
-        if (queue != null && !queue.isBlank()) {
-            amqp.deleteQueue(queue);
+    public record ControllerRuntimeRemoval(
+        java.util.List<RemoveResource> targetResources,
+        java.util.List<RemoveResource> failedResources,
+        java.util.List<RemoveError> errors) {
+        public ControllerRuntimeRemoval {
+            targetResources = java.util.List.copyOf(targetResources);
+            failedResources = java.util.List.copyOf(failedResources);
+            errors = java.util.List.copyOf(errors);
+        }
+
+        public boolean succeeded() {
+            return failedResources.isEmpty() && errors.isEmpty();
         }
     }
 

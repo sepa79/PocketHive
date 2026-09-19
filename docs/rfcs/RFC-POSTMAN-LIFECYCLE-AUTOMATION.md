@@ -1,9 +1,11 @@
 # RFC: Postman Script Execution & Swarm Lifecycle Automation
 
-**Status**: Proposed  
+**Status**: Archived / not accepted
 **Author**: Senior Software Architect  
 **Date**: 2024  
 **Target Release**: PocketHive 0.17.x (experimental)
+
+> Historical proposal only. It was not implemented and is not a lifecycle contract. Its lifecycle diagrams, ownership assumptions and recommendation to duplicate protocol-client code are superseded by `docs/ARCHITECTURE.md` and the repository SSOT rules.
 
 ---
 

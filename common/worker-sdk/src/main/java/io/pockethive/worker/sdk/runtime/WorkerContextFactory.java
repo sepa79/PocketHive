@@ -1,11 +1,15 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 
 /**
  * Produces a {@link WorkerContext} for an incoming message.
  * Implementations are described in {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: define creation of the worker-facing invocation context.
+ * Must not: mutate accepted configuration, select IO implementations or provision resources.
+ * Contract: RESP-WORK-CONTEXT — docs/architecture/runtime-responsibilities.md#resp-work-context.
  */
 public interface WorkerContextFactory {
 

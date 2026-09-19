@@ -16,9 +16,9 @@ Canonical outcome header names: `io.pockethive.swarm.model.OutcomeHeaders`
 
 Forwarded via request envelopes:
 
-- `io.pockethive.worker.sdk.api.HttpRequestEnvelope.resultRules`
-- `io.pockethive.worker.sdk.api.TcpRequestEnvelope.resultRules`
-- `io.pockethive.worker.sdk.api.Iso8583RequestEnvelope.resultRules`
+- `io.pockethive.work.api.HttpRequestEnvelope.resultRules`
+- `io.pockethive.work.api.TcpRequestEnvelope.resultRules`
+- `io.pockethive.work.api.Iso8583RequestEnvelope.resultRules`
 
 ## Contract Shape
 

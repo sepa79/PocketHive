@@ -20,16 +20,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Simple, time-driven scenario implementation that consumes a plan JSON document
- * and emits config-update signals at the configured offsets.
- * <p>
- * v1 only supports bee-scoped steps of type:
- * <ul>
- *   <li>{@code config-update} – payload forwarded as-is</li>
- *   <li>{@code start} – sugar for {@code worker.enabled=true}</li>
- *   <li>{@code stop} – sugar for {@code worker.enabled=false}</li>
- * </ul>
- * Swarm-level steps are ignored for now.
+ * Responsibility: Parse, schedule, execute, and project the legacy time-driven scenario timeline.
+ * Must not: Gain additional responsibilities or become another owner of workload or lifecycle state.
+ * Contract: Execute timeline actions only through {@link ScenarioContext} and expose read-only progress.
+ * TODO (technical debt): Split parsing, schedule execution, and progress projection—including the public nested
+ * {@code Progress} type—and remove the duration compatibility fallback in one separate scenario refactor pass.
  */
 public final class TimelineScenario implements Scenario {
 
@@ -265,7 +260,7 @@ public final class TimelineScenario implements Scenario {
           // REST /api/swarms/{id}/start uses. This reuses SwarmRuntimeCore's
           // enableAll()/setSwarmEnabled logic, including config-update fan-out.
           log.info("Scenario step {} enabling entire swarm via lifecycle", step.stepId);
-          context.manager().enableAll();
+          context.lifecycle().enableAll();
           return;
         }
         // Bee-scoped enable (role/instance) – emit a top-level enabled flag
@@ -275,7 +270,7 @@ public final class TimelineScenario implements Scenario {
       case "stop" -> {
         if (swarmLifecycleStep) {
           log.info("Scenario step {} disabling entire swarm via lifecycle", step.stepId);
-          context.manager().setWorkEnabled(false);
+          context.lifecycle().setWorkEnabled(false);
           return;
         }
         // Bee-scoped disable.

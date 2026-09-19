@@ -276,7 +276,11 @@ else
   RESOLVED_TAGS="not @wip"
 fi
 
-CMD=(./mvnw verify -pl e2e-tests -am "-Dcucumber.filter.tags=${RESOLVED_TAGS}")
+CMD=(
+  ./mvnw verify -pl e2e-tests -am
+  "-Dpockethive.e2e.environment=true"
+  "-Dcucumber.filter.tags=${RESOLVED_TAGS}"
+)
 if [[ -n "${CUCUMBER_NAME}" ]]; then
   CMD+=("-Dcucumber.filter.name=${CUCUMBER_NAME}")
 fi

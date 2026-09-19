@@ -1,16 +1,18 @@
 package io.pockethive.requesttemplates;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
 /**
- * On-disk representation of an HTTP call template.
- *
- * This is intentionally minimal: enough to build an HTTP envelope for the processor worker.
+ * Responsibility: carry the parsed HTTP request-template fields.
+ * Must not: execute HTTP or own authoring metadata validation.
+ * Contract: RESP-REQUEST-TEMPLATE-PARSE — docs/architecture/runtime-responsibilities.md#resp-request-template-parse.
  */
-@JsonIgnoreProperties(ignoreUnknown = true)
+// Opaque authoring hint defined by SCENARIO_CONTRACT; it is not a runtime request field.
+@JsonIgnoreProperties("schemaRef")
 public record HttpTemplateDefinition(
     String serviceId,
     String callId,

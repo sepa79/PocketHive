@@ -1,0 +1,34 @@
+B02 Redis routes verification, 2026-09-08
+Base: eb681ee7 plus uncommitted B02 work
+
+b02-routes-before.log
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.334 s -- in io.pockethive.worker.sdk.runtime.RedisUploaderInterceptorTest
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.196 s -- in io.pockethive.worker.sdk.config.WorkIOConfigBinderTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.024 s -- in io.pockethive.worker.sdk.output.RedisWorkOutputTest
+[INFO] Tests run: 89, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.630 s -- in io.pockethive.scenarios.ScenarioControllerTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  8.621 s
+[INFO] Finished at: 2026-09-08T17:41:57+01:00
+
+b02-routes-verification.log
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.137 s -- in io.pockethive.work.config.WorkConfigurationParserTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.094 s -- in io.pockethive.architecture.RepositoryImportBoundaryTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.321 s -- in io.pockethive.worker.sdk.runtime.RedisUploaderInterceptorTest
+[INFO] Tests run: 28, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.208 s -- in io.pockethive.worker.sdk.config.WorkIOConfigBinderTest
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.021 s -- in io.pockethive.worker.sdk.output.RedisWorkOutputTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.881 s -- in io.pockethive.scenarios.ScenarioRepositoryValidationTest
+[INFO] Tests run: 89, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.338 s -- in io.pockethive.scenarios.ScenarioControllerTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.004 s -- in io.pockethive.scenarios.validation.WorkConfigurationFindingsTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  14.716 s
+[INFO] Finished at: 2026-09-08T17:51:49+01:00
+
+b02-routes-package.log
+[INFO] BUILD SUCCESS
+[INFO] Total time:  15.585 s
+[INFO] Finished at: 2026-09-08T17:52:43+01:00
+
+b02-routes-docs.log
+[SUCCESS] Generated static files in "build".
+
+git diff --check: passed

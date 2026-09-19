@@ -2,15 +2,19 @@ package io.pockethive.dbquery;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.swarm.model.OutcomeHeaders;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import java.sql.SQLException;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.regex.Pattern;
 
+/**
+ * Responsibility: coordinate configured DB statements through the statement executor.
+ * Must not: implement a second JDBC executor or declare Work/CP topology.
+ * Contract: RESP-DB-QUERY-WORK — docs/architecture/runtime-responsibilities.md#resp-db-query-work.
+ */
 class DbQueryRunner {
 
   private final ObjectMapper mapper;

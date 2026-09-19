@@ -1,0 +1,29 @@
+package io.pockethive.rabbit.config;
+
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import org.springframework.context.annotation.Bean;
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.amqp.rabbit.connection.ConnectionFactory;
+import org.springframework.core.env.Environment;
+
+/**
+ * Responsibility: compose the required CONTROL Rabbit connection from its canonical environment decoder.
+ * Must not: require WORK configuration, inherit between planes or own topology/delivery policy.
+ * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
+ */
+@AutoConfiguration(after = org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration.class)
+@ConditionalOnBean(ConnectionFactory.class)
+public class RabbitConnectionConfiguration {
+    @Bean
+    public org.springframework.boot.autoconfigure.amqp.ConnectionFactoryCustomizer controlConnectionSettings(
+        RabbitConnectionSettings controlRabbitSettings) {
+        return client -> RabbitConnectionClients.configure(controlRabbitSettings, client);
+    }
+
+    @Bean
+    public RabbitConnectionSettings controlRabbitSettings(Environment environment) {
+        return RabbitConnectionEnvironment.decode(environment::getProperty);
+    }
+}

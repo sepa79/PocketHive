@@ -8,6 +8,8 @@ template:
     - role: csv-generator
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: CSV_DATASET
           csv:
@@ -67,6 +69,10 @@ template:
     - role: request-builder
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/http
         serviceId: capability-controls
         passThroughOnMissingTemplate: true

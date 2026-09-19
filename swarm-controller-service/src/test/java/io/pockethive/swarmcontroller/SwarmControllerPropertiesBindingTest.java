@@ -41,7 +41,7 @@ class SwarmControllerPropertiesBindingTest {
               assertThat(properties.getRole()).isEqualTo("swarm-controller");
               assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
-              assertThat(properties.queueName("final")).isEqualTo("ph.swarm-a.final");
+              assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.getMetrics().adapter())
                   .isEqualTo(PocketHiveMetricsAdapter.DISABLED);
               assertThat(properties.getMetrics().publishInterval())

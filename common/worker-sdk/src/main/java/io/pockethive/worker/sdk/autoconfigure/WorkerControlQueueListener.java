@@ -7,11 +7,12 @@ import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.MDC;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.messaging.handler.annotation.Header;
 
 /**
+ * Responsibility: handle worker Control Plane messages delivered through the Rabbit binding API.
+ * Must not: select Work delivery policy or own worker state transitions.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ * <p>
  * Centralises consumption of the worker control-plane queue so individual services no longer need
  * to duplicate the listener wiring. The component is only created when the worker control-plane
  * runtime is available in the application context.
@@ -26,10 +27,9 @@ public class WorkerControlQueueListener {
         this.controlPlaneRuntime = Objects.requireNonNull(controlPlaneRuntime, "controlPlaneRuntime");
     }
 
-    @RabbitListener(queues = "#{@workerControlQueueName}")
     public void onControl(String payload,
-                          @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey,
-                          @Header(value = ObservabilityContextUtil.HEADER, required = false) String traceHeader) {
+                          String routingKey,
+                          String traceHeader) {
         ObservabilityContext context = ObservabilityContextUtil.fromHeader(traceHeader);
         ObservabilityContextUtil.populateMdc(context);
         try {

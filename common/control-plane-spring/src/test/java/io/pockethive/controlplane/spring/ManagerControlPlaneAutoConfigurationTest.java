@@ -9,11 +9,11 @@ import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -24,7 +24,7 @@ class ManagerControlPlaneAutoConfigurationTest {
             ControlPlaneCommonAutoConfiguration.class,
             ManagerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitTemplate.class, () -> org.mockito.Mockito.mock(RabbitTemplate.class))
+        .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> org.mockito.Mockito.mock(RabbitPublisher.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.enabled=false",
             "pockethive.control-plane.manager.enabled=true",
@@ -40,21 +40,18 @@ class ManagerControlPlaneAutoConfigurationTest {
             assertThat(context).hasSingleBean(ManagerControlPlane.class);
             assertThat(context).hasSingleBean(ControlPlanePublisher.class);
 
-            TopicExchange exchange = context.getBean("controlPlaneExchange", TopicExchange.class);
-            assertThat(exchange.getName()).isEqualTo("ph.control.manager");
+            RabbitExchangeSpec exchange = context.getBean("controlPlaneExchange", RabbitExchangeSpec.class);
+            assertThat(exchange.name()).isEqualTo("ph.control.manager");
 
             ControlPlaneIdentity identity = context.getBean("managerControlPlaneIdentity", ControlPlaneIdentity.class);
             assertThat(identity.swarmId()).isEqualTo("swarm-beta");
             assertThat(identity.instanceId()).isEqualTo("orch-1");
             assertThat(identity.role()).isEqualTo("orchestrator");
 
-            Declarables declarables = context.getBean("managerControlPlaneDeclarables", Declarables.class);
-            List<Queue> queues = declarables.getDeclarables().stream()
-                .filter(Queue.class::isInstance)
-                .map(Queue.class::cast)
-                .toList();
+            RabbitTopologySpec declarables = context.getBean("managerControlPlaneDeclarables", RabbitTopologySpec.class);
+            var queues = declarables.queues();
             assertThat(queues)
-                .extracting(Queue::getName)
+                .extracting(RabbitQueueSpec::name)
                 .contains("ph.control.manager.orchestrator.orch-1", "ph.control.manager.orchestrator-status.orch-1");
         });
     }
@@ -62,25 +59,24 @@ class ManagerControlPlaneAutoConfigurationTest {
     @Test
     void bindsManagerAdditionalQueuesToControlExchange() {
         contextRunner.run(context -> {
-            Declarables declarables = context.getBean("managerControlPlaneDeclarables", Declarables.class);
-            Optional<Binding> statusBinding = declarables.getDeclarables().stream()
-                .filter(Binding.class::isInstance)
-                .map(Binding.class::cast)
-                .filter(binding -> "ph.control.manager.orchestrator-status.orch-1".equals(binding.getDestination()))
+            RabbitTopologySpec declarables = context.getBean("managerControlPlaneDeclarables", RabbitTopologySpec.class);
+            var statusBinding = declarables.bindings().stream()
+                .filter(binding -> "ph.control.manager.orchestrator-status.orch-1".equals(binding.queue()))
                 .findFirst();
 
             assertThat(statusBinding).isPresent();
-            assertThat(statusBinding.get().getExchange()).isEqualTo("ph.control.manager");
+            assertThat(statusBinding.get().exchange()).isEqualTo("ph.control.manager");
         });
     }
 
     @Test
-    void disablesDeclarablesWhenRequested() {
+    void disablesRabbitTopologySpecWhenRequested() {
         contextRunner
             .withPropertyValues("pockethive.control-plane.manager.declare-topology=false")
             .run(context -> {
-                Declarables declarables = context.getBean("managerControlPlaneDeclarables", Declarables.class);
-                assertThat(declarables.getDeclarables()).isEmpty();
+                RabbitTopologySpec declarables = context.getBean("managerControlPlaneDeclarables", RabbitTopologySpec.class);
+                assertThat(declarables.queues()).isEmpty();
+                assertThat(declarables.bindings()).isEmpty();
             });
     }
 

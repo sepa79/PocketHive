@@ -1,5 +1,7 @@
 package io.pockethive.postprocessor;
 
+import io.pockethive.work.api.WorkerInfo;
+
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.DistributionSummary;
 import io.micrometer.core.instrument.Gauge;
@@ -7,12 +9,12 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.observability.Hop;
 import io.pockethive.observability.ObservabilityContext;
 import io.pockethive.swarm.model.OutcomeHeaders;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -37,7 +39,7 @@ import org.springframework.stereotype.Component;
  * observability stack because its metrics feed Grafana dashboards such as "Pipeline Latency".
  *
  * <p>Each instance caches a {@link PostProcessorMetrics} bundle tied to the
- * {@link io.pockethive.worker.sdk.api.WorkerInfo} (service, instance, swarm). Those Micrometer
+ * {@link WorkerInfo} (service, instance, swarm). Those Micrometer
  * instruments produce metrics:</p>
  * <ul>
  *   <li>{@code ph_hop_latency_ms}</li>
@@ -50,6 +52,10 @@ import org.springframework.stereotype.Component;
  * {@link PostProcessorMetrics#record(LatencyMeasurements, boolean, ProcessorCallStats)} so instrumentation stays
  * consistent. The worker keeps publishing status updates so junior developers can see hop counts
  * and running error totals without leaving the PocketHive UI.</p>
+ * <p>
+ * Responsibility: coordinate transaction postprocessing and delegate projected events to existing sinks.
+ * Must not: treat metrics as domain state or infer a successful upstream transaction from sink publication.
+ * Contract: RESP-POSTPROCESSOR-WORK — docs/architecture/runtime-responsibilities.md#resp-postprocessor-work.
  */
 @Component("postProcessorWorker")
 @PocketHiveWorker(

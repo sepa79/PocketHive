@@ -1,10 +1,9 @@
 package io.pockethive.orchestrator.app;
 
-import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
 import io.pockethive.orchestrator.domain.SwarmCreateTracker;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
 import io.pockethive.orchestrator.domain.SwarmStateStore;
 import io.pockethive.orchestrator.domain.SwarmStore;
+import io.pockethive.orchestrator.domain.SwarmOperationCoordinator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -23,17 +22,12 @@ public class SwarmConfiguration {
     }
 
     @Bean
-    public SwarmPlanRegistry swarmPlanRegistry() {
-        return new SwarmPlanRegistry();
-    }
-
-    @Bean
-    public ScenarioTimelineRegistry scenarioTimelineRegistry() {
-        return new ScenarioTimelineRegistry();
-    }
-
-    @Bean
     public SwarmCreateTracker swarmCreateTracker() {
         return new SwarmCreateTracker();
+    }
+
+    @Bean
+    public SwarmOperationCoordinator swarmOperationCoordinator() {
+        return new SwarmOperationCoordinator();
     }
 }

@@ -2,11 +2,11 @@ package io.pockethive.worker.sdk.input;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -61,7 +61,7 @@ class WorkInputRegistryInitializerTest {
     }
 
     @Test
-    void prefersHigherPriorityFactory() {
+    void rejectsDuplicateFactoriesRegardlessOfPriority() {
         WorkerDefinition definition = new WorkerDefinition(
             "orderedWorker",
             Object.class,
@@ -93,11 +93,10 @@ class WorkInputRegistryInitializerTest {
             binder,
             List.of(fallback, preferred)
         );
-        initializer.afterSingletonsInstantiated();
+        org.assertj.core.api.Assertions.assertThatThrownBy(initializer::afterSingletonsInstantiated)
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Multiple WorkInputFactory");
 
-        assertThat(registry.find("orderedWorker"))
-            .map(WorkInputRegistry.Registration::input)
-            .contains(preferredInput);
     }
 
     private static class OrderedFactory implements WorkInputFactory, Ordered {
@@ -123,6 +122,6 @@ class WorkInputRegistryInitializerTest {
         }
     }
 
-    private static class WorkOutputConfigStub implements io.pockethive.worker.sdk.config.WorkOutputConfig {
+    private static class WorkOutputConfigStub implements io.pockethive.work.config.binding.WorkOutputConfig {
     }
 }

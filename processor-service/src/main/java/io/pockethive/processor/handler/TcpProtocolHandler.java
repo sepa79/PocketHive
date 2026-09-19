@@ -1,5 +1,9 @@
 package io.pockethive.processor.handler;
 
+import io.pockethive.work.api.TcpMetrics;
+import io.pockethive.work.api.TcpOutcome;
+import io.pockethive.work.api.TcpRequestInfo;
+
 import io.pockethive.processor.ProcessorWorkerConfig;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.TcpTransportConfig;
@@ -13,16 +17,16 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectReader;
-import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
-import io.pockethive.worker.sdk.api.TcpResultEnvelope;
+import io.pockethive.work.api.TcpRequestEnvelope;
+import io.pockethive.work.api.TcpResultEnvelope;
 import io.pockethive.processor.transport.*;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.LinkedHashMap;
@@ -33,6 +37,11 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Responsibility: execute TCP exchanges and construct TCP result observations.
+ * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ */
 public class TcpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
@@ -74,7 +83,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, requestMeta);
     }
-    TcpRequestEnvelope.TcpRequest request = requestEnvelope.request();
+    io.pockethive.work.api.TcpRequest request = requestEnvelope.request();
 
     TcpTransportConfig desired = Objects.requireNonNull(
         processorConfig.tcpTransport(),
@@ -117,13 +126,14 @@ public class TcpProtocolHandler implements ProtocolHandler {
     String requestBody = body.get();
     Map<String, Object> authTransportOptions = Map.of();
     if (request.authApplications() != null && !request.authApplications().isEmpty()) {
-      AuthRuntime authRuntime = AuthRuntime.forApplications(
-          request.authApplications(), Map.of(), processorConfig.authProfileSutContext(), context, templateRenderer, redisProperties);
-      for (AuthRef authRef : request.authApplications()) {
-        if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
-          authTransportOptions = authRuntime.transportOptions(authRef, context);
-        } else {
-          requestBody = authRuntime.applyTcpBody(authRef, requestBody, message, context);
+      try (AuthRuntime authRuntime = AuthRuntime.forApplications(
+          request.authApplications(), Map.of(), processorConfig.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+        for (AuthRef authRef : request.authApplications()) {
+          if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+            authTransportOptions = authRuntime.transportOptions(authRef, context);
+          } else {
+            requestBody = authRuntime.applyTcpBody(authRef, requestBody, message, context);
+          }
         }
       }
     }
@@ -187,14 +197,14 @@ public class TcpProtocolHandler implements ProtocolHandler {
       metricsRecorder.record(metrics);
 
       TcpResultEnvelope resultEnvelope = TcpResultEnvelope.of(
-          mapper.convertValue(requestMeta, TcpResultEnvelope.TcpRequestInfo.class),
-          new TcpResultEnvelope.TcpOutcome(
+          mapper.convertValue(requestMeta, TcpRequestInfo.class),
+          new TcpOutcome(
               TcpResultEnvelope.OUTCOME_TCP_RESPONSE,
               response.status(),
               new String(response.body(), StandardCharsets.UTF_8),
               null
           ),
-          new TcpResultEnvelope.TcpMetrics(metrics.durationMs(), metrics.connectionLatencyMs())
+          new TcpMetrics(metrics.durationMs(), metrics.connectionLatencyMs())
       );
       ObjectNode result = mapper.valueToTree(resultEnvelope);
 

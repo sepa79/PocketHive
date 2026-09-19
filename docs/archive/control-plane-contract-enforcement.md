@@ -3,7 +3,7 @@
 > Status: **implemented baseline / archived**  
 > Scope: enforce `docs/spec/*` as SSOT via dedicated tests + CI gates. No runtime validation by default.
 
-> Remaining hardening is tracked in `docs/todo/control-plane-contract-enforcement-followups.md`.
+> Remaining hardening is tracked in `docs/archive/pre-boundary-reset/todo/control-plane-contract-enforcement-followups.md`.
 
 ## Problem
 

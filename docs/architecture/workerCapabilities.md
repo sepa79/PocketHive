@@ -70,7 +70,7 @@ One JSON (or YAML) **manifest per image**:
   runtime config editing; `false` means the field is authoring/startup configuration only. Runtime
   enforcement may narrow an offered field further: `inputs.redis.listName` is shown by the generic
   editor but may be changed only for an already-disabled, single-source Redis dataset worker. The UI
-  must block submission unless swarm status is explicitly `STOPPED`; MCP agents must establish the same
+  must block submission unless workload intent and fresh workload observation are both explicitly `STOPPED`; MCP agents must establish the same
   precondition with `swarm_get` rather than inferring completion from an accepted Stop request.
   For `inputs.*` / `outputs.*`, `true` is allowed only on operational live IO fields documented in
   `docs/ARCHITECTURE.md`. Except for the documented disabled-only Redis single-source `listName`, IO

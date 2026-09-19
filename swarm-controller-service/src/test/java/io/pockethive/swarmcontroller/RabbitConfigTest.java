@@ -21,9 +21,7 @@ class RabbitConfigTest {
   }
 
   @Test
-  void controlQueuePrefixIncludesSwarmId() {
-    assertThat(properties.getControlQueuePrefix())
-        .isEqualTo(CONTROL_QUEUE_PREFIX);
+  void retainsExplicitBasePrefixForCanonicalNaming() {
     assertThat(properties.getControlQueuePrefixBase()).isEqualTo(CONTROL_QUEUE_PREFIX_BASE);
   }
 

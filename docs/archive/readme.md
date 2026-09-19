@@ -6,6 +6,9 @@ Archived files are not current product contracts. Use living documentation under
 
 Subdirectories group related evidence and design packs, for example:
 
+- `pre-boundary-reset/` — superseded execution sequences, completed MCP migration,
+  and legacy plugin/concept material archived for the Work Plane-first boundary plan;
+
 - `auth-proving-runs/` — deployed auth acceptance evidence,
 - `pockethive-plugin/` — historical MCP/IDE POC and implementation material,
 - `scenario-editor-plans/` — superseded editor designs,

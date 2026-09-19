@@ -1,6 +1,8 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.api.transport.WorkOutput;
+
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 
 /**

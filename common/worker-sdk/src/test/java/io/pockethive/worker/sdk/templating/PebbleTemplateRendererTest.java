@@ -1,19 +1,21 @@
 package io.pockethive.worker.sdk.templating;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import java.lang.reflect.Field;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class PebbleTemplateRendererTest {
 
-    private final TemplateRenderer renderer = new PebbleTemplateRenderer();
+    private final TemplateRenderer renderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
 
     @Test
     void rendersStaticTemplate() {
@@ -86,7 +88,7 @@ class PebbleTemplateRendererTest {
         for (int i = 0; i < 12; i++) {
             seq1.add(renderer.render(template, Map.of()));
         }
-        TemplateRenderer second = new PebbleTemplateRenderer();
+        TemplateRenderer second = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
         java.util.List<String> seq2 = new java.util.ArrayList<>();
         for (int i = 0; i < 12; i++) {
             seq2.add(second.render(template, Map.of()));
@@ -111,7 +113,7 @@ class PebbleTemplateRendererTest {
 
     @Test
     void evictsOldEntriesBeyondCacheSize() throws Exception {
-        PebbleTemplateRenderer renderer = new PebbleTemplateRenderer();
+        PebbleTemplateRenderer renderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
         for (int i = 0; i < 11; i++) {
             renderer.render("template-" + i, Map.of());
         }

@@ -2,6 +2,8 @@ package io.pockethive.capabilities.api;
 
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
+import io.pockethive.scenarios.BundleBeeSummary;
+import io.pockethive.scenarios.BundleTemplateSummary;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
 import io.pockethive.scenarios.auth.ScenarioManagerCurrentUserHolder;
@@ -38,7 +40,7 @@ class CapabilityCatalogueControllerTest {
     @Test
     void templatesEndpointReturnsHealthyAndDefunctBundles() throws Exception {
         given(scenarioService.listBundleTemplates()).willReturn(List.of(
-                new ScenarioService.BundleTemplateSummary(
+                new BundleTemplateSummary(
                         "bundles/alpha",
                         "bundles/alpha",
                         "bundles",
@@ -46,10 +48,10 @@ class CapabilityCatalogueControllerTest {
                         "Alpha",
                         "Healthy bundle",
                         "controller:v1",
-                        List.of(new ScenarioService.BundleBeeSummary("worker", "worker:v2")),
+                        List.of(new BundleBeeSummary("worker", "worker:v2")),
                         false,
                         null),
-                new ScenarioService.BundleTemplateSummary(
+                new BundleTemplateSummary(
                         "bundles/broken",
                         "bundles/broken",
                         "bundles",

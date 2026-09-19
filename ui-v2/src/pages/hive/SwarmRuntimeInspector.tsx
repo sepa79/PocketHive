@@ -57,6 +57,11 @@ function formatNumber(value: number | null | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? String(value) : '—'
 }
 
+/**
+ * Responsibility: present owner-provided runtime observations, preserving Rabbit plane identity.
+ * Must not: infer resource ownership or construct cleanup targets from display names.
+ * Contract: docs/ORCHESTRATOR-REST.md runtime debug API.
+ */
 export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps) {
   const [inventory, setInventory] = useState<RuntimeResourceListResponse | null>(null)
   const [rabbit, setRabbit] = useState<RabbitTopologySnapshot | null>(null)
@@ -346,8 +351,8 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
           {(rabbit?.queues ?? []).length ? (
             <div className="runtimeRabbitList">
               {(rabbit?.queues ?? []).map((queue) => (
-                <div key={queue.name} className="runtimeRabbitItem">
-                  <span>{queue.name}</span>
+                <div key={JSON.stringify([queue.plane, queue.name])} className="runtimeRabbitItem">
+                  <span>{queue.plane} · {queue.name}</span>
                   <span className="muted">
                     present {formatBool(queue.present)} · messages {formatNumber(queue.messages)} · consumers{' '}
                     {formatNumber(queue.consumers)}
@@ -364,8 +369,8 @@ export function SwarmRuntimeInspector({ swarmId, runId }: RuntimeInspectorProps)
           {(rabbit?.exchanges ?? []).length ? (
             <div className="runtimeRabbitList">
               {(rabbit?.exchanges ?? []).map((exchange) => (
-                <div key={exchange.name} className="runtimeRabbitItem">
-                  <span>{exchange.name}</span>
+                <div key={JSON.stringify([exchange.plane, exchange.name])} className="runtimeRabbitItem">
+                  <span>{exchange.plane} · {exchange.name}</span>
                   <span className="muted">
                     present {formatBool(exchange.present)} · type {exchange.type ?? '—'}
                   </span>

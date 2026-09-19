@@ -1,7 +1,10 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_EXCHANGE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.CONTROL_QUEUE_PREFIX_BASE;
 import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.HIVE_EXCHANGE;
@@ -15,26 +18,29 @@ import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import com.github.dockerjava.api.DockerClient;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
+import io.pockethive.manager.runtime.QueueStats;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BufferGuardPolicy;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.TrafficPolicy;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.swarm.model.lifecycle.WorkloadState;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
+import io.pockethive.work.config.WorkConfigurationException;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.InOrder;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitQueueSpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
 import org.springframework.amqp.rabbit.core.RabbitAdmin;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.api.RabbitPublisher;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 
@@ -46,10 +52,6 @@ import java.util.stream.IntStream;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.DoublePredicate;
 import org.mockito.ArgumentCaptor;
-import ch.qos.logback.classic.Logger;
-import ch.qos.logback.classic.Level;
-import ch.qos.logback.classic.spi.ILoggingEvent;
-import ch.qos.logback.core.read.ListAppender;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -65,13 +67,13 @@ class SwarmLifecycleManagerTest {
       ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "ALL", "ALL");
 
   @Mock
-  AmqpAdmin amqp;
+  RabbitResources amqp;
   @Mock
   DockerContainerClient docker;
   @Mock
   DockerClient dockerClient;
   @Mock
-  RabbitTemplate rabbit;
+  RabbitPublisher rabbit;
 
   ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
   private SimpleMeterRegistry meterRegistry;
@@ -92,7 +94,7 @@ class SwarmLifecycleManagerTest {
   void startDeclaresQueuesStopLeavesResourcesRemoveCleansUp() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img1", Work.ofDefaults("qin", "qout"), null)
+        new Bee("generator", "img1", Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
@@ -101,21 +103,17 @@ class SwarmLifecycleManagerTest {
     manager.updateHeartbeat("generator", "g1");
     manager.markReady("generator", "g1");
 
-    verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals(HIVE_EXCHANGE)));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("qin"))));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("qout"))));
-    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).declareBinding(bindingCaptor.capture());
+    verify(amqp).declareExchange(argThat((RabbitExchangeSpec e) -> e.name().equals(HIVE_EXCHANGE)));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("qin"))));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("qout"))));
+    ArgumentCaptor<RabbitBindingSpec> bindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).bind(bindingCaptor.capture());
     assertThat(bindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("qin"),
             queue("qout"));
-    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).removeBinding(legacyCaptor.capture());
-    assertThat(legacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
-        .containsExactlyInAnyOrder("qin", "qout");
+    verify(amqp, never()).unbind(any());
     ArgumentCaptor<Map<String,String>> envCap = ArgumentCaptor.forClass(Map.class);
     ArgumentCaptor<String> nameCap = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<Map<String,String>> labelsCap = ArgumentCaptor.forClass(Map.class);
@@ -149,14 +147,14 @@ class SwarmLifecycleManagerTest {
         .containsEntry(PocketHiveDockerLabels.ROLE, "generator")
         .containsEntry(PocketHiveDockerLabels.INSTANCE, assignedName)
         .containsEntry(PocketHiveDockerLabels.IMAGE, "img1");
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
 
     reset(amqp, docker, rabbit);
 
     manager.stop();
 
     ArgumentCaptor<String> stopPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         stopPayload.capture());
     JsonNode stopNode = mapper.readTree(stopPayload.getValue());
@@ -165,15 +163,9 @@ class SwarmLifecycleManagerTest {
     assertThat(stopNode.path("correlationId").asText()).isNotBlank();
     assertThat(stopNode.path("idempotencyKey").asText()).isNotBlank();
     assertThat(stopNode.path("data").path("enabled").asBoolean(true)).isFalse();
-    ArgumentCaptor<String> statusPayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        statusPayload.capture());
-    JsonNode statusNode = mapper.readTree(statusPayload.getValue());
-    assertThat(statusNode.path("data").path("context").path("swarmStatus").asText()).isEqualTo("STOPPED");
     verifyNoInteractions(docker);
     verifyNoInteractions(amqp);
-    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
 
     manager.remove();
 
@@ -181,15 +173,15 @@ class SwarmLifecycleManagerTest {
     verify(amqp).deleteQueue(queue("qin"));
     verify(amqp).deleteQueue(queue("qout"));
     verify(amqp).deleteExchange(HIVE_EXCHANGE);
-    assertEquals(SwarmStatus.REMOVED, manager.getStatus());
+    assertEquals(WorkloadState.UNAVAILABLE, manager.getWorkloadState());
   }
 
   @Test
   void rejectsMultipleBeesSharingRole() {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, null), null),
-        new Bee("gen", "img2", Work.ofDefaults(null, null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("gen", "img2", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     assertThatThrownBy(() -> manager.start(mapper.writeValueAsString(plan)))
         .isInstanceOf(IllegalArgumentException.class)
@@ -203,7 +195,7 @@ class SwarmLifecycleManagerTest {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("gen", "img1", Work.ofDefaults("a", "b"),
-            Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"))));
+            Map.of("CUSTOM_IN_QUEUE", "${in}", "CUSTOM_OUT_QUEUE", "${out}"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -216,31 +208,195 @@ class SwarmLifecycleManagerTest {
     assertEquals(nameCap2.getValue(), env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
     assertThat(env).doesNotContainKeys("BEE_NAME", "JAVA_TOOL_OPTIONS");
     verify(docker).resolveControlNetwork();
-    verify(amqp).declareExchange(argThat((TopicExchange e) -> e.getName().equals(HIVE_EXCHANGE)));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("a"))));
-    verify(amqp).declareQueue(argThat((Queue q) -> q.getName().equals(queue("b"))));
-    ArgumentCaptor<Binding> prepareBindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).declareBinding(prepareBindingCaptor.capture());
+    verify(amqp).declareExchange(argThat((RabbitExchangeSpec e) -> e.name().equals(HIVE_EXCHANGE)));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("a"))));
+    verify(amqp).declareQueue(argThat((RabbitQueueSpec q) -> q.name().equals(queue("b"))));
+    ArgumentCaptor<RabbitBindingSpec> prepareBindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(2)).bind(prepareBindingCaptor.capture());
     assertThat(prepareBindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("a"),
             queue("b"));
-    ArgumentCaptor<Binding> prepareLegacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(2)).removeBinding(prepareLegacyCaptor.capture());
-    assertThat(prepareLegacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
-        .containsExactlyInAnyOrder("a", "b");
+    verify(amqp, never()).unbind(any());
+  }
+
+  @Test
+  void rejectedRedisPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"), "enabled", false)),
+        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "REDIS", "redis", Map.of(
+                "host", "redis", "port", 0, "ssl", false,
+                "sourceStep", "LAST", "pushDirection", "RPUSH", "maxLen", -1,
+                "defaultList", "out"))))), null, "accepted-sut"));
+    ObjectNode redis = (ObjectNode) plan.path("bees").get(1)
+        .path("config").path("outputs").path("redis");
+
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class)
+        .hasMessageContaining("outputs.redis.port");
+    assertThat(manager.expectedWorkers()).isEmpty();
+    assertThat(manager.getMetrics().desired()).isZero();
+    assertThat(manager.sutId()).isNull();
+    assertFalse(manager.hasPendingConfigUpdates());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+
+    redis.put("port", 6379);
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        .thenReturn("c1", "c2");
+    manager.start(plan.toString());
+
+    ArgumentCaptor<Map<String, String>> environment = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(2)).createAndStartContainer(
+        anyString(), environment.capture(), anyString(), any(), anyMap());
+    assertThat(environment.getAllValues().get(1)).containsEntry("POCKETHIVE_OUTPUTS_REDIS_PORT", "6379");
+    assertThat(manager.expectedWorkers()).hasSize(2);
+    assertThat(manager.getMetrics().desired()).isEqualTo(2);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.hasPendingConfigUpdates());
+    var acceptedWorkers = manager.expectedWorkers();
+    acceptedWorkers.forEach(worker -> {
+      manager.updateHeartbeat(worker.role(), worker.instance());
+      manager.markReady(worker.role(), worker.instance());
+    });
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    clearInvocations(amqp, docker, rabbit);
+
+    redis.put("port", 0);
+    plan.put("sutId", "rejected-sut");
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class);
+    assertThat(manager.expectedWorkers()).isEqualTo(acceptedWorkers);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+  }
+
+  @Test
+  void invalidWorkCandidatesRetainAcceptedPlanWithoutEffects() throws Exception {
+    for (String invalidCase : List.of("input-selector", "output-selector", "null-input", "null-output",
+        "missing-input", "unknown-output", "unselected-output", "invalid-redis-output", "redis-output-override")) {
+      SwarmLifecycleManager manager = newManager();
+      ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+          new Bee("processor", "img-proc", Work.ofDefaults("in", "out"), Map.of(),
+              Map.of("inputs", Map.of("type", "RABBITMQ"), "outputs", Map.of("type", "RABBITMQ")))),
+          null, "accepted-sut"));
+      when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("accepted");
+      manager.start(plan.toString());
+      var accepted = manager.expectedWorkers();
+      accepted.forEach(worker -> {
+        manager.updateHeartbeat(worker.role(), worker.instance());
+        manager.markReady(worker.role(), worker.instance());
+      });
+      assertTrue(manager.isReadyForWork());
+      clearInvocations(amqp, docker, rabbit);
+      var bee = (ObjectNode) plan.path("bees").get(0);
+      switch (invalidCase) {
+        case "input-selector" -> bee.withObject("env").put("POCKETHIVE_INPUTS_TYPE", "SCHEDULER");
+        case "output-selector" -> bee.withObject("env").put("POCKETHIVE_OUTPUTS_TYPE", "NONE");
+        case "null-input" -> ((ObjectNode) bee.path("config").path("inputs")).putNull("rabbit");
+        case "null-output" -> ((ObjectNode) bee.path("config").path("outputs")).putNull("rabbit");
+        case "missing-input" -> ((ObjectNode) bee.path("config")).remove("inputs");
+        case "unknown-output" -> ((ObjectNode) bee.path("config").path("outputs")).put("type", "UNKNOWN");
+        case "unselected-output" -> ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+            Map.of("type", "NONE", "rabbit", Map.of())));
+        case "invalid-redis-output" -> ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+            Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false))));
+        case "redis-output-override" -> {
+          ((ObjectNode) bee.path("config")).set("outputs", mapper.valueToTree(
+              Map.of("type", "REDIS", "redis", Map.of("host", "redis", "port", 6379, "ssl", false,
+                  "sourceStep", "FIRST", "pushDirection", "RPUSH", "maxLen", 0, "defaultList", "out"))));
+          bee.withObject("env").put("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "INVALID");
+        }
+        default -> throw new AssertionError(invalidCase);
+      }
+      plan.put("sutId", "rejected-sut");
+      assertThatThrownBy(() -> manager.prepare(plan.toString())).isInstanceOf(WorkConfigurationException.class);
+      assertThat(manager.expectedWorkers()).isEqualTo(accepted);
+      assertThat(manager.sutId()).isEqualTo("accepted-sut");
+      assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+      assertTrue(manager.isReadyForWork());
+      assertFalse(manager.hasPendingConfigUpdates());
+      verifyNoInteractions(amqp, rabbit);
+      verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+      clearInvocations(amqp, docker, rabbit);
+    }
+  }
+
+  @Test
+  void rejectedRabbitPlanPreservesStateAndAllowsCorrectedStart() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    ObjectNode plan = mapper.valueToTree(new SwarmPlan("swarm", List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"), "enabled", false)),
+        new Bee("processor", "img-proc", Work.ofDefaults("data", null), Map.of(),
+            Map.of("inputs", Map.of("type", "RABBITMQ", "rabbit", Map.of("prefetch", 0)),
+                "outputs", Map.of("type", "NONE")))), null, "accepted-sut"));
+    ObjectNode rabbitSettings = (ObjectNode) plan.path("bees").get(1)
+        .path("config").path("inputs").path("rabbit");
+
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class)
+        .hasMessageContaining("inputs.rabbit.prefetch");
+    assertThat(manager.expectedWorkers()).isEmpty();
+    assertThat(manager.getMetrics().desired()).isZero();
+    assertThat(manager.sutId()).isNull();
+    assertFalse(manager.hasPendingConfigUpdates());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+
+    rabbitSettings.put("prefetch", 7);
+    when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        .thenReturn("c1", "c2");
+    manager.start(plan.toString());
+
+    ArgumentCaptor<Map<String, String>> environment = ArgumentCaptor.forClass(Map.class);
+    verify(docker, times(2)).createAndStartContainer(
+        anyString(), environment.capture(), anyString(), any(), anyMap());
+    assertThat(environment.getAllValues().get(1)).containsEntry("POCKETHIVE_INPUTS_RABBIT_PREFETCH", "7");
+    assertThat(manager.expectedWorkers()).hasSize(2);
+    assertThat(manager.getMetrics().desired()).isEqualTo(2);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.hasPendingConfigUpdates());
+    var acceptedWorkers = manager.expectedWorkers();
+    acceptedWorkers.forEach(worker -> {
+      manager.updateHeartbeat(worker.role(), worker.instance());
+      manager.markReady(worker.role(), worker.instance());
+    });
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    clearInvocations(amqp, docker, rabbit);
+
+    rabbitSettings.put("prefetch", 0);
+    plan.put("sutId", "rejected-sut");
+    assertThatThrownBy(() -> manager.prepare(plan.toString()))
+        .isInstanceOf(WorkConfigurationException.class);
+    assertThat(manager.expectedWorkers()).isEqualTo(acceptedWorkers);
+    assertEquals("accepted-sut", manager.sutId());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
+    assertTrue(manager.isReadyForWork());
+    assertFalse(manager.hasPendingConfigUpdates());
+    verifyNoInteractions(amqp, rabbit);
+    verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
   }
 
   @Test
   void populatesQueueEnvironmentFromTemplateWorkAssignments() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator", "img-gen", Work.ofDefaults(null, "gen-out"), null),
-        new Bee("moderator", "img-mod", Work.ofDefaults("gen-out", "mod-out"), null),
-        new Bee("processor", "img-proc", Work.ofDefaults("mod-out", "final-out"), null),
-        new Bee("postprocessor", "img-post", Work.ofDefaults("final-out", null), null)));
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "gen-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("moderator", "img-mod", Work.ofDefaults("gen-out", "mod-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("processor", "img-proc", Work.ofDefaults("mod-out", "final-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("postprocessor", "img-post", Work.ofDefaults("final-out", null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
         .thenReturn("c1", "c2", "c3", "c4");
 
@@ -277,13 +433,13 @@ class SwarmLifecycleManagerTest {
             "processor",
             "img-proc",
             Work.ofDefaults("proc-in", null),
-            null,
-            Map.of(
+            Map.of("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "LPUSH"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
                 "outputs", Map.of(
                     "type", "REDIS",
                     "redis", Map.of(
                         "host", "redis",
                         "port", 6379,
+                        "ssl", false,
                         "sourceStep", "FIRST",
                         "pushDirection", "RPUSH",
                         "routes", List.of(
@@ -298,8 +454,7 @@ class SwarmLifecycleManagerTest {
                         "maxLen", 100
                     )
                 )
-            )
-        )));
+            ))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -311,7 +466,7 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_HOST")).isEqualTo("redis");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PORT")).isEqualTo("6379");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP")).isEqualTo("FIRST");
-    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION")).isEqualTo("RPUSH");
+    assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION")).isEqualTo("LPUSH");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST")).isEqualTo("webauth.RED.custA");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_TARGETLISTTEMPLATE"))
         .isEqualTo("webauth.RED.{{ payloadAsJson.customerCode }}");
@@ -320,6 +475,20 @@ class SwarmLifecycleManagerTest {
         .isEqualTo("^webauth\\\\.RED\\\\.cust[A-E]$");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_ROUTES_0_LIST")).isEqualTo("webauth.BAL.shared");
     assertThat(env.get("POCKETHIVE_OUTPUTS_REDIS_MAXLEN")).isEqualTo("100");
+    manager.updateHeartbeat("processor", env.get("POCKETHIVE_CONTROL_PLANE_INSTANCE_ID"));
+    ArgumentCaptor<String> payloads = ArgumentCaptor.forClass(String.class);
+    verify(rabbit, atLeastOnce()).sendText(eq(CONTROL_EXCHANGE), anyString(), payloads.capture());
+    JsonNode bootstrap = null;
+    for (String payload : payloads.getAllValues()) {
+      JsonNode data = mapper.readTree(payload).path("data");
+      if (data.path("outputs").path("type").asText().equals("REDIS")) bootstrap = data;
+    }
+    assertThat(bootstrap).isNotNull();
+    assertThat(bootstrap.path("outputs").path("redis").path("pushDirection").asText())
+        .isEqualTo(env.get("POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION"));
+    assertThat(bootstrap.path("outputs").path("redis").path("defaultList").asText())
+        .isEqualTo(env.get("POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST"));
+
   }
 
   @Test
@@ -330,13 +499,14 @@ class SwarmLifecycleManagerTest {
             "generator",
             "img-gen",
             Work.ofDefaults(null, "gen-out"),
-            null,
-            Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"),
                 "inputs", Map.of(
                     "type", "REDIS_DATASET",
                     "redis", Map.of(
                         "host", "redis",
                         "port", 6379,
+                        "ssl", false,
+                        "ratePerSec", 10.0,
                         "pickStrategy", "WEIGHTED_RANDOM",
                         "sources", List.of(
                             Map.of("listName", "webauth.RED.custA", "weight", 40),
@@ -344,8 +514,7 @@ class SwarmLifecycleManagerTest {
                         )
                     )
                 )
-            )
-        )));
+            ))));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -362,6 +531,25 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_0_WEIGHT")).isEqualTo("40");
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_1_LISTNAME")).isEqualTo("webauth.RED.custB");
     assertThat(env.get("POCKETHIVE_INPUTS_REDIS_SOURCES_1_WEIGHT")).isEqualTo("25");
+  }
+
+  @Test
+  void rejectsRemovedInputControlsBeforeProvisioning() throws Exception {
+    SwarmLifecycleManager manager = newManager();
+    for (Bee bee : List.of(
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"), Map.of(), Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of("csv", Map.of("enabled", false)))),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
+            Map.of("POCKETHIVE_INPUTS_CSV_ENABLED", "false"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("generator", "img-gen", Work.ofDefaults(null, "data"),
+            Map.of("POCKETHIVE_INPUTS_RABBIT_AUTOSTARTUP", "false"), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))))) {
+      String plan = mapper.writeValueAsString(new SwarmPlan("swarm", List.of(bee)));
+      assertThatThrownBy(() -> manager.prepare(plan))
+          .isInstanceOf(WorkConfigurationException.class).hasMessageContaining("Input-local lifecycle");
+      assertThat(manager.expectedWorkers()).isEmpty();
+      assertThat(manager.getMetrics().desired()).isZero();
+      verifyNoInteractions(amqp, rabbit);
+      verify(docker, never()).createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap());
+    }
   }
 
   @Test
@@ -384,8 +572,7 @@ class SwarmLifecycleManagerTest {
                         "delimiter", "|",
                         "charset", "UTF-8",
                         "startupDelaySeconds", 2,
-                        "tickIntervalMs", 250,
-                        "enabled", true
+                        "tickIntervalMs", 250
                     )
                 ),
                 "outputs", Map.of("type", "RABBITMQ")
@@ -409,57 +596,32 @@ class SwarmLifecycleManagerTest {
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_CHARSET")).isEqualTo("UTF-8");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_STARTUPDELAYSECONDS")).isEqualTo("2");
     assertThat(env.get("POCKETHIVE_INPUTS_CSV_TICKINTERVALMS")).isEqualTo("250");
-    assertThat(env.get("POCKETHIVE_INPUTS_CSV_ENABLED")).isEqualTo("true");
+    assertThat(env).doesNotContainKey("POCKETHIVE_INPUTS_CSV_ENABLED");
   }
 
   @Test
-  void prepareFailsWhenRabbitHostMissing() throws Exception {
-    SwarmControllerProperties properties = SwarmControllerTestProperties.defaults();
-    RabbitProperties rabbitProperties = new RabbitProperties();
-    rabbitProperties.setHost("");
-    rabbitProperties.setPort(5672);
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    try {
-      SwarmLifecycleManager manager = new SwarmLifecycleManager(
-          amqp, mapper, dockerClient, docker, rabbit, rabbitProperties, "inst", properties, registry,
-          io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
-      SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
-
-      assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
-          .isInstanceOf(IllegalStateException.class)
-          .hasMessageContaining("spring.rabbitmq.host");
-    } finally {
-      registry.close();
-    }
-  }
-
-  @Test
-  void prepareRemovesLegacyBindingsOnSubsequentRuns() throws Exception {
+  void prepareEnsuresCurrentBindingsWithoutUnbindingOnSubsequentRuns() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults("in", "out"), null)));
+        new Bee("gen", "img1", Work.ofDefaults("in", "out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties existing = new Properties();
-    when(amqp.getQueueProperties(queue("in")))
-        .thenReturn(null)
+    var existing = queueProps(0);
+    when(amqp.queue(queue("in")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(existing);
-    when(amqp.getQueueProperties(queue("out")))
-        .thenReturn(null)
+    when(amqp.queue(queue("out")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(existing);
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.prepare(mapper.writeValueAsString(plan));
 
-    ArgumentCaptor<Binding> legacyCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(4)).removeBinding(legacyCaptor.capture());
-    assertThat(legacyCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
-        .containsExactlyInAnyOrder("in", "out", "in", "out");
+    verify(amqp, never()).unbind(any());
 
-    ArgumentCaptor<Binding> bindingCaptor = ArgumentCaptor.forClass(Binding.class);
-    verify(amqp, times(4)).declareBinding(bindingCaptor.capture());
+    ArgumentCaptor<RabbitBindingSpec> bindingCaptor = ArgumentCaptor.forClass(RabbitBindingSpec.class);
+    verify(amqp, times(4)).bind(bindingCaptor.capture());
     assertThat(bindingCaptor.getAllValues())
-        .extracting(Binding::getRoutingKey)
+        .extracting(RabbitBindingSpec::routingKey)
         .containsExactlyInAnyOrder(
             queue("in"),
             queue("out"),
@@ -470,7 +632,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void startSendsConfigUpdatesWithoutRestartingContainers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -481,7 +643,7 @@ class SwarmLifecycleManagerTest {
     manager.start("{}");
 
     ArgumentCaptor<String> enablePayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         enablePayload.capture());
     JsonNode enableNode = mapper.readTree(enablePayload.getValue());
@@ -489,13 +651,13 @@ class SwarmLifecycleManagerTest {
     assertThat(enableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(enableNode.path("data").path("enabled").asBoolean(false)).isTrue();
     verifyNoMoreInteractions(docker);
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
   }
 
   @Test
   void heartbeatDoesNotPublishEnablement() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -510,8 +672,8 @@ class SwarmLifecycleManagerTest {
   void setSwarmEnabledDisablesWorkloadsAndUpdatesStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, null), null),
-        new Bee("proc", "img2", Work.ofDefaults(null, null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("proc", "img2", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
 
@@ -520,30 +682,30 @@ class SwarmLifecycleManagerTest {
     manager.markReady("proc", "p1");
 
     manager.enableAll();
-    assertEquals(SwarmStatus.RUNNING, manager.getStatus());
+    assertEquals(WorkloadState.RUNNING, manager.getWorkloadState());
 
     reset(rabbit);
 
     manager.setSwarmEnabled(false);
 
     ArgumentCaptor<String> disablePayload = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(BROADCAST_ROUTE),
         disablePayload.capture());
     JsonNode disableNode = mapper.readTree(disablePayload.getValue());
     assertThat(disableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(disableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
     assertThat(disableNode.path("data").path("enabled").asBoolean(true)).isFalse();
-    assertEquals(SwarmStatus.STOPPED, manager.getStatus());
+    assertEquals(WorkloadState.STOPPED, manager.getWorkloadState());
   }
 
   @Test
   void linearTopologyEnablesAndStopsInOrder() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("gen", "img1", Work.ofDefaults(null, "a"), null),
-        new Bee("proc", "img2", Work.ofDefaults("a", "b"), null),
-        new Bee("sink", "img3", Work.ofDefaults("b", null), null)));
+        new Bee("gen", "img1", Work.ofDefaults(null, "a"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("proc", "img2", Work.ofDefaults("a", "b"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("sink", "img3", Work.ofDefaults("b", null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
     when(docker.createAndStartContainer(eq("img3"), anyMap(), anyString(), any(), anyMap())).thenReturn("c3");
@@ -560,7 +722,7 @@ class SwarmLifecycleManagerTest {
 
     manager.enableAll();
     ArgumentCaptor<String> fanoutEnable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutEnable.capture());
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutEnable.capture());
     JsonNode fanoutEnableNode = mapper.readTree(fanoutEnable.getValue());
     assertThat(fanoutEnableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -569,11 +731,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.stop();
     ArgumentCaptor<String> fanoutDisable = ArgumentCaptor.forClass(String.class);
-    InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        anyString());
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), fanoutDisable.capture());
     JsonNode fanoutDisableNode = mapper.readTree(fanoutDisable.getValue());
     assertThat(fanoutDisableNode.path("kind").asText()).isEqualTo("signal");
     assertThat(fanoutDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
@@ -588,55 +746,9 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
-  void cyclicTopologyWarnsAndUsesStableOrder() throws Exception {
-    SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("a", "ia", Work.ofDefaults("q3", "q1"), null),
-        new Bee("b", "ib", Work.ofDefaults("q1", "q2"), null),
-        new Bee("c", "ic", Work.ofDefaults("q2", "q3"), null)));
-
-    Logger logger = (Logger) org.slf4j.LoggerFactory.getLogger(SwarmLifecycleManager.class);
-    ListAppender<ILoggingEvent> appender = new ListAppender<>();
-    appender.start();
-    logger.addAppender(appender);
-
-    manager.prepare(mapper.writeValueAsString(plan));
-    assertTrue(appender.list.stream().anyMatch(e -> e.getLevel() == Level.WARN && e.getFormattedMessage().contains("cycle")));
-
-    manager.updateHeartbeat("a", "a1");
-    manager.markReady("a", "a1");
-    manager.updateHeartbeat("b", "b1");
-    manager.markReady("b", "b1");
-    manager.updateHeartbeat("c", "c1");
-    manager.markReady("c", "c1");
-
-    reset(rabbit);
-    manager.enableAll();
-    ArgumentCaptor<String> broadcastEnable = ArgumentCaptor.forClass(String.class);
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastEnable.capture());
-    JsonNode broadcastEnableNode = mapper.readTree(broadcastEnable.getValue());
-    assertThat(broadcastEnableNode.path("kind").asText()).isEqualTo("signal");
-    assertThat(broadcastEnableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastEnableNode.path("data").path("enabled").asBoolean(false)).isTrue();
-
-    reset(rabbit);
-    manager.stop();
-    ArgumentCaptor<String> broadcastDisable = ArgumentCaptor.forClass(String.class);
-    InOrder inStop = inOrder(rabbit);
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE), eq(BROADCAST_ROUTE), broadcastDisable.capture());
-    inStop.verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
-        startsWith("event.metric.status-delta." + TEST_SWARM_ID + ".swarm-controller.inst"),
-        anyString());
-    JsonNode broadcastDisableNode = mapper.readTree(broadcastDisable.getValue());
-    assertThat(broadcastDisableNode.path("kind").asText()).isEqualTo("signal");
-    assertThat(broadcastDisableNode.path("type").asText()).isEqualTo(ControlPlaneSignals.CONFIG_UPDATE);
-    assertThat(broadcastDisableNode.path("data").path("enabled").asBoolean(true)).isFalse();
-  }
-
-  @Test
   void staleHeartbeatRequestsStatus() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     manager.prepare(mapper.writeValueAsString(plan));
     manager.updateHeartbeat("gen", "g1");
     manager.markReady("gen", "g1");
@@ -644,7 +756,7 @@ class SwarmLifecycleManagerTest {
     reset(rabbit);
     manager.updateHeartbeat("gen", "g1", System.currentTimeMillis() - 20_000);
     assertFalse(manager.markReady("gen", "g1"));
-    verify(rabbit).convertAndSend(eq(CONTROL_EXCHANGE),
+    verify(rabbit).sendText(eq(CONTROL_EXCHANGE),
         eq(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "gen", "g1")), anyString());
 
     manager.updateHeartbeat("gen", "g1");
@@ -664,7 +776,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void readyForWorkRequiresAllExpectedWorkers() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -680,7 +792,7 @@ class SwarmLifecycleManagerTest {
   @Test
   void statusEmissionsLogAtDebug(CapturedOutput output) throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", "img", Work.ofDefaults(null, null), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
     when(docker.createAndStartContainer(eq("img"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
 
     manager.prepare(mapper.writeValueAsString(plan));
@@ -702,19 +814,16 @@ class SwarmLifecycleManagerTest {
   @Test
   void snapshotQueueStatsReportsDepthConsumersAndOptionalAge() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties qinProps = new Properties();
-    qinProps.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 5);
-    qinProps.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 2);
-    qinProps.put("x-queue-oldest-age-seconds", "17");
+    var qinProps = java.util.Optional.of(new io.pockethive.rabbit.api.RabbitQueueObservation(5, 2, java.util.OptionalLong.of(17)));
 
-    when(amqp.getQueueProperties(queue("qin")))
-        .thenReturn(null)
+    when(amqp.queue(queue("qin")))
+        .thenReturn(java.util.Optional.empty())
         .thenReturn(qinProps);
-    when(amqp.getQueueProperties(queue("qout")))
-        .thenReturn(null)
-        .thenReturn(null);
+    when(amqp.queue(queue("qout")))
+        .thenReturn(java.util.Optional.empty())
+        .thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -757,15 +866,39 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void failedInitialPrepareKeepsOnlyCompletedDeclarationsForCleanup() throws Exception {
+    var manager = newManager();
+    var plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null,
+        Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
+            "outputs", Map.of("type", "NONE")))));
+    var bound = new java.util.ArrayList<String>();
+    var failed = new java.util.concurrent.atomic.AtomicReference<String>();
+    org.mockito.Mockito.doAnswer(call -> {
+      io.pockethive.rabbit.api.RabbitBindingSpec binding = call.getArgument(0);
+      if (!bound.isEmpty()) {
+        failed.set(binding.queue());
+        throw new IllegalStateException("bind failed");
+      }
+      bound.add(binding.queue());
+      return null;
+    }).when(amqp).bind(org.mockito.ArgumentMatchers.any());
+    org.assertj.core.api.Assertions.assertThatThrownBy(() -> manager.prepare(mapper.writeValueAsString(plan)))
+        .hasMessage("bind failed");
+    assertThat(manager.snapshotQueueStats()).containsOnlyKeys(bound.getFirst());
+    manager.remove();
+    org.mockito.Mockito.verify(amqp).deleteQueue(bound.getFirst());
+    org.mockito.Mockito.verify(amqp, org.mockito.Mockito.never()).deleteQueue(failed.get());
+    assertThat(manager.snapshotQueueStats()).isEmpty();
+  }
+
+  @Test
   void removeUnregistersQueueMetrics() throws Exception {
     SwarmLifecycleManager manager = newManager();
-    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null)));
+    SwarmPlan plan = new SwarmPlan("swarm", List.of(new Bee("gen", null, Work.ofDefaults("qin", "qout"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))));
 
-    Properties metrics = new Properties();
-    metrics.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, 3);
-    metrics.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
-    when(amqp.getQueueProperties(queue("qin"))).thenReturn(metrics);
-    when(amqp.getQueueProperties(queue("qout"))).thenReturn(new Properties());
+    var metrics = queueProps(3);
+    when(amqp.queue(queue("qin"))).thenReturn(metrics);
+    when(amqp.queue(queue("qout"))).thenReturn(queueProps(0));
 
     manager.prepare(mapper.writeValueAsString(plan));
 
@@ -775,6 +908,7 @@ class SwarmLifecycleManagerTest {
         .gauge()).isNotNull();
 
     manager.remove();
+    assertThat(manager.snapshotQueueStats()).isEmpty();
 
     assertThat(meterRegistry.find("ph_swarm_queue_depth")
         .tags("queue", queue("qin"), "swarm", TEST_SWARM_ID)
@@ -791,8 +925,8 @@ class SwarmLifecycleManagerTest {
   void startAssignsDistinctRuntimeInstancesForWorkersWithDistinctRolesWithoutBeeIdEnv() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
-        new Bee("generator-alpha", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of()),
-        new Bee("generator-beta", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of())
+        new Bee("generator-alpha", "img-alpha", Work.ofDefaults(null, "gen-alpha"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE"))),
+        new Bee("generator-beta", "img-beta", Work.ofDefaults(null, "gen-beta"), Map.of(), Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ));
     when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
         .thenReturn("c-alpha", "c-beta");
@@ -813,11 +947,8 @@ class SwarmLifecycleManagerTest {
         .allSatisfy(env -> assertThat(env).doesNotContainKey("POCKETHIVE_BEE_ID"));
   }
 
-  private Properties queueProps(long depth) {
-    Properties props = new Properties();
-    props.put(RabbitAdmin.QUEUE_MESSAGE_COUNT, depth);
-    props.put(RabbitAdmin.QUEUE_CONSUMER_COUNT, 1);
-    return props;
+  private java.util.Optional<io.pockethive.rabbit.api.RabbitQueueObservation> queueProps(long depth) {
+    return java.util.Optional.of(new io.pockethive.rabbit.api.RabbitQueueObservation(depth, 1, java.util.OptionalLong.empty()));
   }
 
   @Test
@@ -836,18 +967,17 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 5d))))
+                "scheduler", Map.of("ratePerSec", 5d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(50);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
-    // In real lifecycle the guard is configured during prepare (from swarm-template)
+    // In real lifecycle the guard is configured during prepare from the filesystem startup artifact.
     // and only enabled during start (swarm-start carries no plan payload).
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -865,7 +995,9 @@ class SwarmLifecycleManagerTest {
   void startPublishesBootstrapConfigAndTracksPendingUntilReady() throws Exception {
     SwarmLifecycleManager manager = newManager();
     Map<String, Object> workerConfig = Map.of(
-        "workerOverrides", Map.of("custom", "value"));
+        "workerOverrides", Map.of("custom", "value"),
+        "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
+        "outputs", Map.of("type", "NONE"));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults(null, null), null, workerConfig)
     ));
@@ -878,13 +1010,15 @@ class SwarmLifecycleManagerTest {
     ArgumentCaptor<String> nameCaptor = ArgumentCaptor.forClass(String.class);
     verify(docker).createAndStartContainer(eq("img1"), anyMap(), nameCaptor.capture(), any(), anyMap());
     String instanceName = nameCaptor.getValue();
+    ArgumentCaptor<Map<String, String>> environmentCaptor = ArgumentCaptor.forClass(Map.class);
+    verify(docker).createAndStartContainer(eq("img1"), environmentCaptor.capture(), anyString(), any(), anyMap());
 
     manager.updateHeartbeat("generator", instanceName);
 
     String expectedRoute = ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, TEST_SWARM_ID, "generator", instanceName);
     ArgumentCaptor<String> routingCaptor = ArgumentCaptor.forClass(String.class);
     ArgumentCaptor<String> payloadCaptor = ArgumentCaptor.forClass(String.class);
-    verify(rabbit, atLeastOnce()).convertAndSend(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
+    verify(rabbit, atLeastOnce()).sendText(eq(CONTROL_EXCHANGE), routingCaptor.capture(), payloadCaptor.capture());
     int index = IntStream.range(0, routingCaptor.getAllValues().size())
         .filter(i -> routingCaptor.getAllValues().get(i).equals(expectedRoute))
         .findFirst()
@@ -896,6 +1030,15 @@ class SwarmLifecycleManagerTest {
     assertThat(signal.path("scope").path("role").asText()).isEqualTo("generator");
     assertThat(signal.path("scope").path("instance").asText()).isEqualTo(instanceName);
     assertThat(data.path("workerOverrides").path("custom").asText()).isEqualTo("value");
+    var validation = new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders()
+        .workConfigurationParser().validate(mapper.convertValue(data, new com.fasterxml.jackson.core.type.TypeReference<Map<String, Object>>() {}),
+            io.pockethive.work.config.WorkConfigurationMode.RESOLVED);
+    assertThat(validation.problems()).isEmpty();
+    assertThat(validation.deferredPaths()).isEmpty();
+    assertThat(environmentCaptor.getValue()).containsEntry("POCKETHIVE_INPUTS_TYPE", data.path("inputs").path("type").asText())
+        .containsEntry("POCKETHIVE_OUTPUTS_TYPE", data.path("outputs").path("type").asText());
+    assertThat(Double.parseDouble(environmentCaptor.getValue().get("POCKETHIVE_INPUTS_SCHEDULER_RATEPERSEC")))
+        .isEqualTo(data.path("inputs").path("scheduler").path("ratePerSec").asDouble());
 
     assertTrue(manager.hasPendingConfigUpdates());
 
@@ -919,16 +1062,15 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 10d))))
+                "scheduler", Map.of("ratePerSec", 10d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(180);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -958,16 +1100,15 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure(null, null, null, null));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 80d))))
+                "scheduler", Map.of("ratePerSec", 80d, "maxMessages", 0))))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong depth = new AtomicLong(240);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(depth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -997,20 +1138,19 @@ class SwarmLifecycleManagerTest {
         new BufferGuardPolicy.Backpressure("proc-out", 500, 250, 15));
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
         new Bee("generator", "img1", Work.ofDefaults("qin", "gen-out"),
-            null,
-            Map.of("inputs", Map.of(
+            null, Map.of("outputs", Map.of("type", "NONE"), "inputs", Map.of(
                 "type", "SCHEDULER",
-                "scheduler", Map.of("ratePerSec", 20d)))),
-        new Bee("processor", "img2", Work.ofDefaults("gen-out", "proc-out"), null)
+                "scheduler", Map.of("ratePerSec", 20d, "maxMessages", 0)))),
+        new Bee("processor", "img2", Work.ofDefaults("gen-out", "proc-out"), null, Map.of("inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)), "outputs", Map.of("type", "NONE")))
     ), new TrafficPolicy(guard));
     when(docker.createAndStartContainer(eq("img1"), anyMap(), anyString(), any(), anyMap())).thenReturn("c1");
     when(docker.createAndStartContainer(eq("img2"), anyMap(), anyString(), any(), anyMap())).thenReturn("c2");
     when(docker.resolveControlNetwork()).thenReturn("ctrl-net");
     AtomicLong upstreamDepth = new AtomicLong(220);
     AtomicLong downstreamDepth = new AtomicLong(800);
-    when(amqp.getQueueProperties(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(upstreamDepth.get()));
-    when(amqp.getQueueProperties(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
-    when(amqp.getQueueProperties(eq(queue("qin")))).thenReturn(null);
+    when(amqp.queue(eq(queue("gen-out")))).thenAnswer(inv -> queueProps(upstreamDepth.get()));
+    when(amqp.queue(eq(queue("proc-out")))).thenAnswer(inv -> queueProps(downstreamDepth.get()));
+    when(amqp.queue(eq(queue("qin")))).thenReturn(java.util.Optional.empty());
 
     manager.prepare(mapper.writeValueAsString(plan));
     manager.start("{}");
@@ -1033,7 +1173,6 @@ class SwarmLifecycleManagerTest {
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, TEST_SWARM_ID, "swarm-controller", instanceId),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, TEST_SWARM_ID, "swarm-controller", "ALL"),
         ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "ALL"));
@@ -1044,24 +1183,30 @@ class SwarmLifecycleManagerTest {
   }
 
   private SwarmLifecycleManager newManager(boolean bufferGuardEnabled) {
-    RabbitProperties rabbitProperties = new RabbitProperties();
-    rabbitProperties.setHost("rabbitmq");
-    rabbitProperties.setPort(5672);
-    rabbitProperties.setUsername("guest");
-    rabbitProperties.setPassword("guest");
-    rabbitProperties.setVirtualHost("/");
+    RabbitConnectionSettings rabbitConnection = new RabbitConnectionSettings("rabbitmq", 5672, "guest", "guest", "/");
     meterRegistry = new SimpleMeterRegistry();
-    return new SwarmLifecycleManager(
-        amqp,
+    var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
+    return new SwarmLifecycleManager(amqp, new io.pockethive.rabbit.work.RabbitWorkResources(amqp, rabbitConnection),
         mapper,
         dockerClient,
         docker,
         rabbit,
-        rabbitProperties,
+        io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
+        rabbitConnection,
         "inst",
-        SwarmControllerTestProperties.defaults(bufferGuardEnabled),
+        properties,
         meterRegistry,
-        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties());
+        io.pockethive.swarmcontroller.runtime.SwarmJournal.noop(), new ClickHouseSinkProperties(),
+        runtimeMount(),
+        new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
+            .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"))),
+        new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(), swarm ->
+            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(properties.getTraffic().queuePrefix(), properties.getTraffic().hiveExchange())));
+  }
+
+  private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {
+    return io.pockethive.controlplane.filesystem.RuntimeFilesystemMount.of(
+        "/opt/pockethive/scenarios-runtime");
   }
 
   private boolean waitForRate(Gauge gauge, DoublePredicate predicate) throws InterruptedException {

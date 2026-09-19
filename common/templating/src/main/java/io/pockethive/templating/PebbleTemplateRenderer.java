@@ -1,7 +1,11 @@
 package io.pockethive.templating;
 
+import io.pockethive.templating.api.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderingException;
+import io.pockethive.templating.api.TemplateSyntaxValidator;
+import io.pockethive.templating.api.SequenceAccess;
+import io.pockethive.templating.api.DisabledSequenceAccess;
 import io.pebbletemplates.pebble.PebbleEngine;
-import io.pebbletemplates.pebble.error.PebbleException;
 import io.pebbletemplates.pebble.template.PebbleTemplate;
 import java.io.IOException;
 import java.io.StringWriter;
@@ -18,8 +22,12 @@ import java.util.Objects;
  * inline rather than loaded from files.
  * <p>
  * Template compilation results are cached for performance.
+ * <p>
+ * Responsibility: compile/render templates and validate syntax with the canonical engine.
+ * Must not: select sequence connections or expose engine exceptions as its contract.
+ * Contract: RESP-TEMPLATE-RENDER — docs/architecture/runtime-responsibilities.md#resp-template-render.
  */
-public final class PebbleTemplateRenderer implements TemplateRenderer {
+public final class PebbleTemplateRenderer implements TemplateRenderer, TemplateSyntaxValidator {
 
     private final PebbleEngine engine;
     private final PebbleEngine validationEngine;
@@ -33,12 +41,12 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
             }
         });
 
-    public PebbleTemplateRenderer() {
-        this(new PebbleWeightedSelectionExtension.SeededSelector());
+    public PebbleTemplateRenderer(SequenceAccess sequences) {
+        this(sequences, new PebbleWeightedSelectionExtension.SeededSelector());
     }
 
-    private PebbleTemplateRenderer(PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
-        this(defaultEngine(seededSelector), seededSelector);
+    private PebbleTemplateRenderer(SequenceAccess sequences, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
+        this(defaultEngine(sequences, seededSelector), seededSelector);
     }
 
     public PebbleTemplateRenderer(PebbleEngine engine) {
@@ -65,7 +73,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
                 template.evaluate(writer, safeContext);
                 return writer.toString();
             }
-        } catch (PebbleException | IOException ex) {
+        } catch (RuntimeException | IOException ex) {
             throw new TemplateRenderingException("Failed to render template", ex);
         }
     }
@@ -87,8 +95,8 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
         seededSelector.reset();
     }
 
-    private static PebbleEngine defaultEngine(PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
-        SpelTemplateEvaluator evaluator = new SpelTemplateEvaluator();
+    private static PebbleEngine defaultEngine(SequenceAccess sequences, PebbleWeightedSelectionExtension.SeededSelector seededSelector) {
+        SpelTemplateEvaluator evaluator = new SpelTemplateEvaluator(sequences);
         return new PebbleEngine.Builder()
             .extension(new PebbleEvalExtension(evaluator))
             .extension(new PebbleWeightedSelectionExtension(seededSelector))
@@ -99,7 +107,7 @@ public final class PebbleTemplateRenderer implements TemplateRenderer {
 
     private static PebbleEngine validationEngine() {
         return new PebbleEngine.Builder()
-            .extension(new PebbleEvalExtension(new SpelTemplateEvaluator(), true))
+            .extension(new PebbleEvalExtension(new SpelTemplateEvaluator(DisabledSequenceAccess.INSTANCE), true))
             .extension(new PebbleWeightedSelectionExtension(new PebbleWeightedSelectionExtension.SeededSelector()))
             .autoEscaping(false)
             .cacheActive(true)

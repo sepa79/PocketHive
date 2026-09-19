@@ -2,8 +2,8 @@ package io.pockethive.worker.sdk.runtime;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -20,6 +20,10 @@ import java.util.Objects;
  *   <li>{@code workItem} – the full immutable {@link WorkItem} for convenience</li>
  * </ul>
  * and appends the rendered string via {@link WorkItem#addStepPayload(String)}.
+ * <p>
+ * Responsibility: render an invocation body template through TemplateRenderer and append a Work step.
+ * Must not: open transport connections or implement a second Pebble/SpEL evaluator.
+ * Contract: RESP-WORK-MESSAGE-TEMPLATE — docs/architecture/runtime-responsibilities.md#resp-work-message-template.
  */
 public final class TemplatingInterceptor implements WorkerInvocationInterceptor {
 

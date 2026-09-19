@@ -3,6 +3,7 @@ package io.pockethive.scenarios;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import io.pockethive.swarm.model.SutEnvironment;
 import jakarta.annotation.PostConstruct;
 import java.io.IOException;
 import java.io.StringReader;
@@ -11,6 +12,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -56,46 +58,52 @@ public class SutEnvironmentService {
             return;
         }
 
-        Map<String, SutEnvironment> byId = new ConcurrentHashMap<>();
+        Map<String, SutEnvironment> byId = new LinkedHashMap<>();
 
         if (Files.isDirectory(configPath)) {
-            // Load all *.yaml / *.yml files in the directory. Each file is expected
-            // to contain a list of SutEnvironment objects.
-            try (java.nio.file.DirectoryStream<Path> stream =
-                     java.nio.file.Files.newDirectoryStream(configPath, "*.{yaml,yml}")) {
-                for (Path path : stream) {
-                    try {
-                        List<SutEnvironment> loaded = yamlMapper.readValue(path.toFile(), LIST_TYPE);
-                        for (SutEnvironment env : loaded) {
-                            if (env == null || env.getId() == null || env.getId().isBlank()) {
-                                continue;
-                            }
-                            SutEnvironment previous = byId.put(env.getId(), env);
-                            if (previous != null && !previous.equals(env)) {
-                                log.warn("Duplicate SUT environment id '{}' while loading {}; keeping latest",
-                                    env.getId(), path);
-                            }
-                        }
-                    } catch (Exception ex) {
-                        log.warn("Failed to load SUT environments from {}: {}", path, ex.getMessage());
-                    }
-                }
+            List<Path> sources;
+            try (var stream = Files.list(configPath)) {
+                sources = stream
+                    .filter(Files::isRegularFile)
+                    .filter(SutEnvironmentService::isYaml)
+                    .sorted()
+                    .toList();
+            }
+            for (Path source : sources) {
+                List<SutEnvironment> loaded = yamlMapper.readValue(source.toFile(), LIST_TYPE);
+                addEnvironments(byId, loaded, source);
             }
         } else {
-            // Single file variant: expect a list of SutEnvironment objects.
             List<SutEnvironment> loaded = yamlMapper.readValue(configPath.toFile(), LIST_TYPE);
-            for (SutEnvironment env : loaded) {
-                if (env == null || env.getId() == null || env.getId().isBlank()) {
-                    continue;
-                }
-                byId.put(env.getId(), env);
-            }
+            addEnvironments(byId, loaded, configPath);
         }
 
         environments.clear();
         environments.putAll(byId);
 
         log.info("Loaded {} SUT environment(s) from {}", environments.size(), configPath);
+    }
+
+    private static boolean isYaml(Path source) {
+        String name = source.getFileName().toString();
+        return name.endsWith(".yaml") || name.endsWith(".yml");
+    }
+
+    private static void addEnvironments(Map<String, SutEnvironment> target,
+                                        List<SutEnvironment> loaded,
+                                        Path source) throws IOException {
+        if (loaded == null) {
+            throw new IOException("SUT registry source did not contain an environment list: " + source);
+        }
+        for (SutEnvironment environment : loaded) {
+            if (environment == null) {
+                throw new IOException("SUT registry source contains a null environment: " + source);
+            }
+            if (target.putIfAbsent(environment.id(), environment) != null) {
+                throw new IOException(
+                    "Duplicate SUT environment id '" + environment.id() + "' in " + source);
+            }
+        }
     }
 
     public List<SutEnvironment> list() {
@@ -133,9 +141,7 @@ public class SutEnvironmentService {
         // Validate first using the in-memory mapper.
         try (StringReader reader = new StringReader(yaml)) {
             List<SutEnvironment> parsed = yamlMapper.readValue(reader, LIST_TYPE);
-            if (parsed == null) {
-                throw new IOException("YAML did not contain any environments");
-            }
+            addEnvironments(new LinkedHashMap<>(), parsed, configPath);
         } catch (IOException e) {
             throw e;
         } catch (Exception e) {

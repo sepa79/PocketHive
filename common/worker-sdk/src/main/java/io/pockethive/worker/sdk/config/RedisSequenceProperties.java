@@ -3,71 +3,22 @@ package io.pockethive.worker.sdk.config;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
 /**
- * Redis sequence generator configuration bound from {@code pockethive.worker.config.redis.*}.
+ * Responsibility: bind the existing worker Redis scope and delegate connection validation.
+ * Must not: clamp invalid ports, normalize credentials or open clients.
+ * Contract: RESP-REDIS-CONNECTION-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-redis-connection-settings.
+ * Existing bootstrap defaults and token/sequence scope composition remain B02 debt.
  */
-@ConfigurationProperties(prefix = "pockethive.worker.config.redis")
-public class RedisSequenceProperties {
-
+@ConfigurationProperties(prefix = RedisSequenceProperties.PREFIX)
+public class RedisSequenceProperties extends RedisConnectionProperties {
+    public static final String PREFIX = "pockethive.worker.config.redis";
     private boolean enabled = true;
-    private String host = "redis";
-    private int port = 6379;
-    private String username;
-    private String password;
-    private boolean ssl = false;
 
-    public boolean isEnabled() {
-        return enabled;
+    public RedisSequenceProperties() {
+        setHost("redis");
+        setPort(6379);
+        setSsl(false);
     }
 
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public String getHost() {
-        return host;
-    }
-
-    public void setHost(String host) {
-        this.host = normalise(host);
-    }
-
-    public int getPort() {
-        return port;
-    }
-
-    public void setPort(int port) {
-        this.port = Math.max(1, Math.min(65535, port));
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = normalise(username);
-    }
-
-    public String getPassword() {
-        return password;
-    }
-
-    public void setPassword(String password) {
-        this.password = normalise(password);
-    }
-
-    public boolean isSsl() {
-        return ssl;
-    }
-
-    public void setSsl(boolean ssl) {
-        this.ssl = ssl;
-    }
-
-    private static String normalise(String value) {
-        if (value == null) {
-            return null;
-        }
-        String trimmed = value.trim();
-        return trimmed.isEmpty() ? null : trimmed;
-    }
+    public boolean isEnabled() { return enabled; }
+    public void setEnabled(boolean enabled) { this.enabled = enabled; }
 }

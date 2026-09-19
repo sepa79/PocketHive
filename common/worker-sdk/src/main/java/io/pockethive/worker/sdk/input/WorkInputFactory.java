@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.input;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 
 /**

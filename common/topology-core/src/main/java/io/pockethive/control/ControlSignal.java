@@ -22,20 +22,22 @@ public record ControlSignal(
     String correlationId,
     String idempotencyKey,
     Map<String, Object> data
-) {
+) implements ControlPlaneEnvelope {
+
+    public static final String KIND = "signal";
 
     public ControlSignal {
         Objects.requireNonNull(timestamp, "timestamp");
-        version = requireNonBlank("version", version);
+        version = CommandEnvelopeSupport.requireCurrentVersion(version);
         kind = requireNonBlank("kind", kind);
-        if (!"signal".equals(kind)) {
+        if (!KIND.equals(kind)) {
             throw new IllegalArgumentException("kind must be 'signal' for ControlSignal");
         }
         type = requireNonBlank("type", type);
         origin = requireNonBlank("origin", origin);
         scope = Objects.requireNonNull(scope, "scope");
         correlationId = requireNonBlank("correlationId", correlationId);
-        idempotencyKey = trimToNull(idempotencyKey);
+        idempotencyKey = requireNonBlank("idempotencyKey", idempotencyKey);
         if (data != null && !data.isEmpty()) {
             data = Collections.unmodifiableMap(new LinkedHashMap<>(data));
         } else {
@@ -55,7 +57,7 @@ public record ControlSignal(
         return new ControlSignal(
             Instant.now(),
             ControlPlaneEnvelopeVersion.CURRENT,
-            "signal",
+            KIND,
             type,
             origin,
             Objects.requireNonNull(scope, "scope"),

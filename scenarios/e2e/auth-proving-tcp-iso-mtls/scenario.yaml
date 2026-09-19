@@ -9,6 +9,8 @@ template:
     - role: gen-tcp-prefix
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -27,6 +29,10 @@ template:
     - role: rb-tcp-prefix
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -65,6 +71,8 @@ template:
     - role: gen-iso-mac
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -83,6 +91,10 @@ template:
     - role: rb-iso-mac
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -122,6 +134,8 @@ template:
     - role: gen-mtls
       image: generator:latest
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -140,6 +154,10 @@ template:
     - role: rb-mtls
       image: request-builder:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: /app/scenario/templates/tcp
         serviceId: default
         passThroughOnMissingTemplate: false
@@ -179,6 +197,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

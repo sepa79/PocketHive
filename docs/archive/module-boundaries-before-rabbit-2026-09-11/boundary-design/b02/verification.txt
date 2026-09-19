@@ -1,0 +1,56 @@
+B02 first transfers — local verification, 2026-09-08
+Base: eb681ee7. After: uncommitted sources fingerprinted in source-changes.sha256.
+No deployment or separate review acceptance.
+
+Before patch/config consumers (/tmp/b02-config-before.log)
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.074 s -- in io.pockethive.worker.sdk.runtime.LiveIoConfigUpdateGuardTest
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.198 s -- in io.pockethive.worker.sdk.config.WorkIOConfigBinderTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.513 s -- in io.pockethive.capabilities.CapabilityCatalogueServiceTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  3.651 s
+[INFO] Finished at: 2026-09-08T15:45:33+01:00
+
+Before template loader (/tmp/b02-template-before.log)
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.284 s -- in io.pockethive.requestbuilder.TemplateLoaderTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  2.843 s
+[INFO] Finished at: 2026-09-08T15:50:38+01:00
+
+Before scenario repository (/tmp/b02-template-scenario-before.log)
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.718 s -- in io.pockethive.scenarios.ScenarioRepositoryValidationTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  2.734 s
+[INFO] Finished at: 2026-09-08T15:52:13+01:00
+
+After focused tests (/tmp/b02-transfers-final-tests.log)
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.090 s -- in io.pockethive.work.config.WorkPatchPolicyTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.080 s -- in io.pockethive.architecture.RepositoryImportBoundaryTest
+[INFO] Tests run: 28, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 1.877 s -- in io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntimeTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.003 s -- in io.pockethive.worker.sdk.input.RateSchedulePolicyTest
+[INFO] Tests run: 26, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.152 s -- in io.pockethive.worker.sdk.config.WorkIOConfigBinderTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.894 s -- in io.pockethive.worker.sdk.autoconfigure.WorkControlCompositionTest
+[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.199 s -- in io.pockethive.requesttemplates.RequestTemplateParserTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.290 s -- in io.pockethive.requesttemplates.files.TemplateLoaderTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.714 s -- in io.pockethive.scenarios.ScenarioRepositoryValidationTest
+[INFO] Tests run: 89, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 4.027 s -- in io.pockethive.scenarios.ScenarioControllerTest
+[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.011 s -- in io.pockethive.scenarios.validation.RequestTemplateFindingsTest
+[INFO] Tests run: 15, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.121 s -- in io.pockethive.capabilities.CapabilityCatalogueServiceTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.973 s -- in io.pockethive.trigger.TriggerSchedulerIntegrationTest
+[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.040 s -- in io.pockethive.trigger.TriggerSchedulePolicyTest
+[INFO] Tests run: 13, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.771 s -- in io.pockethive.requestbuilder.RequestBuilderWorkerImplTest
+[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 0.677 s -- in io.pockethive.httpsequence.HttpSequenceRunnerTest
+[INFO] BUILD SUCCESS
+[INFO] Total time:  18.122 s
+[INFO] Finished at: 2026-09-08T16:08:43+01:00
+
+After root package (tests skipped) (/tmp/b02-extracted-package.log)
+[INFO] BUILD SUCCESS
+[INFO] Total time:  7.872 s
+[INFO] Finished at: 2026-09-08T16:06:55+01:00
+
+After documentation build (npm --prefix docs-site run build)
+[webpackbar] ✔ Server: Compiled successfully in 3.36s
+[webpackbar] ✔ Client: Compiled successfully in 3.85s
+[SUCCESS] Generated static files in "build".
+
+git diff --check: exit 0

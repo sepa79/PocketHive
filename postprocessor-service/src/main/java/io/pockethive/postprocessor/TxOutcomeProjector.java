@@ -1,9 +1,9 @@
 package io.pockethive.postprocessor;
 
 import io.pockethive.swarm.model.OutcomeHeaders;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
@@ -12,6 +12,11 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Responsibility: derive sink event fields from received transaction outcome headers.
+ * Must not: treat metrics as domain state or infer a successful upstream transaction from sink publication.
+ * Contract: RESP-POSTPROCESSOR-WORK — docs/architecture/runtime-responsibilities.md#resp-postprocessor-work.
+ */
 final class TxOutcomeProjector {
 
   private static final String CALL_ID_HEADER = OutcomeHeaders.CALL_ID;

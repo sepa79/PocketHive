@@ -1,5 +1,12 @@
 package io.pockethive.scenarios.validation;
 
+
+
+import io.pockethive.work.config.WorkConfigurationParser;
+import io.pockethive.work.config.WorkConfigurationFields;
+import io.pockethive.templating.api.DisabledSequenceAccess;
+import io.pockethive.templating.api.TemplateSyntaxValidator;
+
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -10,7 +17,13 @@ import io.pockethive.capabilities.CapabilityConfigType;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.scenarios.Scenario;
 import io.pockethive.scenarios.ScenarioBundleLayout;
-import io.pockethive.scenarios.ScenarioService;
+import io.pockethive.scenarios.ScenarioVariableDefinition;
+import io.pockethive.scenarios.ScenarioVariableScope;
+import io.pockethive.scenarios.ScenarioVariableType;
+import io.pockethive.scenarios.ScenarioVariableValues;
+import io.pockethive.scenarios.ScenarioVariablesProfile;
+import io.pockethive.scenarios.VariablesDocument;
+import io.pockethive.scenarios.VariablesValidationResult;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.BeeRoles;
 import io.pockethive.swarm.model.OutcomeHeaders;
@@ -20,11 +33,8 @@ import io.pockethive.swarm.model.Topology;
 import io.pockethive.swarm.model.TopologyEdge;
 import io.pockethive.swarm.model.TopologyEndpoint;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
-import io.pockethive.worker.sdk.auth.AuthStorageMode;
-import io.pockethive.worker.sdk.auth.AuthTokenKeys;
-import io.pockethive.worker.sdk.auth.AuthType;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderingException;
+import io.pockethive.templating.api.TemplateRenderingException;
 import java.io.IOException;
 import java.nio.file.DirectoryStream;
 import java.nio.file.Files;
@@ -49,7 +59,19 @@ import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: Canonically parse and validate scenario bundle contracts and their authored content.
+ * Must not: Discover bundles, own catalogue state, publish bundles, or mutate runtime workspaces.
+ * Work diagnostics delegate to the injected neutral parser and its selected providers.
+ * Auth profile storage diagnostics delegate to AuthProfileStorageFindings and shared auth contracts.
+ * Contract: RESP-SCENARIO-VALIDATE — docs/architecture/runtime-responsibilities.md#resp-scenario-validate.
+ * docs/scenarios/SCENARIO_CONTRACT.md, docs/scenarios/SCENARIO_VARIABLES.md, and
+ * docs/scenarios/SCENARIO_BUNDLE_DIAGNOSTICS.md.
+ */
+@Component
 public final class ScenarioBundleValidator {
     private enum StructuredFormat { JSON, YAML }
 
@@ -69,18 +91,11 @@ public final class ScenarioBundleValidator {
     private static final String TYPE_CONFIG_LEAF = "type";
     private static final String INPUT_SELECTOR_CONFIG_PATH = INPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
     private static final String OUTPUT_SELECTOR_CONFIG_PATH = OUTPUT_CONFIG_ROOT + "." + TYPE_CONFIG_LEAF;
-    private static final String REDIS_DATASET_IO_TYPE = "REDIS_DATASET";
-    private static final String REDIS_OUTPUT_IO_TYPE = "REDIS";
-    private static final String REDIS_DATASET_CONFIG_PATH = INPUT_CONFIG_ROOT + ".redis";
-    private static final String REDIS_DATASET_LIST_NAME_PATH = REDIS_DATASET_CONFIG_PATH + ".listName";
-    private static final String REDIS_DATASET_SOURCES_PATH = REDIS_DATASET_CONFIG_PATH + ".sources";
-    private static final String REDIS_OUTPUT_CONFIG_PATH = OUTPUT_CONFIG_ROOT + ".redis";
-    private static final String REDIS_OUTPUT_ROUTES_PATH = REDIS_OUTPUT_CONFIG_PATH + ".routes";
-    private static final String REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH = REDIS_OUTPUT_CONFIG_PATH + ".targetListTemplate";
-    private static final String REDIS_OUTPUT_DEFAULT_LIST_PATH = REDIS_OUTPUT_CONFIG_PATH + ".defaultList";
     private static final String TEMPLATE_EXPRESSION_OPEN = "{{";
     private static final String TEMPLATE_EXPRESSION_CLOSE = "}}";
-    private static final Set<String> REQUEST_TEMPLATE_PROTOCOLS = Set.of("HTTP", "TCP", "ISO8583");
+    private final WorkConfigurationFindings workConfigurationFindings;
+    private final RequestTemplateFindings requestTemplateFindings = new RequestTemplateFindings();
+    private final AuthProfileStorageFindings authProfileStorageFindings = new AuthProfileStorageFindings();
 
     private final ObjectMapper strictJsonMapper = new ObjectMapper(JsonFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -91,10 +106,15 @@ public final class ScenarioBundleValidator {
     private final CapabilityCatalogueService capabilities;
     private final String defaultImageTag;
     private final String scenarioManagerVersion;
-    private final PebbleTemplateRenderer templateSyntaxValidator = new PebbleTemplateRenderer();
+    private final TemplateSyntaxValidator templateSyntaxValidator = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
 
-    public ScenarioBundleValidator(CapabilityCatalogueService capabilities, String defaultImageTag,
-                                   String scenarioManagerVersion) {
+    public ScenarioBundleValidator(
+        CapabilityCatalogueService capabilities,
+        @Value("${pockethive.images.default-tag:}") String defaultImageTag,
+        @Value("${pockethive.release.version}") String scenarioManagerVersion,
+        WorkConfigurationParser workConfigurationParser
+    ) {
+        this.workConfigurationFindings = new WorkConfigurationFindings(workConfigurationParser);
         this.capabilities = capabilities;
         this.defaultImageTag = normalizeTag(defaultImageTag);
         this.scenarioManagerVersion = Objects.requireNonNull(scenarioManagerVersion, "scenarioManagerVersion");
@@ -123,6 +143,7 @@ public final class ScenarioBundleValidator {
 
         Scenario resolved = applyDefaultImageTag(scenario);
         String scenarioId = resolved != null ? resolved.getId() : null;
+        String scenarioName = resolved != null ? resolved.getName() : null;
 
         if (resolved == null) {
             if (findings.isEmpty()) {
@@ -133,7 +154,7 @@ public final class ScenarioBundleValidator {
         } else {
             if (!validateScenarioProtocol(resolved, findings)) {
                 BundleValidationResult result = resultOf(input.source(), input.bundleKey(), input.bundlePath(),
-                    scenarioId, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
+                    scenarioId, scenarioName, resolved.getProtocolVersion(), bundleRoot, List.copyOf(findings));
                 return new ValidationRun(result, descriptorScenario, bundleRoot);
             }
             defunctReason(resolved).ifPresent(reason -> findings.add(defunctFinding(reason)));
@@ -158,7 +179,7 @@ public final class ScenarioBundleValidator {
             input.source(),
             input.bundleKey(),
             input.bundlePath(),
-            scenarioId, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
+            scenarioId, scenarioName, resolved != null ? resolved.getProtocolVersion() : null, bundleRoot,
             List.copyOf(findings));
         return new ValidationRun(result, descriptorScenario, bundleRoot);
     }
@@ -229,9 +250,10 @@ public final class ScenarioBundleValidator {
     }
 
     public BundleValidationResult resultOf(BundleValidationSource source, String bundleKey, String bundlePath,
-                                           String scenarioId, String scenarioProtocolVersion, Path bundleRoot,
+                                           String scenarioId, String scenarioName, String scenarioProtocolVersion,
+                                           Path bundleRoot,
                                            List<ValidationFinding> findings) {
-        return BundleValidationResult.of(source, bundleKey, bundlePath, scenarioId,
+        return BundleValidationResult.of(source, bundleKey, bundlePath, scenarioId, scenarioName,
             new BundleValidationEvidence(
                 scenarioProtocolVersion,
                 ScenarioProtocol.CURRENT_VERSION,
@@ -406,6 +428,7 @@ public final class ScenarioBundleValidator {
             null,
             null,
             null,
+            null,
             List.of(findingForException(e)));
     }
 
@@ -420,6 +443,7 @@ public final class ScenarioBundleValidator {
             null,
             null,
             scenarioId,
+            null,
             null,
             null,
             List.of(finding));
@@ -504,13 +528,13 @@ public final class ScenarioBundleValidator {
         return found;
     }
 
-    public ScenarioService.VariablesDocument parseVariables(String raw) {
+    public VariablesDocument parseVariables(String raw) {
         if (raw == null || raw.isBlank()) {
             throw variablesFailure("%s must not be empty".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
-        ScenarioService.VariablesDocument doc;
+        VariablesDocument doc;
         try {
-            doc = strictYamlMapper.readValue(raw, ScenarioService.VariablesDocument.class);
+            doc = strictYamlMapper.readValue(raw, VariablesDocument.class);
         } catch (Exception e) {
             throw validationFailure(
                 ValidationIssue.VARIABLES_INVALID,
@@ -523,8 +547,8 @@ public final class ScenarioBundleValidator {
         return doc;
     }
 
-    public ScenarioService.VariablesValidationResult validateVariables(
-        ScenarioService.VariablesDocument doc,
+    public VariablesValidationResult validateVariables(
+        VariablesDocument doc,
         Collection<String> canonicalSutIds
     ) {
         Objects.requireNonNull(doc, "doc");
@@ -533,15 +557,15 @@ public final class ScenarioBundleValidator {
         if (doc.version() != 1) {
             throw variablesFailure("%s version must be 1".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
-        List<ScenarioService.VariablesDocument.VariableDefinition> definitions =
+        List<ScenarioVariableDefinition> definitions =
             doc.definitions() == null ? List.of() : doc.definitions();
         if (definitions.isEmpty()) {
             throw variablesFailure(
                 "%s must contain non-empty definitions[]".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
 
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName = new LinkedHashMap<>();
-        for (ScenarioService.VariablesDocument.VariableDefinition def : definitions) {
+        Map<String, ScenarioVariableDefinition> byName = new LinkedHashMap<>();
+        for (ScenarioVariableDefinition def : definitions) {
             if (def == null || def.name() == null || def.name().isBlank()) {
                 throw variablesFailure(
                     "%s definitions[].name must not be blank".formatted(ScenarioBundleLayout.VARIABLES_FILE));
@@ -550,20 +574,20 @@ public final class ScenarioBundleValidator {
             if (byName.put(name, def) != null) {
                 throw variablesFailure("Duplicate variable definition name '%s'".formatted(name));
             }
-            ScenarioService.VariablesDocument.Scope scope = def.scope();
+            ScenarioVariableScope scope = def.scope();
             if (scope == null) {
                 throw variablesFailure("Variable '%s' missing scope".formatted(name));
             }
-            ScenarioService.VariablesDocument.Type type = def.type();
+            ScenarioVariableType type = def.type();
             if (type == null) {
                 throw variablesFailure("Variable '%s' missing type".formatted(name));
             }
         }
 
-        List<ScenarioService.VariablesDocument.Profile> profiles =
+        List<ScenarioVariablesProfile> profiles =
             doc.profiles() == null ? List.of() : doc.profiles();
-        Map<String, ScenarioService.VariablesDocument.Profile> profilesById = new LinkedHashMap<>();
-        for (ScenarioService.VariablesDocument.Profile profile : profiles) {
+        Map<String, ScenarioVariablesProfile> profilesById = new LinkedHashMap<>();
+        for (ScenarioVariablesProfile profile : profiles) {
             if (profile == null || profile.id() == null || profile.id().isBlank()) {
                 throw variablesFailure(
                     "%s profiles[].id must not be blank".formatted(ScenarioBundleLayout.VARIABLES_FILE));
@@ -574,7 +598,7 @@ public final class ScenarioBundleValidator {
             }
         }
 
-        ScenarioService.VariablesDocument.Values values = doc.values();
+        ScenarioVariableValues values = doc.values();
         Map<String, Map<String, Object>> global =
             values == null || values.global() == null ? Map.of() : values.global();
         Map<String, Map<String, Map<String, Object>>> sut =
@@ -622,21 +646,21 @@ public final class ScenarioBundleValidator {
         }
 
         boolean hasGlobal = byName.values().stream()
-            .anyMatch(d -> d.scope() == ScenarioService.VariablesDocument.Scope.GLOBAL);
+            .anyMatch(d -> d.scope() == ScenarioVariableScope.GLOBAL);
         boolean hasSut = byName.values().stream()
-            .anyMatch(d -> d.scope() == ScenarioService.VariablesDocument.Scope.SUT);
+            .anyMatch(d -> d.scope() == ScenarioVariableScope.SUT);
         if ((hasGlobal || hasSut) && profilesById.isEmpty()) {
             throw variablesFailure(
                 "%s must declare profiles[] when definitions[] are present".formatted(ScenarioBundleLayout.VARIABLES_FILE));
         }
 
         List<String> requiredGlobalVars = byName.values().stream()
-            .filter(def -> def.scope() == ScenarioService.VariablesDocument.Scope.GLOBAL)
+            .filter(def -> def.scope() == ScenarioVariableScope.GLOBAL)
             .filter(def -> Boolean.TRUE.equals(def.required()))
             .map(def -> def.name().trim())
             .toList();
         List<String> requiredSutVars = byName.values().stream()
-            .filter(def -> def.scope() == ScenarioService.VariablesDocument.Scope.SUT)
+            .filter(def -> def.scope() == ScenarioVariableScope.SUT)
             .filter(def -> Boolean.TRUE.equals(def.required()))
             .map(def -> def.name().trim())
             .toList();
@@ -669,7 +693,7 @@ public final class ScenarioBundleValidator {
             }
         }
 
-        return new ScenarioService.VariablesValidationResult(List.copyOf(warnings));
+        return new VariablesValidationResult(List.copyOf(warnings));
     }
 
     public List<String> listCanonicalBundleSutIds(Path bundle, String scenarioId) throws IOException {
@@ -871,12 +895,13 @@ public final class ScenarioBundleValidator {
                     "Scenario bee config must not use legacy config.pockethive worker settings.",
                     "Move fields from config.pockethive.worker.config into config."));
             }
-            validateIoSelectorConfig(config, configPath, findings);
             validateRequiredCapabilityConfig(bee, config, configPath, findings);
             validateCapabilityConfigTypes(bee, config, configPath, findings);
             validateCapabilityConfigOptions(bee, config, configPath, findings);
             validateCapabilityConfigNumericRanges(bee, config, configPath, findings);
-            validateSelectedIoSemanticContracts(config, configPath, findings);
+            workConfigurationFindings.validate(config, configPath, findings);
+            ScenarioEnvironmentFindings.validate(bee.env(), ScenarioBundleLayout.SCENARIO_DESCRIPTOR_FILE
+                + ":template.bees[" + index + "].env", findings);
             index++;
         }
         return List.copyOf(findings);
@@ -958,68 +983,6 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private void validateIoSelectorConfig(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        for (IoSelectorRequirement requirement : ioSelectorRequirements()) {
-            if (!containsConfigPath(config, requirement.subblockPath())) {
-                continue;
-            }
-            Object rawSelector = configValue(config, requirement.selectorPath());
-            String actualSelector = stringValue(rawSelector);
-            if (actualSelector == null || actualSelector.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + requirement.selectorPath(),
-                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
-                        + "' but is missing required selector '" + requirement.selectorPath()
-                        + ": " + requirement.expectedSelector() + "'.",
-                    "Add config." + requirement.selectorPath() + ": " + requirement.expectedSelector() + "."));
-                continue;
-            }
-            if (!requirement.expectedSelector().equals(actualSelector)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + requirement.selectorPath(),
-                    "Scenario bee config contains IO-specific block '" + requirement.subblockPath()
-                        + "' but selector '" + requirement.selectorPath() + "' is '" + actualSelector
-                        + "'; expected '" + requirement.expectedSelector() + "'.",
-                    "Set config." + requirement.selectorPath() + " to " + requirement.expectedSelector()
-                        + " or remove config." + requirement.subblockPath() + "."));
-            }
-        }
-    }
-
-    private List<IoSelectorRequirement> ioSelectorRequirements() {
-        Map<String, IoSelectorRequirement> requirements = new LinkedHashMap<>();
-        for (CapabilityManifest manifest : capabilities.allManifests()) {
-            CapabilityManifest.Ui ui = manifest.ui();
-            if (ui == null) {
-                continue;
-            }
-            String ioType = trimToNull(ui.ioType());
-            String selectorPath = selectorPathForIoScope(ui.ioScope());
-            String configRoot = configRootForIoScope(ui.ioScope());
-            if (ioType == null || selectorPath == null || configRoot == null) {
-                continue;
-            }
-            for (CapabilityManifest.ConfigEntry entry : manifest.config()) {
-                if (entry == null) {
-                    continue;
-                }
-                String subblockPath = ioSubblockPath(entry.name(), configRoot);
-                if (subblockPath == null) {
-                    continue;
-                }
-                String key = selectorPath + "|" + subblockPath + "|" + ioType;
-                requirements.putIfAbsent(key, new IoSelectorRequirement(subblockPath, selectorPath, ioType));
-            }
-        }
-        return List.copyOf(requirements.values());
-    }
-
     private String selectorPathForIoScope(String scope) {
         String normalized = trimToNull(scope);
         if (INPUT_IO_SCOPE.equals(normalized)) {
@@ -1029,29 +992,6 @@ public final class ScenarioBundleValidator {
             return OUTPUT_SELECTOR_CONFIG_PATH;
         }
         return null;
-    }
-
-    private String configRootForIoScope(String scope) {
-        String normalized = trimToNull(scope);
-        if (INPUT_IO_SCOPE.equals(normalized)) {
-            return INPUT_CONFIG_ROOT;
-        }
-        if (OUTPUT_IO_SCOPE.equals(normalized)) {
-            return OUTPUT_CONFIG_ROOT;
-        }
-        return null;
-    }
-
-    private String ioSubblockPath(String configName, String configRoot) {
-        String normalized = trimToNull(configName);
-        if (normalized == null) {
-            return null;
-        }
-        String[] segments = normalized.split("\\.");
-        if (segments.length < 3 || !configRoot.equals(segments[0]) || TYPE_CONFIG_LEAF.equals(segments[1])) {
-            return null;
-        }
-        return segments[0] + "." + segments[1];
     }
 
     private void validateRequiredCapabilityConfig(
@@ -1069,7 +1009,7 @@ public final class ScenarioBundleValidator {
                 if (requiredPath == null || requiredPath.isBlank()) {
                     return;
                 }
-                if (ioSelectorSpecificFindingWillCover(config, requiredPath)) {
+                if (isSharedWorkConfigurationField(config, requiredPath)) {
                     return;
                 }
                 if (hasConfigValue(config, requiredPath, Boolean.TRUE.equals(entry.allowBlank()))) {
@@ -1082,20 +1022,6 @@ public final class ScenarioBundleValidator {
                         + ref.owner() + ".",
                     "Add config." + requiredPath + " to the scenario bee."));
             });
-    }
-
-    private boolean ioSelectorSpecificFindingWillCover(Map<String, Object> config, String requiredPath) {
-        if (!INPUT_SELECTOR_CONFIG_PATH.equals(requiredPath) && !OUTPUT_SELECTOR_CONFIG_PATH.equals(requiredPath)) {
-            return false;
-        }
-        Object rawSelector = configValue(config, requiredPath);
-        String actualSelector = stringValue(rawSelector);
-        if (actualSelector != null && !actualSelector.isBlank()) {
-            return false;
-        }
-        return ioSelectorRequirements().stream()
-            .filter(requirement -> requiredPath.equals(requirement.selectorPath()))
-            .anyMatch(requirement -> containsConfigPath(config, requirement.subblockPath()));
     }
 
     private void validateCapabilityConfigTypes(
@@ -1111,6 +1037,9 @@ public final class ScenarioBundleValidator {
                 String fieldPath = trimToNull(entry.name());
                 CapabilityConfigType expectedType = capabilityConfigType(entry.type());
                 if (fieldPath == null || expectedType == null || !containsConfigPath(config, fieldPath)) {
+                    return;
+                }
+                if (isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Object rawValue = configValue(config, fieldPath);
@@ -1139,7 +1068,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Set<String> allowedValues = optionValues(entry.options());
@@ -1172,7 +1101,7 @@ public final class ScenarioBundleValidator {
             .forEach(ref -> {
                 CapabilityManifest.ConfigEntry entry = ref.entry();
                 String fieldPath = trimToNull(entry.name());
-                if (fieldPath == null || !containsConfigPath(config, fieldPath)) {
+                if (fieldPath == null || !containsConfigPath(config, fieldPath) || isSharedWorkConfigurationField(config, fieldPath)) {
                     return;
                 }
                 Object rawValue = configValue(config, fieldPath);
@@ -1206,6 +1135,13 @@ public final class ScenarioBundleValidator {
             });
     }
 
+    private boolean isSharedWorkConfigurationField(Map<String, Object> config, String path) {
+        return path != null && (path.equals(WorkConfigurationFields.INPUTS)
+            || path.startsWith(WorkConfigurationFields.INPUTS + ".")
+            || path.equals(WorkConfigurationFields.OUTPUTS)
+            || path.startsWith(WorkConfigurationFields.OUTPUTS + "."));
+    }
+
     private ValidationFinding numericRangeFinding(
         String configPath,
         String fieldPath,
@@ -1231,223 +1167,6 @@ public final class ScenarioBundleValidator {
             return ">= " + formatNumber(min);
         }
         return "<= " + formatNumber(max);
-    }
-
-    private void validateSelectedIoSemanticContracts(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (REDIS_DATASET_IO_TYPE.equals(stringValue(configValue(config, INPUT_SELECTOR_CONFIG_PATH)))
-            && containsConfigPath(config, REDIS_DATASET_CONFIG_PATH)) {
-            validateRedisDatasetSourceContract(config, configPath, findings);
-        }
-        if (REDIS_OUTPUT_IO_TYPE.equals(stringValue(configValue(config, OUTPUT_SELECTOR_CONFIG_PATH)))
-            && containsConfigPath(config, REDIS_OUTPUT_CONFIG_PATH)) {
-            validateRedisOutputTargetContract(config, configPath, findings);
-        }
-    }
-
-    private void validateRedisDatasetSourceContract(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        Object listName = configValue(config, REDIS_DATASET_LIST_NAME_PATH);
-        Object sources = configValue(config, REDIS_DATASET_SOURCES_PATH);
-        boolean hasListName = isNonBlankString(listName);
-        boolean hasSources = hasConfiguredJsonCollection(sources);
-        if (hasListName == hasSources) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_DATASET_CONFIG_PATH,
-                "Redis dataset input requires exactly one source mode: non-blank '"
-                    + REDIS_DATASET_LIST_NAME_PATH + "' or non-empty '" + REDIS_DATASET_SOURCES_PATH + "'.",
-                "Set either config." + REDIS_DATASET_LIST_NAME_PATH + " or config."
-                    + REDIS_DATASET_SOURCES_PATH + " with at least one source, but not both."));
-        }
-        validateRedisDatasetSources(sources, configPath, findings);
-    }
-
-    private void validateRedisDatasetSources(
-        Object sources,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (sources != null
-            && !(sources instanceof Collection<?>)
-            && !(sources instanceof String text && containsTemplateExpression(text.trim()))) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_DATASET_SOURCES_PATH,
-                "Redis dataset sources must be a list.",
-                "Set config." + REDIS_DATASET_SOURCES_PATH + " to an array of source objects."));
-            return;
-        }
-        if (!(sources instanceof Collection<?> sourceEntries)) {
-            return;
-        }
-        Set<String> seenLists = new LinkedHashSet<>();
-        int index = 0;
-        for (Object source : sourceEntries) {
-            String sourcePath = REDIS_DATASET_SOURCES_PATH + "[" + index + "]";
-            if (!(source instanceof Map<?, ?> sourceMap)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath,
-                    "Redis dataset source entry must be an object.",
-                    "Set config." + sourcePath + " to an object with listName and weight."));
-                index++;
-                continue;
-            }
-            String listName = scalarText(sourceMap.get("listName"));
-            if (listName == null || listName.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".listName",
-                    "Redis dataset source listName must not be blank.",
-                    "Set config." + sourcePath + ".listName to the Redis list name."));
-            } else if (!containsTemplateExpression(listName) && !seenLists.add(listName)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".listName",
-                    "Redis dataset sources must not contain duplicate listName '" + listName + "'.",
-                    "Remove the duplicate source or use a distinct Redis list name."));
-            }
-            Object weightValue = sourceMap.get("weight");
-            if (weightValue == null) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + sourcePath + ".weight",
-                    "Redis dataset source weight must be configured.",
-                    "Set config." + sourcePath + ".weight to a number greater than 0."));
-            } else {
-                Double weight = configNumericValue(weightValue);
-                if (weight != null && (!Double.isFinite(weight) || weight <= 0.0)) {
-                    findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                        ValidationSeverity.ERROR,
-                        configPath + "." + sourcePath + ".weight",
-                        "Redis dataset source weight must be > 0.",
-                        "Set config." + sourcePath + ".weight to a number greater than 0."));
-                }
-            }
-            index++;
-        }
-    }
-
-    private void validateRedisOutputTargetContract(
-        Map<String, Object> config,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        Object routes = configValue(config, REDIS_OUTPUT_ROUTES_PATH);
-        boolean hasRoutes = hasConfiguredJsonCollection(routes);
-        boolean hasTargetListTemplate = isNonBlankString(configValue(config, REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH));
-        boolean hasDefaultList = isNonBlankString(configValue(config, REDIS_OUTPUT_DEFAULT_LIST_PATH));
-        if (!hasRoutes && !hasTargetListTemplate && !hasDefaultList) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_OUTPUT_CONFIG_PATH,
-                "Redis output requires at least one target: non-empty '" + REDIS_OUTPUT_ROUTES_PATH
-                    + "', non-blank '" + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + "', or non-blank '"
-                    + REDIS_OUTPUT_DEFAULT_LIST_PATH + "'.",
-                "Set config." + REDIS_OUTPUT_ROUTES_PATH + ", config."
-                    + REDIS_OUTPUT_TARGET_LIST_TEMPLATE_PATH + ", or config." + REDIS_OUTPUT_DEFAULT_LIST_PATH + "."));
-        }
-        validateRedisOutputRoutes(routes, configPath, findings);
-    }
-
-    private void validateRedisOutputRoutes(
-        Object routes,
-        String configPath,
-        List<ValidationFinding> findings
-    ) {
-        if (routes != null
-            && !(routes instanceof Collection<?>)
-            && !(routes instanceof String text && containsTemplateExpression(text.trim()))) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + REDIS_OUTPUT_ROUTES_PATH,
-                "Redis output routes must be a list.",
-                "Set config." + REDIS_OUTPUT_ROUTES_PATH + " to an array of route objects."));
-            return;
-        }
-        if (!(routes instanceof Collection<?> routeEntries)) {
-            return;
-        }
-        int index = 0;
-        for (Object route : routeEntries) {
-            String routePath = REDIS_OUTPUT_ROUTES_PATH + "[" + index + "]";
-            if (!(route instanceof Map<?, ?> routeMap)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath,
-                    "Redis output route entry must be an object.",
-                    "Set config." + routePath + " to an object with list plus match and/or header."));
-                index++;
-                continue;
-            }
-            String match = scalarText(routeMap.get("match"));
-            String header = scalarText(routeMap.get("header"));
-            String headerMatch = scalarText(routeMap.get("headerMatch"));
-            String list = scalarText(routeMap.get("list"));
-            if (list == null || list.isBlank()) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath + ".list",
-                    "Redis output route list must not be blank.",
-                    "Set config." + routePath + ".list to the target Redis list."));
-            }
-            validateRegex(match, configPath, routePath + ".match", "Redis output route match", findings);
-            validateRegex(headerMatch, configPath, routePath + ".headerMatch", "Redis output route headerMatch", findings);
-            if (isBlank(match) && isBlank(header)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath,
-                    "Redis output route requires match and/or header.",
-                    "Set config." + routePath + ".match or config." + routePath + ".header."));
-            }
-            if (!isBlank(header) && isBlank(headerMatch)) {
-                findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    configPath + "." + routePath + ".headerMatch",
-                    "Redis output route headerMatch must be configured when header is set.",
-                    "Set config." + routePath + ".headerMatch to a regex for the header value."));
-            }
-            index++;
-        }
-    }
-
-    private void validateRegex(
-        String value,
-        String configPath,
-        String fieldPath,
-        String label,
-        List<ValidationFinding> findings
-    ) {
-        if (isBlank(value) || containsTemplateExpression(value)) {
-            return;
-        }
-        try {
-            Pattern.compile(value);
-        } catch (Exception ex) {
-            findings.add(ValidationIssue.SCENARIO_DESCRIPTOR_INVALID.finding(
-                ValidationSeverity.ERROR,
-                configPath + "." + fieldPath,
-                label + " regex is invalid: " + ex.getMessage(),
-                "Set config." + fieldPath + " to a valid regular expression."));
-        }
-    }
-
-    private boolean hasConfiguredJsonCollection(Object value) {
-        if (value instanceof String text && containsTemplateExpression(text.trim())) {
-            return true;
-        }
-        return value instanceof Collection<?> collection && !collection.isEmpty();
-    }
-
-    private boolean isNonBlankString(Object value) {
-        return value instanceof String text && !text.isBlank();
     }
 
     private boolean isBlank(String value) {
@@ -1706,68 +1425,18 @@ public final class ScenarioBundleValidator {
             if (!isUnderRelativeRoot(source.relativePath(), relativeRoot)) {
                 continue;
             }
-            validateRequestTemplateShape(source, findings, shapeReports);
-            String callId = stringValue(source.document().get(CALL_ID_CONFIG_KEY));
-            if (callId == null || callId.isBlank()) {
+            var definition = requestTemplateFindings.parse(source.document(), source.relativePath(),
+                shapeReports.add(source.relativePath()) ? findings : new ArrayList<>());
+            if (definition == null) {
                 continue;
             }
-            String serviceId = stringValue(source.document().get(SERVICE_ID_CONFIG_KEY));
-            if (serviceId == null || serviceId.isBlank()) {
-                continue;
-            }
+            String callId = definition.callId();
+            String serviceId = definition.serviceId();
             visible
                 .computeIfAbsent(templateKey(serviceId, callId), ignored -> new ArrayList<>())
                 .add(source);
         }
         return visible;
-    }
-
-    private void validateRequestTemplateShape(
-        TemplateSource source,
-        List<ValidationFinding> findings,
-        Set<String> shapeReports
-    ) {
-        if (!shapeReports.add(source.relativePath())) {
-            return;
-        }
-        Map<?, ?> doc = source.document();
-        for (String field : List.of("protocol", SERVICE_ID_CONFIG_KEY, CALL_ID_CONFIG_KEY)) {
-            Object value = doc.get(field);
-            if (!(value instanceof String text) || text.isBlank()) {
-                findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
-                    ValidationSeverity.ERROR,
-                    source.relativePath() + ":" + field,
-                    "Request template is missing required field '" + field + "'.",
-                    "Add '" + field + "' to the request template."));
-            }
-        }
-
-        String protocol = stringValue(doc.get("protocol"));
-        if (protocol == null || protocol.isBlank()) {
-            return;
-        }
-        String normalizedProtocol = protocol.toUpperCase(Locale.ROOT);
-        if (!REQUEST_TEMPLATE_PROTOCOLS.contains(normalizedProtocol)) {
-            findings.add(ValidationIssue.TEMPLATE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                source.relativePath() + ":protocol",
-                "Request template declares unsupported protocol '" + protocol + "'.",
-                "Use one of HTTP, TCP, or ISO8583."));
-            return;
-        }
-        if (!"HTTP".equals(normalizedProtocol)) {
-            return;
-        }
-        for (String field : List.of("method", "pathTemplate")) {
-            Object value = doc.get(field);
-            if (!(value instanceof String text) || text.isBlank()) {
-                findings.add(ValidationIssue.TEMPLATE_REQUIRED_FIELD_MISSING.finding(
-                    ValidationSeverity.ERROR,
-                    source.relativePath() + ":" + field,
-                    "HTTP request template is missing required field '" + field + "'.",
-                    "Add '" + field + "' to the HTTP request template."));
-            }
-        }
     }
 
     private List<ValidationFinding> validateVariableReferences(Path bundleRoot) throws IOException {
@@ -1794,12 +1463,12 @@ public final class ScenarioBundleValidator {
 
         Set<String> defined;
         try {
-            ScenarioService.VariablesDocument doc = parseVariables(Files.readString(variablesFile));
+            VariablesDocument doc = parseVariables(Files.readString(variablesFile));
             defined = doc.definitions() == null
                 ? Set.of()
                 : doc.definitions().stream()
                     .filter(Objects::nonNull)
-                    .map(ScenarioService.VariablesDocument.VariableDefinition::name)
+                    .map(ScenarioVariableDefinition::name)
                     .filter(Objects::nonNull)
                     .map(String::trim)
                     .filter(name -> !name.isBlank())
@@ -1858,25 +1527,9 @@ public final class ScenarioBundleValidator {
             } catch (Exception e) {
                 continue;
             }
-            boolean hasInlineAuth = doc.containsKey("auth");
-            boolean hasAuthRef = doc.containsKey("authRef");
-            if (hasInlineAuth) {
-                findings.add(ValidationIssue.AUTH_REF_INLINE_NOT_ALLOWED.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":auth",
-                    "Template uses inline auth, but bundle auth must use authRef.",
-                    "Replace auth with authRef and declare the profile in %s.".formatted(
-                        ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-            }
-            if (hasInlineAuth && hasAuthRef) {
-                findings.add(ValidationIssue.AUTH_REF_INLINE_NOT_ALLOWED.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":authRef",
-                    "Template declares both auth and authRef.",
-                    "Keep authRef only and remove inline auth."));
-            }
-            if (hasAuthRef) {
-                refs.add(authRefUsage(relativePath, doc.get("authRef"), findings));
+            var authRef = requestTemplateFindings.authReference(doc, relativePath, findings);
+            if (authRef != null) {
+                refs.add(new AuthRefUsage(relativePath, authRef.profileId()));
             }
         }
 
@@ -1922,13 +1575,13 @@ public final class ScenarioBundleValidator {
         List<String> canonicalSutIds = listCanonicalBundleSutIds(bundleRoot, scenarioId);
         Path variables = ScenarioBundleLayout.variablesFile(bundleRoot);
         if (variables.startsWith(bundleRoot) && Files.isRegularFile(variables)) {
-            ScenarioService.VariablesDocument doc = parseVariables(Files.readString(variables));
+            VariablesDocument doc = parseVariables(Files.readString(variables));
             validateVariables(doc, canonicalSutIds);
         }
     }
 
     private void validateValueMaps(
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName,
+        Map<String, ScenarioVariableDefinition> byName,
         Map<String, Map<String, Object>> valuesByProfile,
         String label
     ) {
@@ -1941,7 +1594,7 @@ public final class ScenarioBundleValidator {
     }
 
     private void validateValueMap(
-        Map<String, ScenarioService.VariablesDocument.VariableDefinition> byName,
+        Map<String, ScenarioVariableDefinition> byName,
         Map<String, Object> values,
         String label
     ) {
@@ -1951,7 +1604,7 @@ public final class ScenarioBundleValidator {
             if (key == null || key.isBlank()) {
                 throw variablesFailure("%s contains blank variable name".formatted(label));
             }
-            ScenarioService.VariablesDocument.VariableDefinition def = byName.get(key);
+            ScenarioVariableDefinition def = byName.get(key);
             if (def == null) {
                 throw variablesFailure("%s contains unknown variable '%s'".formatted(label, key));
             }
@@ -1963,8 +1616,8 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private void requireType(ScenarioService.VariablesDocument.VariableDefinition def, Object value, String label) {
-        ScenarioService.VariablesDocument.Type type = def.type();
+    private void requireType(ScenarioVariableDefinition def, Object value, String label) {
+        ScenarioVariableType type = def.type();
         switch (type) {
             case STRING -> {
                 if (!(value instanceof String)) {
@@ -2019,37 +1672,6 @@ public final class ScenarioBundleValidator {
         return false;
     }
 
-    private AuthRefUsage authRefUsage(String relativePath, Object value, List<ValidationFinding> findings) {
-        if (!(value instanceof Map<?, ?> map)) {
-            findings.add(ValidationIssue.AUTH_REF_PROFILE_MISSING.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef",
-                "authRef must be an object with profileId and applyAs.",
-                "Use authRef.profileId and authRef.applyAs."));
-            return null;
-        }
-        String profileId = stringValue(map.get("profileId"));
-        String applyAs = stringValue(map.get("applyAs"));
-        if (profileId == null || profileId.isBlank()) {
-            findings.add(ValidationIssue.AUTH_REF_PROFILE_MISSING.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.profileId",
-                "authRef.profileId must not be blank.",
-                "Set authRef.profileId to a profile declared in %s.".formatted(
-                    ScenarioBundleLayout.AUTH_PROFILES_FILE)));
-        }
-        try {
-            AuthApplyAs.parse(applyAs);
-        } catch (IllegalArgumentException e) {
-            findings.add(ValidationIssue.AUTH_REF_APPLY_AS_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":authRef.applyAs",
-                "authRef.applyAs '%s' is not supported.".formatted(nullToBlank(applyAs)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthApplyAsValues()))));
-        }
-        return new AuthRefUsage(relativePath, profileId);
-    }
-
     private AuthProfilesInfo readAuthProfiles(Path authProfiles, Path bundleRoot, List<ValidationFinding> findings) {
         String relativePath = bundleRoot.relativize(authProfiles).toString().replace('\\', '/');
         Map<?, ?> doc;
@@ -2088,82 +1710,9 @@ public final class ScenarioBundleValidator {
                     "Declare type and storage for profile '%s'.".formatted(profileId)));
                 continue;
             }
-            validateAuthProfileStorage(relativePath, profileId, profile, findings);
+            authProfileStorageFindings.validate(relativePath, profileId, profile, findings);
         }
         return new AuthProfilesInfo(Set.copyOf(profileIds));
-    }
-
-    private void validateAuthProfileStorage(
-        String relativePath,
-        String profileId,
-        Map<?, ?> profile,
-        List<ValidationFinding> findings
-    ) {
-        String rawType = stringValue(profile.get("type"));
-        AuthType type;
-        try {
-            type = AuthType.parse(rawType);
-        } catch (IllegalArgumentException e) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' declares unsupported type '%s'.".formatted(profileId, nullToBlank(rawType)),
-                "Use one of: %s.".formatted(String.join(", ", supportedAuthTypeValues()))));
-            return;
-        }
-        if (type == AuthType.NONE) {
-            findings.add(ValidationIssue.AUTH_PROFILES_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".type",
-                "Auth profile '%s' must declare type.".formatted(profileId),
-                "Set a concrete auth profile type."));
-            return;
-        }
-
-        Object storageValue = profile.get("storage");
-        Map<?, ?> storage = storageValue instanceof Map<?, ?> map ? map : Map.of();
-        String rawMode = stringValue(storage.get("mode"));
-        AuthStorageMode mode = AuthStorageMode.NONE;
-        if (rawMode != null && !rawMode.isBlank()) {
-            try {
-                mode = AuthStorageMode.valueOf(normalizeEnumName(rawMode));
-            } catch (IllegalArgumentException e) {
-                findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.mode",
-                    "Auth profile '%s' declares unsupported storage.mode '%s'.".formatted(profileId, rawMode),
-                    "Use one of: %s.".formatted(String.join(", ", supportedAuthStorageModeValues()))));
-                return;
-            }
-        }
-        boolean refreshable = type == AuthType.OAUTH2_CLIENT_CREDENTIALS
-            || type == AuthType.OAUTH2_PASSWORD_GRANT;
-        if (refreshable && mode != AuthStorageMode.REDIS) {
-            findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Refreshable auth profile '%s' must use storage.mode=REDIS.".formatted(profileId),
-                "Set storage.mode: REDIS and provide a tokenKey."));
-        }
-        if (mode == AuthStorageMode.REDIS) {
-            String tokenKey = stringValue(storage.get("tokenKey"));
-            try {
-                AuthTokenKeys.validateTokenKey(tokenKey);
-            } catch (IllegalArgumentException e) {
-                findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                    ValidationSeverity.ERROR,
-                    relativePath + ":profiles." + profileId + ".storage.tokenKey",
-                    "Auth profile '%s' must declare a valid storage.tokenKey.".formatted(profileId),
-                    "Use a non-blank tokenKey matching [A-Za-z0-9._:-]{1,128} without '..'."));
-            }
-        }
-        if (!refreshable && mode != AuthStorageMode.NONE) {
-            findings.add(ValidationIssue.AUTH_STORAGE_INVALID.finding(
-                ValidationSeverity.ERROR,
-                relativePath + ":profiles." + profileId + ".storage.mode",
-                "Non-refresh auth profile '%s' must use storage.mode=NONE.".formatted(profileId),
-                "Set storage.mode: NONE."));
-        }
     }
 
     private void checkImageReference(String scenarioId,
@@ -2544,9 +2093,7 @@ public final class ScenarioBundleValidator {
     }
 
     private String templateKey(String serviceId, String callId) {
-        String normalizedServiceId = serviceId == null ? "" : serviceId.trim();
-        String normalizedCallId = callId == null ? "" : callId.trim();
-        return normalizedServiceId + "::" + normalizedCallId;
+        return io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, callId);
     }
 
     private Set<String> extractCallIds(Object value) {
@@ -2657,20 +2204,8 @@ public final class ScenarioBundleValidator {
         return value instanceof String text ? text.trim() : null;
     }
 
-    private String normalizeEnumName(String value) {
-        return value == null ? null : value.trim().toUpperCase(Locale.ROOT).replace('-', '_');
-    }
-
     private List<String> supportedAuthApplyAsValues() {
         return Arrays.stream(AuthApplyAs.values()).map(Enum::name).toList();
-    }
-
-    private List<String> supportedAuthTypeValues() {
-        return Arrays.stream(AuthType.values()).filter(type -> type != AuthType.NONE).map(AuthType::key).toList();
-    }
-
-    private List<String> supportedAuthStorageModeValues() {
-        return Arrays.stream(AuthStorageMode.values()).map(Enum::name).toList();
     }
 
     private String nullToBlank(String value) {
@@ -2683,10 +2218,6 @@ public final class ScenarioBundleValidator {
         }
         return message.replace('\n', ' ').replace('\r', ' ').trim();
     }
-
-    public record ValidationRun(BundleValidationResult result, Scenario scenario, Path bundleRoot) { }
-
-    public record ScenarioDescriptor(Scenario scenario, Path rootDir) { }
 
     private record AuthRefUsage(String path, String profileId) { }
 
@@ -2710,7 +2241,6 @@ public final class ScenarioBundleValidator {
         }
     }
 
-    private record IoSelectorRequirement(String subblockPath, String selectorPath, String expectedSelector) { }
 
     private record CapabilityConfigEntryRef(CapabilityManifest.ConfigEntry entry, String owner) { }
 

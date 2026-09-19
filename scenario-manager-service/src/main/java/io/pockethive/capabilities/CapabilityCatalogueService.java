@@ -5,7 +5,8 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.pockethive.scenarios.validation.LiveIoConfigMutability;
+import io.pockethive.work.config.policy.WorkPatchPolicy;
+import io.pockethive.work.config.WorkMutationPolicyRegistry;
 import jakarta.annotation.PostConstruct;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,18 +34,21 @@ public class CapabilityCatalogueService {
     private final Path capabilitiesDir;
     private final ObjectMapper jsonMapper;
     private final ObjectMapper yamlMapper;
+    private final WorkMutationPolicyRegistry mutationPolicies;
 
     private volatile Map<String, CapabilityManifest> manifestsByDigest = Map.of();
     private volatile Map<String, CapabilityManifest> manifestsByImageName = Map.of();
     private volatile List<CapabilityManifest> manifests = List.of();
 
     @Autowired
-    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory) throws IOException {
-        this(Paths.get(directory));
+    public CapabilityCatalogueService(@Value("${capabilities.dir:capabilities}") String directory,
+                                      WorkMutationPolicyRegistry mutationPolicies) throws IOException {
+        this(Paths.get(directory), mutationPolicies);
     }
 
-    public CapabilityCatalogueService(Path directory) throws IOException {
+    public CapabilityCatalogueService(Path directory, WorkMutationPolicyRegistry mutationPolicies) throws IOException {
         this.capabilitiesDir = directory.toAbsolutePath().normalize();
+        this.mutationPolicies = Objects.requireNonNull(mutationPolicies, "mutationPolicies");
         Files.createDirectories(this.capabilitiesDir);
         this.jsonMapper = configuredMapper(new ObjectMapper());
         this.yamlMapper = configuredMapper(new ObjectMapper(new YAMLFactory()));
@@ -190,7 +194,7 @@ public class CapabilityCatalogueService {
         return new ManifestCoordinates(digest, canonicalImageName(name));
     }
 
-    private static void validateConfigEntries(CapabilityManifest manifest, List<String> errors) {
+    private void validateConfigEntries(CapabilityManifest manifest, List<String> errors) {
         if (manifest.config() == null) {
             return;
         }
@@ -215,18 +219,18 @@ public class CapabilityCatalogueService {
             + "'; expected one of: " + CapabilityConfigType.allowedWireValues());
     }
 
-    private static void validateLiveMutability(CapabilityManifest.ConfigEntry entry, List<String> errors) {
+    private void validateLiveMutability(CapabilityManifest.ConfigEntry entry, List<String> errors) {
         String entryName = isBlank(entry.name()) ? "<unnamed>" : entry.name().trim();
         if (entry.liveMutable() == null) {
             errors.add("config[].liveMutable for '" + entryName + "' is required and must be true or false");
             return;
         }
         if (Boolean.TRUE.equals(entry.liveMutable())
-            && LiveIoConfigMutability.isIoPath(entryName)
-            && !LiveIoConfigMutability.isLiveMutableIoPath(entryName)) {
+            && WorkPatchPolicy.isIoPath(entryName)
+            && !mutationPolicies.isLiveMutableIoPath(entryName)) {
             errors.add("config[].liveMutable for unsafe IO field '" + entryName
                 + "' must be false; runtime-editable IO fields are: "
-                + LiveIoConfigMutability.liveMutableIoPaths());
+                + mutationPolicies.liveMutableIoPaths());
         }
     }
 

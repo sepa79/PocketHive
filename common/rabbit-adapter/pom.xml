@@ -1,0 +1,25 @@
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+  <parent><groupId>io.pockethive</groupId><artifactId>pockethive-mvp</artifactId><version>${revision}</version><relativePath>../..</relativePath></parent>
+  <artifactId>rabbit-adapter</artifactId>
+  <name>PocketHive Rabbit Adapter</name>
+  <properties><rabbit.boundary.clients.skip>true</rabbit.boundary.clients.skip><maven.compiler.release>21</maven.compiler.release></properties>
+  <dependencyManagement><dependencies><dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-dependencies</artifactId><version>3.5.14</version><type>pom</type><scope>import</scope></dependency></dependencies></dependencyManagement>
+  <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-api</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>topology-core</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-amqp</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-autoconfigure</artifactId></dependency>
+    <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+  </dependencies>
+  <build><plugins><plugin>
+    <groupId>org.apache.maven.plugins</groupId><artifactId>maven-enforcer-plugin</artifactId>
+    <executions><execution>
+      <id>rabbit-no-worker-runtime</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+      <configuration><rules><bannedDependencies><searchTransitive>true</searchTransitive>
+        <excludes><exclude>io.pockethive:worker-sdk</exclude><exclude>io.pockethive:*-service</exclude></excludes>
+      </bannedDependencies></rules></configuration>
+    </execution></executions>
+  </plugin></plugins></build>
+</project>

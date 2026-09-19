@@ -109,6 +109,9 @@ jobs:
           - name: auth-service
             dockerfile: auth-service/Dockerfile.runtime
             target: ""
+          - name: pockethive-mcp
+            dockerfile: pockethive-mcp-service/Dockerfile.runtime
+            target: ""
           - name: scenario-manager
             dockerfile: scenario-manager-service/Dockerfile.runtime
             target: ""
@@ -175,6 +178,7 @@ jobs:
           mkdir -p .local-jars
           for module in \
             auth-service \
+            pockethive-mcp-service \
             scenario-manager-service \
             network-proxy-manager-service \
             orchestrator-service \
@@ -200,6 +204,15 @@ jobs:
             fi
             cp "${jar}" ".local-jars/${module}.jar"
             echo "Staged ${jar} -> .local-jars/${module}.jar"
+            if [ "${module}" = "pockethive-mcp-service" ]; then
+              sbom="${module}/target/pockethive-mcp-sbom.json"
+              if [ ! -f "${sbom}" ]; then
+                echo "Unable to locate CycloneDX SBOM for ${module}" >&2
+                exit 1
+              fi
+              cp "${sbom}" ".local-jars/pockethive-mcp-service.sbom.json"
+              echo "Staged ${sbom} -> .local-jars/pockethive-mcp-service.sbom.json"
+            fi
           done
 
       - name: Set up Docker Buildx

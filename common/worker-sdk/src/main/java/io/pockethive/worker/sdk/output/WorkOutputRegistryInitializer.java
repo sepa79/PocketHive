@@ -1,19 +1,22 @@
 package io.pockethive.worker.sdk.output;
 
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.work.api.transport.WorkOutput;
+
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
-import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 
+/**
+ * Responsibility: register exactly one matching output adapter for each worker.
+ * Must not: resolve ambiguity by ordering or hide missing adapters.
+ * Contract: RESP-WORK-ADAPTER-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-adapter-selection.
+ */
 public final class WorkOutputRegistryInitializer implements SmartInitializingSingleton {
 
     private static final Logger log = LoggerFactory.getLogger(WorkOutputRegistryInitializer.class);
@@ -31,13 +34,7 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
         this.workerRegistry = Objects.requireNonNull(workerRegistry, "workerRegistry");
         this.outputRegistry = Objects.requireNonNull(outputRegistry, "outputRegistry");
         this.configBinder = Objects.requireNonNull(configBinder, "configBinder");
-        if (factories == null || factories.isEmpty()) {
-            this.factories = Collections.emptyList();
-        } else {
-            List<WorkOutputFactory> sorted = new ArrayList<>(factories);
-            AnnotationAwareOrderComparator.sort(sorted);
-            this.factories = Collections.unmodifiableList(sorted);
-        }
+        this.factories = List.copyOf(Objects.requireNonNull(factories, "factories"));
     }
 
     @Override
@@ -46,14 +43,17 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
     }
 
     private void registerOutput(WorkerDefinition definition) {
-        WorkOutput output = factories.stream()
-            .filter(factory -> factory.supports(definition))
-            .findFirst()
-            .map(factory -> {
-                WorkOutputConfig config = configBinder.bind(definition.outputType(), definition.outputConfigType());
-                return factory.create(definition, config);
-            })
-            .orElseThrow(() -> missingFactory(definition));
+        List<WorkOutputFactory> matches = factories.stream()
+            .filter(factory -> factory.supports(definition)).toList();
+        if (matches.isEmpty()) {
+            throw new IllegalStateException("No WorkOutputFactory found for worker '" + definition.beanName() + "' (output=" + definition.outputType() + ")");
+        }
+        if (matches.size() != 1) {
+            throw new IllegalStateException("Multiple WorkOutputFactory matches for worker " + definition.beanName()
+                + ": " + matches.stream().map(factory -> factory.getClass().getName()).toList());
+        }
+        WorkOutputConfig config = configBinder.bind(definition.outputType(), definition.outputConfigType());
+        WorkOutput output = matches.getFirst().create(definition, config);
         outputRegistry.register(definition, output);
         if (log.isInfoEnabled()) {
             String outputName = output.getClass().getSimpleName();
@@ -64,14 +64,4 @@ public final class WorkOutputRegistryInitializer implements SmartInitializingSin
         }
     }
 
-    private IllegalStateException missingFactory(WorkerDefinition definition) {
-        if (definition.outputType() == WorkerOutputType.NONE) {
-            return new IllegalStateException(
-                "No WorkOutputFactory found for worker '%s' (role=%s output=%s); NoopWorkOutputFactory is required for NONE outputs"
-                    .formatted(definition.beanName(), definition.role(), definition.outputType()));
-        }
-        return new IllegalStateException(
-            "No WorkOutputFactory found for worker '%s' (role=%s output=%s)"
-                .formatted(definition.beanName(), definition.role(), definition.outputType()));
-    }
 }

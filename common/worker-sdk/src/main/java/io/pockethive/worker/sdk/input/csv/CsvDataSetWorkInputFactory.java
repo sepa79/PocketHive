@@ -1,8 +1,8 @@
 package io.pockethive.worker.sdk.input.csv;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.WorkerInputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;

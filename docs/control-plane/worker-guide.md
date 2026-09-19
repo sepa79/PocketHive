@@ -45,10 +45,16 @@ ControlPlaneEmitter emitter = ControlPlaneEmitter.using(
     publisher,
     runtime
 );
-emitter.emitReady(ControlPlaneEmitter.ReadyContext.builder(
-    "config-sync", correlationId, commandId, CommandState.status("Ready"))
-    .result("ok")
-    .build());
+emitter.emitResult(new ControlPlaneEmitter.ResultContext(
+    "config-update", correlationId, idempotencyKey,
+    new TerminalResult(
+        TerminalStatus.SUCCEEDED, false,
+        Map.of(
+            "target", new Target("processor", "processor-1"),
+            "requestedEnabled", true,
+            "observedEnabled", true,
+            "appliedConfigSha256", appliedConfigSha256)),
+    Instant.now()));
 ```
 
 The emitter guarantees routing keys and payload schemas remain consistent across services.

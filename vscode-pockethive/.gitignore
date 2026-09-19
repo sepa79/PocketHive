@@ -2,3 +2,5 @@ out/
 node_modules/
 resources/dist-plugin/
 *.vsix
+.stryker-tmp/
+reports/

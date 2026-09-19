@@ -3,19 +3,23 @@ package io.pockethive.controlplane.spring;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import java.time.Duration;
-import java.util.Collection;
 import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.springframework.boot.autoconfigure.amqp.RabbitProperties;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
 
 /**
  * Builds environment maps for control-plane participants so services share a consistent
  * contract when the orchestrator launches controller and worker containers.
+ * Responsibility: compose participant environment values with the canonical connection export.
+ * Must not: validate or encode Rabbit connection fields independently.
+ * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
+ * Work environment is composed separately through its selected owner.
  */
 public final class ControlPlaneContainerEnvironmentFactory {
+
 
     private ControlPlaneContainerEnvironmentFactory() {
     }
@@ -25,7 +29,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
                                                             String managerRole,
                                                             ControlPlaneProperties controlPlaneProperties,
                                                             ControllerSettings settings,
-                                                            RabbitProperties rabbitProperties) {
+                                                            RabbitConnectionSettings rabbitConnection) {
         String resolvedSwarmId = requireArgument(swarmId, "swarmId");
         String resolvedInstance = requireArgument(instanceId, "controller instance");
         Objects.requireNonNull(settings, "settings");
@@ -36,7 +40,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
             requireSetting(controlPlaneProperties.getExchange(), "pockethive.control-plane.exchange"));
         env.put("POCKETHIVE_CONTROL_PLANE_SWARM_ID", resolvedSwarmId);
-        populateRabbitEnv(env, rabbitProperties);
+        env.putAll(RabbitConnectionEnvironment.encode(rabbitConnection));
         env.put("POCKETHIVE_CONTROL_PLANE_WORKER_ENABLED",
             Boolean.toString(controlPlaneProperties.getWorker().isEnabled()));
         env.put("POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE", requireSetting(managerRole, "pockethive.control-plane.manager.role"));
@@ -44,14 +48,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(controlPlaneProperties.getControlQueuePrefix(),
                 "pockethive.control-plane.control-queue-prefix"));
-        String trafficPrefix = settings.trafficQueuePrefix() != null && !settings.trafficQueuePrefix().isBlank()
-            ? settings.trafficQueuePrefix()
-            : "ph." + resolvedSwarmId;
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX", trafficPrefix);
-        String hiveExchange = settings.trafficHiveExchange() != null && !settings.trafficHiveExchange().isBlank()
-            ? settings.trafficHiveExchange()
-            : trafficPrefix + ".hive";
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE", hiveExchange);
         applyPocketHiveMetricsSettings(
             env,
             settings.metrics(),
@@ -69,7 +65,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
     public static Map<String, String> workerEnvironment(String instanceId,
                                                         String role,
                                                         WorkerSettings settings,
-                                                        RabbitProperties rabbitProperties) {
+                                                        RabbitConnectionSettings rabbitConnection) {
         String resolvedInstance = requireArgument(instanceId, "worker instance");
         String resolvedRole = requireArgument(role, "worker role");
         Objects.requireNonNull(settings, "settings");
@@ -80,7 +76,7 @@ public final class ControlPlaneContainerEnvironmentFactory {
         env.put(
             "POCKETHIVE_CONTROL_PLANE_EXCHANGE",
             requireSetting(settings.controlExchange(), "pockethive.control-plane.exchange"));
-        populateRabbitEnv(env, rabbitProperties);
+        env.putAll(RabbitConnectionEnvironment.encode(rabbitConnection));
         env.put(
             "POCKETHIVE_CONTROL_PLANE_CONTROL_QUEUE_PREFIX",
             requireSetting(settings.controlQueuePrefix(), "pockethive.control-plane.control-queue-prefix"));
@@ -94,49 +90,11 @@ public final class ControlPlaneContainerEnvironmentFactory {
         return env;
     }
 
-    public static String swarmTrafficQueueName(String queuePrefix, String suffix) {
-        return requireArgument(queuePrefix, "traffic queue prefix")
-            + "."
-            + requireArgument(suffix, "traffic queue suffix");
-    }
-
-    public static List<String> swarmTrafficQueueNames(String queuePrefix, Collection<String> suffixes) {
-        if (suffixes == null || suffixes.isEmpty()) {
-            return List.of();
-        }
-        LinkedHashSet<String> names = new LinkedHashSet<>();
-        for (String suffix : suffixes) {
-            names.add(swarmTrafficQueueName(queuePrefix, suffix));
-        }
-        return List.copyOf(names);
-    }
-
-    private static void populateRabbitEnv(Map<String, String> env, RabbitProperties rabbitProperties) {
-        Objects.requireNonNull(rabbitProperties, "rabbitProperties");
-        env.put("SPRING_RABBITMQ_HOST",
-            requireSetting(rabbitProperties.getHost(), "spring.rabbitmq.host"));
-        env.put("SPRING_RABBITMQ_PORT", requireRabbitPort(rabbitProperties));
-        env.put("SPRING_RABBITMQ_USERNAME",
-            requireSetting(rabbitProperties.getUsername(), "spring.rabbitmq.username"));
-        env.put("SPRING_RABBITMQ_PASSWORD",
-            requireSetting(rabbitProperties.getPassword(), "spring.rabbitmq.password"));
-        env.put("SPRING_RABBITMQ_VIRTUAL_HOST",
-            requireSetting(rabbitProperties.getVirtualHost(), "spring.rabbitmq.virtual-host"));
-    }
-
     private static String requireSetting(String value, String propertyName) {
         if (value == null || value.isBlank()) {
             throw new IllegalStateException(propertyName + " must not be null or blank");
         }
         return value;
-    }
-
-    private static String requireRabbitPort(RabbitProperties properties) {
-        Integer port = properties.getPort();
-        if (port == null || port <= 0) {
-            throw new IllegalStateException("spring.rabbitmq.port must be a positive integer");
-        }
-        return Integer.toString(port);
     }
 
     private static void applyControlPlaneMetricsSettings(
@@ -225,62 +183,11 @@ public final class ControlPlaneContainerEnvironmentFactory {
         }
     }
 
-    private static String requireArgument(String value, String description) {
+    static String requireArgument(String value, String description) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(description + " must not be null or blank");
         }
         return value;
     }
 
-    public record ControllerSettings(MetricsSettings metrics,
-                                     String runId,
-                                     String dockerSocketPath,
-                                     String trafficQueuePrefix,
-                                     String trafficHiveExchange) {
-        public ControllerSettings {
-            Objects.requireNonNull(metrics, "metrics");
-            requireArgument(runId, "runId");
-            requireArgument(dockerSocketPath, "dockerSocketPath");
-        }
-
-        public String trafficQueueName(String suffix) {
-            return swarmTrafficQueueName(trafficQueuePrefix, suffix);
-        }
-
-        public List<String> trafficQueueNames(Collection<String> suffixes) {
-            return swarmTrafficQueueNames(trafficQueuePrefix, suffixes);
-        }
-    }
-
-    public record WorkerSettings(String swarmId,
-                                 String runId,
-                                 String controlExchange,
-                                 String controlQueuePrefix,
-                                 String hiveExchange,
-                                 MetricsSettings metrics) {
-        public WorkerSettings {
-            Objects.requireNonNull(metrics, "metrics");
-            requireArgument(swarmId, "swarmId");
-            requireArgument(runId, "runId");
-            requireArgument(controlExchange, "controlExchange");
-            requireArgument(controlQueuePrefix, "controlQueuePrefix");
-            requireArgument(hiveExchange, "hiveExchange");
-        }
-    }
-
-    public record MetricsSettings(PocketHiveMetricsAdapter adapter,
-                                  Duration publishInterval,
-                                  ClickHouseMetricsSinkProperties clickHouse) {
-        public MetricsSettings {
-            Objects.requireNonNull(adapter, "adapter");
-            Objects.requireNonNull(publishInterval, "publishInterval");
-            clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
-            if (publishInterval.isZero() || publishInterval.isNegative()) {
-                throw new IllegalArgumentException("metrics.publishInterval must be positive");
-            }
-            if (adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
-                clickHouse.requireConfigured();
-            }
-        }
-    }
 }

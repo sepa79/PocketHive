@@ -1,29 +1,34 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.work.api.HttpRequest;
+import io.pockethive.work.api.Iso8583Request;
+import io.pockethive.work.api.IsoSchemaRef;
+import io.pockethive.work.api.TcpRequest;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.TcpRequestEnvelope;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkStep;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.Iso8583RequestEnvelope;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.TcpRequestEnvelope;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.Iso8583TemplateDefinition;
 import io.pockethive.requesttemplates.TcpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.TemplateLoader;
+import io.pockethive.requesttemplates.files.TemplateLoader;
 import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
@@ -39,6 +44,11 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN},
     config = RequestBuilderWorkerConfig.class
 )
+/**
+ * Responsibility: construct protocol request payloads using templates, auth and selected schema data.
+ * Must not: execute the target transaction or create another shared Work envelope codec.
+ * Contract: RESP-REQUEST-BUILD — docs/architecture/runtime-responsibilities.md#resp-request-build.
+ */
 class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
@@ -58,7 +68,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
   private volatile long lastErrorCountSnapshot = 0L;
 
   @Autowired
-  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties, 
+  RequestBuilderWorkerImpl(RequestBuilderWorkerProperties properties,
                           TemplateRenderer templateRenderer,
                           RedisSequenceProperties redisProperties) {
     this(properties, templateRenderer, new TemplateLoader(), redisProperties);
@@ -94,99 +104,101 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     try {
       reloadTemplatesIfNeeded(config);
       TemplateDefinition definition =
-          templates.get(TemplateLoader.key(serviceId, callId));
+          templates.get(io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, callId));
       if (definition == null) {
         context.logger().warn("No request template found for serviceId={} callId={}; {}", serviceId, callId, missingBehavior(config));
         return handleMissing(config, seed, context);
       }
 
-      AuthRuntime authRuntime = AuthRuntime.forTemplates(
-          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
-      Object envelope;
-      String protocol = definition.protocol();
-      if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
-        MessageTemplate template = MessageTemplate.builder()
-            .bodyType(MessageBodyType.SIMPLE)
-            .bodyTemplate(tcpDef.bodyTemplate())
-            .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
-            .build();
+      try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
+          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+        Object envelope;
+        String protocol = definition.protocol();
+        if ("TCP".equals(protocol) && definition instanceof TcpTemplateDefinition tcpDef) {
+          MessageTemplate template = MessageTemplate.builder()
+              .bodyType(MessageBodyType.SIMPLE)
+              .bodyTemplate(tcpDef.bodyTemplate())
+              .headerTemplates(tcpDef.headersTemplate() == null ? Map.of() : tcpDef.headersTemplate())
+              .build();
 
-        MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, effectiveSeed);
+          MessageTemplateRenderer.RenderedMessage rendered =
+              messageTemplateRenderer.render(template, effectiveSeed);
 
-        Map<String, String> headers = new HashMap<>(rendered.headers());
-        String body = rendered.body();
-        List<AuthRef> authApplications = List.of();
-        if (tcpDef.authRef() != null) {
-          switch (tcpDef.authRef().applyAs()) {
-            case TCP_PAYLOAD_PREFIX, HMAC_PAYLOAD_FIELD -> body = authRuntime.applyTcpBody(tcpDef.authRef(), body, effectiveSeed, context);
-            case ISO8583_MAC_FIELD, MTLS_CLIENT_CERT -> authApplications = List.of(tcpDef.authRef());
-            default -> throw new IllegalArgumentException("Unsupported TCP auth applyAs: " + tcpDef.authRef().applyAs());
+          Map<String, String> headers = new HashMap<>(rendered.headers());
+          String body = rendered.body();
+          List<AuthRef> authApplications = List.of();
+          if (tcpDef.authRef() != null) {
+            switch (tcpDef.authRef().applyAs()) {
+              case TCP_PAYLOAD_PREFIX, HMAC_PAYLOAD_FIELD -> body = authRuntime.applyTcpBody(tcpDef.authRef(), body, effectiveSeed, context);
+              case ISO8583_MAC_FIELD, MTLS_CLIENT_CERT -> authApplications = List.of(tcpDef.authRef());
+              default -> throw new IllegalArgumentException("Unsupported TCP auth applyAs: " + tcpDef.authRef().applyAs());
+            }
           }
+
+          envelope = TcpRequestEnvelope.of(
+              new TcpRequest(
+                  tcpDef.behavior(),
+                  body,
+                  headers,
+                  tcpDef.endTag(),
+                  tcpDef.maxBytes(),
+                  authApplications
+              ),
+              tcpDef.resultRules()
+          );
+        } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
+          MessageTemplate template = MessageTemplate.builder()
+              .bodyType(MessageBodyType.HTTP)
+              .pathTemplate(httpDef.pathTemplate())
+              .methodTemplate(httpDef.method())
+              .bodyTemplate(httpDef.bodyTemplate())
+              .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+              .build();
+
+          MessageTemplateRenderer.RenderedMessage rendered =
+              messageTemplateRenderer.render(template, effectiveSeed);
+
+          Map<String, String> headers = new HashMap<>(rendered.headers());
+
+          String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
+          AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
+              method, rendered.path(), headers, rendered.body());
+          if (httpDef.authRef() != null) {
+            authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);
+            headers = authRequest.headers();
+          }
+          String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
+          boolean isJson = contentType.contains("application/json") ||
+                          (contentType.isEmpty() && looksLikeJson(rendered.body()));
+          envelope = HttpRequestEnvelope.of(
+              new HttpRequest(
+                  method,
+                  authRequest.path(),
+                  headers,
+                  resolveBodyValue(rendered.body(), isJson)
+              ),
+              httpDef.resultRules()
+          );
+        } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
+          envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);
+        } else {
+          throw new IllegalStateException("Unsupported template protocol: " + protocol);
         }
 
-        envelope = TcpRequestEnvelope.of(
-            new TcpRequestEnvelope.TcpRequest(
-                tcpDef.behavior(),
-                body,
-                headers,
-                tcpDef.endTag(),
-                tcpDef.maxBytes(),
-                authApplications
-            ),
-            tcpDef.resultRules()
-        );
-      } else if ("HTTP".equals(protocol) && definition instanceof HttpTemplateDefinition httpDef) {
-        MessageTemplate template = MessageTemplate.builder()
-            .bodyType(MessageBodyType.HTTP)
-            .pathTemplate(httpDef.pathTemplate())
-            .methodTemplate(httpDef.method())
-            .bodyTemplate(httpDef.bodyTemplate())
-            .headerTemplates(httpDef.headersTemplate() == null ? Map.of() : httpDef.headersTemplate())
+        WorkItem httpItem = WorkItem.json(context.info(), envelope)
+            .contentType("application/json")
             .build();
 
-        MessageTemplateRenderer.RenderedMessage rendered =
-            messageTemplateRenderer.render(template, effectiveSeed);
-
-        Map<String, String> headers = new HashMap<>(rendered.headers());
-
-        String method = requireNonBlank(rendered.method(), "method").toUpperCase(Locale.ROOT);
-        AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(
-            method, rendered.path(), headers, rendered.body());
-        if (httpDef.authRef() != null) {
-          authRuntime.applyHttp(httpDef.authRef(), authRequest, effectiveSeed, context);
-          headers = authRequest.headers();
-        }
-        String contentType = headers.getOrDefault("Content-Type", "").toLowerCase();
-        boolean isJson = contentType.contains("application/json") ||
-                        (contentType.isEmpty() && looksLikeJson(rendered.body()));
-        envelope = HttpRequestEnvelope.of(
-            new HttpRequestEnvelope.HttpRequest(
-                method,
-                authRequest.path(),
-                headers,
-                resolveBodyValue(rendered.body(), isJson)
-            ),
-            httpDef.resultRules()
-        );
-      } else if ("ISO8583".equals(protocol) && definition instanceof Iso8583TemplateDefinition isoDef) {
-        envelope = buildIso8583Envelope(isoDef, effectiveSeed, context, serviceId, callId, authRuntime);
-      } else {
-        throw new IllegalStateException("Unsupported template protocol: " + protocol);
+        context.logger().debug("Request Builder rendered serviceId={} callId={} protocol={}",
+            serviceId, callId, protocol);
+        WorkStep step = lastStep(httpItem);
+        WorkItem result = seed.toBuilder()
+            .contentType(httpItem.contentType())
+            .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
+            .build();
+        publishStatus(context, config);
+        return result;
       }
-
-      WorkItem httpItem = WorkItem.json(context.info(), envelope)
-          .contentType("application/json")
-          .build();
-
-      context.logger().debug("Request Builder envelope: {}", httpItem.asString());
-      WorkStep step = lastStep(httpItem);
-      WorkItem result = seed.toBuilder()
-          .contentType(httpItem.contentType())
-          .step(context.info(), step.payload(), step.payloadEncoding(), step.headers())
-          .build();
-      publishStatus(context, config);
-      return result;
     } catch (Exception ex) {
       var authFailure = AuthFailureException.find(ex);
       if (authFailure.isPresent()) {
@@ -226,7 +238,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
 
   private void reloadTemplates(RequestBuilderWorkerConfig config) {
     Map<String, TemplateDefinition> loaded =
-        templateLoader.load(config.templateRoot(), config.serviceId());
+        templateLoader.load(config.templateRoot());
     this.templates = loaded;
     this.lastTemplateConfigKey = config.templateRoot() + "::" + config.serviceId();
   }
@@ -319,7 +331,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     String wireProfileId = requireNonBlank(isoDef.wireProfileId(), "wireProfileId");
 
     if ("RAW_HEX".equals(payloadAdapter)) {
-      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+      return Iso8583RequestEnvelope.of(new Iso8583Request(
           wireProfileId,
           "RAW_HEX",
           requireNonBlank(rendered.body(), "payload"),
@@ -330,11 +342,11 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
     }
 
     if ("FIELD_LIST_XML".equals(payloadAdapter)) {
-      Iso8583TemplateDefinition.IsoSchemaRef templateSchema = isoDef.schemaRef();
+      io.pockethive.requesttemplates.IsoTemplateSchemaRef templateSchema = isoDef.schemaRef();
       if (templateSchema == null) {
         throw new IllegalArgumentException("schemaRef must not be null for FIELD_LIST_XML");
       }
-      Iso8583RequestEnvelope.IsoSchemaRef schemaRef = new Iso8583RequestEnvelope.IsoSchemaRef(
+      IsoSchemaRef schemaRef = new IsoSchemaRef(
           templateSchema.schemaRegistryRoot(),
           templateSchema.schemaId(),
           templateSchema.schemaVersion(),
@@ -343,7 +355,7 @@ class RequestBuilderWorkerImpl implements PocketHiveWorkerFunction {
       );
       byte[] encoded = fieldListXmlCodec.encodePayload(rendered.body(), schemaRef);
       String hexPayload = HexFormat.of().withUpperCase().formatHex(encoded);
-      return Iso8583RequestEnvelope.of(new Iso8583RequestEnvelope.Iso8583Request(
+      return Iso8583RequestEnvelope.of(new Iso8583Request(
           wireProfileId,
           "RAW_HEX",
           hexPayload,

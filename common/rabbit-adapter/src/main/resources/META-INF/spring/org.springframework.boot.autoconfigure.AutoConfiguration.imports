@@ -1,0 +1,5 @@
+io.pockethive.rabbit.topology.RabbitResourceAutoConfiguration
+io.pockethive.rabbit.transport.RabbitTransportAutoConfiguration
+io.pockethive.rabbit.config.RabbitConnectionConfiguration
+io.pockethive.rabbit.work.RabbitWorkAutoConfiguration
+io.pockethive.rabbit.config.RabbitWorkerConnectionAutoConfiguration

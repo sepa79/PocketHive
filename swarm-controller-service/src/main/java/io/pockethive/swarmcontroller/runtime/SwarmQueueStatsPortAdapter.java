@@ -2,35 +2,22 @@ package io.pockethive.swarmcontroller.runtime;
 
 import io.pockethive.manager.ports.QueueStatsPort;
 import io.pockethive.manager.runtime.QueueStats;
-import io.pockethive.swarmcontroller.QueuePropertyCoercion;
-import java.util.OptionalLong;
-import java.util.Properties;
+import io.pockethive.topology.work.WorkPlaneResources;
 import java.util.Objects;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.rabbit.core.RabbitAdmin;
 
 /**
- * Adapter that bridges {@link QueueStatsPort} to {@link AmqpAdmin}.
+ * Responsibility: project selected Work observations for resolved channel addresses into manager statistics.
+ * Must not: resolve names, decode broker properties or access clients.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class SwarmQueueStatsPortAdapter implements QueueStatsPort {
-
-  private final AmqpAdmin amqpAdmin;
-
-  public SwarmQueueStatsPortAdapter(AmqpAdmin amqpAdmin) {
-    this.amqpAdmin = Objects.requireNonNull(amqpAdmin, "amqpAdmin");
-  }
-
-  @Override
-  public QueueStats getQueueStats(String queueName) {
-    Properties props = amqpAdmin.getQueueProperties(queueName);
-    if (props == null) {
-      return QueueStats.empty();
+    private final WorkPlaneResources resources;
+    public SwarmQueueStatsPortAdapter(WorkPlaneResources resources) {
+        this.resources = Objects.requireNonNull(resources, "resources");
     }
-    long depth = QueuePropertyCoercion.coerceLong(props.get(RabbitAdmin.QUEUE_MESSAGE_COUNT));
-    int consumers = QueuePropertyCoercion.coerceInt(props.get(RabbitAdmin.QUEUE_CONSUMER_COUNT));
-    OptionalLong oldestAge = QueuePropertyCoercion.coerceOptionalLong(
-        props.get("x-queue-oldest-age-seconds"));
-    return new QueueStats(depth, consumers, oldestAge);
-  }
+    @Override public QueueStats getQueueStats(String queueName) {
+        return resources.observeInput(queueName)
+            .map(queue -> new QueueStats(queue.messages(), queue.consumers(), queue.oldestAgeSeconds()))
+            .orElseGet(QueueStats::empty);
+    }
 }
-

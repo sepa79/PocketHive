@@ -1,36 +1,61 @@
 package io.pockethive.orchestrator.app;
 
+import io.pockethive.swarm.model.NetworkMode;
+
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.pockethive.orchestrator.app.DebugTapController.DebugTapRequest;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.Work;
+import io.pockethive.rabbit.api.RabbitResourceNames;
+import io.pockethive.rabbit.work.RabbitWorkDebugTaps;
+import io.pockethive.rabbit.work.RabbitWorkTopologyResolver;
+import io.pockethive.rabbit.api.RabbitWorkTopologySettings;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.lang.reflect.Proxy;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.core.AmqpAdmin;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitResources;
+import io.pockethive.rabbit.api.RabbitBindingSpec;
+import io.pockethive.rabbit.api.RabbitReceiver;
 import org.springframework.web.server.ResponseStatusException;
 
 class DebugTapServiceTest {
 
     @Test
+    void unsupportedSelectedWorkDiagnosticsAreExplicit() {
+        var store = new SwarmStore();
+        var swarm = new Swarm("sw1", "instance", "controller", "run", NetworkMode.DIRECT);
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata("template", "controller",
+            List.of(new Bee("processor", "image", Work.ofDefaults("in", "out"), Map.of()))));
+        store.register(swarm);
+        io.pockethive.topology.work.WorkDebugTaps unsupported = (swarmId, role, tapId, source, ttl, limit) -> {
+            throw new UnsupportedOperationException("Memory Work does not support captures");
+        };
+        var service = new DebugTapService(store, unsupported, new io.pockethive.worker.sdk.testing.InMemoryWorkTopologyResolver());
+        assertThatThrownBy(() -> service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60)))
+            .isInstanceOfSatisfying(ResponseStatusException.class, failure -> {
+                assertThat(failure.getStatusCode().value()).isEqualTo(501);
+                assertThat(failure.getReason()).isEqualTo("Memory Work does not support captures");
+            });
+    }
+
+    @Test
     void cleanupExpiredRemovesTapAndDeletesQueue() {
         SwarmStore store = new SwarmStore();
-        var declaredBindings = new CopyOnWriteArrayList<Binding>();
+        var declaredBindings = new CopyOnWriteArrayList<RabbitBindingSpec>();
         var deletedQueues = new CopyOnWriteArrayList<String>();
-        AmqpAdmin amqp = recordingAmqpAdmin(declaredBindings, deletedQueues);
-        RabbitTemplate rabbit = new RabbitTemplate();
+        RabbitResources amqp = recordingRabbitResources(declaredBindings, deletedQueues);
+        RabbitReceiver rabbit = mock(RabbitReceiver.class);
 
-        Swarm swarm = new Swarm("sw1", "inst-1", "c1", "run-1");
+        Swarm swarm = new Swarm("sw1", "inst-1", "c1", "run-1", NetworkMode.DIRECT);
         swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
             "tpl-1",
             "swarm-controller:latest",
@@ -38,7 +63,9 @@ class DebugTapServiceTest {
         ));
         store.register(swarm);
 
-        DebugTapService service = new DebugTapService(store, amqp, rabbit);
+        var names = new RabbitResourceNames();
+        DebugTapService service = new DebugTapService(store, new RabbitWorkDebugTaps(amqp, rabbit),
+            new RabbitWorkTopologyResolver(names, names::forSwarm));
         var created = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 1));
         String tapId = created.tapId();
         String queue = created.queue();
@@ -46,8 +73,8 @@ class DebugTapServiceTest {
         assertThat(created.routingKey()).isEqualTo("ph.sw1.final");
 
         assertThat(declaredBindings).hasSize(1);
-        assertThat(declaredBindings.getFirst().getExchange()).isEqualTo("ph.sw1.hive");
-        assertThat(declaredBindings.getFirst().getRoutingKey()).isEqualTo("ph.sw1.final");
+        assertThat(declaredBindings.getFirst().exchange()).isEqualTo("ph.sw1.hive");
+        assertThat(declaredBindings.getFirst().routingKey()).isEqualTo("ph.sw1.final");
 
         service.cleanupExpired(Instant.now().plusSeconds(5));
 
@@ -57,48 +84,53 @@ class DebugTapServiceTest {
             .hasMessageContaining("debug tap not found");
     }
 
-    private static AmqpAdmin recordingAmqpAdmin(List<Binding> bindings, List<String> deletedQueues) {
+    @Test
+    void bindsBothDirectionsToResolvedSourceResources() {
+        var store = new SwarmStore();
+        var swarm = new Swarm("sw1", "inst-1", "c1", "run-1", NetworkMode.DIRECT);
+        swarm.attachTemplate(new io.pockethive.orchestrator.domain.SwarmTemplateMetadata(
+            "tpl-1", "controller", List.of(
+                new Bee("processor", "image", Work.ofDefaults("input", "output"), Map.of()))));
+        store.register(swarm);
+        var names = org.mockito.Mockito.spy(new RabbitResourceNames());
+        org.mockito.Mockito.doReturn(new RabbitWorkTopologySettings("selected", "selected.exchange")).when(names).forSwarm("sw1");
+        when(names.address("selected.exchange", "selected", "input"))
+            .thenReturn(new io.pockethive.rabbit.api.RabbitWorkAddress("selected.exchange", "queue.input", "selected.input"));
+        when(names.address("selected.exchange", "selected", "output"))
+            .thenReturn(new io.pockethive.rabbit.api.RabbitWorkAddress("selected.exchange", "queue.output", "selected.output"));
+        var bindings = new CopyOnWriteArrayList<RabbitBindingSpec>();
+        var service = new DebugTapService(store, new RabbitWorkDebugTaps(
+            recordingRabbitResources(bindings, new CopyOnWriteArrayList<>()), mock(RabbitReceiver.class)),
+            new RabbitWorkTopologyResolver(names, names::forSwarm));
+
+        var input = service.create(new DebugTapRequest("sw1", "processor", "IN", null, 1, 60));
+        var output = service.create(new DebugTapRequest("sw1", "processor", "OUT", null, 1, 60));
+
+        assertThat(input.exchange()).isEqualTo("selected.exchange");
+        assertThat(input.routingKey()).isEqualTo("selected.input");
+        assertThat(output.exchange()).isEqualTo("selected.exchange");
+        assertThat(output.routingKey()).isEqualTo("selected.output");
+        assertThat(bindings).extracting(RabbitBindingSpec::exchange)
+            .containsExactly("selected.exchange", "selected.exchange");
+        assertThat(bindings).extracting(RabbitBindingSpec::routingKey)
+            .containsExactly("selected.input", "selected.output");
+        assertThat(bindings).extracting(RabbitBindingSpec::queue)
+            .containsExactly(input.queue(), output.queue());
+    }
+
+    private static RabbitResources recordingRabbitResources(List<RabbitBindingSpec> bindings, List<String> deletedQueues) {
         Objects.requireNonNull(bindings, "bindings");
         Objects.requireNonNull(deletedQueues, "deletedQueues");
 
-        return (AmqpAdmin) Proxy.newProxyInstance(
-            AmqpAdmin.class.getClassLoader(),
-            new Class<?>[]{AmqpAdmin.class},
-            (proxy, method, args) -> {
-                String name = method.getName();
-                if ("declareQueue".equals(name) && args != null && args.length == 1) {
-                    Object queue = args[0];
-                    if (queue instanceof org.springframework.amqp.core.Queue q) {
-                        return q.getName();
-                    }
-                    return null;
-                }
-                if ("declareBinding".equals(name) && args != null && args.length == 1) {
-                    if (args[0] instanceof Binding binding) {
-                        bindings.add(binding);
-                    }
-                    return null;
-                }
-                if ("deleteQueue".equals(name) && args != null && args.length >= 1) {
-                    if (args[0] instanceof String queueName) {
-                        deletedQueues.add(queueName);
-                    }
-                    Class<?> returnType = method.getReturnType();
-                    if (returnType == boolean.class || returnType == Boolean.class) {
-                        return true;
-                    }
-                    return null;
-                }
-                Class<?> returnType = method.getReturnType();
-                if (returnType == boolean.class) return false;
-                if (returnType == int.class) return 0;
-                if (returnType == long.class) return 0L;
-                if (returnType == double.class) return 0.0d;
-                if (returnType == float.class) return 0.0f;
-                if (returnType == short.class) return (short) 0;
-                if (returnType == byte.class) return (byte) 0;
-                if (returnType == char.class) return (char) 0;
-                return null;
-            });
+        var resources = org.mockito.Mockito.mock(RabbitResources.class);
+        org.mockito.Mockito.doAnswer(call -> {
+            bindings.add(call.getArgument(0));
+            return null;
+        }).when(resources).bind(org.mockito.ArgumentMatchers.any());
+        org.mockito.Mockito.doAnswer(call -> {
+            deletedQueues.add(call.getArgument(0));
+            return null;
+        }).when(resources).deleteQueue(org.mockito.ArgumentMatchers.anyString());
+        return resources;
     }
 }

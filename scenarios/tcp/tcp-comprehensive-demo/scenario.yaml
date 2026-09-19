@@ -18,6 +18,8 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: "SCHEDULER"
           scheduler:
@@ -56,6 +58,8 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: "SCHEDULER"
           scheduler:
@@ -90,6 +94,8 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: "SCHEDULER"
           scheduler:
@@ -123,6 +129,10 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
         passThroughOnMissingTemplate: false
@@ -138,6 +148,10 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
         passThroughOnMissingTemplate: false
@@ -153,6 +167,10 @@ template:
         - { id: out, direction: out }
       env: {}
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         templateRoot: "/app/scenario/templates/tcp"
         serviceId: "demo"
         passThroughOnMissingTemplate: false
@@ -193,6 +211,10 @@ template:
         - { id: in, direction: in }
       env: {}
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

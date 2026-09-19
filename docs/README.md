@@ -3,14 +3,20 @@
 Welcome to the PocketHive documentation hub. Use these resources to understand the system, explore individual services, and contribute effectively.
 
 ## Architecture
+
+Current implementation direction: `docs/inProgress/work-plane-module-boundaries.md`.
+Work Plane module boundaries come first, followed by Control Plane and remaining sinks.
+Older sequencing/design proposals are indexed in `docs/archive/pre-boundary-reset/README.md`;
+living contracts below continue to describe the supported system.
+
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
-- [SUT + Dataset + Simulation Model (proposal)](architecture/sut-dataset-simulation-model.md)
 - [Network Proxy follow-ups](todo/network-proxy-followups.md)
 - [Documentation index](index.md)
 
 ## Roadmap
 - [Release Notes](../CHANGELOG.md)
+- [Lifecycle Control-Plane Release Verification Matrix](RELEASE_VERIFICATION_MATRIX.md)
 - [Upgrading PocketHive](UPGRADING.md)
 
 ## Usage
@@ -54,10 +60,15 @@ Welcome to the PocketHive documentation hub. Use these resources to understand t
 
 ## Contributing
 - [Contributor Guide](../CONTRIBUTING.md)
+- [Engineering Rules](ENGINEERING_RULES.md)
+- [Review Rules](REVIEW_RULES.md)
+- [Responsibility and SSOT Workflow](ai/RESPONSIBILITY_WORKFLOW.md)
+- [Current B01 Responsibility Records](architecture/runtime-responsibilities.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
 
 ## MCP and IDE integrations
 
-- [PocketHive plugin reference](plugins/pockethive/README.md)
-- [Canonical MCP server](../tools/pockethive-mcp/README.md)
+- [Local MCP and VS Code quick start](USAGE.md#local-mcp-and-vs-code-quick-start)
+- [PocketHive MCP](mcp/README.md)
+- [PocketHive VS Code extension](../vscode-pockethive/README.md)

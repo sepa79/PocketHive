@@ -1,263 +1,54 @@
 package io.pockethive.orchestrator.config;
 
-import io.pockethive.manager.runtime.ComputeAdapterType;
-import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
-import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import jakarta.validation.Valid;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * Responsibility: Bind the explicit Orchestrator application settings tree.
+ * Must not: Own control-plane queue names, routing, or infrastructure effects.
+ * Contract: docs/orchestrator/configuration.md; unknown application settings fail startup.
+ */
 @Validated
-@ConfigurationProperties(prefix = "pockethive.control-plane")
+@ConfigurationProperties(prefix = "pockethive.control-plane.orchestrator", ignoreUnknownFields = false)
 public class OrchestratorProperties {
 
-    private final Orchestrator orchestrator;
+    private final @Valid OrchestratorMetricsProperties metrics;
+    private final @Valid OrchestratorDockerProperties docker;
+    private final @Valid OrchestratorImageProperties images;
+    private final @Valid OrchestratorScenarioManagerProperties scenarioManager;
+    private final @Valid OrchestratorNetworkProxyManagerProperties networkProxyManager;
 
-    public OrchestratorProperties(@Valid Orchestrator orchestrator) {
-        this.orchestrator = Objects.requireNonNull(orchestrator, "orchestrator");
+    public OrchestratorProperties(@Valid OrchestratorMetricsProperties metrics,
+                                  @Valid OrchestratorDockerProperties docker,
+                                  @Valid OrchestratorImageProperties images,
+                                  @Valid OrchestratorScenarioManagerProperties scenarioManager,
+                                  @Valid OrchestratorNetworkProxyManagerProperties networkProxyManager) {
+        this.metrics = Objects.requireNonNull(metrics, "metrics");
+        this.docker = Objects.requireNonNull(docker, "docker");
+        this.images = Objects.requireNonNull(images, "images");
+        this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
+        this.networkProxyManager = Objects.requireNonNull(networkProxyManager, "networkProxyManager");
     }
 
-    public String getControlQueuePrefix() {
-        return orchestrator.controlQueuePrefix();
+    public OrchestratorMetricsProperties getMetrics() {
+        return metrics;
     }
 
-    public String getStatusQueuePrefix() {
-        return orchestrator.statusQueuePrefix();
-    }
-
-    public Metrics getMetrics() {
-        return orchestrator.metrics();
-    }
-
-    public Docker getDocker() {
-        return orchestrator.docker();
+    public OrchestratorDockerProperties getDocker() {
+        return docker;
     }
 
     public String getImageRepositoryPrefix() {
-        Images images = orchestrator.images();
-        if (images == null) {
-            return null;
-        }
-        String prefix = images.getRepositoryPrefix();
-        if (prefix == null || prefix.isBlank()) {
-            return null;
-        }
-        return prefix;
+        return images.getRepositoryPrefix();
     }
 
-    public ScenarioManager getScenarioManager() {
-        return orchestrator.scenarioManager();
+    public OrchestratorScenarioManagerProperties getScenarioManager() {
+        return scenarioManager;
     }
 
-    public NetworkProxyManager getNetworkProxyManager() {
-        return orchestrator.networkProxyManager();
+    public OrchestratorNetworkProxyManagerProperties getNetworkProxyManager() {
+        return networkProxyManager;
     }
-
-    @Validated
-    public static final class Orchestrator {
-
-        private final String controlQueuePrefix;
-        private final String statusQueuePrefix;
-        private final @Valid Metrics metrics;
-        private final @Valid Docker docker;
-        private final @Valid Images images;
-        private final @Valid ScenarioManager scenarioManager;
-        private final @Valid NetworkProxyManager networkProxyManager;
-
-        public Orchestrator(@NotBlank String controlQueuePrefix,
-                             @NotBlank String statusQueuePrefix,
-                             @Valid Metrics metrics,
-                             @Valid Docker docker,
-                             @Valid Images images,
-                             @Valid ScenarioManager scenarioManager,
-                             @Valid NetworkProxyManager networkProxyManager) {
-            this.controlQueuePrefix = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
-            this.statusQueuePrefix = requireNonBlank(statusQueuePrefix, "statusQueuePrefix");
-            this.metrics = Objects.requireNonNull(metrics, "metrics");
-            this.docker = Objects.requireNonNull(docker, "docker");
-            this.images = Objects.requireNonNull(images, "images");
-            this.scenarioManager = Objects.requireNonNull(scenarioManager, "scenarioManager");
-            this.networkProxyManager = Objects.requireNonNull(networkProxyManager, "networkProxyManager");
-        }
-
-        public String controlQueuePrefix() {
-            return controlQueuePrefix;
-        }
-
-        public String statusQueuePrefix() {
-            return statusQueuePrefix;
-        }
-
-        public Metrics metrics() {
-            return metrics;
-        }
-
-        public Docker docker() {
-            return docker;
-        }
-
-        public Images images() {
-            return images;
-        }
-
-        public ScenarioManager scenarioManager() {
-            return scenarioManager;
-        }
-
-        public NetworkProxyManager networkProxyManager() {
-            return networkProxyManager;
-        }
-    }
-
-    @Validated
-    public static final class Metrics {
-
-        private final PocketHiveMetricsAdapter adapter;
-        private final Duration publishInterval;
-        private final @Valid ClickHouseMetricsSinkProperties clickHouse;
-
-        public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
-                       @NotNull Duration publishInterval,
-                       @Valid ClickHouseMetricsSinkProperties clickHouse) {
-            this.adapter = Objects.requireNonNull(adapter, "adapter");
-            this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
-            this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
-            if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
-                throw new IllegalArgumentException("metrics.publishInterval must be positive");
-            }
-            if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
-                this.clickHouse.requireConfigured();
-            }
-        }
-
-        public PocketHiveMetricsAdapter getAdapter() {
-            return adapter;
-        }
-
-        public Duration getPublishInterval() {
-            return publishInterval;
-        }
-
-        public ClickHouseMetricsSinkProperties getClickHouse() {
-            return clickHouse;
-        }
-    }
-
-    @Validated
-    public static final class Docker {
-
-        private final String socketPath;
-        private final ComputeAdapterType computeAdapter;
-
-        public Docker(@NotBlank String socketPath, ComputeAdapterType computeAdapter) {
-            this.socketPath = requireNonBlank(socketPath, "socketPath");
-            // For orchestrator we want AUTO as the default so it can decide
-            // between single-node Docker and Swarm services based on the
-            // runtime environment. Explicit values are honoured as-is.
-            this.computeAdapter = computeAdapter == null ? ComputeAdapterType.AUTO : computeAdapter;
-        }
-
-        public String getSocketPath() {
-            return socketPath;
-        }
-
-        public ComputeAdapterType getComputeAdapter() {
-            return computeAdapter;
-        }
-    }
-
-    @Validated
-    public static final class Images {
-
-        private final String repositoryPrefix;
-
-        public Images(String repositoryPrefix) {
-            if (repositoryPrefix == null || repositoryPrefix.isBlank()) {
-                this.repositoryPrefix = null;
-            } else {
-                String trimmed = repositoryPrefix.trim();
-                // Normalise by stripping trailing slashes so callers can safely append "/name"
-                while (trimmed.endsWith("/")) {
-                    trimmed = trimmed.substring(0, trimmed.length() - 1);
-                }
-                this.repositoryPrefix = trimmed.isEmpty() ? null : trimmed;
-            }
-        }
-
-        public String getRepositoryPrefix() {
-            return repositoryPrefix;
-        }
-    }
-
-    @Validated
-    public static final class ScenarioManager {
-
-        private final String url;
-        private final @Valid Http http;
-
-        public ScenarioManager(@NotBlank String url, @Valid Http http) {
-            this.url = requireNonBlank(url, "url");
-            this.http = Objects.requireNonNull(http, "http");
-        }
-
-        public String getUrl() {
-            return url;
-        }
-
-        public Http getHttp() {
-            return http;
-        }
-    }
-
-    @Validated
-    public static final class NetworkProxyManager {
-
-        private final String url;
-        private final @Valid Http http;
-
-        public NetworkProxyManager(@NotBlank String url, @Valid Http http) {
-            this.url = requireNonBlank(url, "url");
-            this.http = Objects.requireNonNull(http, "http");
-        }
-
-        public String getUrl() {
-            return url;
-        }
-
-        public Http getHttp() {
-            return http;
-        }
-    }
-
-    @Validated
-    public static final class Http {
-
-        private final Duration connectTimeout;
-        private final Duration readTimeout;
-
-        public Http(@NotNull Duration connectTimeout, @NotNull Duration readTimeout) {
-            this.connectTimeout = Objects.requireNonNull(connectTimeout, "connectTimeout");
-            this.readTimeout = Objects.requireNonNull(readTimeout, "readTimeout");
-        }
-
-        public Duration getConnectTimeout() {
-            return connectTimeout;
-        }
-
-        public Duration getReadTimeout() {
-            return readTimeout;
-        }
-    }
-
-    private static String requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(name + " must not be blank");
-        }
-        return value;
-    }
-
 }

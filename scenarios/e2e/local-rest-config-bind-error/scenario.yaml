@@ -12,6 +12,8 @@ template:
       env:
         JAVA_TOOL_OPTIONS: "-XX:ThisOptionDoesNotExist"
       config:
+        outputs:
+          type: RABBITMQ
         inputs:
           type: SCHEDULER
           scheduler:
@@ -32,6 +34,10 @@ template:
     - role: moderator
       image: moderator:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         mode:
           type: rate-per-sec
           ratePerSec: 10
@@ -64,6 +70,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

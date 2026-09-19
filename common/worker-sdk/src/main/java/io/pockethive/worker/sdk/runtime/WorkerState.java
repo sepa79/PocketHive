@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.StatusPublisher;
+import io.pockethive.work.api.StatusPublisher;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -14,10 +14,16 @@ import java.util.concurrent.atomic.LongAdder;
 /**
  * Tracks per-worker state for the runtime. Exposed indirectly via
  * {@link WorkerControlPlaneRuntime.WorkerStateSnapshot}.
+ * <p>
+ * Responsibility: store accepted worker configuration plus separately updated counters and status contributions.
+ * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
+ * Retains the immutable CSV startup baseline defined by RESP-WORK-CSV-SETTINGS separately from CP updates.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  */
 public final class WorkerState {
 
     private final WorkerDefinition definition;
+    private Map<String, Object> inputStartup = Map.of();
     private final AtomicReference<Object> configRef = new AtomicReference<>();
     private volatile boolean enabled;
     private volatile boolean enableConfigured;
@@ -34,6 +40,18 @@ public final class WorkerState {
         WorkIoBindings io = definition.io();
         addIfPresent(workInRoutes, io.inboundQueue());
         addIfPresent(workOutRoutes, io.outboundQueue());
+    }
+
+    // Immutable startup configuration, not a second accepted-update state machine.
+    synchronized void initializeInputStartup(io.pockethive.work.config.WorkIoType inputType,
+                                             Map<String, Object> settings) {
+        if (!definition.input().equals(inputType)) throw new IllegalArgumentException("Startup input type does not match worker definition");
+        if (!inputStartup.isEmpty()) throw new IllegalStateException("Input startup settings already registered");
+        inputStartup = Map.copyOf(settings);
+    }
+
+    synchronized Map<String, Object> inputStartup() {
+        return inputStartup;
     }
 
     WorkerDefinition definition() {

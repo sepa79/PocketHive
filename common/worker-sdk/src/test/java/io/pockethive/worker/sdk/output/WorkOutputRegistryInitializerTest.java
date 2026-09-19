@@ -1,15 +1,19 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.rabbit.work.RabbitWorkOutputFactory;
+
+import io.pockethive.work.api.transport.WorkOutput;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.worker.sdk.config.RabbitOutputProperties;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
+import io.pockethive.rabbit.work.RabbitOutputProperties;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.config.WorkOutputConfigBinder;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
@@ -17,7 +21,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.context.properties.bind.Binder;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
 import org.springframework.core.Ordered;
@@ -55,13 +59,14 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(noopDefinition, rabbitDefinition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
-            "pockethive.outputs.rabbit.routing-key", "custom.out"
+            "pockethive.outputs.rabbit.routing-key", "custom.out",
+            "pockethive.outputs.rabbit.exchange", "exchange"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
-        RabbitTemplate rabbitTemplate = new RabbitTemplate();
+        RabbitPublisher rabbitTemplate = org.mockito.Mockito.mock(RabbitPublisher.class);
         List<WorkOutputFactory> factories = List.of(
             new NoopWorkOutputFactory(),
-            new RabbitWorkOutputFactory(rabbitTemplate)
+            new TransportWorkOutputFactory(new RabbitWorkOutputFactory(rabbitTemplate))
         );
 
         WorkOutputRegistryInitializer initializer = new WorkOutputRegistryInitializer(
@@ -72,12 +77,20 @@ class WorkOutputRegistryInitializerTest {
         );
         initializer.afterSingletonsInstantiated();
 
-        assertThat(outputRegistry.get("noopWorker")).isInstanceOf(NoopWorkOutput.class);
-        assertThat(outputRegistry.get("rabbitWorker")).isInstanceOf(RabbitWorkOutput.class);
+        var info = new io.pockethive.work.api.WorkerInfo("processor", "swarm", "instance", null, null);
+        var item = io.pockethive.work.api.WorkItem.text(info, "result")
+            .observabilityContext(io.pockethive.observability.ObservabilityContextUtil.init("processor", "instance", "swarm")).build();
+        outputRegistry.publish(item, noopDefinition);
+        org.mockito.Mockito.verifyNoInteractions(rabbitTemplate);
+        outputRegistry.publish(item, rabbitDefinition);
+        var sent = org.mockito.ArgumentCaptor.forClass(io.pockethive.rabbit.api.RabbitMessage.class);
+        org.mockito.Mockito.verify(rabbitTemplate).send(org.mockito.ArgumentMatchers.eq("exchange"),
+            org.mockito.ArgumentMatchers.eq("custom.out"), sent.capture());
+        assertThat(new io.pockethive.work.api.WorkItemJsonCodec().fromJson(sent.getValue().body()).asString()).isEqualTo("result");
     }
 
     @Test
-    void prefersHighestPriorityOutputFactory() {
+    void rejectsDuplicateFactoriesRegardlessOfPriority() {
         WorkerDefinition definition = new WorkerDefinition(
             "priorityWorker",
             Object.class,
@@ -94,7 +107,7 @@ class WorkOutputRegistryInitializerTest {
         WorkerRegistry workerRegistry = new WorkerRegistry(List.of(definition));
         WorkOutputRegistry outputRegistry = new WorkOutputRegistry();
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(new MapConfigurationPropertySource(Map.of())));
-        WorkOutput preferredOutput = (result, def) -> { };
+        WorkOutput preferredOutput = result -> { };
         WorkOutputFactory preferred = new OrderedOutputFactory(Ordered.HIGHEST_PRECEDENCE) {
             @Override
             public WorkOutput create(WorkerDefinition def, WorkOutputConfig config) {
@@ -109,9 +122,10 @@ class WorkOutputRegistryInitializerTest {
             binder,
             List.of(fallback, preferred)
         );
-        initializer.afterSingletonsInstantiated();
+        org.assertj.core.api.Assertions.assertThatThrownBy(initializer::afterSingletonsInstantiated)
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessageContaining("Multiple WorkOutputFactory");
 
-        assertThat(outputRegistry.get("priorityWorker")).isSameAs(preferredOutput);
     }
 
     @Test
@@ -160,7 +174,7 @@ class WorkOutputRegistryInitializerTest {
 
         @Override
         public WorkOutput create(WorkerDefinition definition, WorkOutputConfig config) {
-            return new NoopWorkOutput();
+            return new NoopWorkOutput(definition.beanName());
         }
 
         @Override

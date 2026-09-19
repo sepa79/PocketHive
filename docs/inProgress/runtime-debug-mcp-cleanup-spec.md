@@ -11,6 +11,35 @@ access, and cleanup evidence.
 
 HiveForge stays deployment-scope only. It must not clean individual bees.
 
+## Deferred diagnostic completeness — user decision 2026-09-14
+
+The current UI Runtime inspector and MCP Rabbit topology/assessment use a bounded
+resource list: names from the persisted ownership manifest, supplemented by worker
+CONTROL queues derived through shared descriptors from current compute labels.
+Presence, message counts and consumer counts are read from Rabbit on each request;
+the Work resource list itself is not a live broker inventory. An additional Work
+queue outside that list is not discovered. A listed queue that disappears is reported
+as absent. The ownership manifest is written during swarm creation, not refreshed
+from controller status or the inspector's Refresh button.
+
+If the manifest is missing, the topology API reports its unavailability and returns
+empty resource lists. The UI currently renders "No exact queues" / "No exact exchanges"
+without explaining the missing source. An empty inspector list therefore does not
+prove that Rabbit resources are absent. This limitation also applies to MCP views
+derived from the same topology/assessment API.
+
+The user explicitly deferred the correction to a separate diagnostics refactor.
+Its scope is an adapter-owned current resource inventory, comparison with recorded
+expected resources, and explicit presentation of unavailable/incomplete evidence.
+UI/MCP must consume the owner's projection without reconstructing resource names;
+diagnostic discovery must not independently authorize orphan deletion. No runtime,
+API or UI behavior changes are authorized by this deferral record.
+
+This work is separate from the [Rabbit isolation PR](work-plane-module-boundaries.md),
+the [native manifest/orphan cleanup extension for Artemis](../todo/work-plane-artemis-3ds.md),
+and [Orchestrator registry/reset design](orchestrator-correctness.md). The ownership
+manifest is not the Controller's filesystem startup artifact or a durable swarm registry.
+
 ## Ownership
 
 | Concern | Owner | Rule |
@@ -21,9 +50,10 @@ HiveForge stays deployment-scope only. It must not clean individual bees.
 | Docker/Swarm read-only diagnostics | Orchestrator | Owns Docker socket and runtime log/inspect access |
 | RabbitMQ exact topology diagnostics | Orchestrator | Owns manifest/descriptor-based Rabbit reads |
 | Journal persistence and read-model APIs | Orchestrator | Owns journal storage/query contracts |
-| Agent-facing runtime summaries | `tools/pockethive-mcp` | Composes Orchestrator APIs for agents |
+| Runtime assessment semantics | Orchestrator | Compares owned registry, manifest, runtime, RabbitMQ, and control-plane evidence |
+| Agent-facing runtime tools | `pockethive-mcp-service` | Typed pass-through or compatibility projection of Orchestrator APIs |
 | Cleanup plan/execute | Orchestrator | Single runtime cleanup authority |
-| MCP tool surface | `tools/pockethive-mcp` | Agent facade, not runtime authority |
+| MCP tool surface | `pockethive-mcp-service` | Agent facade, not runtime authority |
 | Cleanup approval/policy | HiveGate | Governs destructive execute in production |
 | Cleanup evidence | Orchestrator | MCP must not keep a second evidence authority |
 
@@ -64,10 +94,18 @@ flowchart LR
 | Docker cleanup requires PocketHive labels | Avoids deleting foreign resources |
 | RabbitMQ cleanup uses exact manifest/descriptor names | No prefix guessing |
 | Registered swarm-controller cleanup uses lifecycle removal | Do not bypass swarm lifecycle |
-| Active registered swarms must be stopped before cleanup | Prevents accidental live swarm removal |
+| Registered swarms are removed only through the canonical `REMOVE` operation | The Controller converges workload disablement before cleanup; no raw live deletion path exists |
 | Execute requires `candidateSetHash` | Blocks stale plans |
 | Execute requires `idempotencyKey` | Prevents repeat deletion work |
 | Running resources require `includeRunning=true` | Makes high-risk cleanup explicit |
+| Existing Orchestrator endpoints remain unchanged | Keeps the correction additive and backward compatible |
+
+Runtime inventory comparison follows the existing lifecycle owners. The
+Orchestrator launch manifest supplies expected managers; the current
+control-plane worker observation supplies expected worker `role`, `instance`,
+and an image when reported. The assessment must not classify controller-created
+workers as unmanaged solely because the manager-only launch manifest does not
+list them.
 
 ## Runtime Labels
 
@@ -118,8 +156,8 @@ If the manifest is missing:
 
 ## MCP Tools
 
-Default tool names use underscores. Dotted names are legacy/conceptual unless
-`PH_MCP_TOOL_NAME_MODE=legacy` or `both`.
+Tool names use the canonical underscore IDs below. Removed dotted aliases and
+tool-name modes are not compatibility paths.
 
 | Tool | Mutates | Purpose |
 | --- | --- | --- |
@@ -129,11 +167,12 @@ Default tool names use underscores. Dotted names are legacy/conceptual unless
 | `runtime_get_worker_version` | No | Orchestrator-backed version from image/labels |
 | `runtime_list_workers` | No | Orchestrator-backed manager/worker list |
 | `runtime_inspect_worker` | No | Orchestrator-backed bounded inspect summary |
-| `runtime_diff_swarm_runtime` | No | Registry/manifest/runtime/Rabbit diff |
-| `runtime_control_plane_status` | No | Manifest-provided queues and recent events |
+| `runtime_assess_swarm` | No | Canonical Orchestrator-owned runtime assessment |
+| `runtime_diff_swarm_runtime` | No | Compatibility projection of the canonical assessment |
+| `runtime_control_plane_status` | No | Compatibility projection of the canonical assessment |
 | `runtime_rabbit_topology_snapshot` | No | Orchestrator-backed exact Rabbit resources |
 | `runtime_swarm_timeline` | No | Journal/runtime timeline |
-| `runtime_manifest_validate` | No | Manifest drift validation |
+| `runtime_manifest_validate` | No | Compatibility projection of the canonical assessment |
 
 ## Cleanup Inputs
 
@@ -141,28 +180,29 @@ Default tool names use underscores. Dotted names are legacy/conceptual unless
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `computeAdapter` | Yes | `DOCKER_SINGLE` or `SWARM_STACK`; never `AUTO` |
 | `swarmId` | Yes | Exact swarm id |
 | `runId` | No | Omit only for broader high-risk cleanup |
-| `includeRunning` | No | Default `false` |
-| `includeRabbit` | No | Default `true` |
-| `overrideRegisteredSwarmState` | No | Default `false`; emergency only |
+| `includeRunning` | Yes | Explicit `false` blocks active runtime; `true` permits a high-risk candidate |
+| `includeRabbit` | Yes | Explicit RabbitMQ scope |
 
 `runtime_cleanup_execute`:
 
 | Field | Required | Notes |
 | --- | --- | --- |
-| `computeAdapter` | Yes | Same scope as plan |
 | `swarmId` | Yes | Same scope as plan |
 | `runId` | No | Same scope as plan |
-| `includeRunning` | No | Same scope as plan |
-| `includeRabbit` | No | Same scope as plan |
-| `overrideRegisteredSwarmState` | No | Must match plan |
+| `includeRunning` | Yes | Exactly the value used for the reviewed plan |
+| `includeRabbit` | Yes | Exactly the value used for the reviewed plan |
 | `candidateSetHash` | Yes | From current plan |
 | `candidateIds` | Yes | Execute only selected candidates |
 | `idempotencyKey` | Yes | Reuse returns prior evidence |
 | `reason` | Yes | Human-readable purpose |
 | `actor` | No | Defaults server-side when absent |
+
+These required-field rules apply at the MCP boundary. The pre-existing
+Orchestrator REST DTO remains compatible with direct clients: omitted
+`includeRunning` and `includeRabbit` retain their historical `false` and `true`
+defaults respectively. The MCP always sends both explicit values.
 
 REST examples live in `docs/ORCHESTRATOR-REST.md`.
 
@@ -170,10 +210,10 @@ REST examples live in `docs/ORCHESTRATOR-REST.md`.
 
 | State | Result | Risk |
 | --- | --- | --- |
-| Registered swarm in `NEW`/`CREATING`/`READY`/`STOPPED`/`FAILED` | `LIFECYCLE_REMOVE_SWARM` candidate | Remove/abort through lifecycle |
-| Running registered swarm (`STARTING`/`RUNNING`/`STOPPING`) | Blocked | Must explicitly stop first |
-| Registered swarm in `REMOVING` state | Blocked | Needs lifecycle recovery |
-| `overrideRegisteredSwarmState=true` for `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` | `LIFECYCLE_REMOVE_SWARM` candidate | Emergency high risk |
+| Registered stopped swarm with no non-terminal lifecycle operation | `LIFECYCLE_REMOVE_SWARM` candidate | Canonical filesystem-backed remove/abort |
+| Registered active swarm, `includeRunning=false` | Blocked | Explicit running-resource gate |
+| Registered active swarm, `includeRunning=true` | `LIFECYCLE_REMOVE_SWARM` candidate | High; remove converges workload to `STOPPED` before cleanup |
+| Registered swarm with a non-terminal lifecycle operation | Blocked | The operation coordinator permits only one lifecycle operation |
 | Registered controller Docker resource | Blocked | Must use lifecycle |
 | Unregistered stopped labeled runtime in requested `swarmId`/`runId` | Docker candidate | Orphan cleanup |
 | Unregistered swarm with ownership-manifest Rabbit resources | Rabbit candidate | Exact manifest names only |
@@ -188,17 +228,12 @@ REST examples live in `docs/ORCHESTRATOR-REST.md`.
 | Candidate hash changed before execute | Reject execute | No mutation |
 | Same idempotency key and same input | Return prior evidence | No repeat mutation |
 
-Stuck registered swarms stay on the lifecycle path. Runtime cleanup may abort
-pre-run swarms, and remove stopped/failed swarms, through
-`LIFECYCLE_REMOVE_SWARM`; it does not bypass stop or recovery for swarms in
-running or `REMOVING` states.
-
-Emergency override is explicit and hash-bound. Operators must set
-`overrideRegisteredSwarmState=true` on both plan and execute, select the
-`LIFECYCLE_REMOVE_SWARM` candidate, and provide an execute `reason`. Override is
-intended for HiveGate-governed break-glass workflows only; it still uses
-Orchestrator lifecycle removal and never enables raw registered-controller
-Docker/Rabbit deletion.
+Registered swarms stay on the operation path. Runtime cleanup may abort a
+pre-ready swarm or remove a stopped swarm through `LIFECYCLE_REMOVE_SWARM`.
+A running swarm requires explicit `includeRunning=true` in both plan and execute.
+The remove operation first sets workload intent to `STOPPED` and converges
+disablement. Runtime cleanup does not bypass that convergence, operation
+ownership, the filesystem request/result contract or terminal evidence.
 
 Unregistered labeled resources are treated as orphans only inside the requested
 scope. Docker candidates require `pockethive.managed=true`, exact `swarmId`,
@@ -233,7 +268,7 @@ Runtime debug must have zero scenario-path impact.
 - PocketHive MCP does not approve its own destructive tool.
 - Register `runtime_cleanup_execute` behind HiveGate for production use.
 - HiveGate policy should bind `swarmId`, `runId`, `includeRunning`,
-  `includeRabbit`, `overrideRegisteredSwarmState`, `candidateSetHash`,
+  `includeRabbit`, `candidateSetHash`,
   `candidateIds`, and `idempotencyKey`.
 - No MCP or ChatGPT approval widget is part of this feature. Governance belongs
   in HiveGate or the production control plane that invokes the execute tool.
@@ -267,6 +302,8 @@ Required tests cover:
 - MCP delegates plan/execute to Orchestrator when available.
 - MCP delegates Docker/Swarm list/logs/version/inspect to Orchestrator.
 - MCP delegates exact Rabbit topology reads to Orchestrator.
+- MCP delegates runtime assessment semantics to the additive Orchestrator
+  assessment endpoint; compatibility tool names use the same assessment.
 - Incompatible runtime debug capabilities fail only runtime tools.
 - Missing manifest blocks RabbitMQ cleanup.
 - Active shared RabbitMQ resources are protected.

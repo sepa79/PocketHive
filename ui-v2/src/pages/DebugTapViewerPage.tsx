@@ -66,40 +66,6 @@ function tryPrettyJson(value: string): string | null {
   }
 }
 
-type WorkItemEnvelope = {
-  version?: string
-  headers?: Record<string, unknown>
-  messageId?: string
-  contentType?: string
-  observability?: Record<string, unknown>
-  steps?: Array<{
-    index?: number
-    payload?: string
-    payloadEncoding?: string
-    headers?: Record<string, unknown>
-  }>
-}
-
-function parseWorkItemEnvelope(payload: string): WorkItemEnvelope | null {
-  const trimmed = payload.trim()
-  if (!trimmed.startsWith('{')) return null
-  try {
-    const parsed = JSON.parse(trimmed) as unknown
-    if (!parsed || typeof parsed !== 'object') return null
-    return parsed as WorkItemEnvelope
-  } catch {
-    return null
-  }
-}
-
-function safeStringify(value: unknown): string {
-  try {
-    return JSON.stringify(value, null, 2)
-  } catch {
-    return String(value)
-  }
-}
-
 function metaFromTap(tap: DebugTap): TapMeta {
   return {
     tapId: tap.tapId,
@@ -157,7 +123,6 @@ export function DebugTapViewerPage() {
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<{ kind: 'ok' | 'err'; text: string; title?: string } | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
-  const [envelopeOpen, setEnvelopeOpen] = useState(true)
 
   const [fetchCount, setFetchCount] = useState<number>(10)
 
@@ -306,11 +271,6 @@ export function DebugTapViewerPage() {
     if (!activeSampleId) return null
     return samples.find((s) => s.id === activeSampleId) ?? null
   }, [activeSampleId, samples])
-
-  const activeEnvelope = useMemo(() => {
-    if (!activeSample) return null
-    return parseWorkItemEnvelope(activeSample.payload)
-  }, [activeSample])
 
   const rawPayload = useMemo(() => {
     if (!activeSample) return null
@@ -485,98 +445,10 @@ export function DebugTapViewerPage() {
         <div className="card debugTapViewerPanel">
           <div className="row between" style={{ marginBottom: 8 }}>
             <div className="h3">Details</div>
-            <div className="muted">{activeEnvelope ? 'work-item' : activeSample ? 'message' : '—'}</div>
+            <div className="muted">{activeSample ? 'message' : '—'}</div>
           </div>
           {activeSample ? (
             <div className="debugTapParsed">
-              {activeEnvelope ? (
-                <>
-                  <div className="tapMeta" style={{ marginBottom: 2 }}>
-                    <div className="muted">
-                      messageId <code>{activeEnvelope.messageId ?? '—'}</code> · contentType <code>{activeEnvelope.contentType ?? '—'}</code>
-                    </div>
-                  </div>
-
-                  <details
-                    className="tapDisclosure"
-                    open={envelopeOpen}
-                    onToggle={(e) => setEnvelopeOpen((e.currentTarget as HTMLDetailsElement).open)}
-                  >
-                    <summary>
-                      <span className="tapDisclosureSummary">
-                        <span className="tapDisclosureChevron">▸</span>
-                        <span className="tapDisclosureTitle">Envelope</span>
-                      </span>
-                      <span className="tapDisclosureMeta">headers + observability</span>
-                    </summary>
-                    <div className="tapDisclosureBody">
-                      <div>
-                        <div className="muted" style={{ marginBottom: 6 }}>
-                          envelope.headers
-                        </div>
-                        <pre className="codePre tapPayload">{safeStringify(activeEnvelope.headers ?? {})}</pre>
-                      </div>
-                      <div>
-                        <div className="muted" style={{ marginBottom: 6 }}>
-                          envelope.observability
-                        </div>
-                        <pre className="codePre tapPayload">{safeStringify(activeEnvelope.observability ?? {})}</pre>
-                      </div>
-                    </div>
-                  </details>
-
-                  <div className="muted" style={{ marginTop: 2 }}>
-                    steps
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                    {(activeEnvelope.steps ?? []).length ? (
-                      (activeEnvelope.steps ?? []).map((step, idx) => {
-                        const pretty = typeof step.payload === 'string' ? tryPrettyJson(step.payload) : null
-                        const stepIndex = step.index ?? idx
-                        const service = (step.headers?.['ph.step.service'] as string) ?? '—'
-                        const instance = (step.headers?.['ph.step.instance'] as string) ?? '—'
-                        const encoding = step.payloadEncoding ?? 'utf-8'
-                        const payload = pretty ?? (step.payload ?? '')
-                        const payloadBytes = typeof payload === 'string' ? payload.length : 0
-                        return (
-                          <details key={String(stepIndex)} className="tapDisclosure">
-                            <summary>
-                              <span className="tapDisclosureSummary">
-                                <span className="tapDisclosureChevron">▸</span>
-                                <span className="tapDisclosureTitle">
-                                  step <code>{stepIndex}</code>
-                                </span>
-                              </span>
-                              <span className="tapDisclosureMeta">
-                                {service} · {instance} · {encoding} · {payloadBytes} chars
-                              </span>
-                            </summary>
-                            <div className="tapDisclosureBody">
-                              <div>
-                                <div className="muted" style={{ marginBottom: 6 }}>
-                                  step.headers
-                                </div>
-                                <pre className="codePre tapPayload">{safeStringify(step.headers ?? {})}</pre>
-                              </div>
-                              <div>
-                                <div className="muted" style={{ marginBottom: 6 }}>
-                                  step.payload
-                                </div>
-                                <pre className="codePre tapPayload">{payload}</pre>
-                              </div>
-                            </div>
-                          </details>
-                        )
-                      })
-                    ) : (
-                      <div className="muted">No steps.</div>
-                    )}
-                  </div>
-                </>
-              ) : (
-                <div className="muted">Selected payload is not a JSON WorkItem envelope.</div>
-              )}
-
               <details className="tapDisclosure">
                 <summary>
                   <span className="tapDisclosureSummary">

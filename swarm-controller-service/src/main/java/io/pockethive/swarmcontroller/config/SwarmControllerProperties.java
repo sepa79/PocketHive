@@ -1,6 +1,7 @@
 package io.pockethive.swarmcontroller.config;
 
-import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
@@ -12,6 +13,11 @@ import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+/**
+ * Responsibility: bind explicit Controller settings, including raw traffic prefix and exchange.
+ * Must not: own resource naming formulas, configure adapters or perform runtime effects.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ */
 @Validated
 @ConfigurationProperties(prefix = "pockethive.control-plane")
 public class SwarmControllerProperties {
@@ -20,7 +26,6 @@ public class SwarmControllerProperties {
     private final String role;
     private final String controlExchange;
     private final String controlQueuePrefixBase;
-    private final String controlQueuePrefix;
     private final Traffic traffic;
     private final Metrics metrics;
     private final Docker docker;
@@ -35,7 +40,6 @@ public class SwarmControllerProperties {
         this.role = requireNonBlank(Objects.requireNonNull(manager, "manager").role(), "manager.role");
         this.controlExchange = requireNonBlank(exchange, "exchange");
         this.controlQueuePrefixBase = requireNonBlank(controlQueuePrefix, "controlQueuePrefix");
-        this.controlQueuePrefix = normalizeControlQueuePrefix(this.swarmId, this.controlQueuePrefixBase);
         SwarmController resolved = Objects.requireNonNull(swarmController, "swarmController");
         this.traffic = Objects.requireNonNull(resolved.traffic(), "traffic");
         this.metrics = Objects.requireNonNull(resolved.metrics(), "metrics");
@@ -53,10 +57,6 @@ public class SwarmControllerProperties {
 
     public String getControlExchange() {
         return controlExchange;
-    }
-
-    public String getControlQueuePrefix() {
-        return controlQueuePrefix;
     }
 
     public String getControlQueuePrefixBase() {
@@ -83,18 +83,18 @@ public class SwarmControllerProperties {
         return traffic.hiveExchange();
     }
 
-    public String queueName(String suffix) {
-        return traffic.queueName(suffix);
-    }
+
 
     public String controlQueueName(String instanceId) {
-        return controlQueueName(role, instanceId);
+        return new RabbitResourceNames().swarmControllerQueue(
+            controlQueuePrefixBase, swarmId, role, requireNonBlank(instanceId, "instanceId"));
     }
 
     public String controlQueueName(String role, String instanceId) {
         String resolvedRole = requireNonBlank(role, "role");
         String resolvedInstance = requireNonBlank(instanceId, "instanceId");
-        return controlQueuePrefix + "." + resolvedRole + "." + resolvedInstance;
+        return new RabbitResourceNames().workerControlQueue(
+            controlQueuePrefixBase, swarmId, resolvedRole, resolvedInstance);
     }
 
     @Validated
@@ -144,18 +144,6 @@ public class SwarmControllerProperties {
         }
     }
 
-    private static String normalizeControlQueuePrefix(String swarmId, String prefix) {
-        String resolvedSwarmId = requireNonBlank(swarmId, "swarmId");
-        String normalized = requireNonBlank(prefix, "controlQueuePrefix");
-        if (normalized.endsWith("." + resolvedSwarmId) || normalized.contains("." + resolvedSwarmId + ".")) {
-            return normalized;
-        }
-        if (normalized.endsWith(".")) {
-            return normalized + resolvedSwarmId;
-        }
-        return normalized + "." + resolvedSwarmId;
-    }
-
     @Validated
     public static final class Traffic {
         private final String hiveExchange;
@@ -174,9 +162,7 @@ public class SwarmControllerProperties {
             return queuePrefix;
         }
 
-        public String queueName(String suffix) {
-            return ControlPlaneContainerEnvironmentFactory.swarmTrafficQueueName(queuePrefix, suffix);
-        }
+
     }
 
     @Validated

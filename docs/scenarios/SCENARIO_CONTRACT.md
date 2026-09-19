@@ -172,7 +172,7 @@ config:
     scheduler:
       ratePerSec: 50
   outputs:
-    type: RABBITMQ             # or REDIS / NOOP, etc.
+    type: RABBITMQ             # or REDIS / NONE
   message:
     bodyType: HTTP
     path: /test
@@ -189,13 +189,29 @@ This mirrors how workers bind properties:
   - `<typeKey>` – type‑specific config section
     (e.g. `scheduler`, `redis`).
 - `outputs` – IO configuration for the outbound side.
-  - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NOOP`).
+  - `type` – output type enum (e.g. `RABBITMQ`, `REDIS`, `NONE`).
   - `<typeKey>` – type‑specific config.
 - Role-specific worker fields live directly under `config`.
   - These keys are documented in the worker SDK and capability manifests.
 
+Every worker bee explicitly declares `config.inputs.type` and `config.outputs.type`.
+Scenario validation uses the injected neutral WorkConfigurationParser in AUTHORING mode;
+missing roots/selectors are errors, not defaults inferred from an image or role. The selected
+provider validates an omitted tuning block as an empty object. Rabbit permits empty tuning;
+its queue/exchange/routingKey fields cannot be authored, including as expressions. Logical
+bindings belong in `work`; RESP-WORK-RESOURCE-NAMES resolves their physical names later.
+Rabbit tuning belongs in `config.inputs.rabbit` / `config.outputs.rabbit`. Competing Rabbit
+settings in `bee.env` are rejected; connection overrides remain governed separately.
+Controller also rejects input/output selector overrides in `bee.env` (including Spring
+aliases): selection belongs in `config`. Explicit null Rabbit tuning is invalid; omission
+is represented by an empty tuning object when materializing resolved settings.
+
+Work selection/settings constraints come from the canonical Work parser and its adapter
+providers. Capabilities present these fields; their generic validators do not revalidate
+Work roots. Bundle file/reference and non-Work capability checks remain Scenario-owned.
+
 The **capabilities** files under `scenario-manager-service/capabilities/` are
-the authoritative list of user-tunable fields per worker and IO type.
+the presentation catalogue of user-tunable fields per worker and IO type.
 Capability lookup uses the canonical image name without registry, namespace,
 tag, or digest, so `processor:0.15`, `processor:latest`, and
 `registry.example.lan:5000/pockethive/processor:dev-*` all resolve the
@@ -241,6 +257,36 @@ The scenario protocol remains `2.0.0`. This additive worker contract is
 versioned by `scenario-manager-service/capabilities/http-sequence.latest.yaml`.
 
 ### IO configuration examples
+
+Scheduled input timing and integer-limit semantics, including omission defaults and
+technical duration bounds, are defined by
+[RESP-WORK-INPUT-SCHEDULE](../architecture/runtime-responsibilities.md#resp-work-input-schedule).
+Startup, runtime updates and authoring use that shared parser. Invalid declared values
+are rejected rather than clamped; symbolic authoring constraints remain deferred until
+rendering. This does not make timing fields live-mutable.
+
+Selected CSV_DATASET settings use the complete eight-field contract in
+[RESP-WORK-CSV-SETTINGS](../architecture/runtime-responsibilities.md#resp-work-csv-settings).
+All fields are required; null and unknown fields fail validation. Boolean properties accept
+booleans or exact lowercase `true`/`false` text. The delimiter retains Java regex split
+semantics, and charset must be supported by the JVM. Authoring expressions are deferred;
+resolved settings are validated before use. Source/format/timing changes still require
+rematerialization; only the existing rate control is live-mutable.
+
+Complete scheduler settings and malformed/unknown-field checks delegate to
+[RESP-WORK-SCHEDULER-SETTINGS](../architecture/runtime-responsibilities.md#resp-work-scheduler-settings).
+The existing numeric/default contracts remain authoritative for each field.
+
+The optional `inputs.scheduler.reset` command accepts only boolean `true`/`false`;
+explicit null and text are invalid. Its parser and authoring-expression rules belong to
+[RESP-WORK-SCHEDULER-RESET](../architecture/runtime-responsibilities.md#resp-work-scheduler-reset).
+
+Worker enablement belongs to the worker control state. Removed input-local lifecycle
+fields are rejected according to
+[RESP-WORK-INPUT-LIFECYCLE-POLICY](../architecture/runtime-responsibilities.md#resp-work-input-lifecycle-policy),
+including when explicitly false, null or symbolic. Scenario validation checks raw
+`config.inputs`; Controller planning and worker startup also check environment properties.
+Complete `bee.env` validation at authoring time remains B02 work.
 
 **Scheduler generator (ticks only):**
 
@@ -392,8 +438,12 @@ validation rule. They must validate scenario authoring identity through unique
 Scenarios themselves do not embed full environment details, but swarms
 may be bound to a **System Under Test (SUT)** chosen at create time.
 The contract for SUT environments lives in
-`common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`
-and is represented on disk as YAML under
+`docs/spec/sut-environment.schema.json`; the Scenario Manager registry array
+references it from `docs/spec/sut-environments.schema.json`. Its sole Java representation lives in
+`common/swarm-model/src/main/java/io/pockethive/swarm/model/{SutEnvironment,SutEndpoint}.java`.
+Scenario Manager registry and bundle APIs use those shared types directly; a
+service-local SUT DTO or validator is not a supported projection. The contract
+is represented on disk as YAML under
 `scenario-manager-service/sut/sut-environments*.yaml`.
 
 ### SUT environment YAML
@@ -439,6 +489,12 @@ Shape:
     `https://demo.example.com/public`, or `tcp-mock-server:9090`.
   - `upstreamBaseUrl` (non-blank string, optional) – upstream URI or
     authority used by proxied network bindings.
+
+All text is trimmed at the canonical Java boundary. Blank `id`, `name`,
+`type`, endpoint keys and endpoint fields are rejected. `endpoints` must be
+present (it may be an empty object). Runtime SUT objects do not carry UI
+presentation hints; if such hints are introduced again, they must be a
+separate read-only projection keyed by the canonical environment id.
 
 ### Using SUTs from scenarios
 
@@ -547,3 +603,8 @@ config:
   the body / bodyTemplate.
 - The referenced schema remains **advisory** – workers only see and
   use the templated `body` / `bodyTemplate` strings when generating HTTP payloads.
+
+Controller Redis output composition applies scalar write/target environment overrides
+through the Redis configuration owner before final validation. Output routes belong in
+config; environment route-list overrides are rejected. Bootstrap and startup use the
+same output candidate (RESP-WORK-REDIS-OUTPUT-SETTINGS).

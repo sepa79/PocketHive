@@ -1,20 +1,182 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.rabbit.work.RabbitOutputProperties;
+
+import io.pockethive.rabbit.work.RabbitInputProperties;
+
+import io.pockethive.work.config.binding.WorkInputConfig;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+import io.pockethive.redis.config.RedisDatasetPickStrategy;
+import io.pockethive.redis.config.RedisDatasetEnvironment;
+import io.pockethive.redis.config.RedisDatasetSettings;
+import io.pockethive.redis.config.RedisConnectionEnvironmentCodec;
+import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
+import io.pockethive.rabbit.api.RabbitConnectionSettings;
+import io.pockethive.redis.config.RedisConfigurationParser;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.csv.CsvDataSetInputProperties;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
+import java.util.LinkedHashMap;
+import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.springframework.boot.context.properties.bind.Binder;
+import org.springframework.boot.context.properties.bind.Bindable;
 import org.springframework.boot.context.properties.source.ConfigurationPropertyName;
+import org.springframework.boot.context.properties.source.ConfigurationPropertySources;
 import org.springframework.boot.context.properties.source.MapConfigurationPropertySource;
+import org.springframework.boot.env.YamlPropertySourceLoader;
+import org.springframework.core.io.ByteArrayResource;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
+import org.springframework.mock.env.MockEnvironment;
 
 class WorkIOConfigBinderTest {
 
     @Test
+    void redisDatasetExportBindsWithoutChangingValidatedValues() {
+        var declared = Map.<String, Object>of("host", "redis", "port", 6379, "ssl", false,
+            "sources", List.of(Map.of("listName", "orders", "weight", 2.5)),
+            "pickStrategy", "ROUND_ROBIN", "ratePerSec", 3);
+        var codec = new RedisDatasetEnvironment();
+        var exported = new LinkedHashMap<String, String>();
+        exported.putAll(RedisConnectionEnvironmentCodec.input(declared));
+        exported.putAll(codec.encode(declared));
+        var env = new MockEnvironment();
+        env.getPropertySources().addFirst(new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(exported)));
+        var bound = new WorkInputConfigBinder(Binder.get(env))
+            .bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class).settings("inputs.redis");
+        RedisDatasetSettings expected = new RedisConfigurationParser().parseRedisDatasetSettings(declared, "inputs.redis");
+
+        assertThat(bound).isEqualTo(expected);
+    }
+
+    @Test
+    void csvExportBindsWithoutChangingValidatedValues() {
+        var declared = Map.<String, Object>of("filePath", "/data.csv", "ratePerSec", 2.5,
+            "rotate", false, "skipHeader", true, "delimiter", "\\|", "charset", "utf8",
+            "startupDelaySeconds", 2, "tickIntervalMs", 1000);
+        var exported = new io.pockethive.work.local.csv.CsvDatasetEnvironment().encode(declared);
+        var env = new MockEnvironment();
+        env.getPropertySources().addFirst(new SystemEnvironmentPropertySource("systemEnvironment", new LinkedHashMap<>(exported)));
+        var startup = new WorkInputConfigBinder(Binder.get(env)).bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class).settings();
+        assertThat(io.pockethive.work.local.csv.CsvDatasetParser.configuration(startup))
+            .isEqualTo(io.pockethive.work.local.csv.CsvDatasetParser.configuration(
+                new io.pockethive.work.local.csv.CsvDatasetParser().parse(declared, "inputs.csv")));
+        assertThat(startup.delimiter().split("a|b|", -1)).containsExactly("a", "b", "");
+    }
+
+    @Test
+    void schedulerExportAndSpringEnvironmentAliasesBindToTheValidatedStartupSnapshot() {
+        var codec = new io.pockethive.work.local.scheduler.SchedulerSettingsEnvironment();
+        var candidate = codec.candidate(Map.of("type", "SCHEDULER",
+            "scheduler", Map.of("ratePerSec", 2.5, "maxMessages", 7)), ignored -> null);
+        var exported = new LinkedHashMap<String, Object>();
+        exported.putAll(codec.encode(candidate));
+        exported.put("POCKETHIVE_INPUTS_SCHEDULER_MAXPENDINGTICKS", "4");
+        var env = new MockEnvironment();
+        env.getPropertySources().addFirst(new SystemEnvironmentPropertySource("systemEnvironment", exported));
+
+        var startup = new WorkInputConfigBinder(Binder.get(env))
+            .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class).settings();
+
+        assertThat(startup.ratePerSec()).isEqualTo(2.5);
+        assertThat(startup.maxMessages()).isEqualTo(7L);
+        assertThat(startup.initialDelayMs()).isZero();
+        assertThat(startup.tickIntervalMs()).isEqualTo(1000L);
+        assertThat(startup.maxPendingTicks()).isEqualTo(4);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"file-path,123", "rotate,yes", "skip-header,1", "delimiter,[", "charset,no-such-charset"})
+    void rejectsInvalidCsvValuesBeforeSpringCoercion(String field, String value) {
+        var source = csvInputSource(Map.of());
+        source.put("pockethive.inputs.csv." + field, field.equals("file-path") ? 123 : value);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(source))
+            .bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+    }
+
+    @ParameterizedTest
+    @CsvSource({"rabbit,enabled", "scheduler,enabled", "redis,enabled", "csv,enabled", "rabbit,auto-startup"})
+    void rejectsRemovedControlsFromPropertiesAndEnvironment(String input, String field) throws IOException {
+        String path = "pockethive.inputs." + input + "." + field;
+        for (Object value : new Object[]{false, "", "${UNRESOLVED}"}) {
+            var source = schedulerInputSource(Map.of());
+            source.put(path, value);
+            assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(source))
+                .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining(path).hasMessageContaining("Input-local lifecycle");
+        }
+        String envName = path.toUpperCase(java.util.Locale.ROOT).replace("-", "").replace('.', '_');
+        var env = new SystemEnvironmentPropertySource("systemEnvironment", Map.of(envName, "false"));
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(ConfigurationPropertySources.from(env)))
+            .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining(path);
+
+        for (String value : List.of("[false]", "{flag: false}", "'${" + path + "}'")) {
+            var environment = new MockEnvironment()
+                .withProperty("pockethive.inputs.scheduler.rate-per-sec", "1")
+                .withProperty("pockethive.inputs.scheduler.max-messages", "0");
+            var yaml = new YamlPropertySourceLoader().load("removed-input-control",
+                new ByteArrayResource((path + ": " + value).getBytes(StandardCharsets.UTF_8)));
+            yaml.forEach(environment.getPropertySources()::addFirst);
+            assertThatThrownBy(() -> new WorkInputConfigBinder(Binder.get(environment))
+                .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining(path).hasMessageContaining("Input-local lifecycle");
+        }
+    }
+
+    @ParameterizedTest
+    @CsvSource({"SCHEDULER,initial-delay-ms", "SCHEDULER,tick-interval-ms", "SCHEDULER,max-pending-ticks",
+        "SCHEDULER,max-messages", "REDIS_DATASET,initial-delay-ms", "REDIS_DATASET,tick-interval-ms",
+        "CSV_DATASET,startup-delay-seconds", "CSV_DATASET,tick-interval-ms"})
+    void rejectsInvalidScheduleIntegersBeforeStartupCoercion(WorkerInputType type, String field) {
+        MapConfigurationPropertySource source = switch (type) {
+            case SCHEDULER -> schedulerInputSource(Map.of());
+            case REDIS_DATASET -> redisInputSource(Map.of());
+            case CSV_DATASET -> csvInputSource(Map.of());
+            default -> throw new IllegalArgumentException();
+        };
+        Class<? extends WorkInputConfig> configType = switch (type) {
+            case SCHEDULER -> SchedulerInputProperties.class;
+            case REDIS_DATASET -> RedisDataSetInputProperties.class;
+            case CSV_DATASET -> CsvDataSetInputProperties.class;
+            default -> throw new IllegalArgumentException();
+        };
+        for (Object bad : new Object[]{-1, 100.5, "100.5", true, "", "NaN", "9223372036854775808"}) {
+            source.put("pockethive.inputs." + type.settingsKey() + "." + field, bad);
+            var binder = new WorkInputConfigBinder(new Binder(source));
+            assertThatThrownBy(() -> binder.bind(type, configType))
+                .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+                .hasMessageContaining("must be an integer");
+        }
+    }
+
+    @Test
+    void preservesExactLongLimitAndExistingOmittedTimingDefaults() {
+        var source = schedulerInputSource(Map.of("pockethive.inputs.scheduler.max-messages", "9223372036854775807"));
+        var config = new WorkInputConfigBinder(new Binder(source)).bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class);
+        assertThat(config.maxMessages()).isEqualTo(Long.MAX_VALUE);
+        assertThat(config.initialDelayMs()).isZero();
+        assertThat(config.tickIntervalMs()).isEqualTo(1000L);
+        assertThat(config.maxPendingTicks()).isEqualTo(1);
+    }
+
+    @Test
     void bindsRabbitInputConfigFromEnvironment() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
+            "pockethive.inputs.rabbit.queue", "jobs",
             "pockethive.inputs.rabbit.prefetch", "25",
             "pockethive.inputs.rabbit.concurrent-consumers", "3"
         ));
@@ -28,16 +190,16 @@ class WorkIOConfigBinderTest {
     }
 
     @Test
-    void bindsRabbitOutputConfigWhenPrefixIsPresent() {
+    void rejectsSelectedRabbitOutputWithoutPhysicalDestination() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
             "pockethive.outputs.rabbit.persistent", "true"
         ));
         WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(source));
 
-        RabbitOutputProperties config = binder.bind(WorkerOutputType.RABBITMQ, RabbitOutputProperties.class);
-
-        assertThat(config.isPersistent()).isTrue();
-        assertThat(config.getExchange()).isNull();
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.RABBITMQ, RabbitOutputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("outputs.rabbit.exchange")
+            .hasMessageContaining("outputs.rabbit.routingKey");
     }
 
     @Test
@@ -82,7 +244,17 @@ class WorkIOConfigBinderTest {
 
         assertThat(config.getSources()).hasSize(1);
         assertThat(config.getSources().getFirst().getListName()).isEqualTo("webauth.RED.custA");
-        assertThat(config.getPickStrategy()).isEqualTo(RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM);
+        assertThat(config.getPickStrategy()).isEqualTo(RedisDatasetPickStrategy.WEIGHTED_RANDOM);
+    }
+
+    @Test
+    void rejectsRedisPickStrategyThroughTheCompleteDatasetSettingsContract() {
+        var source = redisInputSource(Map.of("pockethive.inputs.redis.pick-strategy", "RANDOM"));
+
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(source))
+            .bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("pockethive.inputs.redis.pickStrategy");
     }
 
     @Test
@@ -109,6 +281,41 @@ class WorkIOConfigBinderTest {
         assertThat(config.getSources().get(1).getWeight()).isEqualTo(25.0);
     }
 
+    @ParameterizedTest
+    @ValueSource(strings = {"7", "{nested: wrong}", "[wrong]"})
+    void rejectsNonTextRedisSourceNamesAtYamlBinding(String listName) throws IOException {
+        var yaml = new YamlPropertySourceLoader().load("sources", new ByteArrayResource(("""
+            pockethive:
+              inputs:
+                redis:
+                  sources:
+                    - listName: SOURCE_NAME
+                      weight: 1
+            """.replace("SOURCE_NAME", listName)).getBytes(StandardCharsets.UTF_8))).getFirst();
+        var binder = new WorkInputConfigBinder(new Binder(
+            ConfigurationPropertySources.from(yaml).iterator().next(), redisInputSource(Map.of())));
+        assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .hasStackTraceContaining("sources[0]");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"weight", "unknown"})
+    void rejectsMalformedBoundSourceEntries(String field) {
+        var binder = new WorkInputConfigBinder(new Binder(redisInputSource(Map.of(
+            "pockethive.inputs.redis.sources[0]." + field, "bad"))));
+        assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .hasStackTraceContaining("sources[0]");
+    }
+
+    @Test
+    void rejectsDuplicateBoundSourceNamesAfterNormalization() {
+        var binder = new WorkInputConfigBinder(new Binder(redisInputSource(Map.of(
+            "pockethive.inputs.redis.sources[1].list-name", " webauth.RED.custA ",
+            "pockethive.inputs.redis.sources[1].weight", "1"))));
+        assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .hasStackTraceContaining("sources[1].listName").hasStackTraceContaining("duplicate");
+    }
+
     @Test
     void bindsRedisInputSingleListWithoutSources() {
         MapConfigurationPropertySource source = new MapConfigurationPropertySource(Map.of(
@@ -125,7 +332,17 @@ class WorkIOConfigBinderTest {
 
         assertThat(config.getListName()).isEqualTo("ph:dataset:custa");
         assertThat(config.getSources()).isEmpty();
-        assertThat(config.getPickStrategy()).isEqualTo(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
+        assertThat(config.getPickStrategy()).isEqualTo(RedisDatasetPickStrategy.ROUND_ROBIN);
+    }
+
+    @Test
+    void rejectsNumericSingleListNameWithoutSpringTextCoercion() {
+        var source = redisInputSource(Map.of());
+        source.put("pockethive.inputs.redis.list-name", 7);
+        var binder = new WorkInputConfigBinder(new Binder(source));
+        assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("pockethive.inputs.redis.listName").hasMessageContaining("nonblank text");
     }
 
     @Test
@@ -140,7 +357,7 @@ class WorkIOConfigBinderTest {
         WorkInputConfigBinder binder = new WorkInputConfigBinder(new Binder(source));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.redis")
             .hasMessageContaining("exactly one source mode");
     }
@@ -152,7 +369,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.redis")
             .hasMessageContaining("exactly one source mode");
     }
@@ -164,9 +381,9 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.redis.port")
-            .hasMessageContaining("between 1 and 65535");
+            .hasMessageContaining("Must be 1 or greater");
     }
 
     @Test
@@ -176,7 +393,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.redis.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }
@@ -189,7 +406,26 @@ class WorkIOConfigBinderTest {
 
         RedisDataSetInputProperties config = binder.bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
+    }
+
+    @Test
+    void rejectsBooleanInputRatesWithoutSpringCoercion() {
+        var redis = redisInputSource(Map.of());
+        var scheduler = schedulerInputSource(Map.of());
+        var csv = csvInputSource(Map.of());
+        redis.put("pockethive.inputs.redis.rate-per-sec", true);
+        scheduler.put("pockethive.inputs.scheduler.rate-per-sec", true);
+        csv.put("pockethive.inputs.csv.rate-per-sec", true);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(redis))
+            .bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(scheduler))
+            .bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(csv))
+            .bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
     }
 
     @Test
@@ -201,8 +437,8 @@ class WorkIOConfigBinderTest {
 
         SchedulerInputProperties config = binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
-        assertThat(config.getMaxMessages()).isEqualTo(250000L);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
+        assertThat(config.maxMessages()).isEqualTo(250000L);
     }
 
     @Test
@@ -212,7 +448,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.scheduler.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }
@@ -224,7 +460,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.SCHEDULER, SchedulerInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.scheduler.maxMessages")
             .hasMessageContaining(">= 0");
     }
@@ -237,7 +473,7 @@ class WorkIOConfigBinderTest {
 
         CsvDataSetInputProperties config = binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class);
 
-        assertThat(config.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(config.ratePerSec()).isEqualTo(2500.5);
     }
 
     @Test
@@ -247,7 +483,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.ratePerSec")
             .hasMessageContaining(">= 0.0");
     }
@@ -259,7 +495,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.startupDelaySeconds")
             .hasMessageContaining(">= 0");
     }
@@ -271,7 +507,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerInputType.CSV_DATASET, CsvDataSetInputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.inputs.csv.tickIntervalMs")
             .hasMessageContaining(">= 100");
     }
@@ -308,10 +544,82 @@ class WorkIOConfigBinderTest {
         RedisOutputProperties config = binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class);
 
         assertThat(config.getRoutes()).hasSize(1);
-        assertThat(config.getRoutes().getFirst().getHeader()).isEqualTo("x-ph-redis-list");
-        assertThat(config.getRoutes().getFirst().getHeaderMatch()).isEqualTo("^webauth\\\\.RED\\\\.cust[A-E]$");
-        assertThat(config.getRoutes().getFirst().getList()).isEqualTo("webauth.BAL.shared");
+        assertThat(config.getRoutes().getFirst().header()).isEqualTo("x-ph-redis-list");
+        assertThat(config.getRoutes().getFirst().headerMatch()).isEqualTo("^webauth\\\\.RED\\\\.cust[A-E]$");
+        assertThat(config.getRoutes().getFirst().list()).isEqualTo("webauth.BAL.shared");
         assertThat(config.getTargetListTemplate()).isEqualTo("webauth.RED.{{ payloadAsJson.Customer }}");
+    }
+
+    @Test
+    void rejectsInvalidRouteRegexAtStartup() {
+        WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(redisOutputSource(Map.of(
+            "pockethive.outputs.redis.routes[0].match", "["
+        ))));
+
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .hasRootCauseInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasStackTraceContaining("routes[0].match: Redis output route regex is invalid");
+    }
+
+    @Test
+    void rejectsUnknownRouteFieldsAtStartup() {
+        WorkOutputConfigBinder binder = new WorkOutputConfigBinder(new Binder(redisOutputSource(Map.of(
+            "pockethive.outputs.redis.routes[0].typo", "unexpected"
+        ))));
+
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .hasRootCauseInstanceOf(org.springframework.boot.context.properties.bind.UnboundConfigurationPropertiesException.class)
+            .hasStackTraceContaining("pockethive.outputs.redis.routes[0].typo");
+    }
+
+    @Test
+    void preservesTextualNumericRouteNamesAtStartup() {
+        var source = redisOutputSource(Map.of("pockethive.outputs.redis.routes[0].list", "123"));
+        var config = new WorkOutputConfigBinder(new Binder(source)).bind(WorkerOutputType.REDIS, RedisOutputProperties.class);
+        assertThat(config.getRoutes().getFirst().list()).isEqualTo("123");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"match", "header", "header-match", "list"})
+    void rejectsOriginalNumericRouteFieldsBeforeStringCoercion(String field) {
+        var source = redisOutputSource(Map.of());
+        source.put(ConfigurationPropertyName.of("pockethive.outputs.redis.routes[0]." + field), 123);
+        var binder = new WorkOutputConfigBinder(new Binder(source));
+
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .hasRootCauseInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasStackTraceContaining("Redis route field must be a string");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{nested: wrong}", "[wrong]"})
+    void rejectsUnbindableNestedRouteFieldsFromYaml(String header) throws IOException {
+        var yaml = """
+            pockethive.outputs.redis.routes:
+              - match: '.*'
+                header: %s
+                list: out
+            """.formatted(header);
+        var source = new YamlPropertySourceLoader().load("routes",
+            new ByteArrayResource(yaml.getBytes(StandardCharsets.UTF_8))).getFirst();
+        var binder = new WorkOutputConfigBinder(new Binder(
+            ConfigurationPropertySources.from(source).iterator().next(), redisOutputSource(Map.of())));
+
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .hasStackTraceContaining("Nested configuration cannot be bound at pockethive.outputs.redis.routes[0].header");
+    }
+
+    @Test
+    void replacementRouteListDoesNotInheritMalformedLowerPriorityFields() {
+        var selected = redisOutputSource(Map.of("pockethive.outputs.redis.routes[0].list", "selected"));
+        var overridden = redisOutputSource(Map.of("pockethive.outputs.redis.routes[0].header.nested", "wrong"));
+        var binder = new WorkOutputConfigBinder(new Binder(selected, overridden));
+
+        var routes = binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class).getRoutes();
+
+        assertThat(routes).hasSize(1);
+        assertThat(routes.getFirst().list()).isEqualTo("selected");
+        assertThat(routes.getFirst().header()).isNull();
     }
 
     @Test
@@ -340,7 +648,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.outputs.redis.port")
             .hasMessageContaining("between 1 and 65535");
     }
@@ -352,7 +660,7 @@ class WorkIOConfigBinderTest {
         ))));
 
         assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
-            .isInstanceOf(IllegalStateException.class)
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
             .hasMessageContaining("pockethive.outputs.redis.maxLen")
             .hasMessageContaining("-1 or greater");
     }
@@ -393,6 +701,98 @@ class WorkIOConfigBinderTest {
         ));
         properties.putAll(overrides);
         return new MapConfigurationPropertySource(properties);
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"default-list", "target-list-template"})
+    void rejectsNumericOutputTargetsWithoutSpringTextCoercion(String field) {
+        var source = redisOutputSource(Map.of());
+        source.put("pockethive.outputs.redis." + field, 7);
+        var binder = new WorkOutputConfigBinder(new Binder(source));
+
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("Redis output target must be text");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"source-step", "push-direction", "max-len"})
+    void preservesInvalidWriteSettingTypesUntilSharedValidation(String field) {
+        var source = redisOutputSource(Map.of());
+        source.put("pockethive.outputs.redis." + field, field.equals("max-len") ? 1.5 : 7);
+        var binder = new WorkOutputConfigBinder(new Binder(source));
+        assertThatThrownBy(() -> binder.bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class)
+            .hasMessageContaining("pockethive.outputs.redis.");
+    }
+
+    @Test
+    void preservesExportedRedisConnectionsThroughEnvironmentBinding() {
+        for (String password : List.of(" secret ", "")) {
+            var settings = new RedisConfigurationParser().parseRedisConnection(
+                " redis ", 6380.0, " user ", password, "TRUE", "redis");
+            Map<String, Object> environment = new LinkedHashMap<>(RabbitConnectionEnvironment.encode(
+                new RabbitConnectionSettings("rabbit", 5672, "user", "secret", "/")));
+            environment.putAll(Map.of(
+                "POCKETHIVE_INPUTS_REDIS_LISTNAME", "dataset",
+                "POCKETHIVE_INPUTS_REDIS_PICKSTRATEGY", "ROUND_ROBIN",
+                "POCKETHIVE_INPUTS_REDIS_RATEPERSEC", "1",
+                "POCKETHIVE_OUTPUTS_REDIS_SOURCESTEP", "LAST",
+                "POCKETHIVE_OUTPUTS_REDIS_PUSHDIRECTION", "RPUSH",
+                "POCKETHIVE_OUTPUTS_REDIS_DEFAULTLIST", "out",
+                "POCKETHIVE_OUTPUTS_REDIS_MAXLEN", "-1"));
+            environment.putAll(Map.of("POCKETHIVE_INPUTS_REDIS_PORT", "6381",
+                "pockethive.inputs.redis.ssl", "false", "POCKETHIVE_OUTPUTS_REDIS_PORT", "6382",
+                "POCKETHIVE_OUTPUTS_REDIS_USERNAME", "", "POCKETHIVE_OUTPUTS_REDIS_PASSWORD", "",
+                "spring.rabbitmq.port", "5673"));
+            var source = new SystemEnvironmentPropertySource("systemEnvironment", environment);
+            var rawBinder = new Binder(ConfigurationPropertySources.from(source));
+            Map<String, String> composed = new LinkedHashMap<>();
+            environment.forEach((name, value) -> composed.put(name, (String) value));
+            var resolvedEnvironment = new LinkedHashMap<>(composed);
+            var inputConnection = new LinkedHashMap<>(RedisConnectionEnvironmentCodec.configuration(settings));
+            inputConnection.putAll(RedisConnectionEnvironmentCodec.inputProperties(
+                name -> rawBinder.bind(name, String.class).orElse(null)));
+            var outputConnection = new LinkedHashMap<>(RedisConnectionEnvironmentCodec.configuration(settings));
+            outputConnection.putAll(RedisConnectionEnvironmentCodec.outputProperties(
+                name -> rawBinder.bind(name, String.class).orElse(null)));
+            resolvedEnvironment.putAll(RedisConnectionEnvironmentCodec.input(inputConnection));
+            resolvedEnvironment.putAll(RedisConnectionEnvironmentCodec.output(outputConnection));
+            var boundSource = new SystemEnvironmentPropertySource("systemEnvironment",
+                new LinkedHashMap<String, Object>(resolvedEnvironment));
+            var workerEnvironment = new MockEnvironment();
+            workerEnvironment.getPropertySources().addFirst(boundSource);
+            var binder = Binder.get(workerEnvironment);
+            var input = new WorkInputConfigBinder(binder).bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class);
+            var output = new WorkOutputConfigBinder(binder).bind(WorkerOutputType.REDIS, RedisOutputProperties.class);
+            var inputConnectionSettings = input.connectionSettings("inputs.redis");
+            var outputConnectionSettings = output.connectionSettings("outputs.redis");
+            assertThat(inputConnectionSettings.port()).isEqualTo(6381);
+            assertThat(inputConnectionSettings.ssl()).isFalse();
+            assertThat(inputConnectionSettings.password()).isEqualTo(password);
+            assertThat(outputConnectionSettings.port()).isEqualTo(6382);
+            assertThat(outputConnectionSettings.username()).isNull();
+            assertThat(outputConnectionSettings.password()).isEmpty();
+            // Spring gives the uppercase environment entry precedence over the competing dotted entry.
+            assertThat(binder.bind("spring.rabbitmq", Bindable.of(RabbitConnectionSettings.class)).get().port()).isEqualTo(5672);
+            assertThat(resolvedEnvironment).containsEntry("SPRING_RABBITMQ_PORT", "5672");
+        }
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"host", "port", "ssl"})
+    void retainsRawConnectionTypesForBothIoDirections(String field) {
+        var input = redisInputSource(Map.of());
+        var output = redisOutputSource(Map.of());
+        Object invalid = field.equals("port") ? 6379.5 : 7;
+        input.put("pockethive.inputs.redis." + field, invalid);
+        output.put("pockethive.outputs.redis." + field, invalid);
+        assertThatThrownBy(() -> new WorkInputConfigBinder(new Binder(input))
+            .bind(WorkerInputType.REDIS_DATASET, RedisDataSetInputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class).hasMessageContaining("redis." + field);
+        assertThatThrownBy(() -> new WorkOutputConfigBinder(new Binder(output))
+            .bind(WorkerOutputType.REDIS, RedisOutputProperties.class))
+            .isInstanceOf(io.pockethive.work.config.WorkConfigurationException.class).hasMessageContaining("redis." + field);
     }
 
     private static MapConfigurationPropertySource redisOutputSource(Map<String, String> overrides) {

@@ -15,6 +15,8 @@
     <httpcomponents.version>5.4</httpcomponents.version>
     <httpclient5.version>5.6.1</httpclient5.version>
     <testcontainers.version>2.0.3</testcontainers.version>
+    <pitest.version>1.22.0</pitest.version>
+    <pitest.junit5.version>1.2.3</pitest.junit5.version>
   </properties>
   <dependencyManagement>
     <dependencies>
@@ -51,12 +53,12 @@
   </dependencyManagement>
   <dependencies>
     <dependency>
-      <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter</artifactId>
+      <groupId>io.pockethive</groupId><artifactId>work-test-fixtures</artifactId><version>${project.version}</version><scope>test</scope>
     </dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
-      <artifactId>spring-boot-starter-amqp</artifactId>
+      <artifactId>spring-boot-starter</artifactId>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>
@@ -109,6 +111,11 @@
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>control-plane-core</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-filesystem</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -203,12 +210,7 @@
     <resources>
       <resource>
         <directory>src/main/resources</directory>
-      </resource>
-      <resource>
-        <directory>${project.basedir}/../docs/spec</directory>
-        <includes>
-          <include>control-events.schema.json</include>
-        </includes>
+        <filtering>true</filtering>
       </resource>
     </resources>
     <plugins>
@@ -231,6 +233,32 @@
           <compilerArgs>
             <arg>-parameters</arg>
           </compilerArgs>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.pitest</groupId>
+        <artifactId>pitest-maven</artifactId>
+        <version>${pitest.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>org.pitest</groupId>
+            <artifactId>pitest-junit5-plugin</artifactId>
+            <version>${pitest.junit5.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <mutationThreshold>100</mutationThreshold>
+          <coverageThreshold>100</coverageThreshold>
+          <targetClasses>
+            <param>io.pockethive.orchestrator.app.ComponentConfigPatch</param>
+            <param>io.pockethive.orchestrator.app.ComponentConfigPreviewService</param>
+            <param>io.pockethive.orchestrator.runtime.RuntimeAssessmentService</param>
+          </targetClasses>
+          <targetTests>
+            <param>io.pockethive.orchestrator.app.ComponentConfigPreviewServiceTest</param>
+            <param>io.pockethive.orchestrator.app.ComponentControllerTest</param>
+            <param>io.pockethive.orchestrator.runtime.RuntimeAssessmentServiceTest</param>
+          </targetTests>
         </configuration>
       </plugin>
     </plugins>

@@ -1,6 +1,5 @@
 package io.pockethive.e2e.support;
 
-import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -21,9 +20,15 @@ import com.rabbitmq.client.Delivery;
 
 import io.pockethive.control.AlertMessage;
 import io.pockethive.control.CommandOutcome;
+import io.pockethive.control.ControlPlaneEnvelope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import io.pockethive.controlplane.codec.ControlPlaneContractException;
 
 /**
- * Collects control-plane outcomes/alerts/status metrics from RabbitMQ for later assertions.
+ * Responsibility: collect canonically decoded control-plane outcomes, alerts, and statuses for functional E2E assertions.
+ * Must not: define or validate the wire contract, infer operation success, or audit message-family coverage.
+ * Contract: {@link ControlPlaneCodec} and the functional control-plane observations in {@code docs/ARCHITECTURE.md}.
  */
 public final class ControlPlaneEvents implements AutoCloseable {
 
@@ -33,7 +38,7 @@ public final class ControlPlaneEvents implements AutoCloseable {
   private final Channel channel;
   private final String queueName;
   private final String consumerTag;
-  private final ControlPlaneEventParser parser;
+  private final ControlPlaneCodec codec;
   private final List<OutcomeEnvelope> outcomes = new CopyOnWriteArrayList<>();
   private final List<AlertEnvelope> alerts = new CopyOnWriteArrayList<>();
   private final List<StatusEnvelope> statuses = new CopyOnWriteArrayList<>();
@@ -45,7 +50,7 @@ public final class ControlPlaneEvents implements AutoCloseable {
     try {
       this.connection = connectionFactory.createConnection();
       this.channel = connection.createChannel(false);
-      this.parser = new ControlPlaneEventParser();
+      this.codec = ControlPlaneCodec.create();
       this.queueName = channel.queueDeclare("", false, true, true, Collections.emptyMap()).getQueue();
       channel.queueBind(queueName, this.controlExchange, "event.outcome.#");
       channel.queueBind(queueName, this.controlExchange, "event.alert.#");
@@ -58,12 +63,12 @@ public final class ControlPlaneEvents implements AutoCloseable {
     }
   }
 
-  ControlPlaneEvents(ControlPlaneEventParser parser) {
+  ControlPlaneEvents(ControlPlaneCodec codec) {
     this.connection = null;
     this.channel = null;
     this.queueName = null;
     this.consumerTag = null;
-    this.parser = Objects.requireNonNull(parser, "parser");
+    this.codec = Objects.requireNonNull(codec, "codec");
     this.controlExchange = null;
   }
 
@@ -82,18 +87,19 @@ public final class ControlPlaneEvents implements AutoCloseable {
     String routingKey = delivery.getEnvelope().getRoutingKey();
     byte[] body = delivery.getBody();
     try {
-      ControlPlaneEventParser.ParsedEvent event = parser.parse(routingKey, body);
+      ControlPlaneEnvelope event = codec.decode(
+          new String(body, java.nio.charset.StandardCharsets.UTF_8), routingKey);
       Instant receivedAt = Instant.now();
-      if (event.hasOutcome()) {
-        recordOutcome(routingKey, event.outcome(), receivedAt);
-      } else if (event.hasAlert()) {
-        recordAlert(routingKey, event.alert(), receivedAt);
-      } else if (event.hasStatus()) {
-        recordStatus(routingKey, event.status(), receivedAt);
+      if (event instanceof CommandOutcome outcome) {
+        recordOutcome(routingKey, outcome, receivedAt);
+      } else if (event instanceof AlertMessage alert) {
+        recordAlert(routingKey, alert, receivedAt);
+      } else if (event instanceof StatusMetric status) {
+        recordStatus(routingKey, new StatusEvent(status), receivedAt);
       } else {
         LOGGER.debug("Ignoring unsupported control-plane message on {}", routingKey);
       }
-    } catch (IOException ex) {
+    } catch (ControlPlaneContractException ex) {
       LOGGER.warn("Failed to parse control-plane payload on {}", routingKey, ex);
     }
   }

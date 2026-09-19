@@ -126,6 +126,7 @@ export type BundleValidationResult = {
   bundleKey: string | null
   bundlePath: string | null
   scenarioId: string | null
+  scenarioName: string | null
   validation: {
     scenarioProtocolVersion: string | null
     supportedScenarioProtocolVersion: string
@@ -283,6 +284,7 @@ function normalizeValidationResult(input: unknown): BundleValidationResult {
     bundleKey: asString(input['bundleKey']),
     bundlePath: asString(input['bundlePath']),
     scenarioId: asString(input['scenarioId']),
+    scenarioName: asString(input['scenarioName']),
     validation: {
       scenarioProtocolVersion: asString(validation['scenarioProtocolVersion']),
       supportedScenarioProtocolVersion,

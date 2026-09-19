@@ -1,0 +1,338 @@
+import assert from 'node:assert/strict';
+import { execFile as execFileCallback } from 'node:child_process';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { promisify } from 'node:util';
+import test from 'node:test';
+
+import { ConnectionContractError } from '../connection/contracts';
+import {
+  CommittedBundleReference,
+  GitBundleLimits,
+  GitBundlePackager,
+  GitCommand,
+} from '../scenarios/gitBundlePackager';
+
+const execFile = promisify(execFileCallback);
+
+test('packages every regular file from the selected committed Git tree with exact bytes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-test-'));
+  const bundle = join(root, 'scenarios', 'bundles', 'mixed-smoke');
+  try {
+    await mkdir(bundle, { recursive: true });
+    await writeFile(join(bundle, 'scenario.yaml'), 'name: mixed-smoke\n', 'utf8');
+    await writeFile(join(bundle, 'query.sql'), Buffer.from([0x53, 0x45, 0x4c, 0x45, 0x43, 0x54, 0x20, 0x31, 0x3b, 0x0a]));
+    await writeFile(join(bundle, 'run.sh'), '#!/bin/sh\nprintf "ok\\n"\n', { mode: 0o755 });
+    await git(root, 'init');
+    await git(root, 'config', 'user.email', 'test@example.invalid');
+    await git(root, 'config', 'user.name', 'PocketHive Test');
+    await git(root, 'remote', 'add', 'origin', 'https://example.invalid/qa/pockethive-tests.git');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'fixture');
+    await writeFile(join(bundle, 'query.sql'), 'uncommitted bytes must not be packaged\n', 'utf8');
+
+    const prepared = await new GitBundlePackager().package(bundle);
+    const retainedArchive = prepared.archive;
+    try {
+      assert.equal(prepared.source.repository, 'https://example.invalid/qa/pockethive-tests.git');
+      assert.match(prepared.source.commit, /^[0-9a-f]{40}$/);
+      assert.equal(prepared.source.bundlePath, 'scenarios/bundles/mixed-smoke');
+      assert.equal(prepared.source.verification, 'CLIENT_ASSERTED');
+      assert.deepEqual(prepared.fileManifest.map(file => [file.path, file.byteCount]), [
+        ['query.sql', 10],
+        ['run.sh', 24],
+        ['scenario.yaml', 18],
+      ]);
+      assert.ok(prepared.fileManifest.every(file => /^sha256:[0-9a-f]{64}$/.test(file.sha256)));
+      assert.ok(retainedArchive.byteLength > 0);
+      assert.deepEqual([...retainedArchive.slice(0, 4)], [0x50, 0x4b, 0x03, 0x04]);
+    } finally {
+      await prepared.dispose();
+    }
+    assert.equal(retainedArchive.every(byte => byte === 0), true);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('packages a discovered repository reference from Git objects after the worktree directory is removed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-reference-'));
+  const bundlePath = 'scenarios/bundles/removed-worktree';
+  const bundle = join(root, ...bundlePath.split('/'));
+  try {
+    await mkdir(bundle, { recursive: true });
+    await writeFile(join(bundle, 'scenario.yaml'), 'id: removed-worktree\n', 'utf8');
+    await git(root, 'init');
+    await git(root, 'config', 'user.email', 'test@example.invalid');
+    await git(root, 'config', 'user.name', 'PocketHive Test');
+    await git(root, 'remote', 'add', 'origin', 'https://example.invalid/qa/reference.git');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'committed scenario');
+    await rm(bundle, { recursive: true });
+
+    const commit = (await execFile('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' })).stdout.trim();
+    const reference: CommittedBundleReference = { repositoryRoot: root, bundlePath, commit };
+    const prepared = await new GitBundlePackager().package(reference);
+    try {
+      assert.equal(prepared.source.bundlePath, bundlePath);
+      assert.deepEqual(prepared.fileManifest.map(file => file.path), ['scenario.yaml']);
+    } finally {
+      await prepared.dispose();
+    }
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('repository references reject non-canonical bundle paths before invoking Git', async () => {
+  let calls = 0;
+  const packager = new GitBundlePackager(async () => {
+    calls += 1;
+    throw new Error('must not run');
+  });
+  for (const bundlePath of ['', ' scenarios/smoke', '/scenarios/smoke', 'scenarios\\smoke',
+    'scenarios//smoke', 'scenarios/./smoke', 'scenarios/../smoke']) {
+    await assertCode(packager.package({
+      repositoryRoot: '/workspace/repository', bundlePath, commit: 'a'.repeat(40),
+    }),
+      'GIT_BUNDLE_PATH_INVALID');
+  }
+  assert.equal(calls, 0);
+  await assertCode(packager.package({
+    repositoryRoot: '/workspace/repository-does-not-exist', bundlePath: 'scenarios/smoke',
+    commit: 'a'.repeat(40),
+  }), 'GIT_REPOSITORY_REQUIRED');
+});
+
+test('repository references fail when the discovered commit is invalid or no longer HEAD', async () => {
+  await withSelectedDirectory(async ({ root }) => {
+    const packager = new GitBundlePackager(fakeGit(root, {}));
+    await assertCode(packager.package({ repositoryRoot: root, bundlePath: 'bundle', commit: 'invalid' }),
+      'GIT_COMMIT_INVALID');
+    await assertCode(packager.package({
+      repositoryRoot: root, bundlePath: 'bundle', commit: '2'.repeat(40),
+    }), 'GIT_REPOSITORY_HEAD_CHANGED');
+  });
+});
+
+test('fails explicitly when source identity is absent or selected content is not a committed directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-test-'));
+  const bundle = join(root, 'bundle');
+  try {
+    await mkdir(bundle);
+    await writeFile(join(bundle, 'scenario.yaml'), 'name: sample\n', 'utf8');
+    await git(root, 'init');
+    await git(root, 'config', 'user.email', 'test@example.invalid');
+    await git(root, 'config', 'user.name', 'PocketHive Test');
+    await git(root, 'add', '.');
+    await git(root, 'commit', '-m', 'fixture');
+
+    await assert.rejects(new GitBundlePackager().package(bundle), /GIT_REMOTE_ORIGIN_REQUIRED/);
+    await git(root, 'remote', 'add', 'origin', 'https://example.invalid/qa/tests.git');
+    await mkdir(join(root, 'uncommitted'));
+    await assert.rejects(new GitBundlePackager().package(join(root, 'uncommitted')), /GIT_BUNDLE_TREE_REQUIRED/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('maps Git identity and tree failures to stable contract codes', async () => {
+  await withSelectedDirectory(async ({ root, selected }) => {
+    await assertCode(new GitBundlePackager(fakeGit(root, { fail: 'rev-parse --show-toplevel' })).package(selected),
+      'GIT_REPOSITORY_REQUIRED');
+    await assertCode(new GitBundlePackager(fakeGit(root, { fail: 'remote get-url origin' })).package(selected),
+      'GIT_REMOTE_ORIGIN_REQUIRED');
+    await assertCode(new GitBundlePackager(fakeGit(root, { fail: 'rev-parse HEAD' })).package(selected),
+      'GIT_COMMIT_REQUIRED');
+    await assertCode(new GitBundlePackager(fakeGit(root, { commit: 'not-a-commit' })).package(selected),
+      'GIT_COMMIT_INVALID');
+    await assertCode(new GitBundlePackager(fakeGit(root, { commit: `prefix${'a'.repeat(64)}` })).package(selected),
+      'GIT_COMMIT_INVALID');
+    await assertCode(new GitBundlePackager(fakeGit(root, { commit: `${'a'.repeat(40)}suffix` })).package(selected),
+      'GIT_COMMIT_INVALID');
+    await assertCode(new GitBundlePackager(fakeGit(root, { commit: `${'a'.repeat(64)}suffix` })).package(selected),
+      'GIT_COMMIT_INVALID');
+    await assertCode(new GitBundlePackager(fakeGit(root, {
+      fail: `ls-tree -r -z --full-tree ${'1'.repeat(40)}:bundle`,
+    }))
+      .package(selected), 'GIT_BUNDLE_TREE_REQUIRED');
+    await assertCode(new GitBundlePackager(fakeGit(root, { tree: '' })).package(selected),
+      'GIT_BUNDLE_FILES_REQUIRED');
+    await assertCode(new GitBundlePackager(fakeGit(root, { repository: '   ' })).package(selected),
+      'GIT_COMMAND_OUTPUT_REQUIRED');
+    const nestedRoot = join(selected, 'nested-repository');
+    await mkdir(nestedRoot);
+    await assertCode(new GitBundlePackager(fakeGit(root, { repositoryRoot: nestedRoot })).package(selected),
+      'GIT_BUNDLE_PATH_INVALID');
+    const siblingRoot = join(root, 'sibling-repository');
+    await mkdir(siblingRoot);
+    await assertCode(new GitBundlePackager(fakeGit(root, { repositoryRoot: siblingRoot })).package(selected),
+      'GIT_BUNDLE_PATH_INVALID');
+    await assertCode(new GitBundlePackager(fakeGit(root, { repositoryRoot: selected })).package(selected),
+      'GIT_BUNDLE_PATH_INVALID');
+  });
+});
+
+test('accepts only regular committed blobs with safe relative paths and valid object ids', async () => {
+  await withSelectedDirectory(async ({ root, selected }) => {
+    const invalidRecords = [
+      `120000 blob ${'a'.repeat(40)}\tlink`,
+      `100644 tree ${'a'.repeat(40)}\tdirectory`,
+      '100644 blob invalid\tfile.yaml',
+      `100644 blob ${'a'.repeat(40)}\t/absolute.yaml`,
+      `100644 blob ${'a'.repeat(40)}\tdir\\file.yaml`,
+      `100644 blob ${'a'.repeat(40)}\tdir//file.yaml`,
+      `100644 blob ${'a'.repeat(40)}\tdir/./file.yaml`,
+      `100644 blob ${'a'.repeat(40)}\tdir/../file.yaml`,
+      `100644 blob ${'a'.repeat(40)}suffix\tfile.yaml`,
+      `100644 blob prefix${'a'.repeat(40)}\tfile.yaml`,
+      `100644 blob prefix${'a'.repeat(64)}\tfile.yaml`,
+      `100644 blob ${'a'.repeat(64)}suffix\tfile.yaml`,
+      '100644 blob\tfile.yaml',
+      `100644 blob ${'a'.repeat(40)} file-without-tab`,
+    ];
+    for (const tree of invalidRecords) {
+      await assertCode(new GitBundlePackager(fakeGit(root, { tree })).package(selected),
+        'GIT_BUNDLE_ENTRY_INVALID');
+    }
+
+    const objectId = 'b'.repeat(64);
+    const prepared = await new GitBundlePackager(fakeGit(root, {
+      commit: 'c'.repeat(64), tree: `100755 blob ${objectId}\tdir/run.sh`,
+    })).package(selected);
+    try {
+      assert.equal(prepared.source.commit, 'c'.repeat(64));
+      assert.deepEqual(prepared.fileManifest.map(entry => entry.path), ['dir/run.sh']);
+    } finally {
+      await prepared.dispose();
+    }
+  });
+});
+
+test('enforces explicit file, expanded-byte, archive-byte, and command-buffer limits', async () => {
+  await withSelectedDirectory(async ({ root, selected }) => {
+    const objectA = 'a'.repeat(40);
+    const objectB = 'b'.repeat(40);
+    const twoFiles = `100644 blob ${objectA}\ta.yaml\0` + `100644 blob ${objectB}\tb.yaml`;
+    await assertCode(new GitBundlePackager(fakeGit(root, { tree: twoFiles }), limits({ files: 1 }))
+      .package(selected), 'GIT_BUNDLE_FILE_LIMIT_EXCEEDED');
+    await assertCode(new GitBundlePackager(fakeGit(root, {
+      tree: twoFiles, blobs: { [objectA]: Buffer.alloc(3), [objectB]: Buffer.alloc(3) },
+    }), limits({ expandedBytes: 5 })).package(selected), 'GIT_BUNDLE_EXPANDED_LIMIT_EXCEEDED');
+    const exactFileLimit = await new GitBundlePackager(fakeGit(root, {}), limits({ files: 1 }))
+      .package(selected);
+    await exactFileLimit.dispose();
+    await assertCode(new GitBundlePackager(fakeGit(root, { fail: `cat-file blob ${objectA}` }))
+      .package(selected), 'GIT_BUNDLE_READ_FAILED');
+    await assertCode(new GitBundlePackager(fakeGit(root, {
+      fail: `archive --format=zip ${'1'.repeat(40)}:bundle`,
+    }))
+      .package(selected), 'GIT_BUNDLE_ARCHIVE_FAILED');
+    const exactLimit = await new GitBundlePackager(fakeGit(root, {
+      blobs: { [objectA]: Buffer.alloc(5) },
+    }), limits({ expandedBytes: 5 })).package(selected);
+    await exactLimit.dispose();
+    await assertCode(new GitBundlePackager(fakeGit(root, { archive: Buffer.alloc(5) }),
+      limits({ archiveBytes: 4 })).package(selected), 'GIT_BUNDLE_ARCHIVE_LIMIT_EXCEEDED');
+
+    let observedArchiveBuffer = 0;
+    let observedBlobBuffer = 0;
+    const checkingGit: GitCommand = async (cwd, args, maxBytes) => {
+      if (args[0] === 'archive') observedArchiveBuffer = maxBytes ?? 0;
+      if (args[0] === 'cat-file' && args[1] === 'blob') observedBlobBuffer = maxBytes ?? 0;
+      return fakeGit(root, {})(cwd, args, maxBytes);
+    };
+    const prepared = await new GitBundlePackager(checkingGit, limits({ archiveBytes: 4 })).package(selected);
+    try {
+      assert.equal(observedArchiveBuffer, 5);
+      assert.equal(observedBlobBuffer, 129);
+    } finally {
+      await prepared.dispose();
+    }
+
+    const reversedTree = `100644 blob ${objectA}\tz.yaml\0` + `100644 blob ${objectB}\ta.yaml`;
+    const sorted = await new GitBundlePackager(fakeGit(root, { tree: reversedTree })).package(selected);
+    try {
+      assert.deepEqual(sorted.fileManifest.map(entry => entry.path), ['a.yaml', 'z.yaml']);
+    } finally {
+      await sorted.dispose();
+    }
+  });
+});
+
+test('dispose zeroizes retained archive bytes and remains idempotent', async () => {
+  await withSelectedDirectory(async ({ root, selected }) => {
+    const prepared = await new GitBundlePackager(fakeGit(root, {
+      archive: Buffer.from([0x50, 0x4b, 0x03, 0x04]),
+    })).package(selected);
+    const retainedArchive = prepared.archive;
+    assert.deepEqual([...retainedArchive], [0x50, 0x4b, 0x03, 0x04]);
+
+    await prepared.dispose();
+    assert.deepEqual([...retainedArchive], [0, 0, 0, 0]);
+    await prepared.dispose();
+    assert.deepEqual([...retainedArchive], [0, 0, 0, 0]);
+  });
+});
+
+interface FakeGitOptions {
+  readonly fail?: string;
+  readonly repositoryRoot?: string;
+  readonly repository?: string;
+  readonly commit?: string;
+  readonly tree?: string;
+  readonly blobs?: Readonly<Record<string, Buffer>>;
+  readonly archive?: Buffer;
+}
+
+function fakeGit(root: string, options: FakeGitOptions): GitCommand {
+  const objectId = 'a'.repeat(40);
+  return async (_cwd, args) => {
+    const command = args.join(' ');
+    if (command === options.fail) throw new Error('simulated Git failure');
+    if (command === 'rev-parse --show-toplevel') return Buffer.from(options.repositoryRoot ?? root);
+    const commit = options.commit ?? '1'.repeat(40);
+    if (command === `cat-file -e ${commit}:bundle`) return Buffer.alloc(0);
+    if (command === 'remote get-url origin') {
+      return Buffer.from(options.repository ?? 'https://example.invalid/qa/tests.git');
+    }
+    if (command === 'rev-parse HEAD') return Buffer.from(commit);
+    if (command === `ls-tree -r -z --full-tree ${commit}:bundle`) {
+      return Buffer.from(`${options.tree ?? `100644 blob ${objectId}\tscenario.yaml`}\0`);
+    }
+    if (args[0] === 'cat-file' && args[1] === 'blob') {
+      return options.blobs?.[args[2]] ?? Buffer.from('name: test\n');
+    }
+    if (command === `archive --format=zip ${commit}:bundle`) {
+      return options.archive ?? Buffer.from([0x50, 0x4b, 0x03, 0x04]);
+    }
+    throw new Error(`Unexpected Git command: ${command}`);
+  };
+}
+
+function limits(overrides: Partial<GitBundleLimits>): GitBundleLimits {
+  return { archiveBytes: 16, expandedBytes: 128, files: 10, ...overrides };
+}
+
+async function withSelectedDirectory(
+  action: (paths: { root: string; selected: string }) => Promise<void>,
+): Promise<void> {
+  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-bundle-fake-'));
+  const selected = join(root, 'bundle');
+  try {
+    await mkdir(selected);
+    await action({ root, selected });
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+async function assertCode(promise: Promise<unknown>, code: string): Promise<void> {
+  await assert.rejects(promise, (error: unknown) =>
+    error instanceof ConnectionContractError && error.code === code);
+}
+
+async function git(cwd: string, ...args: string[]): Promise<void> {
+  await execFile('git', args, { cwd, encoding: 'utf8' });
+}

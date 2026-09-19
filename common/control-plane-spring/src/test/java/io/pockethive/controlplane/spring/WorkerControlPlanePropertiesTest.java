@@ -10,7 +10,7 @@ class WorkerControlPlanePropertiesTest {
     void controlPlaneMetadataDerivedFromConfiguredIdentity() {
         WorkerControlPlaneProperties properties = buildProperties();
 
-        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        WorkerControlTopology controlPlane = properties.getControlPlane();
         assertThat(controlPlane.getControlQueueName())
             .isEqualTo("ph.control.swarm-alpha.generator.worker-1");
         assertThat(controlPlane.getRoutes().configSignals())

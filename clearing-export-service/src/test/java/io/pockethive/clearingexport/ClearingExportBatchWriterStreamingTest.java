@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -19,7 +21,7 @@ class ClearingExportBatchWriterStreamingTest {
   void streamingModeFinalizesByTimeWindowWithoutBufferingWholeBatch() throws Exception {
     TestClock clock = new TestClock(1_000L);
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), new XmlOutputFormatter());
     ClearingExportBatchWriter writer =
         new ClearingExportBatchWriter(assembler, new LocalDirectoryClearingExportSink(), clock, false);
 
@@ -68,7 +70,7 @@ class ClearingExportBatchWriterStreamingTest {
   void preflightFailsWhenSinkDoesNotSupportStreaming() {
     TestClock clock = new TestClock(1_000L);
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), new XmlOutputFormatter());
     ClearingExportSink sink = new ClearingExportSink() {
       @Override
       public ClearingExportSinkWriteResult writeFile(ClearingExportWorkerConfig config, ClearingRenderedFile file) {

@@ -33,9 +33,10 @@ import {
   parseSwarmLifecycleControlResponse,
   pendingSwarmLifecycleFeedback,
   resolveSwarmLifecycleFeedback,
+  resolveSwarmLifecycleOperationFeedback,
   type SwarmLifecycleFeedback,
 } from '../lib/swarmLifecycleAction'
-import { changesRedisDatasetListName, isStoppedSwarmStatus } from '../lib/runtimeConfigGuard'
+import { changesRedisDatasetListName, isStoppedWorkloadState } from '../lib/runtimeConfigGuard'
 
 const HIVE_EXPLAIN_KEY = 'PH_UI_HIVE_EXPLAIN'
 
@@ -46,11 +47,12 @@ type BeeSummary = {
 
 type SwarmSummary = {
   id: string
-  status?: string | null
+  runtimeIntent: string
+  workloadIntent: string
+  controllerState: string
+  workloadState: string
   health?: string | null
-  heartbeat?: string | null
-  workEnabled?: boolean
-  controllerEnabled?: boolean
+  runtimeResourceState: string
   templateId?: string | null
   controllerImage?: string | null
   bees?: BeeSummary[]
@@ -90,10 +92,10 @@ type SwarmSnapshotView = {
   staleAfterSec: number
   envelopeTimestamp: string | null
   runtime: RuntimeMeta | null
-  enabled: boolean | null
   startedAt: string | null
-  swarmStatus: string | null
-  swarmHealth: string | null
+  controllerState: string | null
+  workloadState: string | null
+  health: string | null
   workers: SwarmWorkerSummary[]
 }
 
@@ -191,10 +193,10 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
       staleAfterSec: snapshot.staleAfterSec,
       envelopeTimestamp: null,
       runtime: null,
-      enabled: null,
       startedAt: null,
-      swarmStatus: null,
-      swarmHealth: null,
+      controllerState: null,
+      workloadState: null,
+      health: null,
       workers: [],
     }
   }
@@ -203,11 +205,11 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
   const runtime = extractRuntimeMeta(envelope.runtime)
 
   const data = isRecord(envelope.data) ? envelope.data : null
-  const enabled = data ? toBooleanOrNull(data.enabled) : null
   const startedAt = data ? toStringOrNull(data.startedAt) : null
   const context = data && isRecord(data.context) ? data.context : null
-  const swarmStatus = context ? toStringOrNull(context.swarmStatus) : null
-  const swarmHealth = context ? toStringOrNull(context.swarmHealth) : null
+  const controllerState = context ? toStringOrNull(context.controllerState) : null
+  const workloadState = context ? toStringOrNull(context.workloadState) : null
+  const health = context ? toStringOrNull(context.health) : null
 
   const workersRaw = context && Array.isArray(context.workers) ? (context.workers as unknown[]) : []
   const workers: SwarmWorkerSummary[] = workersRaw
@@ -247,10 +249,10 @@ function extractSnapshotView(snapshot: StatusFullSnapshotResponse | null): Swarm
     staleAfterSec: snapshot.staleAfterSec,
     envelopeTimestamp,
     runtime,
-    enabled,
     startedAt,
-    swarmStatus,
-    swarmHealth,
+    controllerState,
+    workloadState,
+    health,
     workers,
   }
 }
@@ -752,12 +754,34 @@ export function HivePage() {
 
   useEffect(() => {
     const unsubscribe = subscribeWireLog(refreshLifecycleFeedback)
-    const timeoutCheck = window.setInterval(() => refreshLifecycleFeedback(), 1000)
+    let active = true
+    const refreshOperations = async () => {
+      const pending = Object.values(lifecycleFeedback).filter((feedback) => feedback.status === 'pending')
+      await Promise.all(pending.map(async (feedback) => {
+        try {
+          const response = await fetch(feedback.operationUrl, { headers: { Accept: 'application/json' } })
+          if (!response.ok) throw new Error(await readErrorMessage(response))
+          const operation = await response.json()
+          if (!active) return
+          setLifecycleFeedback((current) => {
+            const latest = current[feedback.swarmId]
+            if (!latest || latest.correlationId !== feedback.correlationId) return current
+            const resolved = resolveSwarmLifecycleOperationFeedback(latest, operation)
+            return resolved === latest ? current : { ...current, [feedback.swarmId]: resolved }
+          })
+        } catch {
+          // Keep the accepted operation pending until its declared client deadline.
+        }
+      }))
+      refreshLifecycleFeedback()
+    }
+    const timeoutCheck = window.setInterval(() => void refreshOperations(), 1000)
     return () => {
+      active = false
       unsubscribe()
       window.clearInterval(timeoutCheck)
     }
-  }, [refreshLifecycleFeedback])
+  }, [lifecycleFeedback, refreshLifecycleFeedback])
 
   const runSwarmAction = useCallback(
     async (swarm: SwarmSummary, action: SwarmAction) => {
@@ -842,9 +866,9 @@ export function HivePage() {
   const sendSelectedWorkerConfigUpdate = useCallback(
     async (patch: Record<string, unknown>) => {
       if (!configEditTarget) return
-      if (changesRedisDatasetListName(patch) && !isStoppedSwarmStatus(selectedSwarm?.status)) {
+      if (changesRedisDatasetListName(patch) && !isStoppedWorkloadState(selectedSwarm?.workloadState)) {
         throw new Error(
-          `Stop swarm '${configEditTarget.swarmId}' before changing inputs.redis.listName. Current status: ${selectedSwarm?.status ?? 'unknown'}.`,
+          `Stop swarm '${configEditTarget.swarmId}' before changing inputs.redis.listName. Current workload state: ${selectedSwarm?.workloadState ?? 'unknown'}.`,
         )
       }
       setConfigEditBusy(true)
@@ -876,7 +900,7 @@ export function HivePage() {
         setConfigEditBusy(false)
       }
     },
-    [configEditTarget, loadSnapshot, loadSwarms, selectedSwarm?.status],
+    [configEditTarget, loadSnapshot, loadSwarms, selectedSwarm?.workloadState],
   )
 
   useEffect(() => {
@@ -1186,9 +1210,9 @@ export function HivePage() {
 	                  <div className="swarmCell swarmMeta">
 	                    <span
 	                      className="hal-eye"
-	                      data-state={halEyeState(swarm.status, swarm.health)}
-	                      title={halEyeTitle(swarm.status, swarm.health)}
-	                      aria-label={halEyeTitle(swarm.status, swarm.health).replace('\n', '; ')}
+	                      data-state={halEyeState(swarm.workloadState, swarm.health)}
+	                      title={halEyeTitle(swarm.workloadState, swarm.health)}
+	                      aria-label={halEyeTitle(swarm.workloadState, swarm.health).replace('\n', '; ')}
 	                    />
 	                  </div>
 	                  <div className="swarmCell">
@@ -1332,22 +1356,16 @@ export function HivePage() {
 	                        </div>
                         <div className="kvGrid" style={{ marginTop: 10 }}>
                           <div className="kv">
-                            <div className="k">Swarm status</div>
-                            <div className="v">{snapshotView.swarmStatus ?? '—'}</div>
+                            <div className="k">Controller state</div>
+                            <div className="v">{snapshotView.controllerState ?? '—'}</div>
                           </div>
                           <div className="kv">
-                            <div className="k">Swarm health</div>
-                            <div className="v">{snapshotView.swarmHealth ?? '—'}</div>
+                            <div className="k">Workload state</div>
+                            <div className="v">{snapshotView.workloadState ?? '—'}</div>
                           </div>
                           <div className="kv">
-                            <div className="k">Enabled</div>
-                            <div className="v">
-                              {snapshotView.enabled === null
-                                ? '—'
-                                : snapshotView.enabled
-                                  ? 'true'
-                                  : 'false'}
-                            </div>
+                            <div className="k">Health</div>
+                            <div className="v">{snapshotView.health ?? '—'}</div>
                           </div>
                           <div className="kv">
                             <div className="k">Envelope timestamp</div>
