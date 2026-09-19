@@ -494,19 +494,25 @@ public final class BundleUploadCoordinator {
             if (ticket instanceof PublicationUploadTicket publication) {
                 PublicationAttempt attempt = attempts.get(publication.attemptId());
                 if (attempt != null && attempt.state() == PublicationAttemptState.OWNER_CALL_IN_FLIGHT) {
-                    attempt.ambiguous();
                     ticket.consume();
                 } else {
-                    if (attempt != null && (attempt.state() == PublicationAttemptState.RECEIVING
-                        || attempt.state() == PublicationAttemptState.VERIFIED)) {
-                        attempt.failed();
-                    }
                     ticket.fail();
                 }
             } else {
                 ticket.fail();
             }
             changed = true;
+        }
+        // Schema migration can retire a ticket while retaining a possibly completed owner attempt.
+        for (PublicationAttempt attempt : attempts.values()) {
+            if (attempt.state() == PublicationAttemptState.OWNER_CALL_IN_FLIGHT) {
+                attempt.ambiguous();
+                changed = true;
+            } else if (attempt.state() == PublicationAttemptState.RECEIVING
+                || attempt.state() == PublicationAttemptState.VERIFIED) {
+                attempt.failed();
+                changed = true;
+            }
         }
         deleteOrphanedSpoolFiles();
         if (changed) {

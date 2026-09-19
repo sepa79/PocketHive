@@ -2372,7 +2372,13 @@ Local ticket/attempt mutation, snapshot and persistence form one serialized step
 Owner and spool IO stay outside that step; their completion re-resolves canonical
 state by identity. A rollback must not detach another operation from its stored
 terminal result. If recording an owner result fails, report an unresolved outcome
-with the attempt identity and preserve the state needed for restart recovery.
+with the attempt identity and preserve the state needed for restart recovery. Startup recovery
+also examines retained publication attempts after obsolete tickets have been
+retired by schema migration. Possible owner writes become AMBIGUOUS through the
+canonical attempt state machine and remain reconcilable without replay. Interrupted
+pre-owner RECEIVING/VERIFIED attempts become FAILED. PREPARED and terminal history
+remain unchanged under existing retention; migration never invents generation
+binding or reauthorizes retired workflow tickets.
 
 **Forbidden:** implement scenario authoring transitions or owner bundle validators.
 
