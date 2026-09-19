@@ -19,8 +19,10 @@ fixture and explicit connection settings:
 | `AUTH_REDIS_TEST_PORT` | TCP port of that fixture. |
 | `AUTH_OPENSSL_TEST_EXECUTABLE` | Absolute path to the OpenSSL executable used by the independent signed-request verifier. |
 
-The CI test job starts its own Redis service and supplies these values. The
-OpenSSL verifier fails explicitly if its executable is missing or invalid; it
+The CI test and scoped Java mutation jobs each start their own Redis service and
+supply these values. Both jobs check the explicit OpenSSL executable before
+running the relevant gates. The OpenSSL verifier fails explicitly if its executable
+is missing or invalid; it
 does not switch verification implementations. Redis-gated tests are skipped when
 their connection settings are absent, so a passing run with those skips does not
 establish Redis integration coverage.
@@ -54,8 +56,27 @@ The focused authoring regressions preserve complete signed and ordinary OAuth
 files through proposal generation and the HTTP upload workflow. The HTTP test
 stubs the owner validation result; separate Scenario Manager API tests exercise
 the real authored storage checks. Neither resolves credentials or proves provider
-acceptance. The scoped mutation jobs cover Java MCP and product `auth-service`,
-not mutation coverage of the worker OAuth provider.
+acceptance.
+
+## Scoped Java mutation gates
+
+CI runs the configured Java MCP, product `auth-service`, and HTTP Sequence PIT
+gates with Java 21 and repository-pinned Maven 3.9.6. After installing the reactor
+dependencies, the commands are:
+
+```bash
+./mvnw -B -ntp -DskipTests install
+./mvnw -B -ntp -f pockethive-mcp-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+./mvnw -B -ntp -f auth-service/pom.xml org.pitest:pitest-maven:mutationCoverage
+./mvnw -B -ntp -f http-sequence-service/pom.xml -Pmutation test-compile org.pitest:pitest-maven:mutationCoverage
+```
+
+The HTTP Sequence profile retains its configured target classes and thresholds
+in `http-sequence-service/pom.xml`; its discovered tests use the Redis settings
+above and JDK keytool/JCA for TLS/signature checks. The independent OpenSSL oracle
+runs in worker-sdk tests during the root Java gate; the mutation job separately
+checks that OpenSSL is available. These are scoped mutation gates, not mutation
+coverage of the worker OAuth provider or every class in the modules.
 
 ## Environment verification
 
