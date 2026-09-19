@@ -37,7 +37,7 @@ One JSON (or YAML) **manifest per image**:
   "image": {
     "name": "ghcr.io/pockethive/generator",
     "tag": "1.12.0",
-    "digest": "sha256:abcd..."   // optional but preferred if known
+    "digest": "sha256:abcd..."
   },
   "role": "generator",
   "config": [
@@ -57,6 +57,8 @@ One JSON (or YAML) **manifest per image**:
   ]
 }
 ```
+
+`image.digest` is optional, but preferred when the digest is known.
 
 **Notes**
 - Manifests are indexed by canonical `image.name` and, when declared, by `image.digest`.

@@ -100,9 +100,12 @@ scenarios/
 - `templates/` holds protocol templates. Today HTTP templates live under
   `templates/http/`; TCP/ISO/SOAP/etc can live under sibling folders as they
   are introduced.  
-- `sut/` and `datasets/` are optional and may contain SUT configs or input
-  data; exact conventions are described in the in‑progress
-  `docs/archive/scenario-bundle-runtime-plan.md`.
+- `sut/` is optional and uses the canonical
+  [`sut/<sutId>/sut.yaml` bundle layout](SCENARIO_MANAGER_BUNDLE_REST.md#bundle-local-suts).
+- `datasets/` is optional bundle-relative input data. The runtime bundle is
+  mounted at `/app/scenario`; use the
+  [scenario volume contract](SCENARIO_CONTRACT.md#docker-volumes) and the
+  selected worker's capability/input schema for the exact file reference.
 
 Example bundles in this repo:
 - `scenarios/e2e/variables-demo/` – demonstrates `variables.yaml` + `vars.*` + `eval(...)`.
@@ -123,5 +126,6 @@ YAML remains the **single source of truth**:
 - Download/replace bundle operations operate on the same on‑disk structure.
 
 For details of what the plan can express and how the visual editor maps to
-YAML, see `SCENARIO_PLAN_GUIDE.md`. For IO and capabilities used by the
-config dialogs, see `docs/architecture/workerCapabilities.md`.
+YAML, see the [scenario plan guide](SCENARIO_PLAN_GUIDE.md). For IO and
+capabilities used by the config dialogs, see
+[worker capabilities](../architecture/workerCapabilities.md).

@@ -1,5 +1,12 @@
 # Scenario Plans — User Guide (v1)
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Scenario authors and operators who schedule swarm changes |
+| Prerequisites | Familiarity with scenario YAML and the [scenario contract](SCENARIO_CONTRACT.md) |
+| Expected outcome | A valid, observable plan with explicit time-based steps |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 > This guide explains the **`plan`** section of a Scenario: what it can do
 > today, how time‑based steps work, and how to express them in YAML.
 
@@ -332,3 +339,11 @@ For `config-update` steps the editor uses worker **capabilities**:
 Looping and reset controls are exposed via the Swarm Controller runtime
 panel and Swarms list, but they are just wrappers over `config-update`
 commands; the plan itself remains a static timeline defined in YAML.
+
+## Troubleshooting
+
+Validate the plan against the [scenario contract](SCENARIO_CONTRACT.md). For runtime symptoms, follow the canonical [observability and troubleshooting guide](../guides/operators/observability-troubleshooting.md).
+
+## Next step
+
+Run the plan through the customer workflow in [Create and Run Your First Scenario](../guides/onboarding/first-scenario.md), then use [Scenario Patterns](SCENARIO_PATTERNS.md) when composing a larger flow.

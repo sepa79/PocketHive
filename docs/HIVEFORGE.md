@@ -1,275 +1,110 @@
-# HiveForge Deployment
+# HiveForge integration
 
-PocketHive declares a HiveForge POC manifest at the repository root:
-`hiveforge.yaml`.
+HiveForge is PocketHive's **recommended direction** for managed,
+production-like Docker Swarm deployment. The current `v0.15.35` component is
+**available** for stack preparation and validation; it is not a complete or
+**supported** deployment lifecycle.
 
-The current HiveForge implementation is repository/ref-driven and runs declared
-component actions through Ansible. PocketHive keeps image build and push outside
-HiveForge; deploy actions consume registry-qualified images through explicit
-runtime environment values.
+Start with the canonical [deployment path chooser](guides/operators/deployment.md)
+for the current status of source, Compose-package, and HiveForge paths and for
+the shared status terminology. “Production-like” describes the orchestration
+model, not a production-support claim.
 
-## Current Supported Profiles
+:::warning Current implementation boundary
 
-- `single-full` - deploys the existing local Docker Compose stack on a single
-  Docker host by running `./build-hive.sh --quick`.
-- `swarm-reduced` - deploys the portable reduced Docker Swarm runtime from
-  HiveForge-managed compose/config artifacts and prebuilt images.
-- `swarm-full` - deploys the Docker Swarm runtime with dedicated service-owned
-  roots for RabbitMQ, Postgres, ClickHouse, and Redis. ClickHouse owns product
-  metrics. Grafana and the remaining runtime config/state stay under the shared
-  HiveForge project root.
+The `swarm-reduced` and `swarm-full` deploy/update playbooks render
+`/hf/stacks/compose.yml` and validate it with `docker stack config`. They do not
+run `docker stack deploy`. The remove playbook always fails, and `single-full`
+is rejected by deploy/update.
 
-The `single-full` profile intentionally maps to the existing canonical local
-PocketHive entrypoint instead of inventing a second compose orchestration path.
-The `swarm-reduced` and `swarm-full` profiles render a Docker Stack compose file
-from the Ansible Jinja2 template, then HiveForge deploys the rendered stack with
-`docker stack deploy`. They do not build or push images.
+A successful HiveForge action currently proves repository preparation,
+template rendering, and stack validation. It does not prove that the target
+runtime changed.
 
-For `swarm-reduced` and `swarm-full`, scenario/runtime workloads assume the HiveForge-managed
-project root is shared and available on every eligible Swarm node. PocketHive
-therefore does not require `pockethive.scenarios` or `pockethive.sut` node
-labels for Scenario Manager, Orchestrator, swarm controllers, dynamically
-launched workers, or bundled SUT/mock services. It also does not require a
-`pockethive.proxy` node label for HAProxy, Network Proxy Manager, Toxiproxy,
-Redis, or UI services because their state and config are either shared under
-the HiveForge-managed project root or stateless. Swarm controllers still run on
-manager nodes because they need Docker Swarm API access. Stateful placement
-remains explicit where the runtime profile declares dedicated roots.
+:::
 
-## HiveForge Path Contract
+## Implemented profile behavior
 
-PocketHive Ansible actions run inside the HiveForge action container. They must
-read and write the project action root, not Docker-daemon host paths.
+| Profile | Deploy/update | Remove |
+| --- | --- | --- |
+| `single-full` | Rejected. It does not run `build-hive.sh`. | Fails. |
+| `swarm-reduced` | Prepares, renders, and validates the reduced Swarm stack. | Fails. |
+| `swarm-full` | Prepares, renders, and validates the Swarm stack with dedicated RabbitMQ, Postgres, ClickHouse, and Redis roots. | Fails. |
 
-The action-root constant is:
+PocketHive keeps image build and publication outside HiveForge. The Swarm
+profiles consume registry-qualified, prebuilt images.
+
+For both Swarm profiles, Scenario Manager, Orchestrator, swarm controllers,
+dynamic workers, bundled SUT/mock services, proxy services, and UI use
+the HiveForge-managed shared project root where the stack template declares
+bind-backed state. Swarm controllers remain constrained to manager nodes
+because they need Docker Swarm API access.
+
+Redis is profile-specific: `swarm-reduced` uses the `redis-data` named volume;
+`swarm-full` uses a dedicated `POCKETHIVE_REDIS_ROOT` bind and placement label.
+`swarm-full` also uses dedicated service-owned roots and placement labels for
+RabbitMQ, Postgres, and ClickHouse. Those host paths must already exist on
+eligible nodes; the PocketHive action does not create or change them.
+
+## HiveForge path contract
+
+PocketHive Ansible actions run inside the HiveForge action container. They read
+and write the project action root, not Docker-daemon host paths.
 
 ```yaml
 hiveforge_root: /hf
 ```
 
-Use these paths exactly in PocketHive action playbooks:
-
-| Purpose | Path or value | Used by |
+| Purpose | Path or value | Owner |
 | --- | --- | --- |
-| Action root visible inside the Ansible container | `/hf` | Ansible reads/writes |
-| Managed runtime artifacts copied by `artifacts.managedPaths` | `/hf/artifacts/runtime/...` | Ansible reads |
-| Rendered Docker Stack file | `/hf/stacks/compose.yml` | Ansible writes, HiveForge deploys |
-| HiveForge-managed runtime state dirs | `/hf/state/...` | Ansible creates/chowns |
-| Docker-daemon host-visible bind root | `HIVEFORGE_BIND_SOURCE_DIR` | Stack template render only |
-| Dedicated `swarm-full` service data dirs | `POCKETHIVE_*_ROOT` | Stack template render only |
+| Action root inside the Ansible container | `/hf` | HiveForge/action |
+| Prepared release assets | `/hf/artifacts/runtime/...` | HiveForge managed artifacts |
+| Rendered Docker Stack file | `/hf/stacks/compose.yml` | PocketHive action |
+| Shared runtime state | `/hf/state/...` | PocketHive action under the managed root |
+| Docker-daemon-visible equivalent of the project root | `HIVEFORGE_BIND_SOURCE_DIR` | HiveForge environment |
+| Dedicated `swarm-full` service roots | `POCKETHIVE_*_ROOT` | Environment operator |
 
-`HIVEFORGE_BIND_SOURCE_DIR` is not the path that PocketHive Ansible should write
-to. It is the host-visible equivalent of the same managed project root for the
-target Docker daemon, for example `/opt/hiveforge/data/deployed/pockethive`.
-PocketHive passes it into the Ansible Stack template so rendered bind mounts point
-at paths Docker can resolve. The Ansible action itself must create shared state
-through `/hf/state/...`.
-
-The mapping is therefore:
+`HIVEFORGE_BIND_SOURCE_DIR` is used only when rendering bind sources for the
+target Docker daemon. Ansible must create shared state through `/hf/state/...`.
 
 ```text
-Ansible action path:      /hf/state/haproxy/runtime
-Rendered Docker bind:     ${HIVEFORGE_BIND_SOURCE_DIR}/state/haproxy/runtime
-Example Docker host path: /opt/hiveforge/data/deployed/pockethive/state/haproxy/runtime
+Action path:             /hf/state/haproxy/runtime
+Rendered bind source:    ${HIVEFORGE_BIND_SOURCE_DIR}/state/haproxy/runtime
+Example host equivalent: /opt/hiveforge/data/deployed/pockethive/state/haproxy/runtime
 ```
 
-`artifacts.managedPaths` only prepares release/runtime files under
-`/hf/artifacts/runtime/...`. Runtime state such as `/hf/state/grafana/data` and
-`/hf/state/tcp-mock/data` is not a managed artifact; the PocketHive action must
-create it before the rendered stack is handed back to HiveForge.
+Managed release assets are copied under `/hf/artifacts/runtime/...`. Mutable
+runtime state, such as Grafana and TCP Mock data, is created under `/hf/state`
+and is not a managed release artifact.
 
-In `swarm-full`, HiveForge only creates directories under its managed project
-root. It never creates, chmods, or chowns dedicated service mount roots. Those
-paths must already exist on nodes selected by the matching placement labels.
+## Declared runtime requirements
 
-Both Swarm profiles override the base Postgres healthcheck with a longer
-startup grace period. Fresh Postgres data directories on shared or remote
-storage can spend more than the local-compose default in `initdb`; Swarm must
-not kill that first task before the entrypoint finishes creating the database
-and host authentication rules.
-
-## Declared Runtime Requirements
-
-The `stack` component manifest declares these non-secret runtime environment
-requirements so `validate_requirements` can fail before the playbook starts:
+The component manifest currently declares:
 
 ```text
 DOCKER_REGISTRY
 POCKETHIVE_VERSION
 POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
-POCKETHIVE_STACK_NAME
 ```
 
-`DOCKER_REGISTRY` must include the trailing slash and must equal
-`POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX + "/"`.
-`POCKETHIVE_VERSION` must be set explicitly. `latest` is allowed only when the
-operator sets it intentionally; HiveForge must not infer it from a missing
-value.
+`DOCKER_REGISTRY` includes a trailing slash and equals the repository prefix
+plus `/`. `POCKETHIVE_VERSION` must be an explicit image tag; use the exact
+`<release-version>` approved for the operation rather than a floating tag.
 
-Current HiveForge component requirements are global per component, not
-profile-specific. Because of that, `swarm-full` dedicated root variables are
-documented here and validated by the playbook instead of being declared in
-`requirements.environment`, which would incorrectly make `swarm-reduced`
-require them too.
+`POCKETHIVE_STACK_NAME` is not a current component requirement and is not used
+by the playbooks.
 
-## Component
-
-- `stack` - the whole local PocketHive stack.
-
-Actions:
-
-- `deploy` - runs `./build-hive.sh --quick` for `single-full`; deploys the
-  rendered Docker Stack for `swarm-reduced` and `swarm-full`
-- `update` - runs `./build-hive.sh --quick` for `single-full`; redeploys the
-  rendered Docker Stack for `swarm-reduced` and `swarm-full`
-- `remove` - runs `./build-hive.sh --clean` for `single-full`; removes the
-  Docker Stack for `swarm-reduced` and `swarm-full`
-
-## Agent MCP Deploy Checklist
-
-When a human asks an agent to deploy PocketHive through HiveForge, use the
-HiveForge MCP tools only. Do not SSH to hosts, inspect Proxmox, run Docker
-commands locally against the target, or add deployment workarounds. Treat
-HiveForge validation failures as explicit configuration gaps to fix through
-HiveForge MCP configuration.
-
-For the large Docker Swarm environment currently exposed by HiveForge as
-`environmentId=swarm`, the production-like PocketHive stack profile is
-`swarm-full`.
-
-Agent sequence:
-
-1. Use HiveMind MCP for work context with `project_id=pockethive`.
-2. Confirm HiveForge is reachable with `check_health`.
-3. Confirm project/policy with `list_projects` and `list_environments`.
-4. If needed, allow PocketHive on the swarm environment:
-
-   ```text
-   set_environment_project_policy:
-     environmentId: swarm
-     projectId: pockethive
-     profiles: [swarm-full]
-     actions: [deploy, update, remove]
-   ```
-
-5. Set non-secret runtime env before `validate_requirements` or `start_action`.
-   For a release tag such as `v0.15.24`, use `POCKETHIVE_VERSION=0.15.24`
-   without the leading `v`:
-
-   ```text
-   set_project_runtime_env:
-     projectId: pockethive
-     profile: swarm-full
-     values:
-       DOCKER_REGISTRY: ghcr.io/sepa79/pockethive/
-       POCKETHIVE_VERSION: <release version without leading v>
-       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX: ghcr.io/sepa79/pockethive
-       POCKETHIVE_STACK_NAME: pockethive
-       POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
-       POCKETHIVE_POSTGRES_ROOT: /data/postgres
-       POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
-       POCKETHIVE_REDIS_ROOT: /data/redis
-       HTTP_PROXY: http://proxy.example:3128
-       HTTPS_PROXY: http://proxy.example:3128
-       NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
-   ```
-
-   Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
-   environment requires outbound proxy access. PocketHive renders those values
-   into Grafana so `GF_INSTALL_PLUGINS` can download
-   `grafana-clickhouse-datasource`; it also renders lowercase proxy variables
-   from the same uppercase values for tools that read lowercase names.
-
-6. Start the lifecycle action through HiveForge MCP:
-
-   ```text
-   start_action:
-     projectId: pockethive
-     gitRef: v<release version>
-     component: stack
-     action: update
-     profile: swarm-full
-   ```
-
-7. Poll only through `get_operation`. Verify completion with
-   `list_deployments` and/or `read_journal`.
-
-The synchronous `validate_requirements` and repository inspection calls may
-time out for PocketHive because checkout/managed-artifact preparation is large.
-Prefer `start_action` plus `get_operation` for the actual deployment workflow.
-
-## Example HiveForge Registry
-
-HiveForge keeps project registry and environment policy outside the project
-repository. For a local development registration, use a registry entry shaped
-like:
-
-```yaml
-projects:
-  - id: pockethive
-    name: PocketHive
-    source: github
-    repository: https://github.com/sepa79/PocketHive.git
-    approvedRefs:
-      - main
-```
-
-The matching local environment policy must explicitly allow the project,
-profile, and action:
-
-```yaml
-current: local
-environments:
-  - id: local
-    name: Local Docker
-    kind: local-docker
-    capabilities:
-      runtime:
-        - docker-single
-      managedRoot:
-        shared: false
-        nodes:
-          - local-docker
-    policy:
-      projects:
-        - id: pockethive
-          profiles:
-            - single-full
-          actions:
-            - deploy
-            - remove
-            - update
-```
-
-For `swarm-reduced`, HiveForge runtime environment must include these explicit
-non-secret values before `start_action`. Agents should set them before
-`validate_requirements` so the profile scope is ready for the whole deployment
-flow:
+`swarm-full` additionally validates these profile-specific host paths:
 
 ```text
-DOCKER_REGISTRY=192.168.88.54:5000/pockethive/
-POCKETHIVE_VERSION=dev-YYYYMMDD-HHMM-g<sha>
-POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX=192.168.88.54:5000/pockethive
-POCKETHIVE_STACK_NAME=pockethive
+POCKETHIVE_RABBITMQ_ROOT
+POCKETHIVE_POSTGRES_ROOT
+POCKETHIVE_CLICKHOUSE_ROOT
+POCKETHIVE_REDIS_ROOT
 ```
 
-`DOCKER_REGISTRY` must include the trailing slash because the base compose file
-concatenates it directly with image names. `POCKETHIVE_VERSION=latest` is
-allowed only as an explicit operator choice.
-
-`swarm-full` requires the same values plus explicit dedicated data directories.
-Each value must be the exact host directory mounted into the service container;
-PocketHive does not append another `/data` segment:
-
-```text
-POCKETHIVE_RABBITMQ_ROOT=/data/rabbitmq
-POCKETHIVE_POSTGRES_ROOT=/data/postgres
-POCKETHIVE_CLICKHOUSE_ROOT=/data/clickhouse
-POCKETHIVE_REDIS_ROOT=/data/redis
-```
-
-Those directories are Docker-daemon host paths, not HiveForge container paths.
-They must exist on nodes with the corresponding labels:
+Each is the exact host directory mounted into its service. Eligible Swarm nodes
+must carry the matching placement label:
 
 ```text
 node.labels.pockethive.rabbitmq == true
@@ -278,28 +113,112 @@ node.labels.pockethive.clickhouse == true
 node.labels.pockethive.redis == true
 ```
 
-HiveForge copies managed runtime files from the checked-out repo into the
-container-visible action root under:
+## Current preparation/validation workflow
+
+Agents must use HiveForge MCP only. Do not SSH to hosts, inspect the
+virtualization layer, run Docker commands directly on the target, or invent a
+deployment fallback.
+
+:::warning This workflow does not deploy
+
+The steps below exercise the current preparation/validation action. Record the
+result with that wording. Do not describe the action as a runtime deployment or
+update.
+
+:::
+
+For a configured `swarm-full` environment:
+
+1. Check HiveForge health and confirm the project/environment policy.
+2. Set the exact release registry, version, repository prefix, and required
+   dedicated roots.
+3. Start `deploy` or `update` for the approved git ref and `swarm-full`.
+4. Poll the HiveForge operation and inspect its journal.
+5. Record the result as **stack preparation/validation**, not deployment.
+
+Example runtime values:
 
 ```text
-/hf/artifacts/runtime/
+DOCKER_REGISTRY=ghcr.io/sepa79/pockethive/
+POCKETHIVE_VERSION=<release-version-without-leading-v>
+POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX=ghcr.io/sepa79/pockethive
+POCKETHIVE_RABBITMQ_ROOT=/data/rabbitmq
+POCKETHIVE_POSTGRES_ROOT=/data/postgres
+POCKETHIVE_CLICKHOUSE_ROOT=/data/clickhouse
+POCKETHIVE_REDIS_ROOT=/data/redis
 ```
 
-For `swarm-reduced` and `swarm-full`, HiveForge must also provide
-`HIVEFORGE_BIND_SOURCE_DIR`. PocketHive reads prepared runtime config files and
-creates shared runtime state through `/hf`, but renders Docker Stack bind
-sources with `HIVEFORGE_BIND_SOURCE_DIR` because those paths are resolved by the
-target Docker daemon, not by the HiveForge action container.
+Set proxy variables only when the target needs outbound proxy access. Never
+copy example proxy hostnames or credentials into a real configuration.
 
-Expected managed files for `swarm-reduced`:
+The current action shape is:
 
 ```text
-artifacts/runtime/config/rabbitmq/rabbitmq.conf
-artifacts/runtime/config/clickhouse/init/02-ph-tx-outcome-v2.sql
-artifacts/runtime/config/clickhouse/clickhouse-entrypoint.sh
-artifacts/runtime/config/clickhouse/migrate-tx-outcome-v1-to-v2.sh
-artifacts/runtime/scenarios
-artifacts/runtime/scenario-manager/capabilities
-artifacts/runtime/scenario-manager/network
-artifacts/runtime/scenario-manager/sut
+start_action:
+  projectId: pockethive
+  gitRef: v<release-version>
+  component: stack
+  action: update
+  profile: swarm-full
 ```
+
+Do not run `remove`: the current playbook fails deliberately for every profile.
+
+**Expected result:** the HiveForge journal records repository preparation,
+stack rendering, and successful `docker stack config` validation.
+
+**What this proves:** the action accepted the declared inputs and produced a
+syntactically valid rendered stack.
+
+**What this does not prove:** that deploy/update changed the target runtime,
+that PocketHive ingress is healthy, or that remove works.
+
+**Next step:** retain the operation ID, exact git ref, profile, image tag, and
+journal as preparation/validation evidence. Runtime verification is not a
+valid next step until HiveForge reports actual execution evidence.
+
+**If it fails:** correct the explicit requirement or policy named in the
+HiveForge journal and rerun through HiveForge. Do not use SSH, direct Docker,
+or a different profile as an implicit fallback.
+
+## Intended managed workflow
+
+After runtime execution is implemented, the governed workflow is intended to:
+
+1. publish one immutable PocketHive image set;
+2. bind exact registry/version inputs to an approved git ref;
+3. execute deploy or update through HiveForge;
+4. distinguish render/validation evidence from runtime-execution evidence;
+5. verify UI health and the first-swarm lifecycle through official ingress;
+6. execute and verify governed remove or documented recovery.
+
+These steps describe the target workflow, not current behavior.
+
+## Managed deployment completion gate
+
+Before HiveForge can be documented as a supported managed deployment, the
+integration must demonstrate:
+
+1. deploy creates or changes the target stack;
+2. update changes an existing stack;
+3. remove deletes the managed stack;
+4. operation evidence distinguishes preparation from runtime execution;
+5. the PocketHive UI health check passes through official ingress;
+6. a scenario can complete create, ready, start, run, stop, and remove through
+   the PocketHive customer interfaces.
+
+Until that gate passes, use the
+[source-development local flow](guides/operators/deployment.md) for a working
+local environment and track HiveForge execution as an explicit dependency.
+
+## Update and recovery boundary
+
+The current action does not update a running stack, remove one, or provide a
+runtime rollback. A failed action is a preparation/validation failure: preserve
+the operation journal, correct the explicit configuration or policy through
+HiveForge, and rerun the approved action.
+
+Do not infer runtime recovery from a successful render, and do not use direct
+host access as a workaround. Once execution exists, update/remove/rollback
+instructions must identify the observable runtime change, verification through
+official ingress, and the evidence retained for each step.

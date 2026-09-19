@@ -4,10 +4,12 @@ import { themes as prismThemes } from "prism-react-renderer";
 
 const DOCS_URL = process.env.DOCS_URL || "http://localhost:3000";
 const DOCS_BASE_URL = process.env.DOCS_BASE_URL || "/";
+const POCKETHIVE_APP_URL = process.env.POCKETHIVE_APP_URL;
+const docsLink = (path = "") => `${DOCS_BASE_URL}${path}`;
 
 const config: Config = {
   title: "PocketHive Docs",
-  tagline: "RabbitMQ-centric load and behavior simulator",
+  tagline: "Build, run, and observe reusable behavior simulations",
   url: DOCS_URL,
   baseUrl: DOCS_BASE_URL,
   onBrokenLinks: "throw",
@@ -46,10 +48,20 @@ const config: Config = {
             "ARCHITECTURE.md",
             "USAGE.md",
             "ORCHESTRATOR-REST.md",
+            "HIVEFORGE.md",
+            "PROJECT_MAP.md",
+            "GLOSSARY.md",
+            "UPGRADING.md",
             "observability.md",
             "correlation-vs-idempotency.md",
           ],
-          exclude: ["archive/**", "inProgress/**", "**/*.html"],
+          exclude: [
+            "archive/**",
+            "inProgress/**",
+            "scenarios/CAPACITY_MODELER_NOTES.md",
+            "scenarios/SCENARIO_BUILDER_NOTES.md",
+            "**/*.html",
+          ],
         },
         blog: false,
         theme: {
@@ -65,7 +77,30 @@ const config: Config = {
         alt: "PocketHive Logo",
         src: "img/logo.svg",
       },
-      items: [],
+      items: [
+        {
+          type: "docSidebar",
+          sidebarId: "customerSidebar",
+          label: "Customer guide",
+          position: "left",
+        },
+        {
+          type: "docSidebar",
+          sidebarId: "referenceSidebar",
+          label: "Reference",
+          position: "left",
+        },
+        ...(POCKETHIVE_APP_URL
+          ? [
+              {
+                label: "PocketHive app",
+                href: POCKETHIVE_APP_URL,
+                target: "_blank" as const,
+                position: "right" as const,
+              },
+            ]
+          : []),
+      ],
     },
     footer: {
       style: "dark",
@@ -73,8 +108,15 @@ const config: Config = {
         {
           title: "Docs",
           items: [
-            { label: "Start here", to: "/" },
-            { label: "Quickstart", to: "/guides/onboarding/quickstart-15min" },
+            { label: "Overview", to: docsLink() },
+            {
+              label: "Quickstart",
+              to: docsLink("guides/onboarding/quickstart-15min"),
+            },
+            {
+              label: "Application guide",
+              to: docsLink("guides/ui/application-guide"),
+            },
           ],
         },
       ],

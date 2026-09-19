@@ -1,5 +1,12 @@
 # Templating Guide: Advanced
 
+| Reader context | Details |
+| --- | --- |
+| Audience | Experienced scenario and request-template authors |
+| Prerequisites | Completion of [Templating Guide: Basics](templating-basics.md); Redis access for sequence examples |
+| Expected outcome | A validated advanced template that uses only explicitly current helpers |
+| Last verified PocketHive version | PocketHive `v0.15.35` |
+
 This guide covers advanced patterns for deterministic IDs, weighted
 routing, request templates, and validation workflow.
 
@@ -129,6 +136,9 @@ body: |
 
 ## 2. Proposed weighted helpers (Pebble)
 
+> [!IMPORTANT]
+> **Target/proposed feature:** `pickWeighted(...)`, `pickWeightedSeeded(...)`, and `templating.reseed` are not part of the current PocketHive helper surface. Use the current constrained SpEL approach documented in [Templating Guide: Basics](templating-basics.md) until the proposal is implemented and documented as current.
+
 This is a proposal for shorthand weighted selection without chained
 `#randInt(...)` calls.
 
@@ -237,3 +247,11 @@ The tool exits non-zero on failures.
 - Only registered helpers are callable.
 - Keep heavy logic in workers or templates, not deeply nested
   expressions.
+
+## Troubleshooting
+
+Run the canonical checks in [Authoring and Test Tools](integrations/authoring-and-test-tools.md). For runtime rendering evidence, use the [observability and troubleshooting guide](operators/observability-troubleshooting.md).
+
+## Next step
+
+Apply the current helpers to a complete bundle using [Create and Run Your First Scenario](onboarding/first-scenario.md), and keep proposed helpers out of production scenarios until their status changes.
