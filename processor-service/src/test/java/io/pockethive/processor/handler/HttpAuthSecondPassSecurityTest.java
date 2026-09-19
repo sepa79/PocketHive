@@ -96,7 +96,6 @@ class HttpAuthSecondPassSecurityTest {
             assertThat(debugMessages).as("DEBUG capture is active for harmless headers")
                 .anyMatch(message -> message.contains("X-Audit-Probe") && message.contains("safe-probe"));
 
-            // Keep this expectation failing until credentials are redacted at the production log boundary.
             assertThat(debugMessages).as("downstream Bearer credentials must be absent from every DEBUG message")
                 .noneMatch(message -> message.contains(SYNTHETIC_TOKEN));
         } finally {

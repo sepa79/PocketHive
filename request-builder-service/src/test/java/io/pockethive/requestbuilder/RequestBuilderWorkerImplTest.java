@@ -161,15 +161,33 @@ class RequestBuilderWorkerImplTest {
         dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
-    WorkItem headerSeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
-    JsonNode headerEnvelope = new ObjectMapper().readTree(worker.onMessage(headerSeed, context).asString());
-    assertThat(headerEnvelope.get("request").get("headers").get("Authorization").asText())
-        .isEqualTo("Bearer header-token");
+    var logger = (ch.qos.logback.classic.Logger) context.logger();
+    var previousLevel = logger.getLevel();
+    var events = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    events.start();
+    logger.addAppender(events);
+    logger.setLevel(ch.qos.logback.classic.Level.DEBUG);
+    try {
+      WorkItem headerSeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
+      JsonNode headerEnvelope = new ObjectMapper().readTree(worker.onMessage(headerSeed, context).asString());
+      assertThat(headerEnvelope.get("request").get("headers").get("Authorization").asText())
+          .isEqualTo("Bearer header-token");
 
-    WorkItem querySeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "query").build();
-    JsonNode queryEnvelope = new ObjectMapper().readTree(worker.onMessage(querySeed, context).asString());
-    assertThat(queryEnvelope.get("request").get("path").asText())
-        .isEqualTo("/query?existing=1&api_key=query-token");
+      WorkItem querySeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "query").build();
+      JsonNode queryEnvelope = new ObjectMapper().readTree(worker.onMessage(querySeed, context).asString());
+      assertThat(queryEnvelope.get("request").get("path").asText())
+          .isEqualTo("/query?existing=1&api_key=query-token");
+      assertThat(events.list).isNotEmpty();
+      assertThat(events.list).allSatisfy(event -> {
+        assertThat(event.getFormattedMessage()).doesNotContain("header-token", "query-token");
+        assertThat(java.util.Arrays.toString(event.getArgumentArray()))
+            .doesNotContain("header-token", "query-token");
+      });
+    } finally {
+      logger.detachAppender(events);
+      logger.setLevel(previousLevel);
+      events.stop();
+    }
   }
 
   @Test

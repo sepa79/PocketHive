@@ -37,10 +37,11 @@ import javax.crypto.spec.SecretKeySpec;
 /**
  * Responsibility: activate prepared worker profiles and coordinate credential application and token acquisition.
  * Must not: duplicate profile preparation, signed acquisition or token storage/claim behavior, or own product identity.
+ * Delegates owned-resource lifetime to RESP-WORK-AUTH-RESOURCES.
  * Consumes RESP-REDIS-CONNECTION-SETTINGS for validated token-store connection values.
  * Contract: RESP-WORK-AUTH-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-work-auth-runtime.
  */
-public final class AuthRuntime {
+public final class AuthRuntime implements AutoCloseable {
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -55,6 +56,7 @@ public final class AuthRuntime {
     private final Map<String, AuthProfile> profiles;
     private final Map<String, String> fingerprints;
     private final TokenStore tokenStore;
+    private final AuthRuntimeResources resources;
     private final TemplateRenderer renderer;
     private final HttpClient httpClient;
     private final OAuth2HttpSignatureTokenProvider signedTokens;
@@ -62,12 +64,21 @@ public final class AuthRuntime {
     private AuthRuntime(
         Map<String, AuthProfile> profiles,
         Map<String, String> fingerprints,
-        TokenStore tokenStore,
+        AuthRuntimeResources resources,
         TemplateRenderer renderer
     ) {
-        this(profiles, fingerprints, tokenStore, renderer, HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build());
+        try {
+            this.profiles = Map.copyOf(profiles);
+            this.fingerprints = Map.copyOf(fingerprints);
+            this.resources = resources;
+            this.tokenStore = resources.tokenStore();
+            this.renderer = renderer;
+            this.httpClient = resources.httpClient();
+            this.signedTokens = new OAuth2HttpSignatureTokenProvider(tokenStore, httpClient);
+        } catch (RuntimeException | Error failure) {
+            resources.closeAfterFailure(failure);
+            throw failure;
+        }
     }
 
     AuthRuntime(
@@ -77,12 +88,12 @@ public final class AuthRuntime {
         TemplateRenderer renderer,
         HttpClient httpClient
     ) {
-        this.profiles = Map.copyOf(profiles);
-        this.fingerprints = Map.copyOf(fingerprints);
-        this.tokenStore = tokenStore;
-        this.renderer = renderer;
-        this.httpClient = httpClient;
-        this.signedTokens = new OAuth2HttpSignatureTokenProvider(tokenStore, httpClient);
+        this(profiles, fingerprints, AuthRuntimeResources.borrowed(tokenStore, httpClient), renderer);
+    }
+
+    @Override
+    public void close() {
+        resources.close();
     }
 
     public static AuthRuntime forTemplates(
@@ -152,7 +163,7 @@ public final class AuthRuntime {
     }
 
     public static AuthRuntime inactive(TemplateRenderer renderer) {
-        return new AuthRuntime(Map.of(), Map.of(), null, renderer);
+        return new AuthRuntime(Map.of(), Map.of(), AuthRuntimeResources.withoutTokenStore(), renderer);
     }
 
     public boolean active() {
@@ -164,8 +175,8 @@ public final class AuthRuntime {
             AuthProfile profile = profile(ref);
             AuthMaterial material = material(ref.profileId(), profile, item, context);
             switch (ref.applyAs()) {
-                case HTTP_AUTHORIZATION_BEARER -> request.headers().put("Authorization", "Bearer " + material.value());
-                case HTTP_HEADER, HMAC_HEADER -> request.headers().put(headerName(ref, profile), headerValue(ref, profile, material, item, request.body()));
+                case HTTP_AUTHORIZATION_BEARER -> AuthHttpHeaders.replace(request.headers(), "Authorization", "Bearer " + material.value());
+                case HTTP_HEADER, HMAC_HEADER -> AuthHttpHeaders.replace(request.headers(), headerName(ref, profile), headerValue(ref, profile, material, item, request.body()));
                 case HTTP_QUERY_PARAM -> request.setPath(appendQuery(request.path(), queryParam(ref, profile), material.value()));
                 default -> throw unsupported(ref, "HTTP");
             }
@@ -274,12 +285,12 @@ public final class AuthRuntime {
                     }
                 }
             }
-            TokenStore store = resolved.values().stream().anyMatch(p -> p.getStorage().getMode() == AuthStorageMode.REDIS)
-                ? new RedisTokenStore(
-                    context.info().swarmId(),
+            AuthRuntimeResources resources = resolved.values().stream()
+                .anyMatch(p -> p.getStorage().getMode() == AuthStorageMode.REDIS)
+                ? AuthRuntimeResources.redis(context.info().swarmId(),
                     redisProperties.connectionSettings(RedisSequenceProperties.PREFIX))
-                : null;
-            return new AuthRuntime(resolved, fingerprints, store, renderer);
+                : AuthRuntimeResources.withoutTokenStore();
+            return new AuthRuntime(resolved, fingerprints, resources, renderer);
         } catch (IOException ex) {
             throw AuthFailureException.configuration("auth-profiles-read", "Failed to read " + file, ex);
         } catch (RuntimeException ex) {

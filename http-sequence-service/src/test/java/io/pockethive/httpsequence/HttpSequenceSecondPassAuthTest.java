@@ -167,6 +167,38 @@ class HttpSequenceSecondPassAuthTest {
     } finally { observer.shutdown(); }
   }
 
+  @Test
+  void interruptedRetryReleasesRedisConnectionAndPreservesInterruption() throws Exception {
+    RedisClient observer = RedisClient.create(RedisURI.create(System.getenv("AUTH_REDIS_TEST_HOST"),
+        Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT"))));
+    var retry = new HttpSequenceWorkerConfig.Retry(3, 100, 1.0, 100, List.of("5xx"));
+    // Observe runner retries exactly: Apache's independent 503 retry would precede our interruption.
+    try (var connection = observer.connect();
+         Fixture f = new Fixture(null, false, retry, HttpClients.custom().disableAutomaticRetries().build())) {
+      int before = clientCount(connection.sync().info("clients"));
+      f.resourceStatus = 503;
+      f.interruptAfterResource = true;
+      WorkItem result;
+      try {
+        result = f.run();
+        assertThat(Thread.currentThread().isInterrupted()).isTrue();
+      } finally {
+        Thread.interrupted();
+      }
+      assertThat(result.stepHeaders()).containsEntry(HttpSequenceHeaders.STATUS, 503)
+          .containsEntry(HttpSequenceHeaders.ATTEMPTS, 1);
+      assertThat(f.tokenRequests).hasValue(1);
+      assertThat(f.resources).hasSize(1);
+      assertThat(f.signatureFailures).isEmpty();
+      assertThat(clientCount(connection.sync().info("clients")))
+          .as("an interrupted completed journey must release its owned Redis connection")
+          .isEqualTo(before);
+    } finally {
+      Thread.interrupted();
+      observer.shutdown();
+    }
+  }
+
   private static int clientCount(String info) {
     return info.lines().filter(line -> line.startsWith("connected_clients:"))
         .map(line -> Integer.parseInt(line.substring("connected_clients:".length()).trim())).findFirst().orElseThrow();
@@ -186,7 +218,7 @@ class HttpSequenceSecondPassAuthTest {
   private final class Fixture implements AutoCloseable {
     final HttpsServer token;
     final HttpServer resource;
-    final CloseableHttpClient transport = HttpClients.createDefault();
+    final CloseableHttpClient transport;
     final AtomicInteger tokenRequests = new AtomicInteger();
     final AtomicInteger signatureForwarded = new AtomicInteger();
     final List<List<String>> resources = new CopyOnWriteArrayList<>();
@@ -196,9 +228,16 @@ class HttpSequenceSecondPassAuthTest {
     final WorkerContext context;
     final WorkItem seed;
     volatile int resourceStatus = 200;
+    volatile boolean interruptAfterResource;
     volatile String tokenBody = "{\"access_token\":\"" + TOKEN + "\",\"token_type\":\"bEaReR\",\"expires_in\":120,\"unknown\":true}";
 
     Fixture(String existingHeader, boolean mixed) throws Exception {
+      this(existingHeader, mixed, null, HttpClients.createDefault());
+    }
+
+    Fixture(String existingHeader, boolean mixed, HttpSequenceWorkerConfig.Retry retry,
+        CloseableHttpClient transport) throws Exception {
+      this.transport = transport;
       token = HttpsServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
       token.setHttpsConfigurator(new HttpsConfigurator(serverTls));
       token.createContext("/", this::validateToken);
@@ -237,7 +276,7 @@ class HttpSequenceSecondPassAuthTest {
           """.formatted(token.getAddress().getPort(), RAW_TARGET, keyFile.toString().replace("\\", "/")));
       writeTemplate(templates, "A", "signed", "/signed", existingHeader);
       List<HttpSequenceWorkerConfig.Step> steps = new ArrayList<>();
-      steps.add(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, null, List.of(), List.of()));
+      steps.add(new HttpSequenceWorkerConfig.Step("s1", "A", null, false, retry, List.of(), List.of()));
       if (mixed) {
         writeTemplate(templates, "B", "static", "/static", null);
         steps.add(new HttpSequenceWorkerConfig.Step("s2", "B", null, false, null, List.of(), List.of()));
@@ -252,9 +291,14 @@ class HttpSequenceSecondPassAuthTest {
       var redis = new RedisSequenceProperties();
       redis.setHost(System.getenv("AUTH_REDIS_TEST_HOST"));
       redis.setPort(Integer.parseInt(System.getenv("AUTH_REDIS_TEST_PORT")));
+      var executor = new ApacheHttpCallExecutor(transport);
       runner = new HttpSequenceRunner(new ObjectMapper().findAndRegisterModules(), Clock.systemUTC(),
           (template, ignored) -> template == null ? "" : template, new TemplateLoader(),
-          new ApacheHttpCallExecutor(transport), new DefaultHttpSequenceTargetResolver(), redis);
+          (target, call) -> {
+            var result = executor.execute(target, call);
+            if (interruptAfterResource) Thread.currentThread().interrupt();
+            return result;
+          }, new DefaultHttpSequenceTargetResolver(), redis);
       config = new HttpSequenceWorkerConfig("http://127.0.0.1:" + resource.getAddress().getPort(), templates.toString(), "default", 1,
           steps, new HttpSequenceWorkerConfig.DebugCapture(HttpSequenceWorkerConfig.DebugCaptureMode.NONE, 0.0, 1, 1, false, false, 0, 1), Map.of());
     }

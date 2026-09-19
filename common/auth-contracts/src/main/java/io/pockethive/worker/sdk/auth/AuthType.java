@@ -46,7 +46,7 @@ public enum AuthType {
         if (value == null || value.isBlank()) {
             return NONE;
         }
-        return valueOf(value.toUpperCase().replace('-', '_'));
+        return valueOf(value.toUpperCase(Locale.ROOT).replace('-', '_'));
     }
 
     /**

@@ -13,9 +13,11 @@ import java.nio.file.Path;
 import java.security.KeyPairGenerator;
 import java.util.Base64;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.api.parallel.ResourceLock;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
 
@@ -23,6 +25,32 @@ class AuthProfilePreparationTest {
     private static final String PRIVATE_KEY = testPrivateKey();
     private static final String TOKEN_KEY = "signed-api";
     @TempDir Path temporary;
+
+    @ParameterizedTest
+    @CsvSource({"OAUTH2_HTTP_SIGNATURE", "OAUTH2_CLIENT_CREDENTIALS", "OAUTH2_PASSWORD_GRANT"})
+    @ResourceLock("default-locale-timezone")
+    void profilePreparationRoundTripIsIndependentOfDefaultLocale(AuthType type) {
+        AuthProfile authored = profile();
+        authored.setType(type);
+        Locale original = Locale.getDefault();
+        Locale originalDisplay = Locale.getDefault(Locale.Category.DISPLAY);
+        Locale originalFormat = Locale.getDefault(Locale.Category.FORMAT);
+        try {
+            Locale.setDefault(Locale.forLanguageTag("tr-TR"));
+            AuthProfile resolved = AuthProfilePreparation.resolveProfile(authored,
+                Map.of(), Map.of(), context(), (text, values) -> text);
+            assertThat(resolved.getType()).isEqualTo(type);
+            assertThat(resolved.getStorage().getMode()).isEqualTo(AuthStorageMode.REDIS);
+            assertThat(resolved.getStorage().getTokenKey()).isEqualTo(TOKEN_KEY);
+            assertThat(resolved.mergedProperties()).isEqualTo(authored.mergedProperties());
+            assertThat(authored.getType()).isEqualTo(type);
+        } finally {
+            Locale.setDefault(original);
+            Locale.setDefault(Locale.Category.DISPLAY, originalDisplay);
+            Locale.setDefault(Locale.Category.FORMAT, originalFormat);
+        }
+    }
+
 
     @Test
     void rendersNestedValuesWithoutMutatingAuthoredProfile() {
