@@ -9,7 +9,7 @@ import java.util.Objects;
 /**
  * Responsibility: Model the ScenarioWorkflow MCP domain concept and enforce its local invariants.
  * Must not: Access transport, configuration, or infrastructure adapters.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-WORKFLOW - docs/architecture/runtime-responsibilities.md#resp-mcp-workflow.
  */
 
 public final class ScenarioWorkflow {
@@ -114,6 +114,7 @@ public final class ScenarioWorkflow {
             throw new WorkflowRuleViolation("WORKFLOW_REQUIREMENTS_UNRESOLVED");
         }
         capabilityFingerprint = Objects.requireNonNull(capabilities, "capabilities");
+        invalidateDownstream();
         state = ScenarioWorkflowState.READY_TO_GENERATE;
         revision++;
     }
@@ -125,6 +126,21 @@ public final class ScenarioWorkflow {
         generatedFileSetDigest = requireText(fileSetDigest, "fileSetDigest");
         state = ScenarioWorkflowState.GENERATED;
         revision++;
+    }
+
+    public void requireGeneration(long expectedRevision, String expectedFileSetDigest,
+                                  CapabilityFingerprint expectedCapabilities) {
+        requireRevision(expectedRevision);
+        if (!Objects.equals(generatedFileSetDigest, expectedFileSetDigest)
+            || !Objects.equals(capabilityFingerprint, expectedCapabilities)) {
+            throw new WorkflowRuleViolation("WORKFLOW_GENERATION_MISMATCH");
+        }
+    }
+
+    public void requireValidatedGeneration(long expectedRevision, String expectedFileSetDigest,
+                                           CapabilityFingerprint expectedCapabilities) {
+        requireGeneration(expectedRevision, expectedFileSetDigest, expectedCapabilities);
+        requireState(ScenarioWorkflowState.VALIDATED, "WORKFLOW_NOT_VALIDATED");
     }
 
     public void validated(long expectedRevision, String archiveDigest, String bundleContentDigest) {

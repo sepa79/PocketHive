@@ -270,6 +270,31 @@ Invalid, incomplete, stale, or mismatched input fails explicitly. There is no
 create/replace fallback, server-side Git checkout, bundle-root scan, or archive
 execution.
 
+Workflow-bound upload tickets retain the prepared workflow revision, generated
+file-set digest, and capability fingerprint. Validation completion applies only
+to that exact generation. Its receipt retains this identity; publication checks
+the corresponding validated revision both before calling Scenario Manager and
+when recording completion. Regeneration, cancellation, capability changes, or a
+concurrent edit make older tickets stale; no receipt can validate or publish the
+replacement proposal. Regeneration clears prior validation/publication evidence
+from the current workflow projection; historical upload receipts remain separate. Workflow saves compare the persisted revision atomically.
+Validation persists the workflow transition, receipt and consumed ticket in one
+atomic state write, so a failed write leaves no partial accepted evidence.
+If the owner has already published while the workflow changes, the publication
+attempt keeps the verified owner result and reports a workflow state-sync error;
+it does not mark the replacement proposal published or retry the owner write.
+Concurrent upload completion updates the canonical ticket and publication attempt
+after the owner response; another upload's rollback cannot discard that result.
+If saving the owner result itself fails, publication reports an ambiguous durable
+outcome with its attempt ID and retains the in-flight state for restart recovery.
+Owner requests remain concurrent and are not retried by this recovery path.
+
+Coordination-state schema 4 invalidates legacy workflow-bound tickets because
+their prepared generation was not recorded. Existing receipts remain readable
+with explicit `LEGACY_WORKFLOW` binding and cannot authorize publication; clients
+must prepare and validate again. Direct-upload evidence and publication attempts
+are retained; migration never guesses a generation from the current workflow.
+
 The prepare result returns the opaque upload capability exactly once. It
 authorises only one binary `PUT` to that exact ticket before its expiry; it is
 not an MCP access token and cannot call tools or another upload ticket. The MCP

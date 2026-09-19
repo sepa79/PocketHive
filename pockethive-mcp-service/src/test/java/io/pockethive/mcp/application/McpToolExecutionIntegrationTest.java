@@ -469,7 +469,7 @@ class McpToolExecutionIntegrationTest {
         ValidationUploadTicket ticket = mock(ValidationUploadTicket.class);
         when(ticket.id()).thenReturn("uv-test");
         when(ticket.expiresAt()).thenReturn(NOW.plusSeconds(300));
-        when(uploads.prepareValidationWithCapability(eq(PRINCIPAL), eq(workflow.id()), any(), any(), eq(NOW)))
+        when(uploads.prepareValidationWithCapability(eq(PRINCIPAL), eq(UploadWorkflowBinding.workflow(workflow)), any(), any(), eq(NOW)))
             .thenReturn(new PreparedUpload<>(ticket, "validation-capability"));
 
         assertThat(json(execute("scenario_bundle_validation_prepare", input)))
@@ -479,7 +479,7 @@ class McpToolExecutionIntegrationTest {
             .contains("\"expiresAt\":");
         ArgumentCaptor<io.pockethive.mcp.domain.BundleFileManifest> manifest =
             ArgumentCaptor.forClass(io.pockethive.mcp.domain.BundleFileManifest.class);
-        verify(uploads).prepareValidationWithCapability(eq(PRINCIPAL), eq(workflow.id()),
+        verify(uploads).prepareValidationWithCapability(eq(PRINCIPAL), eq(UploadWorkflowBinding.workflow(workflow)),
             eq(new SourceMetadata("git@example/repo", COMMIT, "scenarios/sample", SourceVerification.CLIENT_ASSERTED)),
             manifest.capture(), eq(NOW));
         assertThat(manifest.getValue().files()).hasSize(1);
@@ -560,7 +560,8 @@ class McpToolExecutionIntegrationTest {
         state.workflows.put(workflow.id(), workflow);
         state.sessions.put("as-answer", AgentSession.open("as-answer", PRINCIPAL, NOW, Duration.ofHours(1)));
         when(uploads.validationReceipt("receipt-a", PRINCIPAL))
-            .thenReturn(receipt(UploadWorkflowBinding.workflow(workflow.id())));
+            .thenReturn(receipt(new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, workflow.id(), 1, SHA,
+                new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, NOW))));
         when(uploads.preparePublicationWithCapability(any(), any(), any(), any(), any(), any(), any(), any(), any()))
             .thenReturn(new PreparedUpload<>(mock(PublicationUploadTicket.class), "publication-capability"));
         Map<String, Object> input = bundleInput();
@@ -1083,19 +1084,26 @@ class McpToolExecutionIntegrationTest {
         }
 
         @Override
-        public void saveWorkflow(ScenarioWorkflow workflow, List<Map<String, Object>> files) {
+        public void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision, List<Map<String, Object>> files) {
             workflows.put(workflow.id(), workflow);
             generatedFiles.put(workflow.id(), List.copyOf(files));
             savedWorkflowsWithFiles.add(workflow.id());
         }
 
         @Override
-        public void saveWorkflow(ScenarioWorkflow workflow) {
+        public void saveWorkflow(ScenarioWorkflow workflow, long expectedRevision) {
             workflows.put(workflow.id(), workflow);
         }
 
         @Override
-        public void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow) {
+        public void saveWorkflowAndUploadCoordination(ScenarioWorkflow workflow, long expectedRevision,
+                                                     UploadCoordinationSnapshot uploadState) {
+            saveWorkflow(workflow, expectedRevision);
+            saveUploadCoordination(uploadState);
+        }
+
+        @Override
+        public void saveWorkflowAndRemoveGeneratedFiles(ScenarioWorkflow workflow, long expectedRevision) {
             workflows.put(workflow.id(), workflow);
             generatedFiles.remove(workflow.id());
             removedGeneratedFiles.add(workflow.id());

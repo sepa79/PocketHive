@@ -43,6 +43,11 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
 class BundleUploadCoordinatorTest {
+    private static UploadWorkflowBinding binding(String id) {
+        return new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, id, 1, "sha256:files",
+            new io.pockethive.mcp.domain.CapabilityFingerprint("sha256:capabilities", Instant.EPOCH));
+    }
+
     private static final String CAPABILITY_DIGEST = "sha256:" + "b".repeat(64);
 
     @TempDir
@@ -57,7 +62,7 @@ class BundleUploadCoordinatorTest {
         BundleFileManifest manifest = manifest(Map.of(
             "scenario.yaml", "id: safe\n", "seed/data.sql", "select 1;\n"));
 
-        ValidationUploadTicket validation = coordinator.prepareValidation(principal, "wf-1",
+        ValidationUploadTicket validation = coordinator.prepareValidation(principal, binding("wf-1"),
             source(), manifest, Instant.now());
         assertThat(validation.uploadPath()).isEqualTo("/mcp/uploads/" + validation.id());
         assertThat(owner.calls).isZero();
@@ -120,7 +125,7 @@ class BundleUploadCoordinatorTest {
         PrincipalKey ownerPrincipal = principal("owner");
         byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
-        ValidationUploadTicket ticket = coordinator.prepareValidation(ownerPrincipal, "wf-1", source(), manifest,
+        ValidationUploadTicket ticket = coordinator.prepareValidation(ownerPrincipal, binding("wf-1"), source(), manifest,
             Instant.parse("2026-08-18T10:00:00Z"));
 
         assertRejected(() -> coordinator.receive(ticket.id(), principal("other"), "application/zip",
@@ -201,14 +206,14 @@ class BundleUploadCoordinatorTest {
 
         try (AtomicCoordinationStateRepository firstState = state(properties)) {
             BundleUploadCoordinator first = new BundleUploadCoordinator(owner, properties, firstState,
-                lifecycle());
+                lifecycle(firstState));
             receipt = validate(first, principal, archive, manifest,
                 Instant.parse("2026-08-18T12:00:00Z"));
         }
 
         try (AtomicCoordinationStateRepository restartedState = state(properties)) {
             BundleUploadCoordinator restarted = new BundleUploadCoordinator(owner, properties, restartedState,
-                lifecycle());
+                lifecycle(restartedState));
             assertThat(restarted.validationReceipt(receipt.id(), principal)).isEqualTo(receipt);
 
             PublicationAttempt attempt = new PublicationAttempt("pa-restart", principal,
@@ -217,7 +222,7 @@ class BundleUploadCoordinatorTest {
             attempt.verified();
             attempt.ownerCallInFlight();
             PublicationUploadTicket ticket = new PublicationUploadTicket("up-restart", principal,
-                UploadWorkflowBinding.workflow("wf-1"),
+                binding("wf-1"),
                 source(), manifest, CAPABILITY_DIGEST, Instant.now().plusSeconds(60), attempt.id(), receipt.id(),
                 receipt.archiveDigest(), receipt.bundleContentDigest(), PublicationMode.REPLACE, "safe");
             ticket.begin();
@@ -229,7 +234,7 @@ class BundleUploadCoordinatorTest {
 
         try (AtomicCoordinationStateRepository recoveredState = state(properties)) {
             BundleUploadCoordinator recovered = new BundleUploadCoordinator(owner, properties, recoveredState,
-                lifecycle());
+                lifecycle(recoveredState));
             assertThat(recovered.publicationAttempt("pa-restart", principal).state())
                 .isEqualTo(PublicationAttemptState.AMBIGUOUS);
             assertThatThrownBy(() -> recovered.receive("up-restart", principal, "application/zip",
@@ -247,13 +252,16 @@ class BundleUploadCoordinatorTest {
         FakeOwner owner = new FakeOwner();
         BundleUploadLifecycle forbiddenLifecycle = new BundleUploadLifecycle() {
             @Override
-            public void validated(PrincipalKey principal, String workflowId, String archiveDigest,
-                                  String bundleContentDigest) {
+            public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archiveDigest,
+                                  String bundleContentDigest, UploadCoordinationSnapshot uploadState) {
                 throw new AssertionError("direct validation must not touch workflow state");
             }
 
             @Override
-            public void published(PrincipalKey principal, String workflowId, PublicationAttempt attempt) {
+            public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) { }
+
+            @Override
+            public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
                 throw new AssertionError("direct publication must not touch workflow state");
             }
         };
@@ -318,12 +326,15 @@ class BundleUploadCoordinatorTest {
         FakeOwner owner = new FakeOwner();
         BundleUploadLifecycle lifecycle = new BundleUploadLifecycle() {
             @Override
-            public void validated(PrincipalKey principal, String workflowId, String archiveDigest,
-                                  String bundleContentDigest) {
+            public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archiveDigest,
+                                  String bundleContentDigest, UploadCoordinationSnapshot uploadState) {
             }
 
             @Override
-            public void published(PrincipalKey principal, String workflowId, PublicationAttempt attempt) {
+            public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) { }
+
+            @Override
+            public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
                 throw new IllegalStateException("state unavailable");
             }
         };
@@ -391,7 +402,7 @@ class BundleUploadCoordinatorTest {
         PocketHiveMcpProperties properties = properties(McpStateMode.MEMORY,
             1, 1, 100_000, 100_000, Duration.ofHours(1), Duration.ofHours(1));
         RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
-        BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties, state, lifecycle());
+        BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties, state, lifecycle(state));
         PrincipalKey principal = principal("qa-lead");
         byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
@@ -492,8 +503,8 @@ class BundleUploadCoordinatorTest {
             owner.validationResult = invalid;
             RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
             BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties(), state,
-                lifecycle());
-            ValidationUploadTicket ticket = coordinator.prepareValidation(principal, "wf-invalid", source(),
+                lifecycle(state));
+            ValidationUploadTicket ticket = coordinator.prepareValidation(principal, binding("wf-invalid"), source(),
                 manifest, Instant.now());
             assertRejected(() -> coordinator.receive(ticket.id(), principal, "application/zip", archive.length,
                 new ByteArrayInputStream(archive), Instant.now()), "SCENARIO_BUNDLE_VALIDATION_FAILED");
@@ -501,10 +512,10 @@ class BundleUploadCoordinatorTest {
         }
 
         FakeOwner owner = new FakeOwner();
-        RecordingLifecycle lifecycle = new RecordingLifecycle();
         RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
+        RecordingLifecycle lifecycle = new RecordingLifecycle(state);
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties(), state, lifecycle);
-        ValidationUploadTicket ticket = coordinator.prepareValidation(principal, "wf-live", source(), manifest,
+        ValidationUploadTicket ticket = coordinator.prepareValidation(principal, binding("wf-live"), source(), manifest,
             Instant.now());
         ValidationUploadOutcome outcome = (ValidationUploadOutcome) coordinator.receive(ticket.id(), principal,
             "application/zip", archive.length, new ByteArrayInputStream(archive), Instant.now());
@@ -517,8 +528,8 @@ class BundleUploadCoordinatorTest {
     @Test
     void persistsEveryPublicationBoundaryAndOwnerRejectionWithoutRetry() throws IOException {
         FakeOwner owner = new FakeOwner();
-        RecordingLifecycle lifecycle = new RecordingLifecycle();
         RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
+        RecordingLifecycle lifecycle = new RecordingLifecycle(state);
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties(), state, lifecycle);
         PrincipalKey principal = principal("qa-lead");
         Map<String, String> files = Map.of("scenario.yaml", "id: safe\n", "seed.sql", "select 1;\n");
@@ -720,7 +731,7 @@ class BundleUploadCoordinatorTest {
             return UploadCoordinationSnapshot.empty();
         });
         assertThatThrownBy(() -> new BundleUploadCoordinator(
-            new FakeOwner(), recoveryProperties, state, lifecycle()))
+            new FakeOwner(), recoveryProperties, state, lifecycle(state)))
             .isInstanceOf(IllegalStateException.class).hasMessage("UPLOAD_SPOOL_RECOVERY_FAILED");
     }
 
@@ -743,7 +754,7 @@ class BundleUploadCoordinatorTest {
         PocketHiveMcpProperties properties = properties(McpStateMode.MEMORY,
             2, 10, 100_000, 200_000, Duration.ofHours(1), Duration.ofHours(1));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties, state,
-            lifecycle());
+            lifecycle(state));
 
         coordinator.maintain(created.plus(Duration.ofHours(1)).minusNanos(1));
         assertThat(coordinator.validationReceipt(receipt.id(), principal)).isEqualTo(receipt);
@@ -784,7 +795,7 @@ class BundleUploadCoordinatorTest {
             Map.of(oldReceipt.id(), oldReceipt, currentReceipt.id(), currentReceipt),
             Map.of(oldAttempt.id(), oldAttempt.snapshot())));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties(), state,
-            lifecycle());
+            lifecycle(state));
 
         coordinator.preparePublication(principal, currentReceipt.id(), PublicationMode.CREATE, null, source(),
             manifest, currentReceipt.archiveDigest(), currentReceipt.bundleContentDigest(), now);
@@ -804,7 +815,7 @@ class BundleUploadCoordinatorTest {
                 java.util.stream.Stream.of(Map.entry(ambiguous.id(), ambiguous.snapshot())))
                 .collect(java.util.stream.Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue)));
         BundleUploadCoordinator restarted = new BundleUploadCoordinator(new FakeOwner(), properties(), state,
-            lifecycle());
+            lifecycle(state));
         restarted.reconcile(ambiguous.id(), principal);
         assertThat(state.current.attempts().get(ambiguous.id()).state())
             .isEqualTo(PublicationAttemptState.SUCCEEDED);
@@ -821,7 +832,7 @@ class BundleUploadCoordinatorTest {
         RecordingStateRepository receiptState = new RecordingStateRepository(new UploadCoordinationSnapshot(
             Map.of(), Map.of(receipt.id(), receipt), Map.of()));
         BundleUploadCoordinator receiptCoordinator = new BundleUploadCoordinator(new FakeOwner(), properties(),
-            receiptState, lifecycle());
+            receiptState, lifecycle(receiptState));
 
         receiptCoordinator.maintain(expired);
 
@@ -833,7 +844,7 @@ class BundleUploadCoordinatorTest {
         RecordingStateRepository attemptState = new RecordingStateRepository(new UploadCoordinationSnapshot(
             Map.of(), Map.of(), Map.of(attempt.id(), attempt.snapshot())));
         BundleUploadCoordinator attemptCoordinator = new BundleUploadCoordinator(new FakeOwner(), properties(),
-            attemptState, lifecycle());
+            attemptState, lifecycle(attemptState));
 
         attemptCoordinator.maintain(expired);
 
@@ -845,7 +856,7 @@ class BundleUploadCoordinatorTest {
     void failureAfterVerificationMarksAttemptAndTicketFailedInTheRecoveredSnapshot() throws IOException {
         FakeOwner owner = new FakeOwner();
         RecordingStateRepository state = new RecordingStateRepository(UploadCoordinationSnapshot.empty());
-        BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties(), state, lifecycle());
+        BundleUploadCoordinator coordinator = new BundleUploadCoordinator(owner, properties(), state, lifecycle(state));
         PrincipalKey principal = principal("qa-lead");
         byte[] archive = zip(Map.of("scenario.yaml", "id: safe\n"));
         BundleFileManifest manifest = manifest(Map.of("scenario.yaml", "id: safe\n"));
@@ -894,7 +905,7 @@ class BundleUploadCoordinatorTest {
         Files.createDirectories(unrelated.getParent());
         Files.writeString(unrelated, "keep");
 
-        new BundleUploadCoordinator(new FakeOwner(), properties(), state, lifecycle());
+        new BundleUploadCoordinator(new FakeOwner(), properties(), state, lifecycle(state));
 
         assertThat(ticketState(state, validation.id())).isEqualTo(UploadTicketState.FAILED);
         assertThat(ticketState(state, prepared.id())).isEqualTo(UploadTicketState.PREPARED);
@@ -918,7 +929,7 @@ class BundleUploadCoordinatorTest {
         RecordingStateRepository state = new RecordingStateRepository(new UploadCoordinationSnapshot(
             Map.of(canonical.id(), UploadTicketSnapshot.from(canonical)), Map.of(), Map.of()));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties(), state,
-            lifecycle());
+            lifecycle(state));
         state.failSave = true;
 
         assertThatThrownBy(() -> coordinator.prepareDirectValidation(principal, source(),
@@ -949,7 +960,7 @@ class BundleUploadCoordinatorTest {
             Map.of(), Map.of(canonicalReceipt.id(), canonicalReceipt),
             Map.of(canonicalAttempt.id(), canonicalAttempt.snapshot())));
         BundleUploadCoordinator coordinator = new BundleUploadCoordinator(new FakeOwner(), properties(), state,
-            lifecycle());
+            lifecycle(state));
 
         ValidationUploadTicket validation = coordinator.prepareDirectValidation(principal, source(), manifest, now);
         state.failOnReceiptIncrease = true;
@@ -1018,7 +1029,7 @@ class BundleUploadCoordinatorTest {
 
     private BundleValidationReceipt validate(BundleUploadCoordinator coordinator, PrincipalKey principal,
                                          byte[] archive, BundleFileManifest manifest, Instant now) {
-        ValidationUploadTicket ticket = coordinator.prepareValidation(principal, "wf-1", source(), manifest,
+        ValidationUploadTicket ticket = coordinator.prepareValidation(principal, binding("wf-1"), source(), manifest,
             now);
         BundleValidationReceiptView receipt = ((ValidationUploadOutcome) coordinator.receive(ticket.id(), principal,
             "application/zip", archive.length, new ByteArrayInputStream(archive), now)).validationReceipt();
@@ -1026,13 +1037,31 @@ class BundleUploadCoordinatorTest {
     }
 
     private BundleUploadCoordinator coordinator(FakeOwner owner) {
-        return coordinator(owner, lifecycle());
+        PocketHiveMcpProperties properties = properties();
+        CoordinationStateRepository state = state(properties);
+        return new BundleUploadCoordinator(owner, properties, state, lifecycle(state));
     }
 
     private BundleUploadCoordinator coordinator(FakeOwner owner, BundleUploadLifecycle lifecycle) {
         PocketHiveMcpProperties properties = properties();
         CoordinationStateRepository state = state(properties);
-        return new BundleUploadCoordinator(owner, properties, state, lifecycle);
+        BundleUploadLifecycle persisting = new BundleUploadLifecycle() {
+            @Override
+            public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archive,
+                                  String content, UploadCoordinationSnapshot uploadState) {
+                lifecycle.validated(principal, binding, archive, content, uploadState);
+                state.saveUploadCoordination(uploadState);
+            }
+            @Override
+            public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) {
+                lifecycle.requirePublicationCurrent(principal, binding);
+            }
+            @Override
+            public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
+                lifecycle.published(principal, binding, attempt);
+            }
+        };
+        return new BundleUploadCoordinator(owner, properties, state, persisting);
     }
 
     private static UploadTicketState ticketState(RecordingStateRepository state, String ticketId) {
@@ -1109,14 +1138,22 @@ class BundleUploadCoordinatorTest {
     }
 
     private static BundleUploadLifecycle lifecycle() {
+        return lifecycle(new RecordingStateRepository(UploadCoordinationSnapshot.empty()));
+    }
+
+    private static BundleUploadLifecycle lifecycle(CoordinationStateRepository state) {
         return new BundleUploadLifecycle() {
             @Override
-            public void validated(PrincipalKey principal, String workflowId, String archiveDigest,
-                                  String bundleContentDigest) {
+            public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archiveDigest,
+                                  String bundleContentDigest, UploadCoordinationSnapshot uploadState) {
+                state.saveUploadCoordination(uploadState);
             }
 
             @Override
-            public void published(PrincipalKey principal, String workflowId, PublicationAttempt attempt) {
+            public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) { }
+
+            @Override
+            public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
             }
         };
     }
@@ -1268,20 +1305,26 @@ class BundleUploadCoordinatorTest {
     }
 
     private static final class RecordingLifecycle implements BundleUploadLifecycle {
+        private final CoordinationStateRepository state;
+        private RecordingLifecycle(CoordinationStateRepository state) { this.state = state; }
         private final List<String> validatedWorkflowIds = new ArrayList<>();
         private final List<String> validatedArchiveDigests = new ArrayList<>();
         private final List<String> publishedWorkflowIds = new ArrayList<>();
 
         @Override
-        public void validated(PrincipalKey principal, String workflowId, String archiveDigest,
-                              String bundleContentDigest) {
-            validatedWorkflowIds.add(workflowId);
+        public void validated(PrincipalKey principal, UploadWorkflowBinding binding, String archiveDigest,
+                              String bundleContentDigest, UploadCoordinationSnapshot uploadState) {
+            validatedWorkflowIds.add(binding.workflowId());
             validatedArchiveDigests.add(archiveDigest);
+            state.saveUploadCoordination(uploadState);
         }
 
         @Override
-        public void published(PrincipalKey principal, String workflowId, PublicationAttempt attempt) {
-            publishedWorkflowIds.add(workflowId);
+        public void requirePublicationCurrent(PrincipalKey principal, UploadWorkflowBinding binding) { }
+
+        @Override
+        public void published(PrincipalKey principal, UploadWorkflowBinding binding, PublicationAttempt attempt) {
+            publishedWorkflowIds.add(binding.workflowId());
         }
     }
 
@@ -1325,15 +1368,20 @@ class BundleUploadCoordinatorTest {
                                              io.pockethive.mcp.domain.ScenarioWorkflow workflow) {
         }
 
-        @Override public void saveWorkflow(io.pockethive.mcp.domain.ScenarioWorkflow workflow,
+        @Override public void saveWorkflow(io.pockethive.mcp.domain.ScenarioWorkflow workflow, long expectedRevision,
                                            List<Map<String, Object>> generatedFiles) {
         }
 
-        @Override public void saveWorkflow(io.pockethive.mcp.domain.ScenarioWorkflow workflow) {
+        @Override public void saveWorkflow(io.pockethive.mcp.domain.ScenarioWorkflow workflow, long expectedRevision) {
+        }
+
+        @Override public void saveWorkflowAndUploadCoordination(io.pockethive.mcp.domain.ScenarioWorkflow workflow,
+                                                                long expectedRevision, UploadCoordinationSnapshot uploadState) {
+            saveUploadCoordination(uploadState);
         }
 
         @Override public void saveWorkflowAndRemoveGeneratedFiles(
-            io.pockethive.mcp.domain.ScenarioWorkflow workflow) {
+            io.pockethive.mcp.domain.ScenarioWorkflow workflow, long expectedRevision) {
         }
 
         @Override public long countOpenSessions(PrincipalKey principal) {
