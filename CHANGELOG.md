@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Control/work-plane isolation: move Rabbit connection, topology, resource, and
+  transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
+  keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery
+  and publication semantics.
+- Lifecycle maintainability: decompose Swarm Controller lifecycle, observation,
+  and status handling, and separate Scenario Manager bundle workflows and HTTP
+  contract types into focused implementation units.
 - PocketHive MCP: replace the Node/stdio server with one Java 21 Streamable HTTP
   service on the public ingress, with 50 scope-declared tools, nine connected
   skills, portable PocketHive knowledge, and no HiveMind runtime dependency.
@@ -23,11 +30,38 @@ All notable changes to this project will be documented in this file.
 - Scenario publication: package exact committed Git directories in the VS Code
   client, validate bounded ticketed ZIP uploads, retain byte-identical archives,
   and require explicit `CREATE` or `REPLACE` with no fallback or ambiguous retry.
+- MCP publication integrity: bind validation and publication evidence to the exact
+  authored workflow revision, file-set digest, and capability fingerprint;
+  reject stale tickets after regeneration, cancellation, or concurrent edits.
+  Persist validation evidence atomically and preserve completed owner results
+  across concurrent upload rollback and workflow state-sync failures.
+- MCP state migration: retire legacy workflow-bound upload tickets in
+  coordination-state schema 4; retain historical receipts without publication
+  authority and require clients to prepare and validate again. Preserve direct
+  uploads and publication attempts, including recovery after ticket retirement,
+  without replaying Scenario Manager writes. See the
+  [MCP publication contract](docs/mcp/README.md).
+- MCP client interoperability: publish output schemas and structured content for
+  object-root tool schemas; retain JSON text for array, string, and mixed-shape
+  results so strict MCP clients can consume the canonical Java server.
 - Authentication: extend the existing Auth Service as the single OAuth authority
   for authorization code + PKCE S256, exact redirect/resource/audience/scope
   validation, opaque-token introspection, replay rejection, and a rotating
   refresh token limited to the base VS Code companion session; privileged
   scoped sessions remain short-lived and non-renewable.
+- Worker signed OAuth: add isolated `OAUTH2_HTTP_SIGNATURE` client-credentials
+  profiles with RSA-SHA256 signing of token requests; downstream API calls keep
+  Bearer authentication. Coordinate acquisition through Redis cache/leases with
+  bounded requests, expiry checks, and lease release on failures; preserve the
+  existing OAuth client-credentials and password-grant strategies. See the
+  [Auth User Guide](docs/AUTH-USER-GUIDE.md).
+- Auth security and resource lifecycle: redact credential/session headers in
+  request logs and captures, replace existing Authorization headers
+  case-insensitively, normalize auth types independently of the default locale,
+  and close owned Redis/HTTP resources when workers stop or initialization fails.
+- OAuth authoring: preserve complete signed and ordinary OAuth profiles through
+  Java MCP scenario generation and upload; validate authored profile storage in
+  Scenario Manager without resolving credentials or contacting OAuth providers.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
@@ -52,16 +86,34 @@ All notable changes to this project will be documented in this file.
   demand before expiry, validate a candidate MCP connection before switching,
   keep the authenticated workspace visible during renewal, and provide one
   clear Account menu for sign-in, retry, and revoking sign-out.
+- Windows extension tooling: canonicalize Git scenario fixture paths and fix
+  VSIX package listing checks so the existing test and packaging gates work on Windows.
 - OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
   logo, explicit client/resource/permission context, accessible form semantics,
   responsive styling, and no change to the authorization-code contract.
 - Deployment: install the same hardened non-root, read-only Java MCP image through
   `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
   upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
-- Verification: pass 22 Auth Service tests, 115 MCP tests, and 102 extension
-  tests; kill 26/26 Auth, 576/576 MCP, and 1,825/1,825 extension mutants; pass
-  clean npm audit, packaged-VSIX, public-ingress OAuth/MCP, responsive UI,
-  refresh rotation/replay/revocation, and exact mixed-file bundle checks locally.
+- Earlier MCP migration verification (historical): recorded 22 Auth Service,
+  115 MCP, and 102 extension tests passing; killed 26/26 Auth, 576/576 MCP, and
+  1,825/1,825 extension mutants. Local checks passed for npm audit, packaged VSIX,
+  public-ingress OAuth/MCP, responsive UI, refresh rotation/replay/revocation,
+  and exact mixed-file bundles.
+- CI regression gates: provision test-owned Redis and RabbitMQ fixtures, require
+  the RabbitMQ integration tests and independent OpenSSL verifier, and enforce
+  the scoped Java MCP, Auth Service, and HTTP Sequence mutation gates alongside
+  Windows/Linux extension tests, package checks, and Linux Stryker coverage.
+- Restart integration verification: [PR #517's hosted run](https://github.com/sepa79/PocketHive/actions/runs/35435999539)
+  passed all four jobs for restart head `2103a93a`: 2,247 Java cases and 187
+  extension tests on each platform, with no failures or skips; all three scoped
+  Java mutation gates and Linux Stryker passed. These results supersede the
+  earlier totals for this integration; they do not establish real-provider
+  signed OAuth or deployed-bundle acceptance. The optional deployed acceptance
+  profile was not run; see [authentication verification](docs/ci/auth-testing.md).
+- Integration follow-up: inherited Orchestrator executor/controller identity
+  validation, reset/registry, and public contract extraction findings remain
+  deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
+  Explicit remote HTTP authentication allowance remains separate work.
 - Documentation: add the canonical Java MCP guide, update active deployment and
   extension guidance, supersede the retired Node plugin documents, and record the
   local RST debrief and outstanding governed/human production-release checks.
