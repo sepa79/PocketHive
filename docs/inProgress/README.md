@@ -4,29 +4,29 @@ This directory contains only work that is actively being implemented or is waiti
 
 ## Current plans
 
-- [Nowy framework E2E](e2e-test-system.md) — decyzja użytkownika: budowa od zera,
-  bez przenoszenia kroków/helperów i zależności od starego zestawu. N0: wymagania
-  i projekt gotowe; N1: oba testy ingress przeszły na
-  Rabbit i Artemis. N2: pierwszy test operacji w osiągniętym stanie też przeszedł
-  na obu adapterach. Scenario API (SC-1–SC-3), wybrane grupy auth, worker runtime
-  (WK-1/WK-2) oraz templating/variables (WK-3/SC-4) mają dowody wykonania.
-  Templating przeszedł osobne review. Ostatni wycinek WK-4/WK-5: konfiguracja/overrides
-  po 2/2 na każdym adapterze, framework 66/66, statusy SDK/controller 10/10 i regresja
-  WK-1/WK-2 Rabbit 2/2. Do osobnego review; następny wycinek: NW-1 HTTP proxy.
-  Pozostałe pokrycie otwarte; bieżące wyniki i luki wskazuje mapa acceptance-coverage. N3: potwierdzenie zastąpienia;
-  dopiero N4: usunięcie całego starego systemu.
+- [Nowy framework E2E](e2e-test-system.md) — N0/N1 zakończone; macierz N2:
+  40 PASS / 1 PARTIAL (NW-4: pozostaje Swarm/NFS). Lokalna analiza N3 i poprawka
+  DA-3 przeszły osobny review bez uwag. Końcowy N3 nadal otwarty.
+  Decyzja użytkownika 2026-09-18: wracamy do A5 Artemis/3DS; usunięcie starego
+  frameworka N4 odkładamy do jego ręcznych testów i potwierdzenia.
+  Bieżące wyniki posiada [macierz pokrycia](../ci/acceptance-coverage.md);
+  [plan E2E](e2e-test-system.md) określa warunki N3/N4.
 
 Ready for PR: [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md),
 with the agreed R4 deferrals, verified with Rabbit and a stateful test adapter.
 [Artemis and delayed delivery for 3DS](work-plane-artemis-3ds.md) are now in progress on
 `codex/artemis-work-plane`. The approved plan preserves startup/remove and excludes
 native ownership-manifest/orphan-cleanup expansion.
+Aktualne ustalenia 2026-09-21 i kolejność dalszych prac posiada sekcja
+[3DS: MC/APATA, wspólny mock i A5](work-plane-artemis-3ds.md#aktualne-ustalenia-3ds--2026-09-21).
+A5 jest zaimplementowane i odebrane lokalnie (2026-09-21). Najbliższy krok:
+review i domknięcie brancha; selector/splitter, mock i CloseLook pozostają osobno.
 A1/A2 and admission fixes are in `7e6c63db`; A3 composition is in `9cc6c827`.
 A4 now permits native WORK startup with a Rabbit-only diagnostic manifest. The local
 Artemis create → traffic → remove path passed through public ingress: 5 sampled HTTP
 200 results, 6 native WORK resources verified absent, no remaining resources/errors.
-A4 has 43 focused passing tests and awaits separate review. A5 delay intent remains
-to be agreed; A6 includes the later 3DS acceptance. Existing normal E2E uses Rabbit;
+A4 has 43 focused passing tests and awaits separate review. A5 delayed delivery passed its local ingress acceptance on 2026-09-21;
+A6 includes the later full 3DS/load acceptance. Existing normal E2E uses Rabbit;
 the user reported it green before the local switch to Artemis.
 Other refactors remain separate PRs. The serial CONTROL admission model and withdrawn
 concurrency finding remain documented in

@@ -69,7 +69,7 @@ final class WorkerDefinitionDiscovery {
             WorkOutputConfig outputConfig = workOutputConfigBinder.bind(outputType, outputConfigType);
             WorkIoBindings io = new WorkIoBindings(inputConfig == null ? null : inputConfig.inboundRoute(),
                 outputConfig == null ? null : outputConfig.outboundRoute(),
-                outputConfig == null ? null : outputConfig.outboundGroup());
+                outputConfig == null ? null : outputConfig.outboundGroup(), workOutputConfigBinder.bindDelivery(outputType));
             definitions.add(new WorkerDefinition(
                 beanName,
                 beanType,

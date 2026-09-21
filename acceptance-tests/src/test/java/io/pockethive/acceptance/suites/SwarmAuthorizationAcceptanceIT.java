@@ -41,7 +41,7 @@ class SwarmAuthorizationAcceptanceIT {
         var management = new SwarmManagementApi(manager.http, manager.token);
         var update = swarm.managerEnabled(management, controller, true);
         assertEquals(controller, update.target().instance());
-        var configured = swarm.controllerConfig(management, controller, Map.of("enabled", true));
+        var configured = swarm.componentConfig(management, BeeRoles.SWARM_CONTROLLER, controller, Map.of("enabled", true));
         assertEquals(controller, configured.target().instance());
         assertEquals(BeeRoles.SWARM_CONTROLLER, configured.target().role());
         var observer = new SwarmApi(f.admin.http, f.admin.token);

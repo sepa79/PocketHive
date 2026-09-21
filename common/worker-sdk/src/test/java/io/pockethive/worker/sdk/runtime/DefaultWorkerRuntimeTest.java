@@ -72,6 +72,43 @@ class DefaultWorkerRuntimeTest {
         org.mockito.Mockito.verifyNoInteractions(outputRegistry);
     }
 
+    @Test
+    void eachInvocationPublishesOnlyItsOwnDeliveryIntentAndNoResultMeansNoSend() throws Exception {
+        var delayed = new io.pockethive.work.config.WorkDelivery(io.pockethive.work.config.WorkDeliveryMode.DELAYED, 3000);
+        var immediate = io.pockethive.work.config.WorkDelivery.IMMEDIATE;
+        var first = new WorkerDefinition("first", TestWorker.class, WorkerInputType.RABBITMQ, "first",
+            new WorkIoBindings(null, "middle", null, delayed), Void.class, WorkInputConfig.class, WorkOutputConfig.class,
+            io.pockethive.artemis.api.ArtemisWorkIoType.ARTEMIS, "delayed producer", Set.of());
+        var second = new WorkerDefinition("second", TestWorker.class, WorkerInputType.RABBITMQ, "second",
+            WorkIoBindings.of("middle", "end", "work"), Void.class, WorkInputConfig.class, WorkOutputConfig.class,
+            WorkerOutputType.RABBITMQ, "immediate successor", Set.of());
+        var store = new WorkerStateStore();
+        var outputs = new WorkOutputRegistry();
+        var published = new java.util.ArrayList<io.pockethive.work.config.WorkDelivery>();
+        outputs.register(first, (item, intent) -> published.add(intent));
+        outputs.register(second, (item, intent) -> published.add(intent));
+        PocketHiveWorkerFunction worker = (item, context) -> {
+            if (item.asString().equals("drop")) return null;
+            if (item.asString().equals("invalid")) throw new IllegalArgumentException("invalid template");
+            return item;
+        };
+        var runtime = new DefaultWorkerRuntime(new WorkerRegistry(List.of(first, second)), type -> worker,
+            (definition, state, message) -> workerContext(definition, state), store, List.of(), outputs);
+        store.getOrCreate(first).updateConfig(null, false, true);
+        store.getOrCreate(second).updateConfig(null, false, true);
+        var info = new WorkerInfo("first", "swarm", "instance", null, null);
+        var item = WorkItem.text(info, "payload").observabilityContext(
+            io.pockethive.observability.ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId())).build();
+        var result = runtime.dispatch("first", item);
+        var codec = new io.pockethive.work.api.WorkItemJsonCodec();
+        runtime.dispatch("second", codec.fromJson(codec.toJson(result)));
+        assertThat(published).containsExactly(delayed, immediate);
+        assertThat(runtime.dispatch("first", WorkItem.text(info, "drop").build())).isNull();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runtime.dispatch("first", WorkItem.text(info, "invalid").build()))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("invalid template");
+        assertThat(published).containsExactly(delayed, immediate);
+    }
+
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {
         WorkIoBindings io = definition.io();
         WorkerInfo info = new WorkerInfo(definition.role(), "swarm", "instance", io.inboundQueue(), io.outboundQueue());

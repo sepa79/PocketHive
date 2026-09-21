@@ -44,7 +44,7 @@ public final class WorkConfigurationParser {
                 Objects.requireNonNull(input, "validated input").type(),
                 input.settings(),
                 Objects.requireNonNull(output, "validated output").type(),
-                output.settings());
+                output.settings(), output.delivery());
         }
         return new WorkConfigurationValidation(complete, problems, deferredPaths);
     }
@@ -98,8 +98,16 @@ public final class WorkConfigurationParser {
         if (type == null) {
             return null;
         }
+        WorkDelivery delivery;
+        try {
+            delivery = new WorkDeliveryParser().parseOutput(fields);
+            type.requireDelivery(delivery);
+        } catch (IllegalArgumentException failure) {
+            problems.add(problem(WorkDeliveryParser.PATH, failure.getMessage()));
+            return null;
+        }
         if (type == WorkerOutputType.NONE) {
-            return validateNoOutput(fields, problems);
+            return validateNoOutput(fields, delivery, problems);
         }
         String settingsKey = type.settingsKey();
         Map<?, ?> settings = requireSelectedBlock(fields, WorkConfigurationFields.OUTPUTS, settingsKey, mode, problems);
@@ -119,24 +127,26 @@ public final class WorkConfigurationParser {
             "output parser result");
         problems.addAll(result.problems());
         deferredPaths.addAll(result.deferredPaths());
-        return result.settings() == null ? null : new OutputResult(type, result.settings());
+        return result.settings() == null ? null : new OutputResult(type, result.settings(), delivery);
     }
 
-    private static OutputResult validateNoOutput(Map<?, ?> fields, List<WorkConfigurationProblem> problems) {
+    private static OutputResult validateNoOutput(Map<?, ?> fields, WorkDelivery delivery, List<WorkConfigurationProblem> problems) {
         List<?> unsupported = fields.keySet().stream()
-            .filter(key -> !WorkConfigurationFields.TYPE.equals(key))
+            .filter(key -> !WorkConfigurationFields.TYPE.equals(key) && !WorkDeliveryParser.DELIVERY.equals(key))
             .toList();
         unsupported.forEach(key -> problems.add(problem(
             WorkConfigurationFields.path(WorkConfigurationFields.OUTPUTS, String.valueOf(key)),
             "NONE output must not declare settings.")));
         return unsupported.isEmpty()
-            ? new OutputResult(WorkerOutputType.NONE, NoOutputWorkSettings.INSTANCE)
+            ? new OutputResult(WorkerOutputType.NONE, NoOutputWorkSettings.INSTANCE, delivery)
             : null;
     }
 
     private static Map<?, ?> requireSelectedBlock(Map<?, ?> fields, String root, String settingsKey, WorkConfigurationMode mode,
                                                   List<WorkConfigurationProblem> problems) {
-        Set<String> supportedKeys = Set.of(WorkConfigurationFields.TYPE, settingsKey);
+        Set<String> supportedKeys = WorkConfigurationFields.OUTPUTS.equals(root)
+            ? Set.of(WorkConfigurationFields.TYPE, settingsKey, WorkDeliveryParser.DELIVERY)
+            : Set.of(WorkConfigurationFields.TYPE, settingsKey);
         List<?> unsupported = fields.keySet().stream()
             .filter(key -> !supportedKeys.contains(key))
             .toList();
@@ -222,6 +232,6 @@ public final class WorkConfigurationParser {
     private record InputResult(WorkIoType type, WorkInputSettings settings) {
     }
 
-    private record OutputResult(WorkIoType type, WorkOutputSettings settings) {
+    private record OutputResult(WorkIoType type, WorkOutputSettings settings, WorkDelivery delivery) {
     }
 }

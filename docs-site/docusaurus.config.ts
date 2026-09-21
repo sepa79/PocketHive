@@ -49,6 +49,7 @@ const config: Config = {
             "REVIEW_RULES.md",
             "ai/RESPONSIBILITY_WORKFLOW.md",
             "ci/acceptance-coverage.md",
+            "ci/acceptance-replacement-review.md",
             "USAGE.md",
             "ORCHESTRATOR-REST.md",
             "observability.md",

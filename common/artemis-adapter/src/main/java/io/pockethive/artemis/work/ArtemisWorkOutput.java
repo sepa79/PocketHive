@@ -1,5 +1,9 @@
 package io.pockethive.artemis.work;
 
+import io.pockethive.work.config.WorkDelivery;
+import io.pockethive.work.config.WorkDeliveryMode;
+import io.pockethive.artemis.api.ArtemisWorkIoType;
+
 import io.pockethive.artemis.api.ArtemisOutputSettings;
 import io.pockethive.artemis.transport.ArtemisSessions;
 import io.pockethive.work.api.WorkItem;
@@ -12,7 +16,7 @@ import org.apache.activemq.artemis.api.core.client.ClientProducer;
 import org.apache.activemq.artemis.api.core.client.ClientSession;
 
 /**
- * Responsibility: encode WorkItem results and serialize sends on a dedicated Core producer session.
+ * Responsibility: encode WorkItem results and realize delivery intents on a dedicated Core producer session.
  * Must not: reconstruct destinations, use an input session, dispatch workers or introduce delayed-delivery policy.
  * Contract: RESP-WORK-ARTEMIS-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-artemis-transport.
  */
@@ -38,11 +42,15 @@ public final class ArtemisWorkOutput implements WorkOutput {
     }
 
     @Override
-    public synchronized void publish(WorkItem item) {
+    public synchronized void publish(WorkItem item, WorkDelivery delivery) {
+        ArtemisWorkIoType.ARTEMIS.requireDelivery(delivery);
         byte[] body = codec.toJson(item);
         try {
             var message = session.createMessage(settings.persistent());
             message.getBodyBuffer().writeBytes(body);
+            if (delivery.mode() == WorkDeliveryMode.DELAYED) {
+                message.setScheduledDeliveryTime(Math.addExact(System.currentTimeMillis(), delivery.delayMs()));
+            }
             producer.send(message);
         } catch (ActiveMQException failure) {
             throw new IllegalStateException("Cannot publish Artemis Work result", failure);

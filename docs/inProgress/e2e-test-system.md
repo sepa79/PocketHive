@@ -3,15 +3,23 @@
 Status na 2026-09-18: N0 i N1 zamknięte. Macierz N2 zawiera **40 PASS / 1 PARTIAL**.
 NW-4 jest napisane i przeszło lokalnie na Rabbit oraz Artemis; pozostaje jego
 wykonanie między hostami na Swarm/NFS, odłożone na koniec.
-EX-3 i SM-2 z poprawkami po review zapisane w `cdf2be57`.
-N3 (potwierdzenie zastąpienia) i N4 (usunięcie legacy) pozostają otwarte.
+NW-4 i retencja dowodów zapisane w `51227a32`.
+Lokalna analiza N3 jest zakończona; [raport](../ci/acceptance-replacement-review.md)
+porównuje wymagania, asercje i dowody. Znaleziona luka DA-3 została uzupełniona i
+przeszła oba adaptery. Osobny review poprawki i raportu zakończył się bez uwag
+(53 testy granic przeszły; zweryfikowano zapisane dowody obu adapterów).
+Końcowy odbiór N3 pozostaje otwarty wraz z odłożonym Swarm/NFS.
+Decyzja użytkownika z 2026-09-18: wracamy do A5 Artemis/3DS; N4 odkładamy do
+ręcznych testów użytkownika i jego potwierdzenia. Ani usunięcie starego frameworka,
+ani odłożony NW-4 nie są warunkiem rozpoczęcia A5. Stary zestaw pozostaje zamrożony.
 
 Przy przygotowaniu N3 agent wykonał Maven clean bez archiwizacji i usunął wcześniejsze
 lokalne artefakty `acceptance-tests/target/runs`. Historyczne wyniki w macierzy nie są
 ponownie wykonanym dowodem; zachowały się logi i część podsumowań. Luka dostępności
-surowych dowodów pozostaje jawna przy odbiorze N3. Użytkownik wskazał kopie na innych
-branchach — należy je sprawdzić przed planowaniem odtworzenia przebiegów. Nowe targety
-zapisują poza `target`.
+surowych dowodów pozostaje jawna. Analiza N3 sprawdziła 29 dostępnych refów i nie
+znalazła w nich śledzonych archiwów. Zachowane logi i podsumowania oceniono względem
+asercji; grupy bez dostępnego potwierdzenia wykonano ponownie. Dokładny zakres podaje
+raport. Nowe targety zapisują poza `target`; usuniętych JSON-ów nie odtworzono.
 
 Bieżące wymagania i wyniki określa [macierz pokrycia](../ci/acceptance-coverage.md).
 Datowane wpisy poniżej zachowują historię, nie zastępują aktualnego statusu.
@@ -143,7 +151,9 @@ Warunki łączne:
 
 ### N4 — usunięcie starego systemu
 
-Po potwierdzeniu N3 usunąć cały stary moduł wraz ze starymi krokami, klientami,
+Decyzja użytkownika z 2026-09-18: wykonać dopiero po jego ręcznych testach
+oraz potwierdzeniu usunięcia. Do tego czasu kontynuować Artemis/3DS.
+Po potwierdzeniu N3 i spełnieniu powyższego warunku usunąć cały stary moduł wraz ze starymi krokami, klientami,
 helperami, konfiguracją, zbędnymi fixtures, zależnościami i podłączeniami runnera/CI.
 Każdy zasób przed usunięciem musi być potwierdzony jako należący wyłącznie do starego
 systemu; scenariuszy produktu ani współdzielonych kontraktów nie kasujemy przypadkiem.
@@ -1010,3 +1020,31 @@ Logi, run IDs i archiwalne raporty JUnit podaje macierz pokrycia. Przywrócono A
 WORK po pustym rejestrze. Bieżący zakres gotowy do osobnego review, bez commita/push.
 Lokalne przypadki funkcjonalne są wykonane; NW-4 pozostaje PARTIAL wyłącznie z powodu
 niewykonanego testu między hostami/NFS. N3/N4 nadal otwarte.
+
+
+### 2026-09-18 — N3: uzupełnienie przejścia DA-3
+
+Porównanie starych wymagań z faktycznymi nowymi asercjami wykazało brak runtime
+config-update w DA-3. Dotychczasowy test dowodzi zapisu przy CLICKHOUSE_V2 już w
+scenariuszu; nie dowodzi włączenia sinka w działającym swarmie. Uzupełniamy test:
+NONE z rzeczywistym ruchem i pustą obserwacją → CONFIG_UPDATE na istniejącym API →
+świeża konfiguracja CLICKHOUSE_V2 → nowe próbki i zgodne zapisane wyniki. Mapowanie
+pozostaje w SwarmManagementApi, operacja i cleanup w SwarmResource/OperationAwaiter.
+Metoda konfiguracji komponentu przyjmuje jawną rolę zamiast specjalizacji tylko dla
+controllera; obecny test AU-12 pozostaje jej konsumentem. Nie zmieniamy produktu,
+publicznego kontraktu, klientów brokerów ani kodu starego frameworka.
+
+
+### 2026-09-18 — N3 lokalnie: analiza i wykonania zakończone
+
+Raport `docs/ci/acceptance-replacement-review.md` zawiera porównanie wszystkich
+41 wierszy macierzy z rzeczywistymi asercjami, właścicielami i dostępnymi dowodami.
+DA-3 po poprawce potwierdza runtime włączenie sinka na Rabbit i Artemis; AU-12
+zachowuje dotychczasową ścieżkę konfiguracji controllera przez ten sam mapper.
+178 testów frameworka, 126 wybranych testów właścicieli i 67 wdrożonych wykonań
+przeszło bez błędów/pominięć. Artefakty zachowane poza `target`. Lokalny stack
+przywrócony do Artemis WORK; rejestr swarmów pusty.
+
+Następne: osobne review poprawki DA-3 i zbiorczego raportu, NW-4 między hostami
+Swarm/NFS, końcowy odbiór N3, dopiero potem N4. Nie usunięto legacy, nie wdrażano
+zdalnie i nie wykonano commita ani push. Bieżąca macierz: 40 PASS / 1 PARTIAL.

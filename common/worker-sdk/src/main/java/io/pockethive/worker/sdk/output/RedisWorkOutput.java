@@ -1,5 +1,8 @@
 package io.pockethive.worker.sdk.output;
 
+import io.pockethive.work.config.WorkDelivery;
+import io.pockethive.work.config.WorkerOutputType;
+
 import io.pockethive.work.api.transport.WorkOutput;
 
 import io.pockethive.work.api.WorkItem;
@@ -56,7 +59,8 @@ public final class RedisWorkOutput implements WorkOutput {
     }
 
     @Override
-    public void publish(WorkItem item) {
+    public void publish(WorkItem item, WorkDelivery delivery) {
+        WorkerOutputType.REDIS.requireDelivery(delivery);
         RedisPushSupport.PushRequest request = pushRequest.get();
         String host = request.connection().host();
         if (host == null || host.isBlank()) {

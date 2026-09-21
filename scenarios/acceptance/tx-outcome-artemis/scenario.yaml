@@ -69,7 +69,7 @@ template:
       outputs:
         type: NONE
       forwardToOutput: false
-      txOutcomeSinkMode: CLICKHOUSE_V2
+      txOutcomeSinkMode: NONE
       dropTxOutcomeWithoutCallId: true
     work:
       in:

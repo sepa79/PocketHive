@@ -72,8 +72,11 @@ class ArtemisWorkPlaneFlowTest {
     @TempDir Path directory;
     private static final AtomicInteger IDS = new AtomicInteger(3000);
 
-    @Test
-    void controllerBootstrapWorkerExecutionAndRemovalShareOneNativeWorkOwner() throws Exception {
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(longs = {0, 1500})
+    void controllerBootstrapWorkerExecutionAndRemovalShareOneNativeWorkOwner(long delayMs) throws Exception {
+        var delivery = delayMs == 0 ? io.pockethive.work.config.WorkDelivery.IMMEDIATE
+            : new io.pockethive.work.config.WorkDelivery(io.pockethive.work.config.WorkDeliveryMode.DELAYED, delayMs);
         String url = "vm://" + IDS.incrementAndGet();
         var brokerConfig = new ConfigurationImpl()
             .setPersistenceEnabled(false).setSecurityEnabled(false).setJMXManagementEnabled(false)
@@ -106,7 +109,8 @@ class ArtemisWorkPlaneFlowTest {
                 new CsvDatasetEnvironment(), new SchedulerSettingsEnvironment(), new RedisDatasetEnvironment(),
                 new WorkConnectionEnvironmentResolver(environment), parser, new RedisOutputEnvironment());
             var authoring = Map.<String, Object>of("inputs", Map.of("type", "ARTEMIS", "artemis", Map.of("consumerWindowBytes", 0)),
-                "outputs", Map.of("type", "ARTEMIS", "artemis", Map.of("persistent", true)));
+                "outputs", Map.of("type", "ARTEMIS", "artemis", Map.of("persistent", true),
+                    "delivery", new io.pockethive.work.config.WorkDeliveryParser().configuration(delivery)));
             var bee = new Bee("processor", "image", Work.ofDefaults("intake", "result"), Map.of(), authoring);
             var controlEnvironment = Map.of("SPRING_RABBITMQ_HOST", "control", "SPRING_RABBITMQ_PORT", "5672",
                 "SPRING_RABBITMQ_USERNAME", "control", "SPRING_RABBITMQ_PASSWORD", "secret", "SPRING_RABBITMQ_VIRTUAL_HOST", "/control");
@@ -145,8 +149,9 @@ class ArtemisWorkPlaneFlowTest {
             assertThat(inputSettings).isEqualTo(resolved.inputSettings());
             assertThat(outputSettings).isEqualTo(resolved.outputSettings());
             var definition = new WorkerDefinition("worker", Object.class, inputType, "processor",
-                new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup()),
+                new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup(), new WorkOutputConfigBinder(binder).bindDelivery(outputType)),
                 Void.class, ioCatalog.inputClass(inputType), ioCatalog.outputClass(outputType), outputType, "flow", Set.of(WorkerCapability.MESSAGE_DRIVEN));
+            assertThat(definition.io().outputDelivery()).isEqualTo(delivery);
             var store = new WorkerStateStore();
             store.getOrCreate(definition);
             var identity = new ControlPlaneIdentity("swarm", "processor", "instance");
@@ -158,6 +163,10 @@ class ArtemisWorkPlaneFlowTest {
             control.registerStateListener("worker", latest::set);
             update(control, identity, configuration.bootstrapConfig());
             var accepted = latest.get().rawConfig();
+            assertThat(parser.validate(accepted, WorkConfigurationMode.RESOLVED).configuration()).isEqualTo(resolved);
+            // Delivery remains startup-only even while disabled and after rejection.
+            update(control, identity, Map.of("outputs", Map.of("delivery", Map.of("mode", "DELAYED", "delayMs", 9999))));
+            assertThat(latest.get().rawConfig()).isEqualTo(accepted);
             assertThat(accepted.get("inputs")).isEqualTo(configuration.bootstrapConfig().get("inputs"));
             update(control, identity, Map.of("inputs", Map.of("artemis", Map.of("queue", "foreign"))));
             assertThat(latest.get().rawConfig()).isEqualTo(accepted);
@@ -172,8 +181,10 @@ class ArtemisWorkPlaneFlowTest {
             var statusPublisher = control.statusPublisher("worker");
             when(context.statusPublisher()).thenReturn(statusPublisher);
             when(context.observabilityContext()).thenReturn(ObservabilityContextUtil.init("processor", "instance", "swarm"));
+            var executedAt = new java.util.concurrent.atomic.AtomicLong();
             var executions = new ConcurrentLinkedQueue<String>();
             PocketHiveWorkerFunction worker = (item, ctx) -> {
+                executedAt.set(System.currentTimeMillis());
                 executions.add(item.asString());
                 if (item.asString().equals("invalid template")) throw new IllegalArgumentException("invalid template");
                 return item;
@@ -198,14 +209,19 @@ class ArtemisWorkPlaneFlowTest {
             assertThat(stats.getQueueStats(inputAddress).consumers()).isEqualTo(1);
             await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
                 assertThat(stats.getQueueStats(outputAddress).depth()).isEqualTo(1));
+            var arrivedAt = new java.util.concurrent.atomic.AtomicLong();
             var results = new ConcurrentLinkedQueue<String>();
             var resultInput = plane.inputs().create("result-check", new ArtemisInputSettings(outputAddress, 0));
             resultInput.register(new WorkDeliveryHandler() {
-                @Override public void onWork(WorkItem item) { results.add(item.asString()); }
+                @Override public void onWork(WorkItem item) { arrivedAt.set(System.currentTimeMillis()); results.add(item.asString()); }
                 @Override public void onDecodeFailure(byte[] body, Exception failure) { throw new AssertionError(failure); }
             });
             resultInput.start();
             await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> assertThat(results).containsExactly("payload"));
+            assertThat(arrivedAt.get() - executedAt.get()).isGreaterThanOrEqualTo(delayMs);
+            // A live attempt cannot alter subsequent sends either.
+            update(control, identity, Map.of("outputs", Map.of("delivery", Map.of("mode", "DELAYED", "delayMs", 9999))));
+            assertThat(latest.get().rawConfig().get("outputs")).isEqualTo(accepted.get("outputs"));
             producer.publish(item(info, "invalid template"));
             await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
                 verify(control).publishWorkError(eq("worker"), any(WorkItem.class), any(IllegalArgumentException.class)));

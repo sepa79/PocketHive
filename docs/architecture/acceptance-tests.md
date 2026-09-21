@@ -525,9 +525,13 @@ The storage schema remains clickhouse/init/02-ph-tx-outcome-v2.sql; TxOutcomePro
 and ClickHouseTxOutcomeSink remain the production projection/write owners.
 
 TxOutcomeAcceptanceIT starts an independently authored scheduler/HTTP fixture with
-CLICKHOUSE_V2 configured on its postprocessor. It verifies an empty observation for
-the fresh swarm, captures actual successful processor WorkItems and their trace IDs,
-and awaits matching persisted rows for the owned swarm and sink instance. Status,
+NONE configured on its postprocessor. After observing successful HTTP traffic with
+that runtime setting and no stored outcomes, it enables CLICKHOUSE_V2 through the
+public component-config API. SwarmManagementApi maps the explicit component role
+and instance; SwarmResource uses the existing CONFIG_UPDATE receipt/operation path.
+The suite verifies the operation target and fresh applied worker configuration, then
+captures new successful processor WorkItems and their trace IDs and awaits matching
+persisted rows for the owned swarm and sink instance. Status,
 success, call ID and duration are checked against concrete captured result/header
 values. Fresh worker observations confirm the configured sink. No success is inferred
 from postprocessor counters. Queries and waits are bounded; database rows are retained
@@ -741,3 +745,16 @@ focused assertions reject successful/too-early mutation responses and changed re
 bindings. The deployed test proves actual proxy processing before and after rejection.
 A later Swarm run must independently establish NPM/HAProxy placement on separate hosts
 and the shared NFS runtime; the API-only test does not infer placement from node count.
+
+
+## Delayed Work delivery acceptance (A5)
+
+`DelayedDeliveryAcceptanceIT` uses the ordinary `LiveRun`, HTTP clients, lifecycle
+resources and diagnostic tap. The scenario owns the delay value; the test reads it
+from the selected fixture. Existing observability hops supply generator completion
+and processor admission timestamps, avoiding a false pass caused by slow sample
+polling. It verifies successful HTTP results and swarm removal through public ingress.
+It does not reimplement broker scheduling, name resolution or delivery validation.
+Embedded broker and Controller/SDK flow tests own not-before delivery, immediate
+traffic bypass, scheduled-resource removal and startup-only policy rejection.
+This transport slice does not assert full 3DS correctness or load capacity.

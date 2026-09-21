@@ -414,7 +414,7 @@ class SwarmResourceTest {
           swarm.create(createRequest(create));
           var api = new SwarmManagementApi(http, "actor-token");
           if (managerCommand) swarm.managerEnabled(api, "controller", true);
-          else swarm.controllerConfig(api, "controller", Map.of("enabled", true));
+          else swarm.componentConfig(api, io.pockethive.swarm.model.BeeRoles.SWARM_CONTROLLER, "controller", Map.of("enabled", true));
         }
       });
       assertEquals(500, failure.response().status());
@@ -438,7 +438,7 @@ class SwarmResourceTest {
           swarm.create(createRequest(create));
           var requester = new SwarmManagementApi(http, "runner-token");
           if (managerCommand) swarm.managerEnabled(requester, "controller", true);
-          else swarm.controllerConfig(requester, "controller", Map.of("enabled", true));
+          else swarm.componentConfig(requester, io.pockethive.swarm.model.BeeRoles.SWARM_CONTROLLER, "controller", Map.of("enabled", true));
         }
       });
       assertEquals(403, failure.response().status());

@@ -92,7 +92,7 @@ class WorkPlaneFlowTest {
         assertThat(inputSettings).isEqualTo(resolved.inputSettings());
         assertThat(outputSettings).isEqualTo(resolved.outputSettings());
         var definition = new WorkerDefinition("worker", Object.class, inputType, "processor",
-            new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup()),
+            new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup(), io.pockethive.work.config.WorkDelivery.IMMEDIATE),
             Void.class, ioCatalog.inputClass(inputType), ioCatalog.outputClass(outputType), outputType, "flow", Set.of(WorkerCapability.MESSAGE_DRIVEN));
         var store = new WorkerStateStore();
         store.getOrCreate(definition);

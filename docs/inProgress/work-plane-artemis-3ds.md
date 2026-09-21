@@ -1,6 +1,6 @@
 # Artemis WorkPlane i opóźnione dostarczenie dla 3DS
 
-Status: A1/A2 i admission w `7e6c63db`, A3 w `9cc6c827`. A4 zaimplementowane; create/ruch/remove Artemis przeszły przez publiczny ingress. A4 oczekuje osobnego review; A5–A6 pozostają otwarte.
+Status: A1/A2 i admission w `7e6c63db`, A3 w `9cc6c827`. A4 zaimplementowane; create/ruch/remove Artemis przeszły przez publiczny ingress. A4 oczekuje osobnego review; A5 zaimplementowane i odebrane lokalnie 2026-09-21; A6 pozostaje otwarte.
 Branch: `codex/artemis-work-plane`, punkt wyjścia: `863694be`.
 
 ## Cel i zakres
@@ -18,6 +18,88 @@ Małe klasy o osobnych odpowiedzialnościach tworzą jedno API technologii. Kons
 używają istniejących portów Work i rozwiązanych projekcji; nie importują klienta Artemis,
 nie składają nazw ani nie odtwarzają ustawień. Adapter nie zależy od SDK ani usług.
 Aktualny zakres właścicieli określają rekordy w `docs/architecture/runtime-responsibilities.md`.
+
+## Aktualne ustalenia 3DS — 2026-09-21
+
+Ta sekcja zastępuje wcześniejsze robocze założenia o PROSA i pollingu.
+Jest zapisem uzgodnień i kolejności prac, nie deklaracją gotowej implementacji
+ani zatwierdzeniem nowych pól publicznych kontraktów.
+
+### Przepływ i granice mocka
+
+Inicjatorem jest **MC/APATA**, nie PROSA. PH symuluje MC/APATA oraz aplikację
+mobilną w **jednym mocku**, z osobnymi handlerami i jednym właścicielem stanu:
+
+1. MC/APATA → nasz system: POST po dane kart; odpowiedź zawiera dane.
+2. MC/APATA → nasz system: POST SCASend. Nasz system wywołuje webhook aplikacji
+   (endpoint mocka), następnie odpowiada APATA.
+3. PUSH do aplikacji; nadawca prawdopodobnie APATA, nadal do potwierdzenia.
+4. Aplikacja → nasz system: PATCH z działaniem użytkownika.
+5. Nasz system → APATA: Authenticate/Decline przez mTLS.
+6. APATA → nasz system: POST finalise.
+7. Transakcja ISO; kierunek i końcowy warunek odbioru do ustalenia.
+
+Nie zakładać pętli pollingu: nowszy opis jej nie zawiera. Potwierdzić kontrakty
+HTTP, identyfikatory korelacji, relację webhook/PUSH i zdarzenie rozpoczynające
+czas reakcji aplikacji. PUSH można zastąpić wewnętrznym zdarzeniem mocka dopiero
+po potwierdzeniu, że jego transport nie jest przedmiotem testu. Osobno ustalić SMS.
+
+### Stan w pamięci, oczekiwanie w Artemis
+
+- Pierwsza wersja: jedna instancja mocka, małe rekordy challenge w pamięci procesu.
+  Rekord przechowuje identyfikatory przebiegu/testu, etap, wybraną decyzję i kontekst
+  kolejnych wywołań. Handlery obu ról korzystają z jednego API właściciela stanu.
+- Oczekiwanie realizuje Artemis. Opóźnione zadanie wskazuje rekord konkretnego
+  przebiegu i po dostarczeniu uruchamia krótką akcję, np. PATCH. Publikacja przez
+  porty PH i adapter; bez bezpośredniego klienta brokera w mocku.
+- Nie tworzyć wątku, otwartego HTTP ani osobnego timera na oczekujący challenge.
+  Cel: dziesiątki tysięcy oczekujących challenge, heavy load i udział 10–20%.
+  Kilka sekund poślizgu brokera (np. 5 s) jest akceptowalne; nie zmienia to
+  rzeczywistego deadline/expiry testowanego systemu. Pojemność trzeba zmierzyć.
+- Zakończone rekordy zwalniać po przekazaniu wymaganych dowodów; dla niedokończonych
+  uzgodnić jawny czas retencji i cleanup przebiegu. Restart mocka traci stan:
+  zgłosić przerwanie/błąd testu; zadanie bez rekordu nie powoduje requeue.
+- Wiele replik i magazyn Redis dla stanu mocka to późniejszy wariant za tym samym
+  API, nie wymaganie pierwszej wersji i nie równoległy drugi właściciel stanu.
+
+### Rozliczanie testu — uzgodniony kierunek, osobny etap
+
+Stan mocka posiada zachowanie symulowanych uczestników; raportowanie posiada
+ocenę testu. Nie uznawać wysłanego finalise za dowód zakończenia transakcji ISO.
+
+Domyślnie lekki bilans liczników rozpoczętych transakcji, końców w PP i znanych
+błędów terminalnych. Liczyć transakcje, nie wszystkie wiadomości. Zgodność
+liczników nie dowodzi zgodności identyfikatorów. Zaległych kolejek po Stop nie
+opróżniać i nie produkować osobnego błędu dla każdego niewykonanego elementu.
+
+Opcjonalny CloseLook: zapis oczekiwania przed pierwszą publikacją do Summary Table
+w Redis, wynik z PP i natychmiastowe zgłoszenie błędu (także templating/publikacja).
+Aktualizacje postępu i pełne payloady są opcją debug. Jeden moduł posiada klucze,
+rekordy i ocenę; interceptory, PP i SC delegują do niego. Kontrola przez delayed
+work oraz Final Summary wywoływane przez SC wykorzystują tę samą ocenę. Zachować
+informację o spóźnionych wynikach. Włączenie CloseLook później nie odtworzy
+niezapisanych wcześniej identyfikatorów. Granicę Stop/zbierania wyników uzgodnić
+przed implementacją, bez rozszerzania teraz refaktoru lifecycle.
+
+### Co robimy dalej
+
+1. **A5.1 — kontrakt zatwierdzony 2026-09-21.** Kanoniczny opis:
+   [Delayed Work delivery](../architecture/work-plane-boundaries.md#12-delayed-work-delivery).
+2. **A5.2 — wykonane i odebrane lokalnie 2026-09-21.** Neutralna polityka,
+   eksport startupu i pojedyncza ścieżka publikacji są podłączone. Rzeczywisty broker,
+   przepływ Controller/SDK i nowy E2E przez ingress przeszły testy. Dowody:
+   [A5 w mapie pokrycia](../ci/acceptance-coverage.md#delayed-delivery-a5--2026-09-21).
+3. **Kolejny krok — OutputSelector i splitter.** Selector wybiera logiczny cel,
+   splitter jawnie rozdziela pracę na zadeklarowane wyjścia, np. przepływ główny
+   i CloseLook. Jeden właściciel reguł wspólny z wyborem Redis; bez drugiego SSOT,
+   samodzielnego składania adresów i dodatkowych publisherów w interceptorach.
+   To osobny projekt kontraktu, nie warunek pierwszego testu delayed delivery.
+4. **Mock APATA/App oraz CloseLook** jako oddzielne części implementacji po
+   uzgodnieniu ich kontraktów. Następnie A6: pełny przepływ, jawne negatywne przypadki
+   i pomiar utrzymywanego obciążenia razem z kosztem raportowania.
+
+A5 realizuje termin natywnie w ArtemisWorkOutput. N4/usunięcie starego E2E,
+NW-4 na Swarm/NFS i wcześniej odłożone refaktory pozostają poza tym krokiem.
 
 ## Kolejność wykonania
 
@@ -100,8 +182,18 @@ adapterach nie jest utratą funkcji przy zmianie WorkPlane.
 
 ### A5 — opóźnienie dla rzeczywistego przepływu 3DS
 
-- Przed zmianą API uzgodnić producenta/odbiorcę, źródło wartości i moment liczenia
-  opóźnienia. Względne milisekundy to propozycja, nie zatwierdzony kontrakt.
+2026-09-21: użytkownik wybrał domknięcie A5 przed zamknięciem brancha.
+Kontrakt zatwierdzony przez użytkownika 2026-09-21: [kontrakt delayed delivery](../architecture/work-plane-boundaries.md#12-delayed-work-delivery).
+Projekt ustala konfigurację scenariusza, początek odliczania, właścicieli i odbiór;
+implementacja i lokalny odbiór wykonane 2026-09-21.
+
+Aktualizacja kolejności 2026-09-18: po osobnym review poprawki DA-3 i lokalnego
+raportu N3 bez uwag wracamy do tego etapu. Użytkownik odkłada usunięcie starego
+frameworka do swoich ręcznych testów i potwierdzenia. N4 oraz odłożone wykonanie
+NW-4 na Swarm/NFS nie blokują rozpoczęcia A5; nie oznacza to zamknięcia N3 ani A6.
+Bieżące bramki zastąpienia posiada [plan E2E](e2e-test-system.md).
+
+- Producent/odbiorca, źródło wartości i moment liczenia są zatwierdzone w kanonicznym kontrakcie §12.
 - Neutralny zamiar dostarczenia przechodzi przez DefaultWorkerRuntime →
   WorkOutputRegistry → wybrany WorkOutput. Bez dodatkowego publish w workerze.
 - Adapter wysyła od razu do brokera, który udostępnia wiadomość nie wcześniej niż
@@ -110,6 +202,13 @@ adapterach nie jest utratą funkcji przy zmianie WorkPlane.
   retry/DLQ ani fallbacku w workerach.
 - Odbiór: brak przedwczesnego odbioru, odbiór po terminie i poprawne usuwanie kolejek
   z wiadomościami oczekującymi. Nie obiecywać dostarczenia dokładnie co do milisekundy.
+
+Odbiór A5: pełny reactor 1905 testów bez błędów/pominięć; po końcowych zmianach
+16 testów obszaru, wszystkie zielone. Nowy E2E `delayed-delivery` przeszedł na
+lokalnym stacku przebudowanym przez `build-hive.sh --quick`: delay 3000 ms, odczytane
+odstępy generator → processor 3054/3143/3004 ms, poprawne HTTP oraz CREATE/START/STOP/REMOVE.
+[Mapa pokrycia](../ci/acceptance-coverage.md#delayed-delivery-a5--2026-09-21)
+posiada identyfikator przebiegu i zakres dowodów. To nie jest odbiór obciążenia ani A6.
 
 ### A6 — odbiór całej ścieżki
 
@@ -171,7 +270,7 @@ testowy korzysta z jawnego Core in-VM, bez sieciowego obejścia ingress PocketHi
 Usuwanie adresów używa Core Management na standardowym adresie biblioteki, z timeoutem
 połączenia; uprawnienia i konfiguracja brokera wdrożeniowego należą do podłączenia A3/A6.
 Brak odczytu oldest-age jest reprezentowany przez istniejące OptionalLong w kontrakcie.
-Spring/authoring/ENV connection binding, A4 i opóźnienie są jeszcze niezaimplementowane.
+W chwili zakończenia A1/A2 Spring/authoring/ENV binding, A4 i opóźnienie nie były jeszcze zaimplementowane.
 Nie uruchomiono stacka ani E2E. Kolejny krok: A3, następnie A4. Materiał do osobnego
 review; wyniki testów nie oznaczają samodzielnego odbioru architektury.
 

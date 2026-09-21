@@ -2255,7 +2255,7 @@ message must never settle an earlier unaccepted message (WA-REV-1 correction).
 encoding and sends to its captured resolved address. Their transport factories
 consume typed settings and return the existing Work ports. They must not own worker
 state/execution, select fallback adapters, merge broker headers or add another result
-publication. A3 supplies service/SDK activation. Delayed-delivery intent remains a subsequent slice.
+publication. A3 supplies service/SDK activation. RESP-WORK-DELIVERY owns neutral delivery intent; the Artemis output realizes its native scheduled timestamp.
 
 ArtemisWorkDebugTaps opens diagnostic copies of owner-resolved channels;
 ArtemisWorkDebugTap owns the native non-exclusive divert, temporary capture queue,
@@ -2290,3 +2290,24 @@ relative file names inside a single worker output directory.
 consumer-local reconstruction of output paths; a second output-directory cleanup owner.
 
 **Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
+
+
+## RESP-WORK-DELIVERY
+
+**Owner:** `work-config` owns `WorkDelivery`, its modes, validation, default and
+`WorkDeliveryEnvironment` projection. See the approved [delivery contract](work-plane-boundaries.md#12-delayed-work-delivery).
+`WorkIoType` declares the adapter's delivery capability; Artemis alone currently
+supports DELAYED. Scenario validation and direct transport calls consult that same declaration.
+
+**Consumers:** `WorkConfigurationParser` aggregates the neutral parser with adapter
+settings. Controller worker composition exports the validated policy. SDK startup
+binding delegates scalar parsing to the same owner and retains the immutable result
+in `WorkIoBindings`. Candidate validation compares against that startup value before
+accepted worker state changes. `WorkOutputRegistry` passes it alongside each result
+through the existing `WorkOutput` port. `ArtemisWorkOutput` alone converts it to a
+native scheduled delivery timestamp. `work-api` exposes that shared type; it does
+not define another delivery DTO or serialize intent into WorkItem.
+
+**Forbidden:** duplicated delivery defaults/parsers, inherited per-hop delivery headers,
+worker timers, second publication paths, unsupported-mode fallback, or changes to
+input admission/ACK and failure consumption.

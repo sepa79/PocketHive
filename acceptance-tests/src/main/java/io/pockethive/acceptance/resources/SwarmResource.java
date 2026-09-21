@@ -86,12 +86,12 @@ public final class SwarmResource implements AutoCloseable {
     return execute(OperationType.CONFIG_UPDATE,
         () -> requester.managerEnabled(id, instance, UUID.randomUUID().toString(), enabled));
   }
-  public SwarmOperation controllerConfig(SwarmManagementApi requester, String instance, java.util.Map<String, Object> patch)
+  public SwarmOperation componentConfig(SwarmManagementApi requester, String role, String instance, java.util.Map<String, Object> patch)
       throws IOException, InterruptedException {
     requireAcquired();
     settleBeforeRemoval();
     return execute(OperationType.CONFIG_UPDATE,
-        () -> requester.controllerConfig(id, instance, UUID.randomUUID().toString(), patch));
+        () -> requester.componentConfig(id, role, instance, UUID.randomUUID().toString(), patch));
   }
 
   public SwarmOperation remove() throws IOException, InterruptedException {

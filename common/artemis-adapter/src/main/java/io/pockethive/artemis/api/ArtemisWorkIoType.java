@@ -10,5 +10,7 @@ import io.pockethive.work.config.WorkIoType;
 public enum ArtemisWorkIoType implements WorkIoType {
     ARTEMIS;
 
+    @Override public boolean supportsDelayedDelivery() { return true; }
+
     @Override public String settingsKey() { return "artemis"; }
 }

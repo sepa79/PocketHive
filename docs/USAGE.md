@@ -441,6 +441,36 @@ propagation is not included. `spring.rabbitmq.addresses` is rejected because it 
 the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,
 request a fresh cleanup plan. This code change does not update or deploy environment manifests.
 
+## Delayed Work delivery (Artemis)
+
+Set the neutral policy on the producer's output:
+
+```yaml
+outputs:
+  type: ARTEMIS
+  artemis: { persistent: true }
+  delivery:
+    mode: DELAYED
+    delayMs: 180000
+```
+
+Artemis receives the result immediately and makes it available no earlier than the
+publication time plus the delay. Worker execution does not wait. This is a minimum
+wait, not a delivery deadline. The next worker uses its own output policy.
+
+An absent `delivery` block means IMMEDIATE. An explicit immediate block is
+`delivery: { mode: IMMEDIATE }`, with no `delayMs`. DELAYED requires a positive
+integer. This first version is startup-only: restart the swarm to change it.
+Rabbit, Redis and NONE reject delayed output. Do not set broker scheduling headers
+in WorkItem. See the [canonical contract](architecture/work-plane-boundaries.md#12-delayed-work-delivery).
+
+The local acceptance test measures generator-to-processor hop timestamps through
+the public ingress, then verifies ordinary stop/remove:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-delayed-delivery-artemis.properties delayed-delivery
+```
+
 ## Independent acceptance framework
 
 The new `acceptance-tests` module is independent of the frozen `e2e-tests`.

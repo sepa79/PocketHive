@@ -1,6 +1,6 @@
 # Acceptance replacement coverage
 
-N0 inventory and current N1/N2 evidence, 2026-09-15. This ledger is a requirements checklist, not executable
+N0 inventory and N1–N3 evidence; A5 transport extension added 2026-09-21. This ledger is a requirements checklist, not executable
 routing/configuration and not an assertion of equivalence. Sources: the six frozen
 feature files under `e2e-tests/src/test/resources/features`, current REST/lifecycle,
 worker, auth and networking contracts. No legacy implementation is reused.
@@ -16,10 +16,14 @@ Evidence availability, 2026-09-18: the agent ran Maven clean during N3 preparati
 without archiving `acceptance-tests/target/runs`, deleting the earlier local raw
 artifacts referenced below. Logs and some audit summaries remain, and the historical
 PASS results are retained as historical results. They must not be presented as newly
-replayed tests or as currently available raw evidence. N3 remains open pending its
-evidence assessment/replays and NW-4. New runs use `acceptance-tests/runs` outside
-Maven output and are listed separately; no deleted JSON was reconstructed. The user
-reports copies on other branches; check those during N3 before scheduling replays.
+replayed tests or as currently available raw evidence. The
+[N3 local assessment](acceptance-replacement-review.md) checked 29 available refs,
+assessed preserved logs/summaries and replayed groups lacking accessible proof.
+New runs use `acceptance-tests/runs` outside Maven output; no deleted JSON was
+reconstructed. Separate review of the DA-3 correction/evidence assessment passed
+without findings (53 focused tests passed). Final N3 remains open for the deferred
+cross-node NW-4 execution. The execution plan records the user's decision to resume
+Artemis/3DS and defer legacy removal until manual testing and confirmation.
 
 | ID | Required observable behavior | Source feature/case | New coverage / prerequisite | Status |
 | --- | --- | --- | --- | --- |
@@ -43,7 +47,7 @@ reports copies on other branches; check those during N3 before scheduling replay
 | WK-5 | Explicit overrides, including generator I/O, reach all workers. | swarm-lifecycle: overrides | WorkerConfigurationAcceptanceIT overrides on Rabbit/Artemis: scheduler, adapter tuning, generator message, moderator mode/rate, processor URL/thread count and postprocessor flag; fresh config and successful traffic | PASS |
 | DA-1 | Redis dataset flows through request builder and processor. | swarm-lifecycle: dataset traffic | RedisDatasetAcceptanceIT: two isolated records, FULL Generator/Request Builder/Processor history; Rabbit and Artemis verified | PASS |
 | DA-2 | Dataset values are fully rendered in requests/payloads. | swarm-lifecycle: dataset payloads | Exact seeded JSON survives Generator and rendered HttpRequestEnvelope body; rendered header and HTTP result asserted on both adapters | PASS |
-| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | TxOutcomeAcceptanceIT: persisted rows match captured trace IDs, swarm/sink identity, call ID, status, success and duration; Rabbit and Artemis verified through Grafana ingress | PASS |
+| DA-3 | Enabling tx outcome sink writes matching swarm outcomes to ClickHouse. | swarm-lifecycle: tx outcomes | TxOutcomeAcceptanceIT: runtime NONE → CONFIG_UPDATE → CLICKHOUSE_V2; persisted rows match newly captured trace IDs, swarm/sink identity, call ID, status, success and duration; Rabbit and Artemis through Grafana ingress | PASS |
 | DA-4 | Five-customer WebAuth Redis fixture produces expected TCP activity. | swarm-lifecycle: WebAuth loop | WebAuthLoopAcceptanceIT: five owned customers, exact TCP XML/response and ordered RED/BAL/TOP/RED per customer; Rabbit and Artemis, seven-key verified cleanup | PASS |
 | SW-3 | Scenario plan drives intended lifecycle transitions. | swarm-lifecycle: plan demo | ScenarioPlanAcceptanceIT on Rabbit/Artemis: fresh baseline/rate/pause/resume/final-stop worker snapshots, actual HTTP before pause and after resume, five ordered plan steps and completion in owned-run journal; CREATE/START/REMOVE only from the test. | PASS |
 | EX-1 | 20 transactions form two clearing files. | swarm-lifecycle: clearing export | Exact finalized file content under canonical swarm/run/worker runtime directory | PASS |
@@ -63,18 +67,21 @@ reports copies on other branches; check those during N3 before scheduling replay
 | AU-12 | Swarm-scoped manager/config/journal/pin/tap access, network conflict and deployment-only journal metadata grants hold. | auth-access: swarm admin | SwarmAuthorizationAcceptanceIT on Rabbit/Artemis: canonical CONFIG_UPDATE, journal/pin readback, metadata grants, tap read/close grants, missing-SUT network409 and verified cleanup. Pins remain as documented history. | PASS |
 | AU-13 | Runner cannot change manual network override; viewer can read it. | auth-access: manual override | NetworkAccessAcceptanceIT: verified runner PUT403, viewer GET200, full manual override status unchanged | PASS |
 | FW-1 | Assertion failure after create still removes exact owned swarm; cleanup failure remains visible. | New framework requirement | SwarmResourceTest and FailureCleanupAcceptanceIT passed (framework + Rabbit + Artemis); includes write failures at CREATE/START/STOP/REMOVE and combined test/cleanup/report failures | PASS |
-| FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Identity/failure/config and full-body HTTP checks plus OperationAwaiterBudgetTest: receipt/configured caps, remaining budget, bounded poll; TapResourceTest: missing samples timeout with closure. 93 framework tests pass. | PASS |
+| FW-2 | Wrong operation identity, terminal failure, timeout and missing configuration fail explicitly. | New framework requirement | Identity/failure/config and full-body HTTP checks plus OperationAwaiterBudgetTest: receipt/configured caps, remaining budget, bounded poll; TapResourceTest: missing samples timeout with closure. 178 framework tests pass. | PASS |
+| WP-1 | Delayed Work results arrive no earlier than configured; ordinary traffic and ACK semantics remain; scheduled resources can be removed. | A5 transport extension | DelayedDeliveryAcceptanceIT through ingress; ArtemisDelayedDeliveryTest and ArtemisWorkPlaneFlowTest cover native waiting/removal, startup projection and policy rejection. See dated A5 evidence below. | PASS |
 
 ## Remaining acceptance gates
 
 - NW-4 is implemented and passes on both local WORK adapters; its cross-node
   Swarm/NFS execution remains outstanding. Local success does not establish NFS behavior.
-- N3 still requires the aggregate requirement/assertion review, including the raw
-  evidence availability gap above. Named owner tests cover CONTROL details; Redis,
-  TCP, ClickHouse and export observation boundaries are already established in the
-  corresponding sections below. No backend-port exception is implied.
-- N4 remains gated by N3. The preparation inventory is in the execution plan;
-  legacy code and fixtures have not been removed.
+- The [N3 local assessment](acceptance-replacement-review.md) is complete: actual
+  assertions, owners and available execution evidence were compared. One missing
+  transition in DA-3 is corrected and passes both adapters; separate review of the
+  correction and assessment passed without findings. Final N3 still awaits NW-4.
+  No backend-port exception is implied.
+- N4 remains gated by N3 and the user's manual testing/confirmation, as recorded
+  in the execution plan. Legacy code and fixtures have not been removed; this
+  deferred removal does not block resuming Artemis/3DS.
 - Existing green Cucumber reports are historical reference only. Common WORK
   behavior requires evidence from both Rabbit and Artemis.
 
@@ -1261,3 +1268,62 @@ Artemis WORK is restored afterward, Rabbit CONTROL unchanged. No remote deployme
 Matrix: **40 PASS / 1 PARTIAL / 0 OPEN**. NW-4's local behavioral test is green;
 its cross-node NFS evidence is still missing. N3 aggregate acceptance and N4 legacy
 removal stay open. Implementation awaits separate review and is uncommitted.
+
+
+### N3 local requirement/assertion assessment — 2026-09-18
+
+Reviewed baseline `51227a32`; see [the assessment report](acceptance-replacement-review.md)
+for the row-to-assertion comparison, responsibility evidence, six review passes and
+the disposition of missing historical raw artifacts. The audit found one gap: DA-3
+previously proved only preconfigured persistence. It now starts with NONE, executes
+a canonical runtime CONFIG_UPDATE and verifies new captured outcomes after applying
+CLICKHOUSE_V2. Existing API, operation, worker-observation and cleanup owners are reused.
+
+178 framework tests and 126 selected owner tests pass. Fresh deployed runs: 67 test
+executions across 30 explicit invocations, zero failures/errors/skips. Logs, exact run
+indices and archived reports are under `acceptance-tests/runs/n3-audit-20260918`;
+`execution-summary.json` indexes completed invocations and canonical operation evidence.
+Recent Redis/WebAuth/export/SM-2 historical logs and summaries were assessed instead
+of rerunning solely to replace lost JSON. No missing raw artifact was reconstructed.
+Artemis WORK is restored; final public swarm registry is empty.
+
+Matrix remains **40 PASS / 1 PARTIAL / 0 OPEN**. DA-3 correction and this assessment
+are uncommitted and await separate review. NW-4 cross-node Swarm/NFS, final N3
+acceptance and N4 legacy deletion remain open. No product behavior, public contract,
+legacy code or production manifest changed.
+
+
+## Delayed delivery A5 — 2026-09-21
+
+New transport coverage `WP-1` extends the earlier 41-row N3 comparison; it does not
+close the deferred Swarm/NFS run, legacy removal or full 3DS/load acceptance.
+
+- Full root `./mvnw -B -ntp test`: **1905 tests, zero failures/errors/skips**.
+  After the final parser/import and per-hop runtime test changes, **16 focused tests**
+  passed across work-config, Artemis, SDK, Controller and the import boundary.
+- `ArtemisDelayedDeliveryTest` uses the real embedded broker: pending before due time,
+  immediate traffic bypass, no early callback, unchanged decoded envelope, removal
+  and recreation without resurrection, and timestamp overflow before send.
+- `ArtemisWorkPlaneFlowTest` runs both IMMEDIATE and DELAYED through Controller
+  configuration, ENV binding, accepted worker state, actual SDK publication and
+  broker removal. It rejects delivery changes while disabled and enabled without
+  changing accepted state. Existing execution-error consumption remains covered.
+- `DefaultWorkerRuntimeTest` verifies per-publication intent, no inheritance on the
+  next worker, and no send for a null result or worker exception. Rabbit rejects a
+  direct delayed request without sending; configuration validation rejects unsupported
+  Rabbit/Redis/NONE modes.
+- Local deployment: canonical `build-hive.sh --quick`, selected Artemis WORK and
+  Rabbit CONTROL. The docs build required adding the existing N3 report to the
+  published include list and making its unpublished plan references explicit paths.
+- Ingress command: `./run-acceptance-tests.sh acceptance-tests/targets/local-delayed-delivery-artemis.properties delayed-delivery`.
+  **1 live test passed**; fixture delay **3000 ms**, measured generator completion to
+  processor admission **3054, 3143, 3004 ms**. All three results passed HTTP assertions;
+  CREATE, START, STOP and REMOVE reached SUCCEEDED.
+- Evidence: `acceptance-tests/runs/delayed-delivery-8edda659-1309-4434-8855-ae70bb9f151e`,
+  including `delayed-arrivals.json`, three canonical Work samples and four operation
+  results. An earlier attempt failed before CREATE acceptance because the new fixture
+  lacked its SUT definition; that fixture is corrected, not counted as a successful run.
+
+This is functional evidence on the local stack, not a throughput, latency upper-bound
+or tens-of-thousands-of-challenges capacity result. Delay is fixed per output at startup;
+selector/splitter, APATA/app mock and CloseLook remain outside A5.

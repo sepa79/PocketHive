@@ -24,6 +24,7 @@ final class LiveRun implements AutoCloseable {
   final JsonNode scenario;
   final RunEvidence evidence;
   final SwarmApi swarms;
+  final SwarmManagementApi management;
   final ScenarioApi scenarios;
   final NetworkBindingApi networkBindings;
   final SwarmJournalApi journal;
@@ -34,6 +35,7 @@ final class LiveRun implements AutoCloseable {
     this.api = api;
     evidence = api.evidence;
     swarms = new SwarmApi(api.http, api.token);
+    management = new SwarmManagementApi(api.http, api.token);
     scenarios = new ScenarioApi(api.http, api.token);
     networkBindings = new NetworkBindingApi(api.http, api.token);
     journal = new SwarmJournalApi(api.http, api.token);
