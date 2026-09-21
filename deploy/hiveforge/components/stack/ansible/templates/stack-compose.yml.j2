@@ -358,7 +358,7 @@ services:
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
-      PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool
+      PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool/uploads
       PH_MCP_OPEN_SESSION_TTL: PT2H
       PH_MCP_CLOSED_SESSION_RETENTION: PT24H
       PH_MCP_ATTEMPT_RETENTION: PT24H
@@ -388,9 +388,18 @@ services:
       PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_mcp_service_secret }}
     volumes:
       - {{ pockethive_bind_source_dir }}/state/pockethive-mcp:/var/lib/pockethive-mcp/state
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
-      - /var/lib/pockethive-mcp/spool:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+      # Explicit mounts are preserved by the Swarm deployment path.
+      # The non-root process owns its private directories below these mount roots.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 67108864
+          mode: 01777
+      - type: tmpfs
+        target: /var/lib/pockethive-mcp/spool
+        tmpfs:
+          size: 67108864
+          mode: 01777
     read_only: true
     cap_drop:
       - ALL

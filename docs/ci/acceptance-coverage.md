@@ -1366,3 +1366,14 @@ This replay does not claim a full acceptance-matrix rerun, signed OAuth with an
 external issuer, Rabbit WORK deployment validation, or a load/capacity result.
 A4 source review separately passed 59 focused tests without findings; A5 source
 review passed 16. A6, final N3/N4 and the explicitly deferred refactors remain open.
+
+
+### Large Swarm Artemis verification — 2026-09-21
+
+Deployment `4a80a0d3` / images `dev-20260921-g4a80a0d3` passed six ingress
+acceptance cases on `https://192.168.88.50:8443`: smoke, three lifecycle cases,
+delayed delivery and binding recovery. Final swarm registry was empty.
+See [deployment evidence](../inProgress/artemis-swarm-dev-deploy.md) for exact runs
+and limits. The deployment is degraded by a restarting MCP service; its cause
+is not yet established. NW-4 remains PARTIAL because NPM and HAProxy landed on
+the same manager, despite using NFS. Matrix remains **41 PASS / 1 PARTIAL**.
