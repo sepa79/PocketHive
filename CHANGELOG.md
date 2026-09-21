@@ -4,6 +4,9 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- VS Code tooling security: update pinned `fast-uri`, `js-yaml`, and `qs`
+  development dependencies to patched releases; retain Stryker 10 and the
+  existing mutation scope and thresholds.
 - Control/work-plane isolation: move Rabbit connection, topology, resource, and
   transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
   keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery
