@@ -338,11 +338,14 @@ artifacts/runtime/scenario-manager/sut
 
 ## MCP temporary files on Swarm
 
-MCP retains a read-only root filesystem. Its `/tmp` and upload-spool mounts
-use explicit `volumes: type: tmpfs` entries, each limited to 64 MiB. The deployed
-service must contain both mounts: the earlier service-level `tmpfs` entries were
-absent from the actual service created through the Portainer Stack executor.
-Mount roots use sticky mode 01777; UID10001 creates its private directories.
-The upload coordinator owns `/var/lib/pockethive-mcp/spool/uploads` and applies
-0700 to it; it must not try to chmod the root-owned tmpfs mount itself.
-Verify effective mounts and startup after deployment, not just Stack YAML validity.
+MCP retains a read-only root filesystem. An explicit `volumes: type: tmpfs`
+entry mounts `/tmp` with a total limit of 128 MiB (the previous two 64 MiB budgets).
+UID10001 creates `/tmp/pockethive-mcp-spool` and applies 0700; the upload coordinator
+retains its separate 64 MiB quota. JVM temporary files and spool share the mount.
+The image's existing `/tmp` permissions allow the non-root process to create its
+private directories. Verify effective permissions after deployment.
+
+The Portainer Stack deployment path omitted the earlier service-level `tmpfs`
+entries entirely. Explicit tmpfs volumes reached Swarm, but their configured
+`mode` did not. Do not rely on that option to make a root-owned mount writable;
+verify actual mounts and successful startup, not just Stack YAML validity.

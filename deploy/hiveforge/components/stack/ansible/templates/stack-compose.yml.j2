@@ -358,7 +358,7 @@ services:
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
-      PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool/uploads
+      PH_MCP_UPLOAD_SPOOL_PATH: /tmp/pockethive-mcp-spool
       PH_MCP_OPEN_SESSION_TTL: PT2H
       PH_MCP_CLOSED_SESSION_RETENTION: PT24H
       PH_MCP_ATTEMPT_RETENTION: PT24H
@@ -393,13 +393,7 @@ services:
       - type: tmpfs
         target: /tmp
         tmpfs:
-          size: 67108864
-          mode: 01777
-      - type: tmpfs
-        target: /var/lib/pockethive-mcp/spool
-        tmpfs:
-          size: 67108864
-          mode: 01777
+          size: 134217728
     read_only: true
     cap_drop:
       - ALL
