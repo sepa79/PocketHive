@@ -1,947 +1,116 @@
 package io.pockethive.orchestrator.app;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.JsonNode;
 import io.pockethive.control.AlertMessage;
-import io.pockethive.control.CommandState;
-import io.pockethive.control.ControlSignal;
+import io.pockethive.control.CommandResult;
+import io.pockethive.control.JournalEvent;
 import io.pockethive.control.ControlScope;
-import io.pockethive.controlplane.ControlPlaneSignals;
-import io.pockethive.controlplane.messaging.Alerts;
-import io.pockethive.orchestrator.domain.ScenarioTimelineRegistry;
-import io.pockethive.orchestrator.domain.SwarmPlanRegistry;
-import io.pockethive.orchestrator.domain.SwarmStore;
-import io.pockethive.orchestrator.domain.SwarmCreateTracker;
-import io.pockethive.orchestrator.domain.SwarmCreateTracker.Pending;
-import io.pockethive.orchestrator.domain.SwarmCreateTracker.Phase;
-import io.pockethive.orchestrator.domain.SwarmLifecycleStatus;
-import io.pockethive.orchestrator.domain.Swarm;
+import io.pockethive.control.ControlPlaneEnvelope;
+import io.pockethive.control.StatusMetric;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
+import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.controlplane.ControlPlaneRoles;
+import io.pockethive.controlplane.routing.ControlPlaneRouting;
+import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
 import io.pockethive.orchestrator.domain.HiveJournal;
 import io.pockethive.orchestrator.domain.HiveJournal.HiveJournalEntry;
 import io.pockethive.orchestrator.runtime.RuntimeLogSnapshotJournalService;
-import io.pockethive.swarm.model.NetworkMode;
-import io.pockethive.swarm.model.SwarmPlan;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.support.AmqpHeaders;
-import org.springframework.messaging.handler.annotation.Header;
-import org.springframework.scheduling.annotation.EnableScheduling;
-import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
-
-import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.controlplane.manager.ManagerControlPlane;
-import io.pockethive.controlplane.messaging.ControlSignals;
-import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
-import io.pockethive.controlplane.messaging.CommandOutcomePolicy;
-import io.pockethive.controlplane.messaging.EventMessage;
-import io.pockethive.controlplane.messaging.SignalMessage;
-import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import io.pockethive.controlplane.routing.ControlPlaneRouting.RoutingKey;
-import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
-import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.controlplane.payload.RoleContext;
-import io.pockethive.observability.ControlPlaneJson;
-import org.springframework.beans.factory.annotation.Qualifier;
-
 /**
- * Handles control-plane signals for orchestrator and dispatches swarm plans when
- * controllers become ready.
+ * Responsibility: Decode Orchestrator control-plane ingress and dispatch each supported envelope by kind.
+ * Must not: Own domain state transitions, lifecycle convergence, persistence policy, or terminal outcome construction.
+ * Contract: RESP-ORCHESTRATOR-INGRESS — docs/architecture/runtime-responsibilities.md#resp-orchestrator-ingress.
+ * Decode once with parsed routing context; journal and drop invalid ingress without a fallback path.
  */
 @Component
-@EnableScheduling
 public class SwarmSignalListener {
-    private static final String ROLE = "orchestrator";
-    private static final String ALERT_EVENT_TYPE = Alerts.TYPE + "." + Alerts.TYPE;
-    private static final long STATUS_INTERVAL_MS = 5000L;
-    private static final Duration TEMPLATE_TIMEOUT = Duration.ofMillis(120_000L);
-    private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
 
-    private final SwarmPlanRegistry plans;
-    private final ScenarioTimelineRegistry timelines;
-    private final SwarmStore store;
-    private final SwarmCreateTracker creates;
-    private final ContainerLifecycleManager lifecycle;
-    private final SwarmNetworkBindingService networkBindings;
-    private final ObjectMapper json;
-    private final HiveJournal hiveJournal;
-    private final ControlPlaneJournalErrors journalErrors;
-    private final ManagerControlPlane controlPlane;
-    private final ControlPlaneEmitter controlEmitter;
-    private final RuntimeLogSnapshotJournalService runtimeLogSnapshots;
-    private final ControlPlaneTopologyDescriptor topology;
-    private final ControlPlaneIdentity identity;
-    private final String instanceId;
-    private final String controlQueue;
-    private final List<String> controlRoutes;
-    private final java.time.Instant startedAt;
+  private static final Logger log = LoggerFactory.getLogger(SwarmSignalListener.class);
+  private static final String ROLE = ControlPlaneRoles.ORCHESTRATOR;
 
-    public SwarmSignalListener(SwarmPlanRegistry plans,
-                               ScenarioTimelineRegistry timelines,
-                               SwarmCreateTracker creates,
-                               SwarmStore store,
-                               ContainerLifecycleManager lifecycle,
-                               SwarmNetworkBindingService networkBindings,
-                               ObjectMapper json,
-                               HiveJournal hiveJournal,
-                               ManagerControlPlane controlPlane,
-                               ControlPlaneEmitter controlEmitter,
-                               RuntimeLogSnapshotJournalService runtimeLogSnapshots,
-                               ControlPlaneIdentity managerControlPlaneIdentity,
-                               @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
-                               @Qualifier("managerControlQueueName") String controlQueue) {
-        this.plans = plans;
-        this.timelines = timelines;
-        this.creates = creates;
-        this.store = store;
-        this.lifecycle = lifecycle;
-        this.networkBindings = Objects.requireNonNull(networkBindings, "networkBindings");
-        this.json = json.findAndRegisterModules();
-        this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
-        this.controlPlane = Objects.requireNonNull(controlPlane, "controlPlane");
-        this.controlEmitter = Objects.requireNonNull(controlEmitter, "controlEmitter");
-        this.runtimeLogSnapshots = Objects.requireNonNull(runtimeLogSnapshots, "runtimeLogSnapshots");
-        this.topology = Objects.requireNonNull(descriptor, "descriptor");
-        this.identity = Objects.requireNonNull(managerControlPlaneIdentity, "identity");
-        this.instanceId = identity.instanceId();
-        this.journalErrors = new ControlPlaneJournalErrors(this.hiveJournal, ROLE, "swarm-signal-listener");
-        this.controlQueue = Objects.requireNonNull(controlQueue, "controlQueue");
-        this.controlRoutes = List.copyOf(resolveControlRoutes(descriptor.routes()));
-        this.startedAt = java.time.Instant.now();
-        try {
-            sendStatusFull();
-        } catch (Exception e) {
-            log.warn("initial status", e);
-        }
+  private final ControlPlaneCodec codec;
+  private final HiveJournal hiveJournal;
+  private final ControlPlaneJournalErrors journalErrors;
+  private final RuntimeLogSnapshotJournalService runtimeLogSnapshots;
+  private final SwarmOperationTerminalHandler terminalOperations;
+  private final String instanceId;
+
+  public SwarmSignalListener(
+      ControlPlaneCodec codec,
+      HiveJournal hiveJournal,
+      RuntimeLogSnapshotJournalService runtimeLogSnapshots,
+      SwarmOperationTerminalHandler terminalOperations,
+      @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity) {
+    this.codec = Objects.requireNonNull(codec, "codec");
+    this.hiveJournal = Objects.requireNonNull(hiveJournal, "hiveJournal");
+    this.runtimeLogSnapshots = Objects.requireNonNull(runtimeLogSnapshots, "runtimeLogSnapshots");
+    this.terminalOperations = Objects.requireNonNull(terminalOperations, "terminalOperations");
+    this.instanceId = Objects.requireNonNull(identity, "identity").instanceId();
+    this.journalErrors = new ControlPlaneJournalErrors(hiveJournal, ROLE, "swarm-signal-listener");
+  }
+
+  public void handle(String body, String routingKey) {
+    try {
+      RoutingKey key = requireEventKey(routingKey);
+      ControlPlaneEnvelope envelope = codec.decode(body, routingKey);
+      if (envelope instanceof StatusMetric) {
+        return;
+      }
+      if (envelope instanceof AlertMessage alert) {
+        runtimeLogSnapshots.captureForAlert(routingKey, alert);
+        return;
+      }
+      if (envelope instanceof JournalEvent journal) {
+        acceptJournal(key, routingKey, journal);
+        return;
+      }
+      if (!(envelope instanceof CommandResult result)) {
+        log.warn("Dropping non-result terminal event rk={}", routingKey);
+        journalDrop(key.swarmId(), routingKey, "expected event.result", body, null);
+        return;
+      }
+      terminalOperations.accept(key, routingKey, result);
+    } catch (Exception exception) {
+      log.warn("Dropping invalid control-plane event rk={} payload={}", routingKey, snippet(body), exception);
+      journalDrop(bestEffortSwarmId(routingKey), routingKey, "invalid control-plane event", body, exception);
     }
+  }
 
-    @RabbitListener(queues = "#{managerControlQueueName}")
-    public void handle(String body, @Header(AmqpHeaders.RECEIVED_ROUTING_KEY) String routingKey) {
-        // Control-plane traffic is not safe to requeue on errors: redelivery storms can overwhelm RabbitMQ.
-        // We always ACK by swallowing exceptions (log + drop) so a single bad/duplicate message cannot wedge the system.
-        try {
-            if (routingKey == null || routingKey.isBlank()) {
-                log.warn("Received control-plane event with null or blank routing key; payload snippet={}", snippet(body));
-                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "missing routing key", body, null);
-                return;
-            }
-            if (!routingKey.startsWith("event.")) {
-                log.warn("Received control-plane event with unexpected routing key prefix; rk={} payload snippet={}", routingKey, snippet(body));
-                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "unexpected routing key prefix", body, null);
-                return;
-            }
-            String snippet = snippet(body);
-            if (routingKey.startsWith("event.metric.status-")) {
-                log.debug("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-                return;
-            }
-            RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
-            if (key == null || key.type() == null) {
-                log.warn("Unable to parse control event routing key {}; payload snippet={}", routingKey, snippet);
-                journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "unable to parse routing key", body, null);
-                return;
-            }
+  private void acceptJournal(RoutingKey key, String routingKey, JournalEvent event) {
+    hiveJournal.append(HiveJournalEntry.info(
+        key.swarmId(), HiveJournal.Direction.IN, JournalEvent.KIND, event.type(), event.origin(), event.scope(),
+        event.correlationId(), event.idempotencyKey(), routingKey, event.data(), null, null));
+  }
 
-            log.info("[CTRL] RECV rk={} inst={} payload={}", routingKey, instanceId, snippet);
-
-            if (key.type().startsWith("outcome.")) {
-                handleOutcomeEvent(key, routingKey, body);
-            } else if (ALERT_EVENT_TYPE.equals(key.type())) {
-                handleAlertEvent(key, routingKey, body);
-            }
-        } catch (Exception e) {
-            log.warn("Ignoring control-plane event due to handler exception; rk={} payload snippet={}", routingKey, snippet(body), e);
-            journalControlPlaneDrop(bestEffortSwarmIdFromRoutingKey(routingKey), routingKey, "handler exception", body, e);
-        }
+  private static RoutingKey requireEventKey(String routingKey) {
+    RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
+    if (key == null || key.type() == null) {
+      throw new IllegalArgumentException("Invalid event routing key: " + routingKey);
     }
+    return key;
+  }
 
-    void handleControllerStatusFull(String routingKey) {
-        RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
-        if (key == null || key.type() == null) {
-            log.warn("Unable to parse control status routing key {}", routingKey);
-            return;
-        }
-        if (!"metric.status-full".equalsIgnoreCase(key.type())) {
-            return;
-        }
-        if (!"swarm-controller".equalsIgnoreCase(key.role())) {
-            return;
-        }
-        String controllerInstance = key.instance();
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            log.warn("controller status-full event missing instance segment: {}", key);
-            return;
-        }
-        boolean hasPlan = plans.find(controllerInstance).isPresent();
-        boolean hasCreate = key.swarmId() != null && !key.swarmId().isBlank()
-            && creates.controllerPending(key.swarmId()).isPresent();
-        if (!hasPlan && !hasCreate) {
-            return;
-        }
-        onControllerReady(key);
+  private void journalDrop(String swarmId, String routingKey, String reason, String body, Exception exception) {
+    String resolved = swarmId == null || swarmId.isBlank() ? "hive" : swarmId;
+    journalErrors.errorDrop(
+        resolved, HiveJournal.Direction.IN, "event-dropped",
+        new ControlScope(resolved, ROLE, instanceId), routingKey, reason, body, exception);
+  }
+
+  private static String bestEffortSwarmId(String routingKey) {
+    RoutingKey key = ControlPlaneRouting.parseEvent(routingKey);
+    return key == null || ControlScope.isAll(key.swarmId()) ? null : key.swarmId();
+  }
+
+  private static String snippet(String payload) {
+    if (payload == null) {
+      return "";
     }
-
-    private void handleAlertEvent(RoutingKey key, String routingKey, String body) {
-        try {
-            AlertMessage alert = json.readValue(body, AlertMessage.class);
-            runtimeLogSnapshots.captureForAlert(routingKey, alert);
-        } catch (Exception e) {
-            log.warn("Failed to parse control alert event; rk={} payload snippet={}", routingKey, snippet(body), e);
-            journalControlPlaneDrop(key.swarmId(), routingKey, "invalid alert payload", body, e);
-        }
-    }
-
-    private void handleOutcomeEvent(RoutingKey key, String routingKey, String body) {
-        String command = key.type().substring("outcome.".length());
-        String status = null;
-        String contextStatus = null;
-        String origin = null;
-        String correlationId = null;
-        String idempotencyKey = null;
-        try {
-            var root = json.readTree(body);
-            status = root.path("data").path("status").asText(null);
-            contextStatus = root.path("data").path("context").path("status").asText(null);
-            origin = root.path("origin").asText(null);
-            correlationId = root.path("correlationId").asText(null);
-            idempotencyKey = root.path("idempotencyKey").asText(null);
-            JsonNode scopeNode = root.path("scope");
-            String scopeSwarm = scopeNode.path("swarmId").asText(null);
-            String scopeRole = scopeNode.path("role").asText(null);
-            String scopeInstance = scopeNode.path("instance").asText(null);
-            warnMissingScopeFields("outcome", routingKey, body, scopeSwarm, scopeRole, scopeInstance);
-        } catch (Exception e) {
-            log.debug("Failed to parse outcome payload; rk={} payload snippet={}", routingKey, snippet(body), e);
-        }
-
-        try {
-            String swarmId = key.swarmId();
-            if (swarmId != null && !swarmId.isBlank()) {
-                Boolean ok = classifyTrackedOutcome(command, status);
-                if (ok != null) {
-                    var data = new java.util.LinkedHashMap<String, Object>();
-                    data.put("status", status);
-                    hiveJournal.append(ok
-                        ? HiveJournalEntry.info(
-                            swarmId,
-                            HiveJournal.Direction.IN,
-                            "outcome",
-                            command,
-                            origin != null && !origin.isBlank() ? origin : "unknown",
-                            new ControlScope(swarmId, key.role(), key.instance()),
-                            correlationId,
-                            idempotencyKey,
-                            routingKey,
-                            data,
-                            null,
-                            null)
-                        : HiveJournalEntry.error(
-                            swarmId,
-                            HiveJournal.Direction.IN,
-                            "outcome",
-                            command,
-                            origin != null && !origin.isBlank() ? origin : "unknown",
-                            new ControlScope(swarmId, key.role(), key.instance()),
-                            correlationId,
-                            idempotencyKey,
-                            routingKey,
-                            data,
-                            null,
-                            null));
-                }
-            }
-        } catch (Exception ignore) {
-            // best-effort
-        }
-        try {
-            switch (command) {
-                case "swarm-template" -> {
-                    if (isStatus(status, "Ready")) onSwarmTemplateReady(key);
-                    else onSwarmTemplateError(key);
-                }
-                case "swarm-start" -> {
-                    if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStartNotReady(key, contextStatus);
-                    else if (isStatus(status, "Running")) onSwarmStartReady(key);
-                    else onSwarmStartError(key);
-                }
-                case "swarm-stop" -> {
-                    if (CommandOutcomePolicy.isNotReadyStatus(status)) onSwarmStopNotReady(key, contextStatus);
-                    else if (isStatus(status, "Stopped")) onSwarmStopReady(key);
-                    else onSwarmStopError(key);
-                }
-                case "swarm-remove" -> {
-                    if (isStatus(status, "Removed")) onSwarmRemoveReady(key, correlationId, idempotencyKey);
-                    else store.updateStatus(key.swarmId(), SwarmLifecycleStatus.FAILED);
-                }
-                default -> log.debug("[CTRL] Ignoring outcome type {}", key.type());
-            }
-        } catch (RuntimeException e) {
-            if (isKnownStopFinalizationRace(command, status, key, e)) {
-                // TODO(lifecycle-ssot): stop state is currently finalized by more than one listener.
-                // Fix lifecycle ownership/state transitions in a dedicated change. Until then, do
-                // not turn the known STOPPING/STOPPED finalization race into a user-visible failure.
-                log.warn("[CTRL] known lifecycle finalization race operation={} phase=outcome-finalization swarmId={} role={} instance={} correlationId={} idempotencyKey={} errorType={} errorDetail={}",
-                    command, key.swarmId(), ROLE, instanceId, correlationId, idempotencyKey,
-                    e.getClass().getName(), e.getMessage(), e);
-                return;
-            }
-            emitOutcomeFinalizationError(command, key, correlationId, idempotencyKey, e);
-            throw e;
-        }
-    }
-
-    private boolean isKnownStopFinalizationRace(String command,
-                                                String outcomeStatus,
-                                                RoutingKey key,
-                                                RuntimeException failure) {
-        if (!ControlPlaneSignals.SWARM_STOP.equals(command)
-            || !isStatus(outcomeStatus,
-                CommandOutcomePolicy.rulesFor(ControlPlaneSignals.SWARM_STOP).successStatus())
-            || !(failure instanceof IllegalStateException)) {
-            return false;
-        }
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            return false;
-        }
-        return store.find(swarmId)
-            .map(Swarm::getStatus)
-            .filter(status -> status == SwarmLifecycleStatus.STOPPING || status == SwarmLifecycleStatus.STOPPED)
-            .isPresent();
-    }
-
-    private void emitOutcomeFinalizationError(String command,
-                                              RoutingKey key,
-                                              String correlationId,
-                                              String idempotencyKey,
-                                              RuntimeException failure) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank() || correlationId == null || correlationId.isBlank()) {
-            log.warn("[CTRL] command failure operation={} phase=outcome-finalization code={} message={} swarmId={} role={} instance={} correlationId={} idempotencyKey={} retryable=true errorType={} errorDetail={}",
-                command, Alerts.Codes.RUNTIME_EXCEPTION, failure.getMessage(), swarmId, ROLE, instanceId,
-                correlationId, idempotencyKey, failure.getClass().getName(), failure.getMessage());
-            return;
-        }
-        ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.fromException(
-            command,
-            correlationId,
-            idempotencyKey,
-            new CommandState(null, null, null),
-            "outcome-finalization",
-            failure,
-            true,
-            null,
-            Map.of(),
-            Instant.now());
-        try {
-            emitError(swarmId, context);
-        } catch (RuntimeException emissionFailure) {
-            log.warn("Failed to publish outcome-finalization error operation={} swarmId={} correlationId={}",
-                command, swarmId, correlationId, emissionFailure);
-        }
-    }
-
-    private static Boolean classifyTrackedOutcome(String command, String status) {
-        return switch (command) {
-            case "swarm-create" -> isStatus(status, "Ready");
-            case "swarm-template" -> isStatus(status, "Ready");
-            case "swarm-start" -> isStatus(status, "Running") || CommandOutcomePolicy.isNotReadyStatus(status);
-            case "swarm-stop" -> isStatus(status, "Stopped") || CommandOutcomePolicy.isNotReadyStatus(status);
-            case "swarm-remove" -> isStatus(status, "Removed");
-            default -> null;
-        };
-    }
-
-    private static boolean isStatus(String actual, String expected) {
-        if (actual == null || expected == null) {
-            return false;
-        }
-        return expected.equalsIgnoreCase(actual.trim());
-    }
-
-    private void onControllerReady(RoutingKey key) {
-        if (!"swarm-controller".equalsIgnoreCase(key.role())) {
-            log.debug("Ignoring controller ready for role {}", key.role());
-            return;
-        }
-        String controllerInstance = key.instance();
-        if (controllerInstance == null || controllerInstance.isBlank()) {
-            log.warn("controller ready event missing instance segment: {}", key);
-            return;
-        }
-        SwarmPlan plan = plans.remove(controllerInstance).orElse(null);
-        Pending info = creates.remove(controllerInstance).orElse(null);
-        if (plan != null) {
-            try {
-                ControlSignal payload = templateSignal(plan, info, controllerInstance);
-                String jsonPayload = ControlPlaneJson.write(payload, "swarm-template signal");
-                String rk = ControlPlaneRouting.signal("swarm-template", plan.id(), "swarm-controller", controllerInstance);
-                log.info("sending swarm-template for {} via controller {}", plan.id(), controllerInstance);
-                sendControl(rk, jsonPayload, "signal.swarm-template");
-                try {
-                    var data = new java.util.LinkedHashMap<String, Object>();
-                    data.put("controllerInstance", controllerInstance);
-                    hiveJournal.append(HiveJournalEntry.info(
-                        plan.id(),
-                        HiveJournal.Direction.OUT,
-                        "signal",
-                        "swarm-template",
-                        payload.origin(),
-                        payload.scope(),
-                        payload.correlationId(),
-                        payload.idempotencyKey(),
-                        rk,
-                        data,
-                        null,
-                        null));
-                } catch (Exception ignore) {
-                    // best-effort
-                }
-            } catch (Exception e) {
-                log.warn("template send", e);
-            }
-        } else {
-            log.warn("no swarm plan registered for controller {}", controllerInstance);
-        }
-
-        timelines.remove(controllerInstance).ifPresent(planJson -> {
-            try {
-                Map<String, Object> args = json.readValue(planJson, new TypeReference<Map<String, Object>>() {});
-                String swarmId = plan != null ? plan.id() : info != null ? info.swarmId() : null;
-                if (swarmId == null || swarmId.isBlank()) {
-                    log.warn("cannot send swarm-plan for controller {} without swarm id", controllerInstance);
-                    return;
-                }
-                String signal = io.pockethive.controlplane.ControlPlaneSignals.SWARM_PLAN;
-                // Use a fresh correlation/idempotency pair so the manager's
-                // duplicate cache does not collapse this together with the
-                // swarm-template lifecycle signal.
-                String correlationId = java.util.UUID.randomUUID().toString();
-                String idempotencyKey = java.util.UUID.randomUUID().toString();
-                ControlSignal payload = ControlSignals.swarmPlan(
-                    instanceId,
-                    ControlScope.forInstance(swarmId, "swarm-controller", controllerInstance),
-                    correlationId,
-                    idempotencyKey,
-                    args);
-                String jsonPayload = ControlPlaneJson.write(payload, "swarm-plan signal");
-                String rk = ControlPlaneRouting.signal(signal, swarmId, "swarm-controller", controllerInstance);
-                log.info("sending swarm-plan for {} via controller {} (corr={}, idem={})",
-                    swarmId, controllerInstance, correlationId, idempotencyKey);
-                sendControl(rk, jsonPayload, "signal.swarm-plan");
-                try {
-                    var data = new java.util.LinkedHashMap<String, Object>();
-                    data.put("controllerInstance", controllerInstance);
-                    hiveJournal.append(HiveJournalEntry.info(
-                        swarmId,
-                        HiveJournal.Direction.OUT,
-                        "signal",
-                        signal,
-                        payload.origin(),
-                        payload.scope(),
-                        payload.correlationId(),
-                        payload.idempotencyKey(),
-                        rk,
-                        data,
-                        null,
-                        null));
-                } catch (Exception ignore) {
-                    // best-effort
-                }
-            } catch (Exception e) {
-                log.warn("plan send", e);
-            }
-        });
-
-        if (info != null) {
-            emitCreateReady(info);
-            creates.expectTemplate(info, TEMPLATE_TIMEOUT);
-        } else {
-            log.warn("no pending create tracked for controller {}", controllerInstance);
-        }
-    }
-
-    private void onSwarmTemplateReady(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-template ready event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.TEMPLATE);
-        store.markTemplateApplied(swarmId);
-    }
-
-    private void onSwarmStartReady(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-start ready event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.START);
-        store.markStartConfirmed(swarmId);
-    }
-
-    private void onSwarmStopReady(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-stop ready event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.STOP);
-        lifecycle.stopSwarm(swarmId);
-    }
-
-    private void onSwarmRemoveReady(RoutingKey key, String correlationId, String idempotencyKey) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-remove ready event missing swarm id: {}", key);
-            return;
-        }
-        Swarm swarm = store.find(swarmId).orElse(null);
-        if (swarm != null && swarm.getNetworkMode() == NetworkMode.PROXIED) {
-            String sutId = swarm.getSutId();
-            if (sutId == null || sutId.isBlank()) {
-                throw new IllegalStateException(
-                    "Swarm '%s' is PROXIED but has no sutId for network binding cleanup".formatted(swarmId));
-            }
-            networkBindings.clearBinding(
-                swarmId,
-                sutId,
-                correlationId,
-                idempotencyKey,
-                ROLE,
-                "swarm-remove",
-                ROLE);
-        }
-        lifecycle.removeSwarm(swarmId);
-    }
-
-    private void onSwarmTemplateError(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-template error event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.TEMPLATE);
-        store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
-    }
-
-    private void onSwarmStartError(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-start error event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.START);
-        store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
-    }
-
-    private void onSwarmStartNotReady(RoutingKey key, String contextStatus) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-start not-ready event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.START);
-        updateStatusFromContext(key, contextStatus);
-    }
-
-    private void onSwarmStopError(RoutingKey key) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-stop error event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.STOP);
-        store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
-    }
-
-    private void onSwarmStopNotReady(RoutingKey key, String contextStatus) {
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            log.warn("swarm-stop not-ready event missing swarm id: {}", key);
-            return;
-        }
-        creates.complete(swarmId, Phase.STOP);
-        updateStatusFromContext(key, contextStatus);
-    }
-
-    private void updateStatusFromContext(RoutingKey key, String contextStatus) {
-        String swarmId = key == null ? null : key.swarmId();
-        if (swarmId == null || swarmId.isBlank()) {
-            return;
-        }
-        SwarmLifecycleStatus status = parseSwarmStatus(contextStatus);
-        if (status == null) {
-            return;
-        }
-        store.find(swarmId).ifPresent(swarm -> {
-            SwarmLifecycleStatus current = swarm.getStatus();
-            if (current == status) {
-                log.info("duplicate status update from outcome context for swarm {}: {} (ignoring)", swarmId, status);
-                hiveJournal.append(HiveJournalEntry.info(
-                    swarmId,
-                    HiveJournal.Direction.IN,
-                    "control-plane",
-                    "status-duplicate",
-                    ROLE,
-                    new ControlScope(swarmId, key.role(), key.instance()),
-                    null,
-                    null,
-                    null,
-                    Map.of("status", status.name()),
-                    null,
-                    null));
-                return;
-            }
-            if (current.canTransitionTo(status)) {
-                store.updateStatus(swarmId, status);
-            } else {
-                log.warn("illegal status transition from outcome context for swarm {}: {} -> {} (ignoring)",
-                    swarmId, current, status);
-                hiveJournal.append(HiveJournalEntry.error(
-                    swarmId,
-                    HiveJournal.Direction.IN,
-                    "control-plane",
-                    "status-illegal-transition",
-                    ROLE,
-                    new ControlScope(swarmId, key.role(), key.instance()),
-                    null,
-                    null,
-                    null,
-                    Map.of("from", current.name(), "to", status.name(), "contextStatus", contextStatus),
-                    null,
-                    null));
-            }
-        });
-    }
-
-    private SwarmLifecycleStatus parseSwarmStatus(String status) {
-        if (status == null || status.isBlank()) {
-            return null;
-        }
-        try {
-            return SwarmLifecycleStatus.valueOf(status.trim().toUpperCase());
-        } catch (IllegalArgumentException e) {
-            log.warn("unknown swarm status '{}' in outcome context", status);
-            return null;
-        }
-    }
-
-    private void journalControlPlaneDrop(String swarmId,
-                                         String routingKey,
-                                         String reason,
-                                         String body,
-                                         Exception exception) {
-        String resolvedSwarmId = (swarmId == null || swarmId.isBlank()) ? "hive" : swarmId;
-        journalErrors.errorDrop(
-            resolvedSwarmId,
-            HiveJournal.Direction.IN,
-            "event-dropped",
-            new ControlScope(resolvedSwarmId, ROLE, instanceId),
-            routingKey,
-            reason,
-            body,
-            exception);
-    }
-
-    private static String bestEffortSwarmIdFromRoutingKey(String routingKey) {
-        if (routingKey == null || routingKey.isBlank()) {
-            return null;
-        }
-        ControlPlaneRouting.RoutingKey key = ControlPlaneRouting.parseEvent(routingKey.trim());
-        if (key == null) {
-            return null;
-        }
-        String swarmId = key.swarmId();
-        if (swarmId == null || swarmId.isBlank() || ControlScope.isAll(swarmId)) {
-            return null;
-        }
-        return swarmId;
-    }
-
-    private ControlSignal templateSignal(SwarmPlan plan, Pending info, String controllerInstance) {
-        Map<String, Object> args = json.convertValue(plan, new TypeReference<Map<String, Object>>() {});
-        String correlationId = info != null && info.correlationId() != null && !info.correlationId().isBlank()
-            ? info.correlationId()
-            : java.util.UUID.randomUUID().toString();
-        String idempotencyKey = info != null && info.idempotencyKey() != null && !info.idempotencyKey().isBlank()
-            ? info.idempotencyKey()
-            : java.util.UUID.randomUUID().toString();
-        return ControlSignals.swarmTemplate(
-            instanceId,
-            ControlScope.forInstance(plan.id(), "swarm-controller", controllerInstance),
-            correlationId,
-            idempotencyKey,
-            args);
-    }
-
-    private void emitCreateReady(Pending info) {
-        if (info == null) {
-            return;
-        }
-        try {
-            ControlPlaneEmitter emitter = emitterForSwarm(info.swarmId());
-            ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext.builder(
-                    "swarm-create",
-                    requireText(info.correlationId(), "swarm-create correlationId"),
-                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    new CommandState(null, null, null))
-                .timestamp(Instant.now())
-                .build();
-            logReady(context);
-            emitter.emitReady(context);
-        } catch (Exception e) {
-            log.warn("create ready send", e);
-        }
-    }
-
-    private void emitCreateTimeout(Pending info) {
-        if (info == null) {
-            return;
-        }
-        try {
-            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
-                    "swarm-create",
-                    requireText(info.correlationId(), "swarm-create correlationId"),
-                    requireText(info.idempotencyKey(), "swarm-create idempotencyKey"),
-                    new CommandState(null, null, null),
-                    "controller-bootstrap",
-                    "timeout",
-                    "controller did not become ready in time")
-                .timestamp(Instant.now())
-                .build();
-            emitError(info.swarmId(), context);
-        } catch (Exception e) {
-            log.warn("create timeout send", e);
-        }
-    }
-
-    private void emitPhaseTimeout(String signal, Pending info, String phase, String message) {
-        if (info == null) {
-            return;
-        }
-        try {
-            ControlPlaneEmitter.ErrorContext context = ControlPlaneEmitter.ErrorContext.builder(
-                    signal,
-                    requireText(info.correlationId(), signal + " correlationId"),
-                    requireText(info.idempotencyKey(), signal + " idempotencyKey"),
-                    new CommandState(null, null, null),
-                    phase,
-                    "timeout",
-                    message)
-                .timestamp(Instant.now())
-                .build();
-            emitError(info.swarmId(), context);
-        } catch (Exception e) {
-            log.warn("phase timeout send {}", signal, e);
-        }
-    }
-
-    private ControlPlaneEmitter emitterForSwarm(String swarmId) {
-        RoleContext role = new RoleContext(requireText(swarmId, "swarmId"), topology.role(), identity.instanceId());
-        return ControlPlaneEmitter.using(topology, role, controlPlane.publisher(), runtimeMetaForSwarm(swarmId));
-    }
-
-    private void emitError(String swarmId, ControlPlaneEmitter.ErrorContext context) {
-        ControlPlaneEmitter emitter;
-        try {
-            emitter = emitterForSwarm(swarmId);
-        } catch (RuntimeException setupFailure) {
-            // ControlPlaneEmitter normally owns the structured failure log. Log locally only when
-            // emitter construction fails before it can record the original command failure.
-            logError(swarmId, context);
-            throw setupFailure;
-        }
-        emitter.emitError(context);
-    }
-
-    private Map<String, Object> runtimeMetaForSwarm(String swarmId) {
-        String resolvedSwarmId = requireText(swarmId, "swarmId");
-        var swarm = store.find(resolvedSwarmId)
-            .orElseThrow(() -> new IllegalStateException("Swarm " + resolvedSwarmId + " is not registered"));
-        String templateId = requireText(swarm.templateId(), "swarm.templateId");
-        String runId = requireText(swarm.getRunId(), "swarm.runId");
-        return Map.of(
-            "templateId", templateId,
-            "runId", runId
-        );
-    }
-
-    private void logReady(ControlPlaneEmitter.ReadyContext context) {
-        log.info("[CTRL] SEND event.outcome type={} inst={} corr={} idem={}",
-            context.signal(), instanceId, context.correlationId(), context.idempotencyKey());
-    }
-
-    private void logError(String swarmId, ControlPlaneEmitter.ErrorContext context) {
-        boolean retryable = context.retryable() != null
-            ? context.retryable()
-            : CommandOutcomePolicy.rulesFor(context.signal()).errorRetryableDefault()
-                == CommandOutcomePolicy.RetryablePolicy.TRUE;
-        log.warn("[CTRL] command failure operation={} phase={} code={} message={} swarmId={} role=orchestrator instance={} correlationId={} idempotencyKey={} retryable={} errorType={} errorDetail={}",
-            context.signal(), context.phase(), context.code(), context.message(), swarmId, instanceId,
-            context.correlationId(), context.idempotencyKey(), retryable, context.errorType(),
-            context.errorDetail());
-    }
-
-    private static String requireText(String value, String context) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException(context + " must not be blank");
-        }
-        return value;
-    }
-
-    @Scheduled(fixedRate = STATUS_INTERVAL_MS)
-    public void status() {
-        sendStatusDelta();
-    }
-
-    @Scheduled(fixedRate = 2000L)
-    public void checkTimeouts() {
-        Instant now = Instant.now();
-        creates.expire(now).forEach(this::handleTimeout);
-    }
-
-    private void handleTimeout(Pending pending) {
-        if (pending == null) {
-            return;
-        }
-        Phase phase = pending.phase();
-        String swarmId = pending.swarmId();
-        if (swarmId == null) {
-            return;
-        }
-        store.updateStatus(swarmId, SwarmLifecycleStatus.FAILED);
-        switch (phase) {
-            case CONTROLLER -> {
-                if (pending.instanceId() != null) {
-                    plans.remove(pending.instanceId());
-                }
-                emitCreateTimeout(pending);
-            }
-            case TEMPLATE -> emitPhaseTimeout("swarm-template", pending, "template", "template confirmation timed out");
-            case START -> emitPhaseTimeout("swarm-start", pending, "start", "start confirmation timed out");
-            case STOP -> emitPhaseTimeout("swarm-stop", pending, "stop", "stop confirmation timed out");
-        }
-    }
-
-    private void sendStatusFull() {
-        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
-            var b = builder
-                .workPlaneEnabled(false)
-                .filesystemEnabled(true)
-                .tpsEnabled(false)
-                .enabled(true)
-                .controlIn(controlQueue)
-                .controlRoutes(controlRoutes.toArray(String[]::new))
-                .data("swarmCount", store.count())
-                .data("startedAt", startedAt);
-            var adapterType = lifecycle.currentComputeAdapterType();
-            if (adapterType != null) {
-                b.data("computeAdapter", adapterType.name());
-            }
-        });
-        controlEmitter.emitStatusSnapshot(context);
-        log.debug("[CTRL] SEND status-full inst={} swarmCount={}", instanceId, store.count());
-    }
-
-    public void requestStatusFull() {
-        sendStatusFull();
-    }
-
-	    private void sendStatusDelta() {
-	        ControlPlaneEmitter.StatusContext context = ControlPlaneEmitter.StatusContext.of(builder -> {
-	            builder.workPlaneEnabled(false)
-	                .tpsEnabled(false)
-	                .enabled(true)
-	                .controlIn(controlQueue)
-	                .controlRoutes(controlRoutes.toArray(String[]::new))
-	                .data("swarmCount", store.count());
-	        });
-	        controlEmitter.emitStatusDelta(context);
-	        log.debug("[CTRL] SEND status-delta inst={} swarmCount={}", instanceId, store.count());
-	    }
-
-    private List<String> resolveControlRoutes(ControlPlaneRouteCatalog catalog) {
-        if (catalog == null) {
-            return List.of();
-        }
-        List<String> routes = new ArrayList<>();
-        collectRoutes(routes, catalog.lifecycleEvents());
-        collectRoutes(routes, catalog.statusEvents());
-        return routes;
-    }
-
-    private void collectRoutes(List<String> target, Set<String> templates) {
-        if (templates == null || templates.isEmpty()) {
-            return;
-        }
-        for (String template : templates) {
-            if (template == null || template.isBlank()) {
-                continue;
-            }
-            target.add(template.replace(ControlPlaneRouteCatalog.INSTANCE_TOKEN, instanceId));
-        }
-    }
-
-    private void sendControl(String routingKey, String payload, String context) {
-        String label = (context == null || context.isBlank()) ? "SEND" : "SEND " + context;
-        String snippet = snippet(payload);
-        boolean statusContext = "status".equals(context);
-        boolean statusRoutingKey = routingKey != null && routingKey.contains(".status-");
-        if (statusContext || statusRoutingKey) {
-            log.debug("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
-        } else {
-            log.info("[CTRL] {} rk={} inst={} payload={}", label, routingKey, instanceId, snippet);
-        }
-        if (routingKey != null && routingKey.startsWith("signal.")) {
-            controlPlane.publishSignal(new SignalMessage(routingKey, payload));
-        } else {
-            controlPlane.publishEvent(new EventMessage(routingKey, payload));
-        }
-    }
-
-    private void warnMissingScopeFields(String label,
-                                        String routingKey,
-                                        String body,
-                                        String swarmId,
-                                        String role,
-                                        String instance) {
-        java.util.List<String> missing = new java.util.ArrayList<>();
-        if (swarmId == null || swarmId.isBlank()) {
-            missing.add("swarmId");
-        }
-        if (role == null || role.isBlank()) {
-            missing.add("role");
-        }
-        if (instance == null || instance.isBlank()) {
-            missing.add("instance");
-        }
-        if (!missing.isEmpty()) {
-            log.warn("Received {} payload with missing scope fields {}; rk={} payload snippet={}",
-                label, missing, routingKey, snippet(body));
-        }
-    }
-
-    private static String snippet(String payload) {
-        if (payload == null) {
-            return "";
-        }
-        String trimmed = payload.strip();
-        if (trimmed.length() > 300) {
-            return trimmed.substring(0, 300) + "…";
-        }
-        return trimmed;
-    }
-
+    String stripped = payload.strip();
+    return stripped.length() <= 300 ? stripped : stripped.substring(0, 300) + "…";
+  }
 }

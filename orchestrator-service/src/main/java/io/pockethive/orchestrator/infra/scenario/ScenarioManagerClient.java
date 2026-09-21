@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.infra.scenario;
 
+import io.pockethive.orchestrator.config.OrchestratorScenarioManagerProperties;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
@@ -41,7 +42,7 @@ public class ScenarioManagerClient implements ScenarioClient {
                                  OrchestratorProperties properties,
                                  org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
-        OrchestratorProperties.ScenarioManager scenario = properties.getScenarioManager();
+        OrchestratorScenarioManagerProperties scenario = properties.getScenarioManager();
         Objects.requireNonNull(scenario, "scenario");
         Duration httpConnectTimeout = resolveTimeout(
             scenario.getHttp().getConnectTimeout(), DEFAULT_CONNECT_TIMEOUT);

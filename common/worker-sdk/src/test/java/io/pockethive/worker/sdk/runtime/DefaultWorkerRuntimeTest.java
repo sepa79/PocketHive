@@ -8,16 +8,16 @@ import static org.mockito.Mockito.verify;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.output.WorkOutputRegistry;
 import java.util.List;
 import java.util.Set;
@@ -62,6 +62,14 @@ class DefaultWorkerRuntimeTest {
 
         assertThat(result).isNotNull();
         verify(outputRegistry).publish(eq(result), eq(definition));
+        var failure = new IllegalStateException("publication not confirmed");
+        org.mockito.Mockito.doThrow(failure).when(outputRegistry).publish(org.mockito.ArgumentMatchers.any(), eq(definition));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> runtime.dispatch("testWorker", WorkItem.text(info, "payload").build()))
+            .isSameAs(failure);
+        state.updateConfig(null, false, Boolean.FALSE);
+        org.mockito.Mockito.clearInvocations(outputRegistry);
+        assertThat(runtime.dispatch("testWorker", WorkItem.text(info, "payload").build())).isNull();
+        org.mockito.Mockito.verifyNoInteractions(outputRegistry);
     }
 
     private static WorkerContext workerContext(WorkerDefinition definition, WorkerState state) {

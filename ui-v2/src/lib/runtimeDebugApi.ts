@@ -1,3 +1,5 @@
+import type { ResourcePlane } from '@pockethive/swarm-lifecycle-contract'
+
 const ORCHESTRATOR_BASE = '/orchestrator/api'
 
 export type RuntimeResource = {
@@ -95,6 +97,7 @@ export type RabbitSourceSummary = {
 }
 
 export type RabbitQueueSnapshot = {
+  plane: Exclude<ResourcePlane, 'NONE'>
   name: string
   present: boolean
   messages: number | null
@@ -107,6 +110,7 @@ export type RabbitQueueSnapshot = {
 }
 
 export type RabbitExchangeSnapshot = {
+  plane: Exclude<ResourcePlane, 'NONE'>
   name: string
   present: boolean
   type: string | null

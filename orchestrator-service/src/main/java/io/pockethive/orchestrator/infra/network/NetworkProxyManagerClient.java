@@ -1,5 +1,6 @@
 package io.pockethive.orchestrator.infra.network;
 
+import io.pockethive.orchestrator.config.OrchestratorNetworkProxyManagerProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.auth.client.AuthServiceServiceTokenProvider;
 import io.pockethive.orchestrator.app.NetworkProxyClient;
@@ -13,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.Objects;
+import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -33,7 +35,7 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
                                      OrchestratorProperties properties,
                                      org.springframework.beans.factory.ObjectProvider<AuthServiceServiceTokenProvider> serviceTokenProvider) {
         this.json = json;
-        OrchestratorProperties.NetworkProxyManager networkProxyManager = properties.getNetworkProxyManager();
+        OrchestratorNetworkProxyManagerProperties networkProxyManager = properties.getNetworkProxyManager();
         Objects.requireNonNull(networkProxyManager, "networkProxyManager");
         Duration httpConnectTimeout = resolveTimeout(
             networkProxyManager.getHttp().getConnectTimeout(), DEFAULT_CONNECT_TIMEOUT);
@@ -65,6 +67,29 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
         String trimmedSwarmId = requireText(swarmId, "swarmId");
         String url = baseUrl + "/api/network/bindings/" + trimmedSwarmId + "/clear";
         return sendPost(url, "network-binding-clear " + trimmedSwarmId, request, correlationId, idempotencyKey);
+    }
+
+    @Override
+    public Optional<NetworkBinding> findBinding(String swarmId) throws Exception {
+        String trimmedSwarmId = requireText(swarmId, "swarmId");
+        String url = baseUrl + "/api/network/bindings/" + trimmedSwarmId;
+        String label = "network-binding-read " + trimmedSwarmId;
+        log.info("getting {} from {}", label, url);
+        String authorizationHeader = currentAuthorizationHeader(false);
+        HttpResponse<String> response = sendGetOnce(url, authorizationHeader);
+        if (response.statusCode() == 401 && serviceTokenProvider != null && authorizationHeader != null) {
+            log.warn("{} returned 401 on GET; refreshing service token and retrying once", label);
+            response = sendGetOnce(url, currentAuthorizationHeader(true));
+        }
+        log.info("{} response status {} length {}", label, response.statusCode(),
+            response.body() != null ? response.body().length() : 0);
+        if (response.statusCode() == 404) {
+            return Optional.empty();
+        }
+        if (response.statusCode() != 200) {
+            throw new IllegalStateException(label + " GET status " + response.statusCode());
+        }
+        return Optional.of(json.readValue(response.body(), NetworkBinding.class));
     }
 
     private NetworkBinding sendPost(String url,
@@ -106,6 +131,16 @@ public class NetworkProxyManagerClient implements NetworkProxyClient {
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             builder.header("X-Idempotency-Key", idempotencyKey);
         }
+        return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
+    }
+
+    private HttpResponse<String> sendGetOnce(String url, String authorizationHeader) throws Exception {
+        HttpRequest.Builder builder = HttpRequest.newBuilder()
+            .uri(URI.create(url))
+            .header("Accept", "application/json")
+            .timeout(requestTimeout)
+            .GET();
+        applyAuthorization(builder, authorizationHeader);
         return http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     }
 

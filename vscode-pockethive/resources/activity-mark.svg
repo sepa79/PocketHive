@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="20 40 180 200"
+  role="img" aria-label="PocketHive" data-pocket-hive-activity-icon="24px-silhouette">
+  <!-- Generated from ui-v2/public/logo.svg sha256:2cbaeac51ebb7bd1887363243704e9eb5bfc980bcf07cf39dd6295ced84f7471; do not edit. -->
+  <style>
+    .hex,.edge,.panel,.lensOuter,.node {
+      stroke:currentColor;
+      stroke-linecap:round;
+      stroke-linejoin:round;
+      vector-effect:non-scaling-stroke;
+    }
+    .hex { fill:none; stroke-width:1.25; }
+    .edge { fill:none; stroke-width:0.9; }
+    .panel { fill:none; stroke-width:1.1; }
+    .lensOuter { fill:none; stroke-width:1; }
+    .lensInner,.node { fill:currentColor; }
+    .lensInner { stroke:none; }
+    .node { stroke-width:0.5; }
+  </style>
+  <defs>
+    <mask id="connector-cutout" maskUnits="userSpaceOnUse" x="0" y="0" width="220" height="220">
+      <rect width="220" height="220" fill="white"/>
+      <rect x="84" y="68" width="52" height="84" rx="8" fill="black"/>
+    </mask>
+  </defs>
+  <g transform="translate(0,30)">
+    <polygon class="hex" points="110,20 190,65 190,155 110,200 30,155 30,65"/>
+    <g mask="url(#connector-cutout)">
+      <line class="edge" x1="110" y1="110" x2="110" y2="50"/>
+      <line class="edge" x1="110" y1="110" x2="160" y2="85"/>
+      <line class="edge" x1="110" y1="110" x2="160" y2="135"/>
+      <line class="edge" x1="110" y1="110" x2="110" y2="170"/>
+      <line class="edge" x1="110" y1="110" x2="60"  y2="135"/>
+      <line class="edge" x1="110" y1="110" x2="60"  y2="85"/>
+    </g>
+    <rect class="panel" x="86" y="70" width="48" height="80" rx="6"/>
+    <circle class="lensOuter" cx="110" cy="100" r="20"/>
+    <circle class="lensInner" cx="110" cy="100" r="8"/>
+    <circle class="node" cx="110" cy="50"  r="7"/>
+    <circle class="node" cx="160" cy="85"  r="7"/>
+    <circle class="node" cx="160" cy="135" r="7"/>
+    <circle class="node" cx="110" cy="170" r="7"/>
+    <circle class="node" cx="60"  cy="135" r="7"/>
+    <circle class="node" cx="60"  cy="85"  r="7"/>
+  </g>
+</svg>

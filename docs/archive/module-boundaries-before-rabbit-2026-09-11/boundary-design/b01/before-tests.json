@@ -1,0 +1,103 @@
+{
+  "source_revision": "e0d378711b6447f8bb3e0f8bbf787f9b06c2b5bb",
+  "production_changes_before_baseline": false,
+  "command": "./mvnw -B -ntp -pl common/worker-sdk,common/control-plane-core,common/control-plane-spring,common/templating,common/request-templates,trigger-service,scenario-manager-service,swarm-controller-service,orchestrator-service -am test",
+  "result": "BUILD SUCCESS",
+  "module_suite_totals": [
+    [
+      41,
+      0,
+      0,
+      0
+    ],
+    [
+      9,
+      0,
+      0,
+      0
+    ],
+    [
+      9,
+      0,
+      0,
+      0
+    ],
+    [
+      32,
+      0,
+      0,
+      0
+    ],
+    [
+      4,
+      0,
+      0,
+      0
+    ],
+    [
+      6,
+      0,
+      0,
+      0
+    ],
+    [
+      70,
+      0,
+      0,
+      0
+    ],
+    [
+      10,
+      0,
+      0,
+      0
+    ],
+    [
+      19,
+      0,
+      0,
+      0
+    ],
+    [
+      215,
+      0,
+      0,
+      1
+    ],
+    [
+      14,
+      0,
+      0,
+      0
+    ],
+    [
+      175,
+      0,
+      0,
+      0
+    ],
+    [
+      193,
+      0,
+      0,
+      0
+    ],
+    [
+      161,
+      0,
+      0,
+      0
+    ],
+    [
+      9,
+      0,
+      0,
+      0
+    ]
+  ],
+  "total_tests": 967,
+  "log_sha256": "4b1462f3e5b3014a712bd94079f108a5721391808af1125e552f0d0f3609fcd0",
+  "runtime_ingress_acceptance": false,
+  "skipped_tests": 1,
+  "counting_correction": "Count INFO/WARNING/ERROR module summaries; the first count omitted worker-sdk (215 tests, one pre-existing disabled Redis placeholder)."
+}

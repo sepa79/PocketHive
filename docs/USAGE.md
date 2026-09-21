@@ -11,6 +11,117 @@
 
 When the stack starts only the Orchestrator (Queen) is running. New swarms are created and started from the Hive view as needed.
 
+## PocketHive MCP and VS Code
+
+### Local MCP and VS Code quick start
+
+This is the canonical first-time local setup. It starts the Java PocketHive MCP
+inside the normal PocketHive stack, installs the PocketHive VS Code companion,
+and connects both through the supported public ingress. The companion is a
+PocketHive user interface; it is separate from VS Code's built-in MCP agent
+configuration.
+
+#### 1. Check requirements
+
+Install:
+
+- Docker with Docker Compose;
+- Java 21;
+- `curl` and a Bash-compatible shell; and
+- VS Code 1.85 or later, Node.js, and npm when building the companion from
+  source.
+
+The `code` command is optional. Without it, install the generated VSIX through
+VS Code's **Extensions: Install from VSIX...** command.
+
+#### 2. Build and start PocketHive
+
+From the repository root, run:
+
+```bash
+./build-hive.sh
+```
+
+This full build includes `auth-service` and the Java `pockethive-mcp` service.
+It builds their JARs with the repository-pinned Maven wrapper, builds images and
+deploys them with the rest of the local Compose stack. Use `--quick` only for a later development rebuild where
+skipping the Maven test phase is intentional.
+
+Verify the supported public ingress, not a service container port:
+
+```bash
+curl -fsS http://localhost:8088/healthz
+curl -fsS http://localhost:8088/.well-known/oauth-protected-resource
+```
+
+The first command returns `ok`. The second returns OAuth protected-resource
+metadata whose `resource` is `http://localhost:8088/mcp`. A protected `/mcp`
+request may return an authentication challenge before sign-in; that does not
+mean the MCP is unavailable.
+
+#### 3. Build and install the VS Code companion
+
+From the repository root, run:
+
+```bash
+cd vscode-pockethive
+./init.sh --install
+```
+
+The script installs the locked npm dependencies, builds and verifies the
+extension, creates `pockethive-vscode-<version>.vsix`, and force-installs that
+package when the `code` command is available. Force installation replaces an
+older installed build even when it has the same version.
+
+If `code` is unavailable, run `./init.sh --package`, then use **Extensions:
+Install from VSIX...** and select the generated file. After either route, run
+**Developer: Reload Window** in VS Code so the new extension host is active.
+
+#### 4. Connect the companion
+
+1. Open the PocketHive hexagon in the VS Code Activity Bar.
+2. Add an environment named `Local PocketHive` with the exact MCP URL
+   `http://localhost:8088/mcp`.
+3. Choose **Connect**. Complete the PocketHive browser sign-in and consent.
+   The default local DEV administrator username is `local-admin`.
+4. Confirm that **Authenticated** and **Connection test** both succeed.
+5. Choose **Save & open**.
+
+The workspace should show the Hive, Buzz, Journal, Scenarios, and Debug tabs,
+with the local environment reported as connected. Profiles are stored locally,
+while OAuth material is stored through VS Code Secret Storage.
+
+#### 5. Configure an MCP agent client when required
+
+The companion profile above does not configure VS Code/Copilot, Amazon Q,
+Codex, Cursor, or Windsurf as agent clients. Configure each required client
+separately with the same exact Streamable HTTP URL. Ready repository examples
+are available in `.vscode/mcp.json`, `.amazonq/mcp.json.dist`, `mcp.json`,
+`.cursor/mcp.json`, and `.windsurf/mcp.json`.
+
+Use native Streamable HTTP and OAuth support. Do not configure a Java service
+port, the removed Node server, stdio, an npm proxy, or a fallback endpoint. See
+the [PocketHive MCP connection contract](mcp/README.md#connect) for client
+configuration and authentication behaviour.
+
+#### Troubleshooting
+
+- If `healthz` fails, inspect `docker compose ps` and rerun `./build-hive.sh`;
+  do not switch the client to a backend service port.
+- If the PocketHive Activity Bar still shows an older interface, reinstall with
+  `./init.sh --install` and run **Developer: Reload Window**.
+- If connection validation reports a loopback error, use the exact local URL
+  `http://localhost:8088/mcp`; do not use an unspecified host or a container
+  hostname.
+- If authentication has expired or was declined, use the explicit **Sign in**
+  action. Ordinary tab and swarm commands must not open a separate browser
+  authorization flow.
+
+Scenario Bundle source remains in Git. From the Scenarios tab select a committed
+bundle directory; the extension uploads the exact committed regular files for
+Scenario Manager validation, then requires an explicit `CREATE` or `REPLACE`.
+See `docs/mcp/README.md` for the agent contract and publication flow.
+
 ## Docker Swarm mode (manager-only)
 - Swarm mode requires a **Docker Swarm manager**. Workers cannot create services, so the Orchestrator must connect to a manager node.
 - If you deploy the Orchestrator inside Swarm, schedule it on a manager node and mount the manager’s Docker socket.
@@ -34,18 +145,25 @@ The journal backend is selected via `pockethive.journal.sink` (env: `POCKETHIVE_
   - Disables Postgres-only APIs (they return `501 Not Implemented`).
   - Swarm journal is read from `journal.ndjson` under the runtime root (see below).
 
-### Runtime root (`POCKETHIVE_SCENARIOS_RUNTIME_ROOT`)
+### Runtime filesystem roots
 
 File-backed swarm journals live under:
 
-`$POCKETHIVE_SCENARIOS_RUNTIME_ROOT/<swarmId>/<runId>/journal.ndjson`
+`$POCKETHIVE_RUNTIME_FILESYSTEM_ROOT/<swarmId>/<runId>/journal.ndjson`
 
 In the default stack this is a bind mount:
 
 - Host: `/opt/pockethive/scenarios-runtime`
 - Containers: `/app/scenarios-runtime`
 
-The Orchestrator creates the runtime root directory on startup when configured.
+Filesystem controller startup uses the same bind mount with two explicit settings whose meanings do not overlap:
+
+- `POCKETHIVE_RUNTIME_FILESYSTEM_ROOT` is the absolute local path used by every process performing file IO (`/app/scenarios-runtime` in the default stack);
+- `POCKETHIVE_SCENARIOS_RUNTIME_ROOT` is only the absolute host source passed to the runtime adapter when it creates a bind mount.
+
+PocketHive MCP does not read this filesystem. Runtime manifest diagnostics go through the Orchestrator runtime-debug API, so storage and parsing remain under one owner.
+
+There are no separate startup read/write root settings. The Orchestrator, Scenario Manager and Controller all use the shared runtime-filesystem contract and resolver. A controller receives the exact artifact path and SHA-256; it does not fall back to RabbitMQ or another file. Isolated test harnesses set `POCKETHIVE_RUNTIME_FILESYSTEM_ROOT` to their absolute temporary root.
 
 ### How to enable file mode locally
 
@@ -225,17 +343,22 @@ Manual checks:
   ```json
   {
     "templateId": "rest",
-    "idempotencyKey": "create-rest-001"
+    "idempotencyKey": "create-rest-001",
+    "autoPullImages": false,
+    "sutId": null,
+    "variablesProfileId": null,
+    "networkMode": "DIRECT",
+    "networkProfileId": null
   }
   ```
 
-  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, boots a Swarm Controller runtime, and tracks progress internally—no `signal.swarm-create` message is published by clients.
+  The Orchestrator fetches the requested template from `scenario-manager-service`, expands it into a `SwarmPlan`, persists a checksummed startup artifact, boots a Swarm Controller runtime with the artifact reference, and tracks progress internally—no plan payload is sent through RabbitMQ.
 - Subscribe to control-plane outcomes and alerts to follow the lifecycle:
   - `event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>` — emitted by the Orchestrator after the controller handshake completes.
-  - `event.outcome.swarm-template.<swarmId>.swarm-controller.<controllerInstance>` — emitted once the plan is applied and bees are provisioned (idle by default).
-  - `event.outcome.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` — emitted after issuing a start; `data.status` indicates success/failure.
+  - `event.outcome.swarm-start.<swarmId>.orchestrator.<orchestratorInstance>` — the sole public terminal start outcome, emitted only after the Controller's correlated convergence result is accepted; `data.status` is `Succeeded`, `Rejected`, `Failed`, or `TimedOut`.
+  - `event.outcome.swarm-stop.<swarmId>.orchestrator.<orchestratorInstance>` and `event.outcome.swarm-remove.<swarmId>.orchestrator.<orchestratorInstance>` follow the same ownership rule.
   - `event.alert.{type}.<swarmId>.*.*` — emitted for runtime/IO failures.
-- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The Orchestrator sends `signal.swarm-start.<swarmId>.swarm-controller.<controllerInstance>` on your behalf and you can reuse the outcome/alert subscriptions above to track readiness.
+- Start execution with `POST /api/swarms/{swarmId}/start` (body: `{ "idempotencyKey": "start-rest-001" }`). The response includes both the Orchestrator outcome topic and an `operationUrl`; polling the operation URL is the broker-independent way to observe terminal state.
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides directly inside each bee's `config` map. The Scenario Manager passes those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap. No environment variables are used for logical scenario settings.
@@ -260,3 +383,25 @@ Manual checks:
 - **UI access**: ensure port `8088` is free or adjust mapping in `docker-compose.yml`.
 - **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
 - **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.
+
+### Rabbit Control and Work connections
+
+Rabbit runtime now requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
+`SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD` and
+`SPRING_RABBITMQ_VIRTUAL_HOST` configure Control. Work uses `POCKETHIVE_RABBIT_WORK_HOST`,
+`POCKETHIVE_RABBIT_WORK_PORT`, `POCKETHIVE_RABBIT_WORK_USERNAME`,
+`POCKETHIVE_RABBIT_WORK_PASSWORD` and `POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST`.
+The corresponding Work property prefix is `pockethive.rabbit.work`.
+
+Declare both sets explicitly in the Orchestrator environment. Controller/worker launches
+receive them from the Rabbit-owned environment projection. Identical settings are allowed,
+but the planes retain separate client instances. Do not override Work connection fields in
+individual `bee.env` entries: provisioning and worker execution must use the same target.
+For physical resource separation, configure distinct brokers or vhosts; separate client
+instances do not isolate two identical queue names within the same broker/vhost.
+
+There is no inheritance from Control to Work. Missing Work fields stop startup. The current
+connection contract covers host, port, username, password and virtual-host; TLS/address-list
+propagation is not included. `spring.rabbitmq.addresses` is rejected because it would override
+the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,
+request a fresh cleanup plan. This code change does not update or deploy environment manifests.

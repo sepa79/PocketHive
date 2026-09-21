@@ -8,15 +8,15 @@ import io.pockethive.processor.handler.Iso8583ProtocolHandler;
 import io.pockethive.processor.handler.TcpProtocolHandler;
 import io.pockethive.processor.metrics.CallMetricsRecorder;
 import io.pockethive.processor.exception.ProcessorCallException;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.templating.api.TemplateRenderer;
 
 import java.time.Clock;
 import java.util.Locale;
@@ -61,6 +61,10 @@ import org.springframework.stereotype.Component;
  * emitting error payload steps.
  * <p>
  * Configuration is supplied by the control plane on the {@code processor.control.*} routing keys.
+ * <p>
+ * Responsibility: dispatch a request to its selected protocol handler and return the resulting Work item.
+ * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
 @Component("processorWorker")
 @PocketHiveWorker(
@@ -90,7 +94,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
     this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(),
-        new io.pockethive.templating.PebbleTemplateRenderer(), new RedisSequenceProperties());
+        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()), new RedisSequenceProperties());
   }
 
   ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
@@ -98,7 +102,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         clock,
-        new io.pockethive.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()),
         new RedisSequenceProperties());
   }
 
@@ -113,7 +117,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
         new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
         new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
         clock,
-        new io.pockethive.templating.PebbleTemplateRenderer(),
+        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()),
         new RedisSequenceProperties());
   }
 
@@ -149,7 +153,6 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             redisProperties)
     );
   }
-
 
   @Override
   public WorkItem onMessage(WorkItem in, WorkerContext context) {

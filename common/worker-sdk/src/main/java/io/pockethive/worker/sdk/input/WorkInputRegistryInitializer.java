@@ -1,21 +1,22 @@
 package io.pockethive.worker.sdk.input;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.worker.sdk.config.WorkInputConfigBinder;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.SmartInitializingSingleton;
-import org.springframework.core.annotation.AnnotationAwareOrderComparator;
 
 /**
  * Populates the {@link WorkInputRegistry} using the available {@link WorkInputFactory} beans and
  * fails fast when no factory supports a worker definition.
+ * <p>
+ * Responsibility: register exactly one matching input adapter for each worker.
+ * Must not: resolve ambiguity by ordering or hide missing adapters.
+ * Contract: RESP-WORK-ADAPTER-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-adapter-selection.
  */
 public final class WorkInputRegistryInitializer implements SmartInitializingSingleton {
 
@@ -35,13 +36,7 @@ public final class WorkInputRegistryInitializer implements SmartInitializingSing
         this.workerRegistry = Objects.requireNonNull(workerRegistry, "workerRegistry");
         this.registry = Objects.requireNonNull(registry, "registry");
         this.configBinder = Objects.requireNonNull(configBinder, "configBinder");
-        if (factories == null || factories.isEmpty()) {
-            this.factories = Collections.emptyList();
-        } else {
-            List<WorkInputFactory> sorted = new ArrayList<>(factories);
-            AnnotationAwareOrderComparator.sort(sorted);
-            this.factories = Collections.unmodifiableList(sorted);
-        }
+        this.factories = List.copyOf(Objects.requireNonNull(factories, "factories"));
     }
 
     @Override
@@ -50,13 +45,16 @@ public final class WorkInputRegistryInitializer implements SmartInitializingSing
     }
 
     private void registerInput(WorkerDefinition definition) {
-        WorkInput input = factories.stream()
-            .filter(factory -> factory.supports(definition))
-            .findFirst()
-            .map(factory -> factory.create(definition, resolveConfig(definition)))
-            .orElseThrow(() -> new IllegalStateException(
-                "No WorkInputFactory found for worker '%s' (role=%s input=%s)".formatted(
-                    definition.beanName(), definition.role(), definition.input())));
+        List<WorkInputFactory> matches = factories.stream()
+            .filter(factory -> factory.supports(definition)).toList();
+        if (matches.isEmpty()) {
+            throw new IllegalStateException("No WorkInputFactory found for worker '" + definition.beanName() + "'");
+        }
+        if (matches.size() != 1) {
+            throw new IllegalStateException("Multiple WorkInputFactory matches for worker " + definition.beanName()
+                + ": " + matches.stream().map(factory -> factory.getClass().getName()).toList());
+        }
+        WorkInput input = matches.getFirst().create(definition, resolveConfig(definition));
         registry.register(definition, input);
         if (log.isInfoEnabled()) {
             String inputName = input.getClass().getSimpleName();

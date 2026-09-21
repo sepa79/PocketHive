@@ -5,17 +5,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.pockethive.requesttemplates.HttpTemplateDefinition;
 import io.pockethive.requesttemplates.TemplateDefinition;
-import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
 import io.pockethive.worker.sdk.auth.AuthFailureJournalDeduplicator;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
-import io.pockethive.worker.sdk.templating.TemplatingRenderException;
+import io.pockethive.worker.sdk.diagnostics.RedisDebugCaptureStore;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Clock;
@@ -27,15 +27,23 @@ import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.LongAdder;
 
-final class HttpSequenceRunner {
+/**
+ * Responsibility: execute configured HTTP steps with delegated request rendering and scoped auth resources.
+ * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Delegates capture projection and SDK resource ownership through RESP-HTTP-SEQUENCE-DEBUG-CAPTURE.
+ * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
+ */
+final class HttpSequenceRunner implements AutoCloseable {
 
   private final ObjectMapper mapper;
   private final Clock clock;
   private final TemplateRenderer templateRenderer;
+  private final HttpSequenceRequestRenderer requestRenderer;
   private final TemplateLoader templateLoader;
   private final HttpCallExecutor httpExecutor;
   private final HttpSequenceTargetResolver targetResolver;
   private final RedisDebugCaptureStore debugCaptureStore;
+  private final HttpSequenceDebugCapture debugCapture;
   private final RedisSequenceProperties redisProperties;
   private final AuthFailureJournalDeduplicator authFailureJournal = new AuthFailureJournalDeduplicator();
 
@@ -58,11 +66,14 @@ final class HttpSequenceRunner {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.templateRenderer = Objects.requireNonNull(templateRenderer, "templateRenderer");
+    this.requestRenderer = new HttpSequenceRequestRenderer(templateRenderer);
     this.templateLoader = Objects.requireNonNull(templateLoader, "templateLoader");
     this.httpExecutor = Objects.requireNonNull(httpExecutor, "httpExecutor");
     this.targetResolver = Objects.requireNonNull(targetResolver, "targetResolver");
-    this.debugCaptureStore = new RedisDebugCaptureStore(mapper, redisProperties);
     this.redisProperties = Objects.requireNonNull(redisProperties, "redisProperties");
+    this.debugCapture = new HttpSequenceDebugCapture(mapper);
+    this.debugCaptureStore = redisProperties.isEnabled()
+        ? new RedisDebugCaptureStore(redisProperties.connectionSettings(RedisSequenceProperties.PREFIX)) : null;
   }
 
   WorkItem run(WorkItem seed, WorkerContext context, HttpSequenceWorkerConfig config) {
@@ -89,64 +100,70 @@ final class HttpSequenceRunner {
     try {
       List<HttpSequenceTargetResolver.BaseTarget> baseTargets = targetResolver.resolveBases(config);
       reloadTemplatesIfNeeded(config);
-      AuthRuntime authRuntime = AuthRuntime.forTemplates(
-          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
-      for (int i = 0; i < config.steps().size(); i++) {
-        HttpSequenceWorkerConfig.Step step = config.steps().get(i);
-        if (step.callId() == null) {
-          throw new IllegalArgumentException("Missing callId for sequence step index " + i);
-        }
-
-        String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
-        String key = TemplateLoader.key(serviceId, step.callId());
-        TemplateDefinition definition = templates.get(key);
-        if (!(definition instanceof HttpTemplateDefinition httpDef)) {
-          throw new IllegalArgumentException("Missing HTTP template for " + key);
-        }
-
-        HttpCallExecutor.RenderedCall rendered =
-            renderCall(httpDef, serviceId, step.callId(), payload, current, context, authRuntime);
-        HttpSequenceTargetResolver.ResolvedTarget target = targetResolver.resolve(baseTargets.get(i), rendered.path());
-
-        HttpCallAttempt attempt = executeWithRetry(step, target, rendered);
-        HttpCallExecutor.HttpCallResult result = attempt.result();
-
-        long durationMs = attempt.totalDurationMs();
-        int attempts = attempt.attempts();
-
-        boolean isError = result.statusCode() < 200 || result.statusCode() >= 300;
-        String sha256 = sha256Hex(result.body());
-        String debugRef = null;
-        String bodyPreview = preview(result.body(), config.debugCapture().bodyPreviewBytes());
-
-        if (shouldCapture(config.debugCapture(), isError)) {
-          int maxBodyBytes = config.debugCapture().maxBodyBytes();
-          int bodyBytes = result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length;
-          if (bodyBytes > maxBodyBytes) {
-            bodyBytes = maxBodyBytes;
+      try (AuthRuntime authRuntime = AuthRuntime.forTemplates(
+          config.templateRoot(), authRefs(templates), config.vars(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+        for (int i = 0; i < config.steps().size(); i++) {
+          HttpSequenceWorkerConfig.Step step = config.steps().get(i);
+          if (step.callId() == null) {
+            throw new IllegalArgumentException("Missing callId for sequence step index " + i);
           }
-          if ((totalCapturedBytes + bodyBytes) <= config.debugCapture().maxJourneyBytes()) {
-            totalCapturedBytes += bodyBytes;
-            debugRef = debugCaptureStore.store(info, target, serviceId, step.callId(), rendered, result,
-                config.debugCapture());
+
+          String serviceId = step.serviceId() != null ? step.serviceId() : config.serviceId();
+          String key = io.pockethive.requesttemplates.RequestTemplateParser.key(serviceId, step.callId());
+          TemplateDefinition definition = templates.get(key);
+          if (!(definition instanceof HttpTemplateDefinition httpDef)) {
+            throw new IllegalArgumentException("Missing HTTP template for " + key);
           }
-        }
 
-        boolean extractedOk = applyExtracts(step, payload, result, context);
-        if (!extractedOk) {
-          throw new IllegalStateException("Required extract missing for callId=" + step.callId());
-        }
-        applySetters(step, payload, current, context);
+          HttpCallExecutor.RenderedCall rendered =
+              requestRenderer.render(httpDef, payload, current, context, authRuntime);
+          HttpSequenceTargetResolver.ResolvedTarget target = targetResolver.resolve(baseTargets.get(i), rendered.path());
 
-        current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
-            attempts, sha256, debugRef, bodyPreview, target, null);
+          HttpCallAttempt attempt = executeWithRetry(step, target, rendered);
+          HttpCallExecutor.HttpCallResult result = attempt.result();
 
-        if (isError && !step.continueOnNon2xx()) {
-          failed = true;
-          break;
+          long durationMs = attempt.totalDurationMs();
+          int attempts = attempt.attempts();
+
+          boolean isError = result.statusCode() < 200 || result.statusCode() >= 300;
+          String sha256 = sha256Hex(result.body());
+          String debugRef = null;
+          String bodyPreview = preview(result.body(), config.debugCapture().bodyPreviewBytes());
+
+          if (shouldCapture(config.debugCapture(), isError)) {
+            int maxBodyBytes = config.debugCapture().maxBodyBytes();
+            int bodyBytes = result.body() == null ? 0 : result.body().getBytes(StandardCharsets.UTF_8).length;
+            if (bodyBytes > maxBodyBytes) {
+              bodyBytes = maxBodyBytes;
+            }
+            if ((totalCapturedBytes + bodyBytes) <= config.debugCapture().maxJourneyBytes()) {
+              totalCapturedBytes += bodyBytes;
+              if (debugCaptureStore != null) {
+                String captureKey = HttpSequenceDebugCapture.key(info);
+                String captureValue = debugCapture.project(target, serviceId, step.callId(), rendered, result,
+                    config.debugCapture());
+                if (debugCaptureStore.store(captureKey, config.debugCapture().redisTtlSeconds(), captureValue)) {
+                  debugRef = captureKey;
+                }
+              }
+            }
+          }
+
+          boolean extractedOk = applyExtracts(step, payload, result, context);
+          if (!extractedOk) {
+            throw new IllegalStateException("Required extract missing for callId=" + step.callId());
+          }
+          applySetters(step, payload, current, context);
+
+          current = appendResultStep(current, context, i, step, payload, serviceId, step.callId(), result, durationMs,
+              attempts, sha256, debugRef, bodyPreview, target, null);
+
+          if (isError && !step.continueOnNon2xx()) {
+            failed = true;
+            break;
+          }
         }
       }
-
       if (failed) {
         errorJourneys.increment();
       } else {
@@ -185,56 +202,6 @@ final class HttpSequenceRunner {
         .data("journeys", journeys.sum())
         .data("okJourneys", okJourneys.sum())
         .data("errorJourneys", errorJourneys.sum()));
-  }
-
-  private HttpCallExecutor.RenderedCall renderCall(HttpTemplateDefinition httpDef,
-                                  String serviceId,
-                                  String callId,
-                                  Map<String, Object> payload,
-                                  WorkItem workItem,
-                                  WorkerContext context,
-                                  AuthRuntime authRuntime) {
-    Map<String, Object> ctx = new java.util.HashMap<>();
-    ctx.put("payload", payload);
-    ctx.put("payloadAsJson", payload);
-    ctx.put("ctx", payload);
-    ctx.put("headers", workItem.headers());
-    Object vars = workItem.headers().get("vars");
-    if (vars != null) {
-      ctx.put("vars", vars);
-    }
-    ctx.put("workItem", workItem);
-
-    String path = render("pathTemplate", httpDef.pathTemplate(), ctx);
-    String method = render("method", httpDef.method(), ctx);
-    String body = render("bodyTemplate", httpDef.bodyTemplate(), ctx);
-
-    Map<String, String> headers = new java.util.LinkedHashMap<>();
-    if (httpDef.headersTemplate() != null) {
-      httpDef.headersTemplate().forEach((name, value) -> headers.put(name, render("header:" + name, value, ctx)));
-    }
-
-    if (httpDef.authRef() != null) {
-      AuthRuntime.MutableHttpRequest authRequest = new AuthRuntime.MutableHttpRequest(method, path, headers, body);
-      authRuntime.applyHttp(httpDef.authRef(), authRequest, workItem, context);
-      headers.clear();
-      headers.putAll(authRequest.headers());
-      path = authRequest.path();
-    }
-
-    String upper = method == null || method.isBlank() ? "GET" : method.toUpperCase(Locale.ROOT);
-    return new HttpCallExecutor.RenderedCall(upper, path, body, Map.copyOf(headers));
-  }
-
-  private String render(String label, String template, Map<String, Object> ctx) {
-    if (template == null || template.isBlank()) {
-      return "";
-    }
-    try {
-      return templateRenderer.render(template, ctx);
-    } catch (Exception ex) {
-      throw new TemplatingRenderException("Failed to render " + label, ex);
-    }
   }
 
   private static List<AuthRef> authRefs(Map<String, TemplateDefinition> templates) {
@@ -516,7 +483,7 @@ final class HttpSequenceRunner {
     String key = config.templateRoot() + "::" + config.serviceId();
     Map<String, TemplateDefinition> current = templates;
     if (current == null || !key.equals(lastTemplateConfigKey)) {
-      Map<String, TemplateDefinition> loaded = templateLoader.load(config.templateRoot(), config.serviceId());
+      Map<String, TemplateDefinition> loaded = templateLoader.load(config.templateRoot());
       templates = loaded;
       lastTemplateConfigKey = key;
     }
@@ -615,96 +582,10 @@ final class HttpSequenceRunner {
     return new String(bytes, 0, maxBytes, StandardCharsets.UTF_8);
   }
 
-  private static final class RedisDebugCaptureStore {
-    private final ObjectMapper mapper;
-    private final boolean enabled;
-    private final io.lettuce.core.RedisClient client;
-    private final ThreadLocal<io.lettuce.core.api.sync.RedisCommands<String, String>> commands;
-
-    RedisDebugCaptureStore(ObjectMapper mapper, RedisSequenceProperties properties) {
-      this.mapper = Objects.requireNonNull(mapper, "mapper");
-      boolean canEnable = properties != null
-          && properties.isEnabled()
-          && properties.getHost() != null
-          && !properties.getHost().isBlank();
-      this.enabled = canEnable;
-
-      if (!canEnable) {
-        this.client = null;
-        this.commands = null;
-        return;
-      }
-
-      io.lettuce.core.RedisURI.Builder builder = io.lettuce.core.RedisURI.builder()
-          .withHost(properties.getHost())
-          .withPort(properties.getPort())
-          .withSsl(properties.isSsl());
-      if (properties.getUsername() != null && properties.getPassword() != null) {
-        builder.withAuthentication(properties.getUsername(), properties.getPassword().toCharArray());
-      } else if (properties.getPassword() != null) {
-        builder.withPassword(properties.getPassword().toCharArray());
-      }
-      this.client = io.lettuce.core.RedisClient.create(builder.build());
-      this.commands = ThreadLocal.withInitial(() -> client.connect().sync());
-    }
-
-    String store(WorkerInfo info,
-                 HttpSequenceTargetResolver.ResolvedTarget target,
-                 String serviceId,
-                 String callId,
-                 HttpCallExecutor.RenderedCall request,
-                 HttpCallExecutor.HttpCallResult result,
-                 HttpSequenceWorkerConfig.DebugCapture capture) {
-      if (!enabled) {
-        return null;
-      }
-      String key = "ph:debug:http-seq:%s:%s:%s:%s".formatted(
-          info.swarmId(), info.role(), info.instanceId(), java.util.UUID.randomUUID());
-      ObjectNode node = mapper.createObjectNode();
-      node.put("serviceId", serviceId);
-      node.put("callId", callId);
-      node.put("status", result.statusCode());
-      node.put("targetSource", target.source().name());
-      if (target.sutEndpointId() != null) {
-        node.put("sutEndpointId", target.sutEndpointId());
-      }
-      if (result.error() != null) {
-        node.put("error", result.error());
-      }
-      if (capture.includeHeaders()) {
-        node.set("headers", mapper.valueToTree(result.headers()));
-      }
-
-      if (capture.includeRequest() && request != null) {
-        ObjectNode req = mapper.createObjectNode();
-        req.put("method", request.method());
-        req.put("url", target.uri().toString());
-        req.set("headers", mapper.valueToTree(request.headers()));
-        String requestBody = request.body() == null ? "" : request.body();
-        req.put("body", truncateUtf8(requestBody, capture.maxBodyBytes()));
-        node.set("request", req);
-      }
-
-      String body = result.body() == null ? "" : result.body();
-      node.put("body", truncateUtf8(body, capture.maxBodyBytes()));
-      String value = node.toString();
-      try {
-        commands.get().setex(key, capture.redisTtlSeconds(), value);
-        return key;
-      } catch (Exception ex) {
-        return null;
-      }
-    }
-
-    private static String truncateUtf8(String value, int maxBytes) {
-      if (value == null || value.isEmpty() || maxBytes <= 0) {
-        return "";
-      }
-      byte[] bytes = value.getBytes(StandardCharsets.UTF_8);
-      if (bytes.length <= maxBytes) {
-        return value;
-      }
-      return new String(bytes, 0, maxBytes, StandardCharsets.UTF_8);
+  @Override
+  public void close() {
+    if (debugCaptureStore != null) {
+      debugCaptureStore.close();
     }
   }
 

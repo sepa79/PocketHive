@@ -1,14 +1,12 @@
 package io.pockethive.postprocessor;
 
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
-import org.springframework.amqp.rabbit.annotation.EnableRabbit;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.WebApplicationType;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.scheduling.annotation.EnableScheduling;
 
-@EnableRabbit
 @EnableScheduling
 @SpringBootApplication
 @EnableConfigurationProperties({

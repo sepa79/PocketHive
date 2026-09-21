@@ -1,6 +1,6 @@
 package io.pockethive.worker.sdk.config;
 
-import io.pockethive.worker.sdk.api.HistoryPolicy;
+import io.pockethive.work.api.HistoryPolicy;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -13,6 +13,10 @@ import java.util.function.Supplier;
  * with {@link PocketHiveWorkerConfigProperties} so the SDK binds {@code pockethive.worker.config.*} once.
  *
  * @param <T> domain configuration type of the worker
+ * <p>
+ * Responsibility: hold bound worker business configuration and history policy.
+ * Must not: make settings objects open connections or infer successful publication from configuration.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
  */
 public abstract class PocketHiveWorkerProperties<T> {
 

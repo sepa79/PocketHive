@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.spring;
 
+import io.pockethive.rabbit.api.RabbitResourceNames;
+
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import io.pockethive.controlplane.topology.OrchestratorControlPlaneTopologyDescriptor;
@@ -11,7 +13,9 @@ import java.util.Objects;
 import java.util.function.Function;
 
 /**
- * Utility factory that maps role identifiers to their control-plane descriptor implementations.
+ * Responsibility: compose role-specific Control descriptors with the Rabbit naming owner.
+ * Must not: assemble resource names, duplicate routing rules or provision resources.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class ControlPlaneTopologyDescriptorFactory {
 
@@ -19,15 +23,15 @@ public final class ControlPlaneTopologyDescriptorFactory {
     }
 
     private static final Map<String, Function<ControlPlaneTopologySettings, ControlPlaneTopologyDescriptor>> MANAGER_DESCRIPTORS = Map.of(
-        "orchestrator", OrchestratorControlPlaneTopologyDescriptor::new,
-        "swarm-controller", SwarmControllerControlPlaneTopologyDescriptor::new,
+        "orchestrator", settings -> new OrchestratorControlPlaneTopologyDescriptor(settings, new RabbitResourceNames()),
+        "swarm-controller", settings -> new SwarmControllerControlPlaneTopologyDescriptor(settings, new RabbitResourceNames()),
         "scenario-manager", settings -> new ScenarioManagerTopologyDescriptor()
     );
 
     public static ControlPlaneTopologyDescriptor forWorkerRole(String role, ControlPlaneTopologySettings settings) {
         String normalised = normalise(role);
         ControlPlaneTopologySettings resolved = Objects.requireNonNull(settings, "settings");
-        return new WorkerControlPlaneTopologyDescriptor(normalised, resolved);
+        return new WorkerControlPlaneTopologyDescriptor(normalised, resolved, new RabbitResourceNames());
     }
 
     public static ControlPlaneTopologyDescriptor forManagerRole(String role, ControlPlaneTopologySettings settings) {

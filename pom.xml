@@ -6,6 +6,8 @@
   <version>${revision}</version>
   <packaging>pom</packaging>
     <properties>
+    <work.boundary.enforcer.skip>true</work.boundary.enforcer.skip>
+    <rabbit.boundary.clients.skip>false</rabbit.boundary.clients.skip>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
     <revision>0.15.35</revision>
     <tomcat.version>10.1.55</tomcat.version>
@@ -14,11 +16,23 @@
     <postgresql.version>42.7.11</postgresql.version>
     <oracle.jdbc.version>23.8.0.25.04</oracle.jdbc.version>
     <commons-lang3.version>3.20.0</commons-lang3.version>
+    <jackson-databind.version>2.21.5</jackson-databind.version>
+    <log4j-api.version>2.25.5</log4j-api.version>
+    <nimbus-jose-jwt.version>9.37.4</nimbus-jose-jwt.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
     <maven.compiler.encoding>${project.build.sourceEncoding}</maven.compiler.encoding>
   </properties>
   <modules>
+    <module>common/templating-api</module>
+    <module>common/observability-core</module>
+    <module>common/work-api</module>
+    <module>common/work-config</module>
+    <module>common/redis-config</module>
+    <module>common/work-local-config</module>
+    <module>common/rabbit-adapter</module>
+    <module>common/work-config-composition</module>
+    <module>common/work-test-fixtures</module>
     <module>observability</module>
     <module>common/topology-core</module>
     <module>common/auth-contracts</module>
@@ -26,10 +40,12 @@
     <module>common/templating</module>
     <module>common/auth-client</module>
     <module>common/control-plane-core</module>
+    <module>common/control-plane-filesystem</module>
     <module>common/control-plane-spring</module>
     <module>common/manager-sdk</module>
     <module>common/worker-sdk</module>
     <module>common/request-templates</module>
+    <module>common/request-template-files</module>
     <module>common/sink-clickhouse</module>
     <module>common/docker-client</module>
     <module>common/swarm-model</module>
@@ -44,6 +60,7 @@
     <module>swarm-controller-service</module>
     <module>trigger-service</module>
     <module>scenario-manager-service</module>
+    <module>pockethive-mcp-service</module>
     <module>network-proxy-manager-service</module>
     <module>tcp-mock-server</module>
     <module>request-builder-service</module>
@@ -54,6 +71,21 @@
   </modules>
   <dependencyManagement>
     <dependencies>
+      <dependency>
+        <groupId>com.fasterxml.jackson.core</groupId>
+        <artifactId>jackson-databind</artifactId>
+        <version>${jackson-databind.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.logging.log4j</groupId>
+        <artifactId>log4j-api</artifactId>
+        <version>${log4j-api.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.nimbusds</groupId>
+        <artifactId>nimbus-jose-jwt</artifactId>
+        <version>${nimbus-jose-jwt.version}</version>
+      </dependency>
       <dependency>
         <groupId>org.apache.tomcat.embed</groupId>
         <artifactId>tomcat-embed-core</artifactId>
@@ -187,6 +219,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>
@@ -197,6 +230,7 @@
 	        <configuration>
 	          <environmentVariables>
 	            <POCKETHIVE_TEMPLATE_ID>test-template</POCKETHIVE_TEMPLATE_ID>
+	            <POCKETHIVE_NETWORK_MODE>DIRECT</POCKETHIVE_NETWORK_MODE>
 	            <POCKETHIVE_JOURNAL_RUN_ID>test-run</POCKETHIVE_JOURNAL_RUN_ID>
 	          </environmentVariables>
 	        </configuration>
@@ -206,6 +240,43 @@
 	        <artifactId>maven-enforcer-plugin</artifactId>
 	        <version>3.4.1</version>
 	        <executions>
+          <execution>
+            <!-- Canonical artifact dependency restriction; maintained here, not generated. -->
+            <id>work-core-no-infrastructure</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+            <configuration><skip>${work.boundary.enforcer.skip}</skip><rules><bannedDependencies>
+              <searchTransitive>true</searchTransitive>
+              <excludes>
+                <exclude>org.springframework*:*</exclude>
+                <exclude>io.lettuce*:*</exclude>
+                <exclude>com.rabbitmq*:*</exclude>
+                <exclude>com.clickhouse*:*</exclude>
+                <exclude>com.github.docker-java*:*</exclude>
+                <exclude>redis.clients*:*</exclude>
+                <exclude>io.pockethive:worker-sdk</exclude>
+                <exclude>io.pockethive:observability</exclude>
+                <exclude>io.pockethive:control-plane-spring</exclude>
+                <exclude>io.pockethive:work-test-fixtures</exclude>
+                <exclude>io.pockethive:request-template-files</exclude>
+                <exclude>io.pockethive:sink-clickhouse</exclude>
+                <exclude>io.pockethive:docker-client</exclude>
+                <exclude>io.pockethive:templating</exclude>
+                <exclude>io.pockethive:*-adapter*</exclude>
+              </excludes>
+              <includes><include>*:*:*:*:test</include></includes>
+            </bannedDependencies></rules></configuration>
+          </execution>
+          <execution>
+            <id>rabbit-client-owner</id><phase>validate</phase><goals><goal>enforce</goal></goals>
+            <configuration><skip>${rabbit.boundary.clients.skip}</skip><rules><bannedDependencies>
+              <searchTransitive>false</searchTransitive>
+              <excludes>
+                <exclude>org.springframework.amqp:*</exclude>
+                <exclude>com.rabbitmq:*</exclude>
+                <exclude>org.springframework.boot:spring-boot-starter-amqp</exclude>
+              </excludes>
+              <includes><include>*:*:*:*:test</include></includes>
+            </bannedDependencies></rules></configuration>
+          </execution>
           <execution>
             <id>enforce-java</id>
             <goals>

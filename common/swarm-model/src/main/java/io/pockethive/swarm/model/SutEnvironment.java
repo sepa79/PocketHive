@@ -17,7 +17,13 @@ public record SutEnvironment(@NotBlank String id,
                              @Valid Map<String, SutEndpoint> endpoints) {
 
     public SutEnvironment {
-        if (endpoints == null || endpoints.isEmpty()) {
+        id = requireText(id, "id");
+        name = requireText(name, "name");
+        type = trimOptional(type, "type");
+        if (endpoints == null) {
+            throw new IllegalArgumentException("SUT environment endpoints must be provided");
+        }
+        if (endpoints.isEmpty()) {
             endpoints = Map.of();
         } else {
             Map<String, SutEndpoint> canonical = new LinkedHashMap<>();
@@ -40,5 +46,23 @@ public record SutEnvironment(@NotBlank String id,
 
     public Map<String, SutEndpoint> endpoints() {
         return Collections.unmodifiableMap(endpoints);
+    }
+
+    private static String requireText(String value, String field) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException("SUT environment " + field + " must not be blank");
+        }
+        return value.trim();
+    }
+
+    private static String trimOptional(String value, String field) {
+        if (value == null) {
+            return null;
+        }
+        if (value.isBlank()) {
+            throw new IllegalArgumentException(
+                "SUT environment " + field + " must not be blank when provided");
+        }
+        return value.trim();
     }
 }

@@ -1,5 +1,7 @@
 package io.pockethive.requestbuilder;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -8,17 +10,15 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.auth.AuthApplyAs;
+import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.auth.AuthFailureException;
-import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Map;
@@ -38,7 +38,7 @@ class RequestBuilderWorkerImplTest {
   @BeforeEach
   void setUp() {
     properties = new RequestBuilderWorkerProperties(new ObjectMapper(), WORKER_PROPERTIES);
-    templateRenderer = new PebbleTemplateRenderer();
+    templateRenderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
   }
 
   @Test
@@ -161,15 +161,33 @@ class RequestBuilderWorkerImplTest {
         dir.toString(), "default", true, Map.of());
     WorkerContext context = new TestWorkerContext(config);
 
-    WorkItem headerSeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
-    JsonNode headerEnvelope = new ObjectMapper().readTree(worker.onMessage(headerSeed, context).asString());
-    assertThat(headerEnvelope.get("request").get("headers").get("Authorization").asText())
-        .isEqualTo("Bearer header-token");
+    var logger = (ch.qos.logback.classic.Logger) context.logger();
+    var previousLevel = logger.getLevel();
+    var events = new ch.qos.logback.core.read.ListAppender<ch.qos.logback.classic.spi.ILoggingEvent>();
+    events.start();
+    logger.addAppender(events);
+    logger.setLevel(ch.qos.logback.classic.Level.DEBUG);
+    try {
+      WorkItem headerSeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "header").build();
+      JsonNode headerEnvelope = new ObjectMapper().readTree(worker.onMessage(headerSeed, context).asString());
+      assertThat(headerEnvelope.get("request").get("headers").get("Authorization").asText())
+          .isEqualTo("Bearer header-token");
 
-    WorkItem querySeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "query").build();
-    JsonNode queryEnvelope = new ObjectMapper().readTree(worker.onMessage(querySeed, context).asString());
-    assertThat(queryEnvelope.get("request").get("path").asText())
-        .isEqualTo("/query?existing=1&api_key=query-token");
+      WorkItem querySeed = WorkItem.text(SEED_INFO, "").header("x-ph-call-id", "query").build();
+      JsonNode queryEnvelope = new ObjectMapper().readTree(worker.onMessage(querySeed, context).asString());
+      assertThat(queryEnvelope.get("request").get("path").asText())
+          .isEqualTo("/query?existing=1&api_key=query-token");
+      assertThat(events.list).isNotEmpty();
+      assertThat(events.list).allSatisfy(event -> {
+        assertThat(event.getFormattedMessage()).doesNotContain("header-token", "query-token");
+        assertThat(java.util.Arrays.toString(event.getArgumentArray()))
+            .doesNotContain("header-token", "query-token");
+      });
+    } finally {
+      logger.detachAppender(events);
+      logger.setLevel(previousLevel);
+      events.stop();
+    }
   }
 
   @Test
@@ -256,6 +274,29 @@ class RequestBuilderWorkerImplTest {
     assertThatThrownBy(() -> worker.onMessage(seed, context))
         .isInstanceOf(AuthFailureException.class)
         .hasMessageContaining("HTTP_QUERY_PARAM auth requires");
+    assertThat(worker.onMessage(seed, context)).isNull();
+  }
+
+  @Test
+  void inlineAuthTemplateFailuresThrowOnceThenDropRepeatedFailures() throws Exception {
+    Path dir = Files.createTempDirectory("templates-inline-auth-failure");
+    Files.writeString(dir.resolve("call.yaml"), """
+        serviceId: default
+        callId: call
+        protocol: HTTP
+        method: GET
+        pathTemplate: /should-not-send
+        auth: {}
+        """);
+    RequestBuilderWorkerImpl worker =
+        new RequestBuilderWorkerImpl(properties, templateRenderer, new TemplateLoader(), null);
+    WorkerContext context = new TestWorkerContext(new RequestBuilderWorkerConfig(
+        dir.toString(), "default", false, Map.of()));
+    WorkItem seed = WorkItem.text(SEED_INFO, "{}").header("x-ph-call-id", "call").build();
+
+    assertThatThrownBy(() -> worker.onMessage(seed, context))
+        .isInstanceOf(AuthFailureException.class)
+        .hasMessageContaining("inline auth");
     assertThat(worker.onMessage(seed, context)).isNull();
   }
 

@@ -29,10 +29,9 @@ public final class SwarmControllerRoutes {
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, ALL, controllerRole, ALL),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, controllerRole, ALL),
         ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarm, controllerRole, instance),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarm, controllerRole, ALL),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, controllerRole, ALL),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, controllerRole, ALL),
-        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, controllerRole, ALL)
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarm, controllerRole, instance),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarm, controllerRole, instance),
+        ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarm, controllerRole, instance)
     };
   }
 }

@@ -6,18 +6,12 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.spring.ControlPlaneCommonAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneAutoConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlPlaneProperties;
+import io.pockethive.rabbit.api.RabbitTransportBeans;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
-import java.util.Collection;
-import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.amqp.core.Binding;
-import org.springframework.amqp.core.Declarable;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.Queue;
-import org.springframework.amqp.core.TopicExchange;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.autoconfigure.AutoConfigurations;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
@@ -36,7 +30,8 @@ class ProcessorTopologyProvisioningTest {
             ControlPlaneCommonAutoConfiguration.class,
             WorkerControlPlaneAutoConfiguration.class))
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitTemplate.class, () -> Mockito.mock(RabbitTemplate.class))
+        .withBean(RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class,
+            () -> Mockito.mock(RabbitPublisher.class))
         .withPropertyValues(
             "pockethive.control-plane.worker.role=processor",
             "pockethive.control-plane.instance-id=" + WORKER_PROPERTIES.getInstanceId(),
@@ -52,25 +47,15 @@ class ProcessorTopologyProvisioningTest {
         contextRunner.run(context -> {
             assertThat(context).doesNotHaveBean("moderatedTrafficDeclarables");
 
-            Collection<Declarables> declarablesBeans = context.getBeansOfType(Declarables.class).values();
-            assertThat(declarablesBeans).isNotEmpty();
-
-            List<Declarable> declarables = declarablesBeans.stream()
-                .flatMap(bean -> bean.getDeclarables().stream())
-                .toList();
-
-            assertThat(declarables)
-                .noneMatch(declarable -> declarable instanceof Queue queue
-                    && MODERATOR_QUEUE.equals(queue.getName()));
-
-            assertThat(declarables)
-                .noneMatch(declarable -> declarable instanceof Binding binding
-                    && (MODERATOR_QUEUE.equals(binding.getDestination())
-                        || MODERATOR_QUEUE.equals(binding.getRoutingKey())));
-
-            assertThat(declarables)
-                .noneMatch(declarable -> declarable instanceof TopicExchange exchange
-                    && EXCHANGE.equals(exchange.getName()));
+            var topologies = context.getBeansOfType(io.pockethive.rabbit.api.RabbitTopologySpec.class).values();
+            assertThat(topologies).isNotEmpty();
+            assertThat(topologies.stream().flatMap(spec -> spec.queues().stream()))
+                .noneMatch(queue -> MODERATOR_QUEUE.equals(queue.name()));
+            assertThat(topologies.stream().flatMap(spec -> spec.bindings().stream()))
+                .noneMatch(binding -> MODERATOR_QUEUE.equals(binding.queue())
+                    || MODERATOR_QUEUE.equals(binding.routingKey()) || EXCHANGE.equals(binding.exchange()));
+            assertThat(context.getBeansOfType(io.pockethive.rabbit.api.RabbitExchangeSpec.class).values())
+                .noneMatch(exchange -> EXCHANGE.equals(exchange.name()));
         });
     }
 }

@@ -1,0 +1,34 @@
+{
+  "routingKey": "event.result.swarm-start.swarm-A.generator.gen-1",
+  "payload": {
+    "timestamp": "2024-01-01T00:00:00Z",
+    "version": "2",
+    "kind": "result",
+    "type": "swarm-start",
+    "origin": "gen-1",
+    "scope": {
+      "swarmId": "swarm-A",
+      "role": "generator",
+      "instance": "gen-1"
+    },
+    "correlationId": "corr-1",
+    "idempotencyKey": "idem-1",
+    "runtime": {
+      "templateId": "tpl-1",
+      "runId": "run-1"
+    },
+    "data": {
+      "status": "Succeeded",
+      "retryable": false,
+      "context": {
+        "target": {
+          "role": "generator",
+          "instance": "gen-1"
+        },
+        "requestedWorkloadState": "RUNNING",
+        "observedWorkloadState": "RUNNING",
+        "nonConvergedWorkers": []
+      }
+    }
+  }
+}

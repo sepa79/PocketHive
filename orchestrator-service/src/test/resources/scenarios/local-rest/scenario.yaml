@@ -13,6 +13,8 @@ template:
           scheduler:
             ratePerSec: 50
             maxMessages: 0
+        outputs:
+          type: RABBITMQ
         message:
           bodyType: HTTP
           path: /api/guarded
@@ -25,6 +27,10 @@ template:
     - role: moderator
       image: moderator:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         mode:
           type: pass-through
           ratePerSec: 0.0
@@ -51,6 +57,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

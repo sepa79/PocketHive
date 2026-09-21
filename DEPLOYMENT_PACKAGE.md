@@ -6,26 +6,20 @@ The deployment package bundles everything needed to run PocketHive in external e
 
 ## Creating the Package
 
-### Linux/macOS
+### Linux/macOS/WSL
 ```bash
 ./package-deployment.sh
 ```
 
-### Windows
-```batch
-package-deployment.bat
-```
-
-This creates `pockethive-deployment-<version>.tar.gz` (or `.zip` on Windows).
+This creates `pockethive-deployment-<version>.tar.gz`.
 
 ## Package Contents
 
 ```
 pockethive/
 ├── docker-compose.yml          # Main deployment configuration
-├── .env.example                # Environment variables template
-├── start.sh / start.bat        # Quick start script
-├── stop.sh / stop.bat          # Stop script
+├── start.sh                    # Quick start script
+├── stop.sh                     # Stop script
 ├── DEPLOY.md                   # Deployment instructions
 ├── README.md                   # Project overview
 ├── LICENSE                     # License file
@@ -116,8 +110,8 @@ scenario-manager:
 
 ### Environment Variables
 
-1. Copy `.env.example` to `.env`
-2. Edit values
+1. Optionally create `.env` next to `docker-compose.yml`
+2. Set only the overrides you need
 3. Restart: `docker compose up -d`
 
 ## Image Sources
@@ -156,8 +150,7 @@ Volumes created for data persistence:
 
 ### Package Creation Fails
 
-**Linux/macOS**: Ensure `tar` is installed
-**Windows**: Ensure PowerShell is available
+**Linux/macOS/WSL**: Ensure `tar` is installed
 
 ### Images Won't Pull
 

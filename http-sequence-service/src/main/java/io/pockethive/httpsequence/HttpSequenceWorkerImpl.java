@@ -1,16 +1,18 @@
 package io.pockethive.httpsequence;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.requesttemplates.TemplateLoader;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.requesttemplates.files.TemplateLoader;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Clock;
-import org.apache.hc.client5.http.classic.HttpClient;
+import java.io.IOException;
+import jakarta.annotation.PreDestroy;
+import org.apache.hc.client5.http.impl.classic.CloseableHttpClient;
 import org.apache.hc.client5.http.impl.classic.HttpClients;
 import org.apache.hc.client5.http.impl.io.PoolingHttpClientConnectionManager;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,12 +23,20 @@ import org.springframework.stereotype.Component;
     capabilities = {WorkerCapability.MESSAGE_DRIVEN, WorkerCapability.HTTP},
     config = HttpSequenceWorkerConfig.class
 )
-class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
+/**
+ * Responsibility: delegate Work invocations and close this worker's owned runner and HTTP client.
+ * Shutdown consumes RESP-HTTP-SEQUENCE-DEBUG-CAPTURE.
+ * Must not: own another service's lifecycle or reimplement the shared template engine.
+ * Contract: RESP-HTTP-SEQUENCE-WORK — docs/architecture/runtime-responsibilities.md#resp-http-sequence-work.
+ */
+class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction, AutoCloseable {
 
   private static final int GLOBAL_MAX_CONNECTIONS = 200;
   private static final int GLOBAL_MAX_PER_ROUTE = 200;
 
   private final HttpSequenceRunner runner;
+  private final CloseableHttpClient httpClient;
+  private boolean closed;
 
   @Autowired
   HttpSequenceWorkerImpl(
@@ -35,16 +45,27 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
       TemplateRenderer templateRenderer,
       RedisSequenceProperties redisProperties
   ) {
-    HttpClient pooled = newPooledClient();
-    this.runner = new HttpSequenceRunner(
+    this.httpClient = newPooledClient();
+    try {
+      this.runner = new HttpSequenceRunner(
         mapper,
         Clock.systemUTC(),
         templateRenderer,
         new TemplateLoader(),
-        new ApacheHttpCallExecutor(pooled),
+        new ApacheHttpCallExecutor(httpClient),
         new DefaultHttpSequenceTargetResolver(),
         redisProperties
-    );
+      );
+    } catch (RuntimeException | Error failure) {
+      try {
+        httpClient.close();
+      } catch (IOException | RuntimeException | Error cleanupFailure) {
+        if (failure != cleanupFailure) {
+          failure.addSuppressed(cleanupFailure);
+        }
+      }
+      throw failure;
+    }
   }
 
   @Override
@@ -53,7 +74,18 @@ class HttpSequenceWorkerImpl implements PocketHiveWorkerFunction {
     return runner.run(seed, context, config);
   }
 
-  private static HttpClient newPooledClient() {
+  @PreDestroy
+  @Override
+  public synchronized void close() throws IOException {
+    if (!closed) {
+      closed = true;
+      try (httpClient; runner) {
+        // Reverse declaration order closes capture first and always attempts the HTTP pool.
+      }
+    }
+  }
+
+  private static CloseableHttpClient newPooledClient() {
     PoolingHttpClientConnectionManager manager = new PoolingHttpClientConnectionManager();
     manager.setMaxTotal(GLOBAL_MAX_CONNECTIONS);
     manager.setDefaultMaxPerRoute(GLOBAL_MAX_PER_ROUTE);

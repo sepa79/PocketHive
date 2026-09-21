@@ -1,28 +1,37 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 import io.pockethive.control.ConfirmationScope;
 import io.pockethive.controlplane.ControlPlaneSignals;
+import io.pockethive.controlplane.ControlPlaneRoles;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
-import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
+ * Must not: construct broker names, select a naming implementation or declare resources.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ */
 public final class SwarmControllerControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
-    private static final String ROLE = "swarm-controller";
+    private static final String ROLE = ControlPlaneRoles.SWARM_CONTROLLER;
 
     private final String swarmId;
     private final String controlQueuePrefix;
+    private final ControlResourceNamesPort names;
 
-    public SwarmControllerControlPlaneTopologyDescriptor(String swarmId, String controlQueuePrefix) {
+    public SwarmControllerControlPlaneTopologyDescriptor(String swarmId, String controlQueuePrefix, ControlResourceNamesPort names) {
         this.swarmId = requireText("swarmId", swarmId);
         this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
+        this.names = java.util.Objects.requireNonNull(names, "names");
     }
 
-    public SwarmControllerControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings) {
-        this(settings.swarmId(), settings.controlQueuePrefix());
+    public SwarmControllerControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings, ControlResourceNamesPort names) {
+        this(settings.swarmId(), settings.controlQueuePrefix(), names);
     }
 
     @Override
@@ -33,12 +42,10 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = buildControlQueueName(controlQueuePrefix, swarmId, ROLE, id);
+        String queueName = names.swarmControllerQueue(controlQueuePrefix, swarmId, ROLE, id);
         LinkedHashSet<String> signals = new LinkedHashSet<>();
         // Lifecycle commands must target a concrete controller instance.
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, id));
-        signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, ROLE, "ALL"));
@@ -50,8 +57,8 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, swarmId, ROLE, id));
         signals.add(ControlPlaneRouting.signal(ControlPlaneSignals.STATUS_REQUEST, "ALL", ROLE, "ALL"));
         Set<String> events = Set.of(
-            statusEventPattern("status-full"),
-            statusEventPattern("status-delta"),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_FULL),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_DELTA),
             alertEventPattern()
         );
         return Optional.of(new ControlQueueDescriptor(queueName, signals, events));
@@ -73,14 +80,12 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
         );
         Set<String> lifecycleRoutes = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_START, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_PLAN, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
-            ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_TEMPLATE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_STOP, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN),
             ControlPlaneRouting.signal(ControlPlaneSignals.SWARM_REMOVE, swarmId, ROLE, ControlPlaneRouteCatalog.INSTANCE_TOKEN)
         );
         Set<String> statusEvents = Set.of(
-            statusEventPattern("status-full"),
-            statusEventPattern("status-delta")
+            statusEventPattern(ControlPlaneEventTypes.STATUS_FULL),
+            statusEventPattern(ControlPlaneEventTypes.STATUS_DELTA)
         );
         Set<String> otherEvents = Set.of(
             alertEventPattern()
@@ -96,34 +101,6 @@ public final class SwarmControllerControlPlaneTopologyDescriptor implements Cont
     private String alertEventPattern() {
         String base = ControlPlaneRouting.event("alert", "*", ConfirmationScope.forSwarm(swarmId));
         return base.replace(".ALL.ALL", ".#");
-    }
-
-    private static String buildControlQueueName(String baseQueue, String swarmId, String role, String instanceId) {
-        if (baseQueue == null || baseQueue.isBlank()) {
-            throw new IllegalArgumentException("baseQueue must not be blank");
-        }
-        if (swarmId == null || swarmId.isBlank()) {
-            throw new IllegalArgumentException("swarmId must not be blank");
-        }
-        if (role == null || role.isBlank()) {
-            throw new IllegalArgumentException("role must not be blank");
-        }
-        if (instanceId == null || instanceId.isBlank()) {
-            throw new IllegalArgumentException("instanceId must not be blank");
-        }
-
-        List<String> segments = new ArrayList<>();
-        for (String segment : baseQueue.split("\\.")) {
-            if (!segment.isBlank()) {
-                segments.add(segment);
-            }
-        }
-        if (!segments.contains(swarmId)) {
-            segments.add(swarmId);
-        }
-        segments.add(role);
-        segments.add(instanceId);
-        return String.join(".", segments);
     }
 
     private static String requireInstanceId(String instanceId) {

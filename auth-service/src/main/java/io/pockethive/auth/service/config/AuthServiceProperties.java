@@ -1,19 +1,23 @@
 package io.pockethive.auth.service.config;
 
-import io.pockethive.auth.contract.AuthGrantDto;
 import io.pockethive.auth.contract.AuthProvider;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.UUID;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 
+/**
+ * Responsibility: Bind the root Auth Service configuration and its focused child property types.
+ * Must not: Authenticate principals, issue tokens, or own child configuration behavior.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ */
 @ConfigurationProperties(prefix = "pockethive.auth-service")
 public class AuthServiceProperties {
     private AuthProvider provider = AuthProvider.DEV;
     private Duration sessionTtl = Duration.ofHours(8);
-    private List<UserConfig> users = new ArrayList<>();
-    private List<ServiceAccountConfig> serviceAccounts = new ArrayList<>();
+    private List<AuthServiceUserProperties> users = new ArrayList<>();
+    private List<AuthServiceAccountProperties> serviceAccounts = new ArrayList<>();
+    private AuthServiceOAuthProperties oauth = new AuthServiceOAuthProperties();
 
     public AuthProvider getProvider() {
         return provider;
@@ -31,124 +35,27 @@ public class AuthServiceProperties {
         this.sessionTtl = sessionTtl;
     }
 
-    public List<UserConfig> getUsers() {
+    public List<AuthServiceUserProperties> getUsers() {
         return users;
     }
 
-    public void setUsers(List<UserConfig> users) {
+    public void setUsers(List<AuthServiceUserProperties> users) {
         this.users = users == null ? new ArrayList<>() : new ArrayList<>(users);
     }
 
-    public List<ServiceAccountConfig> getServiceAccounts() {
+    public List<AuthServiceAccountProperties> getServiceAccounts() {
         return serviceAccounts;
     }
 
-    public void setServiceAccounts(List<ServiceAccountConfig> serviceAccounts) {
+    public void setServiceAccounts(List<AuthServiceAccountProperties> serviceAccounts) {
         this.serviceAccounts = serviceAccounts == null ? new ArrayList<>() : new ArrayList<>(serviceAccounts);
     }
 
-    public static class UserConfig {
-        private UUID id;
-        private String username;
-        private String displayName;
-        private boolean active = true;
-        private List<AuthGrantDto> grants = new ArrayList<>();
-
-        public UUID getId() {
-            return id;
-        }
-
-        public void setId(UUID id) {
-            this.id = id;
-        }
-
-        public String getUsername() {
-            return username;
-        }
-
-        public void setUsername(String username) {
-            this.username = username;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public boolean isActive() {
-            return active;
-        }
-
-        public void setActive(boolean active) {
-            this.active = active;
-        }
-
-        public List<AuthGrantDto> getGrants() {
-            return grants;
-        }
-
-        public void setGrants(List<AuthGrantDto> grants) {
-            this.grants = grants == null ? new ArrayList<>() : new ArrayList<>(grants);
-        }
+    public AuthServiceOAuthProperties getOauth() {
+        return oauth;
     }
 
-    public static class ServiceAccountConfig {
-        private UUID id;
-        private String serviceName;
-        private String displayName;
-        private String secret;
-        private boolean active = true;
-        private List<AuthGrantDto> grants = new ArrayList<>();
-
-        public UUID getId() {
-            return id;
-        }
-
-        public void setId(UUID id) {
-            this.id = id;
-        }
-
-        public String getServiceName() {
-            return serviceName;
-        }
-
-        public void setServiceName(String serviceName) {
-            this.serviceName = serviceName;
-        }
-
-        public String getDisplayName() {
-            return displayName;
-        }
-
-        public void setDisplayName(String displayName) {
-            this.displayName = displayName;
-        }
-
-        public String getSecret() {
-            return secret;
-        }
-
-        public void setSecret(String secret) {
-            this.secret = secret;
-        }
-
-        public boolean isActive() {
-            return active;
-        }
-
-        public void setActive(boolean active) {
-            this.active = active;
-        }
-
-        public List<AuthGrantDto> getGrants() {
-            return grants;
-        }
-
-        public void setGrants(List<AuthGrantDto> grants) {
-            this.grants = grants == null ? new ArrayList<>() : new ArrayList<>(grants);
-        }
+    public void setOauth(AuthServiceOAuthProperties oauth) {
+        this.oauth = oauth;
     }
 }

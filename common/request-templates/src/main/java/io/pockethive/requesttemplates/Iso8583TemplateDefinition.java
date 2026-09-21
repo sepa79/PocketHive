@@ -1,11 +1,14 @@
 package io.pockethive.requesttemplates;
 
-import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.swarm.model.ResultRules;
 import java.util.Map;
 
-@JsonIgnoreProperties(ignoreUnknown = true)
+/**
+ * Responsibility: carry the parsed ISO8583 request-template fields.
+ * Must not: load schemas or execute protocol calls.
+ * Contract: RESP-REQUEST-TEMPLATE-PARSE — docs/architecture/runtime-responsibilities.md#resp-request-template-parse.
+ */
 public record Iso8583TemplateDefinition(
     String serviceId,
     String callId,
@@ -14,18 +17,9 @@ public record Iso8583TemplateDefinition(
     String payloadAdapter, // RAW_HEX, FIELD_LIST_XML
     String bodyTemplate,
     Map<String, String> headersTemplate,
-    IsoSchemaRef schemaRef,
+    IsoTemplateSchemaRef schemaRef,
     AuthRef authRef,
     ResultRules resultRules
 ) implements TemplateDefinition {
 
-  @JsonIgnoreProperties(ignoreUnknown = true)
-  public record IsoSchemaRef(
-      String schemaRegistryRoot,
-      String schemaId,
-      String schemaVersion,
-      String schemaAdapter,
-      String schemaFile
-  ) {
-  }
 }

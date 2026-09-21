@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "pockethive-bundles": {
-      "url": "http://localhost:3100/mcp",
+      "type": "http",
+      "url": "http://localhost:8088/mcp",
       "timeout": 300000,
       "disabled": false
     },

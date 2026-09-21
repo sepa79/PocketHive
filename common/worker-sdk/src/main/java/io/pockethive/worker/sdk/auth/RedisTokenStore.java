@@ -2,6 +2,7 @@ package io.pockethive.worker.sdk.auth;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
+import io.pockethive.redis.config.RedisConnectionSettings;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
@@ -12,7 +13,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * Responsibility: store worker tokens, enforce refresh leases and release the owned Redis connection/client.
+ * Must not: resolve connection defaults or perform auth refresh HTTP calls.
+ * Contract: RESP-AUTH-TOKEN-STORE — docs/architecture/runtime-responsibilities.md#resp-auth-token-store.
+ * Consumes RESP-REDIS-CONNECTION-SETTINGS; keys and token identity retain their existing owner.
+ */
 public final class RedisTokenStore implements TokenStore {
     private static final ObjectMapper MAPPER = new ObjectMapper().findAndRegisterModules();
     private static final String CLAIM_SCRIPT = """
@@ -46,19 +54,30 @@ public final class RedisTokenStore implements TokenStore {
     private final RedisClient client;
     private final StatefulRedisConnection<String, String> connection;
     private final RedisCommands<String, String> commands;
+    private final AtomicBoolean closed = new AtomicBoolean();
 
-    public RedisTokenStore(String swarmId, String host, int port, String username, String password, boolean ssl) {
+    public RedisTokenStore(String swarmId, RedisConnectionSettings settings) {
         this.swarmId = requireTokenSegment(swarmId, "swarmId");
-        RedisURI.Builder builder = RedisURI.builder().withHost(host == null || host.isBlank() ? "redis" : host).withPort(port <= 0 ? 6379 : port);
-        if (username != null && !username.isBlank()) {
-            builder.withAuthentication(username, password == null ? "" : password);
-        } else if (password != null && !password.isBlank()) {
-            builder.withPassword(password.toCharArray());
+        RedisURI.Builder builder = RedisURI.builder().withHost(settings.host()).withPort(settings.port()).withSsl(settings.ssl());
+        if (settings.username() != null) {
+            builder.withAuthentication(settings.username(), settings.password());
+        } else if (settings.password() != null) {
+            builder.withPassword(settings.password().toCharArray());
         }
-        builder.withSsl(ssl);
         this.client = RedisClient.create(builder.build());
-        this.connection = client.connect();
-        this.commands = connection.sync();
+        try {
+            this.connection = client.connect();
+            this.commands = connection.sync();
+        } catch (RuntimeException | Error failure) {
+            try {
+                closeResources(null, client);
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (failure != cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            throw failure;
+        }
     }
 
     @Override
@@ -164,8 +183,43 @@ public final class RedisTokenStore implements TokenStore {
 
     @Override
     public void close() {
-        connection.close();
-        client.shutdown();
+        if (closed.compareAndSet(false, true)) {
+            closeResources(connection, client);
+        }
+    }
+
+    private static void closeResources(StatefulRedisConnection<String, String> connection, RedisClient client) {
+        boolean interrupted = Thread.interrupted();
+        try {
+            Throwable failure = null;
+            try {
+                if (connection != null) {
+                    connection.close();
+                }
+            } catch (RuntimeException | Error cleanupFailure) {
+                failure = cleanupFailure;
+            }
+            interrupted |= Thread.interrupted();
+            try {
+                client.shutdown();
+            } catch (RuntimeException | Error cleanupFailure) {
+                if (failure == null) {
+                    failure = cleanupFailure;
+                } else if (failure != cleanupFailure) {
+                    failure.addSuppressed(cleanupFailure);
+                }
+            }
+            if (failure instanceof RuntimeException runtimeFailure) {
+                throw runtimeFailure;
+            }
+            if (failure instanceof Error error) {
+                throw error;
+            }
+        } finally {
+            if (interrupted) {
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
     public static String validateTokenKey(String tokenKey) {

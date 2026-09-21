@@ -1,18 +1,20 @@
 package io.pockethive.worker.sdk.templating;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerInfo;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 
 class MessageTemplateRendererTest {
 
-    private final TemplateRenderer renderer = new PebbleTemplateRenderer();
+    private final TemplateRenderer renderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
     private final MessageTemplateRenderer messageRenderer = new MessageTemplateRenderer(renderer);
 
     @Test

@@ -75,7 +75,7 @@ Common patterns:
 - `REDIS_DATASET` for shared, cross-swarm datasets.
 - `RABBITMQ` queue aliases for chaining workers.
 
-Reference: `docs/archive/worker-configurable-io-plan.md`; remaining work is tracked in `docs/todo/worker-configurable-io-followups.md`.
+Historical reference: `docs/archive/worker-configurable-io-plan.md`; current architecture work is tracked in `docs/inProgress/work-plane-module-boundaries.md`.
 
 ## 4. Runtime lifecycle
 

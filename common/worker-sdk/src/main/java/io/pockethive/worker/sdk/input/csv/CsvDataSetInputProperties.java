@@ -1,146 +1,67 @@
 package io.pockethive.worker.sdk.input.csv;
 
-import io.pockethive.worker.sdk.config.WorkInputConfig;
+import io.pockethive.work.local.csv.CsvDatasetParser;
+import io.pockethive.work.local.csv.CsvDatasetSettings;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import java.util.LinkedHashMap;
+import java.util.Map;
 
+/**
+ * Responsibility: bind raw CSV startup fields and delegate their validation to work-config.
+ * Must not: coerce CSV values, own worker enablement or read dataset files.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
+ * Consumes: RESP-WORK-CSV-SETTINGS — docs/architecture/runtime-responsibilities.md#resp-work-csv-settings.
+ */
 public final class CsvDataSetInputProperties implements WorkInputConfig {
+    private Object filePath;
+    private Object ratePerSec;
+    private Object rotate;
+    private Object skipHeader;
+    private Object delimiter;
+    private Object charset;
+    private Object startupDelaySeconds;
+    private Object tickIntervalMs;
 
-    private static final double MIN_RATE_PER_SEC = 0.0;
-    private static final long MIN_STARTUP_DELAY_SECONDS = 0L;
-    private static final long MIN_TICK_INTERVAL_MS = 100L;
+    public Object getFilePath() { return filePath; }
+    public void setFilePath(Object value) { filePath = value; }
+    public Object getRatePerSec() { return ratePerSec; }
+    public void setRatePerSec(Object value) { ratePerSec = value; }
+    public Object getRotate() { return rotate; }
+    public void setRotate(Object value) { rotate = value; }
+    public Object getSkipHeader() { return skipHeader; }
+    public void setSkipHeader(Object value) { skipHeader = value; }
+    public Object getDelimiter() { return delimiter; }
+    public void setDelimiter(Object value) { delimiter = value; }
+    public Object getCharset() { return charset; }
+    public void setCharset(Object value) { charset = value; }
+    public Object getStartupDelaySeconds() { return startupDelaySeconds; }
+    public void setStartupDelaySeconds(Object value) { startupDelaySeconds = value; }
+    public Object getTickIntervalMs() { return tickIntervalMs; }
+    public void setTickIntervalMs(Object value) { tickIntervalMs = value; }
 
-    private String filePath;
-    private Double ratePerSec;
-    private Boolean rotate;
-    private Boolean skipHeader;
-    private String delimiter;
-    private String charset;
-    private Long startupDelaySeconds;
-    private Long tickIntervalMs;
-    private boolean enabled = true;
-
-    public String getFilePath() {
-        return filePath;
+    public CsvDatasetSettings settings() {
+        return new CsvDatasetParser().parse(rawSettings(), CsvDatasetParser.PATH);
     }
 
-    public void setFilePath(String filePath) {
-        this.filePath = filePath;
-    }
-
-    public double getRatePerSec() {
-        return requireRatePerSec(ratePerSec, "ratePerSec");
-    }
-
-    public void setRatePerSec(double ratePerSec) {
-        this.ratePerSec = ratePerSec;
-    }
-
-    public boolean isRotate() {
-        return requirePresent(rotate, "rotate");
-    }
-
-    public void setRotate(boolean rotate) {
-        this.rotate = rotate;
-    }
-
-    public boolean isSkipHeader() {
-        return requirePresent(skipHeader, "skipHeader");
-    }
-
-    public void setSkipHeader(boolean skipHeader) {
-        this.skipHeader = skipHeader;
-    }
-
-    public String getDelimiter() {
-        return requireNonBlank(delimiter, "delimiter");
-    }
-
-    public void setDelimiter(String delimiter) {
-        this.delimiter = delimiter;
-    }
-
-    public String getCharset() {
-        return requireNonBlank(charset, "charset");
-    }
-
-    public void setCharset(String charset) {
-        this.charset = charset;
-    }
-
-    public long getStartupDelaySeconds() {
-        return requireStartupDelaySeconds(startupDelaySeconds, "startupDelaySeconds");
-    }
-
-    public void setStartupDelaySeconds(long startupDelaySeconds) {
-        this.startupDelaySeconds = startupDelaySeconds;
-    }
-
-    public long getTickIntervalMs() {
-        return requireTickIntervalMs(tickIntervalMs, "tickIntervalMs");
-    }
-
-    public void setTickIntervalMs(long tickIntervalMs) {
-        this.tickIntervalMs = tickIntervalMs;
-    }
-
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public long getInitialDelayMs() {
-        return getStartupDelaySeconds() * 1000L;
-    }
+    public double ratePerSec() { return settings().ratePerSec(); }
+    public long startupDelaySeconds() { return settings().startupDelaySeconds(); }
+    public long tickIntervalMs() { return settings().tickIntervalMs(); }
 
     @Override
     public void validateConfigured(String prefix) {
-        requireNonBlank(filePath, prefix + ".filePath");
-        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
-        requirePresent(rotate, prefix + ".rotate");
-        requirePresent(skipHeader, prefix + ".skipHeader");
-        requireNonBlank(delimiter, prefix + ".delimiter");
-        requireNonBlank(charset, prefix + ".charset");
-        requireStartupDelaySeconds(startupDelaySeconds, prefix + ".startupDelaySeconds");
-        requireTickIntervalMs(tickIntervalMs, prefix + ".tickIntervalMs");
+        new CsvDatasetParser().parse(rawSettings(), prefix);
     }
 
-    private static String requireNonBlank(String value, String name) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
-    }
-
-    private static <T> T requirePresent(T value, String name) {
-        if (value == null) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
-    }
-
-    private static double requireRatePerSec(Double value, String name) {
-        double rate = requirePresent(value, name);
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
-        }
-        return rate;
-    }
-
-    private static long requireStartupDelaySeconds(Long value, String name) {
-        long delay = requirePresent(value, name);
-        if (delay < MIN_STARTUP_DELAY_SECONDS) {
-            throw new IllegalStateException(name + " must be >= " + MIN_STARTUP_DELAY_SECONDS);
-        }
-        return delay;
-    }
-
-    private static long requireTickIntervalMs(Long value, String name) {
-        long interval = requirePresent(value, name);
-        if (interval < MIN_TICK_INTERVAL_MS) {
-            throw new IllegalStateException(name + " must be >= " + MIN_TICK_INTERVAL_MS);
-        }
-        return interval;
+    private Map<String, Object> rawSettings() {
+        var fields = new LinkedHashMap<String, Object>();
+        fields.put(CsvDatasetParser.FILE_PATH, filePath);
+        fields.put(io.pockethive.work.config.input.InputRateParser.FIELD, ratePerSec);
+        fields.put(CsvDatasetParser.ROTATE, rotate);
+        fields.put(CsvDatasetParser.SKIP_HEADER, skipHeader);
+        fields.put(CsvDatasetParser.DELIMITER, delimiter);
+        fields.put(CsvDatasetParser.CHARSET, charset);
+        fields.put(io.pockethive.work.config.input.InputScheduleField.STARTUP_DELAY_SECONDS.key(), startupDelaySeconds);
+        fields.put(io.pockethive.work.config.input.InputScheduleField.TICK_INTERVAL_MS.key(), tickIntervalMs);
+        return fields;
     }
 }

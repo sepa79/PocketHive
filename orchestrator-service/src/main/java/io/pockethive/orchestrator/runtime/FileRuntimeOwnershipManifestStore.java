@@ -1,6 +1,7 @@
 package io.pockethive.orchestrator.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import java.io.IOException;
 import java.nio.file.Files;
@@ -8,7 +9,6 @@ import java.nio.file.Path;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Optional;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -16,13 +16,13 @@ public class FileRuntimeOwnershipManifestStore implements RuntimeOwnershipManife
     public static final String MANIFEST_FILE = "runtime-ownership-manifest.json";
 
     private final ObjectMapper mapper;
-    private final Path root;
+    private final RuntimeFilesystemLayout layout;
 
     public FileRuntimeOwnershipManifestStore(
         ObjectMapper mapper,
-        @Value("${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:scenarios-runtime}") String root) {
+        RuntimeFilesystemLayout layout) {
         this.mapper = mapper;
-        this.root = Path.of(root == null || root.isBlank() ? "scenarios-runtime" : root.trim());
+        this.layout = layout;
     }
 
     @Override
@@ -54,7 +54,7 @@ public class FileRuntimeOwnershipManifestStore implements RuntimeOwnershipManife
 
     @Override
     public Optional<RuntimeOwnershipManifest> findLatest(String swarmId) {
-        Path swarmDir = safeRoot().resolve(safeSegment(swarmId));
+        Path swarmDir = layout.swarmRoot(swarmId);
         if (!Files.isDirectory(swarmDir)) {
             return Optional.empty();
         }
@@ -79,24 +79,6 @@ public class FileRuntimeOwnershipManifestStore implements RuntimeOwnershipManife
     }
 
     private Path manifestPath(String swarmId, String runId) {
-        return safeRoot()
-            .resolve(safeSegment(swarmId))
-            .resolve(safeSegment(runId))
-            .resolve(MANIFEST_FILE);
-    }
-
-    private Path safeRoot() {
-        return root.toAbsolutePath().normalize();
-    }
-
-    private static String safeSegment(String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("manifest path segment must not be blank");
-        }
-        String trimmed = value.trim();
-        if (trimmed.contains("/") || trimmed.contains("\\") || ".".equals(trimmed) || "..".equals(trimmed)) {
-            throw new IllegalArgumentException("manifest path segment is not safe: " + value);
-        }
-        return trimmed;
+        return layout.swarmRunDirectory(swarmId, runId).resolve(MANIFEST_FILE);
     }
 }

@@ -1,5 +1,11 @@
 package io.pockethive.orchestrator.infra.scenario;
 
+import io.pockethive.orchestrator.config.OrchestratorHttpProperties;
+import io.pockethive.orchestrator.config.OrchestratorNetworkProxyManagerProperties;
+import io.pockethive.orchestrator.config.OrchestratorScenarioManagerProperties;
+import io.pockethive.orchestrator.config.OrchestratorImageProperties;
+import io.pockethive.orchestrator.config.OrchestratorDockerProperties;
+import io.pockethive.orchestrator.config.OrchestratorMetricsProperties;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -100,20 +106,18 @@ class ScenarioManagerClientAuthRetryTest {
     }
 
     private static OrchestratorProperties properties(String scenarioManagerUrl) {
-        OrchestratorProperties.Http http = new OrchestratorProperties.Http(Duration.ofSeconds(2), Duration.ofSeconds(5));
-        return new OrchestratorProperties(new OrchestratorProperties.Orchestrator(
-            "ph.control.orchestrator",
-            "ph.control.orchestrator-status",
+        OrchestratorHttpProperties http = new OrchestratorHttpProperties(Duration.ofSeconds(2), Duration.ofSeconds(5));
+        return new OrchestratorProperties(
             metrics(),
-            new OrchestratorProperties.Docker("/var/run/docker.sock", ComputeAdapterType.AUTO),
-            new OrchestratorProperties.Images(null),
-            new OrchestratorProperties.ScenarioManager(scenarioManagerUrl, http),
-            new OrchestratorProperties.NetworkProxyManager("http://network-proxy-manager:8080", http)
-        ));
+            new OrchestratorDockerProperties("/var/run/docker.sock", ComputeAdapterType.AUTO),
+            new OrchestratorImageProperties(null),
+            new OrchestratorScenarioManagerProperties(scenarioManagerUrl, http),
+            new OrchestratorNetworkProxyManagerProperties("http://network-proxy-manager:8080", http)
+        );
     }
 
-    private static OrchestratorProperties.Metrics metrics() {
-        return new OrchestratorProperties.Metrics(
+    private static OrchestratorMetricsProperties metrics() {
+        return new OrchestratorMetricsProperties(
             PocketHiveMetricsAdapter.DISABLED,
             Duration.ofSeconds(10),
             ClickHouseMetricsSinkProperties.disabled()

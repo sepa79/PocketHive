@@ -1,27 +1,37 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.api.WorkStep;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Duration;
-import java.util.ArrayList;
+import io.pockethive.redis.config.RedisRoute;
+import io.pockethive.redis.config.RedisPayloadSource;
+import io.pockethive.redis.config.RedisPushDirection;
+import io.pockethive.redis.config.RedisConnectionSettings;
+import io.pockethive.redis.config.RedisWriteSettings;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
  * Shared Redis push utility used by both output transports and side-output interceptors.
+ * <p>
+ * Responsibility: resolve configured payload/list routes and perform shared Redis push operations.
+ * Must not: parse/validate write settings or route declarations or turn diagnostic capture into business output.
+ * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
+ * Consumes RESP-WORK-REDIS-ROUTES, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
  */
 public final class RedisPushSupport {
 
@@ -30,10 +40,10 @@ public final class RedisPushSupport {
 
     private final RedisWriterFactory writerFactory;
     private final TemplateRenderer templateRenderer;
-    private final Map<ConnectionConfig, RedisWriter> writers = new ConcurrentHashMap<>();
+    private final Map<RedisConnectionSettings, RedisWriter> writers = new ConcurrentHashMap<>();
 
     public RedisPushSupport() {
-        this(new LettuceRedisWriterFactory(), new PebbleTemplateRenderer());
+        this(new LettuceRedisWriterFactory(), new PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()));
     }
 
     public RedisPushSupport(TemplateRenderer templateRenderer) {
@@ -49,7 +59,7 @@ public final class RedisPushSupport {
         if (request == null || message == null) {
             return false;
         }
-        String payload = payloadFor(message, request.sourceStep());
+        String payload = payloadFor(message, request.settings().sourceStep());
         if (payload == null) {
             return false;
         }
@@ -58,7 +68,7 @@ public final class RedisPushSupport {
             return false;
         }
         RedisWriter writer = writers.computeIfAbsent(request.connection(), writerFactory::create);
-        writer.push(targetList, payload, request.pushDirection(), request.maxLen());
+        writer.push(targetList, payload, request.settings().pushDirection(), request.settings().maxLen());
         return true;
     }
 
@@ -67,8 +77,8 @@ public final class RedisPushSupport {
         // It is not a compatibility shim or "try random defaults"; it is a deliberate selection:
         // first matching route wins, otherwise template, otherwise an explicitly-configured defaultList.
         Optional<String> routed = request.routes().stream()
-            .filter(route -> route.matches(message, payload))
-            .map(Route::list)
+            .filter(route -> matches(route, message, payload))
+            .map(RedisRoute::list)
             .filter(list -> list != null && !list.isBlank())
             .findFirst();
         if (routed.isPresent()) {
@@ -99,18 +109,18 @@ public final class RedisPushSupport {
         return templateRenderer.render(template, context);
     }
 
-    public static String payloadFor(WorkItem item, SourceStep sourceStep) {
+    public static String payloadFor(WorkItem item, RedisPayloadSource sourceStep) {
         if (item == null) {
             return null;
         }
-        if (sourceStep == SourceStep.FIRST) {
+        if (sourceStep == RedisPayloadSource.FIRST) {
             return firstPayload(item);
         }
         return item.payload();
     }
 
     private static String firstPayload(WorkItem item) {
-        java.util.Iterator<io.pockethive.worker.sdk.api.WorkStep> iterator = item.steps().iterator();
+        java.util.Iterator<WorkStep> iterator = item.steps().iterator();
         if (!iterator.hasNext()) {
             return null;
         }
@@ -160,161 +170,47 @@ public final class RedisPushSupport {
         }
     }
 
-    public static List<Route> parseRoutes(Object routesObj, Logger log, String owner) {
-        List<Route> routes = new ArrayList<>();
-        if (routesObj == null) {
-            return routes;
-        }
-        String source = owner == null || owner.isBlank() ? "redis" : owner;
-        if (!(routesObj instanceof Iterable<?> iterable)) {
-            throw invalidRoute(source, "routes must be a list");
-        }
-        int index = 0;
-        for (Object obj : iterable) {
-            if (!(obj instanceof Map<?, ?> routeMap)) {
-                throw invalidRoute(source, "routes[" + index + "] must be an object");
-            }
-            String match = asText(routeMap.get("match"));
-            String headerName = asText(routeMap.get("header"));
-            String headerMatch = asText(routeMap.get("headerMatch"));
-            String list = asText(routeMap.get("list"));
-            if (list == null || list.isBlank()) {
-                throw invalidRoute(source, "routes[" + index + "].list must not be blank");
-            }
-
-            Pattern payloadPattern = null;
-            if (match != null && !match.isBlank()) {
-                try {
-                    payloadPattern = Pattern.compile(match);
-                } catch (Exception ex) {
-                    throw invalidRoute(
-                        source,
-                        "routes[" + index + "].match has invalid regex '" + match + "': " + ex.getMessage()
-                    );
-                }
-            }
-
-            Pattern headerPattern = null;
-            if (headerMatch != null && !headerMatch.isBlank()) {
-                try {
-                    headerPattern = Pattern.compile(headerMatch);
-                } catch (Exception ex) {
-                    throw invalidRoute(
-                        source,
-                        "routes[" + index + "].headerMatch has invalid regex '" + headerMatch + "': "
-                            + ex.getMessage()
-                    );
-                }
-            }
-
-            if (payloadPattern == null && (headerName == null || headerName.isBlank())) {
-                throw invalidRoute(source, "routes[" + index + "] requires match and/or header");
-            }
-            if (headerName != null && !headerName.isBlank() && headerPattern == null) {
-                throw invalidRoute(source, "routes[" + index + "].headerMatch must be configured when header is set");
-            }
-            routes.add(new Route(payloadPattern, headerName, headerPattern, list));
-            index++;
-        }
-        return routes;
-    }
-
-    private static IllegalArgumentException invalidRoute(String source, String message) {
-        return new IllegalArgumentException(source + " " + message);
-    }
-
     public static String asText(Object value) {
         return value == null ? null : value.toString();
     }
 
-    public enum SourceStep {
-        FIRST,
-        LAST;
-
-        public static SourceStep fromString(String value) {
-            if (value == null || value.isBlank()) {
-                throw new IllegalArgumentException("Redis sourceStep must be FIRST or LAST");
-            }
-            if ("FIRST".equalsIgnoreCase(value)) {
-                return FIRST;
-            }
-            if ("LAST".equalsIgnoreCase(value)) {
-                return LAST;
-            }
-            throw new IllegalArgumentException("Redis sourceStep must be FIRST or LAST");
+    private static boolean matches(RedisRoute route, WorkItem message, String payload) {
+        if (route.payloadPattern() != null
+            && (payload == null || !route.payloadPattern().matcher(payload).find())) {
+            return false;
         }
+        if (route.headerName() == null) {
+            return true;
+        }
+        Object header = message.headers().get(route.headerName());
+        return header != null && route.headerPattern().matcher(header.toString()).find();
     }
 
-    public enum PushDirection {
-        LPUSH,
-        RPUSH;
-
-        public static PushDirection fromString(String value) {
-            if (value == null || value.isBlank()) {
-                throw new IllegalArgumentException("Redis pushDirection must be LPUSH or RPUSH");
-            }
-            if ("LPUSH".equalsIgnoreCase(value)) {
-                return LPUSH;
-            }
-            if ("RPUSH".equalsIgnoreCase(value)) {
-                return RPUSH;
-            }
-            throw new IllegalArgumentException("Redis pushDirection must be LPUSH or RPUSH");
-        }
-    }
-
-    public record Route(Pattern payloadPattern, String headerName, Pattern headerPattern, String list) {
-        public Route {
-            Objects.requireNonNull(list, "list");
-        }
-
-        public boolean matches(WorkItem message, String payload) {
-            boolean payloadMatches = payloadPattern == null || (payload != null && payloadPattern.matcher(payload).find());
-            if (!payloadMatches) {
-                return false;
-            }
-            if (headerName == null || headerName.isBlank()) {
-                return true;
-            }
-            Object header = message.headers().get(headerName);
-            if (header == null) {
-                return false;
-            }
-            return headerPattern != null && headerPattern.matcher(header.toString()).find();
-        }
-    }
-
-    public record PushRequest(ConnectionConfig connection,
-                              SourceStep sourceStep,
-                              PushDirection pushDirection,
-                              List<Route> routes,
+    public record PushRequest(RedisConnectionSettings connection,
+                              RedisWriteSettings settings,
+                              List<RedisRoute> routes,
                               String defaultList,
-                              String targetListTemplate,
-                              int maxLen) {
+                              String targetListTemplate) {
 
         public PushRequest {
             connection = Objects.requireNonNull(connection, "connection");
-            sourceStep = Objects.requireNonNull(sourceStep, "sourceStep");
-            pushDirection = Objects.requireNonNull(pushDirection, "pushDirection");
+            settings = Objects.requireNonNull(settings, "settings");
             routes = routes == null ? List.of() : List.copyOf(routes);
         }
     }
 
-    public record ConnectionConfig(String host, int port, String username, String password, boolean ssl) {
-    }
-
     public interface RedisWriter {
-        void push(String list, String payload, PushDirection direction, int maxLen);
+        void push(String list, String payload, RedisPushDirection direction, int maxLen);
     }
 
     public interface RedisWriterFactory {
-        RedisWriter create(ConnectionConfig config);
+        RedisWriter create(RedisConnectionSettings config);
     }
 
     public static final class LettuceRedisWriterFactory implements RedisWriterFactory {
 
         @Override
-        public RedisWriter create(ConnectionConfig config) {
+        public RedisWriter create(RedisConnectionSettings config) {
             RedisURI.Builder builder = RedisURI.builder()
                 .withHost(config.host())
                 .withPort(config.port())
@@ -330,7 +226,7 @@ public final class RedisPushSupport {
             connection.setTimeout(Duration.ofSeconds(10));
             RedisCommands<String, String> commands = connection.sync();
             return (list, payload, direction, maxLen) -> {
-                if (direction == PushDirection.LPUSH) {
+                if (direction == RedisPushDirection.LPUSH) {
                     commands.lpush(list, payload);
                 } else {
                     commands.rpush(list, payload);

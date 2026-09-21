@@ -4,36 +4,47 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.input.WorkInput;
-import io.pockethive.worker.sdk.input.WorkInputFactory;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerRegistry;
 import io.pockethive.worker.sdk.testing.ControlPlaneTestFixtures;
 import java.util.Optional;
+import java.util.Map;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mockito;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.beans.factory.BeanCreationException;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.env.SystemEnvironmentPropertySource;
 
 class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withConfiguration(org.springframework.boot.autoconfigure.AutoConfigurations.of(io.pockethive.rabbit.work.RabbitWorkAutoConfiguration.class))
         .withPropertyValues(defaultProperties())
         .withBean(ObjectMapper.class, ObjectMapper::new)
-        .withBean(RabbitTemplate.class, () -> Mockito.mock(RabbitTemplate.class))
+        .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER, RabbitPublisher.class, () -> org.mockito.Mockito.mock(RabbitPublisher.class))
+            .withBean(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER, RabbitPublisher.class, () -> Mockito.mock(RabbitPublisher.class))
+        .withBean(io.pockethive.rabbit.api.RabbitListeners.class, () -> Mockito.mock(io.pockethive.rabbit.api.RabbitListeners.class))
         .withUserConfiguration(TestWorkerConfiguration.class, PocketHiveWorkerSdkAutoConfiguration.class);
 
-    @Test
-    void bindsIoConfigurationIntoWorkerDefinition() {
-        contextRunner.run(context -> {
+    @ParameterizedTest
+    @CsvSource({
+        "RABBITMQ,RABBITMQ", "' RaBbItMq ',RABBITMQ",
+        "RABBITMQ,' RaBbItMq '", "' RABBITMQ ',' RABBITMQ '"
+    })
+    void bindsIoConfigurationIntoWorkerDefinition(String input, String output) {
+        contextRunner.withInitializer(context -> context.getEnvironment().getPropertySources().addFirst(
+            new SystemEnvironmentPropertySource("selection", Map.of(
+                "POCKETHIVE_INPUTS_TYPE", input, "POCKETHIVE_OUTPUTS_TYPE", output)))).run(context -> {
+            assertThat(context).hasNotFailed();
             WorkerRegistry registry = context.getBean(WorkerRegistry.class);
             Optional<WorkerDefinition> definition = registry.find("processorWorker");
             assertThat(definition).isPresent();
@@ -53,9 +64,9 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
                 assertThat(context).hasFailed();
                 Throwable failure = context.getStartupFailure();
                 assertThat(failure).isInstanceOf(BeanCreationException.class);
-                assertThat(failure).hasRootCauseInstanceOf(IllegalStateException.class);
+                assertThat(failure).hasRootCauseInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
                 assertThat(failure.getCause().getMessage())
-                    .contains("pockethive.inputs.rabbit.queue");
+                    .contains("inputs.rabbit.queue");
             });
     }
 
@@ -69,9 +80,9 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
                 assertThat(context).hasFailed();
                 Throwable failure = context.getStartupFailure();
                 assertThat(failure).isInstanceOf(BeanCreationException.class);
-                assertThat(failure).hasRootCauseInstanceOf(IllegalStateException.class);
+                assertThat(failure).hasRootCauseInstanceOf(io.pockethive.work.config.WorkConfigurationException.class);
                 assertThat(failure.getCause().getMessage())
-                    .contains("pockethive.outputs.rabbit.routingKey");
+                    .contains("outputs.rabbit.routingKey");
             });
     }
 
@@ -98,21 +109,6 @@ class PocketHiveWorkerSdkAutoConfigurationQueueResolutionTest {
         @Bean
         ProcessorWorker processorWorker() {
             return new ProcessorWorker();
-        }
-
-        @Bean
-        WorkInputFactory stubWorkInputFactory() {
-            return new WorkInputFactory() {
-                @Override
-                public boolean supports(WorkerDefinition definition) {
-                    return true;
-                }
-
-                @Override
-                public WorkInput create(WorkerDefinition definition, WorkInputConfig config) {
-                    return new WorkInput() { };
-                }
-            };
         }
 
         @Bean("workerControlPlaneTopologyDescriptor")

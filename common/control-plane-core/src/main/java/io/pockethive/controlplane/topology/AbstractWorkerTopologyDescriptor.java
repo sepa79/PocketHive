@@ -1,5 +1,7 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.Collection;
@@ -8,20 +10,27 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
+ * Must not: construct broker names, select a naming implementation or declare resources.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ */
 abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
     private final String role;
     private final String swarmId;
     private final String controlQueuePrefix;
+    private final ControlResourceNamesPort names;
     private final Optional<QueueDescriptor> trafficQueue;
 
     protected AbstractWorkerTopologyDescriptor(String role,
                                                String swarmId,
                                                String controlQueuePrefix,
-                                               QueueDescriptor trafficQueue) {
+                                               QueueDescriptor trafficQueue, ControlResourceNamesPort names) {
         this.role = requireRole(role);
         this.swarmId = requireText("swarmId", swarmId);
         this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
+        this.names = java.util.Objects.requireNonNull(names, "names");
         this.trafficQueue = Optional.ofNullable(trafficQueue);
     }
 
@@ -33,7 +42,7 @@ abstract class AbstractWorkerTopologyDescriptor implements ControlPlaneTopologyD
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = controlQueuePrefix + "." + swarmId + "." + role + "." + id;
+        String queueName = names.workerControlQueue(controlQueuePrefix, swarmId, role, id);
         Set<String> configSignals = Set.of(
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, "ALL", role, "ALL"),
             ControlPlaneRouting.signal(ControlPlaneSignals.CONFIG_UPDATE, swarmId, role, "ALL"),

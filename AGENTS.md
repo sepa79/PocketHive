@@ -20,11 +20,21 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Breaking changes are acceptable unless compatibility is explicitly required.
 - **No implicit Optional for core state/config flags.**
   - Use explicit required fields and explicit enums/states.
-- **SSOT for contracts.**
-  - One canonical schema/DTO per API/event/config contract.
-  - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, or mappers for the same contract format (API/event/config).
+- **SSOT for contracts, state, configuration, and behavior.**
+  - Every material fact or behavior has exactly one authoritative owner. SSOT is not limited to wire DTOs or schemas.
+  - Keep one canonical definition for each API/event/config/file-format contract and one canonical implementation of its validation, parsing, normalization, mapping, and response construction.
+  - Keep exactly one writer/state machine for each domain fact. Other models may only be explicitly named, read-only projections derived from that owner; they must not independently validate, mutate, or decide domain behavior.
+  - Resolve configuration, filesystem paths, defaults, and environment settings through one shared contract/resolver. Do not repeat constants or reconstruct the same effective setting in individual services.
+  - Define operation success once, through canonical postconditions. A caller, adapter, or projection must not infer success from attempted actions when the owning contract requires verified effects.
+  - Do not keep duplicate definitions, DTOs, schemas, validators, parsers, mappers, factories, state machines, path resolvers, or outcome calculators for the same responsibility.
+  - Before approving a non-trivial change, search the whole repository for alternative owners of every affected responsibility. Two active authorities are a **CRITICAL** finding and block approval unless the architecture explicitly defines distinct, non-overlapping ownership.
 - **KISS.**
   - Prefer straightforward, maintainable implementations over clever abstractions.
+- **Strict implementation-unit separation.**
+  - Follow `docs/ENGINEERING_RULES.md`: one Java production type per file by default, one TypeScript/React runtime module or component concern per file, one clear responsibility per file, and no kitchen-sink classes or public nested contract bags. Only the narrow private nested-type exception defined there is allowed.
+  - Existing mixed files are debt, not precedent. Do not add behavior to a mixed file; extract the affected responsibility first.
+  - Every new or materially changed runtime class, REST controller, message listener, command/event handler, state machine, coordinator, boundary parser, projection, repository, or infrastructure adapter must declare a concise JavaDoc responsibility header with `Responsibility`, `Must not`, and `Contract`.
+  - Transport listeners decode, establish context, and dispatch. REST controllers map HTTP and delegate. Neither owns domain state transitions, lifecycle convergence, persistence, or terminal outcome construction.
 - **No magic strings for core behavior.**
   - Never hardcode raw string literals to drive domain behavior (roles, protocols, event types, routing keys, header names).
   - Use shared constants/enums/contract types.
@@ -86,8 +96,13 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Usage & local run: `docs/USAGE.md`
   - Project overview hub: `docs/README.md`
 
+- **Engineering policy**
+  - Engineering rules (implementation units and boundaries): `docs/ENGINEERING_RULES.md`
+  - Review rules (mandatory non-trivial review checklist): `docs/REVIEW_RULES.md`
+
 - **Agent hygiene**
   - AI guidelines: `docs/ai/AI_GUIDELINES.md`
+  - Responsibility/header changes and SSOT evidence: `docs/ai/RESPONSIBILITY_WORKFLOW.md`
   - HiveMind workflow: `docs/ai/HIVEMIND_WORKFLOW.md`
   - Review checklist (PR gate): `docs/ai/REVIEW_CHECKLIST.md`
   - Task template for agent work: `docs/ai/TASK_TEMPLATE.md`
@@ -101,11 +116,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 
 ## 3) Contribution workflow (short)
 
-1. **Plan**: If your change affects routing, message schema, or REST, edit the relevant doc first (see §2) and get review.
-2. **Implement**: Keep code inside its module’s boundaries; prefer ports + adapters; use Lombok to avoid boilerplate.
+1. **Plan**: If your change affects routing, message schema, REST, or responsibility ownership, edit the relevant doc first (see §2) and get review.
+2. **Implement**: Declare the owner and its responsibility header before code. Keep code inside its module’s boundaries; prefer ports + adapters; use Lombok to avoid boilerplate.
 3. **Test**: Add/adjust tests at the right layer per `control-plane-testing.md`.
 4. **Observe**: Ensure logs/metrics match `observability.md`.
-5. **Review**: Run through `ai/REVIEW_CHECKLIST.md` before opening a PR.
+5. **Review**: Run through `docs/REVIEW_RULES.md` and `docs/ai/REVIEW_CHECKLIST.md` before opening a PR.
 
 **Protected areas — require explicit approval:**
 - Routing utility, shared message envelopes, public contracts, prod compose/k8s manifests, and security config.
@@ -132,13 +147,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
 - PocketHive agent work should use the globally configured HiveMind project memory when available. Use the workflow in `docs/ai/HIVEMIND_WORKFLOW.md` with `project_id=pockethive`; do not create repo-local HiveMind storage or start a local HiveMind API as an implicit fallback.
 - `build-hive.sh` in the repo root is the **canonical entrypoint** for local PocketHive rebuild/redeploy cycles: it rebuilds worker/service artifacts as needed and restarts the local `docker-compose` stack. Prefer using it over ad‑hoc `docker`/`mvn` commands when you want a full local refresh.
 - For production-like HiveForge swarm deploys, use the `docs/HIVEFORGE.md` Agent MCP Deploy Checklist. Deploy through HiveForge MCP only; do not inspect Proxmox/hosts or run direct Docker/SSH commands as a deployment workaround.
-- `tools/pockethive-mcp/` is the **canonical PocketHive MCP server** for agents and IDEs:
-  - Use it for scenario authoring, swarm lifecycle, workflow evidence, environment status, runtime debug, worker logs/version, topology drift, manifest validation, and governed runtime cleanup.
-  - Start stdio with `npm run mcp:start`.
-  - Start Streamable HTTP with `npm run mcp:start:http`; clients connect to `http://localhost:3100/mcp`.
-  - Runtime cleanup tools are exposed here as `runtime_cleanup_plan` and `runtime_cleanup_execute` by default. Register `runtime_cleanup_execute` behind HiveGate for governed approval and execution.
-  - Worker/runtime diagnostics are exposed here as `runtime_tail_worker_logs`, `runtime_get_worker_version`, `runtime_list_workers`, `runtime_inspect_worker`, `runtime_diff_swarm_runtime`, `runtime_control_plane_status`, `runtime_rabbit_topology_snapshot`, `runtime_swarm_timeline`, and `runtime_manifest_validate` by default.
-  - Dotted conceptual names like `runtime.cleanup.plan` require `PH_MCP_TOOL_NAME_MODE=legacy` or `both`; default agent configs should use underscore tool names.
+- `pockethive-mcp-service/` is the **canonical PocketHive MCP server** for agents and IDEs:
+  - Connect only through the selected environment's public ingress, for example `http://localhost:8088/mcp` locally or `https://<environment>/mcp` remotely.
+  - Use its generated knowledge, capabilities, complete tool catalogue, and connected skills for scenario authoring, swarm lifecycle, environment status, runtime diagnostics, evidence, and governed cleanup. See `docs/mcp/README.md`.
+  - It is Java 21 Streamable HTTP only. The removed Node server, stdio transport, local process spawning, dotted aliases, and bundle-root configuration are not compatibility paths.
+  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires the governed HiveGate path; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
 - `tools/mcp-orchestrator-debug/` is lower-level debug tooling for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is legacy/additive debug MCP tooling. Do not configure it as the product PocketHive MCP surface for normal agent work.

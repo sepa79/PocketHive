@@ -5,17 +5,16 @@ import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.HistoryPolicy;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.HistoryPolicy;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Function;
@@ -25,6 +24,10 @@ import org.slf4j.LoggerFactory;
 /**
  * Baseline context factory used for Stage 1 runtime integration tests and examples outlined in
  * {@code docs/sdk/worker-sdk-quickstart.md}.
+ * <p>
+ * Responsibility: create read views of worker configuration, identity and observability for invocations.
+ * Must not: mutate accepted configuration, select IO implementations or provision resources.
+ * Contract: RESP-WORK-CONTEXT — docs/architecture/runtime-responsibilities.md#resp-work-context.
  */
 public final class DefaultWorkerContextFactory implements WorkerContextFactory {
 

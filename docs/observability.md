@@ -61,11 +61,11 @@ metrics, or an explicit disabled/test state for targets that intentionally do
 - **Bounds.** Label count, key length, and value length are rejected at the
   ClickHouse metrics sink boundary. Rejected samples are skipped individually
   and logged so one bad meter does not stop a full publish cycle.
-- **Failure semantics.** MCP `metrics_query` reads ClickHouse metrics only
-  through Grafana's provisioned ClickHouse datasource. Missing Grafana config,
-  datasource errors/backpressure, and HTTP failures are explicit tool failures;
-  there is no Prometheus or local SQL fallback. Unit coverage for this
-  fail-closed behavior lives in `tools/pockethive-mcp/workflow.test.mjs`.
+- **Agent access.** The removed Node MCP `metrics_query` tool is not carried
+  forward. It remains `BLOCKED_BY_MISSING_OWNER_API` in
+  `docs/mcp/NODE_TOOL_MIGRATION_LEDGER.md` until PocketHive publishes an owned
+  metrics read-model API. The Java MCP does not query Grafana, ClickHouse, or a
+  local database as a fallback.
 
 ## Queue depth snapshots
 

@@ -8,6 +8,6 @@ export function changesRedisDatasetListName(patch: Record<string, unknown>): boo
   return redis !== null && Object.prototype.hasOwnProperty.call(redis, 'listName')
 }
 
-export function isStoppedSwarmStatus(status: string | null | undefined): boolean {
-  return typeof status === 'string' && status.trim().toUpperCase() === 'STOPPED'
+export function isStoppedWorkloadState(state: string | null | undefined): boolean {
+  return typeof state === 'string' && state.trim().toUpperCase() === 'STOPPED'
 }

@@ -3,6 +3,15 @@
 spring:
   application:
     name: scenario-manager
+  autoconfigure:
+    # Scenario authoring uses Rabbit validation, not broker transport.
+    exclude: org.springframework.boot.autoconfigure.amqp.RabbitAutoConfiguration
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
 
 logging:
   config: classpath:logback-spring.xml

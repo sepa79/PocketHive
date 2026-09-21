@@ -3,6 +3,7 @@ package io.pockethive.capabilities.api;
 import io.pockethive.capabilities.CapabilityCatalogueService;
 import io.pockethive.capabilities.CapabilityManifest;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
+import io.pockethive.scenarios.BundleTemplateSummary;
 import io.pockethive.scenarios.ScenarioBundleLayout;
 import io.pockethive.scenarios.ScenarioService;
 import io.pockethive.scenarios.auth.ScenarioManagerAuthorization;
@@ -25,6 +26,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 
+/**
+ * Responsibility: Map the capability catalogue HTTP surface to catalogue and scenario projections.
+ * Must not: Own capability discovery, scenario catalogue state, or authoring contract definitions.
+ * Contract: docs/architecture/workerCapabilities.md and docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md.
+ */
 @RestController
 @RequestMapping("/api")
 public class CapabilityCatalogueController {
@@ -41,7 +47,7 @@ public class CapabilityCatalogueController {
     }
 
     @GetMapping(value = "/templates", produces = MediaType.APPLICATION_JSON_VALUE)
-    public List<ScenarioService.BundleTemplateSummary> templates() {
+    public List<BundleTemplateSummary> templates() {
         AuthenticatedUserDto user = currentUser();
         return scenarioService.listBundleTemplates().stream()
                 .filter(summary -> isRunnableTemplate(user, summary))
@@ -49,9 +55,9 @@ public class CapabilityCatalogueController {
     }
 
     @GetMapping(value = "/templates/{id}", produces = MediaType.APPLICATION_JSON_VALUE)
-    public ScenarioService.BundleTemplateSummary template(@PathVariable("id") String id) {
+    public BundleTemplateSummary template(@PathVariable("id") String id) {
         AuthenticatedUserDto user = currentUser();
-        ScenarioService.BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
+        BundleTemplateSummary summary = scenarioService.findBundleTemplate(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
         if (!isRunnableTemplate(user, summary)) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, authorization.runDeniedMessage());
@@ -106,7 +112,7 @@ public class CapabilityCatalogueController {
                         view.source()));
     }
 
-    private ScenarioTemplateView buildScenarioTemplate(ScenarioService.BundleTemplateSummary summary) {
+    private ScenarioTemplateView buildScenarioTemplate(BundleTemplateSummary summary) {
         return new ScenarioTemplateView(
                 summary.bundleKey(),
                 summary.bundlePath(),
@@ -237,54 +243,7 @@ public class CapabilityCatalogueController {
         }
     }
 
-    public record ScenarioTemplateView(String bundleKey,
-                                       String bundlePath,
-                                       String folderPath,
-                                       String id,
-                                       String name,
-                                       String description,
-                                       String controllerImage,
-                                       List<BeeImage> bees,
-                                       boolean defunct,
-                                       String defunctReason) { }
-
-    public record BeeImage(String role, String image) { }
-
-    public record AuthoringContractFingerprintView(
-            String contractVersion,
-            String fingerprint,
-            String source) { }
-
-    public record AuthoringContractView(
-            String contractVersion,
-            String fingerprint,
-            String source,
-            Map<String, String> endpoints,
-            Map<String, Object> scenario,
-            Map<String, Object> templatesContract,
-            Map<String, Object> variables,
-            Map<String, Object> sut,
-            Map<String, Object> auth,
-            Map<String, Object> trafficPolicy,
-            CapabilitiesContractView capabilities,
-            List<ScenarioTemplateView> templateCatalog,
-            Map<String, Boolean> cache) { }
-
-    public record CapabilitiesContractView(
-            int count,
-            List<String> roles,
-            List<CapabilitySummary> manifests) { }
-
-    public record CapabilitySummary(
-            String role,
-            String image,
-            String schemaVersion,
-            String capabilitiesVersion,
-            int configCount,
-            int actionCount,
-            int panelCount) { }
-
-    private boolean isRunnableTemplate(AuthenticatedUserDto user, ScenarioService.BundleTemplateSummary summary) {
+    private boolean isRunnableTemplate(AuthenticatedUserDto user, BundleTemplateSummary summary) {
         if (user == null) {
             return true;
         }

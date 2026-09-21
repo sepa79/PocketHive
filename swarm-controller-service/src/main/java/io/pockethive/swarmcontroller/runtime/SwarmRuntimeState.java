@@ -9,16 +9,15 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Aggregates the immutable {@link SwarmRuntimeContext} with mutable, plan-derived
- * runtime state such as container ids. This class is the single source of truth for
- * what has been materialised for a given swarm.
+ * Responsibility: Own the materialized worker identities for one immutable runtime context.
+ * Must not: Analyze plans, provision workers, or mutate lifecycle readiness.
+ * Contract: Reject duplicate runtime roles and instances and expose defensive state snapshots.
  */
 public final class SwarmRuntimeState {
 
   private final SwarmRuntimeContext context;
   private final Map<String, List<String>> containersByRole = new LinkedHashMap<>();
   private final Map<String, List<String>> instancesByRole = new LinkedHashMap<>();
-  private final Map<String, WorkerTarget> workersByInstance = new LinkedHashMap<>();
 
   public SwarmRuntimeState(SwarmRuntimeContext context) {
     this.context = Objects.requireNonNull(context, "context");
@@ -32,10 +31,6 @@ public final class SwarmRuntimeState {
     return context.plan();
   }
 
-  public List<String> startOrder() {
-    return context.startOrder();
-  }
-
   public void registerWorker(String role, String instanceId, String containerId) {
     String resolvedRole = normalize(role);
     String resolvedInstance = normalize(instanceId);
@@ -43,7 +38,9 @@ public final class SwarmRuntimeState {
     if (resolvedRole == null || resolvedInstance == null || resolvedContainer == null) {
       throw new IllegalArgumentException("role, instanceId, and containerId must not be blank");
     }
-    if (workersByInstance.containsKey(resolvedInstance)) {
+    boolean instanceRegistered = instancesByRole.values().stream()
+        .anyMatch(instances -> instances.contains(resolvedInstance));
+    if (instanceRegistered) {
       throw new IllegalArgumentException("duplicate runtime worker instance: " + resolvedInstance);
     }
     if (instancesByRole.containsKey(resolvedRole)) {
@@ -52,7 +49,6 @@ public final class SwarmRuntimeState {
 
     containersByRole.computeIfAbsent(resolvedRole, r -> new ArrayList<>()).add(resolvedContainer);
     instancesByRole.computeIfAbsent(resolvedRole, r -> new ArrayList<>()).add(resolvedInstance);
-    workersByInstance.put(resolvedInstance, new WorkerTarget(resolvedRole, resolvedInstance, resolvedContainer));
   }
 
   /**
@@ -73,10 +69,6 @@ public final class SwarmRuntimeState {
     return Collections.unmodifiableMap(snapshot);
   }
 
-  public Map<String, WorkerTarget> workersByInstance() {
-    return Collections.unmodifiableMap(new LinkedHashMap<>(workersByInstance));
-  }
-
   private static String normalize(String value) {
     if (value == null || value.isBlank()) {
       return null;
@@ -84,6 +76,4 @@ public final class SwarmRuntimeState {
     return value.trim();
   }
 
-  public record WorkerTarget(String role, String instanceId, String containerId) {
-  }
 }

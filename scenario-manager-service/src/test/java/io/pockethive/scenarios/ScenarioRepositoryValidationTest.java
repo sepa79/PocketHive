@@ -26,9 +26,9 @@ class ScenarioRepositoryValidationTest {
     assertThat(Files.isDirectory(scenariosRoot)).as("repo scenarios directory").isTrue();
     assertThat(Files.isDirectory(capabilitiesRoot)).as("repo capabilities directory").isTrue();
 
-    CapabilityCatalogueService capabilities = new CapabilityCatalogueService(capabilitiesRoot);
+    CapabilityCatalogueService capabilities = new CapabilityCatalogueService(capabilitiesRoot, io.pockethive.scenarios.config.ScenarioWorkConfigurationComposition.createMutationPolicyRegistry());
     capabilities.reload();
-    ScenarioBundleValidator validator = new ScenarioBundleValidator(capabilities, "latest", "test");
+    ScenarioBundleValidator validator = new ScenarioBundleValidator(capabilities, "latest", "test", new io.pockethive.work.config.composition.CurrentWorkConfigurationProviders().workConfigurationParser());
 
     List<Path> scenarioFiles;
     try (Stream<Path> stream = Files.walk(scenariosRoot)) {

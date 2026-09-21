@@ -13,6 +13,12 @@
 - 
 
 **Deliverables**
+
+Use the [responsibility workflow](RESPONSIBILITY_WORKFLOW.md) when ownership/boundaries
+change: link affected architecture IDs/sections, current/target owners and observable
+acceptance; hand off its [review evidence](RESPONSIBILITY_WORKFLOW.md#separate-review-task)
+and explicit gaps.
+
 - 
 
 **Context**

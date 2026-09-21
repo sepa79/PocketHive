@@ -1,10 +1,10 @@
 package io.pockethive.moderator;
 
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -23,6 +23,10 @@ import org.springframework.stereotype.Component;
  * flag in {@code application.yml} (or push a runtime override) to pause moderation during load
  * testing. The worker keeps publishing status updates so you can confirm its enabled/disabled state
  * from Grafana.</p>
+ * <p>
+ * Responsibility: apply configured traffic moderation during a Work invocation.
+ * Must not: become the accepted configuration writer or publish a second Work result.
+ * Contract: RESP-MODERATOR-WORK — docs/architecture/runtime-responsibilities.md#resp-moderator-work.
  */
 @Component("moderatorWorker")
 @PocketHiveWorker(

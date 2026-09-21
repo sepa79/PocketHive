@@ -9,25 +9,25 @@ import io.pockethive.controlplane.topology.ControlPlaneRouteCatalog;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
 import java.util.Optional;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
+import io.pockethive.rabbit.api.RabbitPublisher;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -49,6 +49,7 @@ class WorkerMetricsInterceptorTest {
     );
 
     private final ApplicationContextRunner contextRunner = new ApplicationContextRunner()
+        .withConfiguration(org.springframework.boot.autoconfigure.AutoConfigurations.of(io.pockethive.rabbit.work.RabbitWorkAutoConfiguration.class))
         .withPropertyValues(
             "pockethive.control-plane.exchange=metrics-swarm.control",
             "pockethive.control-plane.swarm-id=metrics-swarm",
@@ -162,9 +163,14 @@ class WorkerMetricsInterceptorTest {
             return new SimpleMeterRegistry();
         }
 
-        @Bean
-        RabbitTemplate rabbitTemplate() {
-            return Mockito.mock(RabbitTemplate.class);
+        @Bean(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER)
+        RabbitPublisher rabbitTemplate() {
+            return Mockito.mock(RabbitPublisher.class);
+        }
+
+        @Bean(io.pockethive.rabbit.api.RabbitTransportBeans.WORK_PUBLISHER)
+        RabbitPublisher workPublisher() {
+            return Mockito.mock(RabbitPublisher.class);
         }
 
         @Bean

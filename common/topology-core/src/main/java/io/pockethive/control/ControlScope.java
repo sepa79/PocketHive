@@ -7,7 +7,7 @@ import com.fasterxml.jackson.annotation.JsonIgnore;
  * <p>
  * Describes the swarm, role and instance that a message is about (the subject),
  * independently of the component that emitted the message ({@code origin}).
- * Use {@link #ALL} for fan-out; values are never {@code null}.
+ * Use the literal {@link #ALL} for fan-out; missing and blank values are invalid.
  */
 public record ControlScope(String swarmId, String role, String instance) {
 
@@ -16,24 +16,25 @@ public record ControlScope(String swarmId, String role, String instance) {
     public static final ControlScope EMPTY = new ControlScope(ALL, ALL, ALL);
 
     public static boolean isAll(String value) {
-        return value != null && value.equalsIgnoreCase(ALL);
+        return ALL.equals(value);
     }
 
     public ControlScope {
-        swarmId = normalize(swarmId);
-        role = normalize(role);
-        instance = normalize(instance);
+        swarmId = requireSegment("scope.swarmId", swarmId);
+        role = requireSegment("scope.role", role);
+        instance = requireSegment("scope.instance", instance);
     }
 
-    private static String normalize(String value) {
-        if (value == null) {
-            return ALL;
+    /** Validates one explicit scope or routing segment without introducing a wildcard default. */
+    public static String requireSegment(String field, String value) {
+        if (value == null || value.isBlank()) {
+            throw new IllegalArgumentException(field + " must not be blank; use ALL for fan-out");
         }
         String trimmed = value.trim();
-        if (trimmed.isEmpty()) {
-            return ALL;
+        if (trimmed.equalsIgnoreCase(ALL) && !ALL.equals(trimmed)) {
+            throw new IllegalArgumentException(field + " must use the literal ALL for fan-out");
         }
-        if (isAll(trimmed)) {
+        if (ALL.equals(trimmed)) {
             return ALL;
         }
         return trimmed;

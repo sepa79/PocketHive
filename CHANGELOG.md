@@ -2,6 +2,298 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+- Control/work-plane isolation: move Rabbit connection, topology, resource, and
+  transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
+  keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery
+  and publication semantics.
+- Lifecycle maintainability: decompose Swarm Controller lifecycle, observation,
+  and status handling, and separate Scenario Manager bundle workflows and HTTP
+  contract types into focused implementation units.
+- PocketHive MCP: replace the Node/stdio server with one Java 21 Streamable HTTP
+  service on the public ingress, with 50 scope-declared tools, nine connected
+  skills, portable PocketHive knowledge, and no HiveMind runtime dependency.
+- QA-led authoring: add principal-bound multi-workflow sessions, mandatory MCP
+  form elicitation with no inferred answers, explicit invalidation/recovery, and
+  independently callable operational tools.
+- Scenario generation: preserve exact UTF-8 text, including whitespace, final
+  newlines, and empty files, and reject non-canonical or duplicate generated
+  paths explicitly.
+- VS Code branding: use a canonical PocketHive hexagon silhouette optimized to
+  keep its button, lens, connectors, and nodes visible in the 24 px Activity
+  Bar, while retaining the full-colour mark in the webview header; render the
+  shared `PocketHive` heading with its `Hive` suffix in the canonical logo
+  yellow, tighten the heading/subtitle rhythm to match the canonical wordmark,
+  and release the extension as 1.0.2 so VS Code loads the refined branding from
+  a new versioned asset location.
+- Scenario publication: package exact committed Git directories in the VS Code
+  client, validate bounded ticketed ZIP uploads, retain byte-identical archives,
+  and require explicit `CREATE` or `REPLACE` with no fallback or ambiguous retry.
+- MCP publication integrity: bind validation and publication evidence to the exact
+  authored workflow revision, file-set digest, and capability fingerprint;
+  reject stale tickets after regeneration, cancellation, or concurrent edits.
+  Persist validation evidence atomically and preserve completed owner results
+  across concurrent upload rollback and workflow state-sync failures.
+- MCP state migration: retire legacy workflow-bound upload tickets in
+  coordination-state schema 4; retain historical receipts without publication
+  authority and require clients to prepare and validate again. Preserve direct
+  uploads and publication attempts, including recovery after ticket retirement,
+  without replaying Scenario Manager writes. See the
+  [MCP publication contract](docs/mcp/README.md).
+- MCP client interoperability: publish output schemas and structured content for
+  object-root tool schemas; retain JSON text for array, string, and mixed-shape
+  results so strict MCP clients can consume the canonical Java server.
+- Authentication: extend the existing Auth Service as the single OAuth authority
+  for authorization code + PKCE S256, exact redirect/resource/audience/scope
+  validation, opaque-token introspection, replay rejection, and a rotating
+  refresh token limited to the base VS Code companion session; privileged
+  scoped sessions remain short-lived and non-renewable.
+- Worker signed OAuth: add isolated `OAUTH2_HTTP_SIGNATURE` client-credentials
+  profiles with RSA-SHA256 signing of token requests; downstream API calls keep
+  Bearer authentication. Coordinate acquisition through Redis cache/leases with
+  bounded requests, expiry checks, and lease release on failures; preserve the
+  existing OAuth client-credentials and password-grant strategies. See the
+  [Auth User Guide](docs/AUTH-USER-GUIDE.md).
+- Auth security and resource lifecycle: redact credential/session headers in
+  request logs and captures, replace existing Authorization headers
+  case-insensitively, normalize auth types independently of the default locale,
+  and close owned Redis/HTTP resources when workers stop or initialization fails.
+- OAuth authoring: preserve complete signed and ordinary OAuth profiles through
+  Java MCP scenario generation and upload; validate authored profile storage in
+  Scenario Manager without resolving credentials or contacting OAuth providers.
+- VS Code: replace the legacy product Tree Views with one narrow environment-first
+  HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
+  Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
+- VS Code validation: add a live Playwright flow through the local public MCP
+  ingress and fix narrow-width overflow, keyboard/ARIA tab navigation, verified
+  principal labels, exact-swarm Journal loading, and readable bounded owner-data
+  cards; release the extension as 1.0.3.
+- VS Code lifecycle: keep the newest resolved companion webview attached when an
+  obsolete view disposes; add lifecycle regression coverage and release the
+  extension as 1.0.4.
+- VS Code payload boundary: preserve the required navigation and profile fields
+  when owner data exceeds one presentation-field limit, return an explicit
+  field error instead of replacing the whole view-model contract, and request
+  ten events for the narrow Buzz and Journal views; add regression and mutation
+  coverage and release the extension as 1.0.5.
+- VS Code enterprise companion: restore context-valid swarm Start/Stop and
+  guarded Remove, authoritative collapsible run history, exact run-to-Journal
+  navigation, compact Buzz/Journal filters, searchable Scenario Bundles, and
+  grouped Debug actions in the responsive HTML Side Bar without restoring a
+  second owner or transport path.
+- VS Code authorised sessions: renew the base companion session once and on
+  demand before expiry, validate a candidate MCP connection before switching,
+  keep the authenticated workspace visible during renewal, and provide one
+  clear Account menu for sign-in, retry, and revoking sign-out.
+- Windows extension tooling: canonicalize Git scenario fixture paths and fix
+  VSIX package listing checks so the existing test and packaging gates work on Windows.
+- OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
+  logo, explicit client/resource/permission context, accessible form semantics,
+  responsive styling, and no change to the authorization-code contract.
+- Deployment: install the same hardened non-root, read-only Java MCP image through
+  `build-hive.sh` and HiveForge contracts, with bounded persistent state, tmpfs
+  upload spooling, public Nginx routes, health checks, and embedded CycloneDX SBOM.
+- Earlier MCP migration verification (historical): recorded 22 Auth Service,
+  115 MCP, and 102 extension tests passing; killed 26/26 Auth, 576/576 MCP, and
+  1,825/1,825 extension mutants. Local checks passed for npm audit, packaged VSIX,
+  public-ingress OAuth/MCP, responsive UI, refresh rotation/replay/revocation,
+  and exact mixed-file bundles.
+- CI regression gates: provision test-owned Redis and RabbitMQ fixtures, require
+  the RabbitMQ integration tests and independent OpenSSL verifier, and enforce
+  the scoped Java MCP, Auth Service, and HTTP Sequence mutation gates alongside
+  Windows/Linux extension tests, package checks, and Linux Stryker coverage.
+- Restart integration verification: [PR #517's hosted run](https://github.com/sepa79/PocketHive/actions/runs/35435999539)
+  passed all four jobs for restart head `2103a93a`: 2,247 Java cases and 187
+  extension tests on each platform, with no failures or skips; all three scoped
+  Java mutation gates and Linux Stryker passed. These results supersede the
+  earlier totals for this integration; they do not establish real-provider
+  signed OAuth or deployed-bundle acceptance. The optional deployed acceptance
+  profile was not run; see [authentication verification](docs/ci/auth-testing.md).
+- Integration follow-up: inherited Orchestrator executor/controller identity
+  validation, reset/registry, and public contract extraction findings remain
+  deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
+  Explicit remote HTTP authentication allowance remains separate work.
+- Documentation: add the canonical Java MCP guide, update active deployment and
+  extension guidance, supersede the retired Node plugin documents, and record the
+  local RST debrief and outstanding governed/human production-release checks.
+
+## [0.15.36]
+Timestamp: 2026-08-19T00:00:00Z
+
+- Release metadata and info endpoints: add a shared `observability` auto-configuration
+  that contributes `pockethive.service` and `pockethive.version` to Actuator info,
+  filter service application resources so `@project.version@` resolves at build time,
+  expose `health` and `info` from Scenario Manager, and cover the filtered config and
+  contributor registration with tests.
+- Pipeline observability dashboards: switch swarm filtering to the canonical Grafana
+  regex variable in the ClickHouse queries and clamp several queue and buffer-guard
+  panels to a minimum aggregation interval so multi-swarm views stay accurate.
+- Node security maintenance: refresh the root, UI v2, PocketHive MCP, VS Code, and
+  docs-site lockfiles through `npm update`, clear `npm audit` findings in all active
+  Node projects except the remaining upstream `docs-site` `image-size` advisory, and
+  pin `uuid` in the docs-site overrides to remove the fixable transitive issue.
+
+Timestamp: 2026-07-22T22:53:54Z
+
+- Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
+  operation and allocate CREATE's run id before launch, so failures before swarm
+  registration publish and retry their schema-complete terminal outcome.
+- Lifecycle API: remove the unused `notes` field from create/start/stop/remove
+  requests, remove the unused AMQP `swarmCreate` signal factory, and make Debug
+  Tap a raw message viewer rather than a second, partial WorkItem parser.
+- Lifecycle create boundary: validate the canonical request schema before REST
+  mapping and typed Java construction, require explicit `null` for absent nullable
+  inputs, reject non-canonical whitespace, and align MCP, workflow, VS Code and
+  POC create callers with the required network mode.
+- WorkItem data-plane: validate every Rabbit inbound and outbound JSON envelope
+  against the canonical WorkItem schema before mapping; remove codec/DTO and
+  builder copies of step-header wire validation, and reject incomplete
+  observability at the same boundary. Per-step headers now reject `null` values
+  at that boundary; removing a header is the only canonical representation.
+- Control-plane scope contract: require every routing and envelope scope segment,
+  use the literal `ALL` for intentional fan-out, and reject `null`, blank and
+  non-canonical wildcard aliases instead of silently broadening delivery. The
+  journal migration canonicalizes historic blank scope fields to `ALL` and
+  prevents new non-canonical rows.
+- Create contract: require an explicit boolean `autoPullImages`; `null` can no
+  longer silently disable image preloading.
+- Breaking lifecycle contract: replace the mixed swarm/container status and
+  implicit `enabled` state with independent runtime intent, workload intent,
+  controller state, workload state, health, and resource state axes; legacy
+  lifecycle fields and envelopes are not accepted.
+- Lifecycle operations: make the correlation-specific REST operation resource
+  authoritative, publish one orchestrator-owned terminal outcome notification,
+  and scope idempotency to operation type, swarm, exact target, and key.
+- Lifecycle convergence: complete create only after the controller verifies the
+  filesystem startup artifact, and complete start, stop, and enabled config
+  updates only after fresh worker observations match the requested intent.
+- Controller state authority: remove the parallel `ManagerRuntimeCore` workload
+  and readiness machine; scenarios now use a command-only lifecycle port and a
+  read-only projection derived from the single Controller lifecycle core.
+- Controller capability SSOT: replace silent lifecycle defaults with mandatory
+  core, scenario, and buffer-guard capability interfaces, and use the single
+  Manager SDK `QueueStats` value throughout Controller runtime and metrics.
+- Control-plane contract SSOT: construct public lifecycle responses in one
+  Orchestrator factory and dispatch lifecycle commands by canonical operation
+  type instead of transport strings.
+- TypeScript contract SSOT: generate one shared lifecycle package from the JSON
+  schema for the Hive UI and VS Code extension, reject compatibility status
+  aliases, and gate consumer builds against stale generated artifacts.
+- Explicit network selection: remove null-to-`DIRECT` coercion and compatibility
+  create constructors; create, binding, update, launch, and status boundaries
+  now require a declared canonical network mode.
+- SUT contract SSOT: delete the Scenario Manager `SutEnvironment` DTO and its
+  divergent validation, use the shared model directly for registry and bundle
+  APIs, reject missing/blank canonical fields, and remove unused runtime
+  `ui.panelId` metadata instead of retaining a compatibility projection.
+- Filesystem lifecycle handoff: start controllers from a versioned immutable
+  swarm artifact with a verified SHA-256 digest, and coordinate swarm removal
+  through correlation-specific filesystem request/result artifacts instead of
+  a fragile RabbitMQ teardown acknowledgement.
+- Lifecycle consumers and documentation: migrate the Hive UI, PocketHive MCP,
+  VS Code extension, E2E tests, schemas, AsyncAPI, REST documentation, and
+  runtime diagnostics to the canonical operation and state contracts.
+- Explicit failure semantics: reject invalid core registry identities, require
+  an explicitly composed Controller journal, and propagate cross-swarm,
+  serialization, and append failures instead of silently discarding them.
+- Bootstrap and template SSOT: provide one conditional Jackson
+  auto-configuration and shared worker logging defaults from `observability`,
+  and delete the unused divergent worker-sdk HTTP template record.
+- UI packaging: include the generated shared lifecycle contract in the Docker
+  build workspace so container builds consume the same package as local UI
+  and extension builds.
+- Agent lifecycle tooling: require callers to select `DIRECT` or `PROXIED`
+  explicitly when creating a swarm and require a profile only for the proxied
+  adapter; remove the MCP-side hard-coded network mode.
+- Idempotent Docker removal: treat an already stopped or already absent
+  container as satisfying the corresponding teardown postcondition, so a
+  failed partial create can still be removed completely.
+- Health journaling: establish the first observed health value as the baseline
+  instead of serializing a fake transition whose previous value is null.
+- Test boundaries: exclude archived legacy UI sources from the active root
+  Vitest suite; the current UI remains covered by its own package suite.
+- Scenario authoring defaults SSOT: declare safe required config defaults in
+  capability manifests, generate the MCP defaults projection from those
+  manifests, and make the scenario migrator consume the same manifest contract
+  instead of maintaining a second defaults table.
+- Workflow lifecycle ordering: wait for the correlation-specific create
+  operation to succeed before readiness polling and start dispatch, including
+  the resumable deploy path, so controller readiness cannot race an active
+  create operation.
+- Strict workflow evidence: allow deploy to explicitly pre-arm a debug tap
+  before start traffic, then reuse that tap during verification without
+  weakening strict proof requirements or crossing swarm identities.
+- Startup artifact JSON correctness: preserve legal null values inside the
+  immutable scenario plan rather than passing arbitrary JSON through
+  `Map.copyOf`.
+- Control-plane result ownership: terminal worker results identify the concrete
+  executor even for broadcast signals, and Orchestrator ignores valid results
+  whose correlation belongs to controller-internal operations.
+- Workflow cleanup acceptance: wait for the correlation-specific remove
+  operation to succeed and verify the swarm registry postcondition before
+  reporting teardown, while still attempting bundle cleanup after a failure.
+- Network proxy NFS reliability: replace cross-node `inotify` reloads with
+  SHA-256 polling, validated HAProxy reloads, and an applied-digest handshake;
+  binding mutations now fail explicitly unless HAProxy confirms the exact
+  desired configuration.
+- Lifecycle API failure semantics: return the active canonical operation as
+  `409 Conflict` for concurrent lifecycle requests, include the schema-required
+  nullable resource in remove errors, reject unauthorized create requests before
+  reserving an operation, preserve the originating execution failure when outcome
+  publication also fails, and make auth E2E wait for accepted lifecycle operations
+  before issuing dependent commands.
+- Removal postconditions: clear the canonical Network Proxy Manager binding and
+  verify its absence before registry, runtime-directory, worker, and queue
+  teardown; a successful REMOVE can no longer leave HTTP/HTTPS/TCPS routes
+  active.
+- History-policy E2E: tap the source exchange before generator traffic instead
+  of competing with the final-queue consumer, derive the expected history
+  policy from the canonical scenario template rather than a duplicated feature
+  literal, and match canonical worker roles exactly so `postprocessor` cannot
+  be mistaken for `processor`.
+- Release-gate activation: remove the stale `@wip` exclusions from the auth
+  rollout and history-policy contracts. Auth now takes the controller instance
+  only from the succeeded lifecycle operation target, and clearing-export
+  assertions wait for the canonical `status-full` config snapshot after the
+  worker applies configuration instead of inspecting an incomplete startup
+  snapshot.
+- Full control-plane audit: make control-plane capture mandatory, centralise
+  its six captured families (`signal`, `result`, `outcome`, `journal`, `alert`,
+  and `metric`), and fail the unfiltered E2E pack when any family is absent.
+  Filtered E2E runs remain targeted audits and do not require families their
+  selected scenarios intentionally do not emit.
+- Verification: the saved `large-swarm` target completed the full E2E pack on
+  2026-08-04 at 13:41 BST with **39 scenarios and 463 steps passed** in
+  19m13.169s. Surefire recorded **67 tests with zero failures, errors, or
+  skips** (Cucumber: 39/39); this includes the three former `@wip` release
+  scenarios. Its mandatory full audit captured 3,889 control-plane messages
+  and required `signal`, `result`, `outcome`, `journal`, `alert`, and `metric`
+  families. The official ingress returned an empty swarm registry after the
+  run. Targeted E2E also verifies that capture initialisation and schema/routing
+  checks remain active for filtered runs.
+- HAProxy NFS acceptance: on the large swarm, with Network Proxy Manager and
+  HAProxy on distinct nodes sharing the deployed runtime mount, a dedicated
+  ingress E2E proved desired/applied acknowledgement for a valid binding,
+  explicit ~10-second timeout for an invalid HAProxy candidate, retention of
+  the prior binding, and final removal. The test now clears only its own stale
+  bindings and selects a free acceptance port, preventing retry debris.
+- Release traceability: [the lifecycle control-plane verification matrix](docs/RELEASE_VERIFICATION_MATRIX.md)
+  records each workstream's commits, automated proof, large-swarm evidence, and
+  remaining release gate. It now records the HiveForge deployment receipt,
+  immutable Compose digest, and live application image digests for the
+  large-swarm E2E environment; the last two branch commits and current
+  acceptance additions are E2E-only and require no runtime-image redeploy.
+- Release gates: the final post-REMOVE canonical PocketHive MCP snapshot found
+  no swarm registry entry, workers, managers, exact RabbitMQ queues/exchanges,
+  or cleanup candidates. HiveMap's full code-quality comparison and the
+  complementary documentation SSOT comparison both passed; the previous HIGH
+  full-audit family-coverage finding is resolved, while the unrelated MEDIUM
+  large-coordinator maintainability finding remains tracked for separate work.
+- Swarm-full mount evidence: HiveForge's immutable Compose receipt and live
+  runtime report confirm healthy stateful services with the four dedicated
+  `/opt/pockethive-data/*/data` bindings and the HAProxy/Network Proxy Manager
+  shared NFS runtime mount.
 ## [0.15.35]
 Timestamp: 2026-07-10T13:36:56Z
 
@@ -231,17 +523,12 @@ Timestamp: 2026-06-18T15:27:35Z
   control-plane topology descriptors for label-gated Docker/RabbitMQ cleanup,
   removing the duplicate `TrafficTopology` naming helper.
 - RabbitMQ cleanup: delete exact manifest-owned queues/exchanges and
-  descriptor-derived worker control queues only when worker labels and registry
-  state prove the instance is stale; registered swarms that are not explicitly
-  stopped keep shared queues, and derived worker control queues obey the same
-  `includeRunning` gate as their worker runtime object.
-- Runtime cleanup safety: allow pre-run registered swarms to be aborted through
-  `LIFECYCLE_REMOVE_SWARM`, keep running swarms and swarms in `REMOVING` state
-  blocked, and return the required lifecycle action when execute targets a
-  blocked lifecycle candidate.
-- Runtime cleanup emergency path: add hash-bound
-  `overrideRegisteredSwarmState` for rare break-glass lifecycle removal of
-  `STARTING`/`RUNNING`/`STOPPING`/`REMOVING` registered swarms.
+  descriptor-derived worker control queues only for unregistered orphan
+  resources proven by labels and ownership evidence.
+- Runtime cleanup safety: every registered swarm is removable only through the
+  canonical FS-backed `LIFECYCLE_REMOVE_SWARM` operation. Cleanup execution
+  reports `DISPATCHED` with its correlation and operation URL; direct
+  Docker/RabbitMQ candidates and lifecycle ownership overrides are forbidden.
 - Runtime debug ownership: move Docker/Swarm list, logs, version, and inspect
   reads behind Orchestrator runtime debug APIs so PocketHive MCP no longer uses
   a local Docker socket fallback for worker or swarm-controller manager debug.

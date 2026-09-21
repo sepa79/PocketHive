@@ -1,12 +1,17 @@
 package io.pockethive.clearingexport;
 
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import org.springframework.stereotype.Component;
 
 @Component
+/**
+ * Responsibility: map and validate configured fields for one structured clearing record.
+ * Must not: make rendering helpers persist files or create a second template evaluator.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 class StructuredRecordProjector {
 
   private final TemplateRenderer templateRenderer;

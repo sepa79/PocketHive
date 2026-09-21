@@ -3,14 +3,12 @@ package io.pockethive.worker.sdk.templating;
 import io.pockethive.templating.RedisSequenceGenerator;
 
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * Tests for Redis sequence generation functionality.
  * Note: These are unit tests that verify format patterns without requiring Redis.
- * For integration tests with actual Redis, run with -Dredis.integration.test=true
  */
 class RedisSequenceGeneratorTest {
 
@@ -75,14 +73,6 @@ class RedisSequenceGeneratorTest {
         int expectedValue = 1050;
         // This would be the actual base-36 calculation for AAABQG
         assertThat(expectedValue).isEqualTo(1050);
-    }
-
-    @Test
-    @EnabledIfSystemProperty(named = "redis.integration.test", matches = "true")
-    void demonstrateIntegrationTestPlaceholder() {
-        // Placeholder for actual Redis integration tests
-        // Would require Redis dependencies and Testcontainers
-        assertThat("Integration tests require Redis setup").isNotEmpty();
     }
 
     private static String formatSequence(long value, String modeName, String format) throws Exception {

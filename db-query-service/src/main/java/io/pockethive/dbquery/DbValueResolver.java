@@ -3,7 +3,7 @@ package io.pockethive.dbquery;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
 import java.math.BigDecimal;
 import java.sql.Date;
 import java.sql.Timestamp;
@@ -13,6 +13,11 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
+/**
+ * Responsibility: resolve DB parameter values from payload/headers/vars paths and convert declared types.
+ * Must not: implement a second JDBC executor or declare Work/CP topology.
+ * Contract: RESP-DB-QUERY-WORK — docs/architecture/runtime-responsibilities.md#resp-db-query-work.
+ */
 class DbValueResolver {
 
   private static final TypeReference<LinkedHashMap<String, Object>> STRING_OBJECT_MAP =

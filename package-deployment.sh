@@ -22,7 +22,6 @@ echo "Copying deployment files..."
 # Core deployment files
 cp docker-compose.yml "${DEPLOY_DIR}/docker-compose.yml"
 sed 's#\./#/opt/pockethive/#g' docker-compose.yml > "${DEPLOY_DIR}/docker-compose.opt.yml"
-cp .env.example "${DEPLOY_DIR}/.env.example"
 cp README.md "${DEPLOY_DIR}/"
 cp LICENSE "${DEPLOY_DIR}/"
 
@@ -73,7 +72,7 @@ cat > "${DEPLOY_DIR}/DEPLOY.md" << 'EOF'
    sudo tar xzf pockethive-deployment-*.tar.gz -C /opt
    cd /opt/pockethive
    ```
-2. **Review configuration** in `.env.example` (optional)
+2. **Optionally create `.env`** next to `docker-compose.yml` to override image registry, tag, or ingress-related variables
 3. **Deploy with Docker Compose (from /opt/pockethive)**:
    ```bash
    sudo docker compose up -d

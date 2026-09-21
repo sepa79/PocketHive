@@ -1,6 +1,6 @@
 package io.pockethive.clearingexport;
 
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.time.Clock;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -12,6 +12,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 @Component
+/**
+ * Responsibility: assemble clearing file content/name through templates and XML formatting.
+ * Must not: make rendering helpers persist files or create a second template evaluator.
+ * Contract: RESP-CLEARING-EXPORT — docs/architecture/runtime-responsibilities.md#resp-clearing-export.
+ */
 class ClearingExportFileAssembler {
 
   private final TemplateRenderer templateRenderer;

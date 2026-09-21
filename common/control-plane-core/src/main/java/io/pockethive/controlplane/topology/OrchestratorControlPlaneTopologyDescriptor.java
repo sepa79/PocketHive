@@ -1,24 +1,36 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 import io.pockethive.control.ConfirmationScope;
+import io.pockethive.control.CommandResult;
+import io.pockethive.controlplane.ControlPlaneEventTypes;
+import io.pockethive.controlplane.ControlPlaneRoles;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 
+/**
+ * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
+ * Must not: construct broker names, select a naming implementation or declare resources.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
+ */
 public final class OrchestratorControlPlaneTopologyDescriptor implements ControlPlaneTopologyDescriptor {
 
-    private static final String ROLE = "orchestrator";
+    private static final String ROLE = ControlPlaneRoles.ORCHESTRATOR;
 
     private final String controlQueuePrefix;
+    private final ControlResourceNamesPort names;
 
-    public OrchestratorControlPlaneTopologyDescriptor(String controlQueuePrefix) {
+    public OrchestratorControlPlaneTopologyDescriptor(String controlQueuePrefix, ControlResourceNamesPort names) {
         this.controlQueuePrefix = requireText("controlQueuePrefix", controlQueuePrefix);
+        this.names = java.util.Objects.requireNonNull(names, "names");
     }
 
-    public OrchestratorControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings) {
-        this(settings.controlQueuePrefix());
+    public OrchestratorControlPlaneTopologyDescriptor(ControlPlaneTopologySettings settings, ControlResourceNamesPort names) {
+        this(settings.controlQueuePrefix(), names);
     }
 
     @Override
@@ -29,30 +41,41 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     @Override
     public Optional<ControlQueueDescriptor> controlQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = controlQueuePrefix + "." + ROLE + "." + id;
-        Set<String> outcomeEvents = Set.of(lifecycleEventPattern("outcome"));
-        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), outcomeEvents));
+        String queueName = names.managerControlQueue(controlQueuePrefix, ROLE, id);
+        Set<String> executorEvents = Set.of(
+            lifecycleEventPattern(CommandResult.KIND),
+            lifecycleEventPattern(ControlPlaneEventTypes.JOURNAL_WORK_JOURNAL),
+            lifecycleEventPattern(ControlPlaneEventTypes.ALERT_ALERT));
+        return Optional.of(new ControlQueueDescriptor(queueName, Set.of(), executorEvents));
     }
 
     @Override
     public Collection<QueueDescriptor> additionalQueues(String instanceId) {
+        return List.of(controllerStatusQueue(instanceId));
+    }
+
+    public QueueDescriptor controllerStatusQueue(String instanceId) {
         String id = requireInstanceId(instanceId);
-        String queueName = controlQueuePrefix + ".orchestrator-status." + id;
+        String queueName = names.controllerStatusQueue(controlQueuePrefix, id);
         Set<String> bindings = Set.of(
-            controllerStatusPattern("status-full"),
-            controllerStatusPattern("status-delta")
+            controllerStatusPattern(ControlPlaneEventTypes.STATUS_FULL),
+            controllerStatusPattern(ControlPlaneEventTypes.STATUS_DELTA)
         );
-        return List.of(new QueueDescriptor(queueName, bindings));
+        return new QueueDescriptor(queueName, bindings);
     }
 
     @Override
     public ControlPlaneRouteCatalog routes() {
-        Set<String> lifecycleEvents = Set.of(lifecycleEventPattern("outcome"));
+        Set<String> lifecycleEvents = Set.of(lifecycleEventPattern(CommandResult.KIND));
         Set<String> statusEvents = Set.of(
-            controllerStatusPattern("status-full"),
-            controllerStatusPattern("status-delta")
+            controllerStatusPattern(ControlPlaneEventTypes.STATUS_FULL),
+            controllerStatusPattern(ControlPlaneEventTypes.STATUS_DELTA)
         );
-        return new ControlPlaneRouteCatalog(Set.of(), Set.of(), Set.of(), statusEvents, lifecycleEvents, Set.of());
+        return new ControlPlaneRouteCatalog(
+            Set.of(), Set.of(), Set.of(), statusEvents, lifecycleEvents,
+            Set.of(
+                lifecycleEventPattern(ControlPlaneEventTypes.ALERT_ALERT),
+                lifecycleEventPattern(ControlPlaneEventTypes.JOURNAL_WORK_JOURNAL)));
     }
 
     private static String lifecycleEventPattern(String type) {
@@ -61,7 +84,7 @@ public final class OrchestratorControlPlaneTopologyDescriptor implements Control
     }
 
     private static String controllerStatusPattern(String type) {
-        ConfirmationScope scope = new ConfirmationScope("*", "swarm-controller", "*");
+        ConfirmationScope scope = new ConfirmationScope("*", ControlPlaneRoles.SWARM_CONTROLLER, "*");
         return ControlPlaneRouting.event("metric", type, scope);
     }
 

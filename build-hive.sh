@@ -187,8 +187,8 @@ require_tools() {
     echo "Docker Compose V2 is required (docker compose)." >&2
     exit 1
   fi
-  if ! command -v mvn >/dev/null 2>&1; then
-    echo "Maven is required for local builds." >&2
+  if [[ ! -x ./mvnw ]]; then
+    echo "Maven wrapper ./mvnw is required for local builds." >&2
     exit 1
   fi
 }
@@ -254,7 +254,7 @@ run_maven_package() {
     mvn_goals=(clean package)
     reset_local_build_state
   fi
-  local mvn_cmd=(mvn -B -pl "$csv" -am "${mvn_goals[@]}")
+  local mvn_cmd=(./mvnw -B -pl "$csv" -am "${mvn_goals[@]}")
   if $SKIP_TESTS; then
     mvn_cmd+=("-DskipTests")
   fi
@@ -315,6 +315,16 @@ stage_artifacts() {
     mkdir -p "$(dirname "${staged_path}")"
     cp "${jar_path}" "${staged_path}"
     echo " - Staged ${module} → ${staged_path}"
+    if [[ "${module}" == "pockethive-mcp-service" ]]; then
+      local sbom_path="${module}/target/pockethive-mcp-sbom.json"
+      local staged_sbom="${LOCAL_ARTIFACTS_DIR}/pockethive-mcp-service.sbom.json"
+      if [[ ! -f "${sbom_path}" ]]; then
+        echo "Unable to locate CycloneDX SBOM for ${module} at ${sbom_path}" >&2
+        exit 1
+      fi
+      cp "${sbom_path}" "${staged_sbom}"
+      echo " - Staged ${module} SBOM → ${staged_sbom}"
+    fi
   done
 }
 
@@ -600,8 +610,13 @@ main() {
     DURATIONS["docker_build"]=-1
   fi
 
-  echo "Starting PocketHive stack via docker compose up -d"
-  measure "compose_up" compose_up_full_stack
+  if (( ${#MODULE_FILTER[@]} == 0 && ${#SERVICE_FILTER[@]} == 0 )); then
+    echo "Starting PocketHive stack via docker compose up -d"
+    measure "compose_up" compose_up_full_stack
+  else
+    echo "Starting selected PocketHive services: ${SERVICES_TO_BUILD[*]}"
+    measure "compose_up" compose_up_services "${SERVICES_TO_BUILD[@]}"
+  fi
 
   if (( ${#RESTART_TARGETS[@]} )); then
     echo "Restarting requested services: ${RESTART_TARGETS[*]}"

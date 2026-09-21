@@ -1,21 +1,23 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.work.api.MutableStatus;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerCapability;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.binding.WorkOutputConfig;
+import io.pockethive.work.api.WorkerCapability;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime.WorkerStateSnapshot;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
 import io.pockethive.worker.sdk.runtime.WorkerState;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Method;
 import java.time.Clock;
@@ -725,7 +727,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime, times(4)).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         anyString(),
@@ -735,7 +737,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-created"),
@@ -745,7 +747,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-write-failed"),
@@ -755,7 +757,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-finalize-failed"),
@@ -765,7 +767,7 @@ class ClearingExportWorkerImplTest {
     verify(controlPlaneRuntime).publishWorkJournalEvent(
         eq("clearingExportWorker"),
         anyString(),
-        isNull(),
+        anyString(),
         eq("work-journal"),
         eq("recorded"),
         eq("clearing-export-flush-summary"),
@@ -974,7 +976,7 @@ class ClearingExportWorkerImplTest {
   }
 
   private static final class RecordingStatusPublisher
-      implements StatusPublisher, StatusPublisher.MutableStatus {
+      implements StatusPublisher, MutableStatus {
 
     private final Map<String, Object> data = new LinkedHashMap<>();
     private boolean fullEmitted;

@@ -4,12 +4,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkInputConfig;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.config.binding.WorkInputConfig;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.input.WorkInput;
 import io.pockethive.worker.sdk.input.WorkInputFactory;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -58,8 +58,33 @@ class PocketHiveWorkerIoFromConfigTest {
             assertThat(context).hasFailed();
             Throwable failure = context.getStartupFailure();
             assertThat(failure).isInstanceOf(BeanCreationException.class);
-            assertThat(failure.getCause()).hasMessageContaining("pockethive.outputs.rabbit.exchange");
+            assertThat(failure.getCause()).hasMessageContaining("pockethive.inputs.type");
         });
+    }
+
+    @Test
+    void rejectsMissingAdapterBindingBeforeParsingSettings() {
+        contextRunner.withPropertyValues("pockethive.inputs.type=RABBITMQ", "pockethive.outputs.type=NONE",
+            "pockethive.inputs.rabbit.prefetch=bad")
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure()).hasStackTraceContaining(
+                    "Expected one input configuration provider for RABBITMQ, found 0");
+            });
+    }
+
+    @Test
+    void rejectsAmbiguousAdapterBindingBeforeCreatingInputs() {
+        contextRunner.withPropertyValues("pockethive.inputs.type=SCHEDULER", "pockethive.outputs.type=NONE")
+            .withBean("secondSchedulerBinding", io.pockethive.work.config.binding.WorkInputConfigProvider.class,
+                () -> new io.pockethive.work.config.binding.WorkInputConfigProvider(
+                    io.pockethive.work.config.WorkerInputType.SCHEDULER,
+                    io.pockethive.worker.sdk.config.SchedulerInputProperties.class))
+            .run(context -> {
+                assertThat(context).hasFailed();
+                assertThat(context.getStartupFailure()).hasStackTraceContaining(
+                    "Expected one input configuration provider for SCHEDULER, found 2");
+            });
     }
 
     private static String[] defaultProperties() {

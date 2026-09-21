@@ -1,4 +1,3 @@
-@wip
 Feature: WorkItem history policy configuration
 
   Background:
@@ -10,7 +9,7 @@ Feature: WorkItem history policy configuration
     Then the "generator" bee has history policy "FULL"
     And the "moderator" bee has history policy "LATEST_ONLY"
     And the "processor" bee has history policy "DISABLED"
-    And the "postprocessor" bee has history policy "DISABLED"
+    And the "postprocessor" bee has history policy "FULL"
 
   @history-policy-runtime @group-lifecycle
   Scenario: Worker statuses advertise configured history policies
@@ -22,7 +21,6 @@ Feature: WorkItem history policy configuration
     Then the swarm reports running
     And I start generator traffic
     Then the final queue receives the default generator response
-    And the postprocessor status reflects applied history policy
     And the worker statuses advertise history policies
     When I stop the swarm
     Then the swarm reports stopped

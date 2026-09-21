@@ -4,14 +4,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doNothing;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
-import io.pockethive.worker.sdk.api.WorkItem;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.redis.config.RedisDatasetPickStrategy;
+import io.pockethive.redis.config.RedisDatasetSource;
+import io.pockethive.work.config.WorkerInputType;
+import io.pockethive.work.config.WorkerOutputType;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
-import io.pockethive.worker.sdk.config.WorkOutputConfig;
-import io.pockethive.worker.sdk.config.WorkerInputType;
-import io.pockethive.worker.sdk.config.WorkerOutputType;
+import io.pockethive.work.config.binding.WorkOutputConfig;
 import io.pockethive.worker.sdk.runtime.WorkIoBindings;
 import io.pockethive.worker.sdk.runtime.WorkerControlPlaneRuntime;
 import io.pockethive.worker.sdk.runtime.WorkerDefinition;
@@ -36,6 +40,47 @@ class RedisDataSetWorkInputTest {
         if (input != null) {
             input.stop();
         }
+    }
+
+    @Test
+    void intakeFollowsWorkerEnablementAcrossUpdatesAndRestart() throws Exception {
+        var properties = baseProperties();
+        properties.setInitialDelayMs(600_000L);
+        var data = new ArrayDeque<>(List.of("one", "two"));
+        var runtime = new RecordingWorkerRuntime();
+        var control = mock(WorkerControlPlaneRuntime.class);
+        var state = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+        when(state.enabled()).thenReturn(false);
+        when(state.rawConfig()).thenReturn(Map.of());
+        var listener = new java.util.concurrent.atomic.AtomicReference<
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot>>();
+        doAnswer(call -> {
+            listener.set(call.getArgument(1));
+            listener.get().accept(state);
+            return null;
+        }).when(control).registerStateListener(any(), any());
+        input = new RedisDataSetWorkInput(definition(), control, runtime, identity(), properties,
+            LoggerFactory.getLogger("test-redis-input"), new QueueRedisClientFactory(data));
+
+        input.start();
+        input.tick();
+        assertThat(data).hasSize(2);
+        assertThat(runtime.items).isEmpty();
+        when(state.enabled()).thenReturn(true);
+        listener.get().accept(state);
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("one");
+
+        when(state.enabled()).thenReturn(false);
+        listener.get().accept(state);
+        input.stop();
+        input.start();
+        input.tick();
+        assertThat(data).hasSize(1);
+        when(state.enabled()).thenReturn(true);
+        listener.get().accept(state);
+        input.tick();
+        assertThat(runtime.items).extracting(WorkItem::asString).containsExactly("one", "two");
     }
 
     @Test
@@ -124,7 +169,7 @@ class RedisDataSetWorkInputTest {
         RedisDataSetInputProperties properties = baseProperties();
         properties.setListName(null);
         properties.setSources(List.of(source("red", 3.0), source("bal", 1.0)));
-        properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
+        properties.setPickStrategy(RedisDatasetPickStrategy.ROUND_ROBIN);
         properties.setRatePerSec(2.0);
         properties.setInitialDelayMs(10_000L);
         properties.setTickIntervalMs(1_000L);
@@ -160,7 +205,7 @@ class RedisDataSetWorkInputTest {
         RedisDataSetInputProperties properties = baseProperties();
         properties.setListName(null);
         properties.setSources(List.of(source("red", 1.0), source("bal", 1.0)));
-        properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
+        properties.setPickStrategy(RedisDatasetPickStrategy.ROUND_ROBIN);
         properties.setRatePerSec(3.0);
         properties.setInitialDelayMs(10_000L);
         properties.setTickIntervalMs(1_000L);
@@ -197,7 +242,7 @@ class RedisDataSetWorkInputTest {
         RedisDataSetInputProperties properties = baseProperties();
         properties.setListName(null);
         properties.setSources(List.of(source("red", 1.0), source("bal", 1.0)));
-        properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM);
+        properties.setPickStrategy(RedisDatasetPickStrategy.WEIGHTED_RANDOM);
         properties.setRatePerSec(1.0);
         properties.setInitialDelayMs(10_000L);
         properties.setTickIntervalMs(1_000L);
@@ -230,31 +275,6 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
-    void rejectsInvalidSourceEntriesInsteadOfDroppingOrDefaultingThem() {
-        RedisDataSetInputProperties properties = new RedisDataSetInputProperties();
-        List<RedisDataSetInputProperties.Source> sourcesWithNull = new ArrayList<>();
-        sourcesWithNull.add(null);
-
-        assertThatThrownBy(() -> properties.setSources(sourcesWithNull))
-            .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("sources[0]");
-
-        RedisDataSetInputProperties.Source missingWeight = new RedisDataSetInputProperties.Source();
-        missingWeight.setListName("red");
-        assertThatThrownBy(() -> properties.setSources(List.of(missingWeight)))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("sources[0].weight");
-
-        assertThatThrownBy(() -> properties.setSources(List.of(source("", 1.0))))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("sources[0].listName");
-
-        assertThatThrownBy(() -> properties.setSources(List.of(source("red", 0.0))))
-            .isInstanceOf(IllegalStateException.class)
-            .hasMessageContaining("sources[0].weight");
-    }
-
-    @Test
     void appliesExplicitRawScalarUpdates() {
         RedisDataSetInputProperties properties = baseProperties();
         input = inputFor(properties);
@@ -273,9 +293,9 @@ class RedisDataSetWorkInputTest {
 
         assertThat(properties.getHost()).isEqualTo("redis-updated");
         assertThat(properties.getPort()).isEqualTo(6380);
-        assertThat(properties.isSsl()).isTrue();
-        assertThat(properties.getPickStrategy()).isEqualTo(RedisDataSetInputProperties.PickStrategy.WEIGHTED_RANDOM);
-        assertThat(properties.getRatePerSec()).isEqualTo(2500.5);
+        assertThat(properties.getSsl()).isEqualTo(true);
+        assertThat(properties.getPickStrategy()).isEqualTo(RedisDatasetPickStrategy.WEIGHTED_RANDOM);
+        assertThat(properties.ratePerSec()).isEqualTo(2500.5);
     }
 
     @Test
@@ -292,6 +312,25 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
+    void rejectsNullSourcesWithoutClearingBoundSourcesOrApplyingOtherFields() {
+        RedisDataSetInputProperties properties = baseProperties();
+        properties.setListName(null);
+        var sources = List.of(source("red", 1.0));
+        properties.setSources(sources);
+        input = inputFor(properties);
+        Map<String, Object> update = new LinkedHashMap<>();
+        update.put("sources", null);
+        update.put("ratePerSec", 3.0);
+
+        assertThatThrownBy(() -> input.applyRawConfigOverrides(Map.of("inputs", Map.of("redis", update))))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("inputs.redis.sources");
+        assertThat(properties.getSources()).containsExactlyElementsOf(sources);
+        assertThat(properties.getListName()).isNull();
+        assertThat(properties.ratePerSec()).isEqualTo(1.0);
+        properties.validateConfigured("inputs.redis");
+    }
+
+    @Test
     void rejectsMalformedRawScalarUpdateWithoutApplyingPartialChanges() {
         assertMalformedRawUpdateKeepsListName(Map.of("host", " "));
         assertMalformedRawUpdateKeepsListName(Map.of("port", "not-a-port"));
@@ -302,6 +341,27 @@ class RedisDataSetWorkInputTest {
         assertMalformedRawUpdateKeepsListName(Map.of("pickStrategy", "RANDOMISH"));
         assertMalformedRawUpdateKeepsListName(Map.of("ratePerSec", "fast"));
         assertMalformedRawUpdateKeepsListName(Map.of("ratePerSec", "-0.1"));
+        assertMalformedRawUpdateKeepsListName(Map.of("sources", List.of(
+            Map.of("listName", "red", "weight", 1), Map.of("listName", " red ", "weight", 2))));
+    }
+
+    @Test
+    void requiresAnExplicitValidModeChangeBeforeMutatingSelection() {
+        RedisDataSetInputProperties properties = baseProperties();
+        input = inputFor(properties);
+        var sources = List.of(Map.of("listName", "red", "weight", 1));
+        assertThatThrownBy(() -> input.applyRawConfigOverrides(Map.of("inputs", Map.of("redis", Map.of("sources", sources)))))
+            .hasMessageContaining("exactly one source mode");
+        assertThat(properties.getListName()).isEqualTo("dataset");
+
+        input.applyRawConfigOverrides(Map.of("inputs", Map.of("redis", Map.of("listName", "", "sources", sources))));
+        assertThat(properties.getListName()).isNull();
+        assertThat(properties.getSources()).containsExactly(source("red", 1));
+        assertThatThrownBy(() -> input.applyRawConfigOverrides(Map.of("inputs", Map.of("redis", Map.of(
+            "sources", List.of(), "ratePerSec", 3)))))
+            .hasMessageContaining("exactly one source mode");
+        assertThat(properties.getSources()).containsExactly(source("red", 1));
+        assertThat(properties.ratePerSec()).isEqualTo(1);
     }
 
     private static WorkerDefinition definition() {
@@ -326,7 +386,14 @@ class RedisDataSetWorkInputTest {
 
     private static WorkerControlPlaneRuntime mockControlPlane() {
         WorkerControlPlaneRuntime runtime = mock(WorkerControlPlaneRuntime.class);
-        doNothing().when(runtime).registerStateListener(any(), any());
+        doAnswer(call -> {
+            java.util.function.Consumer<WorkerControlPlaneRuntime.WorkerStateSnapshot> listener = call.getArgument(1);
+            var snapshot = mock(WorkerControlPlaneRuntime.WorkerStateSnapshot.class);
+            when(snapshot.enabled()).thenReturn(true);
+            when(snapshot.rawConfig()).thenReturn(Map.of());
+            listener.accept(snapshot);
+            return null;
+        }).when(runtime).registerStateListener(any(), any());
         doNothing().when(runtime).emitStatusSnapshot();
         return runtime;
     }
@@ -338,9 +405,8 @@ class RedisDataSetWorkInputTest {
         properties.setSsl(false);
         properties.setListName("dataset");
         properties.setSources(List.of());
-        properties.setPickStrategy(RedisDataSetInputProperties.PickStrategy.ROUND_ROBIN);
+        properties.setPickStrategy(RedisDatasetPickStrategy.ROUND_ROBIN);
         properties.setRatePerSec(1.0);
-        properties.setEnabled(true);
         return properties;
     }
 
@@ -369,11 +435,8 @@ class RedisDataSetWorkInputTest {
         assertThat(properties.getListName()).isEqualTo("dataset");
     }
 
-    private static RedisDataSetInputProperties.Source source(String listName, double weight) {
-        RedisDataSetInputProperties.Source source = new RedisDataSetInputProperties.Source();
-        source.setListName(listName);
-        source.setWeight(weight);
-        return source;
+    private static RedisDatasetSource source(String listName, double weight) {
+        return new RedisDatasetSource(listName, weight);
     }
 
     private static final class QueueRedisClientFactory implements RedisDataSetWorkInput.RedisClientFactory {
@@ -385,7 +448,7 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(RedisDataSetInputProperties properties) {
+        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new QueueRedisListClient(queue);
         }
     }
@@ -418,7 +481,7 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(RedisDataSetInputProperties properties) {
+        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new MultiQueueRedisListClient(queues);
         }
     }

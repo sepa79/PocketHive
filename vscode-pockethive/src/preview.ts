@@ -1,8 +1,7 @@
+import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
-import { randomUUID } from 'crypto';
 
-import { PREVIEW_SCHEME } from './constants';
-import { getOutputChannel } from './output';
+export const PREVIEW_SCHEME = 'pockethive-preview';
 
 class PreviewProvider implements vscode.TextDocumentContentProvider {
   private readonly emitter = new vscode.EventEmitter<vscode.Uri>();
@@ -17,12 +16,8 @@ class PreviewProvider implements vscode.TextDocumentContentProvider {
   }
 
   provideTextDocumentContent(uri: vscode.Uri): string {
-    const params = new URLSearchParams(uri.query);
-    const id = params.get('id');
-    if (!id) {
-      return '';
-    }
-    return this.documents.get(id) ?? '';
+    const id = new URLSearchParams(uri.query).get('id');
+    return id ? this.documents.get(id) ?? '' : '';
   }
 }
 
@@ -33,27 +28,14 @@ export function initPreviewProvider(): PreviewProvider {
   return provider;
 }
 
-export async function openPreviewDocument(
-  title: string,
-  content: string,
-  language?: string,
-  preview = true
-): Promise<void> {
-  if (!provider) {
-    throw new Error('Preview provider not initialized.');
-  }
+export async function openPreviewDocument(title: string, content: string, language?: string): Promise<void> {
+  if (!provider) throw new Error('Preview provider not initialized.');
   const uri = provider.createUri(title, content);
   const document = await vscode.workspace.openTextDocument(uri);
-  if (language) {
-    await vscode.languages.setTextDocumentLanguage(document, language);
-  }
-  await vscode.window.showTextDocument(document, { preview });
-  const outputChannel = getOutputChannel();
-  outputChannel.appendLine(`[${new Date().toISOString()}] OPEN ${title}`);
-  outputChannel.show(true);
+  if (language) await vscode.languages.setTextDocumentLanguage(document, language);
+  await vscode.window.showTextDocument(document, { preview: true });
 }
 
-export async function openJsonPreview(title: string, data: unknown, preview = true): Promise<void> {
-  const content = JSON.stringify(data, null, 2);
-  await openPreviewDocument(title, content, 'json', preview);
+export async function openJsonPreview(title: string, data: unknown): Promise<void> {
+  await openPreviewDocument(title, JSON.stringify(data, null, 2), 'json');
 }

@@ -56,6 +56,10 @@ public enum ValidationIssue {
         ValidationCategory.SCENARIO,
         SCENARIO_DESCRIPTOR_FILE,
         "Repair " + SCENARIO_DESCRIPTOR_FILE + " so it has a valid id and swarm template."),
+    WORK_CONFIGURATION_DEFERRED(
+        ValidationCategory.SCENARIO,
+        SCENARIO_DESCRIPTOR_FILE,
+        "Render the expression and validate the resolved configuration before runtime use."),
     SUT_INVALID(
         ValidationCategory.SUT,
         "sut",

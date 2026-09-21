@@ -40,19 +40,22 @@ tests to focus on the relevant fields.
 
 ## Execution
 
-Run the suite once the PocketHive stack is deployed and the required environment variables are available. Helper
-scripts are available at the repository root for Unix-like and Windows environments:
+Run the suite once the PocketHive stack is deployed and the required environment variables are available. The helper
+script lives at the repository root and is supported on Linux/macOS/WSL:
 
 ```bash
-./start-e2e-tests.sh          # macOS/Linux
-start-e2e-tests.bat           # Windows
+./start-e2e-tests.sh
 ```
 
-Both wrappers accept additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
-command. When invoked without extra configuration, the scripts seed the environment with defaults that mirror the
+The wrapper accepts additional Maven arguments, which are forwarded to the underlying `./mvnw verify -pl e2e-tests -am`
+command. When invoked without extra configuration, the script seeds the environment with defaults that mirror the
 service container configuration (e.g. `http://localhost:8088/orchestrator`, `http://localhost:8088/scenario-manager`,
 `http://localhost:1083` for auth-service, `rabbitmq:5672` with the `guest/guest` account, and `ws://localhost:8088/ws`).
 Override any of these values by exporting the environment variables before launching the helper.
+
+The environment Cucumber suite is deliberately activated only by these wrappers.
+Plain `./mvnw test` still runs the E2E module's local unit and contract tests,
+but does not guess an environment, credentials, audit scope, or ingress target.
 
 The Unix helper also supports grouped execution so you do not need to rerun the entire 20-minute pack while iterating:
 
@@ -64,6 +67,12 @@ The Unix helper also supports grouped execution so you do not need to rerun the 
 ./start-e2e-tests.sh --group lifecycle,proxy
 ./start-e2e-tests.sh --group data --tags @tcp-timeout
 ```
+
+An unfiltered run is the **full control-plane audit**: it must observe `signal`,
+`result`, `outcome`, `journal`, `alert`, and `metric`. A group, tag, or name
+filter is a targeted audit; it retains schema, routing, and operation-flow
+checks without requiring message families that the selected scenarios do not
+exercise.
 
 The Unix helper can load deployment target profiles from `deploy/e2e-targets/<name>.env`:
 

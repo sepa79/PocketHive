@@ -1,21 +1,23 @@
 package io.pockethive.generator;
 
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.HttpRequestEnvelope;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkStep;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
-import io.pockethive.worker.sdk.config.WorkerCapability;
+import io.pockethive.work.api.HttpRequest;
+
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.HttpRequestEnvelope;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkStep;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
+import io.pockethive.work.api.WorkerCapability;
 import io.pockethive.worker.sdk.templating.MessageBodyType;
 import io.pockethive.worker.sdk.templating.MessageTemplate;
 import io.pockethive.worker.sdk.templating.MessageTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
-import org.springframework.amqp.core.MessageProperties;
+import org.springframework.util.MimeTypeUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
@@ -46,6 +48,10 @@ import org.springframework.stereotype.Component;
  * it is emitting work. You can also inspect the generated {@code WorkItem}—it includes headers
  * like {@code content-type}, {@code message-id}, and {@code x-ph-service} to help with
  * observability.</p>
+ * <p>
+ * Responsibility: construct generated Work payloads and metadata from configured templates.
+ * Must not: provision broker topology or decide CP lifecycle outcomes.
+ * Contract: RESP-GENERATOR-WORK — docs/architecture/runtime-responsibilities.md#resp-generator-work.
  */
 @Component("generatorWorker")
 @PocketHiveWorker(
@@ -143,12 +149,12 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
       return WorkItem.text(context.info(), rendered.body())
           .headers(headers)
           .messageId(messageId)
-          .contentType(MessageProperties.CONTENT_TYPE_JSON)
+          .contentType(MimeTypeUtils.APPLICATION_JSON_VALUE)
           .build();
     }
 
     HttpRequestEnvelope payload = HttpRequestEnvelope.of(
-        new HttpRequestEnvelope.HttpRequest(
+        new HttpRequest(
             rendered.method(),
             rendered.path(),
             rendered.headers(),
@@ -159,7 +165,7 @@ class GeneratorWorkerImpl implements PocketHiveWorkerFunction {
     return WorkItem.json(context.info(), payload)
         .headers(baseHeaders)
         .messageId(messageId)
-        .contentType(MessageProperties.CONTENT_TYPE_JSON)
+        .contentType(MimeTypeUtils.APPLICATION_JSON_VALUE)
         .build();
   }
 

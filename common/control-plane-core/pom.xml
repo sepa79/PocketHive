@@ -9,25 +9,36 @@
   </parent>
   <artifactId>control-plane-core</artifactId>
   <properties>
+    <work.boundary.enforcer.skip>false</work.boundary.enforcer.skip>
     <java.version>21</java.version>
     <jackson.version>2.21.3</jackson.version>
-    <spring.amqp.version>3.2.10</spring.amqp.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>${maven.multiModuleProjectDirectory}/docs/spec</directory>
+        <includes>
+          <include>control-events.schema.json</include>
+          <include>swarm-lifecycle.schema.json</include>
+        </includes>
+        <targetPath>io/pockethive/controlplane/schema</targetPath>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-jar-plugin</artifactId>
-        <version>3.3.0</version>
-        <executions>
-          <execution>
-            <goals>
-              <goal>test-jar</goal>
-            </goals>
-          </execution>
-        </executions>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <configuration>
+          <systemPropertyVariables>
+            <pockethive.repositoryRoot>${maven.multiModuleProjectDirectory}</pockethive.repositoryRoot>
+          </systemPropertyVariables>
+        </configuration>
       </plugin>
+      <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-jar-plugin</artifactId><version>3.4.2</version><executions><execution><id>test-fixtures</id><phase>process-test-classes</phase><goals><goal>test-jar</goal></goals></execution></executions></plugin>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
@@ -39,6 +50,12 @@
     </plugins>
   </build>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version><scope>test</scope></dependency>
+    <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>swarm-model</artifactId>
+      <version>${project.version}</version>
+    </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
       <artifactId>topology-core</artifactId>
@@ -46,13 +63,8 @@
     </dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
-      <artifactId>observability</artifactId>
+      <artifactId>observability-core</artifactId>
       <version>${project.version}</version>
-    </dependency>
-    <dependency>
-      <groupId>org.springframework.amqp</groupId>
-      <artifactId>spring-rabbit</artifactId>
-      <version>${spring.amqp.version}</version>
     </dependency>
     <dependency>
       <groupId>com.fasterxml.jackson.core</groupId>
@@ -86,7 +98,6 @@
       <groupId>com.networknt</groupId>
       <artifactId>json-schema-validator</artifactId>
       <version>1.0.87</version>
-      <scope>test</scope>
     </dependency>
   </dependencies>
 </project>

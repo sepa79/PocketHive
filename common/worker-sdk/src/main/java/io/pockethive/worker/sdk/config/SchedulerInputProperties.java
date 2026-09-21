@@ -1,106 +1,122 @@
 package io.pockethive.worker.sdk.config;
 
+import io.pockethive.work.config.binding.WorkInputConfig;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+import io.pockethive.work.local.scheduler.SchedulerSettings;
+import io.pockethive.work.local.scheduler.SchedulerSettingsParser;
+import io.pockethive.work.config.input.InputRateParser;
+import io.pockethive.work.config.input.InputScheduleField;
+import io.pockethive.work.config.input.InputScheduleParser;
+import io.pockethive.work.config.WorkerInputType;
+
 /**
- * Scheduler-specific tuning parameters that can be scoped per worker role.
+ * Responsibility: bind scheduler startup settings and delegate rate/timing/limit validation to work-config.
+ * Must not: implement rate/timing/limit constraints or schedule work.
+ * Consumes RESP-WORK-SCHEDULER-SETTINGS for complete startup validation.
+ * Worker enablement belongs to RESP-WORK-STATE, never these input properties.
+ * Contract: RESP-WORK-IO-CONFIG — docs/architecture/runtime-responsibilities.md#resp-work-io-config.
+ * Consumes RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE:
+ * docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  */
 public class SchedulerInputProperties implements WorkInputConfig {
 
-    private static final double MIN_RATE_PER_SEC = 0.0;
-    private static final long MIN_MAX_MESSAGES = 0L;
-
-    private boolean enabled = false;
-    private long initialDelayMs = 0L;
-    private long tickIntervalMs = 1_000L;
-    private int maxPendingTicks = 1;
-    private Double ratePerSec;
+    private Object initialDelayMs =
+        InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.INITIAL_DELAY_MS);
+    private Object tickIntervalMs =
+        InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.TICK_INTERVAL_MS);
+    private Object maxPendingTicks =
+        InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.MAX_PENDING_TICKS);
+    private Object ratePerSec;
     /**
-     * Optional upper bound on the total number of messages the scheduler will
+     * Required limit on the total number of messages the scheduler will
      * dispatch for the current configuration. A value of {@code 0} means
      * "no limit" (infinite run).
      */
-    private Long maxMessages;
+    private Object maxMessages =
+        InputScheduleParser.initialValue(WorkerInputType.SCHEDULER, InputScheduleField.MAX_MESSAGES);
 
-    public boolean isEnabled() {
-        return enabled;
-    }
-
-    public void setEnabled(boolean enabled) {
-        this.enabled = enabled;
-    }
-
-    public long getInitialDelayMs() {
+    public Object getInitialDelayMs() {
         return initialDelayMs;
     }
 
-    public void setInitialDelayMs(long initialDelayMs) {
-        this.initialDelayMs = Math.max(0L, initialDelayMs);
+    public void setInitialDelayMs(Object initialDelayMs) {
+        this.initialDelayMs = initialDelayMs;
     }
 
-    public long getTickIntervalMs() {
+    public long initialDelayMs() {
+        return new InputScheduleParser().parse(initialDelayMs, InputScheduleField.INITIAL_DELAY_MS,
+            InputScheduleField.INITIAL_DELAY_MS.path(WorkerInputType.SCHEDULER));
+    }
+
+    public Object getTickIntervalMs() {
         return tickIntervalMs;
     }
 
-    public void setTickIntervalMs(long tickIntervalMs) {
-        this.tickIntervalMs = Math.max(100L, tickIntervalMs);
+    public void setTickIntervalMs(Object tickIntervalMs) {
+        this.tickIntervalMs = tickIntervalMs;
     }
 
-    public int getMaxPendingTicks() {
+    public long tickIntervalMs() {
+        return new InputScheduleParser().parse(tickIntervalMs, InputScheduleField.TICK_INTERVAL_MS,
+            InputScheduleField.TICK_INTERVAL_MS.path(WorkerInputType.SCHEDULER));
+    }
+
+    public Object getMaxPendingTicks() {
         return maxPendingTicks;
     }
 
-    public void setMaxPendingTicks(int maxPendingTicks) {
-        this.maxPendingTicks = Math.max(1, maxPendingTicks);
+    public void setMaxPendingTicks(Object maxPendingTicks) {
+        this.maxPendingTicks = maxPendingTicks;
     }
 
-    public double getRatePerSec() {
-        return requireRatePerSec(ratePerSec, "ratePerSec");
+    public int maxPendingTicks() {
+        return (int) new InputScheduleParser().parse(maxPendingTicks, InputScheduleField.MAX_PENDING_TICKS,
+            InputScheduleField.MAX_PENDING_TICKS.path(WorkerInputType.SCHEDULER));
     }
 
-    public void setRatePerSec(double ratePerSec) {
+    public Object getRatePerSec() {
+        return ratePerSec;
+    }
+
+    public void setRatePerSec(Object ratePerSec) {
         this.ratePerSec = ratePerSec;
     }
 
-    public long getMaxMessages() {
-        return requireMaxMessages(maxMessages, "maxMessages");
+    public double ratePerSec() {
+        return new InputRateParser().parse(ratePerSec, InputRateParser.SCHEDULER_PATH);
     }
 
-    public void setMaxMessages(long maxMessages) {
+    public Object getMaxMessages() {
+        return maxMessages;
+    }
+
+    public void setMaxMessages(Object maxMessages) {
         this.maxMessages = maxMessages;
+    }
+
+    public long maxMessages() {
+        return new InputScheduleParser().parse(maxMessages, InputScheduleField.MAX_MESSAGES,
+            InputScheduleField.MAX_MESSAGES.path(WorkerInputType.SCHEDULER));
+    }
+
+    public SchedulerSettings settings() {
+        return new SchedulerSettingsParser().parse(rawSettings(), "inputs.scheduler");
     }
 
     @Override
     public void validateConfigured(String prefix) {
-        requireRatePerSec(ratePerSec, prefix + ".ratePerSec");
-        requireMaxMessages(maxMessages, prefix + ".maxMessages");
+        new SchedulerSettingsParser().parse(rawSettings(), prefix);
     }
 
-    private static double requirePresent(Double value, String name) {
-        if (value == null) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
-    }
-
-    private static long requirePresent(Long value, String name) {
-        if (value == null) {
-            throw new IllegalStateException(name + " must be configured");
-        }
-        return value;
-    }
-
-    private static double requireRatePerSec(Double value, String name) {
-        double rate = requirePresent(value, name);
-        if (!Double.isFinite(rate) || rate < MIN_RATE_PER_SEC) {
-            throw new IllegalStateException(name + " must be >= " + MIN_RATE_PER_SEC);
-        }
-        return rate;
-    }
-
-    private static long requireMaxMessages(Long value, String name) {
-        long limit = requirePresent(value, name);
-        if (limit < MIN_MAX_MESSAGES) {
-            throw new IllegalStateException(name + " must be >= " + MIN_MAX_MESSAGES);
-        }
-        return limit;
+    private Map<String, Object> rawSettings() {
+        var values = new LinkedHashMap<String, Object>();
+        values.put(InputRateParser.FIELD, ratePerSec);
+        values.put(InputScheduleField.INITIAL_DELAY_MS.key(), initialDelayMs);
+        values.put(InputScheduleField.TICK_INTERVAL_MS.key(), tickIntervalMs);
+        values.put(InputScheduleField.MAX_PENDING_TICKS.key(), maxPendingTicks);
+        values.put(InputScheduleField.MAX_MESSAGES.key(), maxMessages);
+        return values;
     }
 }

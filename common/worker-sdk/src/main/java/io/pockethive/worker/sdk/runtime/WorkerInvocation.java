@@ -1,14 +1,20 @@
 package io.pockethive.worker.sdk.runtime;
 
-import io.pockethive.worker.sdk.api.HistoryPolicy;
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkStep;
+
+import io.pockethive.work.api.HistoryPolicy;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import java.util.List;
 import java.util.Objects;
 
 /**
  * Encapsulates invocation of the worker implementation.
+ * <p>
+ * Responsibility: execute one worker function through the configured interceptor chain.
+ * Must not: reimplement service business logic or introduce a second output publication for the same result.
+ * Contract: RESP-WORK-INVOCATION — docs/architecture/runtime-responsibilities.md#resp-work-invocation.
  */
 final class WorkerInvocation {
 
@@ -91,14 +97,14 @@ final class WorkerInvocation {
     }
 
     private WorkItem stampNewSteps(WorkItem input, WorkItem output, WorkerContext context) {
-        List<io.pockethive.worker.sdk.api.WorkStep> inSteps = toList(input.steps());
-        List<io.pockethive.worker.sdk.api.WorkStep> outSteps = toList(output.steps());
+        List<WorkStep> inSteps = toList(input.steps());
+        List<WorkStep> outSteps = toList(output.steps());
         if (outSteps.size() <= inSteps.size()) {
             return output;
         }
-        List<io.pockethive.worker.sdk.api.WorkStep> updated = new java.util.ArrayList<>(outSteps);
+        List<WorkStep> updated = new java.util.ArrayList<>(outSteps);
         for (int i = inSteps.size(); i < outSteps.size(); i++) {
-            io.pockethive.worker.sdk.api.WorkStep step = outSteps.get(i);
+            WorkStep step = outSteps.get(i);
             java.util.Map<String, Object> headers = new java.util.LinkedHashMap<>(step.headers());
             headers.put(WorkItem.STEP_SERVICE_HEADER, context.info().role());
             headers.put(WorkItem.STEP_INSTANCE_HEADER, context.info().instanceId());
@@ -107,14 +113,14 @@ final class WorkerInvocation {
         return output.toBuilder().steps(updated).build();
     }
 
-    private static List<io.pockethive.worker.sdk.api.WorkStep> toList(Iterable<io.pockethive.worker.sdk.api.WorkStep> steps) {
+    private static List<WorkStep> toList(Iterable<WorkStep> steps) {
         if (steps instanceof List<?> list) {
             @SuppressWarnings("unchecked")
-            List<io.pockethive.worker.sdk.api.WorkStep> cast = (List<io.pockethive.worker.sdk.api.WorkStep>) list;
+            List<WorkStep> cast = (List<WorkStep>) list;
             return cast;
         }
-        List<io.pockethive.worker.sdk.api.WorkStep> result = new java.util.ArrayList<>();
-        for (io.pockethive.worker.sdk.api.WorkStep step : steps) {
+        List<WorkStep> result = new java.util.ArrayList<>();
+        for (WorkStep step : steps) {
             result.add(step);
         }
         return result;

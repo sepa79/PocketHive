@@ -1,9 +1,15 @@
 package io.pockethive.worker.sdk.testing;
 
+import io.pockethive.controlplane.spring.WorkerControlTopology;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-import io.pockethive.control.CommandState;
+import io.pockethive.swarm.model.lifecycle.Target;
+import io.pockethive.swarm.model.lifecycle.TerminalResult;
+import io.pockethive.swarm.model.lifecycle.TerminalStatus;
+import java.time.Instant;
+import java.util.Map;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.messaging.ControlPlaneEmitter;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
@@ -25,7 +31,7 @@ class ControlPlaneTestFixturesTest {
         assertThat(ControlPlaneTestFixtures.hiveExchange("swarm-1")).isEqualTo("ph.swarm-1.hive");
         assertThat(ControlPlaneTestFixtures.workerQueue("swarm-1", "generator")).isEqualTo("ph.swarm-1.gen");
         assertThat(ControlPlaneTestFixtures.workerQueue("swarm-1", "moderator")).isEqualTo("ph.swarm-1.mod");
-        WorkerControlPlaneProperties.ControlPlane controlPlane = properties.getControlPlane();
+        WorkerControlTopology controlPlane = properties.getControlPlane();
         assertThat(controlPlane.getControlQueueName()).isEqualTo("ph.control.swarm-1.generator.worker-a");
         assertThat(controlPlane.getRoutes().configSignals())
             .contains("signal.config-update.swarm-1.generator.{instance}");
@@ -41,17 +47,21 @@ class ControlPlaneTestFixturesTest {
     }
 
     @Test
-    void workerEmitterPublishesReadyEvent() {
+    void workerEmitterPublishesTerminalResult() {
         CapturingPublisher publisher = new CapturingPublisher();
         ControlPlaneIdentity identity = ControlPlaneTestFixtures.workerIdentity("swarm-1", "generator", "worker-a");
 
         ControlPlaneEmitter emitter = ControlPlaneTestFixtures.workerEmitter(publisher, identity);
-        ControlPlaneEmitter.ReadyContext context = ControlPlaneEmitter.ReadyContext
-            .builder("config-update", "corr-1", "cmd-1", new CommandState(null, false, null))
-            .result("ok")
-            .build();
+        ControlPlaneEmitter.ResultContext context = new ControlPlaneEmitter.ResultContext(
+            "config-update", "corr-1", "cmd-1",
+            new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of(
+                "target", new Target("generator", "worker-a"),
+                "requestedEnabled", true,
+                "observedEnabled", true,
+                "appliedConfigSha256", "a".repeat(64))),
+            Instant.now());
 
-        emitter.emitReady(context);
+        emitter.emitResult(context);
 
         assertThat(publisher.lastEvent()).isNotNull();
         assertThat(publisher.lastEvent().routingKey()).contains("generator");

@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
 import io.pockethive.templating.PebbleTemplateRenderer;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -174,7 +176,7 @@ class ClearingExportBatchWriterHardeningTest {
 
   private static ClearingExportBatchWriter newWriter(ClearingExportSink sink, LongSupplier nowMsSupplier) {
     ClearingExportFileAssembler assembler =
-        new ClearingExportFileAssembler(new PebbleTemplateRenderer(), new XmlOutputFormatter());
+        new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), new XmlOutputFormatter());
     return new ClearingExportBatchWriter(assembler, sink, nowMsSupplier, false);
   }
 

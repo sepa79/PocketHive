@@ -1,5 +1,7 @@
 package io.pockethive.templating;
 
+import io.pockethive.templating.api.TemplateRenderingException;
+
 import io.pebbletemplates.pebble.extension.AbstractExtension;
 import io.pebbletemplates.pebble.extension.Function;
 import io.pebbletemplates.pebble.template.EvaluationContext;
@@ -15,6 +17,11 @@ import java.util.SplittableRandom;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ThreadLocalRandom;
 
+/**
+ * Responsibility: expose weighted selection functions to the shared Pebble engine.
+ * Must not: select sequence connections, resolve application beans or expose an alternative engine contract.
+ * Contract: RESP-TEMPLATE-RENDER — docs/architecture/runtime-responsibilities.md#resp-template-render.
+ */
 final class PebbleWeightedSelectionExtension extends AbstractExtension {
 
     private final SeededSelector seededSelector;

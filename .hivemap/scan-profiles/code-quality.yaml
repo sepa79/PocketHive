@@ -1,0 +1,53 @@
+formatVersion: 1
+profileId: code-quality-review
+include:
+  - common/**
+  - auth-service/**
+  - clearing-export-service/**
+  - db-query-service/**
+  - generator-service/**
+  - http-sequence-service/**
+  - moderator-service/**
+  - network-proxy-manager-service/**
+  - orchestrator-service/**
+  - postprocessor-service/**
+  - processor-service/**
+  - pockethive-mcp-service/**
+  - request-builder-service/**
+  - scenario-manager-service/**
+  - swarm-controller-service/**
+  - tcp-mock-server/**
+  - trigger-service/**
+  - ui-v2/**
+  - vscode-pockethive/**
+  - tools/**
+  - AGENTS.md
+  - README.md
+  - docs/ARCHITECTURE.md
+  - docs/ORCHESTRATOR-REST.md
+  - docs/README.md
+  - docs/spec/**
+  - docs/architecture/**
+  - docs/control-plane/**
+  - docs/ci/**
+  - docs/mcp/**
+  - docs/scenarios/**
+  - docs/sdk/**
+  - docs/ui-v2/**
+  - docs/plugins/pockethive/**
+exclude:
+  - docs/changelog.html
+  - docs/readme.html
+archivePatterns:
+  - archive/**
+  - docs/archive/**
+legacyPatterns:
+  - archive/legacy-ui/**
+  - docs/todo/**
+  - docs/inProgress/**
+  - docs/toBeReviewed/**
+generatedPatterns:
+  - node_modules/**
+  - **/target/**
+  - **/dist/**
+  - **/coverage/**

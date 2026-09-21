@@ -1,17 +1,17 @@
 package io.pockethive.controlplane.spring;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.consumer.SelfFilter;
 import io.pockethive.controlplane.manager.ManagerControlPlane;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
+import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.topology.ControlPlaneTopologyDescriptor;
 import io.pockethive.controlplane.topology.ControlPlaneTopologySettings;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import org.springframework.amqp.core.Declarables;
-import org.springframework.amqp.core.TopicExchange;
+import io.pockethive.rabbit.api.RabbitTopologySpec;
+import io.pockethive.rabbit.api.RabbitExchangeSpec;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
@@ -22,6 +22,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 /**
+ * Responsibility: compose manager Control Plane identity, messaging and declarations.
+ * Must not: declare Work resources or implement workload lifecycle decisions.
+ * Contract: RESP-CP-COMPOSITION — docs/architecture/runtime-responsibilities.md#resp-cp-composition.
+ * <p>
  * Auto-configuration that exposes manager-facing control-plane beans.
  */
 @Configuration(proxyBeanMethods = false)
@@ -55,24 +59,24 @@ public class ManagerControlPlaneAutoConfiguration {
 
     @Bean(name = "managerControlPlaneDeclarables")
     @ConditionalOnMissingBean(name = "managerControlPlaneDeclarables")
-    Declarables managerControlPlaneDeclarables(
+    RabbitTopologySpec managerControlPlaneDeclarables(
         @Qualifier("managerControlPlaneTopologyDescriptor") ControlPlaneTopologyDescriptor descriptor,
         @Qualifier("managerControlPlaneIdentity") ControlPlaneIdentity identity,
         ControlPlaneTopologyDeclarableFactory factory,
-        TopicExchange controlPlaneExchange) {
+        RabbitExchangeSpec controlPlaneExchange) {
         if (!properties.isDeclareTopology() || !properties.getManager().isDeclareTopology()) {
-            return new Declarables(List.of());
+            return new RabbitTopologySpec(List.of(), List.of());
         }
-        return factory.create(descriptor, identity, controlPlaneExchange, controlPlaneExchange);
+        return factory.create(descriptor, identity, controlPlaneExchange);
     }
 
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(ControlPlanePublisher.class)
-    ManagerControlPlane managerControlPlane(ObjectMapper objectMapper,
+    ManagerControlPlane managerControlPlane(ControlPlaneCodec codec,
         ControlPlanePublisher publisher,
         @Qualifier("managerControlPlaneIdentity") ObjectProvider<ControlPlaneIdentity> identityProvider) {
-        ManagerControlPlane.Builder builder = ManagerControlPlane.builder(publisher, objectMapper);
+        ManagerControlPlane.Builder builder = ManagerControlPlane.builder(publisher, codec);
         ControlPlaneProperties.ManagerProperties manager = properties.getManager();
         if (manager.isListenerEnabled()) {
             ControlPlaneIdentity identity = identityProvider.getIfAvailable();

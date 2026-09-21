@@ -1,5 +1,10 @@
 package io.pockethive.processor.handler;
 
+import io.pockethive.work.api.Iso8583Metrics;
+import io.pockethive.work.api.Iso8583Outcome;
+import io.pockethive.work.api.Iso8583Request;
+import io.pockethive.work.api.Iso8583RequestInfo;
+
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -20,12 +25,12 @@ import io.pockethive.processor.transport.TcpTransportFactory;
 import io.pockethive.worker.sdk.auth.AuthApplyAs;
 import io.pockethive.worker.sdk.auth.AuthRef;
 import io.pockethive.worker.sdk.auth.AuthRuntime;
-import io.pockethive.worker.sdk.api.Iso8583RequestEnvelope;
-import io.pockethive.worker.sdk.api.Iso8583ResultEnvelope;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.Iso8583RequestEnvelope;
+import io.pockethive.work.api.Iso8583ResultEnvelope;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.net.URI;
 import java.time.Clock;
 import java.util.HashMap;
@@ -37,6 +42,11 @@ import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Responsibility: execute ISO8583 exchanges and construct ISO result observations.
+ * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ */
 public class Iso8583ProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
@@ -76,7 +86,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(CallMetrics.failure(0L, 0L, -1), ex, Map.of("transport", "iso8583"));
     }
-    Iso8583RequestEnvelope.Iso8583Request request = requestEnvelope.request();
+    Iso8583Request request = requestEnvelope.request();
 
     Endpoint endpoint;
     try {
@@ -92,17 +102,18 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       wireProfile = WireProfile.fromId(request.wireProfileId());
       payloadBytes = decodePayload(request);
       if (request.authApplications() != null && !request.authApplications().isEmpty()) {
-        AuthRuntime authRuntime = AuthRuntime.forApplications(
-            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
-        String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
-        for (AuthRef authRef : request.authApplications()) {
-          if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
-            authTransportOptions = authRuntime.transportOptions(authRef, context);
-          } else {
-            payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
+        try (AuthRuntime authRuntime = AuthRuntime.forApplications(
+            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+          String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
+          for (AuthRef authRef : request.authApplications()) {
+            if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+              authTransportOptions = authRuntime.transportOptions(authRef, context);
+            } else {
+              payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
+            }
           }
+          payloadBytes = HexFormat.of().parseHex(payloadHex);
         }
-        payloadBytes = HexFormat.of().parseHex(payloadHex);
       }
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(
@@ -169,7 +180,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       metricsRecorder.record(metrics);
 
       Iso8583ResultEnvelope resultEnvelope = Iso8583ResultEnvelope.of(
-          new Iso8583ResultEnvelope.Iso8583RequestInfo(
+          new Iso8583RequestInfo(
               "iso8583",
               endpoint.scheme(),
               "SEND",
@@ -178,13 +189,13 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
               request.payloadAdapter(),
               payloadBytes.length
           ),
-          new Iso8583ResultEnvelope.Iso8583Outcome(
+          new Iso8583Outcome(
               Iso8583ResultEnvelope.OUTCOME_ISO8583_RESPONSE,
               200,
               HexFormat.of().withUpperCase().formatHex(response.body()),
               null
           ),
-          new Iso8583ResultEnvelope.Iso8583Metrics(metrics.durationMs(), metrics.connectionLatencyMs())
+          new Iso8583Metrics(metrics.durationMs(), metrics.connectionLatencyMs())
       );
 
       ObjectNode result = mapper.valueToTree(resultEnvelope);
@@ -227,7 +238,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     }
   }
 
-  private byte[] decodePayload(Iso8583RequestEnvelope.Iso8583Request request) {
+  private byte[] decodePayload(Iso8583Request request) {
     return switch (request.payloadAdapter()) {
       case "RAW_HEX" -> decodeRawHexPayload(request.payload());
       default -> throw new IllegalArgumentException("Unsupported ISO8583 payloadAdapter: " + request.payloadAdapter());
@@ -274,7 +285,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   }
 
   private Map<String, Object> requestMetadata(Endpoint endpoint,
-                                              Iso8583RequestEnvelope.Iso8583Request request,
+                                              Iso8583Request request,
                                               WireProfile profile) {
     Map<String, Object> requestMeta = new LinkedHashMap<>();
     requestMeta.put("transport", "iso8583");

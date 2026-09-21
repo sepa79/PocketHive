@@ -1,9 +1,9 @@
 package io.pockethive.trigger;
 
-import io.pockethive.worker.sdk.api.PocketHiveWorkerFunction;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.config.PocketHiveWorker;
+import io.pockethive.work.api.PocketHiveWorkerFunction;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.PocketHiveWorker;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.net.URI;
@@ -41,6 +41,10 @@ import org.springframework.stereotype.Component;
  * <p>The worker does not emit metrics, but it logs every shell line and HTTP request/response at
  * debug level. Pair those logs with the status updates captured below to troubleshoot unexpected
  * trigger behavior.</p>
+ * <p>
+ * Responsibility: execute one configured trigger action per runtime invocation.
+ * Must not: recalculate interval/single-request quota or own CP state.
+ * Contract: RESP-TRIGGER-WORK — docs/architecture/runtime-responsibilities.md#resp-trigger-work.
  */
 @Component("triggerWorker")
 @PocketHiveWorker(

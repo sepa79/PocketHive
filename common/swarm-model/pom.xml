@@ -13,6 +13,7 @@
     <jakarta.validation.version>3.0.2</jakarta.validation.version>
     <jackson.version>2.21.3</jackson.version>
     <jackson.annotations.version>2.21</jackson.annotations.version>
+    <networknt.json.schema.version>1.0.87</networknt.json.schema.version>
     <junit.jupiter.version>5.10.2</junit.jupiter.version>
   </properties>
   <dependencies>
@@ -30,7 +31,11 @@
       <groupId>com.fasterxml.jackson.core</groupId>
       <artifactId>jackson-databind</artifactId>
       <version>${jackson.version}</version>
-      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.networknt</groupId>
+      <artifactId>json-schema-validator</artifactId>
+      <version>${networknt.json.schema.version}</version>
     </dependency>
     <dependency>
       <groupId>org.junit.jupiter</groupId>
@@ -40,6 +45,18 @@
     </dependency>
   </dependencies>
   <build>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+      </resource>
+      <resource>
+        <directory>../../docs/spec</directory>
+        <includes>
+          <include>swarm-lifecycle.schema.json</include>
+        </includes>
+        <targetPath>io/pockethive/swarm/model/lifecycle/schema</targetPath>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

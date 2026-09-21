@@ -42,6 +42,7 @@ register_pockethive_image() {
 
 register_pockethive_image jvm-base "" "" docker/base/Dockerfile docker/base "" base
 register_pockethive_image auth-service auth-service auth-service auth-service/Dockerfile.runtime . "" runtime
+register_pockethive_image pockethive-mcp pockethive-mcp pockethive-mcp-service pockethive-mcp-service/Dockerfile.runtime . "" runtime
 register_pockethive_image scenario-manager scenario-manager scenario-manager-service scenario-manager-service/Dockerfile.runtime . "" runtime
 register_pockethive_image network-proxy-manager network-proxy-manager network-proxy-manager-service network-proxy-manager-service/Dockerfile.runtime . "" runtime
 register_pockethive_image orchestrator orchestrator orchestrator-service orchestrator-service/Dockerfile.runtime . "" runtime

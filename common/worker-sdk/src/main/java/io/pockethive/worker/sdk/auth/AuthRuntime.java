@@ -4,10 +4,10 @@ import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import io.pockethive.worker.sdk.api.WorkItem;
-import io.pockethive.worker.sdk.api.WorkerContext;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkerContext;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URLEncoder;
@@ -34,7 +34,14 @@ import java.util.concurrent.ConcurrentMap;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
-public final class AuthRuntime {
+/**
+ * Responsibility: activate prepared worker profiles and coordinate credential application and token acquisition.
+ * Must not: duplicate profile preparation, signed acquisition or token storage/claim behavior, or own product identity.
+ * Delegates owned-resource lifetime to RESP-WORK-AUTH-RESOURCES.
+ * Consumes RESP-REDIS-CONNECTION-SETTINGS for validated token-store connection values.
+ * Contract: RESP-WORK-AUTH-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-work-auth-runtime.
+ */
+public final class AuthRuntime implements AutoCloseable {
     private static final ObjectMapper JSON = new ObjectMapper().findAndRegisterModules();
     private static final ObjectMapper YAML = new ObjectMapper(YAMLFactory.builder()
         .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
@@ -49,22 +56,44 @@ public final class AuthRuntime {
     private final Map<String, AuthProfile> profiles;
     private final Map<String, String> fingerprints;
     private final TokenStore tokenStore;
+    private final AuthRuntimeResources resources;
     private final TemplateRenderer renderer;
     private final HttpClient httpClient;
+    private final OAuth2HttpSignatureTokenProvider signedTokens;
 
     private AuthRuntime(
         Map<String, AuthProfile> profiles,
         Map<String, String> fingerprints,
-        TokenStore tokenStore,
+        AuthRuntimeResources resources,
         TemplateRenderer renderer
     ) {
-        this.profiles = Map.copyOf(profiles);
-        this.fingerprints = Map.copyOf(fingerprints);
-        this.tokenStore = tokenStore;
-        this.renderer = renderer;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .build();
+        try {
+            this.profiles = Map.copyOf(profiles);
+            this.fingerprints = Map.copyOf(fingerprints);
+            this.resources = resources;
+            this.tokenStore = resources.tokenStore();
+            this.renderer = renderer;
+            this.httpClient = resources.httpClient();
+            this.signedTokens = new OAuth2HttpSignatureTokenProvider(tokenStore, httpClient);
+        } catch (RuntimeException | Error failure) {
+            resources.closeAfterFailure(failure);
+            throw failure;
+        }
+    }
+
+    AuthRuntime(
+        Map<String, AuthProfile> profiles,
+        Map<String, String> fingerprints,
+        TokenStore tokenStore,
+        TemplateRenderer renderer,
+        HttpClient httpClient
+    ) {
+        this(profiles, fingerprints, AuthRuntimeResources.borrowed(tokenStore, httpClient), renderer);
+    }
+
+    @Override
+    public void close() {
+        resources.close();
     }
 
     public static AuthRuntime forTemplates(
@@ -134,7 +163,7 @@ public final class AuthRuntime {
     }
 
     public static AuthRuntime inactive(TemplateRenderer renderer) {
-        return new AuthRuntime(Map.of(), Map.of(), null, renderer);
+        return new AuthRuntime(Map.of(), Map.of(), AuthRuntimeResources.withoutTokenStore(), renderer);
     }
 
     public boolean active() {
@@ -146,8 +175,8 @@ public final class AuthRuntime {
             AuthProfile profile = profile(ref);
             AuthMaterial material = material(ref.profileId(), profile, item, context);
             switch (ref.applyAs()) {
-                case HTTP_AUTHORIZATION_BEARER -> request.headers().put("Authorization", "Bearer " + material.value());
-                case HTTP_HEADER, HMAC_HEADER -> request.headers().put(headerName(ref, profile), headerValue(ref, profile, material, item, request.body()));
+                case HTTP_AUTHORIZATION_BEARER -> AuthHttpHeaders.replace(request.headers(), "Authorization", "Bearer " + material.value());
+                case HTTP_HEADER, HMAC_HEADER -> AuthHttpHeaders.replace(request.headers(), headerName(ref, profile), headerValue(ref, profile, material, item, request.body()));
                 case HTTP_QUERY_PARAM -> request.setPath(appendQuery(request.path(), queryParam(ref, profile), material.value()));
                 default -> throw unsupported(ref, "HTTP");
             }
@@ -240,12 +269,12 @@ public final class AuthRuntime {
                 if (profile == null) {
                     throw new IllegalArgumentException("authRef.profileId '" + ref.profileId() + "' not found in " + file);
                 }
-                if (referencesSut(profile) && (sut == null || sut.isEmpty())) {
+                if (AuthProfilePreparation.referencesSut(profile) && (sut == null || sut.isEmpty())) {
                     throw new IllegalArgumentException("authRef.profileId '" + ref.profileId() + "' references sut but no SUT context was provided");
                 }
-                AuthProfile resolvedProfile = resolveProfile(profile, vars, sut, context, renderer);
-                validateProfile(ref.profileId(), resolvedProfile);
-                String fingerprint = fingerprint(resolvedProfile);
+                AuthProfile resolvedProfile = AuthProfilePreparation.resolveProfile(profile, vars, sut, context, renderer);
+                AuthProfilePreparation.validateProfile(ref.profileId(), resolvedProfile);
+                String fingerprint = AuthProfilePreparation.fingerprint(resolvedProfile);
                 resolved.put(ref.profileId(), resolvedProfile);
                 fingerprints.put(ref.profileId(), fingerprint);
                 String tokenKey = tokenKey(resolvedProfile);
@@ -256,16 +285,12 @@ public final class AuthRuntime {
                     }
                 }
             }
-            TokenStore store = resolved.values().stream().anyMatch(p -> p.getStorage().getMode() == AuthStorageMode.REDIS)
-                ? new RedisTokenStore(
-                    context.info().swarmId(),
-                    redisProperties.getHost(),
-                    redisProperties.getPort(),
-                    redisProperties.getUsername(),
-                    redisProperties.getPassword(),
-                    redisProperties.isSsl())
-                : null;
-            return new AuthRuntime(resolved, fingerprints, store, renderer);
+            AuthRuntimeResources resources = resolved.values().stream()
+                .anyMatch(p -> p.getStorage().getMode() == AuthStorageMode.REDIS)
+                ? AuthRuntimeResources.redis(context.info().swarmId(),
+                    redisProperties.connectionSettings(RedisSequenceProperties.PREFIX))
+                : AuthRuntimeResources.withoutTokenStore();
+            return new AuthRuntime(resolved, fingerprints, resources, renderer);
         } catch (IOException ex) {
             throw AuthFailureException.configuration("auth-profiles-read", "Failed to read " + file, ex);
         } catch (RuntimeException ex) {
@@ -291,7 +316,10 @@ public final class AuthRuntime {
     }
 
     private AuthMaterial material(String profileId, AuthProfile profile, WorkItem item, WorkerContext context) {
-        if (isRefreshable(profile)) {
+        if (profile.getType() == AuthType.OAUTH2_HTTP_SIGNATURE) {
+            return signedTokens.material(profileId, tokenKey(profile), fingerprints.get(profileId), profile, context);
+        }
+        if (profile.getType().requiredStorageMode() == AuthStorageMode.REDIS) {
             return refreshableMaterial(profileId, profile, context);
         }
         return switch (profile.getType()) {
@@ -426,108 +454,6 @@ public final class AuthRuntime {
         return Path.of(configured).toAbsolutePath().normalize();
     }
 
-    @SuppressWarnings("unchecked")
-    private static AuthProfile resolveProfile(AuthProfile profile, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer) {
-        Map<String, Object> raw = JSON.convertValue(profile, new TypeReference<>() {});
-        Map<String, Object> resolved = (Map<String, Object>) resolveValue(raw, vars, sut, context, renderer);
-        return JSON.convertValue(resolved, AuthProfile.class);
-    }
-
-    private static Object resolveValue(Object value, Map<String, Object> vars, Map<String, Object> sut, WorkerContext context, TemplateRenderer renderer) {
-        if (value instanceof String text) {
-            return renderer.render(text, Map.of(
-                "vars", vars == null ? Map.of() : vars,
-                "sut", sut == null ? Map.of() : sut,
-                "swarm", Map.of("id", context.info().swarmId()),
-                "worker", Map.of("id", context.info().instanceId(), "role", context.info().role())
-            ));
-        }
-        if (value instanceof Map<?, ?> map) {
-            if (map.size() == 1 && map.containsKey("env")) {
-                return readEnvSecret(String.valueOf(map.get("env")));
-            }
-            if (map.size() == 1 && map.containsKey("file")) {
-                return readFileSecret(String.valueOf(map.get("file")));
-            }
-            Map<String, Object> resolved = new LinkedHashMap<>();
-            map.forEach((k, v) -> resolved.put(String.valueOf(k), resolveValue(v, vars, sut, context, renderer)));
-            return resolved;
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(v -> resolveValue(v, vars, sut, context, renderer)).toList();
-        }
-        return value;
-    }
-
-    private static boolean referencesSut(AuthProfile profile) {
-        Map<String, Object> raw = JSON.convertValue(profile, new TypeReference<>() {});
-        return referencesSutValue(raw);
-    }
-
-    private static boolean referencesSutValue(Object value) {
-        if (value instanceof String text) {
-            return text.contains("{{") && (text.contains("sut.") || text.contains("sut["));
-        }
-        if (value instanceof Map<?, ?> map) {
-            return map.values().stream().anyMatch(AuthRuntime::referencesSutValue);
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().anyMatch(AuthRuntime::referencesSutValue);
-        }
-        return false;
-    }
-
-    private static void validateProfile(String profileId, AuthProfile profile) {
-        if (profile.getType() == null || profile.getType() == AuthType.NONE) {
-            throw new IllegalArgumentException("Auth profile '" + profileId + "' must declare type");
-        }
-        boolean refreshable = isRefreshable(profile);
-        if (refreshable && profile.getStorage().getMode() != AuthStorageMode.REDIS) {
-            throw new IllegalArgumentException("Refreshable auth profile '" + profileId + "' must use storage.mode=REDIS");
-        }
-        if (!refreshable && profile.getStorage().getMode() != AuthStorageMode.NONE) {
-            throw new IllegalArgumentException("Non-refresh auth profile '" + profileId + "' must use storage.mode=NONE");
-        }
-        if (profile.getStorage().getMode() == AuthStorageMode.REDIS) {
-            RedisTokenStore.validateTokenKey(profile.getStorage().getTokenKey());
-        }
-    }
-
-    private static boolean isRefreshable(AuthProfile profile) {
-        return profile.getType() == AuthType.OAUTH2_CLIENT_CREDENTIALS || profile.getType() == AuthType.OAUTH2_PASSWORD_GRANT;
-    }
-
-    private static String fingerprint(AuthProfile profile) {
-        try {
-            return "sha256:" + sha256Hex(JSON.writeValueAsString(redacted(profile)));
-        } catch (Exception ex) {
-            throw new IllegalStateException("Failed to fingerprint auth profile", ex);
-        }
-    }
-
-    private static Object redacted(Object value) {
-        if (value instanceof Map<?, ?> map) {
-            Map<String, Object> result = new LinkedHashMap<>();
-            map.forEach((k, v) -> {
-                String key = String.valueOf(k);
-                result.put(key, sensitive(key) ? "sha256:" + sha256Hex(String.valueOf(v)) : redacted(v));
-            });
-            return result;
-        }
-        if (value instanceof AuthProfile profile) {
-            return redacted(JSON.convertValue(profile, new TypeReference<Map<String, Object>>() {}));
-        }
-        if (value instanceof List<?> list) {
-            return list.stream().map(AuthRuntime::redacted).toList();
-        }
-        return value;
-    }
-
-    private static boolean sensitive(String key) {
-        String k = key.toLowerCase(Locale.ROOT);
-        return k.contains("secret") || k.contains("password") || k.contains("key") || k.contains("token") || k.contains("cert");
-    }
-
     private static String tokenKey(AuthProfile profile) {
         return profile.getStorage().getMode() == AuthStorageMode.REDIS ? profile.getStorage().getTokenKey() : null;
     }
@@ -643,22 +569,6 @@ public final class AuthRuntime {
                 .digest((value == null ? "" : value).getBytes(StandardCharsets.UTF_8)));
         } catch (Exception ex) {
             throw new IllegalStateException("Failed to hash auth value", ex);
-        }
-    }
-
-    private static String readEnvSecret(String name) {
-        String value = System.getenv(name);
-        if (value == null) {
-            throw new IllegalArgumentException("Required auth env reference is not set: " + name);
-        }
-        return value;
-    }
-
-    private static String readFileSecret(String path) {
-        try {
-            return Files.readString(Path.of(path)).trim();
-        } catch (IOException ex) {
-            throw new IllegalArgumentException("Required auth file reference is not readable: " + path, ex);
         }
     }
 

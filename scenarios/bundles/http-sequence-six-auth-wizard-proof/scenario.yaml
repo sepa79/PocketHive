@@ -41,6 +41,10 @@ template:
       env:
         WIZARD_PROOF_CLIENT_SECRET: local-dummy-wizard-proof-secret
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: RABBITMQ
         baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
         templateRoot: /app/scenario/templates/http
         serviceId: sequence
@@ -94,6 +98,10 @@ template:
     - role: postprocessor
       image: postprocessor:latest
       config:
+        inputs:
+          type: RABBITMQ
+        outputs:
+          type: NONE
         forwardToOutput: false
         txOutcomeSinkMode: NONE
         dropTxOutcomeWithoutCallId: true

@@ -43,6 +43,11 @@ const sidebars: SidebarsConfig = {
         "correlation-vs-idempotency",
       ],
     },
+    {
+      type: "category",
+      label: "Engineering",
+      items: ["ENGINEERING_RULES", "REVIEW_RULES", "ai/RESPONSIBILITY_WORKFLOW"],
+    },
   ],
 };
 

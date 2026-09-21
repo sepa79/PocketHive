@@ -1,19 +1,23 @@
 package io.pockethive.controlplane.topology;
 
+import io.pockethive.topology.control.ControlResourceNamesPort;
+
 /**
- * Generic worker control-plane topology descriptor that derives bindings from the worker role.
+ * Responsibility: select Control recipients and bindings using owner-resolved physical queue names.
+ * Must not: construct broker names, select a naming implementation or declare resources.
+ * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names.
  */
 public final class WorkerControlPlaneTopologyDescriptor extends AbstractWorkerTopologyDescriptor {
 
     public WorkerControlPlaneTopologyDescriptor(String role,
                                                 String swarmId,
                                                 String controlQueuePrefix,
-                                                QueueDescriptor trafficQueue) {
-        super(role, swarmId, controlQueuePrefix, trafficQueue);
+                                                QueueDescriptor trafficQueue, ControlResourceNamesPort names) {
+        super(role, swarmId, controlQueuePrefix, trafficQueue, names);
     }
 
-    public WorkerControlPlaneTopologyDescriptor(String role, ControlPlaneTopologySettings settings) {
+    public WorkerControlPlaneTopologyDescriptor(String role, ControlPlaneTopologySettings settings, ControlResourceNamesPort names) {
         this(role, settings.swarmId(), settings.controlQueuePrefix(),
-            settings.trafficQueueForRole(role).orElse(null));
+            settings.trafficQueueForRole(role).orElse(null), names);
     }
 }

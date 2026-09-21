@@ -1,3 +1,8 @@
+/**
+ * Responsibility: coordinate Control Plane readiness and expose connection health.
+ * Must not: invent broker destinations or start with failed/stale connection information.
+ * Contract: RESP-CONTROL-STOMP-INFO — docs/architecture/runtime-responsibilities.md#resp-control-stomp-info.
+ */
 import { subscribeSchemaState, type SchemaState } from './schemaRegistry'
 import {
   startStompGateway,
@@ -7,7 +12,7 @@ import {
   subscribeStompState,
   type StompConnectionState,
 } from './stompGateway'
-import { CONTROL_PLANE_TOPICS } from './subscriptions'
+import { loadControlPlaneConnectionInfo } from './connectionInfo'
 import { applyStatusEnvelope, hasStatusSnapshot, requestEviction } from './stateStore'
 import { requestControlPlaneRefresh } from './restGateway'
 import {
@@ -19,6 +24,7 @@ import {
 export type ControlPlaneHealth = {
   schemaStatus: SchemaState['status']
   schemaError?: string
+  connectionInfoError?: string
   stompState: StompConnectionState
   invalidCount: number
 }
@@ -32,6 +38,7 @@ let health: ControlPlaneHealth = {
 }
 
 const listeners = new Set<HealthListener>()
+let connectionRequest = 0
 let schemaReady = false
 let started = false
 let evictionTimer: number | null = null
@@ -56,18 +63,17 @@ export function startControlPlaneHealth() {
     }
     notify()
     if (state.status === 'ready') {
-      applySettings(lastSettings, lastSettings)
+      void applySettings(lastSettings)
     } else {
-      stopStompGateway()
+      void applySettings(null)
     }
   })
   subscribeControlPlaneSettings((settings) => {
-    const previous = lastSettings
     lastSettings = settings
     if (!schemaReady) {
       return
     }
-    applySettings(settings, previous)
+    void applySettings(settings)
   })
   subscribeStompState((state) => {
     health = { ...health, stompState: state }
@@ -118,27 +124,26 @@ function notify() {
   listeners.forEach((listener) => listener(health))
 }
 
-function applySettings(settings: ControlPlaneSettings | null, previous?: ControlPlaneSettings | null) {
-  if (!settings || !settings.enabled) {
-    stopStompGateway()
-    return
+async function applySettings(settings: ControlPlaneSettings | null) {
+  const request = ++connectionRequest
+  stopStompGateway()
+  health = { ...health, connectionInfoError: undefined }
+  notify()
+  if (!settings || !settings.enabled) return
+  try {
+    const info = await loadControlPlaneConnectionInfo()
+    if (request !== connectionRequest) return
+    startStompGateway({
+      url: settings.url,
+      topics: [info.subscriptionDestination],
+      destinationPrefix: info.destinationPrefix,
+      connectHeaders: { login: settings.user, passcode: settings.passcode },
+    })
+  } catch (error) {
+    if (request !== connectionRequest) return
+    health = { ...health, connectionInfoError: error instanceof Error ? error.message : String(error) }
+    notify()
   }
-  const shouldRestart =
-    !previous ||
-    settings.url !== previous.url ||
-    settings.user !== previous.user ||
-    settings.passcode !== previous.passcode
-  if (shouldRestart) {
-    stopStompGateway()
-  }
-  startStompGateway({
-    url: settings.url,
-    topics: CONTROL_PLANE_TOPICS,
-    connectHeaders: {
-      login: settings.user,
-      passcode: settings.passcode,
-    },
-  })
 }
 
 function queueRefresh() {

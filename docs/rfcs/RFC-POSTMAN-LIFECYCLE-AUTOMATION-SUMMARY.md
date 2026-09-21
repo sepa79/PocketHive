@@ -1,4 +1,6 @@
-# RFC: Postman Script Execution & Swarm Lifecycle Automation
+# Archived RFC summary: Postman Script Execution & Swarm Lifecycle Automation
+
+> Not accepted and not implemented. This summary is historical, not normative. Lifecycle semantics are defined only in `docs/ARCHITECTURE.md`; the proposal to copy protocol client implementations conflicts with the current SSOT rule.
 
 **Status**: Proposed  
 **Target Release**: PocketHive 0.17.x (experimental)  

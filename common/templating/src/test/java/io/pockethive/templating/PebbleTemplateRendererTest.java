@@ -1,12 +1,16 @@
 package io.pockethive.templating;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
+import io.pockethive.templating.api.TemplateRenderingException;
+
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import org.junit.jupiter.api.Test;
 
 class PebbleTemplateRendererTest {
-    private final PebbleTemplateRenderer renderer = new PebbleTemplateRenderer();
+    private final PebbleTemplateRenderer renderer = new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE);
 
     @Test
     void acceptsRuntimePebbleAndEvalSyntaxWithoutRendering() {

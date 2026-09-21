@@ -1,5 +1,9 @@
 package io.pockethive.worker.sdk.auth;
 
+import io.pockethive.templating.api.DisabledSequenceAccess;
+
+import io.pockethive.work.api.MutableStatus;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -7,13 +11,13 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.micrometer.observation.ObservationRegistry;
 import io.pockethive.observability.ObservabilityContext;
-import io.pockethive.worker.sdk.api.HistoryPolicy;
-import io.pockethive.worker.sdk.api.StatusPublisher;
-import io.pockethive.worker.sdk.api.WorkerContext;
-import io.pockethive.worker.sdk.api.WorkerInfo;
+import io.pockethive.work.api.HistoryPolicy;
+import io.pockethive.work.api.StatusPublisher;
+import io.pockethive.work.api.WorkerContext;
+import io.pockethive.work.api.WorkerInfo;
 import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import io.pockethive.templating.PebbleTemplateRenderer;
-import io.pockethive.templating.TemplateRenderer;
+import io.pockethive.templating.api.TemplateRenderer;
 import java.lang.reflect.Method;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -28,6 +32,41 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 class AuthRuntimeTest {
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.CsvSource({
+        "STATIC_TOKEN,HTTP_AUTHORIZATION_BEARER,Authorization,Bearer test-token",
+        "BASIC_AUTH,HTTP_HEADER,aUtHoRiZaTiOn,Basic YWxpY2U6c2VjcmV0",
+        "API_KEY,HTTP_HEADER,X-Api-Key,test-token"
+    })
+    void replacesAllEffectiveCredentialHeaders(
+        AuthType type, AuthApplyAs applyAs, String headerName, String expected) throws Exception {
+        Path templates = profiles("""
+            profiles:
+              profile:
+                type: %s
+                storage:
+                  mode: NONE
+                token: test-token
+                key: test-token
+                username: alice
+                password: secret
+            """.formatted(type));
+        AuthRef ref = new AuthRef("profile", applyAs, headerName, null, null);
+        Map<String, String> original = Map.of(
+            headerName.toLowerCase(java.util.Locale.ROOT), "old-lower",
+            headerName.toUpperCase(java.util.Locale.ROOT), "old-upper",
+            "X-Correlation-Id", "correlation");
+        var request = new AuthRuntime.MutableHttpRequest("GET", "/test", original, "");
+        try (AuthRuntime runtime = AuthRuntime.forTemplates(templates.toString(), List.of(ref),
+            Map.of(), new TestContext(), (template, context) -> template, new RedisSequenceProperties())) {
+            runtime.applyHttp(ref, request, null, new TestContext());
+        }
+        assertThat(request.headers()).hasSize(2).containsEntry(headerName, expected)
+            .containsEntry("X-Correlation-Id", "correlation")
+            .doesNotContainValue("old-lower").doesNotContainValue("old-upper");
+        assertThat(original).containsValue("old-lower").containsValue("old-upper");
+    }
 
     @Test
     void appliesStaticBearerHeaderFromAuthProfile() throws Exception {
@@ -81,7 +120,7 @@ class AuthRuntimeTest {
                 )
             ),
             new TestContext(),
-            new PebbleTemplateRenderer(),
+            new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
             new RedisSequenceProperties());
 
         AuthRuntime.MutableHttpRequest request = new AuthRuntime.MutableHttpRequest("GET", "/accounts", Map.of(), "");
@@ -135,7 +174,7 @@ class AuthRuntimeTest {
             Map.of(),
             Map.of(),
             new TestContext(),
-            new PebbleTemplateRenderer(),
+            new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE),
             new RedisSequenceProperties()))
             .isInstanceOf(AuthFailureException.class)
             .hasMessageContaining("references sut but no SUT context was provided");
@@ -321,7 +360,7 @@ class AuthRuntimeTest {
             ref("file", AuthApplyAs.HTTP_AUTHORIZATION_BEARER)
         );
         TestContext context = new TestContext();
-        AuthRuntime runtime = runtime(templates, refs, Map.of("token", "var-token"), context, new PebbleTemplateRenderer());
+        AuthRuntime runtime = runtime(templates, refs, Map.of("token", "var-token"), context, new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE));
 
         AuthRuntime.MutableHttpRequest templated = new AuthRuntime.MutableHttpRequest("GET", "/templated", Map.of(), "");
         runtime.applyHttp(refs.get(0), templated, null, context);

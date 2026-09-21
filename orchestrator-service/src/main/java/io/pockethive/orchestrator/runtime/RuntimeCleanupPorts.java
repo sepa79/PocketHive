@@ -29,15 +29,7 @@ public final class RuntimeCleanupPorts {
         void removeService(String runtimeId);
     }
 
-    public interface RabbitTopologyPort {
-        Optional<RabbitQueueResource> queue(String name);
 
-        Optional<RabbitExchangeResource> exchange(String name);
-
-        void deleteQueue(String name);
-
-        void deleteExchange(String name);
-    }
 
     public record ComputeRuntimeResource(
         String runtimeId,

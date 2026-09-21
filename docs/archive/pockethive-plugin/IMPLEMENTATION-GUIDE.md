@@ -791,7 +791,7 @@ ApplicationManager.getApplication().executeOnPooledThread {
 The IDE-native quick-pick wizard below is the **fast path** for users who
 know what they want. For AI-assisted bundle creation in chat (where the
 agent asks questions, infers intent, and handles ambiguity), see
-[BUNDLE-WIZARD.md](../../plugins/pockethive/BUNDLE-WIZARD.md).
+[BUNDLE-WIZARD.md](../pre-boundary-reset/plugins/pockethive/BUNDLE-WIZARD.md).
 
 VS Code quick-pick multi-step flow. No webview needed — uses
 `vscode.window.showInputBox` and `vscode.window.showQuickPick`.
@@ -1111,6 +1111,6 @@ attempt them without a separate spec:
 
 | Gap | Where the spec lives |
 |---|---|
-| Authoring session MCP tools | `docs/concepts/pockethive-scenario-builder-mcp-plugin-spec.md` |
+| Authoring session MCP tools | `docs/archive/pre-boundary-reset/concepts/pockethive-scenario-builder-mcp-plugin-spec.md` |
 | Session UI panels in VS Code | Not yet designed — needs Phase 4 spec |
 | Session UI panels in IntelliJ | Not yet designed — needs Phase 4 spec |
