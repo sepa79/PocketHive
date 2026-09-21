@@ -35,7 +35,7 @@ class McpDeploymentContractTest {
         assertThat(compose)
             .contains("  pockethive-mcp:")
             .contains("image: ${DOCKER_REGISTRY:-}pockethive-mcp:${POCKETHIVE_VERSION:-latest}")
-            .contains("PH_MCP_POCKETHIVE_INGRESS: http://localhost:8088")
+            .contains("PH_MCP_POCKETHIVE_INGRESS: ${POCKETHIVE_PUBLIC_INGRESS:-http://localhost:8088}")
             .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
             .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S")
             .contains("POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D")

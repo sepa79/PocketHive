@@ -146,9 +146,33 @@ supported MCP OAuth metadata routes return their canonical JSON contracts;
 every other route under that prefix returns `404` and must never fall through
 to the PocketHive HTML application.
 
-Remote authorization and token endpoints require HTTPS. Loopback HTTP is
-permitted only for an explicitly configured local development issuer and
-resource whose resolved hosts remain loopback.
+### Public endpoint transport policy
+
+HTTPS is the default for remote endpoints. `POCKETHIVE_ALLOW_REMOTE_HTTP=true`
+is an explicit deployment exception for unencrypted remote HTTP; it defaults to
+`false`. Auth Service and MCP bind that same environment setting and delegate
+public endpoint validation to `PublicEndpointTransportPolicy` in `auth-contracts`.
+No independent service-specific remote-HTTP allowance or automatic downgrade exists.
+The allowance applies only to explicitly configured public ingress, issuer and
+resource URLs. It does not change redirect registration, PKCE, resource matching,
+scopes, origin/host allow-lists, internal service routing or token handling.
+Public URLs must be absolute HTTP(S) URLs with a host and without user information,
+query or fragment. Existing explicit loopback HTTP remains supported without the
+remote allowance, including IPv6 loopback.
+
+The companion independently requires the saved `REMOTE_HTTP` profile mode, labelled
+**Remote HTTP (unencrypted)**. `REMOTE_HTTPS` remains the new-profile default;
+`LOCAL_LOOPBACK_HTTP` remains loopback-only. A profile's MCP and authorization
+server URLs must use its selected transport. `endpointSecurityPolicy.ts` is the
+companion's single mode/transport validator; form labels are presentation only.
+OAuth child endpoints retain the validated issuer's ownership checks.
+Companion metadata, OAuth, MCP and archive-upload requests reject HTTP redirects;
+a redirect cannot change the selected endpoint or transport.
+
+Public HTTP carries passwords and bearer/refresh tokens without TLS. This is an
+explicit insecure deployment exception, not standards-compliant production OAuth
+transport or a promise of support in other MCP clients. Prefer HTTPS at public
+ingress, even when internal services use HTTP.
 
 ### 3.2 MCP OAuth scopes and grants
 

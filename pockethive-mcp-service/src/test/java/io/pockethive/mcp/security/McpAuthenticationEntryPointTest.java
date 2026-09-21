@@ -47,7 +47,7 @@ class McpAuthenticationEntryPointTest {
     private static PocketHiveMcpProperties properties() {
         URI ingress = URI.create("https://lab.example");
         return new PocketHiveMcpProperties(
-            ingress, URI.create("http://ui:8088"), McpStateMode.MEMORY,
+            false, ingress, URI.create("http://ui:8088"), McpStateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1),
             Duration.ofMinutes(5), 10, 2, 100, 10, 1_000_000,

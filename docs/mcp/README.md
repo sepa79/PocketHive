@@ -346,3 +346,28 @@ Node wizard/import/clone/enrich APIs are not supported authoring paths.
 - Scenario Manager bundle contract:
   `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md`
 - VS Code client and package usage: `vscode-pockethive/README.md`
+
+## Explicit remote HTTP deployments
+
+Remote HTTP is disabled unless `POCKETHIVE_ALLOW_REMOTE_HTTP=true` is passed to
+both Auth Service and MCP. The [public endpoint transport contract](../architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy)
+owns this allowance. Set public ingress, issuer, resource, allowed origin and
+allowed host to the exact externally reachable HTTP environment; an extension
+selection cannot enable the server setting. No client or server silently
+switches protocols. Restart the services after changing deployment settings.
+
+For the repository Compose deployment, set in `.env`:
+
+```dotenv
+POCKETHIVE_ALLOW_REMOTE_HTTP=true
+POCKETHIVE_PUBLIC_INGRESS=http://pockethive.example:8088
+PH_MCP_ALLOWED_HOSTS=pockethive.example:8088
+```
+
+Use an origin without a trailing slash. Compose projects ingress, `/auth-service`
+issuer, `/mcp` resource and allowed origin from `POCKETHIVE_PUBLIC_INGRESS`; `PH_MCP_ALLOWED_HOSTS` is the exact public host header
+including its port when present. These settings default to the existing localhost deployment.
+In HiveForge explicitly set `POCKETHIVE_ALLOW_REMOTE_HTTP` (`false` for HTTPS,
+`true` for HTTP) alongside its existing
+explicit `pockethive_public_ingress` and allowed host settings.
+In the companion select **Remote HTTP (unencrypted)** explicitly and connect.

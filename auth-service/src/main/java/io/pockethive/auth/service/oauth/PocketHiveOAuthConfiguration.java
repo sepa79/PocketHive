@@ -1,5 +1,7 @@
 package io.pockethive.auth.service.oauth;
 
+import io.pockethive.auth.contract.PublicEndpointTransportPolicy;
+
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.service.config.AuthServiceProperties;
@@ -238,7 +240,8 @@ public class PocketHiveOAuthConfiguration {
             || oauth.getDynamicClientTtl().isZero()
             || oauth.getDynamicClientTtl().compareTo(oauth.getRefreshTokenTtl()) <= 0
             || oauth.getDynamicClientCapacity() < 1
-            || !secureOrLoopback(oauth.getIssuer()) || !secureOrLoopback(oauth.getResource())
+            || !PublicEndpointTransportPolicy.allows(oauth.getIssuer(), oauth.isAllowRemoteHttp())
+            || !PublicEndpointTransportPolicy.allows(oauth.getResource(), oauth.isAllowRemoteHttp())
             || !vscodeRedirectBase(oauth.getVscodeRedirectUri())) {
             throw new IllegalStateException("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");
         }
@@ -247,13 +250,6 @@ public class PocketHiveOAuthConfiguration {
 
     private static boolean blank(String value) {
         return value == null || value.isBlank();
-    }
-
-    private static boolean secureOrLoopback(java.net.URI uri) {
-        return "https".equalsIgnoreCase(uri.getScheme())
-            || ("http".equalsIgnoreCase(uri.getScheme()) && uri.getHost() != null
-                && ("localhost".equalsIgnoreCase(uri.getHost()) || "127.0.0.1".equals(uri.getHost())
-                    || "::1".equals(uri.getHost())));
     }
 
     private static boolean vscodeRedirectBase(java.net.URI uri) {

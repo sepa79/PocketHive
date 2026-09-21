@@ -1178,7 +1178,7 @@ class BundleUploadCoordinatorTest {
                                                 Duration attemptRetention, Duration receiptRetention) {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, mode,
+            false, ingress, ingress, mode,
             temporaryDirectory.resolve("state"), temporaryDirectory.resolve("spool"), Duration.ofMinutes(30),
             Duration.ofHours(1), attemptRetention, receiptRetention, Duration.ofMinutes(5),
             100, 10, 100, 10, 1_000_000, maxPerPrincipal, maxConcurrent, maxUploadBytes, maxSpoolBytes,
@@ -1191,7 +1191,7 @@ class BundleUploadCoordinatorTest {
     private PocketHiveMcpProperties propertiesWithSpool(Path spoolPath) {
         PocketHiveMcpProperties source = properties();
         return new PocketHiveMcpProperties(
-            source.pocketHiveIngress(), source.ownerApiBase(), source.stateMode(), source.statePath(), spoolPath,
+            false, source.pocketHiveIngress(), source.ownerApiBase(), source.stateMode(), source.statePath(), spoolPath,
             source.openSessionTtl(), source.closedSessionRetention(), source.attemptRetention(),
             source.receiptRetention(), source.uploadTicketTtl(), source.maxOpenSessions(),
             source.maxOpenSessionsPerPrincipal(), source.maxTransportSessions(), source.maxWorkflowsPerSession(), source.maxStateBytes(),
