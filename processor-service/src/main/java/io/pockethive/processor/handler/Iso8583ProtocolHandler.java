@@ -102,17 +102,18 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
       wireProfile = WireProfile.fromId(request.wireProfileId());
       payloadBytes = decodePayload(request);
       if (request.authApplications() != null && !request.authApplications().isEmpty()) {
-        AuthRuntime authRuntime = AuthRuntime.forApplications(
-            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties);
-        String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
-        for (AuthRef authRef : request.authApplications()) {
-          if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
-            authTransportOptions = authRuntime.transportOptions(authRef, context);
-          } else {
-            payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
+        try (AuthRuntime authRuntime = AuthRuntime.forApplications(
+            request.authApplications(), Map.of(), config.authProfileSutContext(), context, templateRenderer, redisProperties)) {
+          String payloadHex = HexFormat.of().withUpperCase().formatHex(payloadBytes);
+          for (AuthRef authRef : request.authApplications()) {
+            if (authRef.applyAs() == AuthApplyAs.MTLS_CLIENT_CERT) {
+              authTransportOptions = authRuntime.transportOptions(authRef, context);
+            } else {
+              payloadHex = authRuntime.applyIsoPayloadHex(authRef, payloadHex, message, context);
+            }
           }
+          payloadBytes = HexFormat.of().parseHex(payloadHex);
         }
-        payloadBytes = HexFormat.of().parseHex(payloadHex);
       }
     } catch (IllegalArgumentException ex) {
       throw new ProcessorCallException(

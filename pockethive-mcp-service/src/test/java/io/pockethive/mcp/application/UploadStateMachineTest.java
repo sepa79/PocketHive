@@ -98,12 +98,12 @@ class UploadStateMachineTest {
 
     @Test
     void invalidBindingsPublicationIntentAndTransitionsFailExplicitly() {
-        assertThatThrownBy(() -> new UploadWorkflowBinding(null, null))
+        assertThatThrownBy(() -> new UploadWorkflowBinding(null, null, 0, null, null))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("UPLOAD_WORKFLOW_MODE_REQUIRED");
-        assertThatThrownBy(() -> new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, " "))
+        assertThatThrownBy(() -> new UploadWorkflowBinding(UploadWorkflowMode.WORKFLOW, " ", 0, null, null))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("UPLOAD_WORKFLOW_ID_REQUIRED");
-        assertThatThrownBy(() -> new UploadWorkflowBinding(UploadWorkflowMode.DIRECT, "workflow"))
-            .isInstanceOf(IllegalArgumentException.class).hasMessage("UPLOAD_WORKFLOW_ID_FORBIDDEN");
+        assertThatThrownBy(() -> new UploadWorkflowBinding(UploadWorkflowMode.DIRECT, "workflow", 0, null, null))
+            .isInstanceOf(IllegalArgumentException.class).hasMessage("UPLOAD_WORKFLOW_IDENTITY_FORBIDDEN");
         assertThatThrownBy(() -> publication("replace-missing", PublicationMode.REPLACE, null))
             .isInstanceOf(IllegalArgumentException.class).hasMessage("PUBLICATION_SCENARIO_ID_REQUIRED");
         assertThatThrownBy(() -> publication("create-specified", PublicationMode.CREATE, "scenario"))

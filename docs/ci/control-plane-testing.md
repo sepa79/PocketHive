@@ -30,6 +30,31 @@ Both suites execute automatically as part of the existing Maven workflows. Runni
 `./mvnw verify` or the module-specific Maven `test` goals above will execute the new checks, making
 it easy to plug them into GitHub Actions or other CI runners without extra wiring.
 
+The root CI test job also supplies a disposable RabbitMQ management broker for
+`SwarmLifecycleManagerIntegrationTest`. It sets `RABBITMQ_SERVER_REQUIRED=true`
+so an unavailable broker fails the job instead of skipping its two lifecycle
+tests. The broker is a component-test fixture, not an entrypoint into a deployed
+PocketHive stack.
+
+To include these tests in a local root run, configure the same explicit settings
+for your test-owned broker:
+
+| Environment variable | CI fixture value |
+| --- | --- |
+| `RABBITMQ_TEST_HOSTNAME` | `127.0.0.1` |
+| `RABBITMQ_TEST_PORT` | `5672` |
+| `RABBITMQ_TEST_ADMIN_URI` | `http://127.0.0.1:15672/api/` |
+| `RABBITMQ_TEST_USER`, `RABBITMQ_TEST_ADMIN_USER` | `guest` |
+| `RABBITMQ_TEST_PASSWORD`, `RABBITMQ_TEST_ADMIN_PASSWORD` | `guest` |
+| `RABBITMQ_SERVER_REQUIRED` | `true` |
+
+The CI broker permits the fixture's guest account from the host runner and binds
+its published ports to loopback. Keep that configuration limited to disposable
+test infrastructure. The test derives its Spring/work-plane Rabbit connection
+settings from the same `RabbitAvailableCondition` broker; no independent Spring
+host or port override is needed. Docker must also be available for its
+Testcontainers PostgreSQL dependency.
+
 ## Repository import boundaries
 
 `RepositoryImportBoundaryTest`, hosted in `common/control-plane-core`, scans Java
@@ -64,3 +89,6 @@ implementation boundaries. The [coverage ledger](acceptance-coverage.md) maps cu
 requirements to new evidence. The [replacement plan](../inProgress/e2e-test-system.md)
 owns N0–N4, including deletion only after confirmed replacement. This does not alter
 existing control-plane contract tests or authorize direct service-port stack checks.
+
+For worker OAuth fixtures and MCP authoring checks, see
+[Authentication regression tests](auth-testing.md).

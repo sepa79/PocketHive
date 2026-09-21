@@ -21,7 +21,7 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Execute MCP-owned bundle validation and publication-ticket tools.
  * Must not: Capture QA requirements, manage sessions, or publish directly to Scenario Manager.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-UPLOAD-COORDINATION - docs/architecture/runtime-responsibilities.md#resp-mcp-upload-coordination.
  */
 @Component
 final class BundleToolExecutor {
@@ -72,7 +72,7 @@ final class BundleToolExecutor {
         if (workflow.state() != io.pockethive.mcp.domain.ScenarioWorkflowState.GENERATED) {
             throw new ToolExecutionException("WORKFLOW_NOT_GENERATED", workflow.id());
         }
-        return validationTicketView(uploads.prepareValidationWithCapability(caller.principal(), workflow.id(),
+        return validationTicketView(uploads.prepareValidationWithCapability(caller.principal(), UploadWorkflowBinding.workflow(workflow),
             source(input), manifest(input), clock.instant()));
     }
 
@@ -81,7 +81,7 @@ final class BundleToolExecutor {
         try {
             String receiptId = text(input, "validationReceiptId");
             BundleValidationReceipt receipt = uploads.validationReceipt(receiptId, caller.principal());
-            if (receipt.workflowBinding().mode() == UploadWorkflowMode.WORKFLOW) {
+            if (receipt.workflowBinding().mode() != UploadWorkflowMode.DIRECT) {
                 workflows.requireMutableWorkflow(receipt.workflowBinding().workflowId(), caller);
             }
             return publicationTicketView(uploads.preparePublicationWithCapability(caller.principal(), receiptId,

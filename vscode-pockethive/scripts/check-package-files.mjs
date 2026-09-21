@@ -20,8 +20,8 @@ for (const requiredClass of ['hex', 'panel', 'lensOuter', 'lensInner', 'node']) 
   assert.match(activitySvg, new RegExp(`class="${requiredClass}"`),
     `PocketHive Activity Bar icon must retain ${requiredClass}`);
 }
-const vsceCommand = join('node_modules', '.bin', process.platform === 'win32' ? 'vsce.cmd' : 'vsce');
-const { stdout } = await run(vsceCommand, ['ls'], { encoding: 'utf8' });
+const vsceCli = join('node_modules', '@vscode', 'vsce', 'vsce');
+const { stdout } = await run(process.execPath, [vsceCli, 'ls'], { encoding: 'utf8' });
 const files = stdout.split(/\r?\n/).filter(Boolean).map(path => path.replaceAll('\\', '/'));
 for (const required of [
   'package.json', 'README.md', 'LICENSE', 'media/companion.css',

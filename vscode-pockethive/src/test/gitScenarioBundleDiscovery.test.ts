@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFile as execFileCallback } from 'node:child_process';
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
@@ -18,7 +18,7 @@ import {
 const execFile = promisify(execFileCallback);
 
 test('discovers only canonical Scenario Bundle directories committed at HEAD', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'pockethive-git-scenario-discovery-'));
+  const root = await realpath(await mkdtemp(join(tmpdir(), 'pockethive-git-scenario-discovery-')));
   try {
     await scenario(root, 'scenarios/bundles/mixed-smoke');
     await scenario(root, 'scenarios/db-query-postgres-smoke');

@@ -304,6 +304,38 @@ class ScenarioWorkflowTest {
         assertThat(restored.requirements()).containsExactlyInAnyOrderEntriesOf(snapshot.requirements());
     }
 
+    @Test
+    void invalidRegenerationDoesNotDiscardAlreadyValidatedEvidence() {
+        ScenarioWorkflow workflow = completeRequirements();
+        workflow.readyToGenerate(workflow.revision(), CAPABILITIES);
+        workflow.generated(workflow.revision(), "sha256:files");
+        workflow.validated(workflow.revision(), "sha256:archive", "sha256:content");
+        ScenarioWorkflowSnapshot before = workflow.snapshot();
+        assertThatThrownBy(() -> workflow.readyToGenerate(workflow.revision(), null))
+            .isInstanceOf(NullPointerException.class).hasMessage("capabilities");
+        assertThat(workflow.snapshot()).isEqualTo(before);
+    }
+
+    @Test
+    void boundGenerationChecksRevisionFilesCapabilitiesAndValidatedState() {
+        ScenarioWorkflow workflow = completeRequirements();
+        workflow.readyToGenerate(workflow.revision(), CAPABILITIES);
+        workflow.generated(workflow.revision(), "sha256:files");
+        long generatedRevision = workflow.revision();
+        workflow.requireGeneration(generatedRevision, "sha256:files", CAPABILITIES);
+        assertThatThrownBy(() -> workflow.requireGeneration(generatedRevision - 1, "sha256:files", CAPABILITIES))
+            .hasMessage("WORKFLOW_VERSION_CONFLICT");
+        assertThatThrownBy(() -> workflow.requireGeneration(generatedRevision, "sha256:other", CAPABILITIES))
+            .hasMessage("WORKFLOW_GENERATION_MISMATCH");
+        assertThatThrownBy(() -> workflow.requireGeneration(generatedRevision, "sha256:files",
+            new CapabilityFingerprint("sha256:other", CAPABILITIES.observedAt())))
+            .hasMessage("WORKFLOW_GENERATION_MISMATCH");
+        assertThatThrownBy(() -> workflow.requireValidatedGeneration(generatedRevision, "sha256:files", CAPABILITIES))
+            .hasMessage("WORKFLOW_NOT_VALIDATED");
+        workflow.validated(generatedRevision, "sha256:archive", "sha256:content");
+        workflow.requireValidatedGeneration(generatedRevision + 1, "sha256:files", CAPABILITIES);
+    }
+
     private static ScenarioWorkflow completeRequirements() {
         ScenarioWorkflow workflow = ScenarioWorkflow.create("workflow-1", "session-1", PRINCIPAL);
         for (QaRequirementTopic topic : QaRequirementTopic.values()) {

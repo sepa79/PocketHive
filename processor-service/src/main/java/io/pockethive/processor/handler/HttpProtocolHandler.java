@@ -106,11 +106,8 @@ public class HttpProtocolHandler implements ProtocolHandler {
     }
     Map<String, Object> requestMeta = requestMetadata(target, method, baseUrl, path);
 
-    JsonNode headersNode = mapper.valueToTree(requestInfo.headers());
-    headersNode.fields().forEachRemaining(entry -> logger.debug("header {}={}", entry.getKey(), entry.getValue().asText()));
-
     Optional<String> body = extractBody(requestInfo.body());
-    logger.debug("HTTP REQUEST {} {} headers={} body={}", method, target, headersNode, body.orElse(""));
+    HttpRequestDebugLog.log(logger, method, target, requestInfo.headers(), body.orElse(""));
 
     long start = clock.millis();
     long pacingMillis = 0L;
@@ -119,7 +116,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
       final long pacingMillisForHandler = pacingMillis;
       HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
-      headersNode.fields().forEachRemaining(entry -> apacheRequest.addHeader(entry.getKey(), entry.getValue().asText()));
+      requestInfo.headers().forEach(apacheRequest::addHeader);
       body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
 
       record CallOutcome(int statusCode, Map<String, List<String>> headers, String body, CallMetrics metrics) {

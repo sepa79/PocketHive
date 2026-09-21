@@ -39,7 +39,7 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Execute the QA requirement-capture and scenario-workflow authoring lifecycle.
  * Must not: Manage agent-session lifecycle, publish bundles, or map owner-service tool families.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-WORKFLOW - docs/architecture/runtime-responsibilities.md#resp-mcp-workflow.
  */
 @Component
 final class ScenarioWorkflowToolExecutor {
@@ -209,7 +209,7 @@ final class ScenarioWorkflowToolExecutor {
             requirements.put(answer.topic(), requirement);
         }
         workflow.answerAll(expectedRevision, requirements);
-        state.saveWorkflowAndRemoveGeneratedFiles(workflow);
+        state.saveWorkflowAndRemoveGeneratedFiles(workflow, expectedRevision);
         return projection.workflow(workflow);
     }
 
@@ -280,7 +280,7 @@ final class ScenarioWorkflowToolExecutor {
             default -> throw new ToolExecutionException("REQUIREMENT_DISPOSITION_INVALID", disposition);
         };
         workflow.answer(expectedRevision, question.topic(), requirement);
-        state.saveWorkflowAndRemoveGeneratedFiles(workflow);
+        state.saveWorkflowAndRemoveGeneratedFiles(workflow, expectedRevision);
         return projection.workflow(workflow);
     }
 
@@ -292,7 +292,7 @@ final class ScenarioWorkflowToolExecutor {
         Object capability = owners.get(SCENARIO_PREFIX + "/api/authoring-contract/fingerprint");
         workflow.readyToGenerate(expectedRevision, new CapabilityFingerprint(sha256(json(capability)), clock.instant()));
         workflow.generated(workflow.revision(), fileDigest);
-        state.saveWorkflow(workflow, files);
+        state.saveWorkflow(workflow, expectedRevision, files);
         Map<String, Object> view = new LinkedHashMap<>(projection.workflow(workflow));
         view.put("files", files);
         view.put("fileSetDigest", fileDigest);
@@ -301,8 +301,9 @@ final class ScenarioWorkflowToolExecutor {
 
     private Object cancel(Map<String, Object> input, McpCaller caller) {
         ScenarioWorkflow workflow = workflows.requireMutableWorkflow(text(input, "workflowId"), caller);
-        workflow.cancel(number(input, "expectedRevision"));
-        state.saveWorkflowAndRemoveGeneratedFiles(workflow);
+        long expectedRevision = number(input, "expectedRevision");
+        workflow.cancel(expectedRevision);
+        state.saveWorkflowAndRemoveGeneratedFiles(workflow, expectedRevision);
         return projection.workflow(workflow);
     }
 

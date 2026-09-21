@@ -63,7 +63,7 @@ class AtomicCoordinationStateRepositoryTest {
             repository.createSession(session);
             repository.createWorkflow(session, workflow);
             workflow.cancel(0);
-            repository.saveWorkflow(workflow, List.of(Map.of(
+            repository.saveWorkflow(workflow, 0, List.of(Map.of(
                 "path", "seed/init.sql", "content", "select 1;", "sha256", "sha256:file")));
             assertThat(repository.countOpenSessions(PRINCIPAL)).isEqualTo(2);
         }
@@ -148,7 +148,7 @@ class AtomicCoordinationStateRepositoryTest {
         }
 
         assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
-            .isEqualTo(3);
+            .isEqualTo(4);
     }
 
     @Test
@@ -171,7 +171,7 @@ class AtomicCoordinationStateRepositoryTest {
             assertThat(migrated.loadUploadCoordination().receipts()).containsEntry(receipt.id(), receipt);
         }
         assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
-            .isEqualTo(3);
+            .isEqualTo(4);
     }
 
     @Test
@@ -191,7 +191,63 @@ class AtomicCoordinationStateRepositoryTest {
             assertThat(migrated.loadUploadCoordination().attempts()).isEmpty();
         }
         assertThat(mapper.readTree(state.resolve("state.json").toFile()).path("schemaVersion").asInt())
-            .isEqualTo(3);
+            .isEqualTo(4);
+    }
+
+    @Test
+    void versionThreeMigrationRetiresUnboundWorkflowTicketsButPreservesHistoricalEvidence() throws Exception {
+        Path path = temporaryDirectory.resolve("legacy-v3-generation");
+        var binding = new UploadWorkflowBinding(io.pockethive.mcp.application.UploadWorkflowMode.WORKFLOW,
+            "wf-1", 1, SHA, new io.pockethive.mcp.domain.CapabilityFingerprint(SHA, Instant.EPOCH));
+        var source = new SourceMetadata("git@example/repo", "a".repeat(40), "scenarios/safe", SourceVerification.CLIENT_ASSERTED);
+        var manifest = new BundleFileManifest(List.of(new BundleFileManifestEntry("scenario.yaml", 4, SHA)));
+        BundleValidationReceipt receipt = new BundleValidationReceipt("vr-old", PRINCIPAL, binding,
+            source, manifest, SHA, SHA, "safe", "Safe", Instant.EPOCH);
+        var direct = new io.pockethive.mcp.application.ValidationUploadTicket("uv-direct", PRINCIPAL,
+            UploadWorkflowBinding.direct(), source, manifest, SHA, Instant.EPOCH.plusSeconds(60));
+        var workflow = new io.pockethive.mcp.application.ValidationUploadTicket("uv-workflow", PRINCIPAL,
+            binding, source, manifest, SHA, Instant.EPOCH.plusSeconds(60));
+        var attempt = new io.pockethive.mcp.application.PublicationAttempt("pa-old", PRINCIPAL,
+            io.pockethive.mcp.application.PublicationMode.CREATE, "safe", SHA, Instant.EPOCH);
+        attempt.receiving();
+        attempt.verified();
+        attempt.ownerCallInFlight();
+        attempt.succeeded(Map.of("id", "safe"));
+        try (AtomicCoordinationStateRepository current = repository(path, 1_000_000, 10, 4)) {
+            current.saveUploadCoordination(new UploadCoordinationSnapshot(Map.of(
+                direct.id(), io.pockethive.mcp.application.UploadTicketSnapshot.from(direct),
+                workflow.id(), io.pockethive.mcp.application.UploadTicketSnapshot.from(workflow)),
+                Map.of(receipt.id(), receipt), Map.of(attempt.id(), attempt.snapshot())));
+        }
+        ObjectNode root = (ObjectNode) mapper.readTree(path.resolve("state.json").toFile());
+        root.put("schemaVersion", 3);
+        ObjectNode legacyBinding = (ObjectNode) root.path("uploadCoordination").path("receipts").path("vr-old").path("workflowBinding");
+        legacyBinding.remove(List.of("preparedRevision", "generatedFileSetDigest", "capabilityFingerprint"));
+        mapper.writeValue(path.resolve("state.json").toFile(), root);
+        try (AtomicCoordinationStateRepository migrated = repository(path, 1_000_000, 10, 4)) {
+            var snapshot = migrated.loadUploadCoordination();
+            assertThat(snapshot.tickets()).containsOnlyKeys("uv-direct");
+            assertThat(snapshot.tickets().get("uv-direct")).isEqualTo(io.pockethive.mcp.application.UploadTicketSnapshot.from(direct));
+            assertThat(snapshot.attempts()).containsEntry(attempt.id(), attempt.snapshot());
+            assertThat(snapshot.receipts().get(receipt.id()).scenarioName()).isEqualTo("Safe");
+            assertThat(snapshot.receipts().get(receipt.id()).archiveDigest()).isEqualTo(SHA);
+            assertThat(snapshot.receipts().get(receipt.id()).workflowBinding()).isEqualTo(
+                new UploadWorkflowBinding(io.pockethive.mcp.application.UploadWorkflowMode.LEGACY_WORKFLOW, "wf-1", 0, null, null));
+        }
+        assertThat(mapper.readTree(path.resolve("state.json").toFile()).path("schemaVersion").asInt()).isEqualTo(4);
+    }
+
+    @Test
+    void versionThreeMigrationRejectsMalformedBindingCollections() throws Exception {
+        for (String collection : List.of("tickets", "receipts")) {
+            Path path = temporaryDirectory.resolve("legacy-v3-malformed-" + collection);
+            Files.createDirectories(path);
+            ObjectNode root = emptyState(3);
+            ((ObjectNode) root.path("uploadCoordination")).set(collection, mapper.createArrayNode());
+            mapper.writeValue(path.resolve("state.json").toFile(), root);
+            assertThatThrownBy(() -> repository(path, 1_000_000, 10, 4))
+                .hasMessageContaining("MCP_STATE_CORRUPT");
+        }
     }
 
     @Test
@@ -218,7 +274,7 @@ class AtomicCoordinationStateRepositoryTest {
 
         Path unsupported = temporaryDirectory.resolve("unsupported-version");
         Files.createDirectories(unsupported);
-        mapper.writeValue(unsupported.resolve("state.json").toFile(), emptyState(4));
+        mapper.writeValue(unsupported.resolve("state.json").toFile(), emptyState(5));
         assertThatThrownBy(() -> repository(unsupported, 1_000_000, 10, 4))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("MCP_STATE_CORRUPT");

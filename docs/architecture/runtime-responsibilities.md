@@ -183,6 +183,14 @@ The moved worker-auth profile/reference/material records and enums own their sha
 
 Request templates and worker AuthRuntime share these values; profile file loading remains AuthRuntime behavior.
 
+AuthType.requiredStorageMode is the sole type-to-storage policy consumed by
+authored bundle findings and runtime profile preparation. It does not select or
+connect a storage adapter and does not change serialized profile fields.
+
+AuthType owns locale-independent parsing and canonical naming. Accepted kebab-case
+and enum names must resolve identically regardless of the JVM default locale,
+including profile serialization and preparation round trips.
+
 **Forbidden:** load files, refresh credentials or select a storage implementation.
 
 **Required effect:** Worker-auth consumers share profile/reference/material types without loading infrastructure from the contracts module.
@@ -1482,21 +1490,148 @@ The output registry delegates to it without requiring Rabbit/Redis output settin
 
 **Migration status:** Current B01 NONE composition.
 
+## RESP-MCP-CATALOGUE
+
+**Current owner:** `pockethive-mcp-service` `ToolCatalogue` publishes the canonical
+tool descriptors and versioned connected-skill content. `McpToolId` owns tool
+identifiers; the catalogue binds schemas, scopes, owner dispatch metadata and
+skill references to those identifiers.
+
+**Consumers:** MCP discovery/resources and the scope-enforcing invocation facade
+consume these descriptors. Skills guide clients through the existing owner APIs;
+they are not an additional auth-profile schema or validator.
+
+**Forbidden:** execute tools, call owner services, infer runtime configuration,
+resolve secrets, or duplicate worker auth and Scenario Manager validation.
+
+**Required effect:** each tool has one descriptor and discoverable skill content
+with its version and content digest. Auth authoring guidance preserves complete
+file contents and distinguishes proposals, owner validation and runtime acceptance.
+See [the MCP agent contract](../mcp/README.md#agent-contract).
+
+**Verification entrypoints:** `ToolCatalogueTest`, `McpToolExecutionIntegrationTest`,
+and `McpStreamableHttpIntegrationTest`.
+
+**Migration status:** documents the existing catalogue owner; no ownership transfer
+or tool/auth schema change.
+
 ## RESP-WORK-AUTH-RUNTIME
 
 **Current module(s):** `common/worker-sdk`.
 
-AuthRuntime currently loads/validates worker auth profiles, applies auth material and coordinates token refresh through TokenStore and HTTP.
+AuthRuntime activates worker auth profiles, applies auth material and coordinates
+ordinary OAuth refresh through TokenStore and HTTP. It delegates resolved profile
+preparation to RESP-WORK-AUTH-PROFILE-PREPARATION and signed OAuth acquisition to
+RESP-WORK-SIGNED-OAUTH-TOKENS. HTTP header replacement is delegated to
+RESP-WORK-AUTH-HTTP-HEADERS. Factory-created runtimes own their token store and HTTP
+client; injected resources are borrowed. Callers close factory runtimes at the end
+of request/journey scope, including failure and interruption. Initialization
+failures release resources already acquired.
 
-Template workers call it; shared profile/claim values live in auth-contracts. File/path and HTTP effects remain here in the current implementation.
+Template workers call it; shared profile/claim values live in auth-contracts.
+YAML reading, profile-file discovery, activation-set tokenKey collision detection
+and Redis policy selection remain here; AuthRuntimeResources constructs the store. Preparation completes before opening
+the token store. Existing ordinary OAuth request/parser behavior is unchanged.
 
 **Forbidden:** own product auth-service identity/authorization or duplicate token storage/claim behavior.
 
-**Required effect:** Configured auth material/refresh uses the selected TokenStore; its current path/HTTP effects remain visible for later extraction.
+**Required effect:** Configured auth material/refresh uses the selected TokenStore;
+profile resolution, validation, fingerprinting and collision checks precede store
+construction. Current discovery/ordinary HTTP effects remain visible for later extraction.
 
-**Verification entrypoints:** `AuthRuntimeTest`.
+**Verification entrypoints:** `AuthRuntimeTest`, `OAuth2HttpSignatureRuntimeTest`,
+`AuthRuntimeLifecycleTest`, `AuthHttpHeadersTest`, `HttpSequenceSecondPassAuthTest`.
 
-**Migration status:** Mixed implementation retained; B06/B07 separate profile parsing, paths, HTTP and storage adapters. No added runtime behavior in this adoption.
+**Migration status:** Profile preparation and signed acquisition have separate
+owners. Discovery, credential application and ordinary OAuth acquisition remain
+in this existing mixed owner; broader B06/B07 separation is not claimed here.
+
+## RESP-WORK-AUTH-PROFILE-PREPARATION
+
+**Current module(s):** `common/worker-sdk`.
+
+AuthProfilePreparation owns worker-context rendering, env/file secret resolution,
+resolved profile validation and cache fingerprints. AuthRuntime supplies the
+auth-contracts profile and selected TemplateRenderer. The shared
+AuthType.requiredStorageMode policy and AuthTokenKeys own storage classification
+and key syntax; RESP-WORK-OAUTH-SIGNATURE owns resolved signing-specific validation.
+
+**Forbidden:** discover/read profile YAML, connect to Redis, acquire tokens, mutate
+downstream requests, or define an alternative auth schema or storage policy.
+
+**Required effect:** Detect missing SUT context before rendering; resolve before
+validation and fingerprinting. Preserve signed file bytes, legacy file trimming,
+legacy fingerprint serialization and signed-only canonical map ordering. Failure
+does not activate profiles or open a token store.
+
+**Verification entrypoints:** `AuthProfilePreparationTest`, `AuthRuntimeTest`,
+`OAuth2HttpSignatureRuntimeTest`.
+
+**Migration status:** This concern moves out of AuthRuntime with its behavior tests.
+Filesystem and environment reads remain explicit SDK effects, not pure domain logic.
+
+## RESP-WORK-OAUTH-SIGNATURE
+
+**Current module(s):** `common/worker-sdk`.
+
+OAuth2HttpSignature owns validation of resolved signed OAuth settings and
+construction of the signed token request, including form encoding, digest,
+canonical signature input and RSA signing. Profile preparation validates before
+activation; the signed token provider requests a fresh signature for acquisition.
+
+**Forbidden:** resolve secret references, perform HTTP/Redis IO, own refresh claims,
+or sign downstream resource requests.
+
+**Required effect:** One validation/signing implementation supplies an HTTPS token
+request; private-key and protocol failures are explicit. Ordinary OAuth stays unsigned.
+
+**Verification entrypoints:** `OAuth2HttpSignatureTest`, `OAuth2HttpSignatureWireTest`.
+
+**Migration status:** Isolated implementation for the new profile; no existing schema changes.
+
+## RESP-WORK-SIGNED-OAUTH-TOKENS
+
+**Current module(s):** `common/worker-sdk`.
+
+OAuth2HttpSignatureTokenProvider owns signed OAuth acquisition, bounded contention,
+strict token-response parsing and refresh-claim coordination through the selected
+TokenStore and HttpClient. OAuth2HttpSignature constructs each token request.
+AuthRuntime alone applies the returned material to downstream requests.
+
+**Forbidden:** implement token persistence/claim arbitration, resolve profiles,
+own product auth-service identity, or change ordinary OAuth acquisition behavior.
+
+**Required effect:** Reuse valid tokens, bound HTTP work by the claim lease, publish
+only under the owned claim and release claims on failure without masking the
+primary error. Do not apply a token whose publication failed.
+
+**Verification entrypoints:** `OAuth2HttpSignatureRuntimeTest`,
+`OAuth2HttpSignatureConcurrencyTest`, `OAuth2HttpSignatureTimeoutTest`,
+`OAuth2HttpSignatureRedisTest`.
+
+**Migration status:** New isolated lifecycle; shared TokenStore retains storage authority.
+
+## RESP-SCENARIO-AUTH-STORAGE-FINDINGS
+
+**Current module(s):** `scenario-manager-service`.
+
+AuthProfileStorageFindings owns the authored profile type/storage boundary and
+maps failures to canonical bundle findings. It consumes AuthType.parse and
+AuthType.requiredStorageMode from auth-contracts and AuthTokenKeys for token-key
+validation. ScenarioBundleValidator delegates each authored profile after
+document parsing and retains bundle/profile-reference visibility.
+
+**Forbidden:** read secret sources, validate resolved signing keys/token endpoints/
+scopes, acquire tokens, or duplicate shared type/storage/token-key policy.
+
+**Required effect:** Preserve existing authored storage parsing/defaults and
+finding codes, paths, messages and ordering while applying the shared type-to-storage policy.
+
+**Verification entrypoints:** `AuthProfileStorageFindingsTest`, signed-auth
+`ScenarioControllerTest` cases.
+
+**Migration status:** Authored storage concern extracted from ScenarioBundleValidator;
+resolved profile preparation stays in the worker SDK.
 
 ## RESP-GENERATOR-WORK
 
@@ -1566,9 +1701,15 @@ Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket
 
 **Current module(s):** `http-sequence-service`.
 
-HttpSequenceWorkerImpl delegates the configured sequence to HttpSequenceRunner, which owns ordered step execution and current HTTP/capture behavior.
+HttpSequenceWorkerImpl delegates the configured sequence to HttpSequenceRunner,
+which owns ordered step execution, retries, capture selection and journey budgets.
+Capture projection delegates to RESP-HTTP-SEQUENCE-DEBUG-CAPTURE and persistence
+to RESP-WORK-REDIS-DEBUG-CAPTURE. The worker closes its runner and pooled HTTP client.
 
 Request templates, TemplateRenderer and AuthRuntime provide their existing capabilities.
+HttpSequenceRequestRenderer owns per-step request rendering. The runner closes
+its factory-created AuthRuntime when the journey exits, including failure and
+interruption; Redis cache entries and refresh leases retain their existing owner.
 
 **Forbidden:** own another service's lifecycle or reimplement the shared template engine.
 
@@ -1576,7 +1717,8 @@ Request templates, TemplateRenderer and AuthRuntime provide their existing capab
 
 **Verification entrypoints:** `HttpSequenceRunnerTest`.
 
-**Migration status:** Mixed HTTP/template/auth/debug-capture implementation remains B06/B07 debt.
+**Migration status:** Request rendering and capture projection/storage have distinct owners;
+remaining mixed orchestration/template/extraction responsibilities remain B06/B07 debt.
 
 ## RESP-DB-QUERY-WORK
 
@@ -1887,6 +2029,8 @@ ScenarioBundleValidator owns bundle acceptance checks; ScenarioTemplateValidator
 Both use the canonical template API with DisabledSequenceAccess; diagnostic rendering must not decide persisted scenario validity.
 
 Request-template shape/auth/protocol checks delegate to RequestTemplateParser.
+AuthProfileStorageFindings projects authored auth type/storage checks using the
+shared auth-contracts policy; see RESP-SCENARIO-AUTH-STORAGE-FINDINGS.
 RequestTemplateFindings projects its problems into bundle findings; profile existence and
 bundle visibility stay here. The offline diagnostic delegates file loading to
 request-template-files. See RESP-REQUEST-TEMPLATE-PARSE for these transferred owners.
@@ -2311,3 +2455,221 @@ not define another delivery DTO or serialize intent into WorkItem.
 **Forbidden:** duplicated delivery defaults/parsers, inherited per-hop delivery headers,
 worker timers, second publication paths, unsupported-mode fallback, or changes to
 input admission/ACK and failure consumption.
+
+
+## RESP-WORK-AUTH-HTTP-HEADERS
+
+**Current module(s):** `common/worker-sdk`.
+
+AuthHttpHeaders owns replacement of a single HTTP authentication header. AuthRuntime
+supplies the already-resolved header name and value. Replacement removes all
+case variants before writing the requested name, so an outgoing request has one
+effective credential header. There is no second profile validator or token source.
+
+**Forbidden:** acquire credentials, discover or validate profiles, modify unrelated
+headers, construct HTTP requests or log credential values.
+
+**Required effect:** Existing case variants cannot retain stale credentials;
+nonmatching headers and the caller's source map retain their existing behavior.
+
+**Verification entrypoints:** `AuthHttpHeadersTest`, `AuthRuntimeTest`,
+`HttpSequenceSecondPassAuthTest`.
+
+**Migration status:** Header mutation moves out of the mixed AuthRuntime owner;
+credential generation and non-HTTP application remain with existing owners.
+
+## RESP-PROCESSOR-HTTP-REQUEST-LOG
+
+**Current module(s):** `processor-service`.
+
+HttpRequestDebugLog owns processor request DEBUG projection and emission.
+HttpProtocolHandler delegates request diagnostics before sending the original
+headers. It delegates typed credential/session header projection to HttpHeaderRedactor
+and retains noncredential header diagnostics.
+
+**Forbidden:** mutate transport headers, acquire or apply credentials, decide
+request validity, or implement collected runtime-log redaction.
+
+**Required effect:** No Authorization, Proxy-Authorization, Cookie or Set-Cookie value reaches
+per-header or aggregate processor request DEBUG arguments; outbound headers are
+unchanged. Arbitrary URL/body redaction is not claimed by this header boundary.
+
+**Verification entrypoints:** `HttpRequestDebugLogTest`, `HttpAuthSecondPassSecurityTest`.
+
+**Migration status:** Request diagnostic responsibility extracted from
+HttpProtocolHandler; broader HTTP result and transport behavior unchanged.
+
+## RESP-HTTP-SEQUENCE-REQUEST-RENDERING
+
+**Current module(s):** `http-sequence-service`.
+
+HttpSequenceRequestRenderer owns step request-context assembly and rendering,
+then delegates credential application to the supplied AuthRuntime. The runner
+retains ordered execution, retry and runtime lifetime.
+
+**Forbidden:** discover profiles, own runtime resources, parse templates,
+execute transport calls or decide retry policy.
+
+**Required effect:** Existing rendered method/path/body/headers and step context
+reach the executor with the canonical auth application behavior.
+
+**Verification entrypoints:** `HttpSequenceRequestRendererTest`,
+`HttpSequenceRunnerTest`, `HttpSequenceSecondPassAuthTest`.
+
+**Migration status:** Existing renderCall responsibility extracted from the
+mixed runner before applying journey resource scoping.
+
+## RESP-WORK-AUTH-RESOURCES
+
+**Current module(s):** `common/worker-sdk`.
+
+AuthRuntimeResources owns factory-created TokenStore/HttpClient allocation and
+cleanup; injected resources are borrowed. AuthRuntime delegates resource lifetime
+to this owner. Construction failures release acquired resources. Close releases
+all owned resources even when an earlier close fails, retaining interruption and
+failure information. RedisTokenStore remains owner of its client/connection pair
+and shuts down its client if connection creation fails.
+
+**Forbidden:** discover or validate profiles, apply credentials, acquire tokens,
+change Redis records or refresh leases, or close borrowed test/integration resources.
+
+**Required effect:** Completing a request/journey releases its runtime's connections
+without deleting cached credentials or interfering with another runtime's resources.
+
+**Verification entrypoints:** `AuthRuntimeLifecycleTest`, `RedisTokenStoreTest`,
+`HttpSequenceSecondPassAuthTest`.
+
+**Migration status:** Resource ownership extracted from mixed AuthRuntime as part
+of the inherited Redis-retention fix. Runtime factory API behavior is preserved.
+
+
+## RESP-MCP-WORKFLOW
+
+**Current module(s):** `pockethive-mcp-service`.
+
+ScenarioWorkflow owns scenario authoring transitions and their revision/generation
+preconditions. Upload tickets bind to the prepared workflow revision, generated
+file-set digest and capability fingerprint. Validation/publication evidence may
+advance only that bound generation; an intervening update invalidates completion.
+
+**Consumers:** ScenarioWorkflowToolExecutor, BundleToolExecutor and the upload lifecycle.
+
+**Forbidden:** perform archive upload, remote owner calls or persistence.
+
+**Required effect:** Older owner evidence cannot validate or publish newer authored state.
+
+**Verification entrypoints:** ScenarioWorkflow and workflow upload lifecycle regressions.
+
+## RESP-MCP-UPLOAD-LIFECYCLE
+
+**Current module(s):** `pockethive-mcp-service`.
+
+CoordinationWorkflowUploadLifecycle applies verified owner evidence through
+ScenarioWorkflow's bound-generation preconditions and atomically persists the
+result against the observed revision. It never substitutes the current generation
+for the identity captured when an upload ticket was prepared.
+
+**Forbidden:** own authoring transitions, upload archives or perform publication.
+
+**Required effect:** A stale callback fails explicitly without overwriting newer state.
+
+**Verification entrypoints:** Workflow upload lifecycle and stale-generation regressions.
+
+## RESP-MCP-UPLOAD-COORDINATION
+
+**Current module(s):** `pockethive-mcp-service`.
+
+BundleUploadCoordinator owns ticket and archive integrity, owner-request
+coordination and recording actual owner results. It carries immutable workflow
+bindings to the canonical lifecycle and checks them before irreversible owner
+publication. If an owner effect succeeds but workflow synchronization fails,
+that divergence must be explicit rather than reporting a synchronized success.
+Local ticket/attempt mutation, snapshot and persistence form one serialized step.
+Owner and spool IO stay outside that step; their completion re-resolves canonical
+state by identity. A rollback must not detach another operation from its stored
+terminal result. If recording an owner result fails, report an unresolved outcome
+with the attempt identity and preserve the state needed for restart recovery. Startup recovery
+also examines retained publication attempts after obsolete tickets have been
+retired by schema migration. Possible owner writes become AMBIGUOUS through the
+canonical attempt state machine and remain reconcilable without replay. Interrupted
+pre-owner RECEIVING/VERIFIED attempts become FAILED. PREPARED and terminal history
+remain unchanged under existing retention; migration never invents generation
+binding or reauthorizes retired workflow tickets.
+
+**Forbidden:** implement scenario authoring transitions or owner bundle validators.
+
+**Required effect:** Ticket evidence stays associated with its prepared generation.
+
+**Verification entrypoints:** BundleUploadCoordinator and workflow upload regressions.
+
+## RESP-MCP-COORDINATION-STATE
+
+**Current module(s):** `pockethive-mcp-service`.
+
+CoordinationStateRepository and its atomic adapter own snapshot persistence and
+revision compare-and-save. They must reject a stale expected revision so that a
+callback cannot overwrite a newer workflow snapshot.
+
+**Forbidden:** decide authoring transitions or invent owner validation/publication evidence.
+
+**Required effect:** Concurrent workflow updates are retained when stale completion is rejected.
+
+**Verification entrypoints:** Atomic coordination repository concurrency regressions.
+
+## RESP-HTTP-DIAGNOSTIC-HEADERS
+
+**Current module(s):** `common/observability-core`.
+
+HttpHeaderRedactor owns the pure diagnostic projection of HTTP header maps.
+Both processor request logs and HTTP Sequence stored captures consume this policy.
+Authorization, Proxy-Authorization, Cookie and Set-Cookie values are replaced
+completely, case-insensitively. Scalar and multi-value shapes, key spelling and
+safe value order are preserved in independent snapshots.
+
+**Forbidden:** mutate transport headers, resolve credentials, execute IO, validate
+profiles or claim redaction of arbitrary URLs, bodies or unstructured error text.
+
+**Required effect:** Standard credential and session headers cannot reach either
+diagnostic sink while sent requests and received responses remain unchanged.
+
+**Verification entrypoints:** `HttpHeaderRedactorTest`, `HttpRequestDebugLogTest`,
+`HttpSequenceDebugCaptureTest`.
+
+## RESP-WORK-REDIS-DEBUG-CAPTURE
+
+**Current module(s):** `common/worker-sdk`.
+
+RedisDebugCaptureStore owns expiring diagnostic value writes and the lifetime of
+its lazily allocated Redis client and single shared connection. It consumes
+canonical RedisConnectionSettings. Writes and close are serialized; close is
+idempotent and attempts connection and client cleanup even if one fails. A failed
+connection attempt releases acquired resources. No capture allocates resources
+until an actual write; a closed owner cannot allocate again. Write failure remains
+best effort and does not fail the worker journey.
+
+**Forbidden:** select captures, project payloads, define service-specific keys,
+resolve connection defaults, manage token/lease records or route business output.
+
+**Required effect:** Capture resources remain bounded across worker threads and
+are released by worker shutdown without deleting captured records before TTL.
+
+**Verification entrypoints:** `RedisDebugCaptureStoreTest`, `HttpSequenceDebugCaptureTest`.
+
+## RESP-HTTP-SEQUENCE-DEBUG-CAPTURE
+
+**Current module(s):** `http-sequence-service`.
+
+HttpSequenceDebugCapture owns the existing capture key and JSON projection,
+including configured request/response inclusion and body truncation. Header
+projection delegates to HttpHeaderRedactor. HttpSequenceRunner retains capture
+selection and journey budgets, delegates expiring storage to the SDK owner and
+closes it. HttpSequenceWorkerImpl owns runner and pooled HTTP client shutdown;
+both resources are attempted even if one close fails.
+
+**Forbidden:** open Redis connections, implement another header redactor, change
+auth schemas or profile resolution, or change debug capture defaults.
+
+**Required effect:** Capture shape, selection and TTL remain compatible, standard
+credential/session headers are redacted, and worker-owned resources have a close path.
+
+**Verification entrypoints:** `HttpSequenceDebugCaptureTest`, `RedisDebugCaptureStoreTest`.
