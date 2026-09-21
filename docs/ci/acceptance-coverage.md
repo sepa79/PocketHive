@@ -1327,3 +1327,42 @@ close the deferred Swarm/NFS run, legacy removal or full 3DS/load acceptance.
 This is functional evidence on the local stack, not a throughput, latency upper-bound
 or tens-of-thousands-of-challenges capacity result. Delay is fixed per output at startup;
 selector/splitter, APATA/app mock and CloseLook remain outside A5.
+
+
+### Post-merge local verification — 2026-09-21
+
+Revision `713e7559` includes A5 and PR #517 (signed OAuth, HTTP Sequence and MCP).
+Rebuilt/redeployed with canonical `./build-hive.sh --quick`; the preceding full
+reactor passed 2523 tests without failures/errors/skips. WORK remains Artemis;
+CONTROL remains Rabbit. All live calls below used `http://localhost:8088/`.
+
+| Check | Result | Evidence under `acceptance-tests/runs/` |
+| --- | --- | --- |
+| Platform smoke | PASS | `platform-smoke-e06bd44b-1c5e-4325-96e7-ed89e237f4bc` |
+| HTTP lifecycle | PASS | `http-lifecycle-0aa29cb4-b5d6-42ad-b987-eabb8b48997d` |
+| Target-state lifecycle | PASS | `target-state-lifecycle-9005817c-a692-4812-83d0-9e69d32b25f1` |
+| Cleanup after intentional assertion failure | PASS | `failure-cleanup-83e8c42d-b0fc-4ed1-b918-820ec34507e5` |
+| Delayed delivery | PASS; 3000 ms configured, 3054/3127/3003 ms observed, three successful HTTP results and CREATE/START/STOP/REMOVE | `delayed-delivery-0cce4ae8-4cd3-44f5-9b71-e0c0f7bdeb70` |
+
+Invocation detail: the first command selected `smoke | lifecycle` with
+`local-artemis.properties`. All three lifecycle tests passed, but the smoke test
+rejected lifecycle-only target keys before contacting the deployment. That runner
+invocation ended BUILD FAILURE; it is not recorded as a successful suite run.
+Smoke was then rerun separately with `local-smoke.properties` and passed.
+The delayed-delivery target/group also completed BUILD SUCCESS. No product or
+framework change was required for the invocation error.
+
+Commands: `./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties 'smoke | lifecycle'`
+(initial mixed-target error as above),
+`./run-acceptance-tests.sh acceptance-tests/targets/local-smoke.properties smoke`,
+`./run-acceptance-tests.sh acceptance-tests/targets/local-delayed-delivery-artemis.properties delayed-delivery`.
+Logs: `/tmp/ph-post517-build.log`, `/tmp/ph-post517-lifecycle.log`,
+`/tmp/ph-post517-smoke.log`, `/tmp/ph-post517-delay.log`.
+The canonical diagnostics CLI through ingress returned an empty swarm list before
+rebuild and after all tests. The rebuilt stack remains running.
+
+Current matrix: **41 PASS / 1 PARTIAL** (NW-4 still lacks cross-node Swarm/NFS).
+This replay does not claim a full acceptance-matrix rerun, signed OAuth with an
+external issuer, Rabbit WORK deployment validation, or a load/capacity result.
+A4 source review separately passed 59 focused tests without findings; A5 source
+review passed 16. A6, final N3/N4 and the explicitly deferred refactors remain open.

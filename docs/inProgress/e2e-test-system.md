@@ -1,6 +1,7 @@
 # Nowy framework E2E — budowa od zera i zastąpienie starego zestawu
 
-Status na 2026-09-18: N0 i N1 zamknięte. Macierz N2 zawiera **40 PASS / 1 PARTIAL**.
+Status na 2026-09-21: N0 i N1 zamknięte. Bieżąca macierz zawiera **41 PASS / 1 PARTIAL**
+(40 wcześniejszych PASS oraz WP-1 delayed delivery z A5).
 NW-4 jest napisane i przeszło lokalnie na Rabbit oraz Artemis; pozostaje jego
 wykonanie między hostami na Swarm/NFS, odłożone na koniec.
 NW-4 i retencja dowodów zapisane w `51227a32`.

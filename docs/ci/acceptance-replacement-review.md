@@ -8,7 +8,8 @@ owner; the repository execution plan (`docs/inProgress/e2e-test-system.md`) owns
 The local requirement/assertion comparison is complete. One missing transition was
 found: DA-3 tested a preconfigured ClickHouse sink, while the old observable behavior
 included enabling it through runtime configuration. That gap is corrected and its
-execution evidence is listed below. The correction needs its separate source review.
+execution evidence is listed below. Its separate source review subsequently passed
+without findings (53 focused tests); the correction was committed in `6e3b0aa4`.
 NW-4 still lacks cross-node Swarm/NFS execution. Final N3 acceptance and N4 deletion
 remain open; no legacy code was removed and no remote stack was deployed.
 

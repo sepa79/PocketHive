@@ -36,6 +36,17 @@ the HiveForge-managed project root or stateless. Swarm controllers still run on
 manager nodes because they need Docker Swarm API access. Stateful placement
 remains explicit where the runtime profile declares dedicated roots.
 
+## Explicit WorkPlane selection
+
+Both Swarm profiles require `POCKETHIVE_WORK_TYPE=RABBITMQ` or `ARTEMIS`.
+With ARTEMIS, the stack provisions the same pinned Core broker as local Compose
+and passes its connection settings to Orchestrator; Rabbit remains CONTROL.
+Artemis has one replica with stop-first updates and shared managed state at
+`/hf/state/artemis/data`, owned by the image UID/GID 1001:1001. The existing
+HiveForge bind-source mapping exposes that directory to Swarm. No new node label
+or dedicated external root is required. This does not configure broker HA.
+With RABBITMQ, Artemis is not deployed and Rabbit WORK settings are explicit.
+
 ## HiveForge Path Contract
 
 PocketHive Ansible actions run inside the HiveForge action container. They must
@@ -96,6 +107,7 @@ requirements so `validate_requirements` can fail before the playbook starts:
 ```text
 DOCKER_REGISTRY
 POCKETHIVE_VERSION
+POCKETHIVE_WORK_TYPE
 POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
 POCKETHIVE_PUBLIC_INGRESS
@@ -112,10 +124,12 @@ value.
 
 `POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
 trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
-its exact host value without a scheme or path. The two MCP/Auth Service secrets
-must be supplied through HiveForge secret-backed runtime configuration, must be
-at least 16 characters, and must not be committed or printed in deployment
-evidence. The rendered stack exposes the MCP only as
+its exact host value without a scheme or path. For the development environment, the two MCP/Auth fields use explicit, public
+test values of at least 16 characters, as approved by the operator. Their names
+end in SECRET but these test fixtures are not confidential credentials.
+The Dev ingress exposes HTTPS on 8443 using the intentionally public test TLS
+identity in `deploy/hiveforge/runtime/dev-tls`; clients explicitly trust its
+certificate. HTTP on 8088 remains available for the existing UI path. The rendered stack exposes the MCP only as
 `<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
 
 Current HiveForge component requirements are global per component, not
@@ -188,10 +202,9 @@ Agent sequence:
        NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
-   Supply `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
-   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` through the environment's
-   secret mechanism; do not place literal values in the journal or this
-   non-secret runtime map.
+   For Dev, set `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
+   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` to the approved public test
+   values through the same non-secret runtime map.
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
    environment requires outbound proxy access. PocketHive renders those values

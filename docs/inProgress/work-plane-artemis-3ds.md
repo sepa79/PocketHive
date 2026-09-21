@@ -1,7 +1,28 @@
 # Artemis WorkPlane i opóźnione dostarczenie dla 3DS
 
-Status: A1/A2 i admission w `7e6c63db`, A3 w `9cc6c827`. A4 zaimplementowane; create/ruch/remove Artemis przeszły przez publiczny ingress. A4 oczekuje osobnego review; A5 zaimplementowane i odebrane lokalnie 2026-09-21; A6 pozostaje otwarte.
+Status na 2026-09-21: A1–A5 wykonane. Osobne review A4 i A5 zakończone bez findings; A5 zapisane w `6e3b0aa4`. PR #517 zmergowany w `713e7559`. A6 (pełny 3DS i obciążenie) pozostaje osobnym etapem. Datowane wpisy poniżej zachowują historię; dawne „oczekuje review” nie opisują bieżącego statusu.
 Branch: `codex/artemis-work-plane`, punkt wyjścia: `863694be`.
+
+## Domknięcie A4/A5 i merge OAuth — 2026-09-21
+
+- A4: osobny review na `713e7559` bez findings. Prześledzono projekcję startową,
+  Controller → WorkPlaneResources → native remove oraz niezależną weryfikację
+  nieobecności w Orchestratorze. **59 testów**, zero błędów i pominięć.
+  Manifest diagnostyczny nie jest źródłem zwykłego remove; jego zakres pozostaje Rabbit-only.
+- A5: osobny review bez findings, **16 testów** powtórzonych; implementacja i dowody
+  zapisane w `6e3b0aa4`. Kontrakt §12 pozostaje właścicielem zachowania.
+- PR #517 zmergowany w `713e7559`: **2523 testy Javy, 187 testów VS Code**, zero
+  błędów i pominięć; build dokumentacji i kontrola zawartości VSIX przeszły.
+  Dodano poradnik OAuth i jego stronę testów do publikowanych dokumentów.
+- Stack z `713e7559` przebudowany przez `build-hive.sh --quick`. Smoke, trzy
+  przypadki lifecycle i delayed delivery przeszły przez publiczny ingress; końcowa
+  lista swarmów pusta. Pierwsze wspólne wywołanie smoke/lifecycle miało błędny target
+  dla smoke; poprawne osobne powtórzenie przeszło. Pełne dowody i ograniczenia:
+  [weryfikacja po merge](../ci/acceptance-coverage.md#post-merge-local-verification--2026-09-21).
+  Lokalny odbiór A1–A5 jest domknięty; pozostaje przygotowanie PR/domknięcie brancha.
+- Osobny zakres nadal otwarty: A6, selector/splitter, mock APATA/App i CloseLook;
+  NW-4 na Swarm/NFS, końcowy N3 i zatwierdzone przez użytkownika odłożenie N4;
+  natywny orphan cleanup oraz kompletność diagnostyki manifestu.
 
 ## Cel i zakres
 
