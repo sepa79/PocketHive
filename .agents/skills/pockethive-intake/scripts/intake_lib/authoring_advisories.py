@@ -1,6 +1,7 @@
 """Responsibility: report read-only review notices from explicit intake facts.
 Must not: infer request contracts, time semantics or targets, or author questions.
-Contract: intake-contract.md, Authoring review notices.
+Local contract: intake-contract.md, Authoring review notices.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

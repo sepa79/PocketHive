@@ -1,5 +1,6 @@
 """Responsibility: identify explicitly missing or placeholder intake scalar values.
-Must not: infer applicability or replace missing values. Contract: intake-contract.md.
+Must not: infer applicability or replace missing values. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-DOCUMENT-VALUES — docs/architecture/intake-runtime.md#resp-intake-document-values.
 """
 from __future__ import annotations
 

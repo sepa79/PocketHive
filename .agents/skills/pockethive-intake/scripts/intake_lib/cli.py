@@ -1,5 +1,6 @@
 """Responsibility: decode CLI arguments and expose the canonical command result.
-Must not: own document state, review decisions or validation rules. Contract: intake-contract.md.
+Must not: own document state, review decisions or validation rules. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-CLI — docs/architecture/intake-runtime.md#resp-intake-cli.
 """
 from __future__ import annotations
 

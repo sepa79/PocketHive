@@ -61,10 +61,6 @@ cover the shared contracts, SDK integration and service consumers touched by the
 current boundary migration. Their current owners and remaining gaps must not be
 confused with the target module layout; adoption is awaiting separate review.
 
-The [independent acceptance framework records](architecture/acceptance-tests.md) own
-new test infrastructure. The frozen legacy suite remains isolated until replacement
-coverage is accepted; it does not supply code to the new framework.
-
 ## 2. Roles (Managers vs. Workers)
 
 PocketHive splits the control plane into **managers** (orchestrator + swarm controllers) and **workers** (generators, moderators, processors, post-processors, triggers, etc.). Managers shape desired state and publish control signals; workers execute workloads and echo health back through the same exchange.
@@ -109,32 +105,6 @@ migration remains governed by the [boundary design](architecture/work-plane-boun
 - Apply `signal.config-update.{swarmId}.{role}.{instance}` (`data.enabled: true|false`) to control **workload** state only while keeping control listeners responsive.
 - Runtime behaviour, worker interfaces, and adoption guidance are covered in the [Worker SDK quick start](sdk/worker-sdk-quickstart.md).
 - Worker capability manifests and capability `config[]` contract are specified in the [Worker Capability Catalogue](architecture/workerCapabilities.md).
-
-#### Worker CONTROL command execution
-
-**The current worker CONTROL path processes commands serially within one worker
-runtime.** One consumer handles its `workerControl` queue. Dispatch through
-`WorkerControlQueueListener` → `WorkerControlPlaneRuntime` → state listeners is
-synchronous, including the Work input's enable/disable callback. The next command
-is handled after that callback returns. Work execution has its own executor and
-may run concurrently; increasing Work concurrency does not add CONTROL consumers.
-This execution model is scoped to worker command handling, not every thread or
-manager in PocketHive.
-
-Normal Spring lifecycle ordering initializes Work inputs before starting CONTROL
-reception and stops CONTROL reception before stopping those inputs. Factory-created
-`MessageWorkInput` instances are held in `WorkInputRegistry`; they are not separately
-registered Spring event listeners. The public input lifecycle methods do not by
-themselves establish additional concurrent application callers.
-
-**This relies on the current wiring and configuration, not a runtime guard against
-all possible overrides.** The CONTROL Simple container uses one consumer by default;
-current repository configuration does not override it. Increasing
-`spring.rabbitmq.listener.simple.concurrency` or `max-concurrency`, adding asynchronous
-state dispatch, or introducing concurrent lifecycle callers changes this assumption
-and requires revisiting state/admission ordering. Reviews must establish the actual
-callers and configuration that permit a reported interleaving, as required by the
-[transition review rules](REVIEW_RULES.md#mandatory-boundary-review--blocking-rules).
 
 ### 2.3 Request Builder worker
 

@@ -1,5 +1,6 @@
 """Responsibility: retain immutable, bounded file evidence at content-addressed paths.
-Must not: infer provenance or rewrite document references. Contract: intake-contract.md.
+Must not: infer provenance or rewrite document references. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-EVIDENCE-SNAPSHOTS — docs/architecture/intake-runtime.md#resp-intake-evidence-snapshots.
 """
 from .errors import IntakeError
 from .package_context import sha256

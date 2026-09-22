@@ -1,5 +1,6 @@
 """Responsibility: construct and refresh derived paths, questions and document hashes.
-Must not: fill client facts, adopt proposals or grant approvals. Contract: intake-contract.md.
+Must not: fill client facts, adopt proposals or grant approvals. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-PROJECTIONS — docs/architecture/intake-runtime.md#resp-intake-projections.
 """
 from __future__ import annotations
 

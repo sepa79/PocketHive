@@ -1,6 +1,7 @@
 """Responsibility: populate a recorded bundle intake from its verified inspection.
 Must not: replace its source, infer client adoption or own projection construction.
-Contract: intake-contract.md; bundle-observations.json.
+Local contract: intake-contract.md; bundle-observations.json.
+Contract: RESP-INTAKE-POPULATION — docs/architecture/intake-runtime.md#resp-intake-population.
 """
 from __future__ import annotations
 

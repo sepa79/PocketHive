@@ -1,6 +1,7 @@
 """Responsibility: compare explicit bundle snapshots and map changed evidence to targets.
 Must not: parse source payloads, infer semantic impacts or mutate intake/source state.
-Contract: intake-contract.md, Source comparison; bundle-observations.json.
+Local contract: intake-contract.md, Source comparison; bundle-observations.json.
+Contract: RESP-INTAKE-INSPECTION — docs/architecture/intake-runtime.md#resp-intake-inspection.
 """
 from __future__ import annotations
 

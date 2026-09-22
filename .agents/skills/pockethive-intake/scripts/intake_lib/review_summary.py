@@ -1,6 +1,7 @@
 """Responsibility: project the canonical review result into a smaller conversational view.
 Must not: validate, choose questions, infer readiness or write document state.
-Contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Local contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

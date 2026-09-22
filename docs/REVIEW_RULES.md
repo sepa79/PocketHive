@@ -167,7 +167,7 @@ perform work, tests and evidence, then hand off; they do not run a self-review l
    applicable configuration that permit the interleaving. A test that invokes public
    methods from extra threads demonstrates conditional behavior; it does not alone
    establish a reachable application defect. Check the documented
-   [worker CONTROL execution model](ARCHITECTURE.md#worker-control-command-execution)
+   [worker CONTROL execution model](architecture/work-plane-boundaries.md#worker-control-command-execution)
    where applicable. Revalidate that model when the change alters callers or concurrency.
 6. **State the evidence and limits.** Report inspected owners/call paths, relevant
    before/after behavior, tests run and unverified boundaries. A passing build, scanner,

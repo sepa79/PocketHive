@@ -1,7 +1,7 @@
 /**
  * Responsibility: Discover and validate resource metadata for an explicit connection profile.
  * Must not: Authenticate users, persist profiles, or define another transport policy.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy.
+ * Contract: RESP-COMPANION-ENDPOINT-DISCOVERY — docs/architecture/runtime-responsibilities.md#resp-companion-endpoint-discovery.
  */
 import { validateEndpointTransport } from './endpointSecurityPolicy';
 import { lookup } from 'node:dns/promises';
@@ -16,18 +16,41 @@ import {
 type AddressResolver = (hostname: string) => Promise<string[]>;
 
 const MAX_METADATA_CHARACTERS = 65_536;
+export const ENDPOINT_DISCOVERY_TIMEOUT_MS = 10_000;
 
 export class PocketHiveEndpointValidator implements EndpointValidationPort {
   constructor(
     private readonly fetcher: typeof fetch = fetch,
     private readonly resolveAddresses: AddressResolver = resolveHost,
+    private readonly timeoutMs: number = ENDPOINT_DISCOVERY_TIMEOUT_MS,
   ) {}
 
-  async validate(profile: McpConnectionProfile): Promise<ValidatedEndpoint> {
+  async validate(profile: McpConnectionProfile, signal: AbortSignal): Promise<ValidatedEndpoint> {
+    signal.throwIfAborted();
+    const deadline = new AbortController();
+    const timeout = setTimeout(() => deadline.abort(new ConnectionContractError(
+      'MCP_ENDPOINT_DISCOVERY_TIMEOUT', 'Endpoint discovery exceeded its time limit',
+    )), this.timeoutMs);
+    const boundedSignal = AbortSignal.any([signal, deadline.signal]);
+    let onAbort!: () => void;
+    const aborted = new Promise<never>((_resolve, reject) => {
+      onAbort = () => reject(boundedSignal.reason);
+      boundedSignal.addEventListener('abort', onAbort, { once: true });
+    });
+    try {
+      return await Promise.race([this.discover(profile, boundedSignal), aborted]);
+    } finally {
+      clearTimeout(timeout);
+      boundedSignal.removeEventListener('abort', onAbort);
+    }
+  }
+
+  private async discover(profile: McpConnectionProfile, signal: AbortSignal): Promise<ValidatedEndpoint> {
     const endpoint = new URL(profile.mcpUrl);
     validateEndpointTransport(endpoint, profile.endpointSecurityMode);
     if (profile.endpointSecurityMode === 'LOCAL_LOOPBACK_HTTP') {
       const addresses = await this.resolveAddresses(endpoint.hostname);
+      signal.throwIfAborted();
       if (addresses.length === 0 || addresses.some(address => !isLoopback(address))) {
         throw new ConnectionContractError(
           'MCP_ENDPOINT_LOOPBACK_RESOLUTION_FAILED',
@@ -40,7 +63,9 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
       method: 'GET',
       headers: { Accept: 'application/json' },
       redirect: 'error',
+      signal,
     });
+    signal.throwIfAborted();
     if (!response.ok) {
       throw new ConnectionContractError(
         'MCP_RESOURCE_METADATA_UNAVAILABLE',
@@ -54,6 +79,7 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
       );
     }
     const text = await response.text();
+    signal.throwIfAborted();
     if (text.length > MAX_METADATA_CHARACTERS) {
       throw new ConnectionContractError(
         'MCP_RESOURCE_METADATA_INVALID',

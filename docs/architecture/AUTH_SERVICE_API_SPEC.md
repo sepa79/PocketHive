@@ -544,7 +544,10 @@ file before publishing an in-memory mutation, prunes expired registrations
 before reads and writes, and fails explicitly when configured state cannot be
 read, validated, or written. A missing state file represents an empty
 first-start registry; malformed, duplicate, over-capacity, or unsupported state
-blocks Auth Service startup. The persisted projection contains public client
+blocks Auth Service startup. The file must contain exactly one JSON document;
+trailing whitespace is allowed, but trailing values or garbage are rejected.
+`schemaVersion` must be a JSON integer, without string or floating-point coercion.
+Rejected reads leave the file unchanged. The persisted projection contains public client
 metadata and expiry only. It contains no client secret, authorization code,
 access token, refresh token, consent, user identity, or permission grant.
 

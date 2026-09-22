@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Responsibility: expose explicit deterministic release packaging.
-Must not: install dependencies, discover client sources or silently reseal edits. Contract: intake-contract.md.
+Must not: install dependencies, discover client sources or silently reseal edits. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-PACKAGING — docs/architecture/intake-runtime.md#resp-intake-packaging.
 """
 from pathlib import Path
 import sys

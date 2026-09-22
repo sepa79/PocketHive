@@ -4,10 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.spy;
 
-import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.File;
 import java.io.IOException;
@@ -17,6 +16,8 @@ import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 class JsonFileDynamicClientStateStoreTest {
     private static final Instant ISSUED_AT = Instant.parse("2026-09-04T08:00:00Z");
@@ -79,6 +80,53 @@ class JsonFileDynamicClientStateStoreTest {
     }
 
     @Test
+    void acceptsOnlyWhitespaceAfterACompleteDocument(@TempDir Path directory) throws Exception {
+        Path path = directory.resolve("state.json");
+        Files.writeString(path, "{\"schemaVersion\":1,\"clients\":[]} \n\t\r");
+
+        assertThat(store(path).load()).isEmpty();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "{\"schemaVersion\":1,\"clients\":[]} TRUNCATED-BACKUP",
+        "{\"schemaVersion\":1,\"clients\":[]} {\"schemaVersion\":2,\"clients\":[]}",
+        "{\"schemaVersion\":1,\"clients\":[]} null",
+        "{\"schemaVersion\":1.9,\"clients\":[]}",
+        "{\"schemaVersion\":1.0,\"clients\":[]}",
+        "{\"schemaVersion\":1e0,\"clients\":[]}",
+        "{\"schemaVersion\":\"1\",\"clients\":[]}"
+    })
+    void rejectsMalformedWholeDocumentsWithoutChangingBytes(String content, @TempDir Path directory)
+        throws Exception {
+        Path path = directory.resolve("state.json");
+        Files.writeString(path, content);
+        byte[] before = Files.readAllBytes(path);
+
+        assertThatThrownBy(() -> store(path).load())
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_READ_FAILED");
+        assertThat(Files.readAllBytes(path)).isEqualTo(before);
+    }
+
+    @Test
+    void strictStateParsingDoesNotChangeTheSuppliedMapper(@TempDir Path directory) throws Exception {
+        ObjectMapper sharedMapper = new ObjectMapper().findAndRegisterModules();
+        Path path = directory.resolve("state.json");
+        JsonFileDynamicClientStateStore strictStore = new JsonFileDynamicClientStateStore(sharedMapper, path);
+        for (String content : List.of(
+            "{\"schemaVersion\":1,\"clients\":[]} false",
+            "{\"schemaVersion\":1.9,\"clients\":[]}",
+            "{\"schemaVersion\":\"1\",\"clients\":[]}"
+        )) {
+            Files.writeString(path, content);
+            assertThatThrownBy(strictStore::load).isInstanceOf(IllegalStateException.class);
+            assertThat(sharedMapper.readValue(content, DynamicClientStateDocument.class).schemaVersion())
+                .isEqualTo(1);
+        }
+    }
+
+    @Test
     void removesTemporaryFileWhenAtomicReplacementFails(@TempDir Path directory) throws Exception {
         Path statePath = directory.resolve("state.json");
         Files.createDirectory(statePath);
@@ -95,9 +143,8 @@ class JsonFileDynamicClientStateStoreTest {
     @Test
     void cleanupFailureDoesNotMaskTheAuthoritativeStateWriteFailure(@TempDir Path directory)
         throws Exception {
-        ObjectMapper mapper = mock(ObjectMapper.class);
-        when(mapper.copy()).thenReturn(mapper);
-        when(mapper.enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES)).thenReturn(mapper);
+        ObjectMapper mapper = spy(new ObjectMapper().findAndRegisterModules());
+        doReturn(mapper).when(mapper).copy();
         doAnswer(invocation -> {
             Path temporary = ((File) invocation.getArgument(0)).toPath();
             Files.delete(temporary);

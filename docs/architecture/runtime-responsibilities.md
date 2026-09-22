@@ -1036,7 +1036,7 @@ WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState;
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
 The current command execution assumptions are defined in
-[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
+[Worker CONTROL command execution](work-plane-boundaries.md#worker-control-command-execution).
 Workers start disabled in WorkerState and input registration receives that state before
 intake. Only accepted worker-level control enablement updates may enable intake;
 input properties and container environment must not provide a second enablement flag.
@@ -1319,7 +1319,7 @@ the redundant RabbitWorkDispatcher is removed. WorkOutput accepts only a WorkIte
 selected target already captured by its instance. DefaultWorkerRuntime remains the sole result
 publication path through WorkOutputRegistry. Local scheduled WorkInput lifecycle is unchanged.
 For the application callers and ordering of enable/disable callbacks, see
-[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
+[Worker CONTROL command execution](work-plane-boundaries.md#worker-control-command-execution).
 
 **Forbidden:** broker-specific state in this seam, a second dispatcher/publication path,
 inline worker dispatch, retry of accepted work, completion-based ACK or a drain policy.
@@ -2716,6 +2716,125 @@ validator, or interpreting an HTTP URL as permission to enable remote HTTP.
 **Verification:** endpoint policy tests, service configuration tests, remote HTTP
 OAuth workflow tests and companion profile/metadata/command tests.
 
+## RESP-OAUTH-CONFIGURATION
+
+**Current roles:** `AuthServiceOAuthProperties` binds OAuth settings beneath
+`AuthServiceProperties`; `PocketHiveOAuthConfiguration.requireValid` validates
+them before composition. Public endpoint transport delegates to
+`RESP-PUBLIC-ENDPOINT-TRANSPORT`. Token, registry and browser owners consume these
+settings rather than reading environment variables independently.
+
+**Forbidden:** registration, token issuance, file IO or another transport policy.
+**Contract:** [Auth Service API](AUTH_SERVICE_API_SPEC.md).
+**Verification:** `DynamicClientRegistrationServiceTest`, `RemoteHttpOAuthTest`.
+This records existing configuration roles; no ownership transfer is introduced.
+
+## RESP-MCP-CONFIGURATION
+
+**Current owner:** `PocketHiveMcpProperties` binds and validates the MCP service's
+owner endpoints, security, storage paths and capacity settings. Application,
+transport, security and state composition consume it; public endpoint transport
+delegates to `RESP-PUBLIC-ENDPOINT-TRANSPORT`. Environment-health-specific settings
+remain a distinct concern in `EnvironmentHealthProperties`.
+
+**Forbidden:** domain transitions, infrastructure IO or alternate config resolution.
+**Contract:** [MCP configuration](../mcp/README.md).
+**Verification:** `PocketHiveMcpPropertiesTest`. Existing ownership, now indexed.
+
+## RESP-COMPANION-CONNECTION-PROFILE
+
+**Current roles:** `connection/profile.ts` constructs the validated immutable
+profile; `storage/profileRepository.ts` owns stored profile decoding, persistence,
+selection and removal through VS Code storage ports. Decoding delegates profile
+construction; both consume `RESP-PUBLIC-ENDPOINT-TRANSPORT`. The companion provider
+and connection flow use these owners; secret contents remain in the session store.
+
+**Forbidden:** authentication, endpoint discovery or a second transport policy.
+**Contract:** [companion profiles](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion profile/repository tests. Existing, disjoint roles.
+
+## RESP-COMPANION-ENDPOINT-DISCOVERY
+
+**Current owner:** `connection/endpointValidator.ts` checks the selected endpoint,
+loopback resolution and protected-resource metadata for the connection flow.
+It consumes the explicit profile and delegates transport checks to
+`RESP-PUBLIC-ENDPOINT-TRANSPORT`; it does not choose another URL or protocol.
+One ten-second discovery budget covers DNS, metadata headers and body. Callers
+pass their cancellation signal; late DNS results cannot initiate an HTTP request.
+
+**Forbidden:** authentication, profile persistence or protocol downgrade.
+**Contract:** [public endpoints](AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
+**Verification:** companion endpoint validation tests. Existing ownership.
+
+## RESP-COMPANION-CONNECTION-ATTEMPT
+
+Stored-session lookup during a test retry belongs to `TESTING` and remains
+cancellable. A late session result must not change terminal cancellation.
+The attempt owner shares stored-session checking between retry and reconnect;
+read failures become actionable authentication failures, unless cancelled.
+
+**Owner:** `connection/connectionAttempt.ts` owns connection-attempt transitions.
+`DISCOVERING` is observable and cancellable for connect/reconnect. Discovery failure
+returns to `EDITING`; cancellation is terminal and late results cannot authenticate,
+test or enable saving. Endpoint discovery remains delegated to its boundary owner.
+
+**Must not:** perform transport IO, persist profiles or introduce another session owner.
+**Contract:** [companion connection flow](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `connectionAttempt.test.ts`.
+
+## RESP-COMPANION-OAUTH-CALLBACK
+
+**Owner:** `connection/loopbackBrowser.ts` owns the temporary loopback listener,
+callback receipt, cancellation and resource release. It flushes the callback page
+before closing connections; cancellation/timeout closes all listener connections.
+`connection/callbackPage.ts` only renders escaped callback presentation.
+
+**Must not:** validate OAuth state, exchange tokens or infer successful MCP connection.
+**Contract:** [companion connection flow](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `loopbackBrowser.test.ts`, live browser OAuth qualification.
+
+## RESP-COMPANION-AUTHORIZED-SESSION
+
+**Owner:** `connection/authorizedMcpSession.ts` owns authenticated session renewal
+and availability. It passes caller cancellation to endpoint discovery and delegates
+OAuth, secret persistence and MCP transport effects to their ports.
+
+**Must not:** own profile persistence, parse OAuth wire responses or define another
+endpoint-discovery policy.
+**Contract:** [companion session lifecycle](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `authorizedMcpSession.test.ts`. Existing session ownership.
+
+## RESP-COMPANION-MCP-HTTP
+
+**Current owner:** `mcp/httpClient.ts` owns MCP HTTP exchange/session transport and
+same-origin archive upload. Connection and operation callers consume it with an
+already selected endpoint and token. Its transport session ID is not domain state.
+
+**Forbidden:** following redirects, selecting security modes, authenticating users
+or deciding PocketHive domain outcomes.
+**Contract:** [MCP](../mcp/README.md).
+**Verification:** `mcpHttpClient.test.ts`, `mcpHttpRedirect.test.ts`. Existing ownership.
+
+## RESP-COMPANION-COMMAND-INPUT
+
+**Current owner:** `webview/messages.ts` defines and strictly decodes webview
+commands before the companion provider dispatches them. Endpoint modes and swarm
+operations are consumed from their existing value owners, not redefined here.
+
+**Forbidden:** command execution, UI state mutation or inferred missing fields.
+**Contract:** [companion](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion message-decoding tests. Existing ownership.
+
+## RESP-COMPANION-ENVIRONMENT-VIEW
+
+**Current owner:** `webview/environmentViews.ts` renders onboarding, account and
+ingress-health views using the webview's supplied model and presentation ports.
+The transport selector presents explicit choices; it does not grant permission.
+
+**Forbidden:** authentication, network probes or inferred environment settings.
+**Contract:** [companion](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion UI checks. Existing presentation responsibility.
+
 ## RESP-INTAKE-RUNTIME-VOCABULARY
 
 **Canonical value owners:** `AuthType` under `RESP-AUTH-VALUES` and
@@ -2730,17 +2849,20 @@ workflow compares its exact bytes with output from the compiled owners through
 Normal Maven tests and product image publication do not depend on intake package
 files. These checks do not prove deployed worker capabilities.
 
-**Intake owners:** the existing schema validator owns document shape, reference
-rules own selected-SUT identity, and readiness rules own missing requirements.
+**Intake consumers:** [schema validation](intake-runtime.md#resp-intake-schema),
+[reference rules](intake-runtime.md#resp-intake-references),
+[readiness rules](intake-runtime.md#resp-intake-readiness) and
+[bundle inspection](intake-runtime.md#resp-intake-inspection) retain their own
+document responsibilities and consume the vocabulary projection.
 They do not validate runtime auth profiles or decide endpoint transport support.
 An accepted type without a complete intake representation remains a handoff gap.
 
 **Forbidden:** hand-maintained runtime value lists, Java source parsing, runtime
 schema downloads, implicit aliases/migrations, or inferring readiness from a type.
 
-**Contract:** [intake vocabulary ownership](../../.agents/skills/pockethive-intake/contract/intake-contract.md#runtime-vocabulary-ownership).
+**Contract:** [intake vocabulary ownership](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#runtime-vocabulary-ownership).
 **Verification:** `tools/intake-contracts/generate.sh --check` in the dedicated
-[intake workflow](../../.github/workflows/intake-skill.yml), public-CLI
+[intake workflow](https://github.com/sepa79/PocketHive/blob/main/.github/workflows/intake-skill.yml), public-CLI
 auth/protocol regressions, and the relocated offline package suite.
 
 ## RESP-INTAKE-RESULT-EVIDENCE
@@ -2753,7 +2875,7 @@ may be reused. Executed reports require both through the existing result checks.
 **Forbidden:** deriving a run ID from another identifier, querying a live run,
 calculating a pass, or inferring execution from an allocated run ID.
 
-**Contract:** [recorded results](../../.agents/skills/pockethive-intake/contract/intake-contract.md#measurement-mappings-and-recorded-results)
+**Contract:** [recorded results](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#measurement-mappings-and-recorded-results)
 and [lifecycle schema](../spec/swarm-lifecycle.schema.json).
 **Verification:** public-CLI result identity and measurement tests.
 

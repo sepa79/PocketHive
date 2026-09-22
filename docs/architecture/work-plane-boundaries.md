@@ -215,6 +215,32 @@ Normal handler return keeps existing AUTO acknowledgement behavior. Work subscri
 their separately supplied tuning/executor; CP uses its configured listener policy. Registration
 happens before the registry starts. No Spring listener annotation or raw container escapes the API.
 
+### Worker CONTROL command execution
+
+**The current worker CONTROL path processes commands serially within one worker
+runtime.** One consumer handles its `workerControl` queue. Dispatch through
+`WorkerControlQueueListener` → `WorkerControlPlaneRuntime` → state listeners is
+synchronous, including the Work input's enable/disable callback. The next command
+is handled after that callback returns. Work execution has its own executor and
+may run concurrently; increasing Work concurrency does not add CONTROL consumers.
+This execution model is scoped to worker command handling, not every thread or
+manager in PocketHive.
+
+Normal Spring lifecycle ordering initializes Work inputs before starting CONTROL
+reception and stops CONTROL reception before stopping those inputs. Factory-created
+`MessageWorkInput` instances are held in `WorkInputRegistry`; they are not separately
+registered Spring event listeners. The public input lifecycle methods do not by
+themselves establish additional concurrent application callers.
+
+**This relies on the current wiring and configuration, not a runtime guard against
+all possible overrides.** The CONTROL Simple container uses one consumer by default;
+current repository configuration does not override it. Increasing
+`spring.rabbitmq.listener.simple.concurrency` or `max-concurrency`, adding asynchronous
+state dispatch, or introducing concurrent lifecycle callers changes this assumption
+and requires revisiting state/admission ordering. Reviews must establish the actual
+callers and configuration that permit a reported interleaving, as required by the
+[transition review rules](../REVIEW_RULES.md#mandatory-boundary-review--blocking-rules).
+
 ## 6. Build and composition enforcement
 
 Rabbit libraries and Spring-AMQP implementation imports belong only to rabbit-adapter.

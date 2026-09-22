@@ -1,6 +1,7 @@
 """Responsibility: check declared data preparation and preservation of client usage constraints.
 Must not: execute data operations, infer credentials or resolve alternate SUT sources.
-Contract: intake-contract.md and the reviewed data source/usage template sections.
+Local contract: intake-contract.md and the reviewed data source/usage template sections.
+Contract: RESP-INTAKE-DATA — docs/architecture/intake-runtime.md#resp-intake-data.
 """
 from __future__ import annotations
 

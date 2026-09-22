@@ -1,6 +1,7 @@
 """Responsibility: derive exact field changes and stable-identity ledger changes.
 Must not: validate schemas, infer answers or adoption, echo old values or mutate rows.
-Contract: intake-contract.md, Review and field views; identity_index owns identity checks.
+Local contract: intake-contract.md, Review and field views; identity_index owns identity checks.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

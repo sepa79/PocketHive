@@ -1,5 +1,6 @@
 """Responsibility: prepare verified intake references for portable local delivery.
-Must not: search for missing evidence, approve reviews or rewrite client payloads. Contract: intake-contract.md.
+Must not: search for missing evidence, approve reviews or rewrite client payloads. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-PORTABILITY — docs/architecture/intake-runtime.md#resp-intake-portability.
 """
 from copy import deepcopy
 import os

@@ -1,6 +1,7 @@
 """Responsibility: explain editable nulls using recorded context and canonical population preview.
 Must not: infer source absence, applicability, adoption or new readiness gates.
-Contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Local contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

@@ -1,5 +1,6 @@
 """Responsibility: dispatch intake operations to their single owning components.
-Must not: duplicate parsers, validators or projection logic. Contract: intake-contract.md.
+Must not: duplicate parsers, validators or projection logic. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-CLI — docs/architecture/intake-runtime.md#resp-intake-cli.
 """
 from contextlib import nullcontext
 from pathlib import Path

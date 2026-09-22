@@ -1,5 +1,6 @@
 """Responsibility: resolve exact JSON Pointers and enumerate scalar facts.
-Must not: infer path aliases or domain applicability. Contract: intake-contract.md, field-help.md.
+Must not: infer path aliases or domain applicability. Local contract: intake-contract.md, field-help.md.
+Contract: RESP-INTAKE-DOCUMENT-VALUES — docs/architecture/intake-runtime.md#resp-intake-document-values.
 """
 from __future__ import annotations
 

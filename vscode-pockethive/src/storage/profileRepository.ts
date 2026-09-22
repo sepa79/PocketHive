@@ -1,7 +1,7 @@
 /**
  * Responsibility: Persist connection profiles, selection and removal through VS Code storage ports.
  * Must not: Authenticate connections or decide endpoint transport policy.
- * Contract: vscode-pockethive/README.md and the canonical connection profile contract.
+ * Contract: RESP-COMPANION-CONNECTION-PROFILE — docs/architecture/runtime-responsibilities.md#resp-companion-connection-profile.
  */
 import { isEndpointSecurityMode } from '../connection/endpointSecurityPolicy';
 import { ConnectionContractError, McpConnectionProfile, OAuthSessionStore } from '../connection/contracts';

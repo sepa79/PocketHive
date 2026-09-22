@@ -4,6 +4,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
@@ -49,6 +50,9 @@ class ScenarioControllerTest {
 
     @Autowired
     WebApplicationContext webApplicationContext;
+
+    @Value("${pockethive.release.version}")
+    String releaseVersion;
 
     @MockBean
     AuthServiceClient authServiceClient;
@@ -602,7 +606,7 @@ class ScenarioControllerTest {
             .andExpect(jsonPath("$.ok").value(false))
             .andExpect(jsonPath("$.validation.scenarioProtocolVersion").value("1.3.0"))
             .andExpect(jsonPath("$.validation.supportedScenarioProtocolVersion").value("2.0.0"))
-            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value("0.15.35"))
+            .andExpect(jsonPath("$.validation.scenarioManagerVersion").value(releaseVersion))
             .andExpect(jsonPath("$.validation.artifactDigest", org.hamcrest.Matchers.startsWith("sha256:")))
             .andExpect(jsonPath("$.findings[0].message", org.hamcrest.Matchers.containsString("incompatible")));
     }

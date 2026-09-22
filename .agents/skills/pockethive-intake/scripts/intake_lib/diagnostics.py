@@ -1,5 +1,6 @@
 """Responsibility: describe failed CLI operations without disclosing client data.
-Must not: repair inputs, expose exception messages/locals or choose command outcomes. Contract: intake-contract.md.
+Must not: repair inputs, expose exception messages/locals or choose command outcomes. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-CLI — docs/architecture/intake-runtime.md#resp-intake-cli.
 """
 from __future__ import annotations
 

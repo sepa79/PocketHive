@@ -1,6 +1,7 @@
 """Responsibility: derive a compact review/resume view from saved intake evidence.
 Must not: author questions, assess source fidelity or decide readiness.
-Contract: intake-contract.md, authoring-outcomes.md.
+Local contract: intake-contract.md, authoring-outcomes.md.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

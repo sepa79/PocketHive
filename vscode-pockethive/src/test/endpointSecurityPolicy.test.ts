@@ -47,13 +47,13 @@ test('remote HTTP discovery preserves exact resource and selected issuer transpo
     return new Response(JSON.stringify({ resource, authorization_servers: [issuer] }),
       { headers: { 'Content-Type': 'application/json' } });
   });
-  assert.equal((await validator.validate(profile)).authorizationServer, issuer);
+  assert.equal((await validator.validate(profile, new AbortController().signal)).authorizationServer, issuer);
   assert.deepEqual(requests, ['http://lab.example:8088/.well-known/oauth-protected-resource']);
   issuer = 'https://lab.example/auth-service';
-  await assert.rejects(validator.validate(profile), /MCP_AUTHORIZATION_SERVER_INVALID/);
+  await assert.rejects(validator.validate(profile, new AbortController().signal), /MCP_AUTHORIZATION_SERVER_INVALID/);
   issuer = 'http://lab.example:8088/auth-service';
   resource = 'http://different.example/mcp';
-  await assert.rejects(validator.validate(profile), /MCP_RESOURCE_METADATA_MISMATCH/);
+  await assert.rejects(validator.validate(profile, new AbortController().signal), /MCP_RESOURCE_METADATA_MISMATCH/);
 });
 
 test('IPv6 loopback reaches metadata using the production address resolver', async () => {
@@ -62,5 +62,5 @@ test('IPv6 loopback reaches metadata using the production address resolver', asy
   const validator = new PocketHiveEndpointValidator(async () => new Response(JSON.stringify({
     resource: profile.mcpUrl, authorization_servers: ['http://[::1]:8088/auth-service'],
   }), { headers: { 'Content-Type': 'application/json' } }));
-  assert.equal((await validator.validate(profile)).mcpUrl, profile.mcpUrl);
+  assert.equal((await validator.validate(profile, new AbortController().signal)).mcpUrl, profile.mcpUrl);
 });

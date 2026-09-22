@@ -1,6 +1,7 @@
 """Responsibility: decode explicit bulk field requests and compose the canonical views.
 Must not: validate facts, enumerate private keys or maintain independent ownership rules.
-Contract: field-help.md.
+Local contract: field-help.md.
+Contract: RESP-INTAKE-FIELD-VIEWS — docs/architecture/intake-runtime.md#resp-intake-field-views.
 """
 from __future__ import annotations
 

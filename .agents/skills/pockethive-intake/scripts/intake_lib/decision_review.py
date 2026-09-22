@@ -1,6 +1,7 @@
 """Responsibility: separate recorded decisions by stage and expose unlinked diagnostic groups.
 Must not: infer question owners, invent questions or calculate readiness.
-Contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Local contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Contract: RESP-INTAKE-REVIEW-VIEWS — docs/architecture/intake-runtime.md#resp-intake-review-views.
 """
 from __future__ import annotations
 

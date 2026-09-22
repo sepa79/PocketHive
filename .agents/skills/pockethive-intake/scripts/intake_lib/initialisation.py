@@ -1,5 +1,6 @@
 """Responsibility: create a new partial intake set from the mandatory templates.
-Must not: infer client facts, adopt bundle configuration or overwrite existing work. Contract: intake-contract.md.
+Must not: infer client facts, adopt bundle configuration or overwrite existing work. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-INITIALISATION — docs/architecture/intake-runtime.md#resp-intake-initialisation.
 """
 from __future__ import annotations
 

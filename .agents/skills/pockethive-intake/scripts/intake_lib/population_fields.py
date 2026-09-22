@@ -1,6 +1,7 @@
 """Responsibility: map explicit HTTP template observations into empty intake fields.
 Must not: parse bundle files, overwrite client facts or adopt observed configuration.
-Contract: bundle-observations.json; intake-contract.md.
+Local contract: bundle-observations.json; intake-contract.md.
+Contract: RESP-INTAKE-POPULATION — docs/architecture/intake-runtime.md#resp-intake-population.
 """
 from __future__ import annotations
 

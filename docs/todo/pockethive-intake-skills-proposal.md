@@ -737,6 +737,14 @@ and limits are recorded in the package's
 
 ### Continuing limits
 
+Open client qualification follows the packaged
+[conversation evaluation guidance](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/references/evaluation.md).
+Verify source minimisation and stakeholder wording in each intended client/model:
+earlier trials sometimes inspected excessive source content or exposed validation
+totals in client-facing replies. Instruction changes and finite trials do not
+establish universal compliance or independent human usability. These are intake
+qualification concerns; MCP transport and worker execution have separate owners.
+
 Recommend one self-contained `pockethive-intake` ZIP with two intake modes,
 bundled stakeholder writing, mandatory templates and one validator. Git-owned
 documents retain senior engineering judgement and minimal-friction interview

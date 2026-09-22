@@ -1,7 +1,7 @@
 /**
  * Responsibility: Own the companion's explicit endpoint modes and transport validation.
  * Must not: Discover endpoints, persist profiles, or infer HTTP permission from a URL.
- * Contract: RESP-PUBLIC-ENDPOINT-TRANSPORT — docs/architecture/runtime-responsibilities.md.
+ * Contract: RESP-PUBLIC-ENDPOINT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-public-endpoint-transport.
  */
 import { ConnectionContractError } from './contracts';
 

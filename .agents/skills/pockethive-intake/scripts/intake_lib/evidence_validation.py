@@ -1,5 +1,6 @@
 """Responsibility: verify source identities and material-fact provenance coverage.
-Must not: infer source meaning, fetch remote sources or authenticate human approval. Contract: intake-contract.md.
+Must not: infer source meaning, fetch remote sources or authenticate human approval. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-PROVENANCE — docs/architecture/intake-runtime.md#resp-intake-provenance.
 """
 from __future__ import annotations
 

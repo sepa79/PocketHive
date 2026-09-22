@@ -1,5 +1,6 @@
 """Responsibility: describe field editing boundaries from the existing owning contracts.
-Must not: validate client facts or duplicate projection assignments. Contract: intake-contract.md.
+Must not: validate client facts or duplicate projection assignments. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-EDIT-POLICY — docs/architecture/intake-runtime.md#resp-intake-edit-policy.
 """
 from __future__ import annotations
 

@@ -1,5 +1,6 @@
 """Responsibility: project extraction coverage from the canonical inspector's traversal.
-Must not: read sources, parse content or infer completed QA review. Contract: intake-contract.md.
+Must not: read sources, parse content or infer completed QA review. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-INSPECTION — docs/architecture/intake-runtime.md#resp-intake-inspection.
 """
 from __future__ import annotations
 

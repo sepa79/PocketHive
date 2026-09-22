@@ -1,7 +1,7 @@
 /**
  * Responsibility: Render environment onboarding, account session, and ingress-health presentation.
  * Must not: Authenticate users, probe services, or infer environment configuration.
- * Contract: vscode-pockethive/README.md and docs/mcp/README.md.
+ * Contract: RESP-COMPANION-ENVIRONMENT-VIEW — docs/architecture/runtime-responsibilities.md#resp-companion-environment-view.
  */
 
 interface PocketHiveEnvironmentViewPort {
@@ -192,15 +192,15 @@ function connectionForm(): HTMLElement {
   ], String(draft.endpointSecurityMode ?? 'REMOTE_HTTPS'));
   form.append(text('h2', draft.id ? 'Connection' : 'Add environment'), stages, name.wrapper, url.wrapper, mode.wrapper);
   form.append(el('div', 'status-list', [
-    statusRow('Endpoint', endpointStatus(attempt)),
+    statusRow('Endpoint', attempt.state === 'DISCOVERING' ? 'Checking endpoint…' : endpointStatus(attempt)),
     statusRow('Authentication', authenticationStatus(attempt)),
     statusRow('Connection test', testStatus(attempt)),
   ]));
   if (attempt.failure?.message) form.append(text('p', String(attempt.failure.message), 'error-message', 'alert'));
   const controls = el('div', 'form-actions');
-  if (model.busy && (attempt.state === 'AUTHENTICATING' || attempt.state === 'TESTING')) {
+  if (model.busy && (attempt.state === 'DISCOVERING' || attempt.state === 'AUTHENTICATING' || attempt.state === 'TESTING')) {
     controls.append(button('Cancel connection', () => send({ type: 'cancelConnection' }, true), 'secondary', true));
-  } else if (attempt.state === 'AUTHENTICATION_FAILED' || attempt.state === 'CANCELLED') {
+  } else if (attempt.state === 'AUTHENTICATION_FAILED') {
     controls.append(button('Sign in again', () => send({ type: 'signInAgain' }), 'primary'));
   } else if (attempt.state === 'CONNECTION_TEST_FAILED') {
     controls.append(button('Retry test', () => send({ type: 'retryTest' }), 'primary'));

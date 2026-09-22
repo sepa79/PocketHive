@@ -1,6 +1,7 @@
 """Responsibility: apply explicit revision-bound field edits with their evidence.
 Must not: infer source meaning, accept reviews or own schema/projection validation.
-Contract: intake-contract.md, authoring-outcomes.md, explicit update batch.
+Local contract: intake-contract.md, authoring-outcomes.md, explicit update batch.
+Contract: RESP-INTAKE-UPDATES — docs/architecture/intake-runtime.md#resp-intake-updates.
 """
 from __future__ import annotations
 

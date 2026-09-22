@@ -1,5 +1,6 @@
 """Responsibility: define safe intake boundary errors.
-Must not: retain payloads or decide validation outcomes. Contract: intake-contract.md.
+Must not: retain payloads or decide validation outcomes. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-CLI — docs/architecture/intake-runtime.md#resp-intake-cli.
 """
 from __future__ import annotations
 

@@ -10,7 +10,7 @@
     <rabbit.boundary.clients.skip>false</rabbit.boundary.clients.skip>
     <artemis.boundary.clients.skip>false</artemis.boundary.clients.skip>
     <!-- Flatten plugin resolves this CI-friendly revision into published POMs; see build plugins below. -->
-    <revision>0.15.35</revision>
+    <revision>0.15.36</revision>
     <tomcat.version>10.1.55</tomcat.version>
     <netty.version>4.1.134.Final</netty.version>
     <bouncycastle.version>1.84</bouncycastle.version>

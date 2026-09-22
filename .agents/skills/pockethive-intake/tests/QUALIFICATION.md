@@ -589,7 +589,10 @@ source/template/schema files remain unchanged. No commits or pushes were made.
 File writes remain individually verified; the document set is not a directory
 transaction. The shared source/evidence owners continue to govern validation.
 
-The repository review is `docs/ai/intake-enrichment-portability-review-2026-09-17.md`.
+The resolved repository review was removed during branch documentation cleanup.
+Remaining intake-client and conversation qualification is tracked in
+`docs/todo/pockethive-intake-skills-proposal.md#continuing-limits`; this is a contributor reference,
+not an installed-package dependency.
 Local evidence (not a package dependency):
 `/home/tim/.tmp/pip/intake-polish-complete-suite-mjpjo9g0/` and
 `/home/tim/.tmp/pip/intake-polish-conversations-jei6tiv_/`.

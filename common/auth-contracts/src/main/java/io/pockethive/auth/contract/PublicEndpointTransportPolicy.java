@@ -5,7 +5,7 @@ import java.net.URI;
 /**
  * Responsibility: Validate transport of explicitly configured public authentication and MCP endpoints.
  * Must not: Resolve addresses, infer URLs, change protocols, or validate client callback registration.
- * Contract: RESP-PUBLIC-ENDPOINT-TRANSPORT — docs/architecture/runtime-responsibilities.md.
+ * Contract: RESP-PUBLIC-ENDPOINT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-public-endpoint-transport.
  */
 public final class PublicEndpointTransportPolicy {
     private PublicEndpointTransportPolicy() { }

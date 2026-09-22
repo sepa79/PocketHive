@@ -1,5 +1,6 @@
 """Responsibility: derive start/resume guidance from explicit workspace contents.
-Must not: mutate files, infer client intent or implement working schemas. Contract: intake-contract.md.
+Must not: mutate files, infer client intent or implement working schemas. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-WORKSPACE — docs/architecture/intake-runtime.md#resp-intake-workspace.
 """
 from .errors import IntakeError
 from .schema_validation import SchemaValidation

@@ -1,5 +1,6 @@
 """Responsibility: inventory explicitly supplied human forms for evidence-led intake.
-Must not: validate working schemas, migrate facts or decide readiness. Contract: intake-contract.md.
+Must not: validate working schemas, migrate facts or decide readiness. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-HUMAN-INPUT — docs/architecture/intake-runtime.md#resp-intake-human-input.
 """
 from __future__ import annotations
 

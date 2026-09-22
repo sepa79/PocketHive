@@ -22,6 +22,13 @@ verify the connection. The steps below describe an installed extension.
    succeed.
 5. Use the Hive, Buzz, Journal, Scenarios, and Debug tabs for that environment.
 
+Endpoint discovery has a ten-second budget covering DNS, response headers and
+the metadata body. The connection form offers **Cancel connection** during discovery;
+cancelled or late results cannot continue to authentication or connection testing.
+The OAuth callback listener closes its connections after flushing the callback
+page, or immediately on cancellation/timeout, without waiting for a browser tab
+or speculative connection to close.
+
 The workspace presents compact bounded rows and empty states rather than raw
 owner responses. Hive groups each swarm into one lifecycle-accented operational
 surface, keeps its status beside its identity, and exposes run history through a
@@ -173,12 +180,14 @@ testing runs on Linux against the same source and test contracts.
 cd vscode-pockethive
 npm ci --ignore-scripts
 npm test
-npm run ui:check
+npm run ui:check -- acceptance-workers-artemis acceptance-http
 npm run mutation
 npm run package
 ```
 
-`npm run ui:check` drives the complete local-loopback add/connect/open flow
+`npm run ui:check -- <template-id> <sut-id>` requires an explicit disposable
+scenario and SUT matching the local deployment's WORK adapter. Use `NONE` for
+a scenario with no SUT. The command drives the complete local-loopback add/connect/open flow
 through `http://localhost:8088/mcp`, including browser OAuth, live MCP reads,
 exact lifecycle/history/debug messages, run-to-Journal navigation, event and
 scenario filters, grouped diagnostics, narrow-width geometry, keyboard tabs,

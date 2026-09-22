@@ -1,5 +1,6 @@
 """Responsibility: bind human review to the material content and intake ledger.
-Must not: grant, refresh or infer approval. Contract: intake-contract.md, provenance-policy.json.
+Must not: grant, refresh or infer approval. Local contract: intake-contract.md, provenance-policy.json.
+Contract: RESP-INTAKE-PROVENANCE — docs/architecture/intake-runtime.md#resp-intake-provenance.
 """
 from .package_context import canonical_hash
 from .pointers import covers, leaves

@@ -1,5 +1,6 @@
 """Responsibility: enumerate declared local evidence records and reference-only links.
-Must not: interpret payload strings or validate evidence. Contract: intake-contract.md, traceability schema.
+Must not: interpret payload strings or validate evidence. Local contract: intake-contract.md, traceability schema.
+Contract: RESP-INTAKE-PROVENANCE — docs/architecture/intake-runtime.md#resp-intake-provenance.
 """
 
 

@@ -1,5 +1,6 @@
 """Responsibility: project explicitly requested fields with canonical authoring guidance.
-Must not: write values, infer evidence support or revalidate schema branches. Contract: intake-contract.md, field-help.md.
+Must not: write values, infer evidence support or revalidate schema branches. Local contract: intake-contract.md, field-help.md.
+Contract: RESP-INTAKE-FIELD-VIEWS — docs/architecture/intake-runtime.md#resp-intake-field-views.
 """
 from __future__ import annotations
 

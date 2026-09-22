@@ -1,6 +1,7 @@
 """Responsibility: render the stakeholder report from canonical intake facts and validation.
 Must not: infer missing facts, classify provenance or decide field applicability.
-Contract: intake-contract.md, stakeholder report presentation.
+Local contract: intake-contract.md, stakeholder report presentation.
+Contract: RESP-INTAKE-REPORT — docs/architecture/intake-runtime.md#resp-intake-report.
 """
 from __future__ import annotations
 

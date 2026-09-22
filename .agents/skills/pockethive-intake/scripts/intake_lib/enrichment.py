@@ -1,5 +1,6 @@
 """Responsibility: stage, validate and publish explicitly sourced intake enrichment.
-Must not: infer facts, overwrite working revisions or own validation. Contract: intake-contract.md.
+Must not: infer facts, overwrite working revisions or own validation. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-ENRICHMENT — docs/architecture/intake-runtime.md#resp-intake-enrichment.
 """
 import json
 from pathlib import Path

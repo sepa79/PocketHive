@@ -1,7 +1,7 @@
 /**
  * Responsibility: Execute the companion's MCP HTTP protocol and same-origin archive upload transport.
  * Must not: Select endpoint security modes, follow redirects, or authenticate users.
- * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy.
+ * Contract: RESP-COMPANION-MCP-HTTP — docs/architecture/runtime-responsibilities.md#resp-companion-mcp-http.
  */
 import {
   ConnectionContractError,

@@ -1,5 +1,6 @@
 """Responsibility: translate explicit source pointers into canonical authoring edits.
-Must not: infer mappings, adopt examples or persist working documents. Contract: intake-contract.md.
+Must not: infer mappings, adopt examples or persist working documents. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-ENRICHMENT — docs/architecture/intake-runtime.md#resp-intake-enrichment.
 """
 from copy import deepcopy
 

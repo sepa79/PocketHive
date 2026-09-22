@@ -1,5 +1,6 @@
 """Responsibility: safely parse and round-trip the supported YAML data model.
-Must not: infer defaults, execute tags or evaluate embedded expressions. Contract: intake-contract.md.
+Must not: infer defaults, execute tags or evaluate embedded expressions. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-YAML — docs/architecture/intake-runtime.md#resp-intake-yaml.
 """
 from __future__ import annotations
 

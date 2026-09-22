@@ -1,7 +1,7 @@
 """Responsibility: inventory scenario source outside reserved intake artifacts and report safe observations.
 Must not: resolve endpoints, infer adapters or execute source content.
-Contract: bundle-observations.json; intake-contract.md#runtime-vocabulary-ownership; RESP-INTAKE-RUNTIME-VOCABULARY.
-Architecture: docs/architecture/runtime-responsibilities.md#resp-intake-runtime-vocabulary.
+Local contract: bundle-observations.json; intake-contract.md#runtime-vocabulary-ownership.
+Contract: RESP-INTAKE-INSPECTION — docs/architecture/intake-runtime.md#resp-intake-inspection.
 """
 from __future__ import annotations
 

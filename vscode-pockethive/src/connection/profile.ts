@@ -1,7 +1,7 @@
 /**
  * Responsibility: Construct validated immutable connection profiles from explicit input.
  * Must not: Discover endpoints, persist profiles, or decide transport policy independently.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy.
+ * Contract: RESP-COMPANION-CONNECTION-PROFILE — docs/architecture/runtime-responsibilities.md#resp-companion-connection-profile.
  */
 import { validateEndpointTransport } from './endpointSecurityPolicy';
 import {

@@ -33,6 +33,7 @@ export interface McpConnectionProfile {
 
 export type ConnectionAttemptState =
   | 'EDITING'
+  | 'DISCOVERING'
   | 'AUTHENTICATING'
   | 'TESTING'
   | 'READY_TO_SAVE'
@@ -82,7 +83,7 @@ export interface OAuthSession {
 }
 
 export interface EndpointValidationPort {
-  validate(profile: McpConnectionProfile): Promise<ValidatedEndpoint>;
+  validate(profile: McpConnectionProfile, signal: AbortSignal): Promise<ValidatedEndpoint>;
 }
 
 export interface AuthenticationPort {

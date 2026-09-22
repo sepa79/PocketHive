@@ -1,6 +1,7 @@
 """Responsibility: persist a revision-bound stakeholder report with verified edit protection.
 Must not: author facts, infer acceptance, execute sources or decide readiness.
-Contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Local contract: intake-contract.md, Decision review and reproducible stakeholder output.
+Contract: RESP-INTAKE-REPORT — docs/architecture/intake-runtime.md#resp-intake-report.
 """
 from __future__ import annotations
 

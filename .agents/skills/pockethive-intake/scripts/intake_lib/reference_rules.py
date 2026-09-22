@@ -1,8 +1,8 @@
 """Responsibility: check identities and explicit references in schema-valid intake documents.
 Must not: infer missing targets, select source alternatives, perform I/O or decide readiness.
-Contract: intake-contract.md#runtime-vocabulary-ownership; RESP-INTAKE-RUNTIME-VOCABULARY.
-Architecture: docs/architecture/runtime-responsibilities.md#resp-intake-runtime-vocabulary.
+Local contract: intake-contract.md#runtime-vocabulary-ownership.
 Document shapes belong to the packaged schemas; transport compatibility belongs to runtime owners.
+Contract: RESP-INTAKE-REFERENCES — docs/architecture/intake-runtime.md#resp-intake-references.
 """
 from __future__ import annotations
 

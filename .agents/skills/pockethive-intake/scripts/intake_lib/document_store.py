@@ -1,5 +1,6 @@
 """Responsibility: persist document bytes with revision checks and cooperative writer exclusion.
-Must not: construct business projections or grant whole-set atomicity. Contract: intake-contract.md.
+Must not: construct business projections or grant whole-set atomicity. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-DOCUMENT-STORE — docs/architecture/intake-runtime.md#resp-intake-document-store.
 """
 from __future__ import annotations
 

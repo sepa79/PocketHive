@@ -1,6 +1,7 @@
 """Responsibility: index explicit document identities and report duplicate ownership.
 Must not: infer missing identities, repair rows or decide reference applicability.
-Contract: intake-contract.md; shared single-field and compound identity semantics.
+Local contract: intake-contract.md; shared single-field and compound identity semantics.
+Contract: RESP-INTAKE-DOCUMENT-VALUES — docs/architecture/intake-runtime.md#resp-intake-document-values.
 """
 from __future__ import annotations
 

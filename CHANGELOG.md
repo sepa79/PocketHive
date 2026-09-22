@@ -4,6 +4,32 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.36]
+Timestamp: 2026-09-22T00:00:00Z
+
+- HTTP Sequence targeting: allow each step to select a SUT HTTP endpoint with
+  `sutEndpointId` or an explicit literal `baseUrl`; steps without an override
+  retain the worker-level target. Validate all declared base targets before
+  execution and reject invalid or conflicting overrides without fallback.
+- HTTP Sequence URL containment: preserve configured base paths and reject
+  literal, encoded and repeatedly encoded path traversal, including encoded
+  slash and backslash separators.
+- HTTP Sequence JSON ownership: use the shared observability mapper and remove
+  the duplicate service configuration; retain the bootstrap SSOT gate.
+- Companion connection reliability: bound and cancel endpoint discovery, keep
+  cancellation terminal during stored-session lookup, and close idle callback
+  connections after flushing the browser response. Separate callback presentation
+  from listener ownership.
+- OAuth registry persistence: reject trailing content and non-integer schema
+  versions in dynamic-client state; fail startup on malformed state without
+  changing the file or the shared JSON mapper.
+- Portable intake 1.9.0: document existing CLI ownership and link runtime headers
+  to canonical responsibility records; keep installed packages independent of
+  repository documentation. Remove resolved branch review/handoff clutter and
+  retain open qualification work with its owning feature.
+- Release metadata: align the Maven reactor and root npm package/lockfile at
+  0.15.36. The VS Code companion remains independently versioned at 1.0.6.
+
 - OAuth consent: make Decline reject all requested permissions, including prior
   consent, and preserve validated cancellation callbacks with the original state.
   Document the registry, persistence, redirect and browser-failure owners.
@@ -30,7 +56,6 @@ All notable changes to this project will be documented in this file.
 - HiveForge Swarm deployment: support explicit Artemis WORK selection and shared
   broker state, cross-host proxy placement, and writable MCP temporary storage
   within the read-only container deployment. Include public Dev TLS/auth fixtures.
-
 
 - Intake skill CI: reject stale generated schemas or package manifests, run the
   public CLI suite, and upload a verified portable ZIP with its checksum as a
@@ -174,9 +199,6 @@ All notable changes to this project will be documented in this file.
   extension guidance, supersede the retired Node plugin documents, and record the
   local RST debrief and outstanding governed/human production-release checks.
 
-## [0.15.36]
-Timestamp: 2026-08-19T00:00:00Z
-
 - Release metadata and info endpoints: add a shared `observability` auto-configuration
   that contributes `pockethive.service` and `pockethive.version` to Actuator info,
   filter service application resources so `@project.version@` resolves at build time,
@@ -189,8 +211,6 @@ Timestamp: 2026-08-19T00:00:00Z
   docs-site lockfiles through `npm update`, clear `npm audit` findings in all active
   Node projects except the remaining upstream `docs-site` `image-size` advisory, and
   pin `uuid` in the docs-site overrides to remove the fixable transitive issue.
-
-Timestamp: 2026-07-22T22:53:54Z
 
 - Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
   operation and allocate CREATE's run id before launch, so failures before swarm

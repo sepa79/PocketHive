@@ -1,5 +1,6 @@
 """Responsibility: resolve and verify the installed package and explicit workspace roots.
-Must not: search home/Git/cwd for defaults or repair package files. Contract: manifest.json.
+Must not: search home/Git/cwd for defaults or repair package files. Local contract: manifest.json.
+Contract: RESP-INTAKE-PACKAGE-CONTEXT — docs/architecture/intake-runtime.md#resp-intake-package-context.
 """
 from __future__ import annotations
 

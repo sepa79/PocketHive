@@ -1,5 +1,6 @@
 """Responsibility: select explicitly participating APIs and the named SUT.
-Must not: infer missing modes or choose an alternate SUT. Contract: intake-contract.md.
+Must not: infer missing modes or choose an alternate SUT. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-APPLICABILITY — docs/architecture/intake-runtime.md#resp-intake-applicability.
 """
 PARTICIPATING_MODES = frozenset(("load", "readiness-only", "auth-prerequisite"))
 

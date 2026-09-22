@@ -1,5 +1,6 @@
 """Responsibility: project recorded ledger context for one explicitly requested field.
-Must not: read sources, infer evidence support or alter ledger records. Contract: intake-contract.md.
+Must not: read sources, infer evidence support or alter ledger records. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-FIELD-VIEWS — docs/architecture/intake-runtime.md#resp-intake-field-views.
 """
 from __future__ import annotations
 

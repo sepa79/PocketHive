@@ -1,7 +1,7 @@
 """Responsibility: identify applicable missing intake decisions and incompatible choices.
 Must not: approve work, assess live readiness or calculate test outcomes.
-Contract: intake-contract.md#runtime-vocabulary-ownership; RESP-INTAKE-RUNTIME-VOCABULARY.
-Architecture: docs/architecture/runtime-responsibilities.md#resp-intake-runtime-vocabulary.
+Local contract: intake-contract.md#runtime-vocabulary-ownership.
+Contract: RESP-INTAKE-READINESS — docs/architecture/intake-runtime.md#resp-intake-readiness.
 """
 from __future__ import annotations
 

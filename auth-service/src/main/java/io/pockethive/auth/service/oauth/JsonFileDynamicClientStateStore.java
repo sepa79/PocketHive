@@ -2,6 +2,9 @@ package io.pockethive.auth.service.oauth;
 
 import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
@@ -25,7 +28,11 @@ final class JsonFileDynamicClientStateStore implements DynamicClientStateStore {
         if (mapper == null || statePath == null || !statePath.isAbsolute()) {
             throw new IllegalArgumentException("OAUTH_DYNAMIC_CLIENT_STATE_PATH_INVALID");
         }
-        this.mapper = mapper.copy().enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        this.mapper = mapper.copy()
+            .enable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, DeserializationFeature.FAIL_ON_TRAILING_TOKENS)
+            .disable(DeserializationFeature.ACCEPT_FLOAT_AS_INT);
+        this.mapper.coercionConfigFor(LogicalType.Integer)
+            .setCoercion(CoercionInputShape.String, CoercionAction.Fail);
         this.statePath = statePath.normalize();
     }
 

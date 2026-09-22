@@ -146,7 +146,7 @@ class ArtemisDebugTapTest {
                         assertThat(arrivals.get(item.messageId())).isGreaterThanOrEqualTo(notBefore.get(item.messageId()));
                         WorkItem original = expected.stream().filter(value -> value.messageId().equals(item.messageId()))
                             .findFirst().orElseThrow();
-                        assertThat(codec.toJson(item)).isEqualTo(codec.toJson(original));
+                        assertThat(item).usingRecursiveComparison().isEqualTo(original);
                     }
                     assertThat(receivedIds).containsExactlyInAnyOrderElementsOf(notBefore.keySet());
                     assertThat(received).isEmpty();

@@ -65,7 +65,9 @@ living contracts below continue to describe the supported system.
 - [Review Rules](REVIEW_RULES.md)
 - [Responsibility and SSOT Workflow](ai/RESPONSIBILITY_WORKFLOW.md)
 - [Current B01 Responsibility Records](architecture/runtime-responsibilities.md)
+- [Intake Runtime Ownership](architecture/intake-runtime.md)
 - [HiveMind Workflow for Agents](ai/HIVEMIND_WORKFLOW.md)
+- [Independent Acceptance Framework](architecture/acceptance-tests.md)
 - [Control Plane Testing Playbook](ci/control-plane-testing.md)
 
 ## MCP and IDE integrations

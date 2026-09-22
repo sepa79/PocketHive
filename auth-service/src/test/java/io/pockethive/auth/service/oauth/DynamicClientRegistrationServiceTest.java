@@ -8,6 +8,7 @@ import io.pockethive.auth.service.config.AuthServiceOAuthProperties;
 import io.pockethive.auth.contract.PocketHiveMcpScopes;
 import io.pockethive.auth.service.config.AuthServiceProperties;
 import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Duration;
@@ -19,6 +20,8 @@ import java.util.Arrays;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.oauth2.core.AuthorizationGrantType;
 import org.springframework.security.oauth2.core.ClientAuthenticationMethod;
@@ -243,6 +246,25 @@ class DynamicClientRegistrationServiceTest {
 
         clock.current = NOW.plus(TTL.multipliedBy(2)).plusSeconds(1);
         assertThat(clients.findById("active")).isNull();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+        "{\"schemaVersion\":1,\"clients\":[]} garbage",
+        "{\"schemaVersion\":1,\"clients\":[]} {\"schemaVersion\":1,\"clients\":[]}",
+        "{\"schemaVersion\":1.9,\"clients\":[]}",
+        "{\"schemaVersion\":\"1\",\"clients\":[]}"
+    })
+    void malformedStateBlocksRegistryStartupWithoutReplacingTheFile(String content, @TempDir Path directory)
+        throws Exception {
+        Path path = directory.resolve("clients.json");
+        Files.writeString(path, content);
+        byte[] before = Files.readAllBytes(path);
+
+        assertThatThrownBy(() -> repository(new MutableClock(NOW), 2, fileStore(path)))
+            .isInstanceOf(IllegalStateException.class)
+            .hasMessage("OAUTH_DYNAMIC_CLIENT_STATE_READ_FAILED");
+        assertThat(Files.readAllBytes(path)).isEqualTo(before);
     }
 
     @Test

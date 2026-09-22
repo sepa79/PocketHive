@@ -7,7 +7,7 @@ import java.time.Duration;
 /**
  * Responsibility: Bind the canonical OAuth issuer, client, capacity, and token-lifetime configuration.
  * Must not: Register clients, issue tokens, or infer missing deployment endpoints.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-OAUTH-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-oauth-configuration.
  */
 public final class AuthServiceOAuthProperties {
     private boolean allowRemoteHttp;

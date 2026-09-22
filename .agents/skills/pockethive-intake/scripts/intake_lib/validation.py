@@ -1,5 +1,6 @@
 """Responsibility: compose canonical structural, evidence and semantic intake checks.
-Must not: repair documents, approve operations or validate PocketHive runtime configuration. Contract: intake-contract.md.
+Must not: repair documents, approve operations or validate PocketHive runtime configuration. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-VALIDATION — docs/architecture/intake-runtime.md#resp-intake-validation.
 """
 from __future__ import annotations
 

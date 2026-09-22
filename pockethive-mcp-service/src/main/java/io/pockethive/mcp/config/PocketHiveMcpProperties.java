@@ -17,7 +17,7 @@ import org.springframework.validation.annotation.Validated;
 /**
  * Responsibility: Bind and validate the canonical MCP owner, security, and capacity configuration.
  * Must not: Own domain transitions or reconstruct configuration outside the canonical properties.
- * Contract: docs/mcp/README.md.
+ * Contract: RESP-MCP-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-mcp-configuration.
  */
 
 @Validated

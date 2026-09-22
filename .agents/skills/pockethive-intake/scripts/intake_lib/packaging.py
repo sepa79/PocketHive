@@ -1,5 +1,6 @@
 """Responsibility: seal explicit release files and write a verified deterministic ZIP.
-Must not: change source snapshots or install/update tools. Contract: manifest.json and intake-contract.md.
+Must not: change source snapshots or install/update tools. Local contract: manifest.json and intake-contract.md.
+Contract: RESP-INTAKE-PACKAGING — docs/architecture/intake-runtime.md#resp-intake-packaging.
 """
 from __future__ import annotations
 

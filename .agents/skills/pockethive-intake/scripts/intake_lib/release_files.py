@@ -1,5 +1,6 @@
 """Responsibility: enumerate exactly the manifest-declared release roots.
-Must not: include client workspaces, caches or follow links. Contract: manifest.json.
+Must not: include client workspaces, caches or follow links. Local contract: manifest.json.
+Contract: RESP-INTAKE-PACKAGING — docs/architecture/intake-runtime.md#resp-intake-packaging.
 """
 from .errors import IntakeError
 

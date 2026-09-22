@@ -1,5 +1,6 @@
 """Responsibility: resolve local canonical schemas and validate document structure.
-Must not: download schemas, insert defaults or decide domain readiness. Contract: schemas/*.schema.json, field-help.md.
+Must not: download schemas, insert defaults or decide domain readiness. Local contract: schemas/*.schema.json, field-help.md.
+Contract: RESP-INTAKE-SCHEMA — docs/architecture/intake-runtime.md#resp-intake-schema.
 """
 from __future__ import annotations
 

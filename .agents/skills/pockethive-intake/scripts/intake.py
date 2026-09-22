@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Responsibility: invoke the intake CLI from any installation directory.
-Must not: own parsing, validation or document state. Contract: intake-contract.md.
+Must not: own parsing, validation or document state. Local contract: intake-contract.md.
+Contract: RESP-INTAKE-CLI — docs/architecture/intake-runtime.md#resp-intake-cli.
 """
 from pathlib import Path
 import sys
