@@ -313,7 +313,7 @@ class RedisUploaderInterceptorTest {
 
     private static WorkerInvocationContext invocationContext(Map<String, Object> rawConfig, WorkItem message) {
         WorkerState state = new WorkerState(DEFINITION);
-        state.updateRawConfig(rawConfig);
+        state.updateRuntimeConfiguration(WorkerRuntimeConfiguration.parse(rawConfig));
         state.setStatusPublisher(StatusPublisher.NO_OP);
         return new WorkerInvocationContext(DEFINITION, state, workerContext(), message);
     }

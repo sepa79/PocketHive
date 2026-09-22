@@ -10,9 +10,7 @@ import io.pockethive.work.api.StatusPublisher;
 import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.WorkerContext;
 import io.pockethive.work.api.WorkerInfo;
-import io.pockethive.worker.sdk.config.PocketHiveWorkerProperties;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
@@ -22,11 +20,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Baseline context factory used for Stage 1 runtime integration tests and examples outlined in
- * {@code docs/sdk/worker-sdk-quickstart.md}.
- * <p>
- * Responsibility: create read views of worker configuration, identity and observability for invocations.
- * Must not: mutate accepted configuration, select IO implementations or provision resources.
+ * Responsibility: create invocation read views using the configured executing worker identity.
+ * Must not: derive executing identity from message origin, mutate accepted configuration,
+ * parse history settings, select IO implementations or provision resources.
  * Contract: RESP-WORK-CONTEXT — docs/architecture/runtime-responsibilities.md#resp-work-context.
  */
 public final class DefaultWorkerContextFactory implements WorkerContextFactory {
@@ -34,39 +30,19 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
     private final Function<Class<?>, Object> beanResolver;
     private final MeterRegistry meterRegistry;
     private final ObservationRegistry observationRegistry;
-    private final List<PocketHiveWorkerProperties<?>> workerProperties;
 
     private final Map<WorkerDefinition, Logger> loggers = new ConcurrentHashMap<>();
     private final ControlPlaneIdentity configuredIdentity;
 
     /**
-     * Creates a factory backed by a simple Micrometer registry and observation registry.
-     */
-    public DefaultWorkerContextFactory(Function<Class<?>, Object> beanResolver) {
-        this(beanResolver, new SimpleMeterRegistry(), ObservationRegistry.create(), null, List.of());
-    }
-
-    /**
-     * Creates a factory backed by a simple Micrometer registry and observation registry, using the
-     * provided control-plane identity as a fallback for swarm/instance identifiers.
+     * Creates a factory with the required executing identity and simple observation registries.
      */
     public DefaultWorkerContextFactory(Function<Class<?>, Object> beanResolver, ControlPlaneIdentity identity) {
-        this(beanResolver, new SimpleMeterRegistry(), ObservationRegistry.create(), identity, List.of());
+        this(beanResolver, new SimpleMeterRegistry(), ObservationRegistry.create(), identity);
     }
 
     /**
-     * Creates a factory using the provided registries.
-     */
-    public DefaultWorkerContextFactory(
-        Function<Class<?>, Object> beanResolver,
-        MeterRegistry meterRegistry,
-        ObservationRegistry observationRegistry
-    ) {
-        this(beanResolver, meterRegistry, observationRegistry, null, List.of());
-    }
-
-    /**
-     * Creates a factory using the provided registries and control-plane identity fallback.
+     * Creates a factory using the provided registries and required executing identity.
      */
     public DefaultWorkerContextFactory(
         Function<Class<?>, Object> beanResolver,
@@ -74,25 +50,10 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         ObservationRegistry observationRegistry,
         ControlPlaneIdentity identity
     ) {
-        this(beanResolver, meterRegistry, observationRegistry, identity, List.of());
-    }
-
-    /**
-     * Creates a factory using the provided registries, control-plane identity fallback, and
-     * optional worker property beans used to resolve {@link HistoryPolicy}.
-     */
-    public DefaultWorkerContextFactory(
-        Function<Class<?>, Object> beanResolver,
-        MeterRegistry meterRegistry,
-        ObservationRegistry observationRegistry,
-        ControlPlaneIdentity identity,
-        List<PocketHiveWorkerProperties<?>> workerProperties
-    ) {
         this.beanResolver = Objects.requireNonNull(beanResolver, "beanResolver");
         this.meterRegistry = Objects.requireNonNull(meterRegistry, "meterRegistry");
         this.observationRegistry = Objects.requireNonNull(observationRegistry, "observationRegistry");
-        this.configuredIdentity = identity;
-        this.workerProperties = workerProperties == null ? List.of() : List.copyOf(workerProperties);
+        this.configuredIdentity = Objects.requireNonNull(identity, "identity");
     }
 
     @Override
@@ -101,46 +62,17 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         Objects.requireNonNull(state, "state");
         Objects.requireNonNull(message, "message");
         Logger logger = loggers.computeIfAbsent(definition, def -> LoggerFactory.getLogger(def.beanType()));
-        String swarmId = resolveIdentifier(message, "swarmId",
-            configuredIdentity != null ? configuredIdentity.swarmId() : null,
-            "swarmId");
-        String instanceId = resolveIdentifier(message, "instanceId",
-            configuredIdentity != null ? configuredIdentity.instanceId() : null,
-            "instanceId");
         WorkIoBindings io = definition.io();
         WorkerInfo info = new WorkerInfo(
             definition.role(),
-            swarmId,
-            instanceId,
+            configuredIdentity.swarmId(),
+            configuredIdentity.instanceId(),
             io.inboundQueue(),
             io.outboundQueue()
         );
         ObservabilityContext observabilityContext = resolveObservabilityContext(info, message);
-        HistoryPolicy historyPolicy = resolveHistoryPolicy(definition);
+        HistoryPolicy historyPolicy = state.historyPolicy();
         return new DefaultWorkerContext(info, state, logger, meterRegistry, observationRegistry, observabilityContext, historyPolicy);
-    }
-
-    private static String resolveIdentifier(
-        WorkItem message,
-        String headerName,
-        String configuredValue,
-        String field
-    ) {
-        String fromHeader = normalise(message.headers().get(headerName));
-        String resolved = fromHeader != null ? fromHeader : normalise(configuredValue);
-        if (resolved == null) {
-            throw new IllegalStateException(
-                field + " must be provided via message header '" + headerName + "' or configured ControlPlaneIdentity");
-        }
-        return resolved;
-    }
-
-    private static String normalise(Object value) {
-        if (value == null) {
-            return null;
-        }
-        String text = value.toString().trim();
-        return text.isEmpty() ? null : text;
     }
 
     private record DefaultWorkerContext(
@@ -198,17 +130,6 @@ public final class DefaultWorkerContextFactory implements WorkerContextFactory {
         public HistoryPolicy historyPolicy() {
             return historyPolicy;
         }
-    }
-
-    private HistoryPolicy resolveHistoryPolicy(WorkerDefinition definition) {
-        if (workerProperties == null || workerProperties.isEmpty()) {
-            return HistoryPolicy.FULL;
-        }
-        return workerProperties.stream()
-            .filter(props -> props != null && props.role().equalsIgnoreCase(definition.role()))
-            .findFirst()
-            .map(PocketHiveWorkerProperties::getHistoryPolicy)
-            .orElse(HistoryPolicy.FULL);
     }
 
     private ObservabilityContext resolveObservabilityContext(WorkerInfo info, WorkItem message) {

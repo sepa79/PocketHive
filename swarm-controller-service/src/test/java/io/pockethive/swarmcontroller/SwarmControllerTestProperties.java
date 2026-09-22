@@ -28,8 +28,7 @@ final class SwarmControllerTestProperties {
             CONTROL_QUEUE_PREFIX_BASE,
             new SwarmControllerProperties.Manager("swarm-controller"),
             new SwarmControllerProperties.SwarmController(
-                new SwarmControllerProperties.Traffic(HIVE_EXCHANGE, TRAFFIC_PREFIX),
-                new SwarmControllerProperties.Metrics(
+                    new SwarmControllerProperties.Metrics(
                     PocketHiveMetricsAdapter.DISABLED,
                     Duration.ofSeconds(10),
                     ClickHouseMetricsSinkProperties.disabled()),

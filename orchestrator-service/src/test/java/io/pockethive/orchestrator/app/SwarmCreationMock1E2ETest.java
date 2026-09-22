@@ -215,6 +215,7 @@ class SwarmCreationMock1E2ETest {
         registry.add("spring.rabbitmq.username", RABBIT::getAdminUsername);
         registry.add("spring.rabbitmq.password", RABBIT::getAdminPassword);
         registry.add("spring.rabbitmq.virtual-host", () -> "/");
+        registry.add("pockethive.work.type", () -> "RABBITMQ");
         registry.add("pockethive.rabbit.work.host", RABBIT::getHost);
         registry.add("pockethive.rabbit.work.port", RABBIT::getAmqpPort);
         registry.add("pockethive.rabbit.work.username", RABBIT::getAdminUsername);

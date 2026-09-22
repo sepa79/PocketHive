@@ -13,6 +13,7 @@ import org.springframework.context.annotation.Import;
  * Must not: infer a broker from worker roles or supply missing WORK configuration.
  * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
  */
+@org.springframework.context.annotation.Conditional(io.pockethive.rabbit.api.RabbitWorkPlaneCondition.class)
 @Import(RabbitWorkConnectionConfiguration.class)
 public class RabbitWorkPlaneConfiguration {
     @org.springframework.context.annotation.Bean

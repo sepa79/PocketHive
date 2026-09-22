@@ -1201,7 +1201,7 @@ class SwarmLifecycleManagerTest {
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
             .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"))),
         new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(), swarm ->
-            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(properties.getTraffic().queuePrefix(), properties.getTraffic().hiveExchange())));
+            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(SwarmControllerTestProperties.TRAFFIC_PREFIX, SwarmControllerTestProperties.HIVE_EXCHANGE)));
   }
 
   private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {

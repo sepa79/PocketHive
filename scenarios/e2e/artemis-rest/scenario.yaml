@@ -1,0 +1,104 @@
+protocolVersion: "2.0.0"
+id: artemis-rest
+name: Artemis REST lifecycle smoke
+description: Explicit Artemis WORK through generator, moderator, processor and postprocessor; Rabbit CONTROL.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        outputs:
+          type: ARTEMIS
+          artemis:
+            persistent: true
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 5.0
+            maxMessages: 0
+        message:
+          bodyType: HTTP
+          path: /api/test
+          method: POST
+          body: hello-world
+          headers: {}
+      work:
+        out:
+          out: gen
+      ports:
+        - { id: out, direction: out }
+    - role: moderator
+      image: moderator:latest
+      config:
+        inputs:
+          type: ARTEMIS
+          artemis:
+            consumerWindowBytes: 0
+        outputs:
+          type: ARTEMIS
+          artemis:
+            persistent: true
+        mode:
+          type: pass-through
+          ratePerSec: 0.0
+      work:
+        in:
+          in: gen
+        out:
+          out: mod
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: ARTEMIS
+          artemis:
+            consumerWindowBytes: 0
+        outputs:
+          type: ARTEMIS
+          artemis:
+            persistent: true
+      work:
+        in:
+          in: mod
+        out:
+          out: final
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        inputs:
+          type: ARTEMIS
+          artemis:
+            consumerWindowBytes: 0
+        outputs:
+          type: NONE
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in:
+          in: final
+      ports:
+        - { id: in, direction: in }
+
+topology:
+  version: 1
+  edges:
+    - id: e1
+      from: { port: out, role: generator }
+      to: { port: in, role: moderator }
+    - id: e2
+      from: { port: out, role: moderator }
+      to: { port: in, role: processor }
+    - id: e3
+      from: { port: out, role: processor }
+      to: { port: in, role: postprocessor }

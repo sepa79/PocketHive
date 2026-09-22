@@ -9,6 +9,11 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 
+/**
+ * Responsibility: merge worker configuration patches and construct typed candidates and their diff.
+ * Must not: accept state, perform adapter effects or decide control command success.
+ * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
+ */
 final class ConfigMerger {
 
     private static final TypeReference<Map<String, Object>> MAP_TYPE = new TypeReference<>() {};
@@ -32,13 +37,13 @@ final class ConfigMerger {
         Map<String, Object> normalizedUpdates = updates == null || updates.isEmpty() ? Map.of() : Map.copyOf(updates);
         boolean replace = resetRequested || !normalizedUpdates.isEmpty();
         Map<String, Object> mergedRaw = previousRaw;
-        Object typedConfig = null;
         if (replace) {
             mergedRaw = mergeWithExisting(previousRaw, normalizedUpdates, resetRequested);
-            typedConfig = toTypedConfig(definition, mergedRaw);
         }
+        WorkerRuntimeConfiguration configuration = WorkerRuntimeConfiguration.parse(mergedRaw);
+        Object typedConfig = replace ? toTypedConfig(definition, mergedRaw) : null;
         Map<String, Object> diff = describeConfigChanges(previousRaw, mergedRaw);
-        return new ConfigMergeResult(previousRaw, mergedRaw, typedConfig, replace, diff);
+        return new ConfigMergeResult(previousRaw, configuration, typedConfig, replace, diff);
     }
 
     Map<String, Object> toRawConfig(Object config) {
@@ -163,11 +168,4 @@ final class ConfigMerger {
         return copy.isEmpty() ? Map.of() : Map.copyOf(copy);
     }
 
-    record ConfigMergeResult(
-        Map<String, Object> previousRaw,
-        Map<String, Object> rawConfig,
-        Object typedConfig,
-        boolean replaced,
-        Map<String, Object> diff
-    ) { }
 }

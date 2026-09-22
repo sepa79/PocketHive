@@ -40,8 +40,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Use shared constants/enums/contract types.
   - String parsing is allowed only at system boundaries, then normalize/map once.
 - **Git safety (agents):**
-  - **No pushes:** agents must not run `git push` (ever).
-  - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
+  - **Development repository pushes:** agents may run `git push` to an explicitly identified development/test repository when publishing source is required for a user-requested deployment or development workflow (for example the HiveForge Dev repository). This authorization persists throughout that task; do not request it again for each push.
+  - **GitHub and other repositories:** pushing to GitHub or any repository outside that authorized development target requires a separate, explicit human request to push to that destination. A Dev deployment does not authorize a GitHub push. Verify the destination URL; do not assume `origin` is the development repository.
+  - **No destructive pushes by default:** force pushes and remote branch/tag deletion require explicit approval for that operation.
+  - **Deployment commits:** authorization to deploy/update a development/test environment includes the scoped commits and Dev repository pushes needed to carry out that workflow. Continue through fixes and verification without requesting permission again for each commit or push. This does not authorize GitHub publication, unrelated commits, destructive pushes, or deployment outside the authorized environment.
+  - **Other commits:** outside an authorized development/test deployment workflow, agents must not create commits unless a human explicitly requests a commit.
 - **Tests must use only official ingress/API paths.**
   - Do not point tests, E2E checks, or test diagnostics at direct service ports as a substitute for the supported entrypoint.
   - Use the official public path/interface for the environment under test (for example the UI ingress / documented API base), not backend container ports.

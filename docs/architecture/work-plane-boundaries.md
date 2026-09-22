@@ -175,12 +175,29 @@ Domain state writers consume operation outcomes; Rabbit does not own swarm conve
 
 ### Preserved Work delivery behavior
 
-This migration preserves the pre-extraction behavior by explicit user decision. Work uses
-AUTO acknowledgement when the listener callback returns. With asynchronous execution this
-is after executor submission, not after processing/publication. Existing SDK decode/dispatch
-error reporting swallows those exceptions. Executor rejection retains the historical
-synchronous dispatch path. Disabled invocation returns null as before. STOP retains the
-existing listener lifecycle; no drain/wait-for-completion policy is introduced.
+Human-approved correction, 2026-09-15: Rabbit and Artemis use one SDK executor
+admission path for every maxInFlight value, including one. The limit controls
+concurrent admitted work only; it does not select inline execution or ACK timing.
+A callback waits for capacity, submits exactly one task, then returns for ACK.
+Worker/parser/executor-task failures are reported after admission and never return
+accepted work to the broker. There is no inline dispatch or rejection fallback.
+
+Before stopping a channel, SDK closes admission and wakes waiting callbacks.
+WorkNotAcceptedException identifies only work that was not submitted (paused,
+closed or interrupted admission). Rabbit maps it to native requeue; Artemis leaves
+that delivery unsettled for session close. This is not retry of accepted work.
+Accepted tasks continue; stop does not wait for their completion. Closing an input
+also shuts down its executor without interrupting accepted tasks. Decode failures
+retain their existing consume/report behavior. No wire schema or CONTROL change.
+
+WA-REV corrections approved 2026-09-15: Artemis acknowledges each consumed delivery
+individually, so a later decode failure cannot acknowledge an earlier unaccepted item.
+SDK disable closes admission before waiting for serialized transport lifecycle calls;
+it can therefore wake a capacity waiter inside synchronous channel start. Enable
+opens admission only while applying serialized lifecycle state. Close is terminal.
+The executor retains core worker threads while idle for existing PER_THREAD client
+reuse. Pool sizes are derived from the one admission limit; no separate backlog of
+unadmitted tasks, idle expiry policy or inline execution is introduced.
 
 WorkItem decoding reads only the message body and ignores AMQP transport headers, including
 null-valued entries. The Rabbit message projection must carry those entries without rejecting
@@ -188,8 +205,8 @@ delivery before the SDK callback; envelope headers remain owned by WorkItemJsonC
 
 RabbitPublisher submits via send. The existing publisherConfirms setting remains represented
 and validated but is not activated, as in the pre-extraction implementation. No SIMPLE-confirm
-activation, confirmation timeout, sendConfirmed API, completion-based settlement or admission
-requeue policy is part of this refactor. Correcting these behaviors requires separate scope.
+activation, confirmation timeout, sendConfirmed API or completion-based settlement is
+part of this refactor. The approved not-submitted settlement exception is defined above.
 
 Control Plane receive integration uses `RabbitListenerBinding`: explicit listener id, resolved
 queue, a message callback and a fatal-failure classifier. CP owns its contract-error classification;
@@ -360,3 +377,140 @@ Preserve section 5 delivery semantics, section 4 configuration ownership and acc
 limitations. Standard Spring binding of the already validated Rabbit ENV projection is not a
 competing configuration owner. The withdrawn worker-review W1 does not authorize a new parser
 or stricter direct-startup validation. The execution plan owns the remaining order and acceptance.
+
+## 11. Artemis adapter — approved implementation slice, 2026-09-15
+
+The active Artemis plan is `docs/inProgress/work-plane-artemis-3ds.md`. The first
+slice implements existing Java Work contracts in `common/artemis-adapter`,
+namespace `io.pockethive.artemis`. A3 supplies authoring, service and SDK composition.
+One deployment explicitly selects `pockethive.work.type` (`RABBITMQ` or `ARTEMIS`);
+Controller bootstrap receives the owner's selection in `POCKETHIVE_WORK_TYPE`.
+Input/output still declare their own adapter and settings. Rabbit CONTROL remains
+independent. Artemis does not require Rabbit WORK credentials or Controller traffic.
+
+Artemis AUTHORING requires `inputs: {type: ARTEMIS, artemis: {consumerWindowBytes: 0}}`
+and, when selected as output, `outputs: {type: ARTEMIS, artemis: {persistent: true}}`.
+These are examples of explicit choices, not defaults. Physical queue/address fields
+are forbidden in AUTHORING; the topology owner supplies them for RESOLVED and the
+matching worker ENV. All Artemis transport settings are startup-only; normal enable,
+pause and execution controls retain their existing SDK behavior. Provider aggregation
+in work-config-composition keeps Scenario Manager on the neutral parser.
+
+Connection settings require an explicit Core broker URL, username, password and
+positive call timeout. Input settings contain a resolved queue and nonnegative
+consumer window size in bytes; output settings contain a resolved address and an
+explicit persistence flag. Settings records own validation. No Rabbit settings,
+implicit connection selection, retry/failover or broker auto-creation fallback.
+The existing Spring Boot 3.5.14 BOM owns the initial Artemis client/server version.
+
+One names owner encodes namespace, swarm and logical channel as separate segments
+to avoid separator collisions. Each channel owns an ANYCAST address and queue;
+resolved projections supply names to transport, resource operations and observations.
+Existing WORK_RESOURCE/WORK identities carry the adapter's exact resource URI for
+normal removal. No additional lifecycle enum or manifest field is introduced.
+
+Core sessions are owned and reused by the adapter. Input delivery and output use
+different sessions; concurrent output calls serialize access to the output session.
+Input decodes through WorkItemJsonCodec, calls WorkDeliveryHandler and acknowledges
+after callback return, including reported decode/dispatch failures. Explicitly unaccepted
+deliveries remain unsettled for channel stop under the SDK admission contract above. No worker
+execution, second result publication, transport-header merge or implicit redelivery.
+Stopping and starting an input must release/recreate its consumer while retaining
+its configured callback. Closing the adapter closes sessions and connection resources.
+
+The existing startup artifact and Controller topology remain the start/remove
+path. The Rabbit-only diagnostic ownership manifest is not an Artemis prerequisite.
+A4 keeps the manifest's Rabbit projection scoped to Rabbit: native WORK_RESOURCE
+entries are omitted with a warning, while CONTROL names and compute identity remain
+recorded. Empty rabbit.workQueues/exchanges say nothing about Artemis resource presence.
+Normal removal uses the Controller's owner-issued targets and Orchestrator's verified
+postconditions. Orphan cleanup and diagnostic-manifest replacement remain separate work.
+Section 12 defines the approved transport delivery contract independently of the eventual 3DS payloads.
+
+
+## 12. Delayed Work delivery
+
+Status: contract approved and A5 implemented/locally verified on 2026-09-21.
+Execution evidence is recorded in the acceptance coverage ledger.
+
+### Scenario contract and time origin
+
+A worker can request delayed delivery of each non-null result through neutral
+output configuration, alongside the selected adapter settings:
+
+```yaml
+outputs:
+  type: ARTEMIS
+  artemis: { persistent: true }
+  delivery:
+    mode: DELAYED
+    delayMs: 180000
+```
+
+`delivery.mode` is `IMMEDIATE` or `DELAYED`. DELAYED requires a positive integral
+`delayMs`; IMMEDIATE forbids `delayMs`. Unknown fields and invalid values fail
+validation. The single documented default for an absent `delivery` block
+is IMMEDIATE, preserving ordinary publication without adding adapter-specific
+defaults. A supplied block must declare its mode explicitly.
+
+For this first slice the policy is fixed at worker startup. Config-update attempts
+to change it are rejected without changing accepted configuration. Delay is a
+constant per output; expressions, random distributions and response-dependent
+selection belong to later work.
+
+The delay starts when the output adapter prepares that publication for sending,
+after worker execution and acquisition of the producer session. It is not measured
+from generator creation, webhook receipt, input admission or completion of HTTP
+processing. Artemis immediately receives the message with a native not-before
+instant calculated from that publication's clock reading plus `delayMs`. Overflow
+is rejected before send. The contract requires aligned worker/broker clocks;
+it does not promise exact delivery latency or an upper bound on lateness.
+
+The producer is any existing worker returning a non-null WorkItem. The recipient
+is the worker consuming its existing resolved output channel. A5 verification uses
+a generator publishing delayed requests to a processor. No APATA payload contract
+or additional HTTP receiver is required for this transport test.
+
+### Ownership and publication path
+
+- `work-config` owns the neutral policy type, fields, default and validation.
+  `WorkConfigurationParser` delegates to that owner; scenario authoring, resolved
+  configuration and startup consume the same result. Adapter settings retain their
+  own existing owners. Environment export is a projection of accepted configuration.
+- `work-api` exposes the shared `work-config` delivery type as the publication intent passed with the WorkItem. Every
+  publication explicitly carries IMMEDIATE or DELAYED in the Java path; the intent
+  is local to that publication and is not serialized into the WorkItem or copied
+  into a global message header. A downstream worker uses its own output policy.
+- The SDK retains the accepted startup output policy in `WorkIoBindings` and passes the intent through
+  `DefaultWorkerRuntime -> WorkOutputRegistry -> WorkOutput`. There is exactly one
+  send for a non-null result and none for a null result. No interceptor publishes.
+- The selected adapter owns its supported delivery modes. Configuration validation
+  and transport enforcement consume the same capability declaration. Unsupported
+  delayed output is rejected before worker execution; the transport also rejects
+  unsupported direct Java calls before any send. Rabbit, Redis and NONE do not gain
+  delayed behavior in this slice.
+- `artemis-adapter` alone translates the neutral relative delay into the Core
+  scheduled-delivery property and absolute broker timestamp. It owns clock access
+  and native message creation. No worker timer, sleeping executor or second queue
+  naming authority is added.
+
+Input admission/ACK behavior and the WorkItem wire envelope remain unchanged.
+Execution failures remain consumed and reported, without retry or redelivery.
+
+### Acceptance
+
+1. An embedded real Artemis broker receives delayed publications immediately,
+   exposes none early, then delivers them; immediate traffic is not held behind
+   scheduled traffic. Payload, identity and correlation survive unchanged.
+2. Removing a channel with scheduled messages verifies resource absence. Recreating
+   that logical channel does not resurrect the removed messages.
+3. Invalid/unsupported policies fail before effects; config-update rejection retains
+   accepted state. Default IMMEDIATE and explicit IMMEDIATE retain ordinary behavior.
+4. Runtime integration exercises the actual single publication path, including null
+   results and errors, and verifies that a downstream immediate output does not
+   inherit the preceding delay.
+5. A new acceptance scenario runs through the official ingress on the local Artemis
+   deployment and records delayed arrival plus ordinary swarm stop/remove evidence.
+
+The selector/splitter, combined APATA/app mock, CloseLook and the full 3DS/load test
+remain separate work. Passing A5 does not claim completion of A6 or a capacity result.

@@ -4,6 +4,26 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Artemis WorkPlane: add an explicit deployment-wide alternative to RabbitMQ for
+  worker traffic, including resource provisioning, transport and verified removal;
+  CONTROL continues to use RabbitMQ. Rabbit and Artemis acknowledge work on
+  admission, without redelivery of failed worker processing.
+- Delayed delivery: add startup-configured `outputs.delivery` with `IMMEDIATE`
+  or `DELAYED` and a positive `delayMs`. Artemis schedules delivery from broker
+  publication through the existing output path; unsupported adapters reject delay.
+- Acceptance testing: add an independent framework with public-ingress API checks,
+  isolated fixtures, verified cleanup and retained evidence across worker behavior,
+  lifecycle, authorization, data, exports and network scenarios. Verify cross-host
+  Swarm/NFS recovery and fresh deployment. Keep the legacy E2E suite frozen until
+  manual acceptance confirms its removal.
+- Worker configuration: honor scenario history policy at runtime, retain
+  `FULL` and `LATEST_ONLY`, and remove the unsupported `DISABLED` option.
+- Clearing exports: require every exporter to write beneath its swarm runtime
+  directory, including configuration updates, and verify finalized text, XML and
+  streaming output.
+- HiveForge Swarm deployment: support explicit Artemis WORK selection and shared
+  broker state, cross-host proxy placement, and writable MCP temporary storage
+  within the read-only container deployment. Include public Dev TLS/auth fixtures.
 - Control/work-plane isolation: move Rabbit connection, topology, resource, and
   transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
   keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery

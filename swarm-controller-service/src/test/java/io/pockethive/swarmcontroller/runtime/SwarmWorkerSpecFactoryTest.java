@@ -583,9 +583,8 @@ class SwarmWorkerSpecFactoryTest {
   }
 
   private static io.pockethive.topology.work.ResolvedWorkTopology topology(Bee bee) {
-    var traffic = properties().getTraffic();
     return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
-        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings(traffic.queuePrefix(), traffic.hiveExchange()))
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("ph.test", "ph.test.hive"))
         .resolve(properties().getSwarmId(), io.pockethive.topology.work.WorkTopologyChannels.from(java.util.List.of(bee)));
   }
 
@@ -602,7 +601,6 @@ class SwarmWorkerSpecFactoryTest {
         "ph.control",
         new SwarmControllerProperties.Manager("swarm-controller"),
         new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Traffic("ph.test.hive", "ph.test"),
             new SwarmControllerProperties.Metrics(
                 PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),

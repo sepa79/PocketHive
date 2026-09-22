@@ -3,9 +3,14 @@ package io.pockethive.controlplane.filesystem;
 import java.nio.file.Path;
 import java.util.Objects;
 
-/** The sole path resolver for artifacts stored below the shared swarm runtime root. */
+/**
+ * Responsibility: resolve validated paths below the shared swarm runtime roots.
+ * Must not: read environment settings, perform file IO or decide runtime lifecycle.
+ * Contract: RESP-RUNTIME-FILESYSTEM-LAYOUT — docs/architecture/runtime-responsibilities.md#resp-runtime-filesystem-layout.
+ */
 public final class RuntimeFilesystemLayout {
 
+  private static final String OUTPUTS = "outputs";
   private static final String STARTUP_ARTIFACTS = "runtime-artifacts";
   private static final String REMOVE_OPERATIONS = "operations/remove";
 
@@ -37,6 +42,15 @@ public final class RuntimeFilesystemLayout {
 
   public Path swarmRunDirectory(String swarmId, String runId) {
     return inside(swarmRoot(swarmId).resolve(requireSegment(runId, "runId")));
+  }
+
+  public Path workerOutputDirectory(String swarmId, String runId, String workerInstance) {
+    return inside(swarmRunDirectory(swarmId, runId).resolve(OUTPUTS)
+        .resolve(requireSegment(workerInstance, "workerInstance")));
+  }
+
+  public Path publishedWorkerOutputDirectory(String swarmId, String runId, String workerInstance) {
+    return publishedRoot.resolve(localRoot.relativize(workerOutputDirectory(swarmId, runId, workerInstance)));
   }
 
   public Path publishedStartupArtifact(String swarmId, String fileName) {

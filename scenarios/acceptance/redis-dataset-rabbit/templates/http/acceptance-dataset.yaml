@@ -1,0 +1,9 @@
+serviceId: default
+callId: acceptance-dataset
+protocol: HTTP
+method: POST
+pathTemplate: /api/test
+bodyTemplate: "{{ payload }}"
+headersTemplate:
+  Content-Type: application/json
+  X-Acceptance-Template: "{{ 'rendered' }}"

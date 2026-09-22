@@ -1,0 +1,27 @@
+# Test-only isolation overlay; merge with repository docker-compose.yml.
+# Explicitly select ui auth-service orchestrator artemis (dependencies are inherited).
+services:
+  rabbitmq:
+    ports: !reset []
+  postgres:
+    ports: !reset []
+  clickhouse:
+    ports: !reset []
+  toxiproxy:
+    ports: !reset []
+  scenario-manager:
+    ports: !reset []
+  network-proxy-manager:
+    ports: !reset []
+  auth-service:
+    ports: !reset []
+  ui:
+    ports: !override
+      - "127.0.0.1:${SM2_INGRESS_PORT:?Explicit dedicated ingress port required}:8088"
+  orchestrator:
+    environment:
+      CONTROL_NETWORK: ${COMPOSE_PROJECT_NAME:?Explicit unique project required}
+      POCKETHIVE_SCENARIOS_RUNTIME_ROOT: ${POCKETHIVE_SCENARIOS_RUNTIME_ROOT:?Explicit fresh runtime root required}
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME:?Explicit unique project required}

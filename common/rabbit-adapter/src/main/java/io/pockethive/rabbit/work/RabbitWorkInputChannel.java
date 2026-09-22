@@ -7,9 +7,11 @@ import io.pockethive.work.api.WorkItem;
 import io.pockethive.work.api.transport.WorkDeliveryHandler;
 import io.pockethive.work.api.transport.WorkInputChannel;
 import io.pockethive.work.api.transport.WorkInputChannelState;
+import io.pockethive.work.api.transport.WorkNotAcceptedException;
+import org.springframework.amqp.ImmediateRequeueAmqpException;
 import java.util.Objects;
 /**
- * Responsibility: register a resolved Rabbit Work subscription and decode incoming envelopes.
+ * Responsibility: decode a resolved Rabbit Work subscription and requeue only explicitly unaccepted deliveries.
  * Must not: inspect SDK state, dispatch workers, publish results or merge transport headers.
  * Contract: RESP-WORK-RABBIT-TRANSPORT — docs/architecture/runtime-responsibilities.md#resp-work-rabbit-transport.
  */
@@ -37,7 +39,11 @@ public final class RabbitWorkInputChannel implements WorkInputChannel {
                 handler.onDecodeFailure(message != null && message.body() != null ? message.body() : new byte[0], failure);
                 return;
             }
-            handler.onWork(item);
+            try {
+                handler.onWork(item);
+            } catch (WorkNotAcceptedException notAccepted) {
+                throw new ImmediateRequeueAmqpException("Work was not admitted", notAccepted);
+            }
         });
     }
 

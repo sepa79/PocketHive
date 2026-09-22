@@ -42,6 +42,9 @@ import org.springframework.boot.context.properties.source.MapConfigurationProper
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.Mockito.*;
+import static org.awaitility.Awaitility.await;
+import java.time.Duration;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 class WorkPlaneFlowTest {
     @Test
@@ -89,7 +92,7 @@ class WorkPlaneFlowTest {
         assertThat(inputSettings).isEqualTo(resolved.inputSettings());
         assertThat(outputSettings).isEqualTo(resolved.outputSettings());
         var definition = new WorkerDefinition("worker", Object.class, inputType, "processor",
-            new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup()),
+            new WorkIoBindings(inputSettings.inboundRoute(), outputSettings.outboundRoute(), outputSettings.outboundGroup(), io.pockethive.work.config.WorkDelivery.IMMEDIATE),
             Void.class, ioCatalog.inputClass(inputType), ioCatalog.outputClass(outputType), outputType, "flow", Set.of(WorkerCapability.MESSAGE_DRIVEN));
         var store = new WorkerStateStore();
         store.getOrCreate(definition);
@@ -118,7 +121,7 @@ class WorkPlaneFlowTest {
         var statusPublisher = control.statusPublisher("worker");
         when(context.statusPublisher()).thenReturn(statusPublisher);
         when(context.observabilityContext()).thenReturn(ObservabilityContextUtil.init("processor", "instance", "swarm"));
-        var executions = new ArrayList<String>();
+        var executions = new ConcurrentLinkedQueue<String>();
         PocketHiveWorkerFunction worker = (item, ctx) -> {
             executions.add(item.asString());
             if (item.asString().equals("invalid template")) throw new IllegalArgumentException("invalid template");
@@ -135,12 +138,14 @@ class WorkPlaneFlowTest {
         assertThat(stats.getQueueStats(inputAddress).depth()).isEqualTo(1);
         assertThat(executions).isEmpty();
         update(control, identity, Map.of("enabled", true));
-        assertThat(executions).containsExactly("payload");
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() -> assertThat(executions).containsExactly("payload"));
         assertThat(stats.getQueueStats(inputAddress).depth()).isZero();
         assertThat(stats.getQueueStats(inputAddress).consumers()).isEqualTo(1);
-        assertThat(transport.pending(outputAddress)).singleElement().satisfies(item -> assertThat(item.asString()).isEqualTo("payload"));
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+            assertThat(transport.pending(outputAddress)).singleElement().satisfies(item -> assertThat(item.asString()).isEqualTo("payload")));
         transport.output(inputAddress).publish(WorkItem.text(info, "invalid template").build());
-        verify(control).publishWorkError(eq("worker"), any(WorkItem.class), any(IllegalArgumentException.class));
+        await().atMost(Duration.ofSeconds(3)).untilAsserted(() ->
+            verify(control).publishWorkError(eq("worker"), any(WorkItem.class), any(IllegalArgumentException.class)));
         assertThat(stats.getQueueStats(inputAddress).depth()).isZero();
         assertThat(stats.getQueueStats(outputAddress).depth()).isEqualTo(1);
         assertThatThrownBy(() -> resources.remove(topology.channel("intake").resource())).hasMessage("Input is running");

@@ -51,7 +51,6 @@ class SwarmRuntimeInfrastructureTest {
     computeAdapter = mock(ComputeAdapter.class);
     queueMetrics = mock(SwarmQueueMetrics.class);
     when(properties.getSwarmId()).thenReturn(SWARM_ID);
-    when(properties.getTraffic()).thenReturn(new SwarmControllerProperties.Traffic("configured.hive", "configured-prefix"));
     infrastructure = new SwarmRuntimeInfrastructure(
         amqp, properties, resources, computeAdapter, queueMetrics);
   }

@@ -45,6 +45,22 @@ class RuntimeFilesystemLayoutTest {
   }
 
   @Test
+  void projectsIsolatedWorkerOutputsToHostAndContainerWithoutCreatingDirectories() {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(localRoot.toString(), "/runtime");
+    Path first = layout.workerOutputDirectory("alpha", "run-1", "exporter-1");
+    assertThat(first).isEqualTo(localRoot.resolve("alpha/run-1/outputs/exporter-1")).doesNotExist();
+    assertThat(layout.publishedWorkerOutputDirectory("alpha", "run-1", "exporter-1"))
+        .isEqualTo(Path.of("/runtime/alpha/run-1/outputs/exporter-1"));
+    assertThat(layout.workerOutputDirectory("alpha", "run-2", "exporter-1")).isNotEqualTo(first);
+    assertThat(layout.workerOutputDirectory("alpha", "run-1", "exporter-2")).isNotEqualTo(first);
+    assertThat(layout.workerOutputDirectory("beta", "run-1", "exporter-1")).isNotEqualTo(first);
+    assertThatThrownBy(() -> layout.workerOutputDirectory("alpha", "run-1", "../other"))
+        .isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> layout.publishedWorkerOutputDirectory("alpha", "../run", "exporter-1"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void acceptsOnlyPathsInsideItsLocalRoot() {
     RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(
         localRoot.toString(), RuntimeFilesystemContract.CONTAINER_ROOT);

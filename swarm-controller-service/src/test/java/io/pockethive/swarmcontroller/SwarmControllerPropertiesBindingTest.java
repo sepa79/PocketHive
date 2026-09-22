@@ -28,8 +28,6 @@ class SwarmControllerPropertiesBindingTest {
             "pockethive.control-plane.exchange=ph.control",
             "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.manager.role=swarm-controller",
-            "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
-            "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
             "pockethive.control-plane.swarm-controller.metrics.adapter=DISABLED",
             "pockethive.control-plane.swarm-controller.metrics.publish-interval=PT10S",
             "pockethive.control-plane.swarm-controller.docker.socket-path=/var/run/docker.sock")
@@ -39,9 +37,6 @@ class SwarmControllerPropertiesBindingTest {
                   context.getBean(SwarmControllerProperties.class);
               assertThat(properties.getSwarmId()).isEqualTo("swarm-a");
               assertThat(properties.getRole()).isEqualTo("swarm-controller");
-              assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
-              assertThat(properties.hiveExchange()).isEqualTo("ph.swarm-a.hive");
-              assertThat(properties.getTraffic().queuePrefix()).isEqualTo("ph.swarm-a");
               assertThat(properties.getMetrics().adapter())
                   .isEqualTo(PocketHiveMetricsAdapter.DISABLED);
               assertThat(properties.getMetrics().publishInterval())
@@ -59,8 +54,6 @@ class SwarmControllerPropertiesBindingTest {
             "pockethive.control-plane.exchange=ph.control",
             "pockethive.control-plane.control-queue-prefix=ph.control",
             "pockethive.control-plane.manager.role=swarm-controller",
-            "pockethive.control-plane.swarm-controller.traffic.queue-prefix=ph.swarm-a",
-            "pockethive.control-plane.swarm-controller.traffic.hive-exchange=ph.swarm-a.hive",
             "pockethive.control-plane.swarm-controller.metrics.adapter=CLICKHOUSE",
             "pockethive.control-plane.swarm-controller.metrics.publish-interval=PT10S",
             "pockethive.control-plane.swarm-controller.metrics.clickhouse.endpoint=http://clickhouse:8123",

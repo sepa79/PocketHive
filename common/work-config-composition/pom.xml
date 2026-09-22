@@ -11,6 +11,7 @@
   <name>PocketHive Work Configuration Composition</name>
   <properties><maven.compiler.release>21</maven.compiler.release></properties>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>artemis-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-config</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>redis-config</artifactId><version>${project.version}</version></dependency>

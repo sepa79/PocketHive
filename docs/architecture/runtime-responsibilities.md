@@ -38,6 +38,12 @@ in the applicable current plan; archived adoption reports describe their origina
 
 WorkItem owns immutable payload/step history; WorkItemBuilder constructs it and WorkStep/HistoryPolicy/WorkPayloadEncoding express that model.
 
+HistoryPolicy contains FULL (retain all recorded steps) and LATEST_ONLY (retain the
+current step, reindexed to zero). These operations preserve the current payload and
+its headers. The redundant DISABLED value was removed by user decision on 2026-09-16;
+there is no compatibility alias. Retention operations remain unchanged; selection of
+the effective policy belongs to RESP-WORK-STATE, not to the WorkItem model.
+
 Worker functions and transport codecs use the same item model; payload JSON convenience conversion is distinct from envelope serialization.
 
 **Forbidden:** perform transport IO or reimplement the Work envelope codec.
@@ -135,12 +141,20 @@ SDK composition supplies the Spring bean inventory and IO binders; WorkerInfo is
 DefaultWorkerContextFactory implements WorkerContextFactory and creates the read view passed to business workers.
 
 The view exposes the selected worker state, history policy and observability facilities; it does not own accepted configuration.
+It captures the already parsed HistoryPolicy from WorkerState when an invocation starts.
+It must not parse scenario fields or consult a separate service-level policy setting.
+
+The executing worker's swarm and instance come exclusively from the required configured
+ControlPlaneIdentity (the workerControlPlaneIdentity bean in Spring composition).
+Incoming WorkItem headers describe message origin and cannot override WorkerInfo.
+New steps use the executing identity; existing step authors and incoming trace context
+remain unchanged. The factory has no identity-less construction path.
 
 **Forbidden:** mutate accepted configuration, select IO implementations or provision resources.
 
 **Required effect:** An invocation receives the selected worker's state and facilities; reading the view does not apply a configuration update.
 
-**Verification entrypoints:** `DefaultWorkerContextFactoryTest`.
+**Verification entrypoints:** `DefaultWorkerContextFactoryTest`, `WorkerInvocationTest`; deployed producer identity in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current SDK implementation; narrower runtime ports are B03/B07.
 
@@ -156,7 +170,8 @@ Worker functions contribute data; WorkerControlPlaneRuntime builds/emits the con
 
 **Required effect:** Worker contributions appear in emitted status without overriding the runtime's reserved control state.
 
-**Verification entrypoints:** `WorkerStatusPublisherTest`.
+**Verification entrypoints:** `WorkerStatusPublisherTest`, `WorkerStatusContractTest`
+(SDK → emitter → canonical codec: full/config/runtime, delta without config, next full preserves config).
 
 **Migration status:** Current; canonical worker state is separately scoped under RESP-WORK-STATE.
 
@@ -959,6 +974,8 @@ WorkerDefinitionDiscovery binds that class and consumes its route projection; it
 switches on Rabbit properties. RabbitInputProperties/RabbitOutputProperties retain their typed
 fields, Rabbit-owned defaults and canonical parser delegation in `io.pockethive.rabbit.work`.
 WorkIoBindingConfiguration declares the SDK-owned Scheduler/CSV/Redis/NONE bindings.
+PocketHiveWorkerProperties holds worker business configuration binding. It no longer
+contains a separate history-policy value; accepted runtime policy belongs to RESP-WORK-STATE.
 WorkIoType carries the declared IO name/settings key. Existing enums implement this contract;
 test composition can explicitly supply its own type. WorkIoTypeParser owns boundary name
 normalization and rejects absent/ambiguous definitions. Startup type properties retain raw
@@ -986,7 +1003,7 @@ MessageWorkInputFactoryTest, WorkOutputRegistryInitializerTest.
 
 ## RESP-WORK-ADAPTER-SELECTION
 
-**Current module(s):** `common/worker-sdk`; neutral IO type/parser in `common/work-config`.
+**Current module(s):** `common/worker-sdk`; neutral selection/IO types in `common/work-config`; deployment inventory in `common/work-config-composition`.
 
 WorkInputRegistryInitializer selects one input factory; WorkOutputRegistryInitializer selects one output factory. Each owns its distinct direction; WorkOutputRegistry retains the selected outputs and dispatches publication.
 
@@ -997,13 +1014,19 @@ wrap these providers for the existing registries; Rabbit factory implementations
 rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
 NONE is an explicit output implementation.
 
+WorkPlaneSelection owns the explicit pockethive.work.type / POCKETHIVE_WORK_TYPE
+bootstrap projection; CurrentWorkPlaneSelection declares the current deployable
+WorkPlane inventory using the existing adapter identities. One deployment selects
+Rabbit or Artemis; no per-swarm registry is introduced. Adapter connection ENV
+includes that owner's selection and is passed through existing provisioning.
+
 **Forbidden:** choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
 
 **Required effect:** Each direction has exactly one matching factory; missing and duplicate matches fail, including NONE cases.
 
 **Verification entrypoints:** `WorkInputRegistryInitializerTest`, `WorkOutputRegistryInitializerTest`; source review against the selection contract. `WorkControlCompositionTest` covers only Scheduler/NONE startup, not factory rejection.
 
-**Migration status:** Current B01 exact-match selection.
+**Migration status:** Current exact-match IO selection and A3 explicit deployment WorkPlane selection.
 
 ## RESP-WORK-STATE
 
@@ -1012,6 +1035,8 @@ NONE is an explicit output implementation.
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+The current command execution assumptions are defined in
+[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
 Workers start disabled in WorkerState and input registration receives that state before
 intake. Only accepted worker-level control enablement updates may enable intake;
 input properties and container environment must not provide a second enablement flag.
@@ -1029,11 +1054,29 @@ must match WorkerDefinition. Problems or deferred RESOLVED paths reject the comm
 preserve state/listener-visible configuration. A candidate containing only non-Work roots
 does not invoke the Work parser and passes through this boundary unchanged.
 
+WorkerRuntimeConfiguration owns parsing the common runtime field `config.historyPolicy`
+from the complete merged worker configuration. It accepts the exact HistoryPolicy names
+FULL and LATEST_ONLY, defaults an absent field to FULL, and rejects invalid values before
+any accepted-state write, enablement, reseeding or ready result. Explicit runtime fields
+in an incoming patch pass through the same policy parser before general null filtering;
+`historyPolicy: null` is invalid, not an omitted field. Rejected candidates
+never reach listener-visible configuration; the existing failure notification may
+republish the previously accepted snapshot.
+ConfigMerger builds that immutable candidate; WorkerControlPlaneRuntime remains the
+accepted-state writer. WorkerState stores the raw map and its parsed policy together;
+the latter is a read-only derivation, never independently writable. Partial updates
+preserve an accepted policy; explicit worker-config reset returns to the absent-field
+default. Each invocation retains the policy captured when its context was created.
+The former `pockethive.worker.history-policy` property and startup-bean selection are
+removed without a compatibility path. Worker property beans must not maintain a
+second effective-policy value or default outside accepted configuration.
+
 **Forbidden:** let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
 
 **Required effect:** Accepted control updates reach the worker state and its snapshots; one accepted revision/state owner must survive B03 extraction.
 
-**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`.
+**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`,
+`WorkerHistoryPolicyTest`, `WorkerRuntimeConfigurationTest`; real retained steps in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current implementation mixes control update, status and configuration concerns. B02/B03 separate them; this record does not certify that separation.
 
@@ -1191,7 +1234,8 @@ SchedulerWorkInput delivers revisions even between ticks; TriggerWorkerImpl exec
 **Current module(s):** `common/rabbit-adapter`, internal `SpringRabbitListeners`.
 
 The module owns Work listener containers and their virtual-thread executor.
-Work uses AUTO acknowledgement on callback return, preserving pre-extraction delivery behavior.
+Work uses AUTO acknowledgement on callback return after SDK executor admission.
+Only WorkNotAcceptedException maps to native requeue; accepted-task failures never reach settlement.
 The SDK supplies
 validated RabbitSubscription values and applies desired state through RabbitListeners.
 Prefetch, fixed consumer count, exclusive and explicit startup intent reach the container.
@@ -1270,28 +1314,42 @@ rules shared by parsers and snapshots. Aggregate review pending.
 WorkInputChannel exposes an already configured subscription without broker types or WorkerDefinition.
 WorkDeliveryHandler separates decoded delivery from decode failure reporting. MessageWorkInput
 applies accepted enabled state and max-in-flight configuration; MessageWorkExecution owns the
-existing synchronous/asynchronous dispatch and error reporting. It uses WorkMessageDispatcher;
+dispatch through MessageWorkExecutor and error reporting for every concurrency limit. It uses WorkMessageDispatcher;
 the redundant RabbitWorkDispatcher is removed. WorkOutput accepts only a WorkItem, with the
 selected target already captured by its instance. DefaultWorkerRuntime remains the sole result
 publication path through WorkOutputRegistry. Local scheduled WorkInput lifecycle is unchanged.
+For the application callers and ordering of enable/disable callbacks, see
+[Worker CONTROL command execution](../ARCHITECTURE.md#worker-control-command-execution).
 
-**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path, retry,
-requeue, completion-based ACK or an added drain policy.
+**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path,
+inline worker dispatch, retry of accepted work, completion-based ACK or a drain policy.
 
-**Required effect:** the same SDK execution path accepts input from Rabbit or a test-only stateful
+**Required effect:** the same SDK execution path accepts input from Rabbit, Artemis or a test-only stateful
 in-memory channel; disabled workers return null, worker/decode failures are reported and swallowed,
-and executor rejection retains synchronous dispatch.
+and successful admission returns without waiting for task completion, even at maxInFlight=1.
+WorkNotAcceptedException is the neutral not-submitted outcome, not a worker failure.
+MessageWorkExecutor owns capacity, pause/resume and executor lifetime. Pausing wakes
+capacity waiters before channel stop; accepted tasks are not cancelled. Core executor
+threads remain alive while idle to preserve PER_THREAD resources; pool dimensions
+are a projection of the single admission limit. MessageWorkInput records desired
+state under a short lock distinct from serialized transport start/stop, so disable
+can pause admission even during synchronous channel start. Close prevents subsequent
+enablement. Its canonical
+policy is the human-approved correction in work-plane-boundaries.md, 2026-09-15.
 
-**Verification:** MessageWorkInputTest, MessageWorkExecutionTest, DefaultWorkerRuntimeTest;
-stateful fake consumer-path coverage is added with the extraction.
+**Verification:** MessageWorkExecutorTest, MessageWorkExecutionTest, MessageWorkInputTest,
+ArtemisWorkAdmissionTest, RabbitWorkAdmissionTest and DefaultWorkerRuntimeTest.
+Admission component tests use the real SDK path with an embedded Artemis broker or
+the real Spring Rabbit listener backed by a mocked AMQP client, respectively.
 
 The test-only InMemoryWorkTransport indexes explicit single-process resources;
 InMemoryWorkChannel owns each resource's pending items, listener state and removal.
 Concurrent publication, intake and lifecycle operations must preserve that state. A handler
-runs outside resource/index locks; taking an item from pending admits it for dispatch, so
-already admitted work may finish after stop/removal. Removing a stopped resource discards
+runs outside resource/index locks; taking an item from pending reserves a delivery,
+while the handler owns execution admission. Already admitted work may finish after stop/removal. Removing a stopped resource discards
 pending items and invalidates its input/output handles, including after address reuse.
-The fixture does not add retry, requeue, cancellation or a wait for admitted work to finish.
+A delivery rejected before SDK admission is restored to pending without a retry loop.
+The fixture does not retry failures of accepted work, cancel them or wait for them to finish.
 InMemoryWorkTransportTest verifies these effects through its public API.
 
 ## RESP-WORK-RABBIT-TRANSPORT
@@ -1309,8 +1367,9 @@ worker definitions or control snapshots. RabbitWorkInputFactory/RabbitWorkOutput
 rabbit-adapter, mutable output destination or an SDK dependency from rabbit-adapter.
 
 **Required effect:** Work envelopes preserve their canonical format; callback-return AUTO ACK
-is unchanged. publisherConfirms remains represented and inactive. No new input requeue or
-shutdown/drain policy is introduced.
+follows successful executor admission at every limit. Only explicit not-submitted
+admission is returned to the broker. publisherConfirms remains represented and inactive;
+CONTROL and accepted-work failure policy are unchanged.
 
 **Verification:** MessageWorkInputFactoryTest, RabbitWorkItemConverterTest, RabbitWorkOutputTest,
 SpringRabbitTransportTest and SpringRabbitListenersTest.
@@ -1698,6 +1757,13 @@ Existing sink adapters consume the projected transaction; upstream protocol outc
 **Current module(s):** `clearing-export-service`.
 
 ClearingExportWorkerImpl coordinates batch records; StructuredRecordProjector maps/validates record fields; ClearingExportFileAssembler renders file content/name and delegates XML formatting.
+
+Output location is runtime-owned, not scenario configuration: `ClearingExportStorageConfiguration`
+uses `RuntimeFilesystemLayout` with the mounted container root and current swarm/run/worker
+identity. `LocalDirectoryClearingExportSink` receives that immutable directory. The
+`localTargetDir` field is removed; config updates cannot change the base directory.
+File names, temporary suffixes and manifest paths must resolve inside that directory.
+No migration or compatibility alias is provided. Relative manifest subdirectories remain supported.
 
 The existing batch writer owns file persistence; TemplateRenderer owns expression evaluation. Record mapping and final file assembly are distinct steps.
 
@@ -2097,6 +2163,12 @@ ResolvedWorkTopology with native resource identities and channel ENV/status proj
 RabbitWorkTopologyResolver is the production implementation in rabbit.work; RabbitResourceNames
 remains the only Rabbit physical-name formula owner. Explicit settings are supplied at composition.
 
+RabbitControllerTopologyEnvironment owns the existing Controller traffic property
+mapping and delegates validation to RabbitResourceNames. SwarmControllerProperties
+no longer binds this adapter-specific block; selected Rabbit composition consumes
+it. Artemis requires only its own connection/namespace for WORK, while CONTROL
+keeps its existing Rabbit configuration. No wire rename or compatibility path.
+
 Controller worker planning, resource creation, bindings and statistics consume that resolved
 result. WorkPlaneResources exposes native ensure/observe/remove operations; RabbitWorkResources
 owns the existing declaration cache and Rabbit operation mapping. appliedResources is a read-only
@@ -2114,9 +2186,8 @@ Guard consumes accepted channel addresses; external downstream observation alias
 by the same selected owner without being declared as swarm resources. Guard math remains in manager-sdk.
 
 Orchestrator controller bootstrap consumes the selected environment/topology projection.
-RuntimeOwnershipManifestFactory owns projection of that result to the existing public manifest;
-its current Rabbit-only shape is an R4 boundary, not a generic native manifest. Unsupported native
-target kinds must be rejected before compute effects rather than stored as invented Rabbit objects.
+RuntimeOwnershipManifestFactory consumes that result for the Rabbit-only diagnostic projection
+under RESP-RUNTIME-CLEANUP; it does not gate native Work startup.
 RuntimeRemovalPostconditionVerifier reads WORK absence through WorkPlaneResources and CONTROL
 through the existing scoped Rabbit port; it alone classifies observations into removal evidence.
 AmqpRabbitTopologyAdapter projects the current Rabbit cleanup contract through selected WorkPlaneResources
@@ -2127,7 +2198,10 @@ WorkResourceNamesPort is removed. RabbitWorkAddress and RabbitWorkTopologySettin
 types; neutral consumers use ResolvedWorkTopology. WorkDebugTaps/WorkDebugTap now carry selected
 capture operations. RabbitWorkDebugTaps delegates TTL/capacity mapping to RabbitDebugTapSpec;
 Orchestrator DebugTapSession owns bounded samples/lifetime, and DebugTapService maps an explicitly
-unsupported selected capture to HTTP 501 without activating Rabbit.
+unsupported selected capture to HTTP 501 without activating Rabbit. Explicit close
+propagates adapter failure as HTTP 500 instead of claiming success after registry removal;
+the removed registration is not proof of native cleanup. Scheduled expiry keeps its
+existing best-effort policy.
 Neither transfer changes addresses, delivery/ACK, or the accepted environment override policy.
 
 Control names use the neutral ControlResourceNamesPort from topology-core. RabbitResourceNames
@@ -2195,6 +2269,17 @@ and valid type/plane combinations. CleanupScope carries request scope; Candidate
 CandidateResult carry the planner/execution projections, never a second outcome calculation.
 ScopedRabbitName and RabbitQueueSnapshot/RabbitExchangeSnapshot preserve that identity.
 
+`RuntimeOwnershipManifestFactory` owns projection of compute identity and Rabbit resource intent
+into the existing diagnostic ownership manifest. WORK_RESOURCE targets stay in the resolved
+topology and normal lifecycle removal evidence; the factory excludes them from `rabbit` with
+an explicit coverage warning. It must not gate native Work startup or claim complete native
+inventory. Invalid planes and owner mapping failures still fail before compute effects.
+`rabbit`, its topology snapshot/assessment check and orphan cleanup cover Rabbit resources only.
+Empty Rabbit WORK lists are not evidence that Artemis resources are absent. Native orphan
+cleanup and diagnostic completeness remain deferred; no second inventory or public field is added.
+Verification: `RuntimeOwnershipManifestFactoryTest`, existing `ContainerLifecycleManagerTest`
+and the Artemis A4 public-ingress create/traffic/remove evidence in the active plan.
+
 `RuntimeRabbitResourcePlanner` owns Rabbit cleanup target selection and debug projections
 from the ownership manifest's distinct Control/Work lists. `RuntimeReconciliationService`
 retains request validation, plan hashing, authorization handoff and execution coordination.
@@ -2239,6 +2324,137 @@ starting STOMP when schema compilation fails, or treating a root-only digest as 
 
 **Required effect:** Canonical lifecycle refs compile in the browser; malformed events remain
 rejected. Conditional requests reuse the validator only for identical complete schema content.
+
+## RESP-ARTEMIS-CONFIGURATION
+
+`ArtemisConnectionSettings`, `ArtemisInputSettings` and `ArtemisOutputSettings` in
+`common/artemis-adapter` own validation of their disjoint typed values. The input
+and output records are the immutable Work settings and bound configuration values.
+`ArtemisSettingValues` owns shared scalar rules. `ArtemisWorkIoType` owns ARTEMIS
+selection identity; `ArtemisEnvironmentKeys` owns its setting/property key literals.
+They must not open connections, reconstruct topology or independently select an
+adapter. `ArtemisConfiguration` provides the public parser/policy projection,
+`ArtemisInputSettingsParser` and `ArtemisOutputSettingsParser` for boundary maps,
+and `ArtemisInputTuning`/`ArtemisOutputTuning` for AUTHORING without physical destinations.
+All scalar rules remain in ArtemisSettingValues; consumerWindowBytes and persistent
+are explicit required values, including startup binding. `ArtemisConnectionEnvironment`
+owns connection property/ENV mapping; `ArtemisWorkBootstrapEnvironment` combines
+owner-resolved destinations with authored tuning and exports that same resolved result.
+Per-worker overrides of owned Artemis connection/destination/tuning fields are rejected.
+Spring composition supplies these existing ports only for explicit adapter selection;
+parsing a scenario never opens a broker connection.
+Contract: `docs/architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15`.
+
+## RESP-ARTEMIS-CONNECTION
+
+`ArtemisSessions` owns the Core locator, session factory and opened session lifetime.
+Construction validates/configures the client without opening a broker connection;
+the first explicit session request opens the factory, which subsequent requests reuse.
+A failed initial connection fails that WORK operation. A later explicit operation may
+attempt its own connection; there is no background retry, readiness wait or failover.
+Closing an unused or used owner is terminal and must not open a connection.
+`ArtemisWorkPlane` is the explicit composition entrypoint returning existing Work
+ports; it closes the owned infrastructure. Orchestrator/Controller port composition,
+configuration export, name resolution and removal-target mapping need no live Artemis.
+CONTROL startup still requires Rabbit independently; Artemis availability is checked
+by operations that use it. This deferred activation was approved for A3-REV-1 on
+2026-09-15 instead of adding an Artemis startup dependency/profile in Compose.
+Broker client types must not escape to SDK/services. No per-message connection,
+implicit Rabbit fallback or swarm lifecycle state.
+
+## RESP-ARTEMIS-RESOURCE-NAMES
+
+`ArtemisResourceNames` owns physical channel names and resource URI encoding/decoding.
+`ArtemisResourceKind` owns the supported native kinds and owner check.
+`ArtemisWorkTopologyResolver` projects those values into ResolvedWorkTopology and
+WorkChannelAddress for transport, ENV, status and resource operations. It must not
+create resources or maintain a second mutable topology registry.
+
+## RESP-ARTEMIS-RESOURCES
+
+`ArtemisWorkResources` implements WorkPlaneResources using Core resource operations,
+including observations and removal. It obtains its reusable resource session only
+when ensure/observe/remove performs broker I/O, after validating the request. An
+unavailable broker is an operation error, never an absent resource or successful
+removal. `ArtemisManagement` owns bounded Core management
+request/response encoding for native resource and debug-tap operations, using the library management address
+and requiring a successful reply; it does not discover targets. The resource owner's
+applied set is only a receipt for completed
+bindings during partial prepare, following the existing WorkPlane contract. Broker
+state is read live; absence differs from an observation error. It must not construct
+physical names, persist manifests, implement orphan cleanup or decide swarm outcomes.
+
+## RESP-WORK-ARTEMIS-TRANSPORT
+
+`ArtemisWorkInputChannel` owns subscription state, canonical WorkItem decoding and
+delivery settlement after callback return. Its channel state is a read-only projection
+of handler registration and the native consumer lifetime: a closed consumer cannot
+remain RUNNING. Explicit start discards a dead subscription and either opens a new
+one or fails; it does not enable automatic recovery. AR-REV-2 correction approved
+2026-09-15. The subsequent approved uniform-admission correction pauses SDK admission
+before channel stop and distinguishes not-submitted deliveries from accepted tasks.
+Native acknowledgements are individual: consuming a later malformed or admitted
+message must never settle an earlier unaccepted message (WA-REV-1 correction).
+`ArtemisWorkOutput` owns canonical
+encoding and sends to its captured resolved address. Their transport factories
+consume typed settings and return the existing Work ports. They must not own worker
+state/execution, select fallback adapters, merge broker headers or add another result
+publication. A3 supplies service/SDK activation. RESP-WORK-DELIVERY owns neutral delivery intent; the Artemis output realizes its native scheduled timestamp.
+
+ArtemisWorkDebugTaps opens diagnostic copies of owner-resolved channels;
+ArtemisWorkDebugTap owns the native non-exclusive divert, temporary capture queue,
+message TTL/ring limit and explicit release. Its exact capture-address settings
+must explicitly disable expiry forwarding: expired diagnostic copies are discarded,
+including when the broker supplies a wildcard expiry address. The source WORK
+expiry policy remains unchanged. It never consumes the source queue.
+ArtemisResourceNames owns capture names. Request expiry remains with the existing
+Orchestrator debug service. Explicit close releases the divert, queue, address and
+address settings; it reports management failures. This is not a crash-recovery or
+orphan-cleanup mechanism: broker-side divert/settings may remain after process loss.
+Both Rabbit and Artemis observations currently omit oldest-message age.
+
+## RESP-RUNTIME-FILESYSTEM-LAYOUT
+
+**Current module:** `common/control-plane-filesystem`; environment names and container
+root are declared by `RuntimeFilesystemContract` in `common/swarm-model`.
+
+`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation and
+worker-output paths. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
+The local and published views derive from the same relative path; consumers must not
+reconstruct that path or introduce a second output root. `RuntimeFilesystemMount`
+owns host-to-container mounts. The layout does not create, read or delete files.
+
+`FilesystemSwarmRemoveStore.deleteSwarmRuntime` remains the existing deletion owner
+for the complete swarm tree, including worker outputs. File observers must collect
+content before REMOVE. Clearing exporter composition consumes this projection directly; scenarios do not own
+the output root. `RuntimeOutputDirectory` is its immutable projection for resolving
+relative file names inside a single worker output directory.
+
+**Forbidden:** environment discovery, file IO or lifecycle decisions in the layout;
+consumer-local reconstruction of output paths; a second output-directory cleanup owner.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
+
+
+## RESP-WORK-DELIVERY
+
+**Owner:** `work-config` owns `WorkDelivery`, its modes, validation, default and
+`WorkDeliveryEnvironment` projection. See the approved [delivery contract](work-plane-boundaries.md#12-delayed-work-delivery).
+`WorkIoType` declares the adapter's delivery capability; Artemis alone currently
+supports DELAYED. Scenario validation and direct transport calls consult that same declaration.
+
+**Consumers:** `WorkConfigurationParser` aggregates the neutral parser with adapter
+settings. Controller worker composition exports the validated policy. SDK startup
+binding delegates scalar parsing to the same owner and retains the immutable result
+in `WorkIoBindings`. Candidate validation compares against that startup value before
+accepted worker state changes. `WorkOutputRegistry` passes it alongside each result
+through the existing `WorkOutput` port. `ArtemisWorkOutput` alone converts it to a
+native scheduled delivery timestamp. `work-api` exposes that shared type; it does
+not define another delivery DTO or serialize intent into WorkItem.
+
+**Forbidden:** duplicated delivery defaults/parsers, inherited per-hop delivery headers,
+worker timers, second publication paths, unsupported-mode fallback, or changes to
+input admission/ACK and failure consumption.
 
 
 ## RESP-WORK-AUTH-HTTP-HEADERS

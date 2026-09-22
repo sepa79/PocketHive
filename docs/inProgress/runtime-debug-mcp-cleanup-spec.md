@@ -36,9 +36,13 @@ diagnostic discovery must not independently authorize orphan deletion. No runtim
 API or UI behavior changes are authorized by this deferral record.
 
 This work is separate from the [Rabbit isolation PR](work-plane-module-boundaries.md),
-the [native manifest/orphan cleanup extension for Artemis](../todo/work-plane-artemis-3ds.md),
+the [Artemis adapter](work-plane-artemis-3ds.md),
 and [Orchestrator registry/reset design](orchestrator-correctness.md). The ownership
 manifest is not the Controller's filesystem startup artifact or a durable swarm registry.
+On 2026-09-15 the user explicitly excluded native manifest/orphan-cleanup expansion
+from Artemis: preserve the existing startup/remove path and remove its dependency
+on the Rabbit-only diagnostic projection. Manifest replacement belongs to this
+separate diagnostics/refactoring scope.
 
 ## Ownership
 

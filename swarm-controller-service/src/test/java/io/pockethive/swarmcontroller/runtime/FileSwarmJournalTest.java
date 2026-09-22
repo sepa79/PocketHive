@@ -81,7 +81,6 @@ class FileSwarmJournalTest {
         "ph.control",
         new SwarmControllerProperties.Manager("swarm-controller"),
         new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Traffic("ph.swarm-a.hive", "ph.swarm-a"),
             new SwarmControllerProperties.Metrics(
                 PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),

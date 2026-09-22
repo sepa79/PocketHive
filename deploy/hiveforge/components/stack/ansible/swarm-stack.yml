@@ -38,6 +38,32 @@
         group: "10001"
   when: pockethive_profile == "swarm-full"
 
+- name: Read optional proxy placement once for deploy and update
+  ansible.builtin.set_fact:
+    pockethive_haproxy_node: "{{ lookup('env', 'POCKETHIVE_HAPROXY_NODE') }}"
+    pockethive_network_proxy_manager_node: "{{ lookup('env', 'POCKETHIVE_NETWORK_PROXY_MANAGER_NODE') }}"
+
+- name: Require paired distinct proxy placement or scheduler placement
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pockethive_haproxy_node | length == 0 and pockethive_network_proxy_manager_node | length == 0)
+        or (pockethive_haproxy_node | length > 0 and pockethive_network_proxy_manager_node | length > 0
+        and pockethive_haproxy_node != pockethive_network_proxy_manager_node)
+    fail_msg: "Set both POCKETHIVE_HAPROXY_NODE and POCKETHIVE_NETWORK_PROXY_MANAGER_NODE to different Swarm hostnames, or leave both empty for scheduler placement."
+
+- name: Require explicit WorkPlane selection
+  ansible.builtin.assert:
+    that:
+      - pockethive_work_type in ["RABBITMQ", "ARTEMIS"]
+    fail_msg: "POCKETHIVE_WORK_TYPE must explicitly select RABBITMQ or ARTEMIS."
+
+- name: Add shared Artemis state when selected
+  ansible.builtin.set_fact:
+    pockethive_swarm_state_dirs: "{{ pockethive_swarm_state_dirs + ['state/artemis/data'] }}"
+    pockethive_swarm_owned_state_dirs: "{{ pockethive_swarm_owned_state_dirs + [{'path': 'state/artemis/data', 'owner': '1001', 'group': '1001'}] }}"
+  when: pockethive_work_type == "ARTEMIS"
+
 - name: Require swarm HiveForge runtime environment
   ansible.builtin.assert:
     that:

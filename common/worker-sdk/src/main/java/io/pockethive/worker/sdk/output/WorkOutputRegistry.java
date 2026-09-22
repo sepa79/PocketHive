@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Registry of {@link WorkOutput} implementations keyed by worker bean name.
  * <p>
- * Responsibility: retain selected Work outputs and delegate publication to the registered instance.
+ * Responsibility: retain selected Work outputs and delegate publication with the accepted startup delivery intent.
  * Must not: choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
  * Contract: RESP-WORK-ADAPTER-SELECTION — docs/architecture/runtime-responsibilities.md#resp-work-adapter-selection.
  */
@@ -30,7 +30,7 @@ public final class WorkOutputRegistry {
         Objects.requireNonNull(item, "item");
         WorkOutput output = outputs.get(definition.beanName());
         if (output != null) {
-            output.publish(item);
+            output.publish(item, definition.io().outputDelivery());
         }
     }
 

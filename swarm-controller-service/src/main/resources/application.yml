@@ -36,9 +36,6 @@ pockethive:
       enabled: true
       role: ${POCKETHIVE_CONTROL_PLANE_MANAGER_ROLE}
     swarm-controller:
-      traffic:
-        queue-prefix: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_QUEUE_PREFIX}
-        hive-exchange: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_TRAFFIC_HIVE_EXCHANGE}
       metrics:
         adapter: ${POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_METRICS_ADAPTER}
         # Provisioned component metrics cadence; the controller's own AMQP status tick is fixed at 5s.

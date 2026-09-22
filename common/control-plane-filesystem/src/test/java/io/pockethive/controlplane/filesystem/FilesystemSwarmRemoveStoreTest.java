@@ -9,6 +9,8 @@ import io.pockethive.swarm.model.lifecycle.RemoveResource;
 import io.pockethive.swarm.model.lifecycle.RemoveResourceType;
 import io.pockethive.swarm.model.lifecycle.RemoveResult;
 import java.nio.file.Path;
+import java.nio.file.Files;
+import java.io.IOException;
 import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -65,6 +67,23 @@ class FilesystemSwarmRemoveStoreTest {
 
     assertThat(root.resolve("alpha")).doesNotExist();
     assertThat(root.resolve("beta/operations/remove/corr-2/request.json")).isRegularFile();
+  }
+
+  @Test
+  void removesFinalizedAndPendingOutputsOnlyForTheRemovedSwarm() throws IOException {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(root.toString(), "/runtime");
+    Path output = layout.workerOutputDirectory("alpha", "run-1", "exporter-1");
+    Path other = layout.workerOutputDirectory("beta", "run-1", "exporter-1");
+    Files.createDirectories(output);
+    Files.createDirectories(other);
+    Files.writeString(output.resolve("clearing.txt"), "completed");
+    Files.writeString(output.resolve("pending.txt.tmp"), "pending");
+    Path retained = Files.writeString(other.resolve("clearing.txt"), "other swarm");
+
+    store().deleteSwarmRuntime("alpha");
+
+    assertThat(layout.swarmRoot("alpha")).doesNotExist();
+    assertThat(retained).hasContent("other swarm");
   }
 
   private FilesystemSwarmRemoveStore store() {

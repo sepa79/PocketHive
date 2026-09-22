@@ -8,7 +8,7 @@ Feature: WorkItem history policy configuration
     When I fetch the "history-policy-demo" scenario template
     Then the "generator" bee has history policy "FULL"
     And the "moderator" bee has history policy "LATEST_ONLY"
-    And the "processor" bee has history policy "DISABLED"
+    And the "processor" bee has history policy "LATEST_ONLY"
     And the "postprocessor" bee has history policy "FULL"
 
   @history-policy-runtime @group-lifecycle

@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.controlplane.filesystem.RuntimeOutputDirectory;
+
 import io.pockethive.templating.api.DisabledSequenceAccess;
 
 import io.pockethive.templating.PebbleTemplateRenderer;
@@ -23,7 +25,7 @@ class ClearingExportBatchWriterStreamingTest {
     ClearingExportFileAssembler assembler =
         new ClearingExportFileAssembler(new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE), new XmlOutputFormatter());
     ClearingExportBatchWriter writer =
-        new ClearingExportBatchWriter(assembler, new LocalDirectoryClearingExportSink(), clock, false);
+        new ClearingExportBatchWriter(assembler, new LocalDirectoryClearingExportSink(new RuntimeOutputDirectory(tempDir)), clock, false);
 
     ClearingExportWorkerConfig config = new ClearingExportWorkerConfig(
         "template",
@@ -38,7 +40,6 @@ class ClearingExportBatchWriterStreamingTest {
         "H|{{ now }}",
         "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
-        tempDir.toString(),
         ".tmp",
         false,
         "reports/clearing/manifest.jsonl",
@@ -92,7 +93,6 @@ class ClearingExportBatchWriterStreamingTest {
         "H|{{ now }}",
         "D|{{ steps.selected.payload }}",
         "T|{{ recordCount }}",
-        tempDir.toString(),
         ".tmp",
         false,
         "reports/clearing/manifest.jsonl",
