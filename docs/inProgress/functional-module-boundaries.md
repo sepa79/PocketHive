@@ -81,52 +81,73 @@ Keep F identifiers for existing references. Execution order is **F01 → F03 →
 work need behavior decisions first. This ordering does not authorize parallel
 changes across those areas or require every area to be finished for the next PR.
 
-### F01 — Redis, delivered in bounded complete paths
+### F01 — Redis, one PR closing the shared technology responsibility
+
+Deliver the Redis extraction as **one PR covering all five consumers**. The steps
+below are implementation checkpoints within that PR, not independently mergeable
+transfers. Introducing an adapter for capture alone does not establish SSOT while
+other consumers still construct RedisURI and RedisClient themselves.
 
 Start with an inventory of connection settings, client lifetime, keys/list names,
-serialization, timeouts and operations for all five consumers above. Include debug
-capture; it was missing from the older four-consumer plan. Distinguish Redis
-mechanics from token identity, dataset selection, trace identity and sequence policy.
+serialization, timeouts and operations in RedisDataSetWorkInput, RedisPushSupport,
+RedisTokenStore, RedisDebugCaptureStore and RedisSequenceGenerator. Record current
+behavior tests before moving implementations. Distinguish Redis mechanics from
+token identity, dataset selection, trace identity and sequence policy.
 
-1. **F01a: first complete path — debug capture.** Establish `common/redis-adapter`
-   as client/connection mechanics owner. `HttpSequenceRunner` currently constructs
-   RedisDebugCaptureStore directly; introduce only the narrow expiring-write API
-   needed by this path. Reuse redis-config directly; do not move its
-   parser just to obtain a new module name. Preserve capture encoding, limits,
-   expiry, lazy initialization, best-effort diagnostic failure and close behavior.
-   Delete the replaced SDK client implementation. HttpSequenceRunner retains
-   capture selection/keys/payload and consumes the adapter API. This diagnostic
-   capture is distinct from WorkPlane debug taps.
-2. **F01b: dataset input and output.** Route read/write operations through the
-   adapter. Reuse neutral Work transport contracts. If input extraction requires
-   an update view, define only the immutable adapter-facing values it consumes;
-   do not copy the entire mutable runtime snapshot or WorkerDefinition. Dataset
-   selection and output target rules each retain their current canonical owner.
-3. **F01c: token storage and sequences.** Move Redis storage implementations behind
-   TokenStore and SequenceAccess, preserving atomic claims, expiry, increment/reset
-   and errors. Inject sequence access explicitly; remove hidden global client
-   configuration. Keep OAuth refresh policy and token-key identity with auth owners.
-4. **Final closure.** Only redis-adapter imports Lettuce in production. Remove the
-   SDK/templating exceptions and all replaced constructors/helpers. Redis-config
-   may remain the single pure settings module; absorbing it is optional and must
-   be an atomic move, never a second parser or compatibility artifact.
+1. **Shared mechanics and API.** Establish `common/redis-adapter` as the sole owner
+   of connection realization and Redis client operations for all five consumers.
+   Reuse redis-config as the sole pure settings/parser module; do not add fields,
+   defaults or a second parser. Keep raw Lettuce clients, commands and arbitrary
+   client callbacks internal. Expose only the capabilities required by consumers.
+   Shared ownership does not imply one shared connection or identical lifetimes:
+   preserve each consumer's existing eager/lazy initialization and operation policy.
+2. **Diagnostic capture.** HttpSequenceRunner consumes an expiring-write capability
+   instead of constructing the SDK RedisDebugCaptureStore. Keep capture selection,
+   keys and payload with HttpSequenceRunner. Preserve encoding, expiry and best-effort
+   failure behavior. This diagnostic capture is distinct from WorkPlane debug taps.
+3. **Dataset input and output.** Move Redis operations into the adapter and reuse
+   neutral Work transport contracts. If input extraction needs an update view,
+   expose only immutable adapter-facing values, not the complete runtime snapshot
+   or WorkerDefinition. Dataset selection and output target rules each retain their
+   existing canonical owner; SDK composition delegates through the new API.
+4. **Token storage and sequences.** Move Redis implementations behind TokenStore
+   and SequenceAccess, preserving atomic claims, expiry, increment/reset and errors.
+   Inject sequence access explicitly and remove hidden global client configuration.
+   OAuth refresh policy and token-key identity remain with their auth owners.
+5. **Atomic cutover and closure.** All five paths use the adapter before the PR
+   merges. Delete replaced implementations and client constructors/helpers; remove
+   SDK/templating Lettuce import exceptions. No production Lettuce imports remain
+   outside redis-adapter, and there is only one settings-to-connection implementation.
+   Do not publish a partially migrated consumer as a completed SSOT transfer.
 
-During F01a–c, explicitly list unmigrated consumers and their non-overlapping
-responsibilities. No migrated responsibility may retain an alternative active
-implementation. Do not claim Redis-wide closure until all five paths are cut over.
+Configuration gates use the fields actually present in RedisConnectionSettings:
+non-default host, port, username, password and ssl reach client construction unchanged.
+Database selection is not an existing field and must not be introduced in this
+extraction. Preserve currently effective behavior without adding a database option.
 
-Gates per slice: non-default host/port/database/auth/TLS settings reach the actual
-client unchanged; failure and shutdown release owned resources; relevant list,
-capture, token or sequence operations retain observable behavior. Use owner tests
-and affected ingress acceptance groups (debug taps, DA-1/2/4 and auth as applicable),
-not bean-registration tests. F01a requires HTTP Sequence diagnostic-store
-verification; successful WorkPlane taps alone do not exercise this Redis path.
-Keep the deferred Redis STOP/update/START race as a
-separate behavior decision; do not fix it incidentally.
+Failure gates distinguish stages and consumers instead of requiring every failure
+to close the connection. For RedisDebugCaptureStore specifically:
 
-Before F01a implementation, trace HttpSequenceRunner capture callers and the exact connection
-contract, specify the minimal adapter API, and record baseline behavior tests. This
-is the first concrete next task; a broad SDK rewrite is not a prerequisite.
+- failed connection initialization releases partially created owned resources;
+- an ordinary RuntimeException during an established connection's diagnostic write
+  returns false and retains the connection; do not add close/reconnect or retry;
+- close marks the store closed and attempts connection/client release, preserving
+  existing cleanup-error and interrupt handling; subsequent store calls return false.
+
+Record equivalent initialization/operation/shutdown expectations separately for
+input, output, token store and sequences before extraction. Existing differences
+are not permission to unify error policy. If consolidation requires a behavioral
+change, resolve it separately before implementing that part.
+
+Use owner tests for non-default settings, operation results and resource lifetime,
+plus affected integration/official-ingress acceptance (DA-1/2/4, token/auth and
+sequence paths as applicable). HTTP Sequence diagnostic-store verification is
+required: successful WorkPlane taps alone do not exercise this Redis path.
+Keep the deferred Redis STOP/update/START race as a separate behavior decision.
+
+First task: trace all five consumer paths, specify the minimal adapter API and
+record their baseline behavior. The inventory may be reviewed before coding; a
+broad SDK rewrite and a new generic connection framework are not prerequisites.
 
 ### F03 — Docker/compute
 

@@ -49,7 +49,8 @@ concurrency finding remain documented in
 
 - [Functional module boundaries](functional-module-boundaries.md) — refreshed against
   the Artemis/acceptance closeout on 2026-09-22. Next proposed sequence: Redis,
-  Docker, journal/filesystem, ClickHouse; first bounded slice is Redis debug capture.
+  Docker, journal/filesystem, ClickHouse. Redis closes all five consumers in one PR;
+  first task is their connection/operation/lifetime inventory and API design.
   Existing neutral Work API, history-policy fixes and exporter paths are not reopened.
   Remaining auth/MCP/service findings require current-code revalidation; behavior
   redesign stays separate. This PR updates the plan only, not its implementation.
