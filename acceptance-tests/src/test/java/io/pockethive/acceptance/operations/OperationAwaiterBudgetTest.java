@@ -2,6 +2,7 @@ package io.pockethive.acceptance.operations;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static io.pockethive.acceptance.support.OperationFixtures.*;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.acceptance.api.*;
 import io.pockethive.acceptance.config.OperationLimits;
 import io.pockethive.acceptance.evidence.RunEvidence;
@@ -47,7 +48,8 @@ class OperationAwaiterBudgetTest {
   }
   @Test void longPollIntervalEndsAtTheDeadlineWithoutAnotherRequest() throws Exception {
     var receipt = receipt();
-    var limits = new OperationLimits(Duration.ofSeconds(1), Duration.ofMillis(250), Duration.ofSeconds(2));
+    // Allow a cold HTTP exchange under build load before exercising the longer-than-budget poll.
+    var limits = new OperationLimits(Duration.ofSeconds(3), Duration.ofSeconds(2), Duration.ofSeconds(4));
     try (var ingress = new ScriptedIngress(); var http = new PocketHiveHttp(ingress.origin(), limits.request());
          var evidence = new RunEvidence(reports, "poll-budget")) {
       ingress.reply("GET", "/orchestrator" + receipt.operationUrl(), 200,
@@ -56,6 +58,9 @@ class OperationAwaiterBudgetTest {
       var error = assertThrows(AssertionError.class, () -> waiter.terminal(SWARM, OperationType.START, receipt));
       assertTrue(error.getMessage().contains(receipt.correlationId()));
       assertTrue(error.getMessage().contains("timed out"));
+      var observation = new ObjectMapper().readTree(
+          evidence.directory().resolve("operation-" + receipt.correlationId() + ".json").toFile());
+      assertEquals(OperationState.DISPATCHED.name(), observation.required("state").textValue());
     }
   }
 }

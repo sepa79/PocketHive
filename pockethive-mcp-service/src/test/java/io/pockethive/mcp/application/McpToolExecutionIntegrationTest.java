@@ -1025,7 +1025,7 @@ class McpToolExecutionIntegrationTest {
     private static PocketHiveMcpProperties properties() {
         URI ingress = URI.create("http://127.0.0.1:8080");
         return new PocketHiveMcpProperties(
-            ingress, ingress, McpStateMode.MEMORY,
+            false, ingress, ingress, McpStateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"), Duration.ofMinutes(30), Duration.ofHours(1),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofMinutes(5), 100, 10, 100, 10, 10_000_000,
             2, 10, 10_000_000, 20_000_000, 200, 20_000_000, 8, 100,

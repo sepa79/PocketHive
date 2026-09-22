@@ -1,0 +1,1898 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shared PocketHive intake document shapes",
+  "$comment": "Canonical shared shapes for draft intake documents. No default keywords, remote refs or runtime scenario validation.",
+  "definitions": {
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "description": "Unknown draft value is null; applicability/readiness is checked by the semantic intake owner."
+    },
+    "boolean": {
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "number": {
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "nonnegativeNumber": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "count": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0
+    },
+    "positiveCount": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 1
+    },
+    "percentile": {
+      "type": [
+        "number",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 100
+    },
+    "hash": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "pointer": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "pattern": "^(?:/(?:[^~]|~[01])*)?(?![\\s\\S])",
+      "description": "RFC 6901 JSON Pointer with valid escapes; exact target resolution is checked semantically."
+    },
+    "jsonValue": {
+      "type": [
+        "object",
+        "array",
+        "string",
+        "number",
+        "boolean",
+        "null"
+      ],
+      "description": "Opaque sample, observation or blueprint content. The canonical YAML codec bounds nested content; this shape does not validate its domain semantics."
+    },
+    "textList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/text"
+      }
+    },
+    "flexibleList": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/jsonValue"
+      }
+    },
+    "status": {
+      "enum": [
+        "pending",
+        "blocked",
+        "not-run",
+        "pass",
+        "fail",
+        "inconclusive",
+        "not-applicable",
+        null
+      ]
+    },
+    "documentTarget": {
+      "type": "object",
+      "properties": {
+        "document": {
+          "enum": [
+            "requirements",
+            "plan",
+            "results",
+            null
+          ]
+        },
+        "pointer": {
+          "$ref": "#/definitions/pointer"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "document",
+        "pointer"
+      ]
+    },
+    "sourceReference": {
+      "type": "object",
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/definitions/text"
+        },
+        "pointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "sha256": {
+          "$ref": "#/definitions/hash"
+        }
+      },
+      "additionalProperties": false
+    },
+    "documentSnapshot": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/text"
+        },
+        "sha256": {
+          "$ref": "#/definitions/hash"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ]
+    },
+    "sourceIdentity": {
+      "type": "object",
+      "properties": {
+        "artifactRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sha256": {
+          "$ref": "#/definitions/hash"
+        },
+        "kind": {
+          "enum": [
+            "file",
+            "directory",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "endpoint": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/definitions/text"
+        },
+        "baseUrl": {
+          "$ref": "#/definitions/text"
+        },
+        "upstreamBaseUrl": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "access": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "$ref": "#/definitions/text"
+        },
+        "networkPrerequisites": {
+          "$ref": "#/definitions/textList"
+        },
+        "caCertificateRef": {
+          "$ref": "#/definitions/text"
+        },
+        "clientCertificateRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "oauthSut": {
+      "type": "object",
+      "properties": {
+        "tokenUrl": {
+          "$ref": "#/definitions/text"
+        },
+        "credentialRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sut": {
+      "type": "object",
+      "properties": {
+        "sutId": {
+          "$ref": "#/definitions/text"
+        },
+        "name": {
+          "$ref": "#/definitions/text"
+        },
+        "type": {
+          "$ref": "#/definitions/text"
+        },
+        "endpoints": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/endpoint"
+          }
+        },
+        "access": {
+          "$ref": "#/definitions/access"
+        },
+        "oauth2": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/oauthSut"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "tokenSource": {
+      "type": "object",
+      "properties": {
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "tokenJsonPointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "expiresInJsonPointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "reuse": {
+          "$ref": "#/definitions/text"
+        },
+        "refreshBeforeExpirySeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        }
+      },
+      "additionalProperties": false
+    },
+    "authorization": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "anyOf": [
+            {
+              "$ref": "runtime-vocabulary.schema.json#/definitions/authType"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "scope": {
+          "$ref": "#/definitions/text"
+        },
+        "clientAuthentication": {
+          "enum": [
+            "client_secret_basic",
+            "client_secret_post",
+            null
+          ]
+        },
+        "tokenRequestSample": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "tokenResponseSample": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "reuse": {
+          "$ref": "#/definitions/text"
+        },
+        "refreshBeforeExpirySeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "tokenSource": {
+          "$ref": "#/definitions/tokenSource"
+        }
+      },
+      "additionalProperties": false
+    },
+    "secretInjectionType": {
+      "enum": [
+        "env",
+        "file",
+        "vault",
+        null
+      ],
+      "description": "Intake delivery arrangement; file records mounted-file references, vault requires an explicit external implementation. No secret resolution."
+    },
+    "bindingSource": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "enum": [
+            "dataset",
+            "constant",
+            "generated",
+            "correlation",
+            null
+          ]
+        },
+        "entityRef": {
+          "$ref": "#/definitions/text"
+        },
+        "column": {
+          "$ref": "#/definitions/text"
+        },
+        "value": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "generator": {
+          "$ref": "#/definitions/text"
+        },
+        "scope": {
+          "$ref": "#/definitions/text"
+        },
+        "correlationRef": {
+          "$ref": "#/definitions/text",
+          "description": "Correlation ID resolved within each destination occurrence of this API; extraction is authored only on that sequence step."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "correlation"}}, "required": ["type"]},
+          "then": {
+            "properties": {
+              "entityRef": {"type": "null"},
+              "column": {"type": "null"},
+              "value": {"type": "null"},
+              "generator": {"type": "null"},
+              "scope": {"type": "null"}
+            }
+          },
+          "else": {
+            "if": {"properties": {"type": {"enum": ["dataset", "constant", "generated"]}}, "required": ["type"]},
+            "then": {"properties": {"correlationRef": {"type": "null"}}}
+          }
+        }
+      ]
+    },
+    "binding": {
+      "type": "object",
+      "properties": {
+        "location": {
+          "enum": [
+            "body",
+            "path",
+            "query",
+            "header",
+            null
+          ]
+        },
+        "path": {
+          "$ref": "#/definitions/text"
+        },
+        "source": {
+          "$ref": "#/definitions/bindingSource"
+        }
+      },
+      "additionalProperties": false
+    },
+    "bodyCheck": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "#/definitions/pointer"
+        },
+        "operator": {
+          "enum": [
+            "equals",
+            "exists",
+            null
+          ]
+        },
+        "value": {
+          "$ref": "#/definitions/jsonValue"
+        }
+      },
+      "additionalProperties": false
+    },
+    "expectedResponse": {
+      "type": "object",
+      "properties": {
+        "httpStatuses": {
+          "type": "array",
+          "items": {
+            "type": "integer",
+            "minimum": 100,
+            "maximum": 599
+          }
+        },
+        "bodyChecks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/bodyCheck"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "idempotency": {
+      "type": "object",
+      "properties": {
+        "required": {
+          "$ref": "#/definitions/boolean"
+        },
+        "headerName": {
+          "$ref": "#/definitions/text"
+        },
+        "rule": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "api": {
+      "type": "object",
+      "properties": {
+        "apiId": {
+          "$ref": "#/definitions/text"
+        },
+        "name": {
+          "$ref": "#/definitions/text"
+        },
+        "serviceId": {
+          "$ref": "#/definitions/text"
+        },
+        "callId": {
+          "$ref": "#/definitions/text"
+        },
+        "endpointRef": {
+          "$ref": "#/definitions/text"
+        },
+        "protocol": {
+          "$ref": "#/definitions/text"
+        },
+        "method": {
+          "$ref": "#/definitions/text"
+        },
+        "path": {
+          "$ref": "#/definitions/text"
+        },
+        "purpose": {
+          "enum": [
+            "business",
+            "authentication",
+            null
+          ]
+        },
+        "headersSample": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "requestSample": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "responseSample": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "authorization": {
+          "$ref": "#/definitions/authorization"
+        },
+        "payloadBindings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/binding"
+          }
+        },
+        "expectedResponse": {
+          "$ref": "#/definitions/expectedResponse"
+        },
+        "idempotency": {
+          "$ref": "#/definitions/idempotency"
+        }
+      },
+      "additionalProperties": false
+    },
+    "productionMeasurement": {
+      "type": "object",
+      "properties": {
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sourceEnvironment": {
+          "$ref": "#/definitions/text"
+        },
+        "source": {
+          "$ref": "#/definitions/text"
+        },
+        "periodStart": {
+          "$ref": "#/definitions/text"
+        },
+        "periodEnd": {
+          "$ref": "#/definitions/text"
+        },
+        "dailyRequestCount": {
+          "$ref": "#/definitions/count"
+        },
+        "averageRequestsPerSecond": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "peakRequestsPerSecond": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "peakWindowSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "notes": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "generatorRule": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "$ref": "#/definitions/text"
+        },
+        "prefix": {
+          "$ref": "#/definitions/text"
+        },
+        "start": {
+          "$ref": "#/definitions/number"
+        },
+        "padTo": {
+          "$ref": "#/definitions/count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataSource": {
+      "type": "object",
+      "properties": {
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "type": {
+          "$ref": "#/definitions/dataSourceType"
+        },
+        "databaseRef": {
+          "$ref": "#/definitions/text"
+        },
+        "queryRef": {
+          "$ref": "#/definitions/text"
+        },
+        "location": {
+          "$ref": "#/definitions/text"
+        },
+        "delimiter": {
+          "$ref": "#/definitions/text"
+        },
+        "hasHeader": {
+          "$ref": "#/definitions/boolean"
+        },
+        "connectionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "generatedColumns": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/generatorRule"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataUsage": {
+      "type": "object",
+      "properties": {
+        "reuseAllowed": {
+          "$ref": "#/definitions/boolean"
+        },
+        "maxConcurrentRequestsPerRecord": {
+          "$ref": "#/definitions/positiveCount"
+        },
+        "onExhaustion": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataEffects": {
+      "type": "object",
+      "properties": {
+        "mutatesState": {
+          "$ref": "#/definitions/boolean"
+        },
+        "description": {
+          "$ref": "#/definitions/text"
+        },
+        "resetRequired": {
+          "$ref": "#/definitions/boolean"
+        },
+        "resetInstructions": {
+          "$ref": "#/definitions/text"
+        },
+        "owner": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entity": {
+      "type": "object",
+      "properties": {
+        "entityId": {
+          "$ref": "#/definitions/text"
+        },
+        "name": {
+          "$ref": "#/definitions/text"
+        },
+        "owner": {
+          "$ref": "#/definitions/text"
+        },
+        "requiredCount": {
+          "$ref": "#/definitions/count"
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "$ref": "#/definitions/text"
+              },
+              "type": {
+                "$ref": "#/definitions/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/dataSource"
+          }
+        },
+        "usage": {
+          "$ref": "#/definitions/dataUsage"
+        },
+        "sideEffects": {
+          "$ref": "#/definitions/dataEffects"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sqlQuery": {
+      "type": "object",
+      "properties": {
+        "queryId": {
+          "$ref": "#/definitions/text"
+        },
+        "purpose": {
+          "$ref": "#/definitions/text"
+        },
+        "sql": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "database": {
+      "type": "object",
+      "properties": {
+        "dbId": {
+          "$ref": "#/definitions/text"
+        },
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "engine": {
+          "$ref": "#/definitions/text"
+        },
+        "host": {
+          "$ref": "#/definitions/text"
+        },
+        "port": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 1,
+          "maximum": 65535
+        },
+        "databaseName": {
+          "$ref": "#/definitions/text"
+        },
+        "schema": {
+          "$ref": "#/definitions/text"
+        },
+        "credentialRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sqlQueries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sqlQuery"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "kpi": {
+      "type": "object",
+      "properties": {
+        "criterionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "transactionDefinition": {
+          "$ref": "#/definitions/text"
+        },
+        "targetTps": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "responseTimePercentile": {
+          "$ref": "#/definitions/percentile"
+        },
+        "maxResponseTimeMs": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "measurementWindow": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "planApproval": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "enum": [
+            "draft",
+            "pending",
+            "approved",
+            "rejected",
+            null
+          ]
+        },
+        "approvedBy": {
+          "$ref": "#/definitions/text"
+        },
+        "approvedAt": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "correlation": {
+      "type": "object",
+      "properties": {
+        "correlationId": {
+          "$ref": "#/definitions/text"
+        },
+        "fromStepRef": {
+          "$ref": "#/definitions/text"
+        },
+        "responsePath": {
+          "$ref": "#/definitions/pointer"
+        },
+        "toStepRef": {
+          "$ref": "#/definitions/text"
+        },
+        "required": {
+          "$ref": "#/definitions/boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "step": {
+      "type": "object",
+      "properties": {
+        "stepId": {
+          "$ref": "#/definitions/text"
+        },
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "thinkTimeMs": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "correlations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/correlation"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "timelinePhase": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/definitions/text"
+        },
+        "durationSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "startRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "endRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "interpolation": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "closedLoop": {
+      "type": "object",
+      "properties": {
+        "concurrentUsers": {
+          "$ref": "#/definitions/positiveCount"
+        },
+        "completionMode": {
+          "enum": [
+            "duration",
+            "iterations",
+            null
+          ]
+        },
+        "durationSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "iterationsPerUser": {
+          "$ref": "#/definitions/positiveCount"
+        },
+        "pacingMs": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        }
+      },
+      "additionalProperties": false
+    },
+    "completion": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "synchronous",
+            "asynchronous",
+            null
+          ]
+        },
+        "assertionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "maxDurationSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "waitPolicyRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiRuntime": {
+      "type": "object",
+      "properties": {
+        "maxInFlight": {
+          "$ref": "#/definitions/positiveCount"
+        },
+        "timeoutMs": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "retries": {
+          "$ref": "#/definitions/count"
+        },
+        "keepAlive": {
+          "$ref": "#/definitions/boolean"
+        },
+        "connectionReuse": {
+          "$ref": "#/definitions/text"
+        },
+        "tlsVerify": {
+          "$ref": "#/definitions/boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiExecution": {
+      "type": "object",
+      "properties": {
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "mode": {
+          "$ref": "#/definitions/apiExecutionMode"
+        },
+        "reason": {
+          "$ref": "#/definitions/text"
+        },
+        "requestsPerJourney": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "readiness": {
+          "type": "object",
+          "properties": {
+            "requestCount": {
+              "$ref": "#/definitions/count"
+            },
+            "beforeLoad": {
+              "$ref": "#/definitions/boolean"
+            },
+            "requiredAssertion": {
+              "$ref": "#/definitions/jsonValue"
+            }
+          },
+          "additionalProperties": false
+        },
+        "timeline": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/timelinePhase"
+          }
+        },
+        "runtime": {
+          "$ref": "#/definitions/apiRuntime"
+        }
+      },
+      "additionalProperties": false
+    },
+    "processorAllocation": {
+      "type": "object",
+      "properties": {
+        "strategy": {
+          "enum": [
+            "per-api",
+            "shared",
+            null
+          ]
+        },
+        "sharedMaxInFlight": {
+          "$ref": "#/definitions/positiveCount"
+        },
+        "onCapacityExceeded": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataAllocation": {
+      "type": "object",
+      "properties": {
+        "unit": {
+          "enum": [
+            "request",
+            "journey",
+            null
+          ]
+        },
+        "releaseCondition": {
+          "$ref": "#/definitions/text"
+        },
+        "sharingScope": {
+          "enum": [
+            "run",
+            "shared-consumers",
+            null
+          ]
+        },
+        "mechanismRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataPreparation": {
+      "type": "object",
+      "properties": {
+        "entityRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sourceSutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sourceType": {
+          "$ref": "#/definitions/dataSourceType"
+        },
+        "bundleDatasetPath": {
+          "$ref": "#/definitions/text"
+        },
+        "rowCount": {
+          "$ref": "#/definitions/count"
+        },
+        "preparation": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "usageOverride": {
+          "$ref": "#/definitions/dataUsage"
+        },
+        "constraints": {
+          "$ref": "#/definitions/text"
+        },
+        "readinessChecks": {
+          "$ref": "#/definitions/flexibleList"
+        },
+        "allocation": {
+          "$ref": "#/definitions/dataAllocation"
+        }
+      },
+      "additionalProperties": false
+    },
+    "secretBinding": {
+      "type": "object",
+      "properties": {
+        "credentialRef": {
+          "$ref": "#/definitions/text"
+        },
+        "environmentVariables": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/text"
+          }
+        },
+        "resolverRef": {
+          "$ref": "#/definitions/text"
+        },
+        "fieldMapping": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/definitions/text"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependency": {
+      "type": "object",
+      "properties": {
+        "endpointRef": {
+          "$ref": "#/definitions/text"
+        },
+        "disposition": {
+          "$ref": "#/definitions/dependencyDisposition"
+        },
+        "configurationRef": {
+          "$ref": "#/definitions/text"
+        },
+        "limitations": {
+          "$ref": "#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "abortCondition": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "$ref": "#/definitions/text"
+        },
+        "operator": {
+          "$ref": "#/definitions/text"
+        },
+        "threshold": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "observedForSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "action": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurementDefinition": {
+      "type": "object",
+      "properties": {
+        "sourceRef": {
+          "$ref": "#/definitions/text"
+        },
+        "population": {
+          "$ref": "#/definitions/text"
+        },
+        "includedOutcomes": {
+          "$ref": "#/definitions/textList"
+        },
+        "excludedOutcomes": {
+          "$ref": "#/definitions/textList"
+        },
+        "latencyStart": {
+          "$ref": "#/definitions/text"
+        },
+        "latencyEnd": {
+          "$ref": "#/definitions/text"
+        },
+        "timeoutTreatment": {
+          "$ref": "#/definitions/text"
+        },
+        "retryTreatment": {
+          "$ref": "#/definitions/text"
+        },
+        "aggregation": {
+          "$ref": "#/definitions/text"
+        },
+        "denominator": {
+          "$ref": "#/definitions/text"
+        },
+        "warmupPolicy": {
+          "$ref": "#/definitions/text"
+        },
+        "drainPolicy": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "workloadDelivery": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "$ref": "#/definitions/text"
+        },
+        "operator": {
+          "$ref": "#/definitions/text"
+        },
+        "threshold": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "window": {
+          "$ref": "#/definitions/text"
+        },
+        "minimumSamples": {
+          "$ref": "#/definitions/count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "measurableRule": {
+      "type": "object",
+      "properties": {
+        "metric": {
+          "$ref": "#/definitions/text"
+        },
+        "operator": {
+          "$ref": "#/definitions/text"
+        },
+        "threshold": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "window": {
+          "$ref": "#/definitions/text"
+        },
+        "minimumSamples": {
+          "$ref": "#/definitions/count"
+        },
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "transactionDefinition": {
+          "$ref": "#/definitions/text"
+        },
+        "unit": {
+          "$ref": "#/definitions/text"
+        },
+        "percentile": {
+          "$ref": "#/definitions/percentile"
+        },
+        "measurementDefinition": {
+          "$ref": "#/definitions/measurementDefinition"
+        }
+      },
+      "additionalProperties": false
+    },
+    "acceptanceCriterion": {
+      "type": "object",
+      "properties": {
+        "criterionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "measurableRules": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/measurableRule"
+          }
+        },
+        "missingEvidenceResult": {
+          "enum": [
+            "inconclusive",
+            null
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "resultCheck": {
+      "type": "object",
+      "properties": {
+        "check": {
+          "$ref": "#/definitions/text"
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "observed": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "evidenceRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "sqlResult": {
+      "type": "object",
+      "properties": {
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "databaseRef": {
+          "$ref": "#/definitions/text"
+        },
+        "queryRef": {
+          "$ref": "#/definitions/text"
+        },
+        "phase": {
+          "enum": [
+            "pre-run",
+            "post-run",
+            null
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "executedAt": {
+          "$ref": "#/definitions/text"
+        },
+        "observed": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "evidenceRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "monitorSource": {
+      "type": "object",
+      "properties": {
+        "monitorId": {
+          "$ref": "#/definitions/text"
+        },
+        "tool": {
+          "$ref": "#/definitions/text"
+        },
+        "location": {
+          "$ref": "#/definitions/text"
+        },
+        "url": {
+          "$ref": "#/definitions/text"
+        },
+        "keyMetrics": {
+          "$ref": "#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "monitorEvidence": {
+      "type": "object",
+      "properties": {
+        "monitorRef": {
+          "$ref": "#/definitions/text"
+        },
+        "capturedFrom": {
+          "$ref": "#/definitions/text"
+        },
+        "capturedTo": {
+          "$ref": "#/definitions/text"
+        },
+        "artifactRef": {
+          "$ref": "#/definitions/text"
+        },
+        "graphUrl": {
+          "$ref": "#/definitions/text"
+        },
+        "query": {
+          "$ref": "#/definitions/text"
+        },
+        "samplingIntervalSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "gaps": {
+          "$ref": "#/definitions/flexibleList"
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        }
+      },
+      "additionalProperties": false
+    },
+    "requestedPhase": {
+      "type": "object",
+      "properties": {
+        "durationSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "startRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "endRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "requestCount": {
+          "$ref": "#/definitions/count"
+        }
+      },
+      "additionalProperties": false
+    },
+    "achievedPhase": {
+      "type": "object",
+      "properties": {
+        "startTime": {
+          "$ref": "#/definitions/text"
+        },
+        "endTime": {
+          "$ref": "#/definitions/text"
+        },
+        "durationSeconds": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "emittedLogicalRequests": {
+          "$ref": "#/definitions/count"
+        },
+        "attemptedRequests": {
+          "$ref": "#/definitions/count"
+        },
+        "completedRequests": {
+          "$ref": "#/definitions/count"
+        },
+        "retryAttempts": {
+          "$ref": "#/definitions/count"
+        },
+        "averageOfferedRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "averageCompletedRate": {
+          "$ref": "#/definitions/nonnegativeNumber"
+        },
+        "rateSeriesEvidenceRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "timelineResult": {
+      "type": "object",
+      "properties": {
+        "phase": {
+          "$ref": "#/definitions/text"
+        },
+        "rateUnit": {
+          "$ref": "#/definitions/text"
+        },
+        "requested": {
+          "$ref": "#/definitions/requestedPhase"
+        },
+        "achieved": {
+          "$ref": "#/definitions/achievedPhase"
+        },
+        "evidenceRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "assertionResult": {
+      "type": "object",
+      "properties": {
+        "description": {
+          "$ref": "#/definitions/text"
+        },
+        "expectedFrom": {
+          "$ref": "#/definitions/text"
+        },
+        "evaluatedCount": {
+          "$ref": "#/definitions/count"
+        },
+        "passedCount": {
+          "$ref": "#/definitions/count"
+        },
+        "failedCount": {
+          "$ref": "#/definitions/count"
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "evidenceRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiResult": {
+      "type": "object",
+      "properties": {
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "mode": {
+          "$ref": "#/definitions/apiExecutionMode"
+        },
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "reason": {
+          "$ref": "#/definitions/text"
+        },
+        "startTime": {
+          "$ref": "#/definitions/text"
+        },
+        "endTime": {
+          "$ref": "#/definitions/text"
+        },
+        "timelineResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/timelineResult"
+          }
+        },
+        "assertions": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/assertionResult"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "journeyResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/definitions/status"
+        },
+        "requested": {
+          "$ref": "#/definitions/requestedPhase"
+        },
+        "achieved": {
+          "type": "object",
+          "properties": {
+            "startTime": {
+              "$ref": "#/definitions/text"
+            },
+            "endTime": {
+              "$ref": "#/definitions/text"
+            },
+            "durationSeconds": {
+              "$ref": "#/definitions/nonnegativeNumber"
+            },
+            "startedJourneys": {
+              "$ref": "#/definitions/count"
+            },
+            "completedJourneys": {
+              "$ref": "#/definitions/count"
+            },
+            "successfulJourneys": {
+              "$ref": "#/definitions/count"
+            },
+            "failedJourneys": {
+              "$ref": "#/definitions/count"
+            },
+            "incompleteJourneys": {
+              "$ref": "#/definitions/count"
+            },
+            "averageStartedRate": {
+              "$ref": "#/definitions/nonnegativeNumber"
+            },
+            "averageSuccessfulRate": {
+              "$ref": "#/definitions/nonnegativeNumber"
+            }
+          },
+          "additionalProperties": false
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "stepRef": {
+                "$ref": "#/definitions/text"
+              },
+              "attempted": {
+                "$ref": "#/definitions/count"
+              },
+              "completed": {
+                "$ref": "#/definitions/count"
+              },
+              "failed": {
+                "$ref": "#/definitions/count"
+              },
+              "evidenceRef": {
+                "$ref": "#/definitions/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "evidenceRefs": {
+          "$ref": "#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "ruleResult": {
+      "type": "object",
+      "properties": {
+        "rule": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/measurableRule"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observedValue": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "windowStart": {
+          "$ref": "#/definitions/text"
+        },
+        "windowEnd": {
+          "$ref": "#/definitions/text"
+        },
+        "sampleCount": {
+          "$ref": "#/definitions/count"
+        },
+        "evidenceRefs": {
+          "$ref": "#/definitions/textList"
+        },
+        "result": {
+          "$ref": "#/definitions/status"
+        }
+      },
+      "additionalProperties": false
+    },
+    "criterionResult": {
+      "type": "object",
+      "properties": {
+        "criterionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "ruleResults": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/ruleResult"
+          }
+        },
+        "result": {
+          "$ref": "#/definitions/status"
+        },
+        "explanation": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataObservation": {
+      "type": "object",
+      "properties": {
+        "entityRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sourceSutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sourceType": {
+          "$ref": "#/definitions/text"
+        },
+        "datasetSnapshotRef": {
+          "$ref": "#/definitions/text"
+        },
+        "datasetSha256": {
+          "$ref": "#/definitions/hash"
+        },
+        "preparedRows": {
+          "$ref": "#/definitions/count"
+        },
+        "uniqueRows": {
+          "$ref": "#/definitions/count"
+        },
+        "consumedRows": {
+          "$ref": "#/definitions/count"
+        },
+        "reusedRows": {
+          "$ref": "#/definitions/count"
+        },
+        "exhausted": {
+          "$ref": "#/definitions/boolean"
+        },
+        "maxObservedConcurrentRequestsPerRecord": {
+          "$ref": "#/definitions/count"
+        },
+        "sideEffectsObserved": {
+          "$ref": "#/definitions/jsonValue"
+        },
+        "usageConstraintsResult": {
+          "$ref": "#/definitions/status"
+        },
+        "validationEvidenceRefs": {
+          "$ref": "#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "provenance": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/definitions/documentTarget"
+        },
+        "kind": {
+          "enum": [
+            "client-statement",
+            "bundle-observation",
+            "engineer-proposal",
+            "calculation",
+            "not-applicable",
+            "approval",
+            "execution-evidence",
+            null
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sourceReference"
+          }
+        },
+        "confirmationRef": {
+          "$ref": "#/definitions/text"
+        },
+        "calculation": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "inputs": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/definitions/documentTarget"
+                  }
+                },
+                "formula": {
+                  "$ref": "#/definitions/text"
+                },
+                "unit": {
+                  "$ref": "#/definitions/text"
+                }
+              },
+              "additionalProperties": false
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "target",
+        "kind"
+      ]
+    },
+    "question": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/text"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/documentTarget"
+          }
+        },
+        "question": {
+          "$ref": "#/definitions/text"
+        },
+        "owner": {
+          "$ref": "#/definitions/text"
+        },
+        "blockingStage": {
+          "enum": [
+            "review",
+            "handoff",
+            "execution",
+            null
+          ]
+        },
+        "status": {
+          "enum": [
+            "open",
+            "answered",
+            "declined",
+            null
+          ]
+        },
+        "answerRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "targets",
+        "question",
+        "blockingStage",
+        "status"
+      ]
+    },
+    "proposal": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/definitions/text"
+        },
+        "targets": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/documentTarget"
+          }
+        },
+        "rationale": {
+          "$ref": "#/definitions/text"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/sourceReference"
+          }
+        },
+        "unresolvedPremises": {
+          "$ref": "#/definitions/textList"
+        },
+        "status": {
+          "enum": [
+            "proposed",
+            "accepted",
+            "rejected",
+            null
+          ]
+        },
+        "decisionRef": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "targets",
+        "rationale",
+        "status"
+      ]
+    },
+    "coverage": {
+      "type": "object",
+      "properties": {
+        "criterionRef": {
+          "$ref": "#/definitions/text"
+        },
+        "apiRef": {
+          "$ref": "#/definitions/text"
+        },
+        "sutRef": {
+          "$ref": "#/definitions/text"
+        },
+        "kpiPointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "planRulePointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "bundleArtifactRef": {
+          "$ref": "#/definitions/text"
+        },
+        "bundlePointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "resultPointer": {
+          "$ref": "#/definitions/pointer"
+        },
+        "evidenceRefs": {
+          "$ref": "#/definitions/textList"
+        },
+        "status": {
+          "enum": [
+            "mapped",
+            "unmapped",
+            "unsupported",
+            null
+          ]
+        },
+        "reason": {
+          "$ref": "#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dataSourceType": {
+      "enum": [
+        "database-export",
+        "csv",
+        "redis",
+        "generated",
+        null
+      ]
+    },
+    "apiExecutionMode": {
+      "enum": [
+        "load",
+        "readiness-only",
+        "excluded",
+        "auth-prerequisite",
+        null
+      ]
+    },
+    "workloadRelationship": {
+      "enum": [
+        "independent",
+        "sequential",
+        null
+      ]
+    },
+    "workloadRateUnit": {
+      "enum": [
+        "requests-per-second",
+        "journeys-per-second",
+        null
+      ]
+    },
+    "arrivalModel": {
+      "enum": [
+        "open-loop",
+        "closed-loop",
+        null
+      ]
+    },
+    "dependencyDisposition": {
+      "enum": [
+        "real",
+        "mocked",
+        "excluded",
+        null
+      ]
+    }
+  }
+}

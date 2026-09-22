@@ -20,12 +20,15 @@ import io.pockethive.auth.service.service.InMemoryUserStore;
 import java.net.URI;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.util.Base64;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.StreamSupport;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+import org.springframework.http.MediaType;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -33,6 +36,8 @@ import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.mock.web.MockHttpSession;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.util.UriComponentsBuilder;
 
 @SpringBootTest
@@ -42,6 +47,15 @@ class OAuthAuthorizationServerTest {
     private static final String REDIRECT_URI = "http://127.0.0.1:38125/callback";
     private static final String RESOURCE = "http://localhost:8080/mcp";
     private static final String VERIFIER = "test-verifier-that-is-at-least-forty-three-characters-long";
+
+    @TempDir
+    static Path dynamicClientStateDirectory;
+
+    @DynamicPropertySource
+    static void dynamicClientState(DynamicPropertyRegistry registry) {
+        registry.add("pockethive.auth-service.oauth.dynamic-client-state-path",
+            () -> dynamicClientStateDirectory.resolve("dynamic-clients.json").toString());
+    }
 
     @Autowired MockMvc mvc;
     @Autowired ObjectMapper mapper;
@@ -146,6 +160,9 @@ class OAuthAuthorizationServerTest {
                 .param("code_verifier", VERIFIER))
             .andExpect(status().isOk())
             .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")))
+            .andExpect(jsonPath("$.expires_in").value(org.hamcrest.Matchers.allOf(
+                org.hamcrest.Matchers.greaterThanOrEqualTo(28_799),
+                org.hamcrest.Matchers.lessThanOrEqualTo(28_800))))
             .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.startsWith("phrfr_")))
             .andExpect(jsonPath("$.scope").isNotEmpty())
             .andDo(result -> assertThat(Set.copyOf(List.of(
@@ -165,6 +182,109 @@ class OAuthAuthorizationServerTest {
             .andExpect(jsonPath("$.refresh_token").value(org.hamcrest.Matchers.allOf(
                 org.hamcrest.Matchers.startsWith("phrfr_"),
                 org.hamcrest.Matchers.not(refreshToken))));
+    }
+
+    @Test
+    void dynamicallyRegisteredLocalhostClientMayRotateOnlyItsLoopbackPort() throws Exception {
+        String registeredRedirect = "http://localhost:52000/oauth/callback";
+        String runtimeRedirect = "http://localhost:62810/oauth/callback";
+        MvcResult registration = mvc.perform(post("/oauth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(dynamicRegistration("Rotating localhost client", registeredRedirect,
+                    PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.READ)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String clientId = mapper.readTree(registration.getResponse().getContentAsString())
+            .path("client_id").asText();
+
+        MvcResult authorization = mvc.perform(get("/oauth/authorize")
+                .with(user("local-admin"))
+                .queryParam("response_type", "code")
+                .queryParam("client_id", clientId)
+                .queryParam("redirect_uri", runtimeRedirect)
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", PocketHiveMcpScopes.DISCOVER + " " + PocketHiveMcpScopes.READ)
+                .queryParam("state", "rotating-localhost-state")
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().is3xxRedirection())
+            .andReturn();
+        String code = UriComponentsBuilder.fromUri(authorizationCallbackFor(
+                authorization, clientId, runtimeRedirect,
+                PocketHiveMcpScopes.DISCOVER, PocketHiveMcpScopes.READ))
+            .build().getQueryParams().getFirst("code");
+
+        mvc.perform(post("/oauth/token")
+                .param("grant_type", "authorization_code")
+                .param("client_id", clientId)
+                .param("code", code)
+                .param("redirect_uri", runtimeRedirect)
+                .param("resource", RESOURCE)
+                .param("code_verifier", VERIFIER))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$.access_token").value(org.hamcrest.Matchers.startsWith("phmcp_")));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
+    void localhostPortRotationAcceptsPortlessRegistrationAndBoundaryPorts() throws Exception {
+        MvcResult registration = mvc.perform(post("/oauth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(dynamicRegistration("Portless localhost client",
+                    "http://localhost/oauth/callback", PocketHiveMcpScopes.DISCOVER)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String clientId = mapper.readTree(registration.getResponse().getContentAsString())
+            .path("client_id").asText();
+
+        for (int runtimePort : List.of(1, 65_535)) {
+            mvc.perform(get("/oauth/authorize")
+                    .queryParam("response_type", "code")
+                    .queryParam("client_id", clientId)
+                    .queryParam("redirect_uri", "http://localhost:" + runtimePort + "/oauth/callback")
+                    .queryParam("resource", RESOURCE)
+                    .queryParam("scope", PocketHiveMcpScopes.DISCOVER)
+                    .queryParam("state", "boundary-port-" + runtimePort)
+                    .queryParam("code_challenge", challenge(VERIFIER))
+                    .queryParam("code_challenge_method", "S256"))
+                .andExpect(status().is3xxRedirection());
+        }
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
+    void localhostPortRotationDoesNotRelaxAnyOtherRedirectComponent() throws Exception {
+        String registeredRedirect = "http://localhost:52000/oauth/callback?channel=amazon-q";
+        MvcResult registration = mvc.perform(post("/oauth/register")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(dynamicRegistration("Bounded localhost client", registeredRedirect,
+                    PocketHiveMcpScopes.DISCOVER)))
+            .andExpect(status().isCreated())
+            .andReturn();
+        String clientId = mapper.readTree(registration.getResponse().getContentAsString())
+            .path("client_id").asText();
+
+        for (String invalidRedirect : List.of(
+            "https://localhost:62810/oauth/callback?channel=amazon-q",
+            "http://127.0.0.1:62810/oauth/callback?channel=amazon-q",
+            "http://localhost:62810/other?channel=amazon-q",
+            "http://localhost:62810/oauth/callback?channel=other",
+            "http://user@localhost:62810/oauth/callback?channel=amazon-q",
+            "http://localhost:62810/oauth/callback?channel=amazon-q#fragment",
+            "http://localhost/oauth/callback?channel=amazon-q",
+            "http://localhost:0/oauth/callback?channel=amazon-q",
+            "http://localhost:65536/oauth/callback?channel=amazon-q")) {
+            mvc.perform(get("/oauth/authorize")
+                    .queryParam("response_type", "code")
+                    .queryParam("client_id", clientId)
+                    .queryParam("redirect_uri", invalidRedirect)
+                    .queryParam("resource", RESOURCE)
+                    .queryParam("scope", PocketHiveMcpScopes.DISCOVER)
+                    .queryParam("state", "bounded-localhost-state")
+                    .queryParam("code_challenge", challenge(VERIFIER))
+                    .queryParam("code_challenge_method", "S256"))
+                .andExpect(status().isBadRequest());
+        }
     }
 
     @Test
@@ -227,6 +347,8 @@ class OAuthAuthorizationServerTest {
 
         mvc.perform(get("/oauth/dev/login"))
             .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().encoding(StandardCharsets.UTF_8))
             .andExpect(content().string(containsString("class=\"auth-shell\"")))
             .andExpect(content().string(containsString("class=\"auth-brand__logo\"")))
             .andExpect(content().string(containsString("pockethive-auth.css")))
@@ -243,12 +365,97 @@ class OAuthAuthorizationServerTest {
 
     @Test
     @WithMockUser(username = "local-admin")
+    void unknownAuthorizationClientRendersBoundedPocketHiveFailure() throws Exception {
+        String untrustedClientId = "unknown-<script>alert(1)</script>";
+        String untrustedState = "state-<img src=x onerror=alert(1)>";
+
+        mvc.perform(get("/oauth/authorize")
+                .queryParam("response_type", "code")
+                .queryParam("client_id", untrustedClientId)
+                .queryParam("redirect_uri", "http://localhost:52000/oauth/callback")
+                .queryParam("resource", RESOURCE)
+                .queryParam("scope", PocketHiveMcpScopes.DISCOVER)
+                .queryParam("state", untrustedState)
+                .queryParam("code_challenge", challenge(VERIFIER))
+                .queryParam("code_challenge_method", "S256"))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith("text/html"))
+            .andExpect(content().string(containsString("class=\"auth-shell\"")))
+            .andExpect(content().string(containsString("PocketHive")))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("invalid_request")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(untrustedClientId))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(untrustedState))));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
+    void unknownConsentClientRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(get("/oauth/consent")
+                .accept(MediaType.TEXT_HTML)
+                .param("client_id", "unknown-client")
+                .param("state", "untrusted-state")
+                .param("scope", PocketHiveMcpScopes.DISCOVER))
+            .andExpect(status().isBadRequest())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("invalid_request")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("unknown-client"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("untrusted-state"))));
+    }
+
+    @Test
+    void unauthenticatedConsentRequestUsesTheCanonicalLoginEntryPoint() throws Exception {
+        mvc.perform(get("/oauth/consent")
+                .accept(MediaType.TEXT_HTML)
+                .header("X-Forwarded-Host", "localhost:8080")
+                .header("X-Forwarded-Proto", "http")
+                .header("X-Forwarded-Prefix", "/auth-service")
+                .param("client_id", CLIENT_ID)
+                .param("state", "consent-state")
+                .param("scope", PocketHiveMcpScopes.DISCOVER))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("http://localhost:8080/auth-service/oauth/dev/login"));
+    }
+
+    @Test
+    void unknownDevUserRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(post("/oauth/dev/login")
+                .with(csrf())
+                .accept(MediaType.TEXT_HTML)
+                .param("username", "unknown-user"))
+            .andExpect(status().isUnauthorized())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("access_denied")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("unknown-user"))));
+    }
+
+    @Test
+    void rejectedDevLoginCsrfRendersBoundedPocketHiveFailure() throws Exception {
+        mvc.perform(post("/oauth/dev/login")
+                .accept(MediaType.TEXT_HTML)
+                .param("username", "local-admin"))
+            .andExpect(status().isForbidden())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().string(containsString("Authorization could not continue")))
+            .andExpect(content().string(containsString("access_denied")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString("Whitelabel"))));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
     void consentFormBindsExplicitFieldsAndPostsToCanonicalIssuer() throws Exception {
         mvc.perform(get("/oauth/consent")
                 .param("client_id", CLIENT_ID)
                 .param("state", "consent-state")
                 .param("scope", PocketHiveMcpScopes.ALL_ORDERED.toArray(String[]::new)))
             .andExpect(status().isOk())
+            .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_HTML))
+            .andExpect(content().encoding(StandardCharsets.UTF_8))
             .andExpect(content().string(containsString("class=\"auth-shell\"")))
             .andExpect(content().string(containsString("<fieldset")))
             .andExpect(content().string(containsString("Requested permissions")))
@@ -266,6 +473,20 @@ class OAuthAuthorizationServerTest {
             .andExpect(content().string(containsString(
                 "action=\"http://localhost:8080/auth-service/oauth/authorize\"")))
             .andExpect(content().string(containsString(PocketHiveMcpScopes.DISCOVER)));
+    }
+
+    @Test
+    @WithMockUser(username = "local-admin")
+    void consentFormOmitsBlankScopeSegments() throws Exception {
+        mvc.perform(get("/oauth/consent")
+                .param("client_id", CLIENT_ID)
+                .param("state", "consent-state")
+                .param("scope", "", PocketHiveMcpScopes.DISCOVER))
+            .andExpect(status().isOk())
+            .andExpect(content().string(containsString(
+                "name=\"scope\" value=\"" + PocketHiveMcpScopes.DISCOVER + "\"")))
+            .andExpect(content().string(org.hamcrest.Matchers.not(containsString(
+                "name=\"scope\" value=\"\""))));
     }
 
     @Test

@@ -39,6 +39,7 @@ The image list is defined by `tools/docker/image-manifest.sh` and currently
 includes:
 
 - `jvm-base`
+- `artemis` (Apache Artemis plus the PocketHive diagnostic-copy transformer)
 - `auth-service`
 - `scenario-manager`
 - `network-proxy-manager`

@@ -16,6 +16,7 @@ const webviewStyles = await readFile('media/companion.css', 'utf8');
 const providerSource = await readFile('src/webview/companionProvider.ts', 'utf8');
 const callbackSource = await readFile('src/connection/loopbackBrowser.ts', 'utf8');
 const callbackLogoSource = await readFile('src/generated/callbackLogo.ts', 'utf8');
+const logoGeneratorSource = await readFile('scripts/generate-logo-assets.mjs', 'utf8');
 const brandTokens = await readFile('resources/brand-tokens.css', 'utf8');
 const canonicalLogo = await readFile('../ui-v2/public/logo.svg', 'utf8');
 const canonicalLogoDigest = createHash('sha256').update(canonicalLogo).digest('hex');
@@ -37,6 +38,10 @@ assert.match(callbackLogoSource, new RegExp(`ui-v2/public/logo\\.svg sha256:${ca
   'Generated callback logo must declare canonical source provenance');
 assert.match(callbackSource, /CALLBACK_LOGO_DATA_URI/,
   'Loopback callback must consume the generated canonical logo');
+assert.match(logoGeneratorSource, /fileURLToPath\(import\.meta\.url\)/,
+  'Logo generation must resolve its module path across supported Node versions');
+assert.doesNotMatch(logoGeneratorSource, /import\.meta\.dirname/,
+  'Logo generation must not require a newer import.meta.dirname runtime');
 assert.doesNotMatch(callbackSource, /auth-brand__mark/,
   'Loopback callback must not retain a CSS-drawn substitute logo');
 assert.doesNotMatch(webviewSource, /app\.append\(header\(\)\)/,

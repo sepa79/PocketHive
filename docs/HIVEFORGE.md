@@ -125,8 +125,7 @@ POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
 POCKETHIVE_PUBLIC_INGRESS
 POCKETHIVE_PUBLIC_HOST
-POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET
-POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
+POCKETHIVE_ALLOW_REMOTE_HTTP
 ```
 
 `DOCKER_REGISTRY` must include the trailing slash and must equal
@@ -135,15 +134,76 @@ POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
 operator sets it intentionally; HiveForge must not infer it from a missing
 value.
 
-`POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
-trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
-its exact host value without a scheme or path. For the development environment, the two MCP/Auth fields use explicit, public
-test values of at least 16 characters, as approved by the operator. Their names
-end in SECRET but these test fixtures are not confidential credentials.
-The Dev ingress exposes HTTPS on 8443 using the intentionally public test TLS
-identity in `deploy/hiveforge/runtime/dev-tls`; clients explicitly trust its
-certificate. HTTP on 8088 remains available for the existing UI path. The rendered stack exposes the MCP only as
+`POCKETHIVE_PUBLIC_INGRESS` is the exact external origin without a trailing
+slash, normally HTTPS, for example `https://lab.example`. An HTTP-only deployment
+must explicitly pass `POCKETHIVE_ALLOW_REMOTE_HTTP=true` in runtime environment
+values. HiveForge requires an explicit `true` or `false`; use `false` for HTTPS.
+Missing or invalid values fail deployment validation. The renderer passes the
+same allowance to Auth Service and MCP and rejects remote HTTP without it. This
+is an unencrypted exception; the [public endpoint transport contract](architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy)
+owns its effects. The companion must independently select **Remote HTTP (unencrypted)**.
+`POCKETHIVE_PUBLIC_HOST` is its exact host value, including a port when present,
+without a scheme or path.
+
+HiveForge does not currently own a secret-provisioning capability. While Auth
+Service remains in Phase 1 with the explicit `DEV` provider, the PocketHive
+HiveForge adapter therefore supplies one fixed, known development credential
+pair to Auth Service and MCP. These values are not confidential and are not
+HiveForge runtime requirements. The canonical pair is owned once by the swarm
+render action and must not be independently reconstructed by the template.
+They do not create another authentication authority: one authenticates MCP
+OAuth introspection, while the other obtains the existing Auth Service bearer
+token used for calls to PocketHive owner APIs. The downstream credential uses
+the same established service-account contract as Orchestrator: Auth Service
+configures the named service account and the calling service receives the
+matching principal name and credential. MCP keeps its own `pockethive-mcp`
+identity and never reuses the Orchestrator identity. The OAuth introspection
+credential remains separate because Orchestrator is not an OAuth resource
+server.
+This temporary contract must not be used with a non-`DEV` authentication
+provider. Adding such a provider requires a contract-first migration to the
+approved HiveForge secret capability before deployment.
+
+The Dev ingress also exposes HTTPS on 8443 using the intentionally public test
+TLS identity in `deploy/hiveforge/runtime/dev-tls`; clients explicitly trust its
+certificate. HTTP on 8088 remains available for the existing UI path. The
+rendered stack exposes the MCP only as
 `<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
+
+Both `deploy` and `update` load the public ingress, host, and HTTP allowance from
+`deploy/hiveforge/components/stack/ansible/vars/public-endpoint.yml`.
+Changing the public URL never enables HTTP implicitly. For an HTTP deployment,
+set these values together in the selected profile's runtime environment:
+
+```yaml
+POCKETHIVE_PUBLIC_INGRESS: http://pockethive.example:8088
+POCKETHIVE_PUBLIC_HOST: pockethive.example:8088
+POCKETHIVE_ALLOW_REMOTE_HTTP: "true"
+```
+
+The generated OAuth issuer is `http://pockethive.example:8088/auth-service`
+and the MCP resource is `http://pockethive.example:8088/mcp`. Amazon Q uses that
+public MCP URL in its own configuration; the companion's transport selection
+does not configure Q. Use the deployment's actual external host and port.
+
+Local contract checks (Python requires PyYAML and Jinja2):
+
+```bash
+python3 -B -m unittest discover -s deploy/hiveforge/tests -v
+bash tools/hiveforge-contract-check.sh
+```
+
+The Python checks render both actions and Swarm profiles with Rabbit and Artemis
+WORK, exercise the public endpoint assertions, and preserve the TLS listener,
+proxy placement and writable MCP temporary storage. They do not execute Ansible
+or verify a live deployment.
+
+Artemis deployments use the release-matched PocketHive `artemis` image, based on
+Apache Artemis 2.40.0. It includes the diagnostic-copy transformer needed to bound
+captures of delayed Work without changing source delivery. Build it through the
+existing image manifest/local or remote-image tooling, or consume the image from
+the standard release workflow. Using the unextended upstream image cannot provide
+this capture contract. See the WorkPlane responsibility records for ownership.
 
 Current HiveForge component requirements are global per component, not
 profile-specific. Because of that, `swarm-full` dedicated root variables are
@@ -206,6 +266,7 @@ Agent sequence:
        POCKETHIVE_STACK_NAME: pockethive
        POCKETHIVE_PUBLIC_INGRESS: https://pockethive.example
        POCKETHIVE_PUBLIC_HOST: pockethive.example
+       POCKETHIVE_ALLOW_REMOTE_HTTP: "false"
        POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
@@ -215,9 +276,10 @@ Agent sequence:
        NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
-   For Dev, set `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
-   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` to the approved public test
-   values through the same non-secret runtime map.
+   Do not supply MCP/Auth Service credentials through this map. The current
+   HiveForge adapter is explicitly Phase 1 `DEV` and owns its fixed, known
+   development credential pair. A non-`DEV` deployment remains unsupported
+   until HiveForge provides the approved secret capability.
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
    environment requires outbound proxy access. PocketHive renders those values

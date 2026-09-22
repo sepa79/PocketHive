@@ -15,7 +15,7 @@ class PocketHiveMcpPropertiesTest {
         PocketHiveMcpProperties properties = properties(
             URI.create("https://lab.example"), URI.create("http://ui:8088"), 10, 2);
 
-        assertThat(properties.hasSecureEndpoints()).isTrue();
+        assertThat(properties.hasAllowedPublicEndpoints()).isTrue();
         assertThat(properties.hasValidOwnerApiBase()).isTrue();
         assertThat(properties.pocketHiveIngress()).isNotEqualTo(properties.ownerApiBase());
     }
@@ -23,7 +23,7 @@ class PocketHiveMcpPropertiesTest {
     @Test
     void rejectsInvalidPublicOwnerProtocolAndLimitConfiguration() {
         assertThat(properties(URI.create("http://lab.example"), URI.create("http://ui:8088"), 10, 2)
-            .hasSecureEndpoints()).isFalse();
+            .hasAllowedPublicEndpoints()).isFalse();
         assertThat(properties(URI.create("https://lab.example"), URI.create("file:///tmp/owner"), 10, 2)
             .hasValidOwnerApiBase()).isFalse();
         assertThat(properties(URI.create("https://lab.example"), URI.create("http://ui:8088/path"), 10, 2)
@@ -32,10 +32,24 @@ class PocketHiveMcpPropertiesTest {
             .hasConsistentLimits()).isFalse();
     }
 
+    @Test
+    void explicitlyAllowsRemoteHttpOnlyWhenEnabled() {
+        PocketHiveMcpProperties properties = properties(URI.create("http://lab.example:8088"),
+            URI.create("http://ui:8088"), 10, 2, true);
+        assertThat(properties.hasAllowedPublicEndpoints()).isTrue();
+        assertThat(properties(URI.create("ftp://lab.example"), URI.create("http://ui:8088"), 10, 2, true)
+            .hasAllowedPublicEndpoints()).isFalse();
+    }
+
     private static PocketHiveMcpProperties properties(URI ingress, URI owner, int totalSessions,
                                                        int sessionsPerPrincipal) {
+        return properties(ingress, owner, totalSessions, sessionsPerPrincipal, false);
+    }
+
+    private static PocketHiveMcpProperties properties(URI ingress, URI owner, int totalSessions,
+                                                       int sessionsPerPrincipal, boolean allowRemoteHttp) {
         return new PocketHiveMcpProperties(
-            ingress, owner, McpStateMode.MEMORY,
+            allowRemoteHttp, ingress, owner, McpStateMode.MEMORY,
             Path.of("target/state"), Path.of("target/spool"),
             Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1), Duration.ofHours(1),
             Duration.ofMinutes(5), totalSessions, sessionsPerPrincipal, 100, 10, 1_000_000,

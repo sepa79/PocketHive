@@ -116,6 +116,21 @@ configuration and authentication behaviour.
 - If authentication has expired or was declined, use the explicit **Sign in**
   action. Ordinary tab and swarm commands must not open a separate browser
   authorization flow.
+- In Amazon Q Developer, if an MCP access token expires while the existing
+  connection remains open, use **Refresh MCP servers**. Amazon Q then
+  reinitialises the connection and silently exchanges its cached rotating
+  refresh token. If Auth Service restarted after the token was issued, its
+  transient token state is no longer available and one interactive sign-in is
+  expected; do not delete the retained client registration unless dynamic
+  registration itself fails.
+- If an agent client retained an OAuth registration across a local restart, it
+  can re-authorize with that same client ID. Do not clear or recreate the client
+  configuration merely because Auth Service restarted; active dynamic client
+  registrations are retained in the `pockethive-auth-state` volume.
+- The first upgrade from the earlier in-memory registry cannot reconstruct a
+  client ID that was issued before durable state existed. Remove and re-add that
+  MCP server once so the client performs dynamic registration; later Auth
+  Service restarts retain the replacement registration.
 
 Scenario Bundle source remains in Git. From the Scenarios tab select a committed
 bundle directory; the extension uploads the exact committed regular files for
@@ -391,7 +406,8 @@ Declare `POCKETHIVE_WORK_TYPE` explicitly in the Orchestrator deployment:
 to Controllers by the selected owner. Worker input/output choices remain explicit
 in scenario config. No selection is inferred from available brokers or credentials.
 
-The local compose stack now includes `apache/activemq-artemis:2.40.0`, with credentials,
+The local compose stack uses the release-matched PocketHive `artemis` image, based
+on Apache Artemis 2.40.0 and including its diagnostic-copy transformer, with credentials,
 volume and healthcheck declared in `docker-compose.yml`; it publishes no host ports.
 The normal `build-hive.sh` stack refresh includes this service. This branch now selects
 `POCKETHIVE_WORK_TYPE: ARTEMIS` locally after the Rabbit E2E baseline passed.

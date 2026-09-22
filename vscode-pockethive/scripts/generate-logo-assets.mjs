@@ -1,8 +1,9 @@
 import { createHash } from 'node:crypto';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const project = resolve(import.meta.dirname, '..');
+const project = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const sourcePath = resolve(project, '..', 'ui-v2', 'public', 'logo.svg');
 const activityPath = resolve(project, 'resources', 'activity-mark.svg');
 const brandTokensPath = resolve(project, 'resources', 'brand-tokens.css');

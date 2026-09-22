@@ -188,6 +188,7 @@ function connectionForm(): HTMLElement {
   const mode = select('Endpoint security', 'endpointSecurityMode', [
     ['REMOTE_HTTPS', 'Remote HTTPS'],
     ['LOCAL_LOOPBACK_HTTP', 'Local loopback HTTP'],
+    ['REMOTE_HTTP', 'Remote HTTP (unencrypted)'],
   ], String(draft.endpointSecurityMode ?? 'REMOTE_HTTPS'));
   form.append(text('h2', draft.id ? 'Connection' : 'Add environment'), stages, name.wrapper, url.wrapper, mode.wrapper);
   form.append(el('div', 'status-list', [

@@ -14,9 +14,15 @@ Track only work that remains after the delivered shared-per-SUT Network Proxy V1
 
 ## Scenario Plan integration
 
-- [ ] Define the `network-profile` Scenario Plan step in the canonical plan contract before implementation.
-- [ ] Implement controller-side execution and journal/status outcomes for the step.
-- [ ] Document ordering and authoring rules.
+The proposed replacement is a separate
+[SUT Plan owned by one SUT Controller](global-sut-mocks-spec.md#continuous-sut-plans).
+It preserves scenario YAML and the existing proxy services. Review that ownership
+change before implementation; the older swarm `network-profile` step is not an
+independent delivery requirement.
+
+- [ ] Review the SUT-scoped profile apply/readback and autonomous-plan contracts.
+- [ ] Deliver the accepted controller integration and phase evidence through the
+      existing Network Proxy Manager.
 
 ## Isolation upgrade
 
@@ -26,4 +32,4 @@ Track only work that remains after the delivered shared-per-SUT Network Proxy V1
 
 ## Explicitly not carried forward
 
-The archived plan mentioned a Swarm Controller runtime profile client. V1 intentionally keeps runtime apply/clear authority in Orchestrator and Network Proxy Manager. Reintroducing a controller client requires a new architecture decision; it is not an implicit missing implementation.
+The archived plan mentioned a Swarm Controller runtime profile client. V1 intentionally keeps runtime apply/clear authority in Orchestrator and Network Proxy Manager. The new proposal introduces a distinct SUT Controller, not that old Swarm Controller client. Its authority split requires the explicit architecture amendment identified in the specification; it is not an implicit missing implementation.

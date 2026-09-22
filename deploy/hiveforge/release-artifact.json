@@ -6,6 +6,11 @@
   },
   "images": [
     {
+      "name": "artemis",
+      "image": "{{ imageRepository.project }}/artemis:{{ release.imageTag }}",
+      "application": true
+    },
+    {
       "name": "auth-service",
       "image": "{{ imageRepository.project }}/auth-service:{{ release.imageTag }}",
       "application": true

@@ -1,5 +1,11 @@
 # TCP Scenario Setup Guide
 
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
 ## Current Setup (Zero Configuration Required)
 
 ### What's Provided Globally
@@ -40,7 +46,7 @@
 ## Future Scenarios: Zero Setup Required
 
 ### For Standard Protocols (ECHO, JSON, STX/ETX, ISO-8583)
-✅ **No setup needed** - Mappings already exist
+**Historical sample setup:** verify the selected mock's mappings; do not assume they are present.
 
 ### For Custom Protocols
 Add ONE mapping file to `tcp-mock-server/mappings/`:

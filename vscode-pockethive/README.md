@@ -221,3 +221,14 @@ under its Content Security Policy, and `npm run assets:check` detects drift.
 
 For the server and agent contract, see `docs/mcp/README.md` and
 `docs/archive/pre-boundary-reset/todo/pockethive-mcp-java-migration.md`.
+
+## Explicit remote HTTP
+
+New environments default to **Remote HTTPS**. For an HTTP-only environment,
+select **Remote HTTP (unencrypted)** explicitly. The saved profile preserves
+that choice across reloads; entering an HTTP URL never changes the selected mode.
+MCP and OAuth discovery must match the selected transport. The server deployment
+must also enable `POCKETHIVE_ALLOW_REMOTE_HTTP=true`; see
+[deployment configuration](../docs/mcp/README.md#explicit-remote-http-deployments).
+Passwords and tokens travel unencrypted in this mode. **Local loopback HTTP**
+continues to allow only local loopback addresses. There is no automatic downgrade.

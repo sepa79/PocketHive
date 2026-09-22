@@ -1,0 +1,213 @@
+version: 2
+templateType: test-execution-results
+executionResultId: null # Administrative identity; this scaffold is not a run.
+requirementId: null
+planId: null
+references:
+  requirementsRef: null # FILLED requirements v3 document path.
+  requirementsVersion: 3
+  requirementsSha256: null
+  planRef: null # FILLED plan v5 path.
+  planVersion: 5
+  planRevision: null
+  planSha256: null
+  generatedBundleSnapshotRef: null
+  generatedBundleSha256: null
+  actualRuntimeConfigSnapshotRef: null # Redacted; hash must describe the retained redacted artifact.
+  actualRuntimeConfigSha256: null
+  traceabilityMap: null # Filled traceability instance path; no self/hash cycle.
+contract:
+  purpose: Record observed results, not expected outcomes disguised as passes.
+  missingValues: Nulls, placeholders and missing evidence cannot establish a pass.
+  statusVocabulary: pending | blocked | not-run | pass | fail | inconclusive | not-applicable
+  notApplicableRule: Include a reason; absence of evidence alone is not not-applicable.
+  redaction: Never retain credentials, auth headers, tokens or sensitive dataset records.
+
+runInfo:
+  sutId: null # Single selected SUT; must match the filled plan.
+  environmentName: null
+  bundleId: null
+  scenarioId: null
+  swarmId: null
+  runId: null # Canonical runtime run identity; swarmId may be reused across runs.
+  operator: null
+  startTime: null # Actual UTC ISO-8601 timestamp, not planned time.
+  endTime: null
+  workerVersion: null # Actual pinned tag.
+  workerImages: [] # Actual role/image/digest when available.
+  executionStatus: not-run
+  authorizationRef: null
+  deviationsFromApprovedPlan: [] # Include approval/effect; unapproved changes invalidate a pass.
+  environmentSnapshotRef: null # Existing SUT/environment evidence when material to the claim.
+
+actualRunConfig:
+  arrivalModel: null
+  rateUnit: null
+  relationship: null
+  sequence: [] # Actual ordered step/API refs, think times and redacted correlations.
+  closedLoop: null # Actual closed-loop settings, when applicable.
+  completion: null # Actual terminal-outcome/wait policy configuration, when applicable.
+  processorAllocation: null
+  apiRuntime: [] # {apiRef, maxInFlight, timeoutMs, retries, keepAlive, connectionReuse, tlsVerify}
+  secretInjection:
+    type: null
+    implementationRef: null
+    credentialRefs: [] # Reference identifiers only.
+    validationStatus: pending
+    evidenceRef: null # Redacted validation evidence only.
+  safety:
+    effectiveLimitsRef: null
+    observationIntervalSeconds: null
+    abortTriggered: null
+    reason: null
+    triggeredAt: null
+
+preRunChecks:
+  - check: Requirements/plan approval and snapshot identity
+    status: pending
+    observed: null
+    evidenceRef: null
+  - check: Worker version, generated bundle validation and actual runtime configuration
+    status: pending
+    observed: null
+    evidenceRef: null
+  - check: Selected-SUT access, data readiness and scoped mock provisioning if applicable
+    status: pending
+    observed: null
+    evidenceRef: null
+  - check: Auth prerequisite and readiness-only API assertions
+    status: pending
+    observed: null
+    evidenceRef: null
+  - check: Monitoring capture, safety observer and cleanup ownership
+    status: pending
+    observed: null
+    evidenceRef: null
+sqlChecks: [] # Empty unless selected-SUT requirements explicitly make SQL applicable.
+# Entry shape: {sutRef, databaseRef, queryRef, phase: pre-run|post-run,
+# status: pending, executedAt: null, observed: null, evidenceRef: null}.
+# Resolve dbId/sqlQueries.queryId only for runInfo.sutId; use approved read-only checks.
+# Never execute another SUT's database checks; sample query IDs are not defaults.
+
+monitoring:
+  sources:
+    - monitorId: null
+      tool: null # E.g. Prometheus, Grafana, journal, queue observations.
+      location: null
+      url: null # Actual graph/query location; exclude credentials from URLs.
+      keyMetrics: []
+  evidence:
+    - monitorRef: null
+      capturedFrom: null
+      capturedTo: null
+      artifactRef: null
+      graphUrl: null
+      query: null
+      samplingIntervalSeconds: null
+      gaps: []
+      status: pending
+
+apiResults:
+  - apiRef: null # requirements.templates[].apiId; include load, readiness-only and excluded APIs.
+    mode: null
+    status: not-run
+    reason: null
+    startTime: null
+    endTime: null
+    timelineResults:
+      - phase: null
+        rateUnit: null # requests-per-second for API observations.
+        requested:
+          durationSeconds: null
+          startRate: null
+          endRate: null
+          requestCount: null # Explicit bounded count for readiness-only; otherwise derived estimate.
+        achieved:
+          startTime: null
+          endTime: null
+          durationSeconds: null
+          emittedLogicalRequests: null
+          attemptedRequests: null # Includes retries.
+          completedRequests: null
+          retryAttempts: null
+          averageOfferedRate: null
+          averageCompletedRate: null
+          rateSeriesEvidenceRef: null # Windowed rates required; averages cannot prove a ramp.
+        evidenceRef: null
+    assertions:
+      - description: null # Include required HTTP status/body checks and idempotency behavior.
+        expectedFrom: null # E.g. requirements API-001 expectedResponse.
+        evaluatedCount: null
+        passedCount: null
+        failedCount: null
+        status: pending
+        evidenceRef: null
+journeyResults: [] # Sequential only: step occurrences, requested/achieved rates, terminal outcomes and evidence.
+workloadDeliveryResult:
+  observedValue: null
+  evidenceRefs: []
+  result: not-run # Evaluate only against the approved plan delivery criterion.
+dependencyObservations: [] # {endpointRef, disposition, configurationRef, evidenceRef, limitations: []}
+stopOutcome:
+  producersStoppedAt: null
+  drainCompletedAt: null
+  outstandingWork: null
+  timeoutActionTaken: null
+  evidenceRefs: []
+  result: not-run # Requested abort does not prove stopping or draining.
+comparisonResults:
+  baselineExecutionRef: null
+  comparabilityEvidenceRefs: []
+  observed: null
+  result: not-run
+  reason: null # Unknown applicability cannot establish not-applicable.
+criterionResults:
+  - criterionRef: null # Match each requirements CRIT ID and plan acceptanceCriteria entry exactly.
+    ruleResults:
+      - rule: null # Read-only snapshot of the exact approved plan rule; never independently editable.
+        observedValue: null
+        windowStart: null
+        windowEnd: null
+        sampleCount: null
+        evidenceRefs: []
+        result: inconclusive
+    result: inconclusive
+    explanation: No evidence evaluated yet.
+
+dataObservations:
+  - entityRef: null
+    sourceSutRef: null # Must equal runInfo.sutId.
+    sourceType: null
+    datasetSnapshotRef: null # Safe artifact reference, not raw sensitive records.
+    datasetSha256: null
+    preparedRows: null
+    uniqueRows: null
+    consumedRows: null
+    reusedRows: null
+    exhausted: null
+    maxObservedConcurrentRequestsPerRecord: null
+    sideEffectsObserved: null
+    usageConstraintsResult: pending
+    validationEvidenceRefs: []
+cleanup:
+  status: pending
+  owner: null
+  actions: [] # {action, status, completedAt, evidenceRef}; only run-owned resources.
+  resetRequired: null
+  resetApprovalRef: null
+  resetResult: pending # Use not-applicable plus reason only when justified by selected SUT.
+  datasetDisposition: null
+  remainingResources: []
+  note: No destructive SQL or shared-resource removal without explicit separate approval.
+observations: []
+issues: [] # Description, impact, affected apiRef/criterionRef if needed, redacted evidence reference.
+overallResult:
+  result: not-run
+  summary: No execution or evidence recorded.
+  missingEvidence: []
+  decisionRule: >
+    Not-run if no execution occurred. Partial execution or missing required evidence is
+    inconclusive unless evidence already establishes failure. Pass requires all applicable
+    readiness checks, approved workload delivery, assertions, criterion rules, data constraints
+    and cleanup obligations verified against the recorded snapshots.
+recommendations: []

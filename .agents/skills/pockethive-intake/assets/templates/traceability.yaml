@@ -1,0 +1,129 @@
+version: 2
+templateType: traceability-map
+
+# Reviewed intake contract v2. Package paths are generated read-only manifest projections.
+# Rules describe intake validation; this document never authorizes runtime operations.
+templateRegistry:
+  requirements: null # Generated from the package manifest.
+  requirementsSample: null # Generated from the package manifest.
+  testPlan: null # Generated from the package manifest.
+  testPlanSample: null # Unavailable: not supplied; never fabricate it.
+  executionResults: null # Generated from the package manifest.
+
+linking:
+  requirementId: "Same value in the filled requirements, plan and execution/results."
+  requirementsRef: "Plan references the filled requirements file, not the generic template."
+  planId: "Execution/results references the specific plan and revision used for the run."
+  sutId: "A plan/run selects one requirements.suts[].sutId; APIs are shared across SUTs."
+  snapshotRule: "Record content hashes of approved requirements, plan, bundle and actual runtime configuration."
+
+references:
+  - from: "plan.apiExecution[].apiRef"
+    to: "requirements.templates[].apiId"
+  - from: "requirements.templates[].endpointRef"
+    to: "requirements.suts[].endpoints keys"
+  - from: "requirements.templates[].payloadBindings[].source.entityRef"
+    to: "requirements.testData.entities[].entityId"
+  - from: "requirements.testData.entities[].sources[].sutRef"
+    to: "requirements.suts[].sutId"
+  - from: "requirements.testData.entities[].sources[].databaseRef"
+    to: "requirements.databases[].dbId"
+  - from: "requirements.testData.entities[].sources[].queryRef"
+    to: "sqlQueries[].queryId in the referenced database"
+  - from: "plan.dataPreparation[].entityRef"
+    to: "requirements.testData.entities[].entityId"
+  - from: "plan.secretInjection.bindings[].credentialRef"
+    to: "credential references required by the selected SUT and its data sources"
+  - from: "plan.acceptanceCriteria[].criterionRef"
+    to: "requirements.successCriteria[].criterionId"
+  - from: "requirements.kpis[].criterionRef"
+    to: "requirements.successCriteria[].criterionId"
+  - from: "requirements.kpis[].apiRef"
+    to: "requirements.templates[].apiId"
+  - from: "requirements.kpis[].sutRef"
+    to: "requirements.suts[].sutId"
+  - from: "executionResults.apiResults[].apiRef"
+    to: "plan.apiExecution[].apiRef"
+  - from: "executionResults.criterionResults[].criterionRef"
+    to: "plan.acceptanceCriteria[].criterionRef"
+  - from: "executionResults.monitoring.evidence[].monitorRef"
+    to: "executionResults.monitoring.sources[].monitorId"
+
+generationRules:
+  - "Require unique SUT, API, entity, database and criterion IDs; query IDs are unique within their referenced database; serviceId/callId pairs must be unique."
+  - "Preserve shared API identity and resolve endpointRef against the explicitly selected supported SUT source; no global/bundle lookup fallback."
+  - "Plan generation.bundleId/scenarioId must match requirements.bundleGeneration, and scenarioId must match the folder."
+  - "Requirements bundleGeneration.testPlanRef must resolve to the filled plan; requirementId and selected SUT must agree."
+  - "Explicitly classify every shared API as load, readiness-only, excluded or an auth prerequisite in the plan."
+  - "OAuth token acquisition is not another business template; custom upstream providers must resolve without dependency cycles."
+  - "Do not attach auth to APIs marked none; require a supported injection path for every selected-SUT credential."
+  - "Map body bindings using JSON Pointer and path/query/header bindings by name; columns must exist and retain declared types."
+  - "Fixed payload fields use explicit constants; example payloads, tokens and secret references are not runtime data."
+  - "Evaluate HTTP and business assertions together; require supported assertion handling or block generation."
+  - "Selected-SUT data sources must exist; database exports must reference the same SUT's database and retrieval query."
+  - "Generated records need complete rules; CSV needs an approved file/header format; Redis needs list and secure connection details."
+  - "A COUNT query cannot satisfy dataset retrieval; export must yield required eligible, unique, correctly typed rows."
+  - "Plan usage overrides may tighten but never loosen reuse, concurrency, exhaustion or side-effect constraints."
+  - "State-changing APIs require an explicit idempotency decision and approved reset/cleanup responsibilities."
+  - "productionUsage is optional evidence; its absence does not block generation if an approved workload exists."
+  - "Ownership entries name existing sections; stakeholders own KPI goals, NFT owns plan choices, and openQuestions is a generated traceability projection."
+  - "For the selected SUT, map KPI goals to plan criterion rules with the same API, transaction definition, units, percentile and window."
+  - "targetTps means achieved successful business transactions/second, not offered request rate; null targets need agreement, not invented defaults."
+  - "Response-time KPIs require latency-distribution evidence at the specified boundaries; do not compute p95 from a last-value gauge."
+  - "API rate units, phase durations, scheduling/order, concurrency allocation and workload termination must be explicit."
+  - "Sequential journeys need order, correlation bindings, think times and journey rates; reject unsupported scheduling."
+  - "Resolve required nulls/placeholders and selected-SUT open questions before generation; do not treat draft examples as approvals."
+  - "Require an approved plan, pinned supported worker version, generation approval, data strategy and secret/mock implementation decisions."
+  - "Mock blueprints are instructions, not executable stubs; auth/data/assertion behavior must be implementable before claiming mock readiness."
+  - "Do not require or access NFT-only data/credentials for a WireMock plan."
+  - "Never copy intake-only OAuth, binding or assertion structures directly into runtime configuration."
+
+executionRules:
+  - "Generation approval is not permission to deploy, query a database, start load or execute cleanup."
+  - "Prechecks require actual evidence for selected-SUT access, credentials, data, mocks, assertions and safety observation."
+  - "Run only applicable read-only SQL queries by database/query reference; record other-SUT queries as not applicable with a reason."
+  - "Record requested and achieved per-API rates, attempts, retries, outcomes, timestamps and phase durations."
+  - "Test-run monitoring locations, queries, windows and gaps belong in results; historical production context remains in requirements.productionUsage."
+  - "Do not infer percentiles or aggregate error rates from an unsuitable metric; retain evidence matching the acceptance window."
+  - "Missing evidence is inconclusive, not pass; partial load delivery cannot establish a successful full-load result."
+  - "Criteria outcomes must map back to requirement criterion IDs and include observed values and evidence."
+  - "Snapshot references must identify the actual approved input revisions and runtime configuration used."
+  - "Redact tokens, Authorization headers, credentials and sensitive data in evidence."
+  - "Record cleanup and state-reset outcomes; never delete shared resources or run destructive SQL without separate approval."
+
+# Filled instance solely owns provenance, questions and proposal adoption.
+# Values remain in their requirements/plan/results owner; references never copy those values.
+instance:
+  version: 1
+  intake:
+    mode: null # from-bundle | new-requirements; explicitly selected task source.
+    source: null # {artifactRef, sha256, kind: file|directory}; identity is not client intent.
+    packageVersion: null
+  documents:
+    requirements: {path: null, sha256: null}
+    plan: {path: null, sha256: null}
+    results: {path: null, sha256: null}
+  # Never hash this traceability file inside itself or create document hash cycles.
+  projections:
+    openQuestionsSha256: null # CLI-owned digest of the last generated openQuestions JSON.
+  provenance: []
+  # {target: {document, pointer}, kind, sources: [{artifactRef, pointer, sha256}],
+  #  confirmationRef, calculation: null|{inputs: [{document, pointer}], formula, unit}}
+  # kind: client-statement|bundle-observation|engineer-proposal|calculation|
+  #       not-applicable|approval|execution-evidence
+  questions: []
+  # {id, targets: [{document, pointer}], question, owner,
+  #  blockingStage: review|handoff|execution, status: open|answered|declined, answerRef}
+  # requirements.openQuestions is generated from unresolved question records.
+  proposals: []
+  # {id, targets: [{document, pointer}], rationale, sources: [{artifactRef, pointer, sha256}],
+  #  unresolvedPremises: [], status: proposed|accepted|rejected, decisionRef}
+  # Proposed values stay only at their owning target; adoption needs supplied decision evidence.
+  coverage: []
+  # {criterionRef, apiRef, sutRef, kpiPointer, planRulePointer, bundleArtifactRef,
+  #  bundlePointer, resultPointer, evidenceRefs: [], status: mapped|unmapped|unsupported, reason}
+  # KPI dimensions resolve through pinned KPI/plan-rule pointers, not another copied definition.
+  review:
+    status: draft # draft | confirmed; no model-generated approval.
+    evidenceRef: null # Supplied real review record required for later handoff.
+    contentSha256: null # Material-document digest supplied with review; finalise never reapproves changes.

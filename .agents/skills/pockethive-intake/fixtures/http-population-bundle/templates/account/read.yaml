@@ -1,0 +1,8 @@
+serviceId: account
+callId: read
+protocol: HTTP
+method: GET
+pathTemplate: /accounts/{{ vars.accountId }}
+headersTemplate:
+  authorization: "Bearer synthetic-sensitive-header-not-for-intake"
+bodyTemplate: ""

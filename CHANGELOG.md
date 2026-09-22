@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- OAuth consent: make Decline reject all requested permissions, including prior
+  consent, and preserve validated cancellation callbacks with the original state.
+  Document the registry, persistence, redirect and browser-failure owners.
+- Artemis diagnostics: bound captures of delayed messages without changing source
+  delivery; ship the required diagnostic transformer in the release-matched broker
+  image through the existing local and release build paths.
 - Artemis WorkPlane: add an explicit deployment-wide alternative to RabbitMQ for
   worker traffic, including resource provisioning, transport and verified removal;
   CONTROL continues to use RabbitMQ. Rabbit and Artemis acknowledge work on
@@ -24,6 +30,23 @@ All notable changes to this project will be documented in this file.
 - HiveForge Swarm deployment: support explicit Artemis WORK selection and shared
   broker state, cross-host proxy placement, and writable MCP temporary storage
   within the read-only container deployment. Include public Dev TLS/auth fixtures.
+
+
+- Intake skill CI: reject stale generated schemas or package manifests, run the
+  public CLI suite, and upload a verified portable ZIP with its checksum as a
+  commit-labelled build artifact. Projection drift is checked only by the
+  dedicated intake workflow; default Maven tests do not depend on skill files.
+  Generated files are never rewritten by CI.
+- Intake schema ownership: derive auth and request-protocol vocabulary from the
+  canonical Java contracts, accept every auth type in drafts, and retain explicit
+  handoff gaps for unmodeled auth requirements. Requirements v3 uses
+  `bearer-token`; add file-based secret injection and preserve HTTPS endpoint
+  references without equating endpoint kind to request protocol. Consolidate
+  repeated intake vocabularies and runtime-field constraints; retain canonical
+  run identity separately from reusable swarm identity in executed reports.
+- VS Code tooling security: update pinned `fast-uri`, `js-yaml`, and `qs`
+  development dependencies to patched releases; retain Stryker 10 and the
+  existing mutation scope and thresholds.
 - Control/work-plane isolation: move Rabbit connection, topology, resource, and
   transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
   keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery
@@ -82,6 +105,14 @@ All notable changes to this project will be documented in this file.
 - OAuth authoring: preserve complete signed and ordinary OAuth profiles through
   Java MCP scenario generation and upload; validate authored profile storage in
   Scenario Manager without resolving credentials or contacting OAuth providers.
+- MCP OAuth interoperability: align the default opaque access-token lifetime
+  with the eight-hour browser session as a bounded Phase 1 mitigation for native
+  clients that refresh only when their MCP connection is reinitialized; retain
+  expiry enforcement, audience/scope validation, and rotating 30-day refresh
+  tokens.
+- Remote HTTP: support an explicit deployment allowance shared by Auth Service
+  and MCP, with a separate saved companion transport choice. Keep HTTPS as the
+  default and reject redirects that could change the selected endpoint.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
@@ -108,6 +139,8 @@ All notable changes to this project will be documented in this file.
   clear Account menu for sign-in, retry, and revoking sign-out.
 - Windows extension tooling: canonicalize Git scenario fixture paths and fix
   VSIX package listing checks so the existing test and packaging gates work on Windows.
+- VS Code packaging: resolve the generated-logo script location from the module
+  URL so packaging remains portable across supported Node 20 releases.
 - OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
   logo, explicit client/resource/permission context, accessible form semantics,
   responsive styling, and no change to the authorization-code contract.
@@ -133,7 +166,10 @@ All notable changes to this project will be documented in this file.
 - Integration follow-up: inherited Orchestrator executor/controller identity
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
-  Explicit remote HTTP authentication allowance remains separate work.
+- HiveForge Phase 1 authentication: stop requiring unsupported secret runtime
+  inputs and explicitly use one fixed, known `DEV` credential pair until
+  HiveForge provides the approved secret capability required by non-`DEV`
+  deployments.
 - Documentation: add the canonical Java MCP guide, update active deployment and
   extension guidance, supersede the retired Node plugin documents, and record the
   local RST debrief and outstanding governed/human production-release checks.

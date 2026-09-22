@@ -2,14 +2,28 @@ package io.pockethive.artemis;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.awaitility.Awaitility.await;
+import io.pockethive.artemis.api.ArtemisInputSettings;
+import io.pockethive.artemis.api.ArtemisOutputSettings;
 import io.pockethive.artemis.api.ArtemisWorkPlane;
 import io.pockethive.artemis.topology.ArtemisResourceKind;
+import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.topology.work.WorkResourceIdentity;
+import io.pockethive.work.api.WorkItem;
+import io.pockethive.work.api.WorkItemJsonCodec;
+import io.pockethive.work.api.WorkerInfo;
+import io.pockethive.work.api.transport.WorkDeliveryHandler;
+import io.pockethive.work.config.WorkDelivery;
+import io.pockethive.work.config.WorkDeliveryMode;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -73,6 +87,71 @@ class ArtemisDebugTapTest {
                 });
             }
             assertThat(plane.resources().observeInput(EmbeddedArtemis.EXPIRY_QUEUE).orElseThrow().messages()).isEqualTo(1);
+        }
+    }
+
+    @Test void scheduledCopiesRespectRingLimitWhileSourceMessagesKeepTheirDelay() throws Exception {
+        try (var broker = new EmbeddedArtemis(directory);
+             var plane = new ArtemisWorkPlane(broker.settings(), "ph")) {
+            var topology = plane.topology().resolve("swarm", Set.of("jobs"));
+            plane.resources().ensure(topology);
+            var source = topology.channel("jobs");
+            try (var capture = plane.debugTaps().open("swarm", "processor", "scheduled", source, 30, 2)) {
+                var output = plane.outputs().create(new ArtemisOutputSettings(source.outputAddress(), true));
+                var info = new WorkerInfo("generator", "swarm", "worker", null, null);
+                var expected = new ArrayList<WorkItem>();
+                var notBefore = new LinkedHashMap<String, Long>();
+                var codec = new WorkItemJsonCodec();
+                for (int i = 0; i < 5; i++) {
+                    var item = WorkItem.text(info, "body-" + i).messageId("message-" + i)
+                        .observabilityContext(ObservabilityContextUtil.init(info.role(), info.instanceId(), info.swarmId()))
+                        .build();
+                    expected.add(item);
+                    notBefore.put(item.messageId(), System.currentTimeMillis() + 3000);
+                    output.publish(item, new WorkDelivery(WorkDeliveryMode.DELAYED, 3000));
+                }
+                await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+                    assertThat(plane.resources().observeInput(source.inputAddress()).orElseThrow().messages()).isEqualTo(5);
+                    assertThat(plane.resources().observeInput(capture.captureAddress()).orElseThrow().messages()).isEqualTo(2);
+                });
+                var copies = new ArrayList<byte[]>();
+                await().atMost(Duration.ofSeconds(1)).untilAsserted(() -> {
+                    capture.receive().ifPresent(copies::add);
+                    assertThat(copies).hasSize(2);
+                });
+                assertThat(copies.get(0)).isEqualTo(codec.toJson(expected.get(3)));
+                assertThat(copies.get(1)).isEqualTo(codec.toJson(expected.get(4)));
+                assertThat(capture.receive()).isEmpty();
+                assertThat(plane.resources().observeInput(source.inputAddress()).orElseThrow().messages()).isEqualTo(5);
+
+                var arrivals = new ConcurrentHashMap<String, Long>();
+                var received = new LinkedBlockingQueue<WorkItem>();
+                var input = plane.inputs().create("source-worker", new ArtemisInputSettings(source.inputAddress(), 0));
+                input.register(new WorkDeliveryHandler() {
+                    @Override public void onWork(WorkItem item) {
+                        arrivals.put(item.messageId(), System.currentTimeMillis());
+                        received.add(item);
+                    }
+                    @Override public void onDecodeFailure(byte[] body, Exception failure) {
+                        throw new AssertionError(failure);
+                    }
+                });
+                try {
+                    input.start();
+                    var receivedIds = new HashSet<String>();
+                    for (int i = 0; i < 5; i++) {
+                        WorkItem item = received.poll(5, TimeUnit.SECONDS);
+                        assertThat(item).isNotNull();
+                        assertThat(receivedIds.add(item.messageId())).isTrue();
+                        assertThat(arrivals.get(item.messageId())).isGreaterThanOrEqualTo(notBefore.get(item.messageId()));
+                        WorkItem original = expected.stream().filter(value -> value.messageId().equals(item.messageId()))
+                            .findFirst().orElseThrow();
+                        assertThat(codec.toJson(item)).isEqualTo(codec.toJson(original));
+                    }
+                    assertThat(receivedIds).containsExactlyInAnyOrderElementsOf(notBefore.keySet());
+                    assertThat(received).isEmpty();
+                } finally { input.stop(); }
+            }
         }
     }
 }

@@ -1,0 +1,7 @@
+id: candidate-b
+name: Synthetic TCP candidate
+type: sandbox
+endpoints:
+  payments:
+    kind: TCP
+    baseUrl: tcp://candidate-b.invalid:9000

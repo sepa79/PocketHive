@@ -1,3 +1,9 @@
+/**
+ * Responsibility: Discover and validate resource metadata for an explicit connection profile.
+ * Must not: Authenticate users, persist profiles, or define another transport policy.
+ * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy.
+ */
+import { validateEndpointTransport } from './endpointSecurityPolicy';
 import { lookup } from 'node:dns/promises';
 
 import {
@@ -19,6 +25,7 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
 
   async validate(profile: McpConnectionProfile): Promise<ValidatedEndpoint> {
     const endpoint = new URL(profile.mcpUrl);
+    validateEndpointTransport(endpoint, profile.endpointSecurityMode);
     if (profile.endpointSecurityMode === 'LOCAL_LOOPBACK_HTTP') {
       const addresses = await this.resolveAddresses(endpoint.hostname);
       if (addresses.length === 0 || addresses.some(address => !isLoopback(address))) {
@@ -69,7 +76,7 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
       );
     }
     const authorizationServer = new URL(metadata.authorization_servers[0]);
-    validateAuthorizationServer(authorizationServer, profile.endpointSecurityMode);
+    validateEndpointTransport(authorizationServer, profile.endpointSecurityMode, true);
     return {
       mcpUrl: profile.mcpUrl,
       resourceMetadataUrl: metadataUrl,
@@ -79,7 +86,7 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
 }
 
 async function resolveHost(hostname: string): Promise<string[]> {
-  return (await lookup(hostname, { all: true, verbatim: true })).map(result => result.address);
+  return (await lookup(hostname === '[::1]' ? '::1' : hostname, { all: true, verbatim: true })).map(result => result.address);
 }
 
 function isLoopback(address: string): boolean {
@@ -87,32 +94,6 @@ function isLoopback(address: string): boolean {
   return normalized === '::1'
     || normalized.startsWith('127.')
     || normalized.startsWith('::ffff:127.');
-}
-
-function validateAuthorizationServer(url: URL, mode: McpConnectionProfile['endpointSecurityMode']): void {
-  if (url.username || url.password || url.search || url.hash) {
-    throw new ConnectionContractError(
-      'MCP_AUTHORIZATION_SERVER_INVALID',
-      'MCP_AUTHORIZATION_SERVER_INVALID: credentials, query, and fragment are forbidden',
-    );
-  }
-  if (mode === 'REMOTE_HTTPS' && url.protocol !== 'https:') {
-    throw new ConnectionContractError(
-      'MCP_AUTHORIZATION_SERVER_INVALID',
-      'MCP_AUTHORIZATION_SERVER_INVALID: remote authorization server requires HTTPS',
-    );
-  }
-  if (mode === 'LOCAL_LOOPBACK_HTTP'
-      && (url.protocol !== 'http:' || !isLoopbackHostname(url.hostname))) {
-    throw new ConnectionContractError(
-      'MCP_AUTHORIZATION_SERVER_INVALID',
-      'MCP_AUTHORIZATION_SERVER_INVALID: local authorization server must be loopback HTTP',
-    );
-  }
-}
-
-function isLoopbackHostname(hostname: string): boolean {
-  return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
 }
 
 function object(text: string): Record<string, unknown> {

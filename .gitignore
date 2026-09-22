@@ -58,3 +58,7 @@ __pycache__/
 
 # Acceptance evidence survives Maven clean; exclude it from source/images.
 acceptance-tests/runs/
+
+# Portable intake skill artifacts
+pockethive-intake*.zip
+pockethive-intake*.zip.sha256

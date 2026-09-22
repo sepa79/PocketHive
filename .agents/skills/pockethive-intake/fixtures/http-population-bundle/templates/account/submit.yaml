@@ -1,0 +1,6 @@
+serviceId: account
+callId: submit
+protocol: HTTP
+method: POST
+pathTemplate: /accounts/submit
+bodyTemplate: '{"privateRecord":"synthetic-sensitive-body-not-for-intake"}'

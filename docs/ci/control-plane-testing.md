@@ -92,3 +92,6 @@ existing control-plane contract tests or authorize direct service-port stack che
 
 For worker OAuth fixtures and MCP authoring checks, see
 [Authentication regression tests](auth-testing.md).
+
+For portable intake schema checks, CLI qualification and distributable CI
+artifacts, see [Intake skill checks and artifacts](intake-skill.md).

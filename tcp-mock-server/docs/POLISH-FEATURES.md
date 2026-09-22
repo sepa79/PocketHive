@@ -1,6 +1,12 @@
-# TCP Mock Server - Polish Features Complete
+# TCP Mock Server - Historical UI Polish Notes
 
-This document describes the 3 final polish features that complete production-grade WireMock parity.
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
+This document retains historical UI feature descriptions. UI features do not establish TCP runtime equivalence or qualification.
 
 ## 1. Bulk Operations
 
@@ -184,15 +190,12 @@ All existing shortcuts still work, plus:
 
 ## Performance
 
-- **Bulk Operations**: O(n) for n selected items, async to prevent UI blocking
-- **Filtering**: O(n) with early termination, <10ms for 1000 mappings
-- **Sorting**: O(n log n), cached until data changes
-- **Diff Computation**: O(n) where n = max lines, <50ms for 1000-line files
-- **Syntax Highlighting**: Lazy rendering, only visible content
+UI performance is unqualified. Earlier timing and capacity claims had no
+supporting benchmark attached and have been removed.
 
 ## Browser Compatibility
 
-All features tested on:
+Historical browser targets; no test evidence is asserted:
 - Chrome 90+
 - Firefox 88+
 - Safari 14+
@@ -216,7 +219,7 @@ All features tested on:
 - **Before**: Compare requests by eye
 - **After**: Click compare, see visual diff
 
-## Complete Feature Checklist
+## Historical Feature Checklist
 
 ✅ Request Journal with Filtering & Pagination
 ✅ Recording & Playback Mode
@@ -227,13 +230,8 @@ All features tested on:
 ✅ **Mapping Search & Filtering** (NEW)
 ✅ **Request/Response Diff Viewer** (NEW)
 
-## Production Readiness
+## Qualification status
 
-The TCP Mock Server UI now has:
-- **100% WireMock feature parity**
-- **Production-grade UX polish**
-- **Enterprise-ready bulk operations**
-- **Advanced filtering and search**
-- **Visual debugging tools**
-
-All features are fully tested, documented, and ready for production use.
+The checklist above is historical. Supported TCP workflows, known gaps and
+required evidence are defined in [TCP capability qualification](WIREMOCK-PARITY.md).
+No runtime or browser tests were run for this documentation update.

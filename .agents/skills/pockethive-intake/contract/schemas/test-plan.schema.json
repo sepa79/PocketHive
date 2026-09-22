@@ -1,0 +1,363 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PocketHive intake test plan draft contract",
+  "$comment": "Structural draft validation only. Nulls and incomplete optional sections are legitimate. The shared intake semantic validator owns provenance, applicability, reference checks and readiness; this schema is not a runtime scenario contract.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 5
+    },
+    "templateType": {
+      "const": "test-plan"
+    },
+    "planId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "revision": {
+      "$ref": "common.schema.json#/definitions/positiveCount"
+    },
+    "requirementId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "requirementsRef": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "requirementsSnapshot": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "$ref": "common.schema.json#/definitions/positiveCount"
+        },
+        "sha256": {
+          "$ref": "common.schema.json#/definitions/hash"
+        }
+      },
+      "additionalProperties": false
+    },
+    "owner": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "sutId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "approval": {
+      "$ref": "common.schema.json#/definitions/planApproval"
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "purpose": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "missingValues": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "applicability": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "workloadAuthority": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "referenceDocuments": {
+          "type": "object",
+          "properties": {
+            "requirementsTemplate": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "executionTemplate": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "traceabilityMap": {
+              "$ref": "common.schema.json#/definitions/text"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "generation": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "bundleId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "scenarioId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "workerVersion": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "pipeline": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "prerequisites": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "blockers": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "approval": {
+          "$ref": "common.schema.json#/definitions/planApproval"
+        }
+      },
+      "additionalProperties": false
+    },
+    "executionModel": {
+      "type": "object",
+      "properties": {
+        "relationship": {
+          "$ref": "common.schema.json#/definitions/workloadRelationship"
+        },
+        "rateUnit": {
+          "$ref": "common.schema.json#/definitions/workloadRateUnit"
+        },
+        "arrivalModel": {
+          "$ref": "common.schema.json#/definitions/arrivalModel"
+        },
+        "sequence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/step"
+          }
+        },
+        "correlationFailureAction": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "note": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "journeyTimeline": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/timelinePhase"
+          }
+        },
+        "closedLoop": {
+          "$ref": "common.schema.json#/definitions/closedLoop"
+        },
+        "completion": {
+          "$ref": "common.schema.json#/definitions/completion"
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiExecution": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/apiExecution"
+      }
+    },
+    "processorAllocation": {
+      "$ref": "common.schema.json#/definitions/processorAllocation"
+    },
+    "dataPreparation": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/dataPreparation"
+      }
+    },
+    "secretInjection": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "type": {
+          "$ref": "common.schema.json#/definitions/secretInjectionType"
+        },
+        "implementationRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "bindings": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/secretBinding"
+          }
+        },
+        "validationStatus": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "persistencePolicy": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "notRequiredReason": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mockSetup": {
+      "type": "object",
+      "properties": {
+        "mode": {
+          "enum": [
+            "existing",
+            "generate-stubs",
+            "not-required",
+            null
+          ]
+        },
+        "approvalStatus": {
+          "enum": [
+            "pending",
+            "approved",
+            "rejected",
+            "not-applicable",
+            null
+          ]
+        },
+        "existingStubsRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "blueprint": {
+          "$ref": "common.schema.json#/definitions/jsonValue"
+        },
+        "securityClaim": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/dependency"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "environmentQualification": {
+      "type": "object",
+      "properties": {
+        "sutSnapshotRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "dependencyRefs": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "limitations": {
+          "$ref": "common.schema.json#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "readiness": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "prerequisites": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "prechecks": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "failureAction": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "safety": {
+      "type": "object",
+      "properties": {
+        "maxRunDurationSeconds": {
+          "$ref": "common.schema.json#/definitions/nonnegativeNumber"
+        },
+        "maxTotalRequests": {
+          "$ref": "common.schema.json#/definitions/count"
+        },
+        "requestBudgetScope": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "observationIntervalSeconds": {
+          "$ref": "common.schema.json#/definitions/nonnegativeNumber"
+        },
+        "abortConditions": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/abortCondition"
+          }
+        },
+        "evidenceUnavailableAction": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "loadStart": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "entryExit": {
+      "type": "object",
+      "properties": {
+        "entry": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "exit": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "drainTimeoutSeconds": {
+          "$ref": "common.schema.json#/definitions/nonnegativeNumber"
+        },
+        "drainTimeoutAction": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "stopProcedureRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "acceptanceCriteria": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/acceptanceCriterion"
+      }
+    },
+    "workloadDelivery": {
+      "$ref": "common.schema.json#/definitions/workloadDelivery"
+    },
+    "comparison": {
+      "type": "object",
+      "properties": {
+        "baselineExecutionRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "comparabilityChecks": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "decisionRule": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "cleanup": {
+      "type": "object",
+      "properties": {
+        "owner": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "actions": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "dataReset": {
+          "$ref": "common.schema.json#/definitions/jsonValue"
+        },
+        "safety": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "templateType"
+  ]
+}

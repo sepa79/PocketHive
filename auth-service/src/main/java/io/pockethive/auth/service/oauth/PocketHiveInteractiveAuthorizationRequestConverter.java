@@ -12,12 +12,11 @@ import org.springframework.security.oauth2.server.authorization.web.authenticati
 import org.springframework.security.web.authentication.AuthenticationConverter;
 
 /**
- * Responsibility: Convert interactive authorization requests while preserving principal validation.
+ * Responsibility: Convert interactive authorization requests and narrow declared scopes to current principal grants.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-OAUTH-AUTHORIZATION-INPUT — docs/architecture/runtime-responsibilities.md#resp-oauth-authorization-input.
  */
 
-/** Narrows any declared interactive MCP intent to the principal's current grant ceiling. */
 public final class PocketHiveInteractiveAuthorizationRequestConverter implements AuthenticationConverter {
     private final OAuth2AuthorizationCodeRequestAuthenticationConverter delegate =
         new OAuth2AuthorizationCodeRequestAuthenticationConverter();

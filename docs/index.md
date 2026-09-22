@@ -54,6 +54,8 @@ by the UI under `/docs/...` as part of the runtime image.
 - `docs/ui-v2/SCENARIO_WORKSPACE_UI_SPEC.md` – implemented Scenario workspace
   UI baseline.
 - `docs/todo/sut-environments-followups.md` – remaining SUT environment work.
+- [Global SUTs, shared mocks and continuous plans](todo/global-sut-mocks-spec.md)
+  (proposed) – global identity, per-SUT controllers and TCP qualification.
 - `docs/todo/scenario-plan-followups.md` – remaining Scenario Plan extensions.
 - `docs/todo/ui-v2-control-plane-followups.md` – remaining UI control-plane hardening.
 - `docs/todo/network-proxy-followups.md` – post-V1 proxy reliability, plan integration,

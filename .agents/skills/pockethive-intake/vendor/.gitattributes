@@ -1,0 +1,8 @@
+# Preserve the pinned upstream bytes and dependency RECORD checksums.
+** -text
+# These exact upstream files contain retained CRLF, spaces or final blank lines.
+fastjsonschema-2.21.2.dist-info/licenses/LICENSE whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol
+fastjsonschema-2.21.2.dist-info/WHEEL whitespace=-blank-at-eof
+ruamel.yaml-0.18.16.dist-info/WHEEL whitespace=-blank-at-eof
+fastjsonschema/draft04.py whitespace=-blank-at-eol
+ruamel.yaml-0.18.16.dist-info/METADATA whitespace=-blank-at-eol

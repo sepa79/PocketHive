@@ -46,7 +46,7 @@ services:
 
 {% if pockethive_work_type == "ARTEMIS" %}
   artemis:
-    image: apache/activemq-artemis:2.40.0
+    image: {{ pockethive_docker_registry }}artemis:{{ pockethive_version }}
     environment:
       ARTEMIS_USER: &artemis-user pockethive
       ARTEMIS_PASSWORD: &artemis-password pockethive-local
@@ -331,16 +331,20 @@ services:
   auth-service:
     image: {{ pockethive_docker_registry }}auth-service:{{ pockethive_version }}
     environment:
-      POCKETHIVE_AUTH_SERVICE_PROVIDER: DEV
+      POCKETHIVE_AUTH_SERVICE_PROVIDER: {{ pockethive_phase_one_dev_auth.provider }}
       POCKETHIVE_AUTH_SERVICE_SESSION_TTL: PT8H
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: orchestrator-local-secret
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_NETWORK_PROXY_MANAGER_SECRET: network-proxy-manager-local-secret
-      POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_mcp_service_secret }}
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}
+      POCKETHIVE_ALLOW_REMOTE_HTTP: "{{ pockethive_allow_remote_http | string | lower }}"
       POCKETHIVE_AUTH_OAUTH_ISSUER: {{ pockethive_public_ingress }}/auth-service
       POCKETHIVE_AUTH_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
-      POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_mcp_introspection_secret }}
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH: /var/lib/pockethive-auth/state/dynamic-clients.json
+      POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/auth-service:/var/lib/pockethive-auth/state
     ports:
       - target: 8080
         published: 1083
@@ -359,6 +363,7 @@ services:
   pockethive-mcp:
     image: {{ pockethive_docker_registry }}pockethive-mcp:{{ pockethive_version }}
     environment:
+      POCKETHIVE_ALLOW_REMOTE_HTTP: "{{ pockethive_allow_remote_http | string | lower }}"
       PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}
       PH_MCP_OWNER_API_BASE: http://ui:8088
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
@@ -389,9 +394,9 @@ services:
       PH_MCP_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
       PH_MCP_OAUTH_INTROSPECTION_URI: http://auth-service:8080/oauth/introspect
       PH_MCP_OAUTH_INTROSPECTION_CLIENT_ID: pockethive-mcp
-      PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_mcp_introspection_secret }}
+      PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}
       PH_MCP_DOWNSTREAM_SERVICE_NAME: pockethive-mcp
-      PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_mcp_service_secret }}
+      PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}
     volumes:
       - {{ pockethive_bind_source_dir }}/state/pockethive-mcp:/var/lib/pockethive-mcp/state
       # Explicit mounts are preserved by the Swarm deployment path.

@@ -32,6 +32,7 @@
     <module>common/redis-config</module>
     <module>common/work-local-config</module>
     <module>common/rabbit-adapter</module>
+    <module>common/artemis-broker-extensions</module>
     <module>common/artemis-adapter</module>
     <module>common/work-config-composition</module>
     <module>common/work-test-fixtures</module>

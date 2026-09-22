@@ -8,7 +8,7 @@ import org.springframework.web.util.HtmlUtils;
 /**
  * Responsibility: Render escaped PocketHive-themed OAuth browser pages.
  * Must not: Bypass canonical scope policy, client authentication, or Spring Authorization Server contracts.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-OAUTH-BROWSER-PAGES — docs/architecture/runtime-responsibilities.md#resp-oauth-browser-pages.
  */
 
 @Component
@@ -61,14 +61,34 @@ final class OAuthBrowserPageRenderer {
                   %s
                 </fieldset>
                 <div class="auth-actions">
-                  <button class="auth-button auth-button--primary" name="consent_action" value="approve" type="submit">Allow</button>
-                  <button class="auth-button auth-button--secondary" name="consent_action" value="cancel" type="submit">Decline</button>
+                  <button class="auth-button auth-button--primary" name="%s" value="%s" type="submit">Allow</button>
+                  <button class="auth-button auth-button--secondary" name="%s" value="%s" type="submit">Decline</button>
                 </div>
               </form>
               <p class="auth-assurance">Only the permissions listed above will be granted. This device session renews securely without reopening sign-in for each action.</p>
             </section>
             """.formatted(brand(logo), escape(clientName), escape(resource), escape(action),
-            escape(clientId), escape(state), escape(csrfParameter), escape(csrfToken), scopeInputs));
+            escape(clientId), escape(state), escape(csrfParameter), escape(csrfToken), scopeInputs,
+            OAuthConsentAction.PARAMETER, OAuthConsentAction.APPROVE.value(),
+            OAuthConsentAction.PARAMETER, OAuthConsentAction.CANCEL.value()));
+    }
+
+    String authorizationFailure(String code, String message, String stylesheet, String logo) {
+        return page("PocketHive authorization", stylesheet, """
+            <section class="auth-card" aria-labelledby="auth-title">
+              %s
+              <div class="auth-intro">
+                <p class="auth-eyebrow auth-eyebrow--danger">Authorization interrupted</p>
+                <h1 id="auth-title">Authorization could not continue</h1>
+                <p>%s</p>
+              </div>
+              <div class="auth-error" role="alert">
+                <span>Error code</span>
+                <code>%s</code>
+              </div>
+              <p class="auth-assurance">No access was granted. You can close this page and reconnect the PocketHive MCP environment from your client.</p>
+            </section>
+            """.formatted(brand(logo), escape(message), escape(code)));
     }
 
     private String scopeInput(String scope) {

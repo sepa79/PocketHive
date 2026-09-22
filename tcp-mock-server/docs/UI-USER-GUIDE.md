@@ -1,5 +1,11 @@
 # TCP Mock Server - UI User Guide
 
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
 Complete guide to using the TCP Mock Server web interface.
 
 ## Table of Contents

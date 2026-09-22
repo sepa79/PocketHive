@@ -11,6 +11,7 @@ living contracts below continue to describe the supported system.
 
 - [System Architecture](ARCHITECTURE.md)
 - [Worker Capability Catalogue](architecture/workerCapabilities.md)
+- [Global SUTs, Shared Mocks and Continuous Plans (proposed)](todo/global-sut-mocks-spec.md)
 - [Network Proxy follow-ups](todo/network-proxy-followups.md)
 - [Documentation index](index.md)
 

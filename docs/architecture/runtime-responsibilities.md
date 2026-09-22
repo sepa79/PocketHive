@@ -2403,7 +2403,12 @@ publication. A3 supplies service/SDK activation. RESP-WORK-DELIVERY owns neutral
 
 ArtemisWorkDebugTaps opens diagnostic copies of owner-resolved channels;
 ArtemisWorkDebugTap owns the native non-exclusive divert, temporary capture queue,
-message TTL/ring limit and explicit release. Its exact capture-address settings
+message TTL/ring limit and explicit release. Diagnostic copies are immediately
+eligible for capture even when the source publication is scheduled. The divert
+clears scheduled delivery on its copy before routing to the capture ring; the
+source timestamp, source queue and WorkItem bytes remain unchanged. This keeps
+`maxItems` effective for delayed traffic rather than retaining an unbounded
+scheduled-message buffer outside the ring. Its exact capture-address settings
 must explicitly disable expiry forwarding: expired diagnostic copies are discarded,
 including when the broker supplies a wildcard expiry address. The source WORK
 expiry policy remains unchanged. It never consumes the source queue.
@@ -2412,6 +2417,24 @@ Orchestrator debug service. Explicit close releases the divert, queue, address a
 address settings; it reports management failures. This is not a crash-recovery or
 orphan-cleanup mechanism: broker-side divert/settings may remain after process loss.
 Both Rabbit and Artemis observations currently omit oldest-message age.
+
+## RESP-ARTEMIS-CAPTURE-TRANSFORM
+
+`DiagnosticCaptureTransformer` in `common/artemis-broker-extensions` owns clearing
+scheduled delivery on a diagnostic divert's message copy, through the Artemis
+`Message.setScheduledDeliveryTime(null)` API. It must not change the source message,
+WorkItem bytes, expiry, routing, or any other message properties. The broker creates
+the independent copy before invoking the transformer; the adapter owns the divert
+configuration and references this explicit transformer class.
+
+This Java 21 extension is packaged into the PocketHive `artemis` broker image.
+Artemis server APIs are provided by the broker; the extension does not package the
+server or depend on services, worker SDK, or the client adapter. Embedded broker
+tests consume the same extension as a test dependency. Broker classpath availability
+is required: failed transformer loading rejects tap creation, with no unbounded
+capture fallback. The real-broker capture regression verifies the ring bound,
+unchanged source count, preserved bytes, and delivery no earlier than the source
+publication's scheduled time.
 
 ## RESP-RUNTIME-FILESYSTEM-LAYOUT
 
@@ -2673,3 +2696,208 @@ auth schemas or profile resolution, or change debug capture defaults.
 credential/session headers are redacted, and worker-owned resources have a close path.
 
 **Verification entrypoints:** `HttpSequenceDebugCaptureTest`, `RedisDebugCaptureStoreTest`.
+
+## RESP-PUBLIC-ENDPOINT-TRANSPORT
+
+**Current owners:** `common/auth-contracts` — `PublicEndpointTransportPolicy`
+for Java services; `vscode-pockethive/src/connection/endpointSecurityPolicy.ts`
+for the companion boundary in its TypeScript runtime.
+
+Auth Service and MCP bind the same `POCKETHIVE_ALLOW_REMOTE_HTTP` deployment
+setting and delegate to the Java policy. The companion requires an independent,
+explicit saved transport selection. Profile creation, persisted profile decoding,
+command decoding and metadata validation consume its canonical policy. UI labels
+are a read-only presentation of the available modes.
+
+**Forbidden:** automatic protocol downgrade, another Java endpoint transport
+validator, or interpreting an HTTP URL as permission to enable remote HTTP.
+
+**Contract:** [public endpoint transport policy](AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
+**Verification:** endpoint policy tests, service configuration tests, remote HTTP
+OAuth workflow tests and companion profile/metadata/command tests.
+
+## RESP-INTAKE-RUNTIME-VOCABULARY
+
+**Canonical value owners:** `AuthType` under `RESP-AUTH-VALUES` and
+`RequestTemplateProtocol` under `RESP-REQUEST-TEMPLATE-PARSE`.
+
+**Projection owner:** `tools/intake-contracts/ExportRuntimeVocabulary.java`
+exports those compiled types into the intake package's local
+`contract/schemas/runtime-vocabulary.schema.json`. The schema validator and
+bundle inspector consume that sealed read-only projection. The dedicated intake
+workflow compares its exact bytes with output from the compiled owners through
+`generate.sh --check`; package integrity checks protect the delivered snapshot.
+Normal Maven tests and product image publication do not depend on intake package
+files. These checks do not prove deployed worker capabilities.
+
+**Intake owners:** the existing schema validator owns document shape, reference
+rules own selected-SUT identity, and readiness rules own missing requirements.
+They do not validate runtime auth profiles or decide endpoint transport support.
+An accepted type without a complete intake representation remains a handoff gap.
+
+**Forbidden:** hand-maintained runtime value lists, Java source parsing, runtime
+schema downloads, implicit aliases/migrations, or inferring readiness from a type.
+
+**Contract:** [intake vocabulary ownership](../../.agents/skills/pockethive-intake/contract/intake-contract.md#runtime-vocabulary-ownership).
+**Verification:** `tools/intake-contracts/generate.sh --check` in the dedicated
+[intake workflow](../../.github/workflows/intake-skill.yml), public-CLI
+auth/protocol regressions, and the relocated offline package suite.
+
+## RESP-INTAKE-RESULT-EVIDENCE
+
+**Owner:** `measurement_rules.py` in the intake skill checks recorded outcome
+evidence and run identity. The lifecycle contract's `RuntimeMetadata.runId` is
+the canonical runtime identity; intake records it alongside `swarmId`, which
+may be reused. Executed reports require both through the existing result checks.
+
+**Forbidden:** deriving a run ID from another identifier, querying a live run,
+calculating a pass, or inferring execution from an allocated run ID.
+
+**Contract:** [recorded results](../../.agents/skills/pockethive-intake/contract/intake-contract.md#measurement-mappings-and-recorded-results)
+and [lifecycle schema](../spec/swarm-lifecycle.schema.json).
+**Verification:** public-CLI result identity and measurement tests.
+
+## RESP-OAUTH-CLIENT-REGISTRY
+
+**Current owner:** `auth-service` — `PocketHiveRegisteredClientRepository` owns
+registered-client lookup, dynamic capacity, inactivity renewal/expiry and the
+single in-memory registry. Spring Authorization Server and
+`DynamicClientRegistrationService` consume its repository API. Mutations replace
+the durable projection through `DynamicClientStateStore` before becoming visible.
+
+**Forbidden:** storing authorization codes, tokens or consent; filesystem IO;
+another registry or an independent expiry/capacity decision in the storage adapter.
+**Required effect:** active dynamic registrations survive restart; invalid state
+fails startup and failed persistence does not publish a registry mutation.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** registry behavior in `DynamicClientRegistrationServiceTest` and
+`OAuthAuthorizationServerTest`. This is implemented ownership, not a migration.
+
+## RESP-OAUTH-CLIENT-STATE
+
+**Current owner:** `auth-service` — `JsonFileDynamicClientStateStore` implements
+the `DynamicClientStateStore` persistence port for the registry above. It owns
+versioned JSON reads and atomic replacement at the one configured absolute path.
+`DynamicClientStateEntry` and `DynamicClientStateDocument` are immutable, read-only
+persistence projections; they do not own registry state or OAuth decisions.
+
+**Forbidden:** alternate paths/formats, client expiry or metadata policy, and
+persistence of secrets, principals, grants, consent or session artifacts.
+**Required effect:** missing first-start state is empty; malformed/unsupported
+state and failed writes are explicit failures; replacement preserves the prior
+file until the complete candidate is ready.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** `JsonFileDynamicClientStateStoreTest` and
+`DynamicClientRegistrationServiceTest`. Current implementation.
+
+## RESP-OAUTH-CLIENT-REGISTRATION
+
+**Current owner:** `auth-service` — `DynamicClientRegistrationService` validates
+public registration metadata and constructs the canonical Spring RegisteredClient.
+The registration controller delegates to it; the registry owns acceptance,
+capacity, persistence and expiry. Restored public metadata uses the same factory.
+
+**Forbidden:** client authentication, user grants, session issuance, metadata URL
+fetching or an independent client registry.
+**Required effect:** accepted metadata defines one bounded public PKCE client;
+invalid metadata is rejected before registry publication.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** `DynamicClientRegistrationServiceTest` and
+`OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-AUTHORIZATION-INPUT
+
+**Current owner:** `auth-service` — `PocketHiveInteractiveAuthorizationRequestConverter`
+delegates request parsing to Spring and narrows declared interactive MCP scopes
+to the authenticated principal's current ceiling from `McpScopeAuthorizationValidator`.
+`PocketHiveOAuthConfiguration` installs this boundary converter.
+
+**Forbidden:** consent/client validation, authorization state mutation, a second
+scope policy or widening declared scopes.
+**Required effect:** canonical request validation still runs after narrowing;
+anonymous requests and non-interactive input retain Spring's validation path.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-LOOPBACK-REDIRECT
+
+**Current owner:** `auth-service` — `LocalhostLoopbackRedirectValidator` adapts
+only the runtime port of a registered HTTP `localhost` callback before delegating
+to the canonical authorization validator. Configuration installs it around
+`McpScopeAuthorizationValidator`; Spring retains its IP-loopback behavior.
+
+**Forbidden:** changes to scheme, host, path, query, fragment or user-info;
+accepting remote callbacks or bypassing PKCE/resource/scope validation.
+**Required effect:** a native localhost listener can rotate its port; every other
+callback component and all other authorization requirements remain enforced.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** localhost callback cases in `OAuthAuthorizationServerTest`.
+Current implementation.
+
+## RESP-OAUTH-CONSENT-ACTION
+
+**Current owner:** `auth-service` — `PocketHiveAuthorizationConsentCustomizer`
+adapts the optional browser action after Spring's consent provider validates the
+pending request. `OAuthConsentAction` owns the browser field and wire values;
+the renderer consumes them. Decline clears proposed authorities, including prior
+consent; approval and scope-only submissions retain Spring's consent semantics.
+
+Spring's `OAuth2AuthorizationConsentAuthenticationProvider` remains the sole
+authority for client/principal/state/scope validation, consent persistence or
+revocation, pending-request consumption and code issuance. The customizer is not
+a parallel consent validator or state machine.
+
+**Forbidden:** manual authorization/consent-store mutations, trusting request
+redirects, bypassing validation, or treating unknown/repeated actions as approval.
+**Required effect:** Decline grants no code or consent even with checked scopes
+or prior consent; valid denial returns access_denied and both decisions consume
+the pending handle once.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthConsentFlowTest`. Implemented with this change.
+
+## RESP-OAUTH-BROWSER-FAILURE
+
+**Current owner:** `auth-service` — `OAuthBrowserAuthorizationFailureHandler`
+owns browser failure responses. It projects only bounded error and original state
+from Spring's validated authorization exception into a callback. Without a
+validated callback it delegates bounded HTML markup to the page renderer. The
+security chains and browser controller consume this owner for their failures.
+
+**Forbidden:** client/consent/redirect revalidation, raw request redirect/state,
+unbounded exception text or session artifacts in HTML, and framework error-page
+dispatch. Spring owns whether a callback is validated; this owner only presents it.
+**Required effect:** valid denials reach the client's callback; unsafe or unbound
+requests stay on a non-cacheable local failure page without parameter disclosure.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthConsentFlowTest`, `OAuthBrowserAuthorizationFailureHandlerTest`
+and browser failure cases in `OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-BROWSER-PAGES
+
+**Current owners:** `auth-service` — `OAuthBrowserController` maps DEV sign-in
+and consent-page requests to the user store, Spring security context, registered
+client repository and failure owner. `OAuthBrowserPageRenderer` owns escaped HTML
+presentation and consumes the consent action values; it makes no consent decision.
+
+**Forbidden:** independent scope/client/token policy, state transitions in the
+renderer, or unsafe values rendered without escaping.
+**Required effect:** public issuer routes, bounded failures and escaped forms
+remain consistent with the configured environment and canonical auth owners.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthBrowserControllerTest`, `OAuthAuthorizationServerTest`
+and `OAuthConsentFlowTest`. Current implementation.
+
+## RESP-OAUTH-SERVER-COMPOSITION
+
+**Current owner:** `auth-service` — `PocketHiveOAuthConfiguration` constructs
+the OAuth security chains, repositories, token services and boundary adapters
+from validated properties. It selects the persistence port and installs the
+authorization converter, redirect adapter, consent customizer and failure owner.
+
+**Forbidden:** registry IO or lifecycle decisions, inline consent validation,
+another public endpoint transport policy, or bypassing Spring authorization rules.
+**Required effect:** public API behavior uses the configured owners with one
+registry/persistence path and the canonical authorization state machine.
+**Contract:** [Auth Service API](AUTH_SERVICE_API_SPEC.md).
+**Verification:** public behavior in `OAuthAuthorizationServerTest`,
+`RemoteHttpOAuthTest` and `OAuthConsentFlowTest`; no bean-identity gate. Current implementation.

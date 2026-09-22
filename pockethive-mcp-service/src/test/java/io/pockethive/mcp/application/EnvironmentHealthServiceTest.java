@@ -177,8 +177,13 @@ class EnvironmentHealthServiceTest {
                 .allMatch(row -> row.status() == EnvironmentServiceStatus.UNAVAILABLE);
         } finally {
             releaseProbes.countDown();
-            interrupter.join();
+            // The assertions above verify the preserved flag; clear it before the interruptible join.
             Thread.interrupted();
+            try {
+                interrupter.join();
+            } finally {
+                Thread.interrupted();
+            }
         }
     }
 

@@ -21,6 +21,7 @@ final class ArtemisWorkDebugTap implements WorkDebugTap {
     private static final String REMOVE_SETTINGS = "removeAddressSettings";
     private static final String CREATE_DIVERT = "createDivert";
     private static final String DESTROY_DIVERT = "destroyDivert";
+    private static final String CAPTURE_TRANSFORMER = "io.pockethive.artemis.broker.DiagnosticCaptureTransformer";
     private final String source;
     private final String capture;
     private final String divert;
@@ -53,8 +54,9 @@ final class ArtemisWorkDebugTap implements WorkDebugTap {
             session.createQueue(QueueConfiguration.of(capture).setAddress(capture).setRoutingType(RoutingType.ANYCAST)
                 .setDurable(false).setTemporary(true).setAutoDelete(false).setRingSize((long) maxItems));
             queueCreated = true;
+            // Scheduled copies must enter the ring immediately; the broker transforms only the divert's copy.
             management.invoke(ResourceNames.BROKER, CREATE_DIVERT, divert, divert, source, capture,
-                false, null, null, RoutingType.ANYCAST.name());
+                false, null, CAPTURE_TRANSFORMER, RoutingType.ANYCAST.name());
             divertCreated = true;
             consumer = session.createConsumer(capture, null, 0, -1, false);
             session.start();
