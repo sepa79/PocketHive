@@ -47,10 +47,12 @@ concurrency finding remain documented in
   identity acceptance implemented (74 tests), awaiting review; reset/registry/lifecycle design remains pending.
   Does not expand the behavior-preserving SSOT extraction scope.
 
-- [Functional module boundaries](functional-module-boundaries.md) — current source analysis
-  and proposed repair order for the existing modularity/SSOT requirement. Covers Redis,
-  worker I/O/runtime, Docker, journal/filesystem, ClickHouse, auth/templates, service contracts,
-  lifecycle projections and residual service/tool boundaries. Implementation awaits plan review.
+- [Functional module boundaries](functional-module-boundaries.md) — refreshed against
+  the Artemis/acceptance closeout on 2026-09-22. Next proposed sequence: Redis,
+  Docker, journal/filesystem, ClickHouse; first bounded slice is Redis debug capture.
+  Existing neutral Work API, history-policy fixes and exporter paths are not reopened.
+  Remaining auth/MCP/service findings require current-code revalidation; behavior
+  redesign stays separate. This PR updates the plan only, not its implementation.
 - [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) — technology transfer exists;
   R1–R6 close selected Work configuration/topology/resources/transport/observations/cleanup across
   SDK, Swarm Controller and Orchestrator, then remove alternatives and hand off for aggregate review.
