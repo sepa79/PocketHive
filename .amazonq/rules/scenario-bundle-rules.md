@@ -1,10 +1,15 @@
 # PocketHive Scenario Bundle Rules
 
-These rules apply to all work in this repository. This repo contains **PocketHive scenario bundles** — self-contained packages that define load/behavior test scenarios for the PocketHive platform.
+Scope: legacy scenario-bundle implementation guidance. This workflow does not
+apply to requirements intake, template population or intake-document review;
+use `.agents/skills/pockethive-intake/SKILL.md` for those tasks. The repository's
+`AGENTS.md` and current `docs/mcp/README.md` take precedence over legacy tool names
+and operational instructions below.
 
 ## Repository purpose
 
-This is a **scenario authoring** repository, not a service codebase. All artifacts are YAML/JSON/CSV configuration consumed by PocketHive's Scenario Manager and Swarm Controller at runtime.
+This is the PocketHive service repository. Scenario bundles are one artifact
+family within it; client intake documents are a separate authoring input.
 
 ## Remote stacks
 

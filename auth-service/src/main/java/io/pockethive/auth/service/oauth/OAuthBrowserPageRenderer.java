@@ -71,6 +71,24 @@ final class OAuthBrowserPageRenderer {
             escape(clientId), escape(state), escape(csrfParameter), escape(csrfToken), scopeInputs));
     }
 
+    String authorizationFailure(String code, String message, String stylesheet, String logo) {
+        return page("PocketHive authorization", stylesheet, """
+            <section class="auth-card" aria-labelledby="auth-title">
+              %s
+              <div class="auth-intro">
+                <p class="auth-eyebrow auth-eyebrow--danger">Authorization interrupted</p>
+                <h1 id="auth-title">Authorization could not continue</h1>
+                <p>%s</p>
+              </div>
+              <div class="auth-error" role="alert">
+                <span>Error code</span>
+                <code>%s</code>
+              </div>
+              <p class="auth-assurance">No access was granted. You can close this page and reconnect the PocketHive MCP environment from your client.</p>
+            </section>
+            """.formatted(brand(logo), escape(message), escape(code)));
+    }
+
     private String scopeInput(String scope) {
         String escaped = escape(scope);
         return """

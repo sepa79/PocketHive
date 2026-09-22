@@ -1,0 +1,5 @@
+Synthetic client input for skill qualification only.
+
+We need a performance test for payment processing. Ownership, exact business
+objective, target environment, load, latency targets and run window are not yet
+specified. No plan has been approved and no test has run.

@@ -1,273 +1,150 @@
-# TCP Mock Server - Complete WireMock Parity
+# TCP Mock Functional Equivalence Specification
 
-This document describes all features implemented to achieve complete WireMock equivalence.
+Status: proposed requirements; implementation and qualification pending.
+Source audit: PocketHive `aedd336b`. No runtime tests were performed for this audit.
 
-## Feature Matrix
+## Decision
 
-| Feature | WireMock | TCP Mock Server | Status |
-|---------|----------|-----------------|--------|
-| Request Journal | ✓ | ✓ | **Complete** |
-| Advanced Filtering | ✓ | ✓ | **Complete** |
-| Pagination | ✓ | ✓ | **Complete** |
-| Export (JSON/CSV) | ✓ | ✓ | **Complete** |
-| Recording Mode | ✓ | ✓ | **Complete** |
-| Create Mapping from Request | ✓ | ✓ | **Complete** |
-| Priority Management | ✓ | ✓ | **Complete** |
-| Conflict Detection | ✓ | ✓ | **Complete** |
-| Response Builder | ✓ | ✓ | **Complete** |
-| Template Variables | ✓ | ✓ | **Complete** |
-| Format Helpers | ✓ | ✓ | **Complete** |
-| Global Settings | ✓ | ✓ | **Complete** |
-| Stub Management | ✓ | ✓ | **Complete** |
+TCP Mock must provide WireMock's core testing workflows for framed TCP messages:
+stubbing, matching, templates, stateful scenarios, delays/faults, request
+verification and real proxy/record/replay. Every workflow works headlessly.
+This document owns those requirements and their qualification matrix.
+[Global SUT and mocks](../../docs/todo/global-sut-mocks-spec.md) owns provisioning,
+configuration publication, shared lifecycle and access through PocketHive.
 
-## 1. Request Journal with Filtering & Pagination
+**Functional equivalence (proposed):** equivalent testing capabilities using
+TCP payloads and connections. It does not require HTTP status/header semantics,
+WireMock JSON/API/SDK compatibility, Handlebars syntax or a standalone UI.
+The comparison baseline is
+[WireMock OSS 3.13.2](https://github.com/wiremock/wiremock/releases/tag/3.13.2),
+verified against its official release tag. This is a reference pin, not a claim
+about the version deployed by PocketHive.
 
-### Features
-- **Date Range Filtering**: Filter requests by start and end date
-- **Match Status Filtering**: Show only matched or unmatched requests
-- **Pattern Search**: Regex-based search across message and response
-- **Pagination**: 50 requests per page with navigation controls
-- **Export**: JSON and CSV export for analysis
+Workflow references: [matching](https://wiremock.org/docs/request-matching/),
+[verification](https://wiremock.org/docs/verifying/),
+[stateful behaviour](https://wiremock.org/docs/stateful-behaviour/) and
+[record/playback](https://wiremock.org/docs/record-playback/). These explanatory
+pages may evolve; qualification must record the pinned comparison version.
 
-### Usage
-```javascript
-// Filter by date range
-journal.filters.dateFrom = '2024-01-01';
-journal.filters.dateTo = '2024-01-31';
+## Required behaviour
 
-// Filter by match status
-journal.filters.matched = true; // only matched
-journal.filters.matched = false; // only unmatched
-journal.filters.matched = null; // all
+- Each listener declares TCP or TLS, framing and text/binary representation.
+  Support `LINE`, `DELIMITER`, `LENGTH_PREFIX_2B`, `LENGTH_PREFIX_4B`,
+  `FIXED_LENGTH` and `STX_ETX`; write-only operation is explicit. No byte
+  guessing, highest-priority-mapping framing or protocol downgrade.
+  Preserve pipelined request/response order on each connection. Honour configured
+  frame, connection and idle limits; use configured TLS identity/trust and client
+  authentication when selected. Listener and configuration readback prove readiness.
+- Keep native **higher-number-first priority**. Equal priorities select the
+  last-created matching mapping; updates preserve creation order. Persist that
+  order and restore it on restart. This intentionally differs from WireMock's
+  [numeric priority convention](https://wiremock.org/docs/stubbing/).
+- Match text equality/contains/regex, exact bytes, byte length, JSON/XML structure,
+  JSONPath and XPath. Unknown operators and invalid expressions fail publication.
+  Explicit unmatched outcomes replace built-in echo/JSON/`OK` catch-all stubs.
+  Authors may declare an ordinary catch-all mapping themselves.
+- Templates use [common/templating](../../common/templating/src/main/java/io/pockethive/templating/TemplateRenderer.java)
+  through one TCP context adapter. Migrate old expressions explicitly; do not
+  try multiple engines or emit unresolved expressions as successful responses.
+  Support static text, binary and file responses as well as dynamic templates.
+  Binary encoding occurs at the transport boundary, not through implicit text
+  conversion. Payload extraction has one implementation shared by its consumers.
+- One scenario-state owner atomically selects the state-dependent mapping and
+  commits its transition. The canonical initial state is `Started`; initialize
+  newly declared scenarios during mapping installation, never through inspection.
+  Scenario reset restores that state. State, variables and reset semantics agree
+  across request handling and admin reads. Reset persistence must survive restart.
+- Delays use scheduled writes, never blocking event-loop sleeps. Connection
+  reset produces a verified TCP reset; empty response sends no payload and keeps
+  the connection open until its configured deadline. Malformed/random responses
+  preserve their declared bytes. EOF and reset remain distinguishable.
+- Explicit upstream proxying preserves request/response bytes and framing,
+  handles TCP/TLS and configured certificate verification, and has connection,
+  response and buffer limits. Failure produces transport evidence; it never
+  substitutes a successful-looking response or another target.
+- Recording captures completed real upstream exchanges. Replay must work with
+  the upstream unavailable. Recording exports an **authoring candidate** for
+  the canonical Scenario Manager publication path; it never writes active
+  mappings or becomes another definition owner.
+- One bounded journal records actual traffic, mapping identity, matched status,
+  timing and completed transport outcome for text, binary, fault and proxy paths.
+  Exact/at-least/at-most/zero verification queries that journal retroactively,
+  using the canonical matcher. Retention loss is reported; incomplete history
+  cannot prove exact, at-most or zero counts. Listing, filtering, export and reset
+  consume the same records.
+- Headless mapping CRUD/import/export uses the SUT authoring/apply lifecycle.
+  Invalid input or failed persistence leaves the active configuration unchanged.
+  Reset operations distinguish journal, scenario state and applied mappings;
+  their completion requires observed effects and follows the shared-SUT rules.
+  Mapping restoration reapplies the pinned base mapping set without implicitly
+  clearing request history or resetting surviving scenarios.
 
-// Export
-journal.exportToJSON(requests); // downloads requests.json
-journal.exportToCSV(requests); // downloads requests.csv
-```
+## Evidence and qualification matrix
 
-### UI Controls
-- Date pickers for from/to dates
-- Dropdown for matched/unmatched/all
-- Export buttons in toolbar
-- Pagination controls at bottom of table
+All rows are required. **Pending** means source inspection found no qualifying
+execution evidence; a partial implementation does not satisfy the target.
 
-## 2. Recording & Playback Mode
+| ID / workflow | Required qualification | Observed implementation at audit | Gate |
+|---|---|---|---|
+| T1 Headless definitions | CRUD/import/export round-trip; duplicate/conflicting IDs; failed publication leaves prior configuration active; restart preserves it. | [Registry](../src/main/java/io/pockethive/tcpmock/service/MessageTypeRegistry.java) silently overwrites IDs and seeds defaults. [Loader](../src/main/java/io/pockethive/tcpmock/service/FileBasedMappingLoader.java) reads `/app/mappings`, writes `/app/data/mappings`, logs failures and continues. | Pending |
+| T2 Matching/order | Positive/negative corpus for every matcher, including structured JSON/XML; real JSONPath/XPath; overlapping priorities and stable ties after edits/restart. | [Matcher](../src/main/java/io/pockethive/tcpmock/util/AdvancedRequestMatcher.java) uses dot/index traversal and regex XML tags; unknown criteria can match. Registry ties lack defined ordering. | Pending |
+| T3 Templates | Static text/binary/file responses; shared renderer helpers/context; missing/invalid expression errors; binary round-trip; explicit migration corpus. | [Enhanced engine](../src/main/java/io/pockethive/tcpmock/service/EnhancedTemplateEngine.java) leaves unknown expressions unchanged and duplicates payload extraction; advertised `eval`/`randInt` helpers are absent there. | Pending |
+| T4 Stateful flows | Concurrent state-dependent requests; independent scenarios; one/reset-all consistency; reset followed by restart. | [StateManager](../src/main/java/io/pockethive/tcpmock/service/StateManager.java) caches mutable metadata around [ScenarioManager](../src/main/java/io/pockethive/tcpmock/service/ScenarioManager.java); reset-all clears memory without persisting. Match/check/update is not atomic. | Pending |
+| T5 Framing/bytes | Fragmented/coalesced/pipelined frames and ordered responses, including delays; exact delimiters/lengths; multiple connections; size limits; write-only path. | [Protocol detection](../src/main/java/io/pockethive/tcpmock/handler/ProtocolDetectionHandler.java) guesses framing and defaults fixed length. [Binary handler](../src/main/java/io/pockethive/tcpmock/handler/BinaryMessageHandler.java) converts bytes to hex strings. | Pending |
+| T6 TLS | Configured identity/trust, hostname verification upstream, client certificates when configured; rejected handshakes never become plaintext. | [Server](../src/main/java/io/pockethive/tcpmock/core/TcpMockServer.java) generates a self-signed certificate instead of loading the declared identity. | Pending |
+| T7 Delays/faults | Timing bounds under concurrency; peer-observed reset versus EOF; empty/malformed/random bytes; cancellation. | Binary handler sleeps on the event loop. [Fault handler](../src/main/java/io/pockethive/tcpmock/handler/FaultInjectionHandler.java) implements reset as ordinary `close()`. | Pending |
+| T8 Journal/verification | Actual completed outcomes; unmatched identity; all transport paths; retroactive count queries; retention/reset boundaries. | [Text handler](../src/main/java/io/pockethive/tcpmock/handler/UnifiedTcpRequestHandler.java) infers unmatched status from response text. [Verification](../src/main/java/io/pockethive/tcpmock/service/RequestVerificationService.java) counts registered expectations prospectively and retains an unbounded request list. | Pending |
+| T9 Proxy | Framed TCP/TLS round-trip; binary identity; slow/refused/disconnected upstream; bounded buffers and connection cleanup. | [Proxy](../src/main/java/io/pockethive/tcpmock/handler/TcpProxyHandler.java) forwards UTF-8 strings over plain TCP and writes synthetic error text. | Pending |
+| T10 Record/replay | Record a real exchange, publish its candidate, disable upstream, reproduce bytes; failed/incomplete capture never publishes a stub. | [RecordingMode](../src/main/java/io/pockethive/tcpmock/service/RecordingMode.java) holds a flag/counter; text-handler records precede the real upstream result. | Pending |
+| T11 SUT isolation/recovery | Two swarms share one mock set; another SUT remains isolated; detach preserves state; failed start/reset/restart stays explicit. | Current mocks are stack services; per-SUT ownership is proposed in the linked SUT specification. | Pending |
+| T12 Capacity | Configured maxima and maximum-plus-one failures; bounded queues/journal/export; 24-hour mixed-traffic soak and recovery. | [RequestStore](../src/main/java/io/pockethive/tcpmock/service/RequestStore.java) caps two queues at 1,000 entries; no tracked evidence establishes published throughput/coverage claims. | Pending |
 
-### Features
-- **Start/Stop Recording**: Toggle recording mode via UI button
-- **Request Capture**: All incoming requests are captured when recording
-- **One-Click Mapping Creation**: Convert any request to a mapping
-- **Status Indicator**: Visual indicator shows recording state
+## Ownership cleanup before implementation
 
-### Usage
-```javascript
-// Start recording
-await recording.start();
+| Responsibility | Required single owner / cleanup |
+|---|---|
+| Mapping contract and publication | One canonical TCP mapping schema/type, parser and ordered registry. Remove active compatibility conversions around [StubMapping](../src/main/java/io/pockethive/tcpmock/model/StubMapping.java); import cannot silently lose semantics. Scenario Manager remains authoring authority. |
+| Matching/extraction | One matcher and extraction boundary. Retire unused [AdvancedMatcher](../src/main/java/io/pockethive/tcpmock/util/AdvancedMatcher.java); remove copied JSON/XML algorithms. |
+| Templates | Shared `common/templating`; retire both service-local engines, including [AdvancedTemplateEngine](../src/main/java/io/pockethive/tcpmock/service/AdvancedTemplateEngine.java). TCP adapter supplies context only. |
+| Runtime state/reset | One state repository and transition/reset application service. Controllers delegate; read projections cannot initialise or mutate state. |
+| Journal/counts | Consolidate top-level `RequestStore`, nested `ScenarioManager.RequestStore` and verification's request/count stores. One append path supplies read-only queries. |
+| Transport/fault/proxy | One action executor; text/binary handlers decode and dispatch. Remove competing [FaultInjector](../src/main/java/io/pockethive/tcpmock/util/FaultInjector.java) semantics and synthetic proxy shortcuts. |
+| Files/settings | One resolved root and publication adapter; no load/save root divergence or browser-local settings authority. |
 
-// Stop recording
-await recording.stop();
+Define executable schemas, errors, reset postconditions and ownership headers
+before runtime edits. Extract affected responsibilities from mixed classes.
+Required protocol safety must not introduce unrelated configuration strictness.
 
-// Create mapping from captured request
-const mapping = await recording.createMappingFromRequest(request);
-```
+## Independent acceptance suite and release gate
 
-### UI Controls
-- **REC button** in header (gray when off, red when recording)
-- **Create Mapping** button (green plus icon) on each request row
-- Hover shows recorded count
+1. **Contract and component tests:** canonical invalid/valid fixtures, matcher
+   and template corpus, state concurrency, atomic publication and reset recovery.
+   In-process channel tests cover fragmentation and byte-level faults.
+2. **Black-box workflows:** use supported PocketHive admin ingress and published
+   SUT endpoints. Observe actual peer traffic; `/api/test`, UI state and handler
+   return values cannot prove wire behaviour. Equivalent HTTP/TCP fixtures compare
+   the workflow outcomes, accounting for the declared priority convention.
+3. **Recovery and isolation:** exercise every T1–T11 failure with concurrent
+   clients, process restart and two SUTs. Record configuration revision, runtime
+   identity and actual completion evidence.
+4. **Capacity:** record versions, topology, payloads, configured limits and
+   latency/error budgets before execution. Test limits and overload, then a
+   24-hour mixed text/binary/TLS/proxy soak with resets and reconnects. Require
+   bounded memory, no leaked connections, correct counts and declared budgets.
 
-### Workflow
-1. Click REC button to start recording
-2. Send test traffic to the server
-3. Click "Create Mapping" button on any captured request
-4. Mapping modal opens pre-filled with request/response
-5. Adjust pattern, priority, and save
+At audit, [UiAuthHeaderTest](../src/test/java/io/pockethive/tcpmock/ui/UiAuthHeaderTest.java)
+contains two static JavaScript checks. Existing
+[E2E features](../../e2e-tests/src/test/resources/features/swarm-lifecycle.feature)
+exercise delayed-response failure and journal presence, not equivalence. Their
+[TCP URL default](../../e2e-tests/src/main/java/io/pockethive/e2e/config/EnvironmentConfig.java)
+uses a direct service port and must not become the new suite's entrypoint.
+These sources establish neither “85% coverage” nor “100% parity”.
 
-## 3. Priority Visualization & Conflict Detection
+Release requires passing evidence for **T1–T12** against the implemented
+contracts. Capability advertising and README claims must reflect that evidence;
+pending rows cannot be counted as complete. This documentation update proves no
+runtime gate.
 
-### Features
-- **Automatic Conflict Detection**: Detects overlapping patterns with same/different priorities
-- **Severity Levels**: High (same priority) vs Medium (different priority)
-- **Visual Warnings**: Yellow banner shows conflicts
-- **Priority Suggestions**: Suggests optimal priority based on pattern specificity
-
-### Usage
-```javascript
-// Detect conflicts
-const conflicts = priorityManager.detectConflicts(mappings);
-// Returns: [{ mapping1, mapping2, priority1, priority2, severity }]
-
-// Suggest priority for new pattern
-const suggested = priorityManager.suggestPriority(pattern, existingMappings);
-```
-
-### UI Display
-- Yellow warning banner appears when conflicts detected
-- Lists conflicting mapping pairs with priorities
-- Severity badge (red for high, yellow for medium)
-
-### Conflict Resolution
-1. Review conflicts in yellow banner
-2. Edit one of the conflicting mappings
-3. Adjust priority to resolve conflict
-4. Save and verify banner disappears
-
-## 4. Response Builder with Helpers
-
-### Features
-- **Format JSON**: Beautify JSON responses
-- **Format XML**: Prettify XML responses
-- **Hex Converter**: Convert text to/from hexadecimal
-- **Template Variables**: Autocomplete for available variables
-- **Live Preview**: See formatted output before saving
-
-### Usage
-```javascript
-// Format JSON
-const formatted = responseBuilder.formatJSON(jsonString);
-
-// Format XML
-const formatted = responseBuilder.formatXML(xmlString);
-
-// Convert to hex
-const hex = responseBuilder.toHex('Hello'); // '48 65 6c 6c 6f'
-
-// Get available variables
-const vars = responseBuilder.getTemplateVariables();
-```
-
-### UI Controls
-- **JSON button**: Format response as JSON
-- **XML button**: Format response as XML
-- **Hex button**: Show hex representation
-- **Vars button**: Show available template variables
-
-### Template Variables
-- `{{message}}` - Original request message
-- `{{now}}` - Current timestamp (ISO)
-- `{{uuid}}` - Random UUID
-- `{{randInt(min,max)}}` - Random integer
-- `{{eval(expr)}}` - Evaluate SpEL expression
-
-## 5. Global Settings & Configuration
-
-### Features
-- **Global Headers**: Add headers to all responses
-- **Default Delay**: Set default response delay (ms)
-- **Default Timeout**: Set connection timeout (ms)
-- **CORS Settings**: Enable/disable CORS
-- **Log Level**: Control logging verbosity
-- **Persistence**: Settings saved to localStorage
-
-### Usage
-```javascript
-// Add global header
-globalSettings.addGlobalHeader('X-Custom', 'value');
-
-// Set default delay
-globalSettings.set('defaultDelay', 100);
-
-// Enable CORS
-globalSettings.set('corsEnabled', true);
-
-// Export/Import settings
-const json = globalSettings.export();
-globalSettings.import(json);
-```
-
-### UI Controls
-- **Settings Tab**: Dedicated tab for configuration
-- **Global Headers Section**: Add/remove headers
-- **Server Configuration**: Delays, timeouts, log level
-- **Save/Reset Buttons**: Persist or reset to defaults
-
-## Advanced Features
-
-### Request Diff Comparison
-```javascript
-const diff = journal.compareRequests(req1, req2);
-// Returns: { messageDiff, responseDiff, timeDiff }
-```
-
-### Pattern Specificity Calculation
-```javascript
-const score = priorityManager.calculateSpecificity(pattern);
-// Returns: 0.0 (generic) to 1.0 (very specific)
-```
-
-### Expression Testing
-```javascript
-// Test JSONPath
-const result = responseBuilder.testExpression('jsonPath', '$.user.name', jsonData);
-
-// Test XPath
-const result = responseBuilder.testExpression('xmlPath', '//user/name', xmlData);
-```
-
-## Keyboard Shortcuts
-
-All existing shortcuts still work:
-- `Ctrl+N` - New mapping
-- `Ctrl+S` - Save mapping
-- `Ctrl+F` - Focus search
-- `Ctrl+K` - Command palette
-- `Ctrl+D` - Duplicate mapping
-- `Ctrl+Z` - Undo
-- `Ctrl+Shift+Z` - Redo
-- `Escape` - Close modal
-
-## API Endpoints
-
-### Recording
-- `GET /api/enterprise/recording/status` - Get recording status
-- `POST /api/enterprise/recording/start` - Start recording
-- `POST /api/enterprise/recording/stop` - Stop recording
-
-### Existing Endpoints
-- `GET /api/requests` - Get all requests
-- `DELETE /api/requests` - Clear requests
-- `GET /api/ui/mappings` - Get all mappings
-- `POST /api/ui/mappings` - Create/update mapping
-- `DELETE /api/ui/mappings/{id}` - Delete mapping
-- `POST /api/test` - Send test message
-
-## Migration from WireMock
-
-### Mapping Conversion
-WireMock JSON mappings can be imported directly:
-1. Export WireMock stubs as JSON
-2. Click Import button in Mappings tab
-3. Select JSON file
-4. Mappings are automatically converted
-
-### Pattern Syntax
-Both use Java regex patterns - no conversion needed.
-
-### Response Templates
-WireMock Handlebars templates map to our template syntax:
-- `{{request.body}}` → `{{message}}`
-- `{{now}}` → `{{now}}`
-- `{{randomValue}}` → `{{uuid}}`
-
-## Performance
-
-- **Request Journal**: Handles 10,000+ requests with pagination
-- **Conflict Detection**: O(n²) but cached, runs in <100ms for 1000 mappings
-- **Export**: Streams large datasets, no memory issues
-- **Recording**: Zero overhead when disabled
-
-## Browser Compatibility
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
-
-## Future Enhancements
-
-Potential additions beyond WireMock:
-- GraphQL support
-- WebSocket mocking
-- gRPC support
-- Machine learning pattern suggestions
-- Distributed recording across multiple instances
+Standalone UI, WireMock SDK/import compatibility, GraphQL, WebSocket, gRPC,
+distributed recording and automatic pattern suggestions are separate future
+work. They are not substitutes for the required TCP workflows.

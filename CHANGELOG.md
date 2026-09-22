@@ -65,6 +65,11 @@ All notable changes to this project will be documented in this file.
 - OAuth authoring: preserve complete signed and ordinary OAuth profiles through
   Java MCP scenario generation and upload; validate authored profile storage in
   Scenario Manager without resolving credentials or contacting OAuth providers.
+- MCP OAuth interoperability: align the default opaque access-token lifetime
+  with the eight-hour browser session as a bounded Phase 1 mitigation for native
+  clients that refresh only when their MCP connection is reinitialized; retain
+  expiry enforcement, audience/scope validation, and rotating 30-day refresh
+  tokens.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
@@ -91,6 +96,8 @@ All notable changes to this project will be documented in this file.
   clear Account menu for sign-in, retry, and revoking sign-out.
 - Windows extension tooling: canonicalize Git scenario fixture paths and fix
   VSIX package listing checks so the existing test and packaging gates work on Windows.
+- VS Code packaging: resolve the generated-logo script location from the module
+  URL so packaging remains portable across supported Node 20 releases.
 - OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
   logo, explicit client/resource/permission context, accessible form semantics,
   responsive styling, and no change to the authorization-code contract.
@@ -117,6 +124,10 @@ All notable changes to this project will be documented in this file.
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
   Explicit remote HTTP authentication allowance remains separate work.
+- HiveForge Phase 1 authentication: stop requiring unsupported secret runtime
+  inputs and explicitly use one fixed, known `DEV` credential pair until
+  HiveForge provides the approved secret capability required by non-`DEV`
+  deployments.
 - Documentation: add the canonical Java MCP guide, update active deployment and
   extension guidance, supersede the retired Node plugin documents, and record the
   local RST debrief and outstanding governed/human production-release checks.

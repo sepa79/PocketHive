@@ -1,0 +1,496 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PocketHive intake execution results draft contract",
+  "$comment": "Structural draft validation only. Nulls and incomplete optional sections are legitimate. The shared intake semantic validator owns provenance, applicability, reference checks and readiness; this schema is not a runtime scenario contract.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "templateType": {
+      "const": "test-execution-results"
+    },
+    "executionResultId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "requirementId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "planId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "references": {
+      "type": "object",
+      "properties": {
+        "requirementsRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "requirementsVersion": {
+          "$ref": "common.schema.json#/definitions/positiveCount"
+        },
+        "requirementsSha256": {
+          "$ref": "common.schema.json#/definitions/hash"
+        },
+        "planRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "planVersion": {
+          "$ref": "common.schema.json#/definitions/positiveCount"
+        },
+        "planRevision": {
+          "$ref": "common.schema.json#/definitions/positiveCount"
+        },
+        "planSha256": {
+          "$ref": "common.schema.json#/definitions/hash"
+        },
+        "generatedBundleSnapshotRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "generatedBundleSha256": {
+          "$ref": "common.schema.json#/definitions/hash"
+        },
+        "actualRuntimeConfigSnapshotRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "actualRuntimeConfigSha256": {
+          "$ref": "common.schema.json#/definitions/hash"
+        },
+        "traceabilityMap": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "contract": {
+      "type": "object",
+      "properties": {
+        "purpose": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "missingValues": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "statusVocabulary": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "notApplicableRule": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "redaction": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "runInfo": {
+      "type": "object",
+      "properties": {
+        "sutId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "environmentName": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "bundleId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "scenarioId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "swarmId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "operator": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "startTime": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "endTime": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "workerVersion": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "workerImages": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "role": {
+                "$ref": "common.schema.json#/definitions/text"
+              },
+              "image": {
+                "$ref": "common.schema.json#/definitions/text"
+              },
+              "digest": {
+                "$ref": "common.schema.json#/definitions/text"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "executionStatus": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "authorizationRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "deviationsFromApprovedPlan": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "environmentSnapshotRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "actualRunConfig": {
+      "type": "object",
+      "properties": {
+        "arrivalModel": {
+          "enum": [
+            "open-loop",
+            "closed-loop",
+            null
+          ]
+        },
+        "rateUnit": {
+          "enum": [
+            "requests-per-second",
+            "journeys-per-second",
+            null
+          ]
+        },
+        "relationship": {
+          "enum": [
+            "independent",
+            "sequential",
+            null
+          ]
+        },
+        "sequence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/step"
+          }
+        },
+        "closedLoop": {
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/definitions/closedLoop"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "completion": {
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/definitions/completion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "processorAllocation": {
+          "anyOf": [
+            {
+              "$ref": "common.schema.json#/definitions/processorAllocation"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "apiRuntime": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "apiRef": {
+                "$ref": "common.schema.json#/definitions/text"
+              },
+              "maxInFlight": {
+                "$ref": "common.schema.json#/definitions/positiveCount"
+              },
+              "timeoutMs": {
+                "$ref": "common.schema.json#/definitions/nonnegativeNumber"
+              },
+              "retries": {
+                "$ref": "common.schema.json#/definitions/count"
+              },
+              "keepAlive": {
+                "$ref": "common.schema.json#/definitions/boolean"
+              },
+              "connectionReuse": {
+                "$ref": "common.schema.json#/definitions/text"
+              },
+              "tlsVerify": {
+                "$ref": "common.schema.json#/definitions/boolean"
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "secretInjection": {
+          "type": "object",
+          "properties": {
+            "type": {
+              "enum": [
+                "env",
+                "vault",
+                null
+              ]
+            },
+            "implementationRef": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "credentialRefs": {
+              "$ref": "common.schema.json#/definitions/textList"
+            },
+            "validationStatus": {
+              "$ref": "common.schema.json#/definitions/status"
+            },
+            "evidenceRef": {
+              "$ref": "common.schema.json#/definitions/text"
+            }
+          },
+          "additionalProperties": false
+        },
+        "safety": {
+          "type": "object",
+          "properties": {
+            "effectiveLimitsRef": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "observationIntervalSeconds": {
+              "$ref": "common.schema.json#/definitions/nonnegativeNumber"
+            },
+            "abortTriggered": {
+              "$ref": "common.schema.json#/definitions/boolean"
+            },
+            "reason": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "triggeredAt": {
+              "$ref": "common.schema.json#/definitions/text"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "preRunChecks": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/resultCheck"
+      }
+    },
+    "sqlChecks": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/sqlResult"
+      }
+    },
+    "monitoring": {
+      "type": "object",
+      "properties": {
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/monitorSource"
+          }
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/monitorEvidence"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "apiResults": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/apiResult"
+      }
+    },
+    "journeyResults": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/journeyResult"
+      }
+    },
+    "workloadDeliveryResult": {
+      "type": "object",
+      "properties": {
+        "observedValue": {
+          "$ref": "common.schema.json#/definitions/jsonValue"
+        },
+        "evidenceRefs": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "result": {
+          "$ref": "common.schema.json#/definitions/status"
+        }
+      },
+      "additionalProperties": false
+    },
+    "dependencyObservations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "endpointRef": {
+            "$ref": "common.schema.json#/definitions/text"
+          },
+          "disposition": {
+            "enum": [
+              "real",
+              "mocked",
+              "excluded",
+              null
+            ]
+          },
+          "configurationRef": {
+            "$ref": "common.schema.json#/definitions/text"
+          },
+          "evidenceRef": {
+            "$ref": "common.schema.json#/definitions/text"
+          },
+          "limitations": {
+            "$ref": "common.schema.json#/definitions/textList"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "stopOutcome": {
+      "type": "object",
+      "properties": {
+        "producersStoppedAt": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "drainCompletedAt": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "outstandingWork": {
+          "$ref": "common.schema.json#/definitions/count"
+        },
+        "timeoutActionTaken": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "evidenceRefs": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "result": {
+          "$ref": "common.schema.json#/definitions/status"
+        }
+      },
+      "additionalProperties": false
+    },
+    "comparisonResults": {
+      "type": "object",
+      "properties": {
+        "baselineExecutionRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "comparabilityEvidenceRefs": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "observed": {
+          "$ref": "common.schema.json#/definitions/jsonValue"
+        },
+        "result": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "reason": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "criterionResults": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/criterionResult"
+      }
+    },
+    "dataObservations": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/dataObservation"
+      }
+    },
+    "cleanup": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "owner": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "actions": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "resetRequired": {
+          "$ref": "common.schema.json#/definitions/boolean"
+        },
+        "resetApprovalRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "resetResult": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "datasetDisposition": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "remainingResources": {
+          "$ref": "common.schema.json#/definitions/flexibleList"
+        },
+        "note": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "observations": {
+      "$ref": "common.schema.json#/definitions/flexibleList"
+    },
+    "issues": {
+      "$ref": "common.schema.json#/definitions/flexibleList"
+    },
+    "overallResult": {
+      "type": "object",
+      "properties": {
+        "result": {
+          "$ref": "common.schema.json#/definitions/status"
+        },
+        "summary": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "missingEvidence": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "decisionRule": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "recommendations": {
+      "$ref": "common.schema.json#/definitions/flexibleList"
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "templateType"
+  ]
+}

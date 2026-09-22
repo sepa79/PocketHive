@@ -1,6 +1,7 @@
 package io.pockethive.auth.service.config;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 
 /**
@@ -12,10 +13,11 @@ public final class AuthServiceOAuthProperties {
     private URI issuer;
     private URI resource;
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
-    private Duration accessTokenTtl = Duration.ofMinutes(15);
+    private Duration accessTokenTtl = Duration.ofHours(8);
     private Duration refreshTokenTtl = Duration.ofDays(30);
     private Duration dynamicClientTtl = Duration.ofDays(31);
     private int dynamicClientCapacity = 256;
+    private Path dynamicClientStatePath;
     private String vscodeClientId;
     private URI vscodeRedirectUri;
     private String introspectionClientId;
@@ -35,6 +37,8 @@ public final class AuthServiceOAuthProperties {
     public void setDynamicClientTtl(Duration value) { this.dynamicClientTtl = value; }
     public int getDynamicClientCapacity() { return dynamicClientCapacity; }
     public void setDynamicClientCapacity(int value) { this.dynamicClientCapacity = value; }
+    public Path getDynamicClientStatePath() { return dynamicClientStatePath; }
+    public void setDynamicClientStatePath(Path value) { this.dynamicClientStatePath = value; }
     public String getVscodeClientId() { return vscodeClientId; }
     public void setVscodeClientId(String value) { this.vscodeClientId = value; }
     public URI getVscodeRedirectUri() { return vscodeRedirectUri; }

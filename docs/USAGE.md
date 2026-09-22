@@ -116,6 +116,21 @@ configuration and authentication behaviour.
 - If authentication has expired or was declined, use the explicit **Sign in**
   action. Ordinary tab and swarm commands must not open a separate browser
   authorization flow.
+- In Amazon Q Developer, if an MCP access token expires while the existing
+  connection remains open, use **Refresh MCP servers**. Amazon Q then
+  reinitialises the connection and silently exchanges its cached rotating
+  refresh token. If Auth Service restarted after the token was issued, its
+  transient token state is no longer available and one interactive sign-in is
+  expected; do not delete the retained client registration unless dynamic
+  registration itself fails.
+- If an agent client retained an OAuth registration across a local restart, it
+  can re-authorize with that same client ID. Do not clear or recreate the client
+  configuration merely because Auth Service restarted; active dynamic client
+  registrations are retained in the `pockethive-auth-state` volume.
+- The first upgrade from the earlier in-memory registry cannot reconstruct a
+  client ID that was issued before durable state existed. Remove and re-add that
+  MCP server once so the client performs dynamic registration; later Auth
+  Service restarts retain the replacement registration.
 
 Scenario Bundle source remains in Git. From the Scenarios tab select a committed
 bundle directory; the extension uploads the exact committed regular files for

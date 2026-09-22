@@ -100,8 +100,6 @@ POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
 POCKETHIVE_PUBLIC_INGRESS
 POCKETHIVE_PUBLIC_HOST
-POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET
-POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
 ```
 
 `DOCKER_REGISTRY` must include the trailing slash and must equal
@@ -112,10 +110,28 @@ value.
 
 `POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
 trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
-its exact host value without a scheme or path. The two MCP/Auth Service secrets
-must be supplied through HiveForge secret-backed runtime configuration, must be
-at least 16 characters, and must not be committed or printed in deployment
-evidence. The rendered stack exposes the MCP only as
+its exact host value without a scheme or path.
+
+HiveForge does not currently own a secret-provisioning capability. While Auth
+Service remains in Phase 1 with the explicit `DEV` provider, the PocketHive
+HiveForge adapter therefore supplies one fixed, known development credential
+pair to Auth Service and MCP. These values are not confidential and are not
+HiveForge runtime requirements. The canonical pair is owned once by the swarm
+render action and must not be independently reconstructed by the template.
+They do not create another authentication authority: one authenticates MCP
+OAuth introspection, while the other obtains the existing Auth Service bearer
+token used for calls to PocketHive owner APIs. The downstream credential uses
+the same established service-account contract as Orchestrator: Auth Service
+configures the named service account and the calling service receives the
+matching principal name and credential. MCP keeps its own `pockethive-mcp`
+identity and never reuses the Orchestrator identity. The OAuth introspection
+credential remains separate because Orchestrator is not an OAuth resource
+server.
+This temporary contract must not be used with a non-`DEV` authentication
+provider. Adding such a provider requires a contract-first migration to the
+approved HiveForge secret capability before deployment.
+
+The rendered stack exposes the MCP only as
 `<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
 
 Current HiveForge component requirements are global per component, not
@@ -188,10 +204,10 @@ Agent sequence:
        NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
-   Supply `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
-   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` through the environment's
-   secret mechanism; do not place literal values in the journal or this
-   non-secret runtime map.
+   Do not supply MCP/Auth Service credentials through this map. The current
+   HiveForge adapter is explicitly Phase 1 `DEV` and owns its fixed, known
+   development credential pair. A non-`DEV` deployment remains unsupported
+   until HiveForge provides the approved secret capability.
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
    environment requires outbound proxy access. PocketHive renders those values

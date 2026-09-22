@@ -1,0 +1,38 @@
+protocolVersion: "2.0.0"
+id: intake-evidence-only
+name: Synthetic fragmented intake source
+description: Configuration observations only; no client SLA or approval is supplied.
+template:
+  image: swarm-controller:fixture
+  bees:
+    - role: source-a
+      image: generator:fixture
+      work:
+        out: {out: work}
+      config:
+        inputs:
+          type: SCHEDULER
+          scheduler:
+            ratePerSec: 100
+        message:
+          bodyType: SIMPLE
+          body: '{"accountId":"{{ variables.accountId }}"}'
+    - role: http-processor
+      image: example.invalid/custom-worker:fixture
+      work:
+        in: {in: work}
+        out: {out: result}
+      config:
+        templateRoot: /app/scenario/templates
+        endpoint: "{{ sut.endpoints['payments'].baseUrl }}"
+        retries: 0
+        dependencyManifest: dependencies/compose.yaml
+        setupScript: dependencies/setup.sh
+        unavailableContext:
+          available: false
+topology:
+  version: 1
+  edges:
+    - id: observed-edge
+      from: {role: source-a, port: out}
+      to: {role: http-processor, port: in}

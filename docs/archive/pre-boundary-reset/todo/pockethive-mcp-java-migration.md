@@ -3139,8 +3139,18 @@ Qualification evidence:
 The current Codex host stored a refresh token but did not send a refresh grant
 after access-token expiry. PocketHive's standards-based renewal passed through
 the same public ingress, so this remains a client-host interoperability issue.
-PocketHive does not add expired-token grace, a client-specific OAuth branch, a
-long-lived-token workaround, or a protocol fallback.
+At that point PocketHive did not add expired-token grace, a client-specific
+OAuth branch, a long-lived-token workaround, or a protocol fallback.
+
+Follow-up evidence on 2026-09-04 showed the same lifecycle gap in Amazon Q
+Developer 2.7.0: refreshing its MCP servers successfully invokes the existing
+refresh grant, but an already-open transport continues using its original
+bearer token. As an explicit Phase 1 mitigation, the default bounded access-token
+lifetime is aligned with the existing eight-hour browser session. Expiry,
+audience and scope validation, refresh-token rotation, and explicit rejection
+of expired tokens remain unchanged. The client-side refresh defect remains the
+proper long-term fix; this mitigation introduces no Amazon-Q-specific server
+branch.
 
 ## Compact QA review implementation and RST evidence — 2026-08-24
 
@@ -3335,11 +3345,16 @@ The migration is complete only when all of the following are true:
 - Clients must support either native form elicitation or the explicit
   agent-mediated question/submit contract, plus binary upload tickets. These
   are declared modes, not a degraded or automatic fallback chain.
-- Remote use requires the explicit HTTPS ingress/host and Auth Service MCP
-  secrets declared by the HiveForge contract. Existing opaque PocketHive login
-  tokens are not silently reclassified as MCP OAuth access tokens. Live remote
-  deployment and approval remain governed HiveGate/HiveForge operations rather
-  than implementation evidence created by this branch.
+- Remote use requires the explicit HTTPS ingress/host. While Auth Service is in
+  Phase 1, the HiveForge adapter explicitly selects the `DEV` provider and owns
+  one fixed, known development credential pair shared by Auth Service and MCP;
+  it does not ask HiveForge to store or transport secrets. This temporary
+  contract cannot be used for a non-`DEV` provider. That transition requires an
+  approved HiveForge secret capability and a contract-first migration. Existing
+  opaque PocketHive login tokens are not silently reclassified as MCP OAuth
+  access tokens. Live remote deployment and approval remain governed
+  HiveGate/HiveForge operations rather than implementation evidence created by
+  this branch.
 - Multi Round-Trip Requests, header-routed stateless semantics, and protocol
   cache hints require a separately approved Java-SDK/client migration; Nginx
   will not bridge revisions or capabilities.

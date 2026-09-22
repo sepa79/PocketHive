@@ -1,0 +1,8 @@
+services:
+  synthetic-db:
+    image: example.invalid/database:fixture
+    environment:
+      DATABASE_NAME: fixture_data
+    volumes:
+      - ./seed.sql:/seed.sql:ro
+# A dependency declaration does not establish a running or authorised service.
