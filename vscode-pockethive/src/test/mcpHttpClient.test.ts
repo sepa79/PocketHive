@@ -47,6 +47,7 @@ test('initializes exact protocol, binds session, and reads current capabilities'
   assert.equal(header(requests[1], 'Mcp-Session-Id'), 'session-123');
   assert.equal(header(requests[2], 'Mcp-Session-Id'), 'session-123');
   assert.equal(requests.every(request => request.init?.method === 'POST'), true);
+  assert.equal(requests.every(request => request.init?.redirect === 'error'), true);
   assert.equal(requests.every(request => request.init?.signal === controller.signal), true);
   assert.deepEqual(JSON.parse(String(requests[0].init?.body)), {
     jsonrpc: '2.0', id: 1, method: 'initialize', params: {

@@ -2457,3 +2457,22 @@ auth schemas or profile resolution, or change debug capture defaults.
 credential/session headers are redacted, and worker-owned resources have a close path.
 
 **Verification entrypoints:** `HttpSequenceDebugCaptureTest`, `RedisDebugCaptureStoreTest`.
+
+## RESP-PUBLIC-ENDPOINT-TRANSPORT
+
+**Current owners:** `common/auth-contracts` — `PublicEndpointTransportPolicy`
+for Java services; `vscode-pockethive/src/connection/endpointSecurityPolicy.ts`
+for the companion boundary in its TypeScript runtime.
+
+Auth Service and MCP bind the same `POCKETHIVE_ALLOW_REMOTE_HTTP` deployment
+setting and delegate to the Java policy. The companion requires an independent,
+explicit saved transport selection. Profile creation, persisted profile decoding,
+command decoding and metadata validation consume its canonical policy. UI labels
+are a read-only presentation of the available modes.
+
+**Forbidden:** automatic protocol downgrade, another Java endpoint transport
+validator, or interpreting an HTTP URL as permission to enable remote HTTP.
+
+**Contract:** [public endpoint transport policy](AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
+**Verification:** endpoint policy tests, service configuration tests, remote HTTP
+OAuth workflow tests and companion profile/metadata/command tests.

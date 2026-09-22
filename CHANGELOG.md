@@ -70,6 +70,9 @@ All notable changes to this project will be documented in this file.
   clients that refresh only when their MCP connection is reinitialized; retain
   expiry enforcement, audience/scope validation, and rotating 30-day refresh
   tokens.
+- Remote HTTP: support an explicit deployment allowance shared by Auth Service
+  and MCP, with a separate saved companion transport choice. Keep HTTPS as the
+  default and reject redirects that could change the selected endpoint.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
@@ -123,7 +126,6 @@ All notable changes to this project will be documented in this file.
 - Integration follow-up: inherited Orchestrator executor/controller identity
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
-  Explicit remote HTTP authentication allowance remains separate work.
 - HiveForge Phase 1 authentication: stop requiring unsupported secret runtime
   inputs and explicitly use one fixed, known `DEV` credential pair until
   HiveForge provides the approved secret capability required by non-`DEV`

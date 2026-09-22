@@ -89,12 +89,13 @@
 - name: Require explicit PocketHive MCP public identity
   ansible.builtin.assert:
     that:
-      - pockethive_public_ingress.startswith("https://")
+      - (pockethive_allow_remote_http | string | lower) in ['true', 'false']
+      - pockethive_public_ingress.startswith("https://") or ((pockethive_allow_remote_http | string | lower) == 'true' and pockethive_public_ingress.startswith("http://"))
       - not pockethive_public_ingress.endswith("/")
       - pockethive_public_host | length > 0
       - "'://' not in pockethive_public_host"
       - "'/' not in pockethive_public_host"
-    fail_msg: "PocketHive MCP requires an explicit HTTPS ingress without a trailing slash and its exact Host value."
+    fail_msg: "PocketHive MCP requires POCKETHIVE_ALLOW_REMOTE_HTTP=true or false, an HTTPS ingress (or HTTP with true) without a trailing slash, and its exact Host value."
 
 - name: Require swarm-full dedicated root environment
   ansible.builtin.assert:

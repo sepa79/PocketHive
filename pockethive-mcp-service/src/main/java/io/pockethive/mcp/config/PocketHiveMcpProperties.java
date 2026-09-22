@@ -1,5 +1,7 @@
 package io.pockethive.mcp.config;
 
+import io.pockethive.auth.contract.PublicEndpointTransportPolicy;
+
 import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -21,6 +23,7 @@ import org.springframework.validation.annotation.Validated;
 @Validated
 @ConfigurationProperties("pockethive.mcp")
 public record PocketHiveMcpProperties(
+    boolean allowRemoteHttp,
     @NotNull URI pocketHiveIngress,
     @NotNull URI ownerApiBase,
     @NotNull McpStateMode stateMode,
@@ -54,10 +57,11 @@ public record PocketHiveMcpProperties(
     @NotBlank String downstreamServiceName,
     @NotBlank String downstreamServiceSecret
 ) {
-    @AssertTrue(message = "production ingress and OAuth resource must use HTTPS; HTTP is loopback-only")
-    public boolean hasSecureEndpoints() {
-        return secureOrLoopback(pocketHiveIngress) && secureOrLoopback(oauthResource)
-            && secureOrLoopback(oauthIssuer);
+    @AssertTrue(message = "public endpoints require HTTPS or loopback HTTP unless POCKETHIVE_ALLOW_REMOTE_HTTP=true")
+    public boolean hasAllowedPublicEndpoints() {
+        return PublicEndpointTransportPolicy.allows(pocketHiveIngress, allowRemoteHttp)
+            && PublicEndpointTransportPolicy.allows(oauthResource, allowRemoteHttp)
+            && PublicEndpointTransportPolicy.allows(oauthIssuer, allowRemoteHttp);
     }
 
     @AssertTrue(message = "ownerApiBase must be an HTTP(S) origin without credentials, path, query, or fragment")
@@ -78,19 +82,6 @@ public record PocketHiveMcpProperties(
         return maxOpenSessionsPerPrincipal <= maxOpenSessions
             && maxConcurrentUploadsPerPrincipal <= maxConcurrentUploads
             && maxUploadBytes <= maxUploadSpoolBytes;
-    }
-
-    private static boolean secureOrLoopback(URI uri) {
-        if (uri == null || uri.getScheme() == null || uri.getHost() == null) {
-            return false;
-        }
-        if ("https".equalsIgnoreCase(uri.getScheme())) {
-            return true;
-        }
-        return "http".equalsIgnoreCase(uri.getScheme())
-            && ("localhost".equalsIgnoreCase(uri.getHost())
-                || "127.0.0.1".equals(uri.getHost())
-                || "::1".equals(uri.getHost()));
     }
 
     private static boolean networkUri(URI uri) {

@@ -409,6 +409,21 @@ class DynamicClientRegistrationServiceTest {
     }
 
     @Test
+    void remoteHttpIssuerAndResourceRequireExplicitDeploymentPermission() {
+        AuthServiceProperties properties = validOAuthProperties();
+        var oauth = properties.getOauth();
+        oauth.setIssuer(URI.create("http://lab.example:8088/auth-service"));
+        oauth.setResource(URI.create("http://lab.example:8088/mcp"));
+        assertThatThrownBy(() -> PocketHiveOAuthConfiguration.requireValid(properties))
+            .hasMessage("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");
+        oauth.setAllowRemoteHttp(true);
+        assertThat(PocketHiveOAuthConfiguration.requireValid(properties)).isSameAs(oauth);
+        oauth.setVscodeRedirectUri(URI.create("http://lab.example/callback"));
+        assertThatThrownBy(() -> PocketHiveOAuthConfiguration.requireValid(properties))
+            .hasMessage("POCKETHIVE_OAUTH_CONFIGURATION_INVALID");
+    }
+
+    @Test
     void requiresCanonicalPortlessIpLoopbackForVscodeRedirect() {
         AuthServiceProperties properties = validOAuthProperties();
         AuthServiceOAuthProperties oauth = properties.getOauth();

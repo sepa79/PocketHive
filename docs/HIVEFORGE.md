@@ -100,6 +100,7 @@ POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
 POCKETHIVE_PUBLIC_INGRESS
 POCKETHIVE_PUBLIC_HOST
+POCKETHIVE_ALLOW_REMOTE_HTTP
 ```
 
 `DOCKER_REGISTRY` must include the trailing slash and must equal
@@ -108,9 +109,16 @@ POCKETHIVE_PUBLIC_HOST
 operator sets it intentionally; HiveForge must not infer it from a missing
 value.
 
-`POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
-trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
-its exact host value without a scheme or path.
+`POCKETHIVE_PUBLIC_INGRESS` is the exact external origin without a trailing
+slash, normally HTTPS, for example `https://lab.example`. An HTTP-only deployment
+must explicitly pass `POCKETHIVE_ALLOW_REMOTE_HTTP=true` in runtime environment
+values. HiveForge requires an explicit `true` or `false`; use `false` for HTTPS.
+Missing or invalid values fail deployment validation. The renderer passes the
+same allowance to Auth Service and MCP and rejects remote HTTP without it. This
+is an unencrypted exception; the [public endpoint transport contract](architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy)
+owns its effects. The companion must independently select **Remote HTTP (unencrypted)**.
+`POCKETHIVE_PUBLIC_HOST` is its exact host value, including a port when present,
+without a scheme or path.
 
 HiveForge does not currently own a secret-provisioning capability. While Auth
 Service remains in Phase 1 with the explicit `DEV` provider, the PocketHive
@@ -133,6 +141,32 @@ approved HiveForge secret capability before deployment.
 
 The rendered stack exposes the MCP only as
 `<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
+
+Both `deploy` and `update` load the public ingress, host, and HTTP allowance from
+`deploy/hiveforge/components/stack/ansible/vars/public-endpoint.yml`.
+Changing the public URL never enables HTTP implicitly. For an HTTP deployment,
+set these values together in the selected profile's runtime environment:
+
+```yaml
+POCKETHIVE_PUBLIC_INGRESS: http://pockethive.example:8088
+POCKETHIVE_PUBLIC_HOST: pockethive.example:8088
+POCKETHIVE_ALLOW_REMOTE_HTTP: "true"
+```
+
+The generated OAuth issuer is `http://pockethive.example:8088/auth-service`
+and the MCP resource is `http://pockethive.example:8088/mcp`. Amazon Q uses that
+public MCP URL in its own configuration; the companion's transport selection
+does not configure Q. Use the deployment's actual external host and port.
+
+Local contract checks (Python requires PyYAML and Jinja2):
+
+```bash
+python3 -B -m unittest discover -s deploy/hiveforge/tests -v
+bash tools/hiveforge-contract-check.sh
+```
+
+The Python checks render both actions and Swarm profiles and exercise the public
+endpoint assertions. They do not execute Ansible or verify a live deployment.
 
 Current HiveForge component requirements are global per component, not
 profile-specific. Because of that, `swarm-full` dedicated root variables are
@@ -195,6 +229,7 @@ Agent sequence:
        POCKETHIVE_STACK_NAME: pockethive
        POCKETHIVE_PUBLIC_INGRESS: https://pockethive.example
        POCKETHIVE_PUBLIC_HOST: pockethive.example
+       POCKETHIVE_ALLOW_REMOTE_HTTP: "false"
        POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse

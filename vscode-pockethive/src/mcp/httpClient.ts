@@ -1,3 +1,8 @@
+/**
+ * Responsibility: Execute the companion's MCP HTTP protocol and same-origin archive upload transport.
+ * Must not: Select endpoint security modes, follow redirects, or authenticate users.
+ * Contract: docs/mcp/README.md and docs/architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy.
+ */
 import {
   ConnectionContractError,
   ConnectionEvidence,
@@ -111,6 +116,7 @@ export class McpHttpClient {
     new Uint8Array(requestBody).set(archive);
     const response = await this.fetcher(target, {
       method: 'PUT',
+      redirect: 'error',
       headers: {
         Authorization: `Bearer ${this.accessToken}`,
         'Content-Type': 'application/zip',
@@ -145,6 +151,7 @@ export class McpHttpClient {
     if (!this.sessionId) return;
     const response = await this.fetcher(this.endpoint!, {
       method: 'DELETE',
+      redirect: 'error',
       headers: this.headers(true),
     });
     if (!response.ok && response.status !== 404) {
@@ -164,6 +171,7 @@ export class McpHttpClient {
     const id = this.nextId++;
     const response = await this.fetcher(this.endpoint!, {
       method: 'POST',
+      redirect: 'error',
       headers: this.headers(requireSession),
       body: JSON.stringify({ jsonrpc: '2.0', id, method, params }),
       signal,
@@ -194,6 +202,7 @@ export class McpHttpClient {
   private async notification(method: string, signal?: AbortSignal): Promise<void> {
     const response = await this.fetcher(this.endpoint!, {
       method: 'POST',
+      redirect: 'error',
       headers: this.headers(true),
       body: JSON.stringify({ jsonrpc: '2.0', method }),
       signal,

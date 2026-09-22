@@ -10,6 +10,7 @@ import java.time.Duration;
  * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
  */
 public final class AuthServiceOAuthProperties {
+    private boolean allowRemoteHttp;
     private URI issuer;
     private URI resource;
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
@@ -23,6 +24,8 @@ public final class AuthServiceOAuthProperties {
     private String introspectionClientId;
     private String introspectionClientSecret;
 
+    public boolean isAllowRemoteHttp() { return allowRemoteHttp; }
+    public void setAllowRemoteHttp(boolean value) { this.allowRemoteHttp = value; }
     public URI getIssuer() { return issuer; }
     public void setIssuer(URI issuer) { this.issuer = issuer; }
     public URI getResource() { return resource; }
