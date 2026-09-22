@@ -3,7 +3,7 @@
 Latest environment evidence (2026-09-22): large Swarm, Artemis WORK, **57/57 PASS**
 across the full run (55 PASS) and two targeted WK-4/WK-5 reruns after fixing the
 image comparison oracle. The full suite was not repeated after the test-only fix.
-See [full Swarm report](../inProgress/artemis-swarm-full-acceptance.md).
+See repository report `docs/inProgress/artemis-swarm-full-acceptance.md`.
 
 N0 inventory and N1–N3 evidence; A5 transport extension added 2026-09-21. This ledger is a requirements checklist, not executable
 routing/configuration and not an assertion of equivalence. Sources: the six frozen
@@ -1379,7 +1379,7 @@ review passed 16. A6, final N3/N4 and the explicitly deferred refactors remain o
 Deployment `4a80a0d3` / images `dev-20260921-g4a80a0d3` passed six ingress
 acceptance cases on `https://192.168.88.50:8443`: smoke, three lifecycle cases,
 delayed delivery and binding recovery. Final swarm registry was empty.
-See [deployment evidence](../inProgress/artemis-swarm-dev-deploy.md) for exact runs
+See repository deployment report `docs/inProgress/artemis-swarm-dev-deploy.md` for exact runs
 and limits. The MCP startup failure was subsequently repaired in deployment
 manifest `55e0986b`: all18 services run, public MCP metadata200 and unauthenticated
 initialize401. NW-4 remains PARTIAL because NPM and HAProxy landed on

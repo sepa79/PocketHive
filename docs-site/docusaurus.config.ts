@@ -43,8 +43,6 @@ const config: Config = {
             "scenarios/**",
             "sdk/**",
             "mcp/README.md",
-            "AUTH-USER-GUIDE.md",
-            "ci/auth-testing.md",
             "control-plane/worker-guide.md",
             "ARCHITECTURE.md",
             "ENGINEERING_RULES.md",
