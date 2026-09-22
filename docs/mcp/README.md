@@ -144,8 +144,10 @@ The server publishes one immutable complete tool list. Invocation still enforces
 the required scope from the canonical descriptor, while catalogue resources may
 present a principal-scoped projection. Connected, versioned skills cover every
 tool. Owner services remain authoritative for live state and operations.
-HiveGate remains authoritative for approval, execution tickets, and governed
-evidence. HiveMind is optional agent-host memory and is not an MCP dependency.
+Auth Service owns identity and grants; MCP enforces tool scopes and owner services
+enforce their operation contracts. Destructive cleanup requires explicit human
+approval of the current plan. The MCP and agent cannot approve their own actions.
+HiveMind is optional agent-host memory and is not an MCP dependency.
 
 Runtime invocation has one scope-enforcing facade. It delegates by the
 descriptor's explicit owner to separate Scenario Manager, Orchestrator, and MCP

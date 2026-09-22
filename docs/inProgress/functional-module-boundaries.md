@@ -210,8 +210,8 @@ and lifecycle state. Compose through ComputeAdapter and explicit diagnostic port
 cleanup success defect is recorded in the correctness track; moving this code must not silently change it.
 
 Gate: raw Docker imports allowed only in docker-client/test fixtures; both services use the same client
-construction owner. Removal-result semantics retain the separately approved contract. Keep HiveGate approval
-at its existing boundary; no new approval flow and no live governed cleanup during this refactor.
+construction owner. Removal-result semantics retain the separately approved contract. Keep explicit human approval
+at the caller boundary; no new approval flow and no live cleanup during this refactor.
 
 ### F04 — Journal/storage paths and queries
 

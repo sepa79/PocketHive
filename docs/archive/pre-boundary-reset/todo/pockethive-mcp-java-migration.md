@@ -13,7 +13,7 @@
 This is the implementation specification and local acceptance record for
 replacing the Node.js PocketHive MCP server with one Java 21 service. HiveForge
 artifacts are delivered and contract-validated; a remote deployment remains a
-separate governed operation through HiveGate/HiveForge.
+separate authorised operation through HiveForge.
 
 ## Approved design
 
@@ -116,8 +116,8 @@ Bundle format. The connected agent can then:
    filesystem uses permitted by this specification.
 9. The Scenario Manager implementation is out of scope. Missing owner
    capabilities remain explicit limitations; the MCP must not emulate them.
-10. HiveGate governs approval, execution tickets, and evidence. The MCP declares
-    risk and binds intent but never approves its own operation.
+10. The MCP declares risk and binds intent but never approves its own operation.
+    Required human approval precedes execution; owner services record outcomes.
 11. HiveMind is optional agent-host memory only. The MCP contains no HiveMind
     client, URL, configuration, tool, health dependency, or fallback.
 12. Every published tool is connected to at least one versioned skill, and every
@@ -311,7 +311,6 @@ no implementation change.
 | Tool contract | MCP `ToolDescriptor` catalogue | Generate registration, docs, skills links, and coverage |
 | Static PocketHive architecture/contracts | Canonical repository documents | Publish generated, traceable projections |
 | Live deployed capabilities | Owning PocketHive APIs | Fetch current data; fail if unavailable or stale |
-| Approval and execution governance | HiveGate | Supply exact operation intent and consume governed result |
 | MCP routing, TLS, and edge limits | PocketHive public ingress | No semantic interpretation; Java revalidates every request |
 | User identity, grants, and MCP token issuance | Auth Service and its approved MCP OAuth extension | No duplicate user/grant store in MCP |
 | MCP authentication and authorisation | Java MCP protected resource using the Auth Service contract | Authenticate, scope discovery/calls, and isolate downstream credentials |
@@ -331,7 +330,6 @@ flowchart LR
     A --> G[(Active Git repository)]
     M --> SM[Scenario Manager API]
     M --> O[Orchestrator API]
-    HG[HiveGate] -. governs mutations .-> M
     HF[HiveForge or build-hive.sh] -. deploys same image .-> M
     HM[Optional HiveMind] -. agent-host memory only .-> A
 ~~~
@@ -674,10 +672,8 @@ file set and bytes; it does not prove that client-asserted Git metadata is true.
 Registration, human documentation, policy metadata, and coverage tests are
 generated from this descriptor. Do not duplicate tool schemas or skill links in
 separate handwritten catalogues. Tool annotations and next actions are advisory
-metadata: they cannot grant authority, change HiveGate policy, or cause an
-automatic call. HiveGate consumes a deployment-approved, digest-pinned
-descriptor manifest from the immutable image; an unknown descriptor or digest
-mismatch fails explicitly.
+metadata: they cannot grant authority, change access policy, or cause an
+automatic call.
 
 The canonical schema library defines one small structured result core:
 `status`, `summary`, `correlationId`, optional `operationId`, typed `data`,
@@ -883,7 +879,7 @@ untrusted data even when it resembles an instruction. Instruction-like text in
 such content must not:
 
 - replace, extend, or override the user's goal or confirmed requirement;
-- alter tool scopes, target selection, approval, HiveGate policy, or authority;
+- alter tool scopes, target selection, approval, access policy, or authority;
 - cause a tool call, link fetch, skill load, publication, or durable-memory write;
 - become a server, system, skill, or developer instruction; or
 - supply a secret, credential, approval, or required user confirmation.
@@ -1105,8 +1101,7 @@ owner contract and must not redefine it as an MCP-owned API.
    the same client-asserted source metadata and `BundleFileManifest`, expected
    archive and bundle-content digests, and target scenario ID when replacing.
 2. The governed publication-prepare tool binds that exact intent and returns a
-   single-use publication upload ticket only after the required HiveGate path
-   permits execution.
+   single-use publication upload ticket after authorisation checks.
 3. The client streams the identical ZIP again. The MCP persists the publication
    attempt state and receives the complete ZIP into quarantine.
 4. The MCP enforces all archive bounds, recomputes and compares the
@@ -1348,8 +1343,7 @@ Scenarios, and Settings Tree Views as product navigation. Command Palette
 commands may remain when they are independently useful, but they call the same
 application services as the webview and cannot become a second behaviour path.
 
-The target follows the proven HiveGate Companion pattern without creating a
-runtime dependency on HiveGate: local TypeScript, HTML, and CSS; a strict
+The target uses local TypeScript, HTML, and CSS; a strict
 Content Security Policy; typed host/webview messages; and domain/application
 logic outside presentation. Do not add React, another UI framework, remote
 scripts, remote styles, remote fonts, or a second package manager for the first
@@ -1682,8 +1676,8 @@ selected. The webview never guesses a worker, queue, run, or manifest.
 `Cleanup plan` is visually separated as a guarded action. The plan renders the
 exact target, candidate set, running-resource state, and hash beside a locked
 `Execute cleanup` control. The extension does not call
-`runtime_cleanup_execute` directly: execution remains disabled until a
-HiveGate-governed approval and execution path is available. The MCP, extension,
+`runtime_cleanup_execute` directly: cleanup execution is not implemented in
+the companion. The MCP, extension,
 agent, or telemetry cannot approve the plan. Decline, expiry, stale hash, or
 cancellation returns to the plan without executing or automatically requesting
 approval again.
@@ -1757,7 +1751,7 @@ replace this store with a more complex cryptographic state capsule.
 
 The store lives at the explicit `PH_MCP_STATE_PATH`, outside any Scenario
 Bundle repository. It is coordination state, not another authority for Git
-source, user intent, deployed scenarios, runtime operations, or HiveGate
+source, user intent, deployed scenarios, runtime operations, or owner
 evidence. Owner-query and runtime-lifecycle tools do not use authoring, ticket,
 or receipt state. A direct publication may use the explicit ticket and receipt
 contracts without requiring an authoring workflow. Any other use requires an
@@ -1819,7 +1813,7 @@ renewal, so a transient session state never sends the user back to
 browser grant, and cleanup remains outside the companion scope. Cleanup follows only the explicitly
 configured durations; missing retention configuration fails startup. Expiry or
 deletion of MCP state never claims rollback or deletion of source Git history,
-Scenario Manager state, Orchestrator state, or HiveGate evidence.
+Scenario Manager state, Orchestrator state, or owner evidence.
 
 Public native MCP clients use the same bounded dynamic-client registry. Its
 expiry is an inactivity deadline renewed by successful active-client lookup,
@@ -1883,7 +1877,7 @@ rechecks it. The inbound MCP bearer token is never forwarded to Scenario
 Manager or Orchestrator. The Java MCP uses the existing Auth Service
 `POST /api/auth/service/login` contract to obtain its separately issued,
 least-privilege service-principal token. Phase 0 must define the exact grants and
-how the original user principal and HiveGate decision are represented in MCP
+how the original user principal and confirmed intent are represented in MCP
 receipts/evidence without claiming they are downstream credentials. If an owner
 operation cannot be safely authorised and audited through that contract, the
 tool remains blocked; deployments never fall back to token passthrough or a
@@ -1909,14 +1903,14 @@ The service must also:
 - use owner-supported idempotency only when the owner contract defines it;
 - never retry a non-idempotent or ambiguous mutation implicitly;
 - expose stable typed failure codes with actionable next steps; and
-- emit no approval, ticket, or evidence-complete decision outside HiveGate.
+- never treat model output or telemetry as human approval or verified effects.
 
 The production container runs as a non-root user with a read-only root
 filesystem, no Docker socket, no package-manager/runtime installation, and only
 the state and spool volumes writable. The spool is mounted non-executable where
 the platform supports it. CPU, memory, file-descriptor, process, state-volume,
 and spool-volume limits are explicit. Egress is allow-listed to the configured
-PocketHive ingress, approved HiveGate facade, identity provider, and telemetry
+PocketHive ingress, identity provider, and telemetry
 collector only; missing access fails rather than opening unrestricted egress.
 
 The build pins Maven plugins and dependencies, verifies checksums where
@@ -1924,8 +1918,7 @@ supported, runs dependency and secret scans, and produces an SBOM. Dependency
 updates are reviewed; dynamic versions are forbidden. The image contains an
 immutable build manifest with the server identity, protocol revision, Java SDK
 version, source revision, `ToolDescriptor` catalogue digest, skill/resource
-digests, and SBOM reference. HiveGate pins the approved descriptor/build digest;
-runtime mismatch fails rather than silently accepting a changed tool surface.
+digests, and SBOM reference.
 Use an existing approved image-signing/attestation mechanism when PocketHive
 adopts one; do not create MCP-specific signing keys or a second supply-chain
 authority in this migration.
@@ -1934,18 +1927,17 @@ authority in this migration.
 
 OpenTelemetry spans cover the public ingress request, MCP method, tool
 ID/version, non-sensitive stable principal reference, agent session, workflow or
-operation handle, owner API call, HiveGate decision reference, state transition,
+operation handle, owner API call, state transition,
 duration, result/failure class, and cancellation. W3C trace context and
 PocketHive `correlationId` propagate end to end. Correlation remains separate
 from idempotency as required by PocketHive.
 
 Metrics use only bounded low-cardinality dimensions such as tool ID/version,
 operation class, state, and result/failure class. Principal, transport-session,
-agent-session, workflow, operation, ticket, receipt, correlation, trace, and
-HiveGate decision IDs are prohibited metric labels; they may appear only in
+agent-session, workflow, operation, ticket, receipt, correlation, and trace
+IDs are prohibited metric labels; they may appear only in
 access-controlled traces or redacted logs. Sampled telemetry is operational
-diagnostics, not a substitute for unsampled HiveGate approval and evidence
-records.
+diagnostics, not a substitute for explicit approval and owner outcome records.
 
 Telemetry and logs must not contain prompts, elicited answers, credentials,
 tokens, archive bytes, bundle or test-data bodies, unrestricted worker logs, or
@@ -2051,7 +2043,7 @@ Use the official interfaces and production-shaped adapters to prove:
   with no duplicate owner mutation or false success receipt;
 - direct-tool execution before and after restart without authoring state, and
   owner-operation status lookup without mirrored MCP state;
-- HiveGate-bound mutation intent;
+- explicit mutation intent and required authorisation;
 - generated resources, progressive scope-filtered skill retrieval,
   deterministic complete tool listing, catalogue digest pinning, and bounded
   results;
@@ -2155,7 +2147,7 @@ At minimum prove:
     themes, and reduced motion without page-level horizontal scrolling.
 34. Debug is one column, never guesses a target, maps every visible action to
     its canonical authorised tool, bounds logs/results, and exposes cleanup
-    execute only from a reviewed current plan through HiveGate governance.
+    execute only from a reviewed current plan with explicit human approval.
 35. The webview rejects forged/unknown messages and injected markup, receives no
     tokens or secrets, loads no remote code/content, restores focus after state
     changes, and releases listeners, timers, links, and results on disposal.
@@ -2215,7 +2207,7 @@ The following held-out and adversarial thresholds are absolute release gates:
 
 - inferred required answers: `0`;
 - unauthorised tool calls: `0`;
-- mutations without the required HiveGate approval: `0`;
+- mutations without the required human approval: `0`;
 - disclosed secrets or sensitive archive/test-data content: `0`;
 - `CREATE`/`REPLACE` fallback or ambiguous-write retry: `0`;
 - unbounded recursive tool or retry chains: `0`;
@@ -2302,7 +2294,7 @@ coverage. Run and record sessions for:
   missing and terminated session IDs, Agent Session confusion, session expiry,
   retention cleanup, and attempts to reuse expired state;
 - trace correlation, telemetry redaction, metric-cardinality attacks, sampled
-  telemetry versus HiveGate evidence, and human intervention visibility;
+  telemetry versus owner outcome evidence, and human intervention visibility;
 - VS Code profile isolation, secret handling, and workspace switching;
 - narrow webview widths, zoom, long translated/content values, keyboard-only and
   screen-reader operation, sticky tabs, focus restoration, theme changes, and
@@ -2326,7 +2318,7 @@ system, or test harness cannot accept a release risk.
 ### Delivery evidence and RST debrief — 2026-08-18
 
 This is local-development evidence for the worktree based on commit
-`08ee6d67d654b06d709a0f51763b96057906c3cb`. It is not a HiveGate approval,
+`08ee6d67d654b06d709a0f51763b96057906c3cb`. It is not an operational approval,
 execution ticket, remote HiveForge deployment receipt, or production release
 decision.
 
@@ -2392,7 +2384,7 @@ resolution evidence for the architecture issues. It did not accept the following
 release risks:
 
 - remote HiveForge deployment and HTTPS/identity-provider operation still need
-  a governed HiveGate/HiveForge execution and receipt;
+  an authorised HiveForge execution and receipt;
 - native VS Code manual checks at 280/320/420 CSS pixels, 200% zoom, keyboard,
   screen reader, light/dark/high-contrast themes, and reduced motion still need
   a human accessibility session;
@@ -2412,7 +2404,7 @@ the recorded `IMPLEMENTED / LOCAL CUTOVER VERIFIED` status.
 ### VS Code live-UI follow-up and RST debrief — 2026-08-19
 
 This is additional local-development evidence for the uncommitted worktree on
-`feat/pockethive-mcp-improvements`. It is not a HiveGate approval, remote
+`feat/pockethive-mcp-improvements`. It is not an operational approval, remote
 HiveForge receipt, commit, push, or production release decision.
 
 | Gate | Final evidence | Result |
@@ -2524,7 +2516,7 @@ test-harness learning, not classified as a product defect or silently omitted.
 This is local-development evidence for the uncommitted worktree on
 `feat/pockethive-mcp-improvements`. It supersedes the earlier no-refresh policy
 as the current companion-session design. It does not change the historical
-evidence recorded above and is not a HiveGate approval, remote HiveForge
+evidence recorded above and is not an operational approval, remote HiveForge
 receipt, commit, push, or production release decision.
 
 | Gate | Final evidence | Result |
@@ -2604,7 +2596,7 @@ acceptance result.
 
 This is local-development evidence for the uncommitted worktree on
 `merge/rewrite-lifecycle-mcp`. It changes only the VS Code presentation adapter,
-its packaged local assets, tests, and this specification. It is not a HiveGate
+its packaged local assets, tests, and this specification. It is not an operational
 approval, remote deployment receipt, commit, push, or release decision.
 
 | Gate | Final evidence | Result |
@@ -2942,8 +2934,7 @@ drain values and hidden MCP defaults are contract violations.
   rooted at `ui-v2/public/logo.svg`;
 - capture the versioned agentic evaluation corpus, Node baseline where
   applicable, absolute safety gates, and approved efficiency thresholds;
-- produce and approve the digest-pinned descriptor/build-manifest contract
-  consumed by HiveGate; and
+- produce and approve the descriptor/build-manifest contract; and
 - record all missing owner APIs as explicit blockers.
 
 ### Phase 1 — mechanical Java port
@@ -3265,7 +3256,7 @@ The migration is complete only when all of the following are true:
 - protocol tool discovery is complete and immutable with explicit required
   scopes; progressive catalogue resources are principal-filtered; invocation
   reauthorises; owner failure does not churn discovery; and the descriptor and
-  build digests are available for HiveGate pinning;
+  build digests are available for verification;
 - retained operational tools remain independently callable without wizard
   state;
 - direct operational tools create no authoring state and use owner-issued
@@ -3296,7 +3287,7 @@ The migration is complete only when all of the following are true:
   instructions, tool selection, or durable state;
 - telemetry is correlated and redacted and exposes meaningful human oversight;
 - metrics remain low-cardinality and sampled telemetry is not represented as
-  HiveGate evidence;
+  owner outcome evidence;
 - all absolute held-out/adversarial agentic thresholds equal zero failures;
 - the VS Code extension contributes exactly one product HTML WebviewView, opens
   on Environments, and uses only the selected profile's MCP HTTP endpoint;
@@ -3307,7 +3298,7 @@ The migration is complete only when all of the following are true:
   after complete success;
 - Hive, Buzz, Journal, Scenarios, and Debug use the same authorised MCP catalogue;
   Debug is single-column, requires exact targets, and exposes cleanup execute
-  only from a reviewed current plan through HiveGate;
+  only from a reviewed current plan with explicit human approval;
 - the webview passes its responsive, accessibility, CSP, message-validation,
   redaction, disposal, theme, and 200%-zoom gates at 280, 320, and 420 CSS pixels;
 - the packaged VSIX contains deterministic derivatives of
@@ -3352,8 +3343,8 @@ The migration is complete only when all of the following are true:
   contract cannot be used for a non-`DEV` provider. That transition requires an
   approved HiveForge secret capability and a contract-first migration. Existing
   opaque PocketHive login tokens are not silently reclassified as MCP OAuth
-  access tokens. Live remote deployment and approval remain governed
-  HiveGate/HiveForge operations rather than implementation evidence created by
+  access tokens. Live remote deployment and approval remain authorised
+  HiveForge operations rather than implementation evidence created by
   this branch.
 - Multi Round-Trip Requests, header-routed stateless semantics, and protocol
   cache hints require a separately approved Java-SDK/client migration; Nginx

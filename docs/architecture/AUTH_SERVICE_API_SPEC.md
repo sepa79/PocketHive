@@ -203,8 +203,8 @@ response always reports the actual granted scope when Auth Service narrows the
 request, as required by the OAuth scope contract.
 
 Scopes constrain discovery and invocation but do not replace resource-level
-PocketHive grants or HiveGate policy. Auth Service returns the principal's full
-grants to the MCP introspection client so the MCP can apply the canonical folder
+PocketHive grants. Auth Service returns the principal's full grants to the MCP
+introspection client so the MCP can apply the canonical folder
 and bundle selectors at invocation time. A scope never grants a broader
 resource selector than the underlying grant.
 
@@ -492,10 +492,11 @@ values. It contains:
 ```
 
 OAuth discovery advertises exactly the canonical interactive scope set accepted
-by public dynamic registration. Governed cleanup is deliberately absent: it is
-not an interactive-client bootstrap capability and remains available only
-through the HiveGate-governed execution path. A client may safely use the
-published `scopes_supported` value as its RFC 7591 registration request without
+by public dynamic registration. The cleanup scope is deliberately absent: it is
+not an interactive-client bootstrap capability. Cleanup execution still requires
+the cleanup scope and explicit human approval of the plan; public registration
+does not grant that scope. A client may safely use the published
+`scopes_supported` value as its RFC 7591 registration request without
 encountering a discover/register contract mismatch.
 
 The service must not derive the issuer or endpoints from `Host`, `Forwarded`, or

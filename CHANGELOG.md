@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
 ## [0.15.36]
 Timestamp: 2026-09-22T00:00:00Z
 
+- Remove unreleased external governance integration claims from repository docs,
+  MCP knowledge and skill guidance. Keep existing scopes, explicit cleanup-plan
+  approval and owner validation; clarify that companion cleanup is plan-only.
+
 - HTTP Sequence targeting: allow each step to select a SUT HTTP endpoint with
   `sutEndpointId` or an explicit literal `baseUrl`; steps without an override
   retain the worker-level target. Validate all declared base targets before

@@ -65,7 +65,7 @@ Orchestrator inspect projection also used by `ui-v2`. Version is the runtime
 image and label projection returned by Orchestrator: it prefers the
 `pockethive.version` label and otherwise uses the image tag, while preserving
 the image and immutable digest. Cleanup execution is shown locked because it
-requires HiveGate approval and is not called directly by the extension.
+is not implemented in the extension; the companion supports planning only.
 
 Every workspace uses the same icon-led tab and action language plus one fixed,
 expandable environment rail. The rail owns the environment identity, uses the

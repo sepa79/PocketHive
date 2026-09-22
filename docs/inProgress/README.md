@@ -71,7 +71,7 @@ concurrency finding remain documented in
 
 - `docs/inProgress/processor-iso8583-v1-v2-plan.md` — active ISO8583 processor delivery and remaining V2 work.
 - [Runtime debug and cleanup](runtime-debug-mcp-cleanup-spec.md) — implementation exists;
-  production HiveGate registration remains. UI/MCP diagnostic completeness is explicitly deferred:
+  companion cleanup execution is not implemented. UI/MCP diagnostic completeness is explicitly deferred:
   live Rabbit observations currently cover only the manifest/descriptor resource list.
 - Current PocketHive MCP/IDE reference documentation lives in `docs/mcp/README.md` and `vscode-pockethive/README.md`; the former plugin design pack is archived.
 

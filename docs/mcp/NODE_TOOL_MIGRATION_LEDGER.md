@@ -124,7 +124,7 @@ Rules:
 | `runtime.rabbit-topology-snapshot` | `MIGRATED` | Orchestrator-owned Rabbit topology API |
 | `runtime.swarm-timeline` | `MIGRATED` | Orchestrator journal/status APIs |
 | `runtime.manifest-validate` | `MIGRATED` | Compose only Orchestrator-owned runtime projections |
-| `runtime.cleanup.execute` | `MIGRATED` | Orchestrator cleanup API plus HiveGate governance |
+| `runtime.cleanup.execute` | `MIGRATED` | Orchestrator cleanup API; explicit plan approval and cleanup scope |
 
 ## Registrations blocked at an authority boundary
 

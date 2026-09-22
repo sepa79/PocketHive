@@ -1,6 +1,6 @@
 # PocketHive intake context
 
-Reference revision: **1**. Reviewed: **2026-09-16**.
+Reference revision: **2**. Reviewed: **2026-09-22**.
 PocketHive source baseline: **6757b2f6c488bc196aa551abc86203a6ccdff10c**,
 including MCP baseline **aedd336b588005d800a4045afbd5b19496a08f59**.
 
@@ -22,9 +22,10 @@ contracts before making a capability claim.
 
 Scenario Manager owns bundle contracts, semantic validation and the supported
 worker capability catalogue. Orchestrator and the existing runtime services own
-runtime lifecycle and observations. The MCP exposes their contracts. HiveGate
-owns governed operational approvals, execution tickets and evidence; model text,
-skills and local validation cannot grant those permissions.
+runtime lifecycle and observations. The MCP exposes their contracts and enforces
+tool scopes using Auth Service identity and grants. Destructive cleanup requires
+explicit human approval of the current plan. Model text, skills and local
+validation cannot grant operational permissions or approve actions.
 
 Keep one authority for each fact. Use explicit adapters, settings, source modes
 and failures. Do not implement a compatibility search chain, choose another

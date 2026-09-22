@@ -749,7 +749,7 @@ test('hive view emits exact bulk lifecycle and swarm detail commands', async () 
     const executeCleanup = findFirst(app, element =>
       element.tagName === 'button' && element.textContent === 'Execute cleanup');
     assert.equal(executeCleanup?.disabled, true);
-    assert.ok(findFirst(app, element => element.textContent === 'Requires HiveGate approval'));
+    assert.ok(findFirst(app, element => element.textContent === 'Planning only'));
     assert.ok(findFirst(app, element => element.textContent === '1 cleanup candidate'));
   } finally {
     delete require.cache[modulePath];

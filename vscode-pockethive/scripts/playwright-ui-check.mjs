@@ -918,7 +918,7 @@ try {
   });
   await page.getByText('2 cleanup candidates', { exact: true }).waitFor({ state: 'visible' });
   assert.equal(await page.getByRole('button', { name: 'Execute cleanup', exact: true }).isDisabled(), true,
-    'cleanup execution must stay disabled without governed HiveGate approval');
+    'cleanup execution must stay disabled in the plan-only companion');
   await page.locator('.debug-maintenance').scrollIntoViewIfNeeded();
   await page.screenshot({ path: path.join(auditDirectory, '16a-selected-debug-cleanup-plan.png') });
   await dispatch(page, { ...workspaceBase, activeTab: 'Debug', workspaceData: interactionSwarms });

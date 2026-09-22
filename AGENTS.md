@@ -154,7 +154,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Connect only through the selected environment's public ingress, for example `http://localhost:8088/mcp` locally or `https://<environment>/mcp` remotely.
   - Use its generated knowledge, capabilities, complete tool catalogue, and connected skills for scenario authoring, swarm lifecycle, environment status, runtime diagnostics, evidence, and governed cleanup. See `docs/mcp/README.md`.
   - It is Java 21 Streamable HTTP only. The removed Node server, stdio transport, local process spawning, dotted aliases, and bundle-root configuration are not compatibility paths.
-  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires the governed HiveGate path; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
+  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires explicit human approval for the exact reviewed plan and the required cleanup scope; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
 - `tools/mcp-orchestrator-debug/` is lower-level debug tooling for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is legacy/additive debug MCP tooling. Do not configure it as the product PocketHive MCP surface for normal agent work.

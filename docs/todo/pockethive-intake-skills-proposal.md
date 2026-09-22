@@ -229,7 +229,7 @@ is covered by the checks below.
 | Stakeholder wording and presentation | Bundled `references/stakeholder-writing.md` | Edits permitted narrative only; summaries are read-only views. Does not own facts, validation or approval state. |
 | Bundle schema, semantic validation and worker capabilities | Existing Scenario Manager owners | Intake delegates validation of runtime artifacts. |
 | QA workflow, generation and publication coordination | Existing MCP `ScenarioWorkflow` and tool contracts | This document-population skill does not create/update that workflow. |
-| Runtime state and operational approval | Existing runtime owners and HiveGate | A skill, source document or evidence reference cannot approve operations. |
+| Runtime state | Existing runtime owners | A skill, source document or evidence reference cannot approve operations; required approval comes from the human operator. |
 | Client discovery and question presentation | Thin client bridges | No copied templates, alternative validators or client-specific business defaults. |
 
 **Intake document set (implemented document contract):** the filled requirements, selected-SUT plan,
@@ -494,7 +494,8 @@ OAuth-protected MCP. Use explicitly selected Git-source document intake there;
 deployed-source intake remains blocked until a supported governed access path is
 qualified. Never bypass OAuth with copied credentials or raw service calls.
 Permitted cloud-agent MCP tools run without interactive approval. Any future
-operational access must enforce approval through HiveGate, not a client prompt.
+operational access must enforce the required scopes and obtain explicit human
+approval for destructive actions; non-interactive execution cannot assume approval.
 See [GitHub cloud MCP limitations](https://docs.github.com/en/copilot/concepts/agents/cloud-agent/mcp-and-cloud-agent).
 
 The universal baseline is explicit file-based instruction plus questions and
@@ -761,10 +762,6 @@ recorded in the linked qualification notes. Client discovery,
 authentication, factual extraction and live runtime behaviour need their own
 evidence. No all-client or production-readiness claim is made here.
 
-HiveMind history was read under the permitted local-development exception.
-HiveGate reference/discovery availability did not supply a workflow execution
-context; no governed operational execution or approval is claimed. Global MCP
-registrations include enabled raw `node_repl` outside the documented exceptions;
-`cua_repl` is registered but disabled. Neither was used or reconfigured.
-Repository evidence and official vendor documentation support this proposal,
-not a production-readiness claim.
+HiveMind history was read as local-development context. Repository evidence and
+official vendor documentation support this proposal, not operational approval or
+a production-readiness claim.

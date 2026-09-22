@@ -442,6 +442,6 @@ direct backend-port substitutes cannot qualify listener behaviour. Apply the
 deployment/evidence. Do not claim these runtime gates passed in a documentation
 delivery. Documentation verification covers links/formatting and `git diff --check`.
 
-HiveGate/HiveMind were not callable during this specification work. Repository
+HiveMind was not callable during this specification work. Repository
 inspection is local development evidence; no governed execution, durable-memory
 recording or runtime qualification is claimed.

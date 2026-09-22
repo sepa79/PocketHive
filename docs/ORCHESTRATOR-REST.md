@@ -388,9 +388,9 @@ from exact PocketHive runtime labels using the shared control-plane topology
 descriptors. Derived worker control queues obey the same `includeRunning` gate as
 their worker runtime object, so default cleanup plans do not target a running
 worker's control queue. Prefix guessing, Docker prune-style operations, and
-implicit cleanup fallbacks are forbidden. In production, the mutating execute
-operation must be registered behind HiveGate or an equivalent governed control
-plane for policy, human approval when required, and evidence.
+implicit cleanup fallbacks are forbidden. The caller must be authorised for
+cleanup and obtain explicit human approval for the exact reviewed plan before
+invoking execute. Orchestrator verifies plan freshness and records the outcome.
 
 #### 2.9.1 Runtime debug capabilities
 `GET /api/runtime/debug/capabilities`
@@ -704,7 +704,7 @@ marked `running=true` and `highRisk=true`.
 
 Recomputes the plan, verifies the candidate hash and idempotency key, then
 executes only the selected candidate ids. This endpoint does not approve itself;
-production access is governed by HiveGate policy outside Orchestrator.
+the caller must obtain explicit human approval before invoking it.
 
 **Request**
 ```json
