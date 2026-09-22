@@ -2003,6 +2003,15 @@ SwarmControllerControlPlaneConfiguration wires controller collaborators; SwarmSi
 
 SwarmRuntimeCore owns local runtime state; SwarmLifecycleCommandHandler, SwarmConfigUpdateHandler and SwarmRemoveCommandHandler own their command workflows. QueueStatsPort reads observations; SwarmQueueMetrics is only a Micrometer projection.
 
+SwarmControllerStartupInitializer verifies the artifact before applying its plans.
+If applying a verified plan fails, it records failure through the lifecycle owner
+and retains `initialized=false`, allowing status and explicit REMOVE while readiness
+gates reject workload commands. It must not retry preparation, change adapters,
+delete resources automatically or suppress artifact-verification failures.
+SwarmOperationObservationHandler (RESP-ORCHESTRATOR-INGRESS) completes CREATE as
+failed on an accepted failed Controller observation with the matching launch digest;
+the existing removal handshake and verified postconditions remain authoritative.
+
 For preparation, SwarmRuntimeCore first builds all PlannedSwarmWorker candidates through
 RESP-CONTROLLER-WORKER-PLAN and validates their identities in a local SwarmRuntimeState.
 Only after that succeeds may it replace the accepted template/context/traffic policy,

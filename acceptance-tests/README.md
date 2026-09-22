@@ -39,6 +39,15 @@ already use the requested fixture's adapter. The framework neither switches brok
 restarts shared services. Plain Maven tests never run deployed acceptance tests; the new
 runner selects deployed tests explicitly. The old suite remains untouched until N3.
 
+The separately selected `startup-failure` group deliberately uses an incompatible
+fixture: on the local Artemis deployment, run
+`./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties startup-failure`.
+It requires CREATE to fail (not time out), verifies failed Controller observation
+and rejected START, then requires normal filesystem-backed removal and registry
+absence. It uses the existing SwarmResource cleanup owner; no reset or orphan
+deletion is permitted. Run the normal `lifecycle` group with the matching Artemis
+target separately to check the successful path.
+
 The `auth-read` group uses the same scenario target shape. It checks 13 explicit
 read routes: 401 without credentials and 200 for the selected actor (local-admin in
 the supplied target). It requires the selected scenario, the public Scenario Manager,

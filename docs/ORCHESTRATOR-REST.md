@@ -774,6 +774,16 @@ Create authorization is evaluated before lifecycle-operation lookup or reservati
 - Launch Controller runtime for `{swarmId}` (no AMQP signal).
 - Emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** only after Controller state is `READY`, workload observation is `STOPPED`, every expected worker is fresh and bootstrap-acknowledged, and the reported startup artifact digest matches the launch record.
 - On failure, emit **`event.outcome.swarm-create.<swarmId>.orchestrator.<orchestratorInstance>`** with `data.status=Failed` and an accompanying `event.alert.{type}` if applicable.
+- After startup artifact verification, a plan-application or provisioning failure
+  leaves the Controller available for status and filesystem-backed `REMOVE`.
+  It reports failed Controller state with `startupReady=false`; workload commands
+  remain rejected. A failed observation matching the Controller instance, run,
+  template and launch digest terminates `CREATE` as `FAILED`, allowing a subsequent
+  explicit remove request.
+  Partial resources remain owned by the existing Controller lifecycle and use
+  the normal verified removal path. No automatic deletion or registry reset occurs.
+  Artifact verification and process/bootstrap failures still fail startup; this
+  does not introduce recovery for a dead Controller or cross-restart reconciliation.
 - Requires a `templateId` referencing the scenario template to instantiate.
 
 **Request**

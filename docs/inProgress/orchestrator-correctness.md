@@ -23,15 +23,31 @@ Neither plan's completion implies completion of the other.
 This slice changes acceptance of mismatched evidence explicitly. It does not alter Rabbit delivery,
 wire schemas, provisioning, normal lifecycle timing, reset, or recovery.
 
-## Separate design work — no implementation authorization from this slice
+## Failed preparation and explicit removal — 2026-09-22
+
+The user separately requested the startup/cleanup fix after release qualification
+found controllers that exited on incompatible worker plans and could not answer REMOVE.
+The scoped fix retains the Controller after applying a verified plan fails, reports
+failure through its existing lifecycle owner, and rejects workload commands. Matching
+instance/run/template/digest evidence fails CREATE promptly; normal explicit REMOVE
+cleans partial resources through the existing filesystem handshake and postconditions.
+See [the CREATE contract](../ORCHESTRATOR-REST.md#30-create-swarm).
+
+Artifact verification and process/bootstrap failures still abort startup. Dead-process
+recovery, registry reset redesign and cross-restart reconciliation remain separate work.
+The `startup-failure` acceptance group reproduces the incompatible-fixture case through
+public ingress; the matching-target `lifecycle` group verifies the normal path.
+
+## Separate design work — no implementation authorization from O1/O2
 
 - **O3 reset and registry/observation model.** Decide whether reset clears only observations or
   whether the endpoint should be removed. A registered runtime must not disappear as a side effect
   of refreshing diagnostics. Status must not recreate registrations. Define effects on active
   operations and accepted snapshots before changing REST §5.2. Gate: running runtimes remain
   controllable across the chosen reset behavior, with explicit operation/observation semantics.
-- **CREATE and lifecycle design.** Specify state ownership, side-effect ordering, failure cleanup
-  and terminalization before behavior changes. Moving the existing workflow out of HTTP belongs
+- **Broader CREATE and lifecycle design.** Beyond the scoped failed-preparation fix above,
+  specify state ownership, side-effect ordering, failure cleanup and terminalization before
+  behavior changes. Moving the existing workflow out of HTTP belongs
   to the SSOT plan only when its behavior remains unchanged.
 - **Orphan compute removal success / invalid HTTP timeouts.** The path review and F03 identified
   behavior changes needed here; keep their contract decisions separate from moving implementations.

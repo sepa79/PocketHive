@@ -7,6 +7,10 @@ All notable changes to this project will be documented in this file.
 ## [0.15.36]
 Timestamp: 2026-09-22T00:00:00Z
 
+- Failed startup: retain Controller status and explicit removal after a verified
+  plan fails to apply; fail the matching CREATE promptly and clean partial resources
+  through the existing verified lifecycle without resetting the swarm registry.
+
 - Remove unreleased external governance integration claims from repository docs,
   MCP knowledge and skill guidance. Keep existing scopes, explicit cleanup-plan
   approval and owner validation; clarify that companion cleanup is plan-only.
