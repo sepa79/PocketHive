@@ -291,6 +291,12 @@ services:
 
   haproxy:
     image: {{ pockethive_docker_registry }}network-proxy-haproxy:{{ pockethive_version }}
+{% if pockethive_haproxy_node | length > 0 %}
+    deploy:
+      placement:
+        constraints:
+          - {{ ("node.hostname == " ~ pockethive_haproxy_node) | to_json }}
+{% endif %}
     environment:
       <<: *haproxy-runtime-environment
       HAPROXY_CONFIG_POLL_INTERVAL_SECONDS: "1"
@@ -516,6 +522,12 @@ services:
 
   network-proxy-manager:
     image: {{ pockethive_docker_registry }}network-proxy-manager:{{ pockethive_version }}
+{% if pockethive_network_proxy_manager_node | length > 0 %}
+    deploy:
+      placement:
+        constraints:
+          - {{ ("node.hostname == " ~ pockethive_network_proxy_manager_node) | to_json }}
+{% endif %}
     environment:
       <<: *haproxy-runtime-environment
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080

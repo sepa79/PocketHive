@@ -1,11 +1,12 @@
 # Artemis development deployment on the large Swarm
 
-Status: deployed and ingress acceptance passed, 2026-09-21. Deployment remains
-**degraded** because the Java MCP service repeatedly exits with code 1.
+Status: deployed and ingress acceptance passed, 2026-09-21. MCP startup repaired;
+all 18 services run at 1/1. NW-4 cross-host proof remains outstanding.
 
 ## Revision, target and execution
 
-- Source commit: `4a80a0d3`, branch `codex/artemis-work-plane`.
+- Application/deploy baseline: `4a80a0d3`, branch `codex/artemis-work-plane`.
+- Final deployed manifest: `55e0986b`; application image tag unchanged.
 - Source published to `http://192.168.88.50:3001/hiveforge/PocketHive.git` with
   explicit user permission. No GitHub push.
 - All 19 application images published with confirmed digests through
@@ -75,13 +76,6 @@ Logs: `/tmp/ph-swarm-{smoke,lifecycle,delayed,binding}.log`.
 
 ## Remaining issues and limits
 
-- 17/18 services reached 1/1. `pockethive-mcp` remains 0/1 with repeated exit1
-  on multiple managers. HiveForge's current tools do not expose service logs.
-  A request for a one-time read-only SSH/service-log diagnostic exception is pending;
-  no direct remote deployment workaround was used.
-- An isolated local run of the same MCP image/environment, resource limits and
-  correctly owned state/tmpfs directories starts successfully. This does not
-  establish the remote failure's cause. The local probe was stopped afterwards.
 - NPM and HAProxy both run on mgr-2. The binding test used real shared NFS but did
   **not** prove cross-host propagation. NW-4 remains PARTIAL; deliberate distinct
   placement and another run are still required.
@@ -89,13 +83,75 @@ Logs: `/tmp/ph-swarm-{smoke,lifecycle,delayed,binding}.log`.
 - User-requested AGENTS.md update permits Dev/test repository pushes required by
   an authorized workflow; GitHub/other destinations require separate permission.
 
-## MCP startup diagnosis and fix — 2026-09-21
+## MCP startup diagnosis and verified fix — 2026-09-21
 
-After explicit user authorization, read-only host diagnostics showed Tomcat
-failing to create `/tmp/tomcat.*` with `Read-only file system`. Docker service
-inspect contained only the state bind; neither configured temporary mount existed.
-The template now uses explicit volume entries of type tmpfs and a private
-`spool/uploads` directory created by UID10001. Local startup passes with this
-configuration; the private spool has mode0700. Root filesystem remains read-only.
-Four Stack render combinations and the action-root contract pass. Remote update
-and effective-mount verification are pending. No Java application change required.
+With explicit user authorization, read-only host diagnostics showed Tomcat failing
+to create `/tmp/tomcat.*` with `Read-only file system`. The actual service had only
+the state bind, without either service-level tmpfs entry from the rendered manifest.
+
+Explicit `volumes: type: tmpfs` reached Swarm, but the configured mode did not.
+The first fix therefore exposed a second error: the root-owned spool mount denied
+UID10001 creation of its private uploads directory. Final manifest `55e0986b`
+uses one 128 MiB tmpfs at `/tmp`, preserving the previous aggregate budget, with
+private `/tmp/pockethive-mcp-spool` and the existing 64 MiB upload quota. There is
+no Java change, image rebuild, root user, or writable-root workaround.
+
+Successful final HiveForge update: `uiop-9bd7fcc0-4b24-4bb7-b32d-bdbfb4922de5`,
+action `op-6f89f118-f17f-4b92-bddc-cbf7ee26bec7`.
+Verified on running task `9n3wgo4oieggetmviuant7edu`, mgr-3:
+
+- health=healthy, readonly=true, restarts=0;
+- `/tmp`: root-owned01777; private spool: UID/GID10001 and0700;
+- actual mount flags: rw,nosuid,nodev,noexec,size=131072k;
+- all18 HiveForge services at1/1;
+- public HTTPS protected-resource metadata200, correct issuer/resource URLs;
+- unauthenticated MCP initialize401, preserving authentication enforcement.
+
+Local equivalent startup also passed. The six earlier ingress acceptance cases
+remain the application regression evidence; metadata/authentication probes above
+specifically verify this deployment-only repair, not a complete OAuth client flow.
+
+
+### E2E rerun after MCP deployment repair — 2026-09-21
+
+Against deployed manifest `55e0986b`, unchanged images `dev-20260921-g4a80a0d3`
+and official HTTPS ingress .50:8443: **5 PASS / 1 FAIL**. Smoke and all three
+lifecycle cases passed; binding recovery passed. Delayed delivery failed on one
+2999 ms observation against the strict >=3000 ms assertion (other samples3046/3112).
+The test compares generator processedAt and processor receivedAt from separate
+processes; clock alignment/resolution remains a possible explanation, not a proven
+cause. No assertion or runtime behavior was changed and no green rerun substituted.
+The failed test completed REMOVE/SUCCEEDED with no remaining resources. Final
+ingress list-swarms returned[]. Logs: `/tmp/ph-swarm-postfix-{smoke,lifecycle,delayed,binding}.log`.
+
+Evidence under `acceptance-tests/runs/`:
+- `target-state-lifecycle-675f2468-660a-46a5-a758-3c5073cac707`
+- `http-lifecycle-36f37b85-1aff-4da9-be7d-768d57cc89c5`
+- `failure-cleanup-b7e2f2e9-fcb4-4266-bde5-f368313a8cea`
+- `delayed-delivery-b740d704-4341-4337-80df-de5fdaeeebc8`
+- `network-binding-recovery-e1c750b1-7c39-4dfd-88f4-fb2017a6142d`
+
+This run supersedes the earlier all-green result as the latest remote acceptance
+status at that point. The user accepted the 2999 ms observation as functionally
+valid; the strict timing assertion is corrected below. NW-4 still lacks cross-host
+NPM/HAProxy evidence.
+
+### Branch closeout verification — 2026-09-22
+
+The delayed-arrival assertion now permits exactly 1 ms of timestamp measurement
+error, as accepted by the user. The allowance is recorded with every observation;
+broker scheduling and the delivery policy contract are unchanged. Fresh official
+HTTPS execution passed: 3074/3135/3005 ms for configured 3000 ms, verified removal.
+Evidence: `delayed-delivery-bb69d93a-181d-4029-a2cc-f315e58cefcd`.
+Runner log: `/tmp/ph-swarm-closeout-20260922/delayed.log`; 178 acceptance-framework
+unit tests also passed. This invocation ran one deployed test, not the historical
+reports remaining in the Maven output directory.
+
+HiveForge currently reports 18/18 running services and all four nodes ready.
+NPM and HAProxy are still on mgr-2. The prepared optional placement settings in
+[the deployment contract](../HIVEFORGE.md#optional-proxy-placement-for-cross-node-verification)
+will pin HAProxy to wrk-1 and NPM to mgr-2. Both playbooks pass syntax checks;
+eight profile/adapter/placement render combinations pass Stack validation and
+five cases exercise the canonical placement assertion (empty pair, distinct pair,
+each incomplete pair, identical hosts). Action-root contract check passes.
+Publication and cross-host execution are pending; NW-4 remains PARTIAL.

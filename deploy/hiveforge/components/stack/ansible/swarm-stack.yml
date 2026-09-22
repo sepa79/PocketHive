@@ -38,6 +38,20 @@
         group: "10001"
   when: pockethive_profile == "swarm-full"
 
+- name: Read optional proxy placement once for deploy and update
+  ansible.builtin.set_fact:
+    pockethive_haproxy_node: "{{ lookup('env', 'POCKETHIVE_HAPROXY_NODE') }}"
+    pockethive_network_proxy_manager_node: "{{ lookup('env', 'POCKETHIVE_NETWORK_PROXY_MANAGER_NODE') }}"
+
+- name: Require paired distinct proxy placement or scheduler placement
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pockethive_haproxy_node | length == 0 and pockethive_network_proxy_manager_node | length == 0)
+        or (pockethive_haproxy_node | length > 0 and pockethive_network_proxy_manager_node | length > 0
+        and pockethive_haproxy_node != pockethive_network_proxy_manager_node)
+    fail_msg: "Set both POCKETHIVE_HAPROXY_NODE and POCKETHIVE_NETWORK_PROXY_MANAGER_NODE to different Swarm hostnames, or leave both empty for scheduler placement."
+
 - name: Require explicit WorkPlane selection
   ansible.builtin.assert:
     that:

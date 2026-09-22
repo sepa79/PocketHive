@@ -1374,6 +1374,43 @@ Deployment `4a80a0d3` / images `dev-20260921-g4a80a0d3` passed six ingress
 acceptance cases on `https://192.168.88.50:8443`: smoke, three lifecycle cases,
 delayed delivery and binding recovery. Final swarm registry was empty.
 See [deployment evidence](../inProgress/artemis-swarm-dev-deploy.md) for exact runs
-and limits. The deployment is degraded by a restarting MCP service; its cause
-is not yet established. NW-4 remains PARTIAL because NPM and HAProxy landed on
+and limits. The MCP startup failure was subsequently repaired in deployment
+manifest `55e0986b`: all18 services run, public MCP metadata200 and unauthenticated
+initialize401. NW-4 remains PARTIAL because NPM and HAProxy landed on
 the same manager, despite using NFS. Matrix remains **41 PASS / 1 PARTIAL**.
+
+
+### E2E rerun after MCP deployment repair — 2026-09-21
+
+Against deployed manifest `55e0986b`, unchanged images `dev-20260921-g4a80a0d3`
+and official HTTPS ingress .50:8443: **5 PASS / 1 FAIL**. Smoke and all three
+lifecycle cases passed; binding recovery passed. Delayed delivery failed on one
+2999 ms observation against the strict >=3000 ms assertion (other samples3046/3112).
+The test compares generator processedAt and processor receivedAt from separate
+processes; clock alignment/resolution remains a possible explanation, not a proven
+cause. No assertion or runtime behavior was changed and no green rerun substituted.
+The failed test completed REMOVE/SUCCEEDED with no remaining resources. Final
+ingress list-swarms returned[]. Logs: `/tmp/ph-swarm-postfix-{smoke,lifecycle,delayed,binding}.log`.
+
+Evidence under `acceptance-tests/runs/`:
+- `target-state-lifecycle-675f2468-660a-46a5-a758-3c5073cac707`
+- `http-lifecycle-36f37b85-1aff-4da9-be7d-768d57cc89c5`
+- `failure-cleanup-b7e2f2e9-fcb4-4266-bde5-f368313a8cea`
+- `delayed-delivery-b740d704-4341-4337-80df-de5fdaeeebc8`
+- `network-binding-recovery-e1c750b1-7c39-4dfd-88f4-fb2017a6142d`
+
+This run supersedes the earlier all-green result as the latest remote acceptance
+status. Historical coverage is retained; the delayed-delivery timing failure is
+accepted by the user as measurement noise; the correction and fresh execution are
+recorded below. NW-4 still lacks cross-host NPM/HAProxy evidence.
+
+### Delayed-delivery measurement correction — 2026-09-22
+
+User accepted the earlier 2999 ms observation for a 3000 ms configured delay.
+The E2E assertion now has a named 1 ms timestamp tolerance, also recorded in the
+arrival evidence. No production policy or broker scheduling changed. Fresh public
+Swarm ingress execution passed with 3074/3135/3005 ms and verified REMOVE:
+`delayed-delivery-bb69d93a-181d-4029-a2cc-f315e58cefcd`.
+178 framework unit tests passed in the same runner invocation. This is one new
+deployed test; older reports retained on disk are not counted as fresh executions.
+Coverage remains **41 PASS / 1 PARTIAL** pending cross-node NW-4.

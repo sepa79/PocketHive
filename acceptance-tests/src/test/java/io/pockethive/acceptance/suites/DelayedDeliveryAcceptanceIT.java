@@ -12,6 +12,9 @@ import org.junit.jupiter.api.Test;
 /** Verifies delayed arrival using worker timestamps, independent of tap polling latency. */
 @Tag("delayed-delivery")
 class DelayedDeliveryAcceptanceIT {
+  // Measurement allowance accepted for cross-worker wall-clock timestamps; not broker policy.
+  private static final long TIMESTAMP_TOLERANCE_MS = 1;
+
   @Test void delaysGeneratorResultsBeforeHttpProcessingAndRemovesTheSwarm() throws Exception {
     try (var run = LiveRun.open("delayed-delivery"); var swarm = run.newSwarm()) {
       var bees = run.scenario.requiredAt("/template/bees");
@@ -42,10 +45,13 @@ class DelayedDeliveryAcceptanceIT {
           long elapsedMs = received.getReceivedAt().toEpochMilli() - generated.getProcessedAt().toEpochMilli();
           var observation = Map.<String, Object>of("messageId", item.messageId(), "configuredDelayMs", delayMs,
               "generatorProcessedAt", generated.getProcessedAt().toString(),
-              "processorReceivedAt", received.getReceivedAt().toString(), "elapsedMs", elapsedMs);
+              "processorReceivedAt", received.getReceivedAt().toString(), "elapsedMs", elapsedMs,
+              "timestampToleranceMs", TIMESTAMP_TOLERANCE_MS);
           observations.add(observation);
           run.evidence.record("delayed-arrivals", observations);
-          assertTrue(elapsedMs >= delayMs, "Processor received " + item.messageId() + " after only " + elapsedMs + " ms");
+          assertTrue(elapsedMs >= delayMs - TIMESTAMP_TOLERANCE_MS,
+              "Processor received " + item.messageId() + " after only " + elapsedMs
+                  + " ms; expected " + delayMs + " ms with " + TIMESTAMP_TOLERANCE_MS + " ms timestamp tolerance");
         }
       }
       swarm.stop();

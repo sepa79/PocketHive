@@ -36,6 +36,19 @@ the HiveForge-managed project root or stateless. Swarm controllers still run on
 manager nodes because they need Docker Swarm API access. Stateful placement
 remains explicit where the runtime profile declares dedicated roots.
 
+## Optional proxy placement for cross-node verification
+
+`POCKETHIVE_HAPROXY_NODE` and `POCKETHIVE_NETWORK_PROXY_MANAGER_NODE` optionally
+pin the two services to explicit Swarm hostnames. Both must be empty (scheduler
+placement) or both must name different hosts (cross-node verification). The shared
+render task validates this pair; the Stack template emits `node.hostname`
+constraints. A missing/ineligible node leaves its service pending; no other host
+is substituted. These settings do not change runtime paths or networking.
+
+For NW-4 on the development Swarm, use HAProxy `docker-swarm-wrk-1` and Network
+Proxy Manager `docker-swarm-mgr-2`. Record actual running task placement before
+and after the ingress test; configured constraints alone are not execution proof.
+
 ## Explicit WorkPlane selection
 
 Both Swarm profiles require `POCKETHIVE_WORK_TYPE=RABBITMQ` or `ARTEMIS`.
