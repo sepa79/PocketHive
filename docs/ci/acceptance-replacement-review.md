@@ -184,3 +184,25 @@ The canonical ledger owns the result and evidence links. This closes the missing
 execution condition; it does not retroactively turn this dated local assessment
 into a review of the new deployment changes. Final N3 awaits separate review of
 the closing evidence. N4 remains explicitly deferred pending manual confirmation.
+
+## Final N3 review — 2026-09-22
+
+N3 is closed. Reviewed the archived full-Swarm JUnit index (55 PASS, two image
+assertion failures), both corrected WK-4/WK-5 reruns (one PASS each), cross-node
+NW-4 and fresh SM-2 with successful HiveForge remove/deploy and scoped empty-root
+cleanup evidence. Latest results cover all 57 distinct cases; this is not a claim
+that the full suite was repeated after the test-only correction.
+
+Reviewed the actual image path: Orchestrator resolves the reference; compute
+adapters record the launch image; public runtime inventory exposes that label.
+Worker status is compared against this independent projection, with exact run,
+swarm, role and instance matching. No image resolver was added to the framework.
+
+Six passes: plan acceptance satisfied; style/responsibility headers aligned;
+concise boundary client using existing HTTP lifetime; authenticated public ingress
+with owned-resource cleanup; no new libraries; explicit oracle and documented
+limits. Repository search found no second acceptance runtime-inventory client or
+image resolver. No blocking findings in this closing scope. This is not a new
+exhaustive review of every production service on the branch. N4 remains deferred
+until user manual testing and explicit confirmation. Raw artifacts remain local
+in the directories named by the full-Swarm report.

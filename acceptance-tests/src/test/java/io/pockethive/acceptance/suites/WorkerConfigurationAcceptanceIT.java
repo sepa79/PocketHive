@@ -43,6 +43,13 @@ class WorkerConfigurationAcceptanceIT {
         samples = tap.awaitSamples(run.target.fixture().samples());
       }
       var workers = WorkerObservations.awaitConfiguredWorkers(run, swarm, authored.keySet());
+      var inventory = run.runtimeInventory().workers(swarm.id(), swarm.runId());
+      run.evidence.record("runtime-inventory", inventory);
+      assertEquals(swarm.id(), inventory.required("swarmId").textValue());
+      assertEquals(swarm.runId(), inventory.required("runId").textValue());
+      var runtimes = inventory.required("workers");
+      assertTrue(runtimes.isArray());
+      assertEquals(workers.size(), runtimes.size());
       for (var worker : workers) {
         String role = worker.required("role").textValue();
         var bee = authored.get(role);
@@ -71,7 +78,18 @@ class WorkerConfigurationAcceptanceIT {
         var metadata = worker.required("runtime");
         assertEquals(run.target.fixture().templateId(), metadata.required("templateId").textValue());
         assertEquals(swarm.runId(), metadata.required("runId").textValue());
-        assertEquals(bee.required("image"), metadata.required("image"));
+        String instance = worker.required("instance").textValue();
+        var matches = java.util.stream.StreamSupport.stream(runtimes.spliterator(), false)
+            .filter(runtime -> instance.equals(runtime.required("instance").textValue())).toList();
+        assertEquals(1, matches.size(), "Exactly one deployed runtime for " + instance);
+        var runtime = matches.getFirst();
+        assertEquals(swarm.id(), runtime.required("swarmId").textValue());
+        assertEquals(swarm.runId(), runtime.required("runId").textValue());
+        assertEquals(role, runtime.required("role").textValue());
+        // Docker adapter records the resolved launch image; authored image may be unqualified.
+        var launchImage = runtime.required("labels").required("pockethive.image");
+        assertTrue(launchImage.isTextual() && !launchImage.textValue().isBlank());
+        assertEquals(launchImage, metadata.required("image"), "Resolved launch image for " + instance);
         for (String field : new String[]{"containerId", "stackName"}) {
           assertTrue(metadata.required(field).isTextual() && !metadata.required(field).textValue().isBlank(), field);
         }

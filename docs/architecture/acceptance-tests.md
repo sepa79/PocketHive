@@ -293,7 +293,14 @@ WorkerConfigurationAcceptanceIT share this observer; it never merges CP messages
 resolves configuration or decides lifecycle success.
 
 WorkerConfigurationAcceptanceIT owns WK-4/WK-5 comparisons of explicitly authored
-fields against runtime configuration and runtime metadata. Fixed expected baseUrl
+fields against runtime configuration and runtime metadata. Image identity is checked
+against the Docker adapter's resolved launch-image label from the public runtime
+inventory, matched by swarm, run, role and instance with exactly one runtime.
+The inventory is independent of worker status; `bees.image` is not used because
+it projects the same status metadata. Authored short image names are not compared
+directly with resolved references, and the test does not implement image resolution.
+This checks launch/status consistency, not independently the prefix resolver itself.
+Fixed expected baseUrl
 examples test rendering without reproducing the resolver. Existing workers fixtures
 provide baseline configuration; worker-overrides fixtures explicitly select different
 values and adapter tuning. Both capture successful HTTP results and use the existing

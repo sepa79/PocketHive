@@ -1,12 +1,14 @@
 # Artemis development deployment on the large Swarm
 
-Status: deployed and ingress acceptance passed, 2026-09-21. MCP startup repaired;
-all 18 services run at 1/1. NW-4 cross-host execution passed on 2026-09-22; closing evidence awaits review.
+Status: freshly redeployed on 2026-09-22; all 18 services at 1/1, smoke and SM-2 PASS.
+Full Artemis Swarm run: 55/57 PASS; both image-comparison failures subsequently
+fixed and targeted reruns PASS (57/57 latest results across those runs).
+See [current full-suite report](artemis-swarm-full-acceptance.md); earlier evidence below is historical.
 
 ## Revision, target and execution
 
 - Application/deploy baseline: `4a80a0d3`, branch `codex/artemis-work-plane`.
-- Final deployed manifest: `fe5d4f4d`; application image tag unchanged.
+- Fresh deployment source: `4c8923d2` (earlier manifest `fe5d4f4d`); application image tag unchanged.
 - Source published to `http://192.168.88.50:3001/hiveforge/PocketHive.git` with
   explicit user permission. No GitHub push.
 - All 19 application images published with confirmed digests through
@@ -171,5 +173,5 @@ Remaining: separate closing review, PR publication; N4 and A6 stay deferred.
 Git authorization is now explicit in both local worktrees' AGENTS.md: the authorized
 Dev deployment includes its scoped commits/pushes, without repeated requests.
 The root PocketHive worktree change is left uncommitted with its unrelated work.
-Automatic review rejected updating the stale project-wide HiveMind Git rule;
-that memory rule was not changed and does not describe the user's current Dev authorization.
+The earlier automatic-review rejection was resolved after the explicit user request:
+HiveMind ruleset v7 now records the same persistent Dev workflow authorization.

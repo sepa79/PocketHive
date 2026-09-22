@@ -1,6 +1,10 @@
 # Artemis WorkPlane i opóźnione dostarczenie dla 3DS
 
-Status na 2026-09-21: A1–A5 wykonane. Osobne review A4 i A5 zakończone bez findings; A5 zapisane w `6e3b0aa4`. PR #517 zmergowany w `713e7559`. A6 (pełny 3DS i obciążenie) pozostaje osobnym etapem. Datowane wpisy poniżej zachowują historię; dawne „oczekuje review” nie opisują bieżącego statusu.
+Status na 2026-09-22: A1–A5 wykonane. Osobne review A4 i A5 zakończone bez findings; A5 zapisane w `6e3b0aa4`. PR #517 zmergowany w `713e7559`. A6 (pełny 3DS i obciążenie) pozostaje osobnym etapem. Datowane wpisy poniżej zachowują historię; dawne „oczekuje review” nie opisują bieżącego statusu.
+Odbiór dużego Swarma i N3 zamknięty: 57/57 aktualnych wyników PASS
+(pełny przebieg plus dwa poprawione reruny); [raport](artemis-swarm-full-acceptance.md).
+N4 i A6 pozostają odłożone. Gotowe do PR.
+
 Branch: `codex/artemis-work-plane`, punkt wyjścia: `863694be`.
 
 ## Domknięcie A4/A5 i merge OAuth — 2026-09-21

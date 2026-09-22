@@ -2,16 +2,17 @@
 
 Status na 2026-09-22: N0 i N1 zamknięte. Bieżąca macierz zawiera **42 PASS / 0 PARTIAL**.
 NW-4 przeszło lokalnie na Rabbit oraz Artemis, a następnie między hostami
-Swarm/NFS na Artemis. Końcowe dowody są zapisane w macierzy i oczekują review N3.
+Swarm/NFS na Artemis. Końcowy review N3 zakończony 2026-09-22 bez blokujących ustaleń.
 NW-4 i retencja dowodów zapisane w `51227a32`.
 Lokalna analiza N3 jest zakończona; [raport](../ci/acceptance-replacement-review.md)
 porównuje wymagania, asercje i dowody. Znaleziona luka DA-3 została uzupełniona i
 przeszła oba adaptery. Osobny review poprawki i raportu zakończył się bez uwag
 (53 testy granic przeszły; zweryfikowano zapisane dowody obu adapterów).
-Końcowy odbiór N3 oczekuje osobnego review dowodów zamykających NW-4.
+N3 zamknięty: sprawdzono dowody NW-4, świeżego SM-2 oraz pełnego przebiegu
+Swarm i dwóch poprawionych rerunów WK-4/WK-5 (łącznie 57/57 aktualnych wyników PASS).
 Decyzja użytkownika z 2026-09-18: wracamy do A5 Artemis/3DS; N4 odkładamy do
 ręcznych testów użytkownika i jego potwierdzenia. Ani usunięcie starego frameworka,
-ani odłożony NW-4 nie są warunkiem rozpoczęcia A5. Stary zestaw pozostaje zamrożony.
+ani wykonane już NW-4 nie są dodatkowym warunkiem rozpoczęcia A5. Stary zestaw pozostaje zamrożony.
 
 Przy przygotowaniu N3 agent wykonał Maven clean bez archiwizacji i usunął wcześniejsze
 lokalne artefakty `acceptance-tests/target/runs`. Historyczne wyniki w macierzy nie są

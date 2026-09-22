@@ -1,5 +1,10 @@
 # Acceptance replacement coverage
 
+Latest environment evidence (2026-09-22): large Swarm, Artemis WORK, **57/57 PASS**
+across the full run (55 PASS) and two targeted WK-4/WK-5 reruns after fixing the
+image comparison oracle. The full suite was not repeated after the test-only fix.
+See [full Swarm report](../inProgress/artemis-swarm-full-acceptance.md).
+
 N0 inventory and N1–N3 evidence; A5 transport extension added 2026-09-21. This ledger is a requirements checklist, not executable
 routing/configuration and not an assertion of equivalence. Sources: the six frozen
 feature files under `e2e-tests/src/test/resources/features`, current REST/lifecycle,
