@@ -1,12 +1,12 @@
 # Artemis development deployment on the large Swarm
 
 Status: deployed and ingress acceptance passed, 2026-09-21. MCP startup repaired;
-all 18 services run at 1/1. NW-4 cross-host proof remains outstanding.
+all 18 services run at 1/1. NW-4 cross-host execution passed on 2026-09-22; closing evidence awaits review.
 
 ## Revision, target and execution
 
 - Application/deploy baseline: `4a80a0d3`, branch `codex/artemis-work-plane`.
-- Final deployed manifest: `55e0986b`; application image tag unchanged.
+- Final deployed manifest: `fe5d4f4d`; application image tag unchanged.
 - Source published to `http://192.168.88.50:3001/hiveforge/PocketHive.git` with
   explicit user permission. No GitHub push.
 - All 19 application images published with confirmed digests through
@@ -76,9 +76,8 @@ Logs: `/tmp/ph-swarm-{smoke,lifecycle,delayed,binding}.log`.
 
 ## Remaining issues and limits
 
-- NPM and HAProxy both run on mgr-2. The binding test used real shared NFS but did
-  **not** prove cross-host propagation. NW-4 remains PARTIAL; deliberate distinct
-  placement and another run are still required.
+- NW-4 now has cross-host proof (2026-09-22, below). Full remote replay of every
+  acceptance group was not performed; historical local evidence remains scoped.
 - No OAuth client interoperability or load-capacity claim is made.
 - User-requested AGENTS.md update permits Dev/test repository pushes required by
   an authorized workflow; GitHub/other destinations require separate permission.
@@ -155,3 +154,22 @@ eight profile/adapter/placement render combinations pass Stack validation and
 five cases exercise the canonical placement assertion (empty pair, distinct pair,
 each incomplete pair, identical hosts). Action-root contract check passes.
 Publication and cross-host execution are pending; NW-4 remains PARTIAL.
+
+### NW-4 cross-host execution completed — 2026-09-22
+
+Manifest `fe5d4f4d` published to the Dev repository and deployed through HiveForge
+update `uiop-be3819d5-e206-4e40-815f-ef253c44bec4` (action
+`op-8e4b5efb-ed1c-42ba-a9ab-0581ee5d7510`). HAProxy moved to wrk-1/.53;
+NPM remained mgr-2/.51. Both actual task IDs were stable before/after the test.
+
+NW-4 passed, including rejected candidate (10019 ms), retained binding and real
+traffic, explicit clear and verified removal. Final ingress registry `[]`, all18
+services1/1. The canonical [coverage ledger](../ci/acceptance-coverage.md#nw-4--cross-node-swarmnfs-pass-2026-09-22)
+records the run ID and evidence archive. No new application images were required.
+Remaining: separate closing review, PR publication; N4 and A6 stay deferred.
+
+Git authorization is now explicit in both local worktrees' AGENTS.md: the authorized
+Dev deployment includes its scoped commits/pushes, without repeated requests.
+The root PocketHive worktree change is left uncommitted with its unrelated work.
+Automatic review rejected updating the stale project-wide HiveMind Git rule;
+that memory rule was not changed and does not describe the user's current Dev authorization.

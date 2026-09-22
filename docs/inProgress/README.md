@@ -5,7 +5,7 @@ This directory contains only work that is actively being implemented or is waiti
 ## Current plans
 
 - [Nowy framework E2E](e2e-test-system.md) — N0/N1 zakończone; macierz N2:
-  41 PASS / 1 PARTIAL po dodaniu WP-1 delayed delivery (NW-4: pozostaje Swarm/NFS). Lokalna analiza N3 i poprawka
+  42 PASS / 0 PARTIAL po NW-4 między hostami Swarm/NFS (2026-09-22). Lokalna analiza N3 i poprawka
   DA-3 przeszły osobny review bez uwag. Końcowy N3 nadal otwarty.
   Decyzja użytkownika 2026-09-18: wracamy do A5 Artemis/3DS; usunięcie starego
   frameworka N4 odkładamy do jego ręcznych testów i potwierdzenia.
@@ -26,8 +26,8 @@ Stack z `713e7559` przebudowany; smoke, trzy przypadki lifecycle i delayed deliv
 przeszły przez ingress, końcowa lista swarmów pusta. [Dowody i ograniczenia](../ci/acceptance-coverage.md#post-merge-local-verification--2026-09-21).
 Lokalny odbiór A1–A5 domknięty. Duży Swarm wdrożony przez HiveForge, MCP naprawiony;
 [aktualne dowody i domknięcie](artemis-swarm-dev-deploy.md) obejmują ingress acceptance
-i poprawiony test pomiaru opóźnienia. NW-4 nadal wymaga rozdzielenia NPM/HAProxy
-między hosty. Pozostaje przygotowanie PR/domknięcie brancha;
+i poprawiony test pomiaru opóźnienia. NW-4 przeszedł z NPM/HAProxy na różnych
+hostach; końcowe dowody oczekują osobnego review. Pozostaje przygotowanie PR/domknięcie brancha;
 selector/splitter, mock i CloseLook pozostają osobno.
 A1/A2 and admission fixes are in `7e6c63db`; A3 composition is in `9cc6c827`.
 A4 now permits native WORK startup with a Rabbit-only diagnostic manifest. The local

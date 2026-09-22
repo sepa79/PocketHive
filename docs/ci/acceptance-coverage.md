@@ -21,8 +21,8 @@ replayed tests or as currently available raw evidence. The
 assessed preserved logs/summaries and replayed groups lacking accessible proof.
 New runs use `acceptance-tests/runs` outside Maven output; no deleted JSON was
 reconstructed. Separate review of the DA-3 correction/evidence assessment passed
-without findings (53 focused tests passed). Final N3 remains open for the deferred
-cross-node NW-4 execution. The execution plan records the user's decision to resume
+without findings (53 focused tests passed). NW-4 cross-node execution passed on 2026-09-22; final N3 remains pending
+review of that closing evidence. The execution plan records the user's decision to resume
 Artemis/3DS and defer legacy removal until manual testing and confirmation.
 
 | ID | Required observable behavior | Source feature/case | New coverage / prerequisite | Status |
@@ -40,7 +40,7 @@ Artemis/3DS and defer legacy removal until manual testing and confirmation.
 | NW-1 | HTTP reaches SUT through selected proxy; runtime config and binding match; binding removed. | swarm-lifecycle: HTTP proxy | HttpProxyAcceptanceIT: explicit bundle SUT/profile, canonical binding, current processor config, successful HTTP proxy URLs, binding404 after verified REMOVE; Rabbit/Artemis pass | PASS |
 | NW-2 | HTTPS reaches SUT through selected proxy with matching runtime config; binding removed. | swarm-lifecycle: HTTPS proxy | HttpProxyAcceptanceIT HTTPS: actual HTTPS response, explicit sslVerify=false in runtime, authored/binding/result addresses and verified binding removal; Rabbit/Artemis | PASS |
 | NW-3 | TCPS reaches SUT through selected proxy with successful result; binding removed. | swarm-lifecycle: TCPS proxy | TcpsProxyAcceptanceIT: canonical TCP result and exact echo body, TLS scheme and runtime settings, authored/binding/result addresses, verified binding removal; Rabbit/Artemis | PASS |
-| NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | NetworkBindingRecoveryAcceptanceIT passes locally on Rabbit/Artemis, including actual HTTP before/after rejection; cross-node Swarm/NFS execution remains deferred | PARTIAL |
+| NW-4 | Valid binding applied; invalid candidate rejected without losing previous binding; explicit clear removes it. | swarm-lifecycle: HAProxy NFS | NetworkBindingRecoveryAcceptanceIT passes locally on Rabbit/Artemis and on cross-node Swarm/NFS with Artemis (2026-09-22), including HTTP before/after rejection, clear and verified remove | PASS |
 | SC-4 | Scenario variables resolve into generated traffic/template rendering. | swarm-lifecycle: variables | TemplatingAcceptanceIT: explicit amber/violet create profiles, global + SUT values, exact typed JSON and eval/header results from actual generated traffic; Rabbit/Artemis | PASS |
 | NW-5 | Delayed TCP response produces processor timeout/error. | swarm-lifecycle: TCP timeout | TcpTimeoutAcceptanceIT: paired delayed-response control (8s timeout/5s delay) and error case (500ms timeout), owned run/processor alert through journal, empty result tap for explicit window, verified removal; Rabbit/Artemis | PASS |
 | WK-4 | Explicit runtime config matches each worker; full status includes config/runtime metadata, delta omits heavy config. | swarm-lifecycle: explicit defaults | WorkerConfigurationAcceptanceIT baseline on Rabbit/Artemis; fresh config/runtime for every worker. WorkerStatusContractTest proves full/config/runtime → delta without config → full; SwarmControllerStatusPublisherTest proves controller runtime through codec | PASS |
@@ -72,12 +72,13 @@ Artemis/3DS and defer legacy removal until manual testing and confirmation.
 
 ## Remaining acceptance gates
 
-- NW-4 is implemented and passes on both local WORK adapters; its cross-node
-  Swarm/NFS execution remains outstanding. Local success does not establish NFS behavior.
+- NW-4 passed on both local WORK adapters and, on 2026-09-22, on cross-node
+  Swarm/NFS with Artemis. Current matrix: **42 PASS / 0 PARTIAL / 0 OPEN**.
 - The [N3 local assessment](acceptance-replacement-review.md) is complete: actual
   assertions, owners and available execution evidence were compared. One missing
   transition in DA-3 is corrected and passes both adapters; separate review of the
-  correction and assessment passed without findings. Final N3 still awaits NW-4.
+  correction and assessment passed without findings. Final N3 awaits review of the
+  closing cross-node execution evidence; no missing execution row remains.
   No backend-port exception is implied.
 - N4 remains gated by N3 and the user's manual testing/confirmation, as recorded
   in the execution plan. Legacy code and fixtures have not been removed; this
@@ -1414,3 +1415,24 @@ Swarm ingress execution passed with 3074/3135/3005 ms and verified REMOVE:
 178 framework unit tests passed in the same runner invocation. This is one new
 deployed test; older reports retained on disk are not counted as fresh executions.
 Coverage remains **41 PASS / 1 PARTIAL** pending cross-node NW-4.
+
+### NW-4 — cross-node Swarm/NFS PASS, 2026-09-22
+
+Deployed manifest `fe5d4f4d`, unchanged application images `dev-20260921-g4a80a0d3`.
+HiveForge update `uiop-be3819d5-e206-4e40-815f-ef253c44bec4` succeeded.
+Actual running tasks before and after the test were HAProxy
+`vwo9itofmx5y9sjcakzw4v9r5` on `docker-swarm-wrk-1` and NPM
+`m5u9zpebpptrtpa3xooslgqo9` on `docker-swarm-mgr-2`, using the shared NFS runtime.
+
+Official HTTPS ingress execution of `NetworkBindingRecoveryAcceptanceIT` passed:
+real HTTP traffic before and after the invalid candidate, rejection after 10019 ms,
+exact previous binding preserved, explicit clear200 followed by absence404, and
+REMOVE/SUCCEEDED with no remaining resources. Final swarm registry was empty.
+178 framework unit tests also passed. HF reports all18 services1/1.
+
+Raw run: `network-binding-recovery-a5a1f4fb-1180-4b73-93c4-271472183e9e`.
+Archived logs, selected JUnit reports, targets and before/after HiveForge task
+placement: `acceptance-tests/runs/swarm-closeout-20260922/` (ignored local evidence).
+Current matrix: **42 PASS / 0 PARTIAL / 0 OPEN**. Final N3 closing evidence awaits
+separate review; N4 deletion remains deferred until the user's manual confirmation.
+This does not claim all acceptance groups ran on the remote Swarm.

@@ -1,15 +1,14 @@
 # Nowy framework E2E — budowa od zera i zastąpienie starego zestawu
 
-Status na 2026-09-21: N0 i N1 zamknięte. Bieżąca macierz zawiera **41 PASS / 1 PARTIAL**
-(40 wcześniejszych PASS oraz WP-1 delayed delivery z A5).
-NW-4 jest napisane i przeszło lokalnie na Rabbit oraz Artemis; pozostaje jego
-wykonanie między hostami na Swarm/NFS, odłożone na koniec.
+Status na 2026-09-22: N0 i N1 zamknięte. Bieżąca macierz zawiera **42 PASS / 0 PARTIAL**.
+NW-4 przeszło lokalnie na Rabbit oraz Artemis, a następnie między hostami
+Swarm/NFS na Artemis. Końcowe dowody są zapisane w macierzy i oczekują review N3.
 NW-4 i retencja dowodów zapisane w `51227a32`.
 Lokalna analiza N3 jest zakończona; [raport](../ci/acceptance-replacement-review.md)
 porównuje wymagania, asercje i dowody. Znaleziona luka DA-3 została uzupełniona i
 przeszła oba adaptery. Osobny review poprawki i raportu zakończył się bez uwag
 (53 testy granic przeszły; zweryfikowano zapisane dowody obu adapterów).
-Końcowy odbiór N3 pozostaje otwarty wraz z odłożonym Swarm/NFS.
+Końcowy odbiór N3 oczekuje osobnego review dowodów zamykających NW-4.
 Decyzja użytkownika z 2026-09-18: wracamy do A5 Artemis/3DS; N4 odkładamy do
 ręcznych testów użytkownika i jego potwierdzenia. Ani usunięcie starego frameworka,
 ani odłożony NW-4 nie są warunkiem rozpoczęcia A5. Stary zestaw pozostaje zamrożony.

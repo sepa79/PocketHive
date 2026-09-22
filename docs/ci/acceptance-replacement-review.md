@@ -175,3 +175,12 @@ The user then chose to resume Artemis/3DS and defer legacy deletion until their
 manual tests and confirmation. Current sequencing is owned by the
 repository execution plan (`docs/inProgress/e2e-test-system.md`); this dated assessment does not
 authorize deleting the old framework.
+
+
+## Closing execution evidence available — 2026-09-22
+
+Cross-node NW-4 passed on the large Swarm (NPM mgr-2, HAProxy wrk-1).
+The canonical ledger owns the result and evidence links. This closes the missing
+execution condition; it does not retroactively turn this dated local assessment
+into a review of the new deployment changes. Final N3 awaits separate review of
+the closing evidence. N4 remains explicitly deferred pending manual confirmation.
