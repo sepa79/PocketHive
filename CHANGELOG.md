@@ -4,6 +4,17 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Redis isolation: route dataset input, output/uploader, token storage, diagnostic
+  capture and sequences through `common/redis-adapter`, with settings owned by
+  `redis-config`. Remove process-global sequence client selection and close
+  application-owned writers and sequence resources on shutdown; preserve existing
+  message admission, retry and diagnostic failure policies.
+- Docker isolation: move client construction, compute bootstrap and runtime
+  inventory/inspect/logs/removal behind `common/docker-client`. Orchestrator and
+  Swarm Controller consume compute/host ports; one owner exports Docker launch
+  settings and one stack-name rule serves launch, status and labels. Remove the
+  unused provisioner and enforce the boundary with production import restrictions,
+  preserving compute selection, lifecycle and cleanup behavior.
 - Artemis WorkPlane: add an explicit deployment-wide alternative to RabbitMQ for
   worker traffic, including resource provisioning, transport and verified removal;
   CONTROL continues to use RabbitMQ. Rabbit and Artemis acknowledge work on

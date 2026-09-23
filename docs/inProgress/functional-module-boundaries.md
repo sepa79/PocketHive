@@ -1,7 +1,8 @@
 # Functional module boundaries — next refactors
 
-Status: F01 implemented in `9a12dd50`; F03 implemented on 2026-09-23 on
-`codex/redis-adapter`, by user request. This work follows PR #519. Historical
+Status: F01 implemented in `9a12dd50`; F03 implemented in `3116364c`,
+reviewed on 2026-09-23 on `codex/redis-adapter`. Prepared for review and integration
+alongside PR #520. This work follows PR #519. Historical
 baseline analysis remains in Git history.
 
 ## Objective and rules
@@ -147,13 +148,12 @@ sequence paths as applicable). HTTP Sequence diagnostic-store verification is
 required: successful WorkPlane taps alone do not exercise this Redis path.
 Keep the deferred Redis STOP/update/START race as a separate behavior decision.
 
-First task: trace all five consumer paths, specify the minimal adapter API and
-record their baseline behavior. The inventory may be reviewed before coding; a
-broad SDK rewrite and a new generic connection framework are not prerequisites.
+The initial inventory and API review are complete; their implementation and
+verification are recorded in the [Redis extraction report](redis-adapter-extraction.md).
 
 ### F03 — Docker/compute
 
-Implemented after Redis extraction commit `9a12dd50`.
+Implemented in `3116364c`, after Redis extraction commit `9a12dd50`.
 Ownership is defined by [RESP-DOCKER-RUNTIME](../architecture/runtime-responsibilities.md#resp-docker-runtime).
 
 - `DockerEngine` owns connection lifetime and compute/runtime construction;

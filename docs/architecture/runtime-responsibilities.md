@@ -201,9 +201,12 @@ including profile serialization and preparation round trips.
 
 ## RESP-AUTH-TOKEN-STORE
 
-**Current module(s):** `common/auth-contracts`, `common/worker-sdk`.
+**Current module(s):** `common/auth-contracts`, `common/redis-adapter`;
+`common/worker-sdk` composes the store for AuthRuntime.
 
-TokenStore owns the worker token storage/claim port; token keys and claim/result values define its shared contract. RedisTokenStore remains its Redis implementation.
+TokenStore owns the worker token storage/claim port; token keys and claim/result
+values define its shared contract. `RedisTokenStore` in redis-adapter implements
+that port through the shared `RedisConnections` owner (RESP-REDIS-ADAPTER).
 
 AuthRuntime calls the selected store for cached credentials and refresh claims; profile validation is outside the store contract.
 
@@ -213,7 +216,8 @@ AuthRuntime calls the selected store for cached credentials and refresh claims; 
 
 **Verification entrypoints:** `RedisTokenStoreTest`, `AuthRuntimeTest`.
 
-**Migration status:** Port/values moved in B01. Redis implementation and connection ownership remain B06.
+**Migration status:** Port/values moved in B01; implementation and connection
+ownership transferred in F01. Auth profile/refresh policy remains outside the adapter.
 
 ## RESP-OBS-CONTEXT
 
@@ -2654,11 +2658,12 @@ diagnostic sink while sent requests and received responses remain unchanged.
 
 ## RESP-WORK-REDIS-DEBUG-CAPTURE
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/redis-adapter`.
 
 RedisDebugCaptureStore owns expiring diagnostic value writes and the lifetime of
 its lazily allocated Redis client and single shared connection. It consumes
-canonical RedisConnectionSettings. Writes and close are serialized; close is
+canonical RedisConnectionSettings and delegates client realization to
+RedisConnections (RESP-REDIS-ADAPTER). Writes and close are serialized; close is
 idempotent and attempts connection and client cleanup even if one fails. A failed
 connection attempt releases acquired resources. No capture allocates resources
 until an actual write; a closed owner cannot allocate again. Write failure remains
@@ -2679,7 +2684,8 @@ are released by worker shutdown without deleting captured records before TTL.
 HttpSequenceDebugCapture owns the existing capture key and JSON projection,
 including configured request/response inclusion and body truncation. Header
 projection delegates to HttpHeaderRedactor. HttpSequenceRunner retains capture
-selection and journey budgets, delegates expiring storage to the SDK owner and
+selection and journey budgets, delegates expiring storage to
+RESP-WORK-REDIS-DEBUG-CAPTURE in redis-adapter and
 closes it. HttpSequenceWorkerImpl owns runner and pooled HTTP client shutdown;
 both resources are attempted even if one close fails.
 

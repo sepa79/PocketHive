@@ -1,8 +1,13 @@
 # Redis adapter extraction — F01
 
-Status: implemented in the working tree, 2026-09-22; verification below.
+Status: implemented in `9a12dd50`; unit/integration verification on 2026-09-22
+and local deployment verification on 2026-09-23 are recorded below.
 Branch: `codex/redis-adapter`; base `4faf139d` from PR #519.
-Align with main after #519 merges before publishing this PR.
+Review base: `codex/artemis-work-plane`; integration is coordinated with PR #520.
+Its Artemis baseline already includes implementation through `18987afc`; planning
+commits `d6014cad`/`4faf139d` from this branch's base also need to be retained.
+Subsequent Docker isolation is recorded under
+[F03](functional-module-boundaries.md#f03--dockercompute).
 Parent scope: [F01](functional-module-boundaries.md#f01--redis-one-pr-closing-the-shared-technology-responsibility).
 
 ## Completed transfer
@@ -65,9 +70,10 @@ Results (2026-09-22):
   outside redis-adapter. Removed API names have no production callers.
 - `git diff --check`: clean.
 
- The base branch's
-57-case acceptance run is not evidence for this extraction. No PocketHive deployment
-or ingress E2E is claimed; the earlier Dev deployment has been removed.
+At this verification stage (2026-09-22), no PocketHive deployment or ingress E2E
+had been run for this extraction. The base branch's 57-case acceptance run is not
+evidence for F01. Later F01 deployment results are recorded below; they do not
+cover the subsequent F03 Docker changes.
 
 ## Review scope
 
@@ -94,7 +100,8 @@ No deployed E2E was run for this shutdown fix.
 
 ## Local deployment verification — 2026-09-23
 
-`build-hive.sh --quick` built and deployed this working tree on local ingress
+`build-hive.sh --quick` built and deployed the F01 working tree later committed
+as `9a12dd50` on local ingress
 http://localhost:8088, with Artemis WORK. Five acceptance cases passed without skips:
 Redis fixture ownership/cleanup (1), Redis dataset pipeline (1), five-customer
 WebAuth Redis routing loop (1), and templating profiles (2). Evidence lives under
@@ -133,4 +140,6 @@ that had exited during the broker failure were restarted only to permit normal R
 An initial REMOVE sent during controller startup timed out; a later explicit REMOVE
 with the controller ready succeeded. After verifying swarm absence, the retained private
 scenarios/lists were deleted through ingress. Final public swarm list is empty. The local
-PH stack remains running for inspection. Failed-run evidence was retained.
+PH stack was left running for inspection at the end of this verification. This is
+a dated observation, not a claim about its current availability. Failed-run evidence
+was retained.
