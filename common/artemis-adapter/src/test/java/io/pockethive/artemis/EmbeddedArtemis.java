@@ -46,6 +46,8 @@ final class EmbeddedArtemis implements AutoCloseable {
 
     void start() throws Exception { server.start(); }
 
+    int sessionCount() { return server.getSessions().size(); }
+
     ArtemisConnectionSettings settings() {
         return new ArtemisConnectionSettings(brokerUrl, "test-user", "test-password", 2000);
     }

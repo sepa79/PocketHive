@@ -34,7 +34,9 @@ concurrency:
 jobs:
   verify-and-package:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Full CLI qualification took 19m32s on the hosted runner; leave room for
+    # dependency setup, package verification and artifact publication.
+    timeout-minutes: 45
     env:
       INTAKE_ARCHIVE: pockethive-intake.zip
     steps:

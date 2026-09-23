@@ -11,10 +11,18 @@ test('remote HTTP requires an explicit mode and rejects unknown modes without pr
   assert.throws(() => createConnectionProfile({ ...input, endpointSecurityMode: 'REMOTE_HTTPS' }), /HTTPS_REQUIRED/);
   assert.throws(() => createConnectionProfile({ ...input, endpointSecurityMode: 'LOCAL_LOOPBACK_HTTP' }), /LOOPBACK_REQUIRED/);
   assert.throws(() => createConnectionProfile({ ...input, endpointSecurityMode: 'AUTO' as EndpointSecurityMode }), /SECURITY_MODE_INVALID/);
+  assert.throws(() => validateEndpointTransport(new URL(input.mcpUrl), 'AUTO' as EndpointSecurityMode), {
+    code: 'MCP_ENDPOINT_SECURITY_MODE_INVALID',
+    message: 'MCP_ENDPOINT_SECURITY_MODE_INVALID: An explicit supported endpoint security mode is required',
+  });
   assert.equal(createConnectionProfile({ ...input, endpointSecurityMode: 'REMOTE_HTTP' }).mcpUrl, input.mcpUrl);
   for (const url of ['https://lab.example/mcp', 'ftp://lab.example/mcp', 'http://user@lab.example/mcp']) {
     assert.throws(() => createConnectionProfile({ ...input, mcpUrl: url, endpointSecurityMode: 'REMOTE_HTTP' }));
   }
+  assert.throws(() => validateEndpointTransport(new URL('https://lab.example/mcp'), 'REMOTE_HTTP'), {
+    code: 'MCP_ENDPOINT_HTTP_REQUIRED',
+    message: 'MCP_ENDPOINT_HTTP_REQUIRED: Remote HTTP mode requires an explicit HTTP URL',
+  });
   assert.throws(() => validateEndpointTransport(new URL('http://lab.example/auth-service'), 'REMOTE_HTTPS', true),
     /MCP_AUTHORIZATION_SERVER_INVALID/);
 });

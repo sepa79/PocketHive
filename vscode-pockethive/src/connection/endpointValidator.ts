@@ -28,10 +28,12 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
   async validate(profile: McpConnectionProfile, signal: AbortSignal): Promise<ValidatedEndpoint> {
     signal.throwIfAborted();
     const deadline = new AbortController();
+    const cancel = () => deadline.abort(signal.reason);
+    signal.addEventListener('abort', cancel, { once: true });
     const timeout = setTimeout(() => deadline.abort(new ConnectionContractError(
       'MCP_ENDPOINT_DISCOVERY_TIMEOUT', 'Endpoint discovery exceeded its time limit',
     )), this.timeoutMs);
-    const boundedSignal = AbortSignal.any([signal, deadline.signal]);
+    const boundedSignal = deadline.signal;
     let onAbort!: () => void;
     const aborted = new Promise<never>((_resolve, reject) => {
       onAbort = () => reject(boundedSignal.reason);
@@ -41,6 +43,7 @@ export class PocketHiveEndpointValidator implements EndpointValidationPort {
       return await Promise.race([this.discover(profile, boundedSignal), aborted]);
     } finally {
       clearTimeout(timeout);
+      signal.removeEventListener('abort', cancel);
       boundedSignal.removeEventListener('abort', onAbort);
     }
   }

@@ -24,6 +24,8 @@ Timestamp: 2026-09-22T00:00:00Z
   slash and backslash separators.
 - HTTP Sequence JSON ownership: use the shared observability mapper and remove
   the duplicate service configuration; retain the bootstrap SSOT gate.
+- Companion minimum-runtime compatibility: preserve endpoint discovery, cancellation
+  and deadlines on VS Code 1.85; add minimum-runtime CI and endpoint rejection tests.
 - Companion connection reliability: bound and cancel endpoint discovery, keep
   cancellation terminal during stored-session lookup, and close idle callback
   connections after flushing the browser response. Separate callback presentation
@@ -41,6 +43,9 @@ Timestamp: 2026-09-22T00:00:00Z
 - OAuth consent: make Decline reject all requested permissions, including prior
   consent, and preserve validated cancellation callbacks with the original state.
   Document the registry, persistence, redirect and browser-failure owners.
+- Artemis regression coverage: verify partial-start session release, diagnostic
+  settings and resource cleanup, preservation of pre-existing resources, and
+  bootstrap validation and configuration preservation.
 - Artemis diagnostics: bound captures of delayed messages without changing source
   delivery; ship the required diagnostic transformer in the release-matched broker
   image through the existing local and release build paths.
@@ -67,7 +72,8 @@ Timestamp: 2026-09-22T00:00:00Z
 
 - Intake skill CI: reject stale generated schemas or package manifests, run the
   public CLI suite, and upload a verified portable ZIP with its checksum as a
-  commit-labelled build artifact. Projection drift is checked only by the
+  commit-labelled build artifact. Allow 45 minutes for qualification and publication.
+  Projection drift is checked only by the
   dedicated intake workflow; default Maven tests do not depend on skill files.
   Generated files are never rewritten by CI.
 - Intake schema ownership: derive auth and request-protocol vocabulary from the

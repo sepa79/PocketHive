@@ -22,7 +22,8 @@ verify the connection. The steps below describe an installed extension.
    succeed.
 5. Use the Hive, Buzz, Journal, Scenarios, and Debug tabs for that environment.
 
-Endpoint discovery has a ten-second budget covering DNS, response headers and
+Endpoint discovery supports the declared VS Code 1.85 minimum runtime and has a
+ten-second budget covering DNS, response headers and
 the metadata body. The connection form offers **Cancel connection** during discovery;
 cancelled or late results cannot continue to authentication or connection testing.
 The OAuth callback listener closes its connections after flushing the callback
@@ -173,8 +174,9 @@ workspace or operating-system temporary file is created.
 
 The extension remains TypeScript because that is the VS Code extension-host
 platform boundary. Dependencies are pinned and locked.
-The unit/package gate runs on Node 20 on both Linux and Windows in CI; mutation
-testing runs on Linux against the same source and test contracts.
+The unit/package gate runs on Node 20 on both Linux and Windows in CI. Endpoint
+discovery and transport tests also run on Node 18.15, the runtime in VS Code 1.85.
+Mutation testing runs on Linux against the same source and test contracts.
 
 ```bash
 cd vscode-pockethive

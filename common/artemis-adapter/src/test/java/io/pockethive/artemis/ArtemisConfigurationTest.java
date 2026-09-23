@@ -71,6 +71,48 @@ class ArtemisConfigurationTest {
         assertThat(adapter.overrideProblems(environment(Map.of())::getProperty)).isEmpty();
     }
 
+    @Test void bootstrapRejectsInvalidAuthoringAndMissingResolvedDestinations() {
+        var adapter = new ArtemisWorkBootstrapEnvironment(connection);
+        var destinations = Map.of(INPUT_QUEUE, "jobs", OUTPUT_ADDRESS, "jobs");
+        var validInput = Map.of("consumerWindowBytes", 0);
+        var validOutput = Map.of("persistent", true);
+        assertThatThrownBy(() -> adapter.bootstrap(
+            configuration(Map.of("consumerWindowBytes", 0, "queue", "foreign"), validOutput), destinations))
+            .isInstanceOf(WorkConfigurationException.class);
+        assertThatThrownBy(() -> adapter.bootstrap(
+            configuration(validInput, Map.of("persistent", true, "address", "foreign")), destinations))
+            .isInstanceOf(WorkConfigurationException.class);
+        assertThatThrownBy(() -> adapter.bootstrap(configuration(validInput, validOutput),
+            Map.of(OUTPUT_ADDRESS, "jobs"))).isInstanceOf(WorkConfigurationException.class);
+        assertThatThrownBy(() -> adapter.bootstrap(configuration(validInput, validOutput),
+            Map.of(INPUT_QUEUE, "jobs"))).isInstanceOf(WorkConfigurationException.class);
+    }
+
+    @Test void bootstrapPreservesOtherConfigurationAndDoesNotMutateItsInput() {
+        var adapter = new ArtemisWorkBootstrapEnvironment(connection);
+        var authored = Map.<String, Object>of(
+            "inputs", Map.of("type", "ARTEMIS", "enabled", false, "artemis", Map.of("consumerWindowBytes", 0)),
+            "outputs", Map.of("type", "ARTEMIS", "delivery", Map.of("mode", "IMMEDIATE"),
+                "artemis", Map.of("persistent", true)),
+            "worker", Map.of("setting", "preserved"));
+        var projection = adapter.bootstrap(authored, Map.of(INPUT_QUEUE, "jobs", OUTPUT_ADDRESS, "jobs"));
+        assertThat(projection.configuration()).containsEntry("worker", authored.get("worker"));
+        assertThat(((Map<?, ?>) projection.configuration().get("inputs")).get("enabled")).isEqualTo(false);
+        assertThat(((Map<?, ?>) projection.configuration().get("outputs")).get("delivery")).isEqualTo(Map.of("mode", "IMMEDIATE"));
+        assertThat(((Map<?, ?>) authored.get("inputs")).get("artemis")).isEqualTo(Map.of("consumerWindowBytes", 0));
+        assertThat(((Map<?, ?>) authored.get("outputs")).get("artemis")).isEqualTo(Map.of("persistent", true));
+    }
+
+    @Test void bootstrapLeavesUnselectedDirectionsUntouched() {
+        var adapter = new ArtemisWorkBootstrapEnvironment(connection);
+        for (var authored : List.of(Map.<String, Object>of(), Map.<String, Object>of(
+            "inputs", Map.of("type", "SCHEDULER"), "outputs", Map.of("type", "NONE")))) {
+            var projection = adapter.bootstrap(authored, Map.of());
+            assertThat(projection.configuration()).isEqualTo(authored);
+            assertThat(projection.environment()).isEmpty();
+        }
+    }
+
     private static Map<String, Object> configuration(Map<?, ?> input, Map<?, ?> output) {
         return Map.of("inputs", Map.of("type", "ARTEMIS", "artemis", input),
             "outputs", Map.of("type", "ARTEMIS", "artemis", output));

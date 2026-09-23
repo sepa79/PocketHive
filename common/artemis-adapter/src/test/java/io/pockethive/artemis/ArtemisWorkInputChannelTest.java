@@ -19,6 +19,31 @@ import org.junit.jupiter.api.io.TempDir;
 class ArtemisWorkInputChannelTest {
     @TempDir Path directory;
 
+    @Test void missingQueueStartReleasesItsSessionAndAllowsExplicitRetry() throws Exception {
+        try (var broker = new EmbeddedArtemis(directory);
+             var plane = new ArtemisWorkPlane(broker.settings(), "ph")) {
+            var topology = plane.topology().resolve("swarm", Set.of("jobs"));
+            var input = plane.inputs().create("worker", new ArtemisInputSettings(topology.channel("jobs").inputAddress(), 0));
+            assertThat(input.state()).isEqualTo(WorkInputChannelState.NOT_REGISTERED);
+            input.register(new WorkDeliveryHandler() {
+                @Override public void onWork(WorkItem item) { throw new AssertionError("No message was sent"); }
+                @Override public void onDecodeFailure(byte[] body, Exception failure) { throw new AssertionError(failure); }
+            });
+            assertThatThrownBy(input::start).isInstanceOf(IllegalStateException.class)
+                .hasMessage("Cannot start Artemis Work input");
+            assertThat(input.state()).isEqualTo(WorkInputChannelState.STOPPED);
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() -> assertThat(broker.sessionCount()).isZero());
+
+            plane.resources().ensure(topology);
+            int sessionsBeforeRetry = broker.sessionCount();
+            input.start();
+            assertThat(input.state()).isEqualTo(WorkInputChannelState.RUNNING);
+            input.stop();
+            await().atMost(Duration.ofSeconds(2)).untilAsserted(() ->
+                assertThat(broker.sessionCount()).isEqualTo(sessionsBeforeRetry));
+        }
+    }
+
     @Test
     void brokerLossStopsTheChannelAndExplicitStartCannotReportSuccess() throws Exception {
         try (var broker = new EmbeddedArtemis(directory);
