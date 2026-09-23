@@ -62,7 +62,7 @@ separated from historical findings that still require revalidation.
 | Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
-| Journal/files | `SwarmJournalController` and `FileSwarmJournal` each assemble `journal.ndjson`; RuntimeFilesystemLayout already owns swarm/run directories | Extend the layout owner; journal API owns storage operations, REST delegates |
+| Journal/files | F04 file slice implemented, pending review: RuntimeFilesystemLayout owns the artifact path; file reads leave REST through SwarmJournalFiles | Next extract Postgres queries/archive/pinning and retention; keep Hive and swarm contracts distinct |
 | ClickHouse | `ClickHouseMetricsSink` and `ClickHouseTxOutcomeSink` each construct HTTP clients and INSERT queries | Existing sink-clickhouse owns transport mechanics, separate explicit domain/buffering policies |
 | Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
@@ -198,14 +198,28 @@ as explicitly requested. They are not prerequisites for completing this F03 slic
 
 ### F04 — Runtime filesystem and journal
 
-Confirmed on the startup/read paths: FileSwarmJournal and SwarmJournalController
-both own `journal.ndjson`; the reader also reconstructs the run directory. Fix in
-this dedicated refactor, not F03.
+**First F04 slice implemented, pending review**, branch `codex/journal-filesystem`,
+based on `7c6c402d` after all four PR #521 CI checks passed. The complete file-read
+path now leaves REST through SwarmFileJournalQuery → SwarmJournalFiles →
+FileSwarmJournalReader. RuntimeFilesystemLayout owns the journal artifact path
+used by both reader and writer.
+See `RESP-SWARM-FILE-JOURNAL` in the runtime responsibility records for the preserved
+selection/error behavior and the remaining ownership debt.
 
-Extend RuntimeFilesystemLayout for journal artifact paths; remove reader/writer
-path reconstruction. Then extract journal append/query/retention capabilities,
-using journal-postgres for SQL and a named file implementation. Keep CP and swarm
-journal contracts distinct; do not create one global journal state machine.
+Confirmed baseline: FileSwarmJournal and SwarmJournalController both own
+`journal.ndjson`; the reader also reconstructs the run directory.
+
+Validation: 45 tests passed, zero failures/errors/skips, including file read/write,
+run selection, HTTP mapping, removal isolation, Postgres storage/pinning, authorization
+and RepositoryImportBoundaryTest. Test log: `/tmp/ph-f04-tests.log` (local evidence).
+No deployed E2E was repeated for this slice. Invalid file-query run identifiers now
+follow the existing layout validation; no new HTTP response contract was introduced.
+
+**Remaining F04:** extract Postgres queries/archive/pinning from the controllers
+and clarify append/query/retention capabilities using journal-postgres for SQL.
+Keep CP and swarm journal contracts distinct; do not create one global journal
+state machine. The file reader retains current malformed-line, absence and
+run-selection behavior, including the existing newest-directory selection policy.
 
 Gate: read/write/export/delete use identical resolved paths; invalid identifiers
 follow one owner contract; REST maps requests and delegates; retention has one writer.

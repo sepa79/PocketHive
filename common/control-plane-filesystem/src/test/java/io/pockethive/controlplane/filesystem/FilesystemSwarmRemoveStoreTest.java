@@ -86,6 +86,22 @@ class FilesystemSwarmRemoveStoreTest {
     assertThat(retained).hasContent("other swarm");
   }
 
+  @Test
+  void removesAllJournalRunsOnlyForTheSelectedSwarm() throws IOException {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(root.toString(), "/runtime");
+    for (String swarm : List.of("alpha", "beta")) {
+      for (String run : List.of("run-1", "run-2")) {
+        Path journal = layout.swarmJournalFile(swarm, run);
+        Files.createDirectories(journal.getParent());
+        Files.writeString(journal, "{\"swarmId\":\"" + swarm + "\"}");
+      }
+    }
+    store().deleteSwarmRuntime("alpha");
+    assertThat(layout.swarmRoot("alpha")).doesNotExist();
+    assertThat(layout.swarmJournalFile("beta", "run-1")).isRegularFile();
+    assertThat(layout.swarmJournalFile("beta", "run-2")).isRegularFile();
+  }
+
   private FilesystemSwarmRemoveStore store() {
     return new FilesystemSwarmRemoveStore(
         new ObjectMapper(), RuntimeFilesystemLayout.of(root.toString(), "/runtime"));

@@ -15,7 +15,6 @@ import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
-import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
@@ -23,7 +22,6 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.time.Instant;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -99,7 +97,7 @@ class OrchestratorAdminAuthTest {
             mock(JdbcTemplate.class),
             store,
             endpointAuthorization(store),
-            runtimeLayout());
+            mock(SwarmFileJournalQuery.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {
@@ -240,11 +238,6 @@ class OrchestratorAdminAuthTest {
         swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", List.of(), bundlePath, folderPath));
         store.register(swarm);
         return store;
-    }
-
-    private static RuntimeFilesystemLayout runtimeLayout() {
-        String root = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize().toString();
-        return RuntimeFilesystemLayout.of(root, root);
     }
 
     private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {

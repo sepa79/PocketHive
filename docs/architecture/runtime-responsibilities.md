@@ -2439,8 +2439,9 @@ Both Rabbit and Artemis observations currently omit oldest-message age.
 **Current module:** `common/control-plane-filesystem`; environment names and container
 root are declared by `RuntimeFilesystemContract` in `common/swarm-model`.
 
-`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation and
-worker-output paths. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
+`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation,
+swarm-journal and worker-output paths. `swarmJournalFile` owns the journal artifact
+name and derives it from the validated swarm/run directory. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
 The local and published views derive from the same relative path; consumers must not
 reconstruct that path or introduce a second output root. `RuntimeFilesystemMount`
 owns host-to-container mounts. The layout does not create, read or delete files.
@@ -2455,6 +2456,40 @@ relative file names inside a single worker output directory.
 consumer-local reconstruction of output paths; a second output-directory cleanup owner.
 
 **Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
+
+
+## RESP-SWARM-FILE-JOURNAL
+
+**F04 file slice:** `FileSwarmJournal` in swarm-controller remains the append owner.
+`SwarmFileJournalQuery` in Orchestrator owns file-query run selection through the
+`SwarmJournalFiles` port; `FileSwarmJournalReader` implements file discovery, reading
+and decoding. Both file implementations consume `RuntimeFilesystemLayout` paths;
+neither reconstructs the journal filename or run path. Swarm tree deletion remains
+with `FilesystemSwarmRemoveStore`, not the reader or writer.
+
+The query preserves existing selection: an explicit nonblank run wins, otherwise
+use the registry's active run, otherwise the most recently modified directory.
+A selected run with no journal does not cause a second selection. This is existing
+file-query behavior, not a new recovery policy. The file reader preserves append
+order, empty files, severity matching, and skipping malformed lines. Missing or
+unreadable files return the existing absence result. Run identifiers now use the
+same layout validation as the writer; invalid run paths are not read and retain
+the endpoint's existing exception-to-500 mapping. No new HTTP error contract is added.
+
+`SwarmJournalController` authorizes access and maps the file query to HTTP; it must
+not discover runs on disk or read/decode journal files. It still contains the
+pre-existing Postgres query/archive/pinning responsibilities: these are outstanding
+F04 debt, not an approved target boundary. Sink selection, severity normalization,
+Postgres behavior and public response shapes are unchanged in this slice.
+
+**Forbidden:** file-query state writes, independent path/default resolution,
+reader-owned retention, changes to append/ACK semantics, or merging Hive and swarm
+journal contracts.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FileSwarmJournalTest`,
+`FileSwarmJournalReaderTest`, `SwarmFileJournalQueryTest`, `SwarmJournalControllerTest`,
+`PostgresJournalStorageTest`, `OrchestratorAdminAuthTest` and existing swarm-tree
+removal tests. PostgreSQL queries, archives and retention remain the next F04 slice.
 
 
 ## RESP-WORK-DELIVERY

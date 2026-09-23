@@ -10,6 +10,7 @@ import java.util.Objects;
  */
 public final class RuntimeFilesystemLayout {
 
+  private static final String SWARM_JOURNAL = "journal.ndjson";
   private static final String OUTPUTS = "outputs";
   private static final String STARTUP_ARTIFACTS = "runtime-artifacts";
   private static final String REMOVE_OPERATIONS = "operations/remove";
@@ -42,6 +43,10 @@ public final class RuntimeFilesystemLayout {
 
   public Path swarmRunDirectory(String swarmId, String runId) {
     return inside(swarmRoot(swarmId).resolve(requireSegment(runId, "runId")));
+  }
+
+  public Path swarmJournalFile(String swarmId, String runId) {
+    return swarmRunDirectory(swarmId, runId).resolve(SWARM_JOURNAL);
   }
 
   public Path workerOutputDirectory(String swarmId, String runId, String workerInstance) {

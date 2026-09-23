@@ -7,8 +7,6 @@ import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -32,6 +30,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+/**
+ * Responsibility: authorize and expose swarm journal HTTP operations; delegate file queries.
+ * Must not: read journal files, reconstruct their paths or mutate swarm lifecycle state.
+ * Contract: RESP-SWARM-FILE-JOURNAL — docs/architecture/runtime-responsibilities.md#resp-swarm-file-journal;
+ * docs/ORCHESTRATOR-REST.md (journal endpoints). Existing Postgres ownership debt remains in F04.
+ */
 @RestController
 @RequestMapping("/api/swarms")
 public class SwarmJournalController {
@@ -42,7 +46,7 @@ public class SwarmJournalController {
     private final JdbcTemplate jdbc;
     private final SwarmStore store;
     private final OrchestratorEndpointAuthorization endpointAuthorization;
-    private final RuntimeFilesystemLayout runtimeLayout;
+    private final SwarmFileJournalQuery fileQuery;
 
     @Value("${pockethive.journal.sink:postgres}")
     private String journalSink;
@@ -51,12 +55,12 @@ public class SwarmJournalController {
                                   JdbcTemplate jdbc,
                                   SwarmStore store,
                                   OrchestratorEndpointAuthorization endpointAuthorization,
-                                  RuntimeFilesystemLayout runtimeLayout) {
+                                  SwarmFileJournalQuery fileQuery) {
         this.json = json;
         this.jdbc = jdbc;
         this.store = store;
         this.endpointAuthorization = endpointAuthorization;
-        this.runtimeLayout = runtimeLayout;
+        this.fileQuery = fileQuery;
     }
 
     /**
@@ -370,83 +374,7 @@ public class SwarmJournalController {
         if ("postgres".equalsIgnoreCase(journalSink)) {
             return readJournalEntriesFromPostgres(swarmId, requestedRunId, severityFilter);
         }
-        Path root = runtimeLayout.localRoot();
-        String cleanedId = sanitizeSegment(swarmId);
-        if (cleanedId == null) {
-            return null;
-        }
-        String runId = resolveRunIdFromRuntimeRoot(root, cleanedId, requestedRunId);
-        if (runId == null) {
-            return null;
-        }
-        Path dir = runtimeLayout.swarmRoot(cleanedId);
-        Path journal = dir.resolve(runId).resolve("journal.ndjson");
-        if (!Files.isRegularFile(journal)) {
-            return null;
-        }
-        List<String> lines;
-        try {
-            lines = Files.readAllLines(journal);
-        } catch (Exception ex) {
-            log.warn("Unable to read journal file {}: {}", journal, ex.getMessage());
-            return null;
-        }
-        if (lines.isEmpty()) {
-            return List.of();
-        }
-        List<Map<String, Object>> result = new ArrayList<>();
-        for (String line : lines) {
-            String trimmed = line == null ? "" : line.trim();
-            if (trimmed.isEmpty()) {
-                continue;
-            }
-            try {
-                Map<String, Object> entry = json.readValue(trimmed, MAP_TYPE);
-                if (matchesSeverityFilter(entry, severityFilter)) {
-                    result.add(entry);
-                }
-            } catch (Exception ex) {
-                log.warn("Skipping malformed journal line in {}: {}", journal, ex.getMessage());
-            }
-        }
-        return List.copyOf(result);
-    }
-
-    private String resolveRunIdFromRuntimeRoot(Path runtimeRoot, String swarmId, String requestedRunId) {
-        String candidate = requestedRunId == null ? null : requestedRunId.trim();
-        if (candidate != null && candidate.isBlank()) {
-            candidate = null;
-        }
-        if (candidate != null) {
-            return candidate;
-        }
-        String active = store.find(swarmId)
-            .map(Swarm::getRunId)
-            .orElse(null);
-        if (active != null && !active.isBlank()) {
-            return active;
-        }
-        try {
-            Path base = runtimeRoot.resolve(swarmId).normalize();
-            if (!base.startsWith(runtimeRoot) || !Files.isDirectory(base)) {
-                return null;
-            }
-            try (var stream = Files.list(base)) {
-                return stream
-                    .filter(Files::isDirectory)
-                    .max(Comparator.comparing(path -> {
-                        try {
-                            return Files.getLastModifiedTime(path).toMillis();
-                        } catch (Exception e) {
-                            return 0L;
-                        }
-                    }))
-                    .map(path -> path.getFileName().toString())
-                    .orElse(null);
-            }
-        } catch (Exception e) {
-            return null;
-        }
+        return fileQuery.read(swarmId, requestedRunId, severityFilter);
     }
 
     private JournalPageResponse readJournalPageFromPostgres(String scope,
@@ -945,14 +873,6 @@ public class SwarmJournalController {
             case "ERROR", "WARN", "INFO" -> normalized;
             default -> throw new IllegalArgumentException("severity must be one of ERROR, WARN, INFO");
         };
-    }
-
-    private static boolean matchesSeverityFilter(Map<String, Object> entry, String severityFilter) {
-        if (severityFilter == null) {
-            return true;
-        }
-        Object severity = entry.get("severity");
-        return severity instanceof String value && severityFilter.equals(value.trim().toUpperCase(Locale.ROOT));
     }
 
     public record JournalRunSummary(String runId, Instant firstTs, Instant lastTs, long entries, boolean pinned) {}
