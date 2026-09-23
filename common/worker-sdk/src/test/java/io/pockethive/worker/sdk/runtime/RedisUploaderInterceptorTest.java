@@ -374,13 +374,16 @@ class RedisUploaderInterceptorTest {
         };
     }
 
-    private static final class RecordingWriterFactory implements RedisPushSupport.RedisWriterFactory {
+    private static final class RecordingWriterFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListWriter> {
 
         private final List<Push> pushes = new ArrayList<>();
 
         @Override
-        public RedisPushSupport.RedisWriter create(io.pockethive.redis.config.RedisConnectionSettings config) {
-            return (list, payload, direction, maxLen) -> pushes.add(new Push(list, payload));
+        public io.pockethive.redis.api.RedisListWriter apply(io.pockethive.redis.config.RedisConnectionSettings config) {
+            return new io.pockethive.redis.api.RedisListWriter() {
+                public void push(String list, String payload, io.pockethive.redis.config.RedisPushDirection direction, int maxLen) { pushes.add(new Push(list, payload)); }
+                public void close() { }
+            };
         }
     }
 

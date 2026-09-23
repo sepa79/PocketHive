@@ -4,6 +4,7 @@ import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
 import io.pockethive.controlplane.spring.ControlPlaneContainerEnvironmentFactory;
 import io.pockethive.controlplane.spring.WorkerSettings;
 import io.pockethive.manager.runtime.WorkerSpec;
+import io.pockethive.docker.DockerRuntimeNames;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SutEndpoint;
@@ -68,8 +69,8 @@ public final class SwarmWorkerSpecFactory {
       environment.put("POCKETHIVE_RUNTIME_IMAGE", bee.image());
     }
     environment.put(
-        "POCKETHIVE_RUNTIME_STACK_NAME",
-        "ph-" + properties.getSwarmId().toLowerCase(Locale.ROOT));
+        DockerRuntimeNames.STACK_NAME_ENV,
+        DockerRuntimeNames.stackName(properties.getSwarmId()));
     applyClickHouseSinkEnvironment(environment);
     String network = controlNetwork.get();
     if (hasText(network)) {

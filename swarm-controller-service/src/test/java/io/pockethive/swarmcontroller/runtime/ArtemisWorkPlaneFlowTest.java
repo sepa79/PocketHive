@@ -158,7 +158,7 @@ class ArtemisWorkPlaneFlowTest {
             var control = spy(new WorkerControlPlaneRuntime(WorkerControlPlane.builder(ControlPlaneCodec.create()).identity(identity).build(),
                 store, new ObjectMapper().findAndRegisterModules(), mock(ControlPlaneEmitter.class), identity,
                 ControlPlaneTestFixtures.workerProperties("swarm", "processor", "instance").getControlPlane(), null,
-                providers.workMutationPolicyRegistry(), parser));
+                providers.workMutationPolicyRegistry(), parser, new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties())));
             var latest = new AtomicReference<WorkerControlPlaneRuntime.WorkerStateSnapshot>();
             control.registerStateListener("worker", latest::set);
             update(control, identity, configuration.bootstrapConfig());

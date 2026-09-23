@@ -57,7 +57,7 @@ class RepositoryImportBoundaryTest {
           "io\\.pockethive\\.(work|worker)\\..*"),
       rule("rabbit-spring-config-owner", outside("common/rabbit-adapter"),
           "org\\.springframework\\.boot\\.autoconfigure\\.amqp\\..*"),
-      rule("redis-client-owner", outside("common/(worker-sdk|templating)|e2e-tests"),
+      rule("redis-client-owner", outside("common/redis-adapter|e2e-tests"),
           "(io\\.lettuce|redis\\.clients)\\..*"),
       rule("artemis-client-owner", outside("common/artemis-adapter"),
           "org\\.apache\\.activemq\\.artemis\\..*"),
@@ -69,8 +69,10 @@ class RepositoryImportBoundaryTest {
           "io\\.pockethive\\.artemis\\..*"),
       rule("rabbit-client-owner", outside("common/rabbit-adapter|e2e-tests"),
           "com\\.rabbitmq\\..*|org\\.springframework\\.amqp\\..*"),
+      rule("docker-implementation-owner", outside("common/docker-client|e2e-tests"),
+          "io\\.pockethive\\.docker\\.(DockerContainerClient|compute\\.Docker(SingleNode|SwarmService)ComputeAdapter)"),
       rule("docker-client-owner",
-          outside("common/docker-client|orchestrator-service|swarm-controller-service|e2e-tests"),
+          outside("common/docker-client|e2e-tests"),
           "com\\.github\\.dockerjava\\..*"),
       rule("clickhouse-client-owner", outside("common/sink-clickhouse|e2e-tests"),
           "(com\\.clickhouse|ru\\.yandex\\.clickhouse)\\..*"),
@@ -106,7 +108,7 @@ class RepositoryImportBoundaryTest {
   void importRulesRejectViolationsAndAllowTheirOwners() {
     assertThat(violations("trigger-service", "import io.lettuce.core.RedisClient;"))
         .containsExactly("1 [redis-client-owner] io.lettuce.core.RedisClient");
-    assertThat(violations("common/worker-sdk", "import io.lettuce.core.RedisClient;")).isEmpty();
+    assertThat(violations("common/redis-adapter", "import io.lettuce.core.RedisClient;")).isEmpty();
     assertThat(violations("common/work-api", "\nimport static org.springframework.util.Assert.*;"))
         .containsExactly("2 [core-no-infrastructure] org.springframework.util.Assert.*");
     assertThat(violations("processor-service", "import com.rabbitmq.client.*;"))

@@ -56,10 +56,14 @@ Headers reference these records under the
 [engineering rules](ENGINEERING_RULES.md#responsibility-header). Use the
 [responsibility workflow](ai/RESPONSIBILITY_WORKFLOW.md) for changes and review evidence.
 
-The [current B01 responsibility records](architecture/runtime-responsibilities.md)
-cover the shared contracts, SDK integration and service consumers touched by the
-current boundary migration. Their current owners and remaining gaps must not be
-confused with the target module layout; adoption is awaiting separate review.
+The [runtime responsibility records](architecture/runtime-responsibilities.md)
+cover shared contracts, SDK integration, adapters and service consumers. Each record
+states its current owners and remaining gaps. In particular,
+[RESP-REDIS-ADAPTER](architecture/runtime-responsibilities.md#resp-redis-adapter) and
+[RESP-DOCKER-RUNTIME](architecture/runtime-responsibilities.md#resp-docker-runtime)
+own the implemented Redis and Docker boundaries. Verification and separately
+deferred refactors are recorded in the repository plan
+`docs/inProgress/functional-module-boundaries.md` (excluded from the published docs site).
 
 The [independent acceptance framework records](architecture/acceptance-tests.md) own
 new test infrastructure. The frozen legacy suite remains isolated until replacement

@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.autoconfigure;
 
+import io.pockethive.worker.sdk.config.ConfiguredSequenceAccess;
+import io.pockethive.worker.sdk.config.RedisSequenceConfiguration;
 import io.pockethive.controlplane.spring.WorkerControlTopology;
 
 import io.pockethive.templating.api.SequenceAccess;
@@ -99,8 +101,13 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(SequenceAccess.class)
-    SequenceAccess sequenceAccess() {
-        return new io.pockethive.templating.ConfiguredRedisSequenceAccess();
+    SequenceAccess sequenceAccess(RedisSequenceConfiguration sequences) {
+        return new ConfiguredSequenceAccess(sequences);
+    }
+
+    @Bean(destroyMethod = "close")
+    RedisSequenceConfiguration redisSequenceConfiguration(RedisSequenceProperties properties) {
+        return new RedisSequenceConfiguration(properties);
     }
 
     @Bean
@@ -211,6 +218,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        WorkerControlPlaneProperties workerControlPlaneProperties,
 	        io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
 	        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser,
+	        RedisSequenceConfiguration sequences,
 	        ObjectProvider<TemplateRenderer> templateRendererProvider,
 	        ObjectProvider<ObjectMapper> objectMapperProvider
 	    ) {
@@ -221,7 +229,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 	        Objects.requireNonNull(controlPlane, "workerControlPlaneProperties.controlPlane must not be null");
 	        TemplateRenderer renderer = templateRendererProvider.getIfAvailable();
 	        return new WorkerControlPlaneRuntime(workerControlPlane, workerStateStore, mapper, controlPlaneEmitter, identity,
-	            controlPlane, renderer, mutationPolicies, workConfigurationParser);
+	            controlPlane, renderer, mutationPolicies, workConfigurationParser, sequences);
 	    }
 
     @Bean
@@ -301,7 +309,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
     @Bean
     @ConditionalOnBean(WorkerControlPlaneRuntime.class)
     @ConditionalOnProperty(prefix = "pockethive.outputs", name = "type", havingValue = "REDIS")
-    WorkOutputFactory redisWorkOutputFactory(
+    RedisWorkOutputFactory redisWorkOutputFactory(
         WorkerControlPlaneRuntime controlPlaneRuntime,
         TemplateRenderer templateRenderer
     ) {
@@ -350,7 +358,7 @@ public class PocketHiveWorkerSdkAutoConfiguration {
 
     @Bean
     @ConditionalOnMissingBean(RedisUploaderInterceptor.class)
-    WorkerInvocationInterceptor redisUploaderInterceptor(TemplateRenderer templateRenderer) {
+    RedisUploaderInterceptor redisUploaderInterceptor(TemplateRenderer templateRenderer) {
         return new RedisUploaderInterceptor(templateRenderer);
     }
 

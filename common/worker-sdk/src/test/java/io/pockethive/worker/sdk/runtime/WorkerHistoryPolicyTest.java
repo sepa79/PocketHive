@@ -59,7 +59,7 @@ class WorkerHistoryPolicyTest {
             IDENTITY.swarmId(), IDENTITY.role(), IDENTITY.instanceId());
         var work = new CurrentWorkConfigurationProviders();
         runtime = new WorkerControlPlaneRuntime(control, states, JSON, emitter, IDENTITY,
-            properties.getControlPlane(), templates, work.workMutationPolicyRegistry(), work.workConfigurationParser());
+            properties.getControlPlane(), templates, work.workMutationPolicyRegistry(), work.workConfigurationParser(), new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
     }
 
     @Test void usesFullWhenScenarioOmitsPolicy() throws Exception {

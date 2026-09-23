@@ -201,9 +201,12 @@ including profile serialization and preparation round trips.
 
 ## RESP-AUTH-TOKEN-STORE
 
-**Current module(s):** `common/auth-contracts`, `common/worker-sdk`.
+**Current module(s):** `common/auth-contracts`, `common/redis-adapter`;
+`common/worker-sdk` composes the store for AuthRuntime.
 
-TokenStore owns the worker token storage/claim port; token keys and claim/result values define its shared contract. RedisTokenStore remains its Redis implementation.
+TokenStore owns the worker token storage/claim port; token keys and claim/result
+values define its shared contract. `RedisTokenStore` in redis-adapter implements
+that port through the shared `RedisConnections` owner (RESP-REDIS-ADAPTER).
 
 AuthRuntime calls the selected store for cached credentials and refresh claims; profile validation is outside the store contract.
 
@@ -213,7 +216,8 @@ AuthRuntime calls the selected store for cached credentials and refresh claims; 
 
 **Verification entrypoints:** `RedisTokenStoreTest`, `AuthRuntimeTest`.
 
-**Migration status:** Port/values moved in B01. Redis implementation and connection ownership remain B06.
+**Migration status:** Port/values moved in B01; implementation and connection
+ownership transferred in F01. Auth profile/refresh policy remains outside the adapter.
 
 ## RESP-OBS-CONTEXT
 
@@ -297,19 +301,34 @@ SDK and service consumers supply templates/context. Sequence calls use the injec
 
 ## RESP-TEMPLATE-SEQUENCE
 
-**Current module(s):** `common/templating-api`, `common/templating`.
+**Current modules:** `common/templating-api`, `common/templating`, `common/redis-adapter`, `common/worker-sdk`.
 
-SequenceAccess defines next/reset; SequenceFunctions maps expression arguments; ConfiguredRedisSequenceAccess delegates to the existing RedisSequenceGenerator. DisabledSequenceAccess rejects effects explicitly.
+SequenceAccess defines next/reset; SequenceFunctions maps expression arguments.
+Pebble/SpEL use the injected port. SDK ConfiguredSequenceAccess delegates to one
+application-owned RedisSequenceConfiguration, which selects explicitly configured
+RedisSequenceGenerator instances from redis-adapter. Worker configuration updates
+validate through RedisConfigurationParser before changing that same selection.
+RedisSequenceGenerator owns INCR/DEL and the sequence key prefix; SequenceFormatter
+and its internal pattern/token/mode types own formatting without Redis effects.
+DisabledSequenceAccess rejects effects explicitly.
 
-Pebble/SpEL invoke the selected port. RedisSequenceConfiguration/RedisSequenceGenerator still own existing global configuration/generation outside the API.
+**Forbidden:** process-global connection selection, another generator, hidden renderer
+constructors selecting Redis, or switching from a disabled port to Redis.
 
-**Forbidden:** create a second generator or switch from a disabled port to Redis.
+**Required effect:** application configuration changes cannot redirect another
+application's sequence requests. Invalid configuration leaves accepted selection intact.
+Formatting, offsets, wrapping and reset retain existing behavior.
 
-**Required effect:** Arguments and reset reach the injected port; selecting DisabledSequenceAccess never activates Redis.
+**Approved legacy exception (2026-09-22):** `redis.enabled=false` skips supplied
+startup settings but sequences still use canonical RedisSequenceProperties defaults.
+It does not disable sequence effects; later validated updates still apply. The human
+explicitly approved preserving this behavior during extraction; it is not a general
+permission to introduce defaults or fallback paths.
 
-**Verification entrypoints:** `SequencePortRenderingTest` (argument/reset behavior and effect-free syntax validation).
-
-**Migration status:** B01 injects the port on the SDK renderer path. Global Redis generator/configuration removal remains B06. Convenience constructors in RedisPushSupport, RedisUploaderInterceptor and ProcessorWorkerImpl still construct a configured sequence adapter directly; they do not prove application-wide selection isolation.
+**Verification:** SequencePortRenderingTest, SequenceFormatterTest,
+RedisSequenceConfigurationTest (including actual Redis effects and isolated selection).
+**Migration status:** F01 removes the global sequence configuration/cache and hidden
+configured-renderer constructors. The SDK owner closes all generators at shutdown.
 
 ## RESP-CP-COMPOSITION
 
@@ -593,9 +612,9 @@ and the sequence connection unchanged; subsequent commands use the last accepted
 RedisConnectionProperties is the shared SDK bootstrap carrier; dataset/output/sequence
 properties delegate to it. Dataset, output, uploader, sequence and token consumers use
 the resolved contract. Scenario Manager projects the same rules for selected Work IO;
-full token/sequence/capture authoring remains open. Redis client/URI construction stays in the existing
-adapters pending B06. Existing sequence bootstrap defaults, global sequence ownership,
-token/sequence scope composition and producer migration remain open B02/B06 work.
+full token/sequence/capture authoring remains open. RESP-REDIS-ADAPTER owns all
+Redis client/URI construction. Sequence scope and its approved bootstrap semantics
+are defined by RESP-TEMPLATE-SEQUENCE; no process-global connection selection remains.
 
 RedisConnectionEnvironmentCodec in `common/redis-config`, namespace
 `io.pockethive.redis.config`, owns encoding connection candidates for
@@ -1457,7 +1476,7 @@ Redis input properties do not supply an independent startup flag.
 
 **Current module(s):** `common/worker-sdk`.
 
-RedisPushSupport owns route/payload selection and Redis list write execution; RedisWorkOutput applies output policy, while RedisUploaderInterceptor applies diagnostic-capture policy.
+RedisPushSupport owns route/payload selection and delegates list writes to RedisListWriter; RedisWorkOutput applies output policy, while RedisUploaderInterceptor applies diagnostic-capture policy.
 
 Both consumers delegate the push operation; RedisWorkOutputFactory wires the selected output. Diagnostic capture and business output are distinct uses, not duplicate authority for one result.
 
@@ -1470,9 +1489,11 @@ Both consumers delegate the push operation; RedisWorkOutputFactory wires the sel
 **Migration status:** Write settings and their enum decoding now belong to
 RESP-WORK-REDIS-WRITE-SETTINGS; destination validation belongs to RESP-WORK-REDIS-TARGETS.
 RedisPushSupport consumes their resolved products and RESP-REDIS-CONNECTION-SETTINGS.
-Its nested ConnectionConfig was removed. Connection defaults, scope composition and
-remaining nested writer/request contracts remain B02/B06 work; complete Redis settings
-are not yet consolidated.
+RedisPushRequest carries the resolved selection inputs; RedisListWriter belongs to
+redis-adapter. RedisWorkOutputFactory and RedisUploaderInterceptor own their respective
+RedisPushSupport lifetimes; Spring shutdown closes every cached writer, including
+writers retained across settings updates. Push and trim remain separate operations.
+No per-message close, retry or failure-policy change is introduced.
 
 ## RESP-WORK-NONE-OUTPUT
 
@@ -2637,11 +2658,12 @@ diagnostic sink while sent requests and received responses remain unchanged.
 
 ## RESP-WORK-REDIS-DEBUG-CAPTURE
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/redis-adapter`.
 
 RedisDebugCaptureStore owns expiring diagnostic value writes and the lifetime of
 its lazily allocated Redis client and single shared connection. It consumes
-canonical RedisConnectionSettings. Writes and close are serialized; close is
+canonical RedisConnectionSettings and delegates client realization to
+RedisConnections (RESP-REDIS-ADAPTER). Writes and close are serialized; close is
 idempotent and attempts connection and client cleanup even if one fails. A failed
 connection attempt releases acquired resources. No capture allocates resources
 until an actual write; a closed owner cannot allocate again. Write failure remains
@@ -2662,7 +2684,8 @@ are released by worker shutdown without deleting captured records before TTL.
 HttpSequenceDebugCapture owns the existing capture key and JSON projection,
 including configured request/response inclusion and body truncation. Header
 projection delegates to HttpHeaderRedactor. HttpSequenceRunner retains capture
-selection and journey budgets, delegates expiring storage to the SDK owner and
+selection and journey budgets, delegates expiring storage to
+RESP-WORK-REDIS-DEBUG-CAPTURE in redis-adapter and
 closes it. HttpSequenceWorkerImpl owns runner and pooled HTTP client shutdown;
 both resources are attempted even if one close fails.
 
@@ -2673,3 +2696,76 @@ auth schemas or profile resolution, or change debug capture defaults.
 credential/session headers are redacted, and worker-owned resources have a close path.
 
 **Verification entrypoints:** `HttpSequenceDebugCaptureTest`, `RedisDebugCaptureStoreTest`.
+
+## RESP-REDIS-ADAPTER
+
+**Current implementation transfer:** F01, common/redis-adapter.
+
+RedisConnections is the single settings-to-client realization owner. Redis list
+read/write, token storage, expiring diagnostics and sequences execute inside this
+module. Only validated redis-config settings enter it; raw Lettuce clients and
+command callbacks are internal. Existing token/sequence ports remain canonical.
+List writers now have an explicit close operation owned by their SDK factory or
+interceptor; closing never changes message publication, routing or retry policy.
+TokenStore.listDueRefreshes lists candidates, not leases; claimRefresh alone claims.
+
+SDK RedisSequenceConfiguration composes application-owned sequence instances and
+validated updates; no process-global selection remains. Formatting semantics,
+sequence key construction, token claims, diagnostic best-effort writes and list
+push-then-trim ordering are preserved. Rejected configuration is not applied.
+
+**Forbidden:** SDK/templating/service Lettuce imports; duplicate connection parsers;
+implicit global Redis selection; converting diagnostic failure to business failure.
+
+**Verification:** adapter operation/lifetime tests and SDK/HTTP Sequence integration;
+RepositoryImportBoundaryTest rejects direct vendor imports outside the adapter.
+
+Redis resource shutdown is terminal: the SDK writer and sequence owners allow
+concurrent operations while open, wait for operations already inside their API
+before releasing clients, and reject subsequent operations without creating clients.
+This does not drain the worker executor or change stop/ACK/redelivery semantics.
+An accepted WorkItem reaching Redis only after this owner has closed receives the
+existing caller's operation-error handling. Cleanup still attempts all cached resources.
+
+## RESP-DOCKER-RUNTIME
+
+**Current modules:** `common/manager-sdk`, `common/docker-client`, `orchestrator-service`,
+`swarm-controller-service`.
+
+`DockerRuntimeClient` owns raw Docker inventory, inspect, log retrieval and explicit
+force-container/service removal operations. `DockerRuntimeResource` is its read-only
+inventory projection; `DockerRuntimeKind` identifies the Docker resource kind.
+`DockerRuntimeAdapter` maps this projection to existing Orchestrator ports and
+selects the already-resolved compute mode. It does not issue Docker commands.
+
+**Forbidden:** decide cleanup eligibility, approvals, lifecycle completion or change
+compute selection. Removal exceptions propagate unchanged; command completion is
+not a new domain-level verification of absence. Inspect retains the application
+ObjectMapper configuration and existing REST response shape. `ComputeRuntimeDebugPort`
+and its read-only `RuntimeInspection`, `RuntimeInspectionState`, `RuntimeMountInspection`
+values live in manager-sdk. `DockerInspectMapper` alone interprets Docker inspect
+fields, including existing alias precedence and scalar values. No raw Docker inspect
+map leaves docker-client. `RuntimeInspectResponseMapper` in Orchestrator owns HTTP
+response fields and source redaction; target eligibility remains in RuntimeDebugService.
+The mount projection records whether propagation was reported, preserving the existing
+container field versus service omission. Existing container RW inversion is preserved
+as diagnostic behavior; correcting it is not part of this extraction.
+
+**Connection, compute and naming ownership:** `DockerEngine` owns one application-scoped connection
+and construction of compute/runtime implementations. `DockerConnections` owns SDK
+configuration and client realization. Orchestrator retains environment-based daemon
+configuration and AUTO manager detection; Controller retains explicit host/socket
+selection and requires a concrete mode. No new probing or selection fallback is added.
+`ComputeHost` exposes network resolution/image pull without container or SDK types;
+service lifecycle consumers receive this port and `ComputeAdapter` rather than raw clients.
+`DockerControllerEnvironment` owns Docker-specific controller ENV and socket-mount
+encoding. `DockerRuntimeNames` owns the existing stack-name rule; all four consumers
+use its result, including status metadata and Docker labels. Existing trimming at
+caller boundaries stays unchanged. Docker SDK/model/implementation imports are forbidden
+outside docker-client (legacy E2E remains explicitly excluded). The uncalled
+DockerWorkloadProvisioner/WorkloadProvisioner path is removed.
+
+Lifecycle decisions, service-drain behavior, cleanup approvals/postconditions, image
+repository resolution and CP transport ownership remain at their existing owners.
+ClickHouse ENV, journal layout and worker freshness are explicitly deferred to F05,
+F04 and F08 respectively. Implementation/verification progress is recorded in the plan.

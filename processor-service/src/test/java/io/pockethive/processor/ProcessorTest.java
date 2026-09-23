@@ -96,7 +96,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -161,7 +161,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -222,7 +222,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("http://sut/api"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut/api");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -251,7 +251,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -306,7 +306,7 @@ class ProcessorTest {
             insecureClient,
             insecureClient,
             clock
-        );
+        , new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
 
         when(verifiedClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
             HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
@@ -335,7 +335,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         TestWorkerContext context = new TestWorkerContext(null);
 
         WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
@@ -369,7 +369,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -423,7 +423,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
         injectGlobalTransport(worker, "TCP", new TcpTransport() {
             @Override
@@ -481,7 +481,7 @@ class ProcessorTest {
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
             Clock clock = Clock.fixed(Instant.parse("2024-02-20T12:00:00Z"), ZoneOffset.UTC);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
             ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
@@ -522,7 +522,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://iso.example:5000"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
         injectGlobalTransport(worker, "ISO8583", new TcpTransport() {
             @Override
@@ -571,7 +571,7 @@ class ProcessorTest {
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
             ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
@@ -612,7 +612,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -661,7 +661,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -696,7 +696,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -734,7 +734,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -773,7 +773,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -790,7 +790,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -811,7 +811,7 @@ class ProcessorTest {
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
             HttpClient httpClient = mock(HttpClient.class);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
 
             TcpTransportConfig transport = new TcpTransportConfig(
                 "socket",
@@ -846,7 +846,7 @@ class ProcessorTest {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
         HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -874,7 +874,7 @@ class ProcessorTest {
         properties.setConfig(processorConfig("http://sut"));
         HttpClient httpClient = mock(HttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -893,7 +893,7 @@ class ProcessorTest {
     void perThreadClientUsesSystemProxyRoutePlanner() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut"));
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE));
 
         Field handlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
         handlersField.setAccessible(true);

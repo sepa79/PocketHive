@@ -7,8 +7,9 @@ import io.pockethive.controlplane.spring.ControllerSettings;
 import io.pockethive.controlplane.spring.MetricsSettings;
 import io.pockethive.controlplane.topology.ControlQueueDescriptor;
 import io.pockethive.controlplane.topology.SwarmControllerControlPlaneTopologyDescriptor;
-import io.pockethive.docker.DockerContainerClient;
-import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
+import io.pockethive.manager.ports.ComputeHost;
+import io.pockethive.docker.DockerControllerEnvironment;
+import io.pockethive.docker.DockerRuntimeNames;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
@@ -62,7 +63,7 @@ public class ContainerLifecycleManager {
     private static final Logger log = LoggerFactory.getLogger(ContainerLifecycleManager.class);
     private static final String SWARM_CONTROLLER_ROLE = "swarm-controller";
     private final RuntimeFilesystemMount runtimeFilesystemMount;
-    private final DockerContainerClient docker;
+    private final ComputeHost docker;
     private final ComputeAdapter computeAdapter;
     private final SwarmStore store;
     private final RabbitResources amqp;
@@ -88,7 +89,7 @@ public class ContainerLifecycleManager {
 
     @Autowired
     public ContainerLifecycleManager(
-        DockerContainerClient docker,
+        ComputeHost docker,
         ComputeAdapter computeAdapter,
         SwarmStore store,
         @org.springframework.beans.factory.annotation.Qualifier(RabbitResourceBeans.CONTROL) RabbitResources amqp,
@@ -142,8 +143,7 @@ public class ContainerLifecycleManager {
         ControllerSettings controllerSettings =
             new ControllerSettings(
                 metrics,
-                resolvedRunId,
-                properties.getDocker().getSocketPath());
+                resolvedRunId);
         Map<String, String> env = new LinkedHashMap<>(
             ControlPlaneContainerEnvironmentFactory.controllerEnvironment(
                 resolvedSwarmId,
@@ -182,11 +182,9 @@ public class ContainerLifecycleManager {
             env.put("CONTROL_NETWORK", net);
         }
         String dockerSocket = properties.getDocker().getSocketPath();
-        env.put("DOCKER_SOCKET_PATH", dockerSocket);
-        env.put("DOCKER_HOST", "unix://" + dockerSocket);
         resolvedAdapterType = requireConcreteAdapterType(computeAdapter.type());
-        env.put("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_COMPUTE_ADAPTER", resolvedAdapterType.name());
-        putEnvIfMissing(env, DockerSwarmServiceComputeAdapter.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
+        env.putAll(DockerControllerEnvironment.encode(dockerSocket, resolvedAdapterType));
+        putEnvIfMissing(env, DockerControllerEnvironment.PLACEMENT_CONSTRAINTS_ENV, normalizeRuntimeRoot(swarmPlacementConstraints));
         env.put("POCKETHIVE_RUNTIME_IMAGE", resolvedImage);
         env.put("POCKETHIVE_TEMPLATE_ID", requireText(templateMetadata.templateId(), "templateId"));
         env.put(
@@ -195,7 +193,7 @@ public class ContainerLifecycleManager {
         env.put(
             SwarmStartupArtifactContract.SHA256_ENV,
             startupArtifact.sha256());
-        env.put("POCKETHIVE_RUNTIME_STACK_NAME", "ph-" + resolvedSwarmId.toLowerCase(java.util.Locale.ROOT));
+        env.put(DockerRuntimeNames.STACK_NAME_ENV, DockerRuntimeNames.stackName(resolvedSwarmId));
         putEnvIfMissing(env, "POCKETHIVE_SUT_ID", normalizeRuntimeRoot(sutId));
         env.put("POCKETHIVE_NETWORK_MODE", resolvedNetworkMode.name());
         putEnvIfMissing(env, "POCKETHIVE_NETWORK_PROFILE_ID", normalizeRuntimeRoot(networkProfileId));
@@ -209,7 +207,7 @@ public class ContainerLifecycleManager {
             resolvedSwarmId, resolvedInstance, resolvedImage, resolvedRunId);
         log.info("docker env: {}", redactEnv(env));
         java.util.List<String> volumes = new java.util.ArrayList<>();
-        volumes.add(dockerSocket + ":" + dockerSocket);
+        volumes.add(DockerControllerEnvironment.socketMount(dockerSocket));
         volumes.add(runtimeFilesystemMount.volume());
         ManagerSpec managerSpec = new ManagerSpec(
             resolvedInstance,

@@ -20,7 +20,7 @@ import static org.mockito.Mockito.when;
 
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
 import io.pockethive.controlplane.filesystem.RuntimeFilesystemMount;
-import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.manager.ports.ComputeHost;
 import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ManagerSpec;
@@ -57,7 +57,7 @@ import io.pockethive.rabbit.api.RabbitConnectionSettings;
 class ContainerLifecycleManagerTest {
 
     @Mock
-    DockerContainerClient docker;
+    ComputeHost docker;
 
     @Mock
     ComputeAdapter computeAdapter;
