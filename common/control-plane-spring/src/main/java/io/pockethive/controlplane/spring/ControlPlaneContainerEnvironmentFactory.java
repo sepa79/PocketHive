@@ -56,9 +56,6 @@ public final class ControlPlaneContainerEnvironmentFactory {
             managerRole,
             resolvedInstance);
         applyControlPlaneMetricsSettings(env, settings.metrics());
-        env.put(
-            "POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH",
-            requireSetting(settings.dockerSocketPath(), "pockethive.control-plane.orchestrator.docker.socket-path"));
         return env;
     }
 

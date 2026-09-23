@@ -1,9 +1,8 @@
 # Functional module boundaries — next refactors
 
-Status: refreshed 2026-09-22 against `18987afc`, after Artemis and acceptance closeout.
-This is the next-work plan, not additional implementation scope for PR #519.
-The user authorized refreshing and publishing this plan; implementation starts only
-when the next slice is selected. Historical analysis remains in Git history.
+Status: F01 implemented in `9a12dd50`; F03 implemented on 2026-09-23 on
+`codex/redis-adapter`, by user request. This work follows PR #519. Historical
+baseline analysis remains in Git history.
 
 ## Objective and rules
 
@@ -58,10 +57,10 @@ separated from historical findings that still require revalidation.
 
 | Area | Current evidence | Next boundary |
 | --- | --- | --- |
-| Redis | Lettuce in SDK `RedisDataSetWorkInput`, `RedisPushSupport`, `RedisTokenStore`, `RedisDebugCaptureStore`, and templating `RedisSequenceGenerator` | One Redis technology owner, existing settings owner, domain-specific operation ports |
+| Redis | All five paths use `common/redis-adapter`; settings remain in `redis-config` | F01 implemented; see Redis extraction evidence |
 | Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
-| Sequences | `ConfiguredRedisSequenceAccess` calls `RedisSequenceGenerator.getDefaultInstance()` | Explicit SequenceAccess composition and owned client lifetime |
-| Docker | Raw Docker imports in both service configurations, `DockerRuntimeAdapter`, `SwarmLifecycleManager`, `DockerWorkloadProvisioner`, and `docker-client` | Existing docker-client owns client realization, inventory and operations; applications retain lifecycle decisions |
+| Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
+| Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
 | Journal/files | `SwarmJournalController` and `FileSwarmJournal` each assemble `journal.ndjson`; RuntimeFilesystemLayout already owns swarm/run directories | Extend the layout owner; journal API owns storage operations, REST delegates |
 | ClickHouse | `ClickHouseMetricsSink` and `ClickHouseTxOutcomeSink` each construct HTTP clients and INSERT queries | Existing sink-clickhouse owns transport mechanics, separate explicit domain/buffering policies |
 | Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
@@ -82,6 +81,9 @@ work need behavior decisions first. This ordering does not authorize parallel
 changes across those areas or require every area to be finished for the next PR.
 
 ### F01 — Redis, one PR closing the shared technology responsibility
+
+Implemented in `9a12dd50`; [extraction status and evidence](redis-adapter-extraction.md).
+The requirements below describe the completed extraction, not a fresh task.
 
 Deliver the Redis extraction as **one PR covering all five consumers**. The steps
 below are implementation checkpoints within that PR, not independently mergeable
@@ -151,17 +153,54 @@ broad SDK rewrite and a new generic connection framework are not prerequisites.
 
 ### F03 — Docker/compute
 
-Extend docker-client. Move client construction and raw inventory/inspect/removal
-mechanics behind neutral specs/results; no raw Docker client/models escape the API.
-Preserve explicit compute modes. Service coordinators retain when/why to provision,
-operation state and convergence. Transfer one complete operation path per PR.
+Implemented after Redis extraction commit `9a12dd50`.
+Ownership is defined by [RESP-DOCKER-RUNTIME](../architecture/runtime-responsibilities.md#resp-docker-runtime).
 
-Gate: selected consumers use the API, bypass constructors/imports disappear, and
-create/use/inspect/remove behavior is verified. Orphan removal postconditions and
-AUTO-selection disagreements require separate decisions; moving code cannot silently
-change success semantics or bypass the existing governed cleanup boundary.
+- `DockerEngine` owns connection lifetime and compute/runtime construction;
+  `DockerConnections` realizes SDK configuration. Orchestrator and Controller receive
+  `ComputeAdapter` and `ComputeHost`; neither constructs raw SDK clients.
+- `DockerRuntimeClient` owns inventory, inspect, logs and explicit force removal.
+  `DockerInspectMapper` interprets Docker fields and returns manager-sdk's neutral
+  `RuntimeInspection`. Orchestrator retains response construction/redaction and
+  cleanup eligibility, approvals and verified removal postconditions.
+- `DockerControllerEnvironment` owns Docker ENV/socket encoding. `DockerRuntimeNames`
+  replaces all four stack-name formulas used by manager launch, worker launch,
+  controller status and Docker stack labels.
+- The uncalled `DockerWorkloadProvisioner`/`WorkloadProvisioner` path was removed.
+  Existing import restrictions now reject raw Docker SDK and concrete operation
+  implementation imports from both services; legacy E2E keeps its existing exception.
+
+Preserved behavior: Orchestrator AUTO manager detection, Controller concrete-mode
+selection, connection precedence, lifecycle stop/remove and service-drain policy,
+force-removal exceptions, inspect aliases/nulls/redaction and historical RW diagnostic
+calculation. Naming still yields `ph-` plus the lowercased swarm ID; caller-side
+trimming remains unchanged. No ACK, retry, cleanup approval or lifecycle timing change.
+
+Verification on 2026-09-23: **186 tests passed, zero failures/errors/skips** across
+focused Docker/runtime/lifecycle/environment/architecture tests and the existing
+Orchestrator creation and Controller lifecycle integration tests (four integration
+cases). All affected reactor modules compiled, including tests. Commands:
+
+```sh
+mvn -q -pl orchestrator-service,swarm-controller-service -am test -Dtest=Docker*Test,Runtime*Test,ContainerLifecycleManagerTest,SwarmLifecycleManagerTest,SwarmWorkerSpecFactoryTest,SwarmControllerRuntimeMetadataTest,ControlPlaneContainerEnvironmentFactoryTest,RepositoryImportBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false
+mvn -q -pl orchestrator-service,swarm-controller-service -am test -Dtest=DockerSingleNodeComputeAdapterTest,DockerSwarmServiceComputeAdapterTest,RepositoryImportBoundaryTest,SwarmCreationMock1E2ETest,SwarmLifecycleManagerIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Counts include each final test case once across both runs. Adapter effects are verified
+against Docker command doubles; component integrations exercise service wiring and
+control-plane collaboration. No fresh deployed Docker/Swarm acceptance was run for
+F03. Separate source review on 2026-09-23 found no actionable issues in the complete
+change set, including connection/compute composition, naming, diagnostics and removal.
+All six review passes were recorded in HiveMind; deployed acceptance was not rerun.
+
+The remaining startup audit findings are plan-only under F04, F05 and F08 below,
+as explicitly requested. They are not prerequisites for completing this F03 slice.
 
 ### F04 — Runtime filesystem and journal
+
+Confirmed on the startup/read paths: FileSwarmJournal and SwarmJournalController
+both own `journal.ndjson`; the reader also reconstructs the run directory. Fix in
+this dedicated refactor, not F03.
 
 Extend RuntimeFilesystemLayout for journal artifact paths; remove reader/writer
 path reconstruction. Then extract journal append/query/retention capabilities,
@@ -173,6 +212,11 @@ follow one owner contract; REST maps requests and delegates; retention has one w
 Do not reopen the completed exporter-directory fix.
 
 ### F05 — ClickHouse
+
+Add the confirmed duplicate ENV export in ContainerLifecycleManager and
+SwarmWorkerSpecFactory to this dedicated refactor. One sink-owned codec must export
+endpoint/table/credentials/timeouts/batching; both launch paths consume it, retaining
+the current precedence and values. This is plan-only during F03.
 
 Move repeated HTTP/auth/INSERT construction into sink-clickhouse. Metrics and
 transaction event construction stay with their domain owners. Their flush,
@@ -209,6 +253,12 @@ changing them. Do not equate thresholds or merge state machines by convenience.
 its historical O1/O2 review status must be checked against current code/evidence
 before selecting further fixes. This refresh does not accept or reopen that work.
 
+Startup audit follow-up for F08: worker status observations write timestamps in both
+SwarmReadinessTracker and SwarmWorkersAggregator, then independently calculate health
+and stale with separate 15s thresholds. Establish one observation/freshness owner
+and derived metrics/worker-list projections in the dedicated state refactor; do not
+change lifecycle timing during F03.
+
 ## Required completion evidence for every PR
 
 1. Name the responsibility, existing owners/callers and supported API before edits.
@@ -223,7 +273,7 @@ before selecting further fixes. This refresh does not accept or reopen that work
 6. Review actual call paths and search the whole repository for competing owners.
    Record all six required review passes and explicit unverified/deferred scope.
 
-Plan review: this update removes stale prerequisites, preserves existing owners,
-adds the omitted Redis capture consumer and splits implementation from behavioral
-redesign. No production code, public contract, dependencies or deployment changed.
-Implementation is not authorized merely because this plan ships in PR #519.
+Original plan review (PR #519): that update removed stale prerequisites, preserved existing owners,
+added the omitted Redis capture consumer and split implementation from behavioral
+redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
+F01 and F03 were subsequently authorized explicitly by the user; the other entries remain plans.

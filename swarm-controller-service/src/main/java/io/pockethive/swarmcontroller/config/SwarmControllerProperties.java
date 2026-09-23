@@ -181,10 +181,6 @@ public class SwarmControllerProperties {
             return socketPath;
         }
 
-        public boolean hasHost() {
-            return host != null && !host.isBlank();
-        }
-
         public ComputeAdapterType computeAdapter() {
             return computeAdapter;
         }

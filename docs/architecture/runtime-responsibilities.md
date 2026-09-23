@@ -2720,3 +2720,46 @@ before releasing clients, and reject subsequent operations without creating clie
 This does not drain the worker executor or change stop/ACK/redelivery semantics.
 An accepted WorkItem reaching Redis only after this owner has closed receives the
 existing caller's operation-error handling. Cleanup still attempts all cached resources.
+
+## RESP-DOCKER-RUNTIME
+
+**Current modules:** `common/manager-sdk`, `common/docker-client`, `orchestrator-service`,
+`swarm-controller-service`.
+
+`DockerRuntimeClient` owns raw Docker inventory, inspect, log retrieval and explicit
+force-container/service removal operations. `DockerRuntimeResource` is its read-only
+inventory projection; `DockerRuntimeKind` identifies the Docker resource kind.
+`DockerRuntimeAdapter` maps this projection to existing Orchestrator ports and
+selects the already-resolved compute mode. It does not issue Docker commands.
+
+**Forbidden:** decide cleanup eligibility, approvals, lifecycle completion or change
+compute selection. Removal exceptions propagate unchanged; command completion is
+not a new domain-level verification of absence. Inspect retains the application
+ObjectMapper configuration and existing REST response shape. `ComputeRuntimeDebugPort`
+and its read-only `RuntimeInspection`, `RuntimeInspectionState`, `RuntimeMountInspection`
+values live in manager-sdk. `DockerInspectMapper` alone interprets Docker inspect
+fields, including existing alias precedence and scalar values. No raw Docker inspect
+map leaves docker-client. `RuntimeInspectResponseMapper` in Orchestrator owns HTTP
+response fields and source redaction; target eligibility remains in RuntimeDebugService.
+The mount projection records whether propagation was reported, preserving the existing
+container field versus service omission. Existing container RW inversion is preserved
+as diagnostic behavior; correcting it is not part of this extraction.
+
+**Connection, compute and naming ownership:** `DockerEngine` owns one application-scoped connection
+and construction of compute/runtime implementations. `DockerConnections` owns SDK
+configuration and client realization. Orchestrator retains environment-based daemon
+configuration and AUTO manager detection; Controller retains explicit host/socket
+selection and requires a concrete mode. No new probing or selection fallback is added.
+`ComputeHost` exposes network resolution/image pull without container or SDK types;
+service lifecycle consumers receive this port and `ComputeAdapter` rather than raw clients.
+`DockerControllerEnvironment` owns Docker-specific controller ENV and socket-mount
+encoding. `DockerRuntimeNames` owns the existing stack-name rule; all four consumers
+use its result, including status metadata and Docker labels. Existing trimming at
+caller boundaries stays unchanged. Docker SDK/model/implementation imports are forbidden
+outside docker-client (legacy E2E remains explicitly excluded). The uncalled
+DockerWorkloadProvisioner/WorkloadProvisioner path is removed.
+
+Lifecycle decisions, service-drain behavior, cleanup approvals/postconditions, image
+repository resolution and CP transport ownership remain at their existing owners.
+ClickHouse ENV, journal layout and worker freshness are explicitly deferred to F05,
+F04 and F08 respectively. Implementation/verification progress is recorded in the plan.
