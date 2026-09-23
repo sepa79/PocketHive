@@ -1,6 +1,9 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.journal.api.JournalEventQueries;
+import io.pockethive.journal.api.JournalRunQueries;
+import io.pockethive.journal.api.JournalRunMetadata;
 import io.pockethive.orchestrator.infra.schema.ControlPlaneSchemaBundle;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -72,9 +75,7 @@ class OrchestratorAdminAuthTest {
     void hiveJournalPageRequiresDeploymentReadForGlobalQuery() {
         SwarmStore store = storeWithSwarm("demo-swarm", "demo/tpl-1", "demo");
         JournalController controller = new JournalController(
-            mock(JdbcTemplate.class),
-            mapper,
-            endpointAuthorization(store));
+            endpointAuthorization(store), mock(JournalEventQueries.class), mock(JournalRunQueries.class), mock(JournalRunMetadata.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {
@@ -93,11 +94,10 @@ class OrchestratorAdminAuthTest {
     void swarmJournalRejectsUserOutsideScope() {
         SwarmStore store = storeWithSwarm("prod-swarm", "prod/tpl-1", "prod");
         SwarmJournalController controller = new SwarmJournalController(
-            mapper,
-            mock(JdbcTemplate.class),
-            store,
+            mock(SwarmJournalPinning.class),
             endpointAuthorization(store),
-            mock(SwarmFileJournalQuery.class));
+            mock(SwarmFileJournalQuery.class),
+            mock(SwarmStoredJournalQuery.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {

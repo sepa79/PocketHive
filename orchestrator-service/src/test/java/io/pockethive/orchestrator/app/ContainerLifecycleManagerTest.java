@@ -29,7 +29,7 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.swarm.model.lifecycle.ControllerState;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
-import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.orchestrator.app.JournalRunRegistration;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifest;
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
@@ -66,7 +66,7 @@ class ContainerLifecycleManagerTest {
     RabbitResources amqp;
 
     @Mock
-    JournalRunMetadataWriter runMetadataWriter;
+    JournalRunRegistration runMetadataWriter;
 
     @BeforeEach
     void setUpComputeAdapterType() {

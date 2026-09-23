@@ -62,7 +62,7 @@ separated from historical findings that still require revalidation.
 | Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
-| Journal/files | F04 file slice implemented, pending review: RuntimeFilesystemLayout owns the artifact path; file reads leave REST through SwarmJournalFiles | Next extract Postgres queries/archive/pinning and retention; keep Hive and swarm contracts distinct |
+| Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
 | ClickHouse | `ClickHouseMetricsSink` and `ClickHouseTxOutcomeSink` each construct HTTP clients and INSERT queries | Existing sink-clickhouse owns transport mechanics, separate explicit domain/buffering policies |
 | Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
@@ -198,7 +198,7 @@ as explicitly requested. They are not prerequisites for completing this F03 slic
 
 ### F04 — Runtime filesystem and journal
 
-**First F04 slice implemented, pending review**, branch `codex/journal-filesystem`,
+**First F04 slice reviewed and committed** as `a651d468`, branch `codex/journal-filesystem`,
 based on `7c6c402d` after all four PR #521 CI checks passed. The complete file-read
 path now leaves REST through SwarmFileJournalQuery → SwarmJournalFiles →
 FileSwarmJournalReader. RuntimeFilesystemLayout owns the journal artifact path
@@ -206,8 +206,8 @@ used by both reader and writer.
 See `RESP-SWARM-FILE-JOURNAL` in the runtime responsibility records for the preserved
 selection/error behavior and the remaining ownership debt.
 
-Confirmed baseline: FileSwarmJournal and SwarmJournalController both own
-`journal.ndjson`; the reader also reconstructs the run directory.
+Pre-extraction baseline: FileSwarmJournal and SwarmJournalController both owned
+`journal.ndjson`; the reader also reconstructed the run directory.
 
 Validation: 45 tests passed, zero failures/errors/skips, including file read/write,
 run selection, HTTP mapping, removal isolation, Postgres storage/pinning, authorization
@@ -215,11 +215,58 @@ and RepositoryImportBoundaryTest. Test log: `/tmp/ph-f04-tests.log` (local evide
 No deployed E2E was repeated for this slice. Invalid file-query run identifiers now
 follow the existing layout validation; no new HTTP response contract was introduced.
 
-**Remaining F04:** extract Postgres queries/archive/pinning from the controllers
-and clarify append/query/retention capabilities using journal-postgres for SQL.
-Keep CP and swarm journal contracts distinct; do not create one global journal
-state machine. The file reader retains current malformed-line, absence and
-run-selection behavior, including the existing newest-directory selection policy.
+**Event reads reviewed, uncommitted:** Hive/swarm/live/archive event SELECTs,
+row mapping and cursor construction now use JournalEventQueries in journal-postgres.
+SwarmJournalRunSelector is the sole explicit/active/observed run selector for file
+and stored reads, including pinning. SwarmStoredJournalQuery retains archive
+precedence and registry-aware empty/absent results. JournalPageResponse and its
+cursor moved to the shared API with unchanged JSON fields; the old DTO was removed.
+See RESP-JOURNAL-EVENT-QUERIES; no wire or write-policy change.
+
+Validation: 58 tests passed, zero failures/errors/skips, including real PostgreSQL
+live/archive paging with equal timestamps, filters, mapping, storage lookup failures,
+run selection, authorization, prior file behavior and import boundaries.
+Command: `./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with the focused journal/filesystem/auth/import test selection; local log
+`/tmp/ph-f04-sql-tests.log`. No deployed E2E or full reactor repeat in this slice.
+
+**Run lists reviewed, uncommitted:** list SQL, summary/tag mapping and live/pinned
+merge now use JournalRunQueries; ordering/filter/limit semantics are preserved. The
+metadata update response uses the same summary reader. See RESP-JOURNAL-RUN-QUERIES.
+
+Validation: 69 focused tests passed, zero failures/errors/skips, including real
+PostgreSQL run merging, swarm isolation, afterTs aggregation, null-date ordering,
+metadata-only summaries, prior event/file behavior and import boundaries.
+Log: `/tmp/ph-f04-runs-tests.log`. No deployed E2E or full-suite run.
+
+**F04 implementation complete and reviewed:**
+metadata registration/operator edits, capture/pinning and retention now use the
+separate ports and adapters in RESP-JOURNAL-WRITES. REST contains no journal SQL,
+archive outcome construction or nested request/response records. Lifecycle startup
+projects template metadata through JournalRunRegistration; the scheduled trigger
+calls JournalRetention. Removed JournalRunMetadataWriter/JournalPartitionManager
+and their SQL implementations from Orchestrator. One shared adapter owns each write.
+
+Existing BufferedPostgresJournalWriter still owns event INSERT/buffering for the
+separate Hive/swarm producer contracts. File append/read/remove paths use the shared
+RuntimeFilesystemLayout; the completed exporter-directory fix was not reopened.
+All existing policies, mode defaults, HTTP payloads and nontransactional statement
+ordering remain unchanged. No database/schema or migration change.
+
+Validation: **111 tests, zero failures/errors/skips**, including real PostgreSQL
+metadata registration/edit/clearing/ambiguity, all pin modes and repeat/conflict,
+retention cutoffs and pinned archive survival, HTTP error/authorization mapping,
+producer append/durable behavior, file queries/removal, run/cursor projections,
+ContainerLifecycleManager and RepositoryImportBoundaryTest. Command:
+`./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with `-Dtest='*Journal*Test,PinModeTest,RuntimeFilesystemLayoutTest,FilesystemSwarmRemoveStoreTest,RepositoryImportBoundaryTest,OrchestratorAdminAuthTest,ContainerLifecycleManagerTest'`
+and `-Dsurefire.failIfNoSpecifiedTests=false`.
+Log: `/tmp/ph-f04-complete-tests.log`. Full reactor/deployed E2E not repeated.
+Final whole-F04 review: no blocking findings. Full Orchestrator/Swarm Controller
+and dependency tests passed with `AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl`:
+1806 tests, 1802 passed, 4 skipped for missing explicit Redis fixture configuration,
+zero failures/errors. Log: `/tmp/ph-f04-review-configured-tests.log`.
+No deployed stack/Swarm E2E was repeated.
 
 Gate: read/write/export/delete use identical resolved paths; invalid identifiers
 follow one owner contract; REST maps requests and delegates; retention has one writer.

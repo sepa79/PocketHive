@@ -1,30 +1,24 @@
-package io.pockethive.orchestrator.infra;
+package io.pockethive.journal.postgres;
 
+import io.pockethive.journal.api.JournalRetention;
+import io.pockethive.journal.api.JournalRetentionSettings;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
-import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.scheduling.annotation.Scheduled;
-import org.springframework.stereotype.Component;
 
 /**
- * Best-effort partition management for {@code journal_event}.
- * <p>
- * Keeps daily partitions created ahead of time and prunes old partitions based on retention.
+ * Responsibility: maintain daily partitions and prune live journal rows using the configured UTC policy.
+ * Must not: schedule itself, write run metadata or delete pinned archives.
+ * Contract: RESP-JOURNAL-WRITES — docs/architecture/runtime-responsibilities.md#resp-journal-writes.
  */
-@Component
-@ConditionalOnProperty(name = "pockethive.journal.sink", havingValue = "postgres")
-public class JournalPartitionManager {
-
-  private static final Logger log = LoggerFactory.getLogger(JournalPartitionManager.class);
+public final class PostgresJournalRetention implements JournalRetention {
+  private static final Logger log = LoggerFactory.getLogger(PostgresJournalRetention.class);
   private static final DateTimeFormatter PARTITION_SUFFIX = DateTimeFormatter.ofPattern("yyyyMMdd", Locale.ROOT);
   private static final Pattern PARTITION_NAME = Pattern.compile("^journal_event_(\\d{8})$");
 
@@ -35,23 +29,16 @@ public class JournalPartitionManager {
   private final int defaultMoveBatchSize;
   private final int defaultMaxFutureDays;
 
-  public JournalPartitionManager(JdbcTemplate jdbc,
-                                 @Value("${pockethive.journal.postgres.retention-days:14}") int retentionDays,
-                                 @Value("${pockethive.journal.postgres.partition.create-days-back:1}") int createDaysBack,
-                                 @Value("${pockethive.journal.postgres.partition.create-days-ahead:2}") int createDaysAhead,
-                                 @Value("${pockethive.journal.postgres.partition.default-move-batch-size:5000}") int defaultMoveBatchSize,
-                                 @Value("${pockethive.journal.postgres.partition.default-max-future-days:14}") int defaultMaxFutureDays) {
-    this.jdbc = Objects.requireNonNull(jdbc, "jdbc");
-    this.retentionDays = Math.max(1, retentionDays);
-    this.createDaysBack = Math.max(0, createDaysBack);
-    this.createDaysAhead = Math.max(0, createDaysAhead);
-    this.defaultMoveBatchSize = Math.max(1, defaultMoveBatchSize);
-    this.defaultMaxFutureDays = Math.max(1, defaultMaxFutureDays);
+  public PostgresJournalRetention(JdbcTemplate jdbc, JournalRetentionSettings settings) {
+    this.jdbc = java.util.Objects.requireNonNull(jdbc, "jdbc");
+    this.retentionDays = settings.retentionDays();
+    this.createDaysBack = settings.createDaysBack();
+    this.createDaysAhead = settings.createDaysAhead();
+    this.defaultMoveBatchSize = settings.defaultMoveBatchSize();
+    this.defaultMaxFutureDays = settings.defaultMaxFutureDays();
   }
 
-  @Scheduled(
-      initialDelayString = "${pockethive.journal.postgres.partition.reconcile.initial-delay-ms:2000}",
-      fixedDelayString = "${pockethive.journal.postgres.partition.reconcile.fixed-delay-ms:60000}")
+  @Override
   public void reconcile() {
     try {
       ensureDailyPartitions();

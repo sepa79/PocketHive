@@ -39,7 +39,7 @@ The serial CONTROL admission model remains documented in
 
 - [Functional module boundaries](functional-module-boundaries.md) — F01 Redis and
   F03 Docker are implemented and reviewed. Next proposed dedicated refactors:
-  F04 journal/filesystem, then F05 ClickHouse. F08 freshness/lifecycle needs a
+  F04 journal/filesystem is implemented and reviewed; next is F05 ClickHouse. F08 freshness/lifecycle needs a
   separate behavior decision. Existing Work API, history-policy fixes and exporter
   paths are not reopened; remaining auth/MCP/service leads require revalidation.
 - [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) — historical

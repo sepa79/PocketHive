@@ -2461,9 +2461,9 @@ consumer-local reconstruction of output paths; a second output-directory cleanup
 ## RESP-SWARM-FILE-JOURNAL
 
 **F04 file slice:** `FileSwarmJournal` in swarm-controller remains the append owner.
-`SwarmFileJournalQuery` in Orchestrator owns file-query run selection through the
-`SwarmJournalFiles` port; `FileSwarmJournalReader` implements file discovery, reading
-and decoding. Both file implementations consume `RuntimeFilesystemLayout` paths;
+`SwarmFileJournalQuery` in Orchestrator delegates run selection to
+`SwarmJournalRunSelector` and reads through the `SwarmJournalFiles` port;
+`FileSwarmJournalReader` implements file discovery, reading and decoding. Both file implementations consume `RuntimeFilesystemLayout` paths;
 neither reconstructs the journal filename or run path. Swarm tree deletion remains
 with `FilesystemSwarmRemoveStore`, not the reader or writer.
 
@@ -2477,10 +2477,9 @@ same layout validation as the writer; invalid run paths are not read and retain
 the endpoint's existing exception-to-500 mapping. No new HTTP error contract is added.
 
 `SwarmJournalController` authorizes access and maps the file query to HTTP; it must
-not discover runs on disk or read/decode journal files. It still contains the
-pre-existing Postgres query/archive/pinning responsibilities: these are outstanding
-F04 debt, not an approved target boundary. Sink selection, severity normalization,
-Postgres behavior and public response shapes are unchanged in this slice.
+not discover runs on disk or read/decode journal files. Capture writes now follow
+RESP-JOURNAL-WRITES below. Sink selection, severity normalization, Postgres
+behavior and public response shapes are unchanged.
 
 **Forbidden:** file-query state writes, independent path/default resolution,
 reader-owned retention, changes to append/ACK semantics, or merging Hive and swarm
@@ -2489,7 +2488,131 @@ journal contracts.
 **Verification:** `RuntimeFilesystemLayoutTest`, `FileSwarmJournalTest`,
 `FileSwarmJournalReaderTest`, `SwarmFileJournalQueryTest`, `SwarmJournalControllerTest`,
 `PostgresJournalStorageTest`, `OrchestratorAdminAuthTest` and existing swarm-tree
-removal tests. PostgreSQL queries, archives and retention remain the next F04 slice.
+removal tests. SQL event reads follow RESP-JOURNAL-EVENT-QUERIES below; run lists
+follow RESP-JOURNAL-RUN-QUERIES. Archive writes and retention follow RESP-JOURNAL-WRITES.
+
+
+## RESP-JOURNAL-EVENT-QUERIES
+
+**F04 event-read slice:** `common/journal-postgres` owns the `JournalEventQueries`
+port and `JournalPageResponse`/`JournalCursor` projection in its `api` package.
+`PostgresJournalEventQueries` owns event SELECTs, live/archive row decoding and
+cursor construction. `JournalEventRowMapper` is the sole SQL-event-to-timeline/page
+mapper; it keeps the existing distinction that only paged entries expose eventId,
+and the existing null timestamp handling for each projection. These are read-only
+projections of journal storage, not a second event/state authority.
+
+Orchestrator composes the adapter with its existing JdbcTemplate and ObjectMapper.
+`SwarmJournalRunSelector` is the single owner of explicit/registry/observed run
+precedence for both file and SQL reads. Each query supplies only its adapter observation.
+`SwarmStoredJournalQuery` owns pinned-read precedence and the existing
+registered-vs-unknown swarm absence semantics. It delegates all event SQL
+to the port. The pin endpoint also uses this same run resolver. Hive queries retain
+explicit optional swarm/run filters and do not inherit swarm run selection.
+Controllers authorize and normalize HTTP parameters, invoke the query/port, and
+map results; they no longer decode SQL event rows or calculate next cursors.
+
+Preserve: newest-first `(ts,id)` pages with limit+1 lookahead; oldest-first swarm
+timelines; filters; pinned capture precedence; empty archived reads vs absent live
+reads for unknown swarms; existing best-effort lookup failures and JSON-map parsing;
+HTTP statuses, payload fields, and live/archive write behavior. This extraction
+adds no fallback or adapter-selection policy. `JournalPageResponse` and its cursor
+move internally without adding a second wire shape or changing serialization.
+
+Run listing/summary merging follows RESP-JOURNAL-RUN-QUERIES below.
+Metadata/pinning writes and retention follow RESP-JOURNAL-WRITES. They remain
+separate capabilities from the read ports.
+
+**Forbidden:** lifecycle/registry state, authorization, run-selection policy or
+writes in the SQL reader; SQL/row mapping in event query consumers; new retention
+or pinning policy; merging Hive and swarm semantics into one state machine.
+
+**Verification:** JournalEventRowMapperTest, PostgresJournalEventQueriesFailureTest,
+PostgresJournalEventQueriesTest (real Postgres), SwarmJournalRunSelectorTest,
+SwarmStoredJournalQueryTest, existing PostgresJournalStorageTest, HTTP mapping/auth
+tests and RepositoryImportBoundaryTest. Deployed E2E is separate.
+
+
+## RESP-JOURNAL-RUN-QUERIES
+
+**F04 run-list slice:** `JournalRunQueries` in `common/journal-postgres/api` exposes
+per-swarm and deployment-wide run lists and the existing metadata summary read.
+`PostgresJournalRunQueries` owns their SQL. `JournalRunRowMapper` owns summary row
+mapping and persisted tags decoding. `JournalRunSummaries` owns the read-only merge
+of live and pinned summaries by `(swarmId,runId)`; it must not alter stored state.
+`SwarmRunSummary` and the smaller `JournalRunSummary` retain their existing JSON
+fields as named read projections, moved from controller-nested types to the API.
+The smaller projection is derived from the merged summary, never independently merged.
+
+Orchestrator authorizes and normalizes list requests. SwarmStoredJournalQuery
+retains the per-swarm empty/unknown distinction using SwarmStore; the SQL module
+never accesses the registry. The metadata update endpoint consumes the same summary
+reader after its existing write, eliminating a second mapper without changing writes.
+
+Preserve the existing details: per-swarm reads live before pinned; global reads
+pinned before live; pinnedOnly ignores afterTs and preserves SQL NULLS LAST order;
+afterTs filters only live events before aggregation; the SQL live limit precedes
+the global merge/final limit. Merged ordering retains the existing reversed
+nullsLast comparator (null lastTs first). Pinned firstTs/metadata win when present;
+only a newer live lastTs (or a null pinned lastTs) triggers replacement, using the
+larger entry count. These rules describe inherited behavior, not new fallback policy.
+
+**Forbidden:** summary state writes, lifecycle decisions, SQL in list consumers,
+consumer-local tag parsing/summary merging, or changes to pinning/retention policy.
+Metadata writes and run identity lookup, capture/pinning writes and retention follow
+RESP-JOURNAL-WRITES; controller contract bags have been removed. No migration or wire change.
+
+**Verification:** pure merge and mapping tests; real PostgreSQL listing tests for
+pinned/live overlap, shared run IDs across swarms, null timestamps, afterTs/limits,
+pinnedOnly and metadata-only summaries; existing journal/auth/file regression tests.
+
+
+## RESP-JOURNAL-WRITES
+
+**F04 implemented and reviewed:** `common/journal-postgres`
+owns separate metadata, capture and retention ports. `JournalRunMetadata` owns both
+startup registration and operator edits; `PostgresJournalRunMetadata` is their sole
+SQL writer. Startup registration retains its best-effort semantics and scenario-id
+projection from the Orchestrator template via `JournalRunRegistration`. Operator updates retain metadata/event/
+capture identity lookup precedence, ambiguity handling, tag trimming/deduplication
+and limits, null-body clearing, and the shared `JournalRunQueries` response projection.
+No new transaction, identity rule or recovery path is introduced.
+
+`JournalCaptures`/`PostgresJournalCaptures` own mode parsing, capture creation,
+archive copying and capture-stat refresh. The request/response records move out of
+REST without wire changes. `SwarmJournalPinning` resolves the selected run through
+the existing shared selector before calling the capture port; REST only authorizes
+and maps success, absence, mode conflict and storage errors. Preserve default/invalid
+mode => SLIM, FULL/SLIM/ERRORS_ONLY behavior, repeated pin idempotency, existing
+mode-conflict response, statement order and existing nontransactional semantics.
+These inherited policies are not new compatibility or fallback mechanisms.
+
+`JournalRetention`/`PostgresJournalRetention` own partition naming, creation,
+batched default-partition rehoming and retention deletion. Orchestrator's `JournalRetentionSchedule`
+only calls the port. `JournalRetentionSettings` owns effective bounds;
+Spring composition binds the existing environment/property defaults once. Preserve
+UTC day calculations, phase order, cutoff comparisons, exception/logging policy,
+partition name recognition and pinned archive survival. No change to retention
+algorithm or concurrent pin/retention semantics is included.
+
+**Append/query/retention separation:** existing `BufferedPostgresJournalWriter` is
+the sole journal_event INSERT/buffering/backpressure implementation. HiveJournal
+and SwarmJournal retain distinct producer contracts and project their own events
+into that writer; query ports are read-only projections. Only retention performs
+partition/default-row deletion and only captures write pinned archives/statistics.
+Metadata registration and edits share one SQL owner, updating distinct fields.
+File journal reads/writes/deletion continue to use RESP-RUNTIME-FILESYSTEM-LAYOUT;
+exporter directory behavior is not reopened. Database bootstrap stays with existing
+Flyway migrations; this extraction introduces no schema or migration change.
+
+**Forbidden:** journal SQL in REST or lifecycle consumers; capture state or outcomes
+constructed by controllers; another tag normalizer, partition naming/retention owner,
+or a shared Hive/swarm lifecycle state machine. No module/bean identity tests.
+
+**Acceptance:** existing append/read/pin regressions plus real PostgreSQL tests for
+metadata registration/edit/clearing and ambiguity, all capture modes/conflicts/repeat,
+retention cutoffs, default rows and archive survival; behavior tests for normalization,
+run selection and failure mapping; repository import rules and targeted module suites.
 
 
 ## RESP-WORK-DELIVERY

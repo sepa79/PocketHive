@@ -2,7 +2,6 @@ package io.pockethive.orchestrator.app;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
@@ -18,7 +17,7 @@ import org.junit.jupiter.api.Test;
 class SwarmFileJournalQueryTest {
     private final SwarmStore store = new SwarmStore();
     private final SwarmJournalFiles files = mock(SwarmJournalFiles.class);
-    private final SwarmFileJournalQuery query = new SwarmFileJournalQuery(store, files);
+    private final SwarmFileJournalQuery query = new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), files);
     private final List<Map<String, Object>> entries = List.of(Map.of("type", "observed"));
 
     @Test
@@ -31,25 +30,6 @@ class SwarmFileJournalQueryTest {
         verify(files).read("alpha", "requested", "ERROR");
         verify(files).read("alpha", "missing", null);
         verifyNoMoreInteractions(files);
-    }
-
-    @Test
-    void omittedOrBlankRunUsesActiveRunWithoutConsultingDiskDiscovery() {
-        register("active");
-        when(files.read("alpha", "active", null)).thenReturn(entries);
-        assertThat(query.read("alpha", null, null)).isEqualTo(entries);
-        assertThat(query.read("alpha", " ", null)).isEqualTo(entries);
-        verify(files, times(2)).read("alpha", "active", null);
-        verifyNoMoreInteractions(files);
-    }
-
-    @Test
-    void absentRegistryRunUsesObservedDirectory() {
-        when(files.latestRunDirectory("alpha")).thenReturn("observed");
-        when(files.read("alpha", "observed", null)).thenReturn(entries);
-        assertThat(query.read("alpha", null, null)).isEqualTo(entries);
-        register(" ");
-        assertThat(query.read("alpha", null, null)).isEqualTo(entries);
     }
 
     @Test

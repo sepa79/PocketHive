@@ -9,9 +9,19 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import io.pockethive.control.ControlScope;
 import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.app.JournalController;
-import io.pockethive.orchestrator.app.JournalPageResponse;
+import io.pockethive.journal.api.JournalPageResponse;
+import io.pockethive.journal.api.JournalCursor;
+import io.pockethive.journal.postgres.PostgresJournalEventQueries;
+import io.pockethive.journal.postgres.PostgresJournalRunQueries;
+import io.pockethive.orchestrator.app.SwarmStoredJournalQuery;
+import io.pockethive.orchestrator.app.SwarmJournalRunSelector;
 import io.pockethive.orchestrator.app.ScenarioClient;
 import io.pockethive.orchestrator.app.SwarmJournalController;
+import io.pockethive.orchestrator.app.SwarmJournalPinning;
+import io.pockethive.journal.api.PinRunRequest;
+import io.pockethive.journal.api.PinRunResponse;
+import io.pockethive.journal.postgres.PostgresJournalCaptures;
+import io.pockethive.journal.postgres.PostgresJournalRunMetadata;
 import io.pockethive.orchestrator.app.SwarmFileJournalQuery;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
@@ -201,7 +211,7 @@ class PostgresJournalStorageTest {
           "c-" + i);
     }
 
-    JournalController ctrl = new JournalController(jdbc, mapper, endpointAuthorization(store));
+    JournalController ctrl = new JournalController(endpointAuthorization(store), new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper), new PostgresJournalRunMetadata(jdbc, mapper, new PostgresJournalRunQueries(jdbc, mapper)));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse first = ctrl.hiveJournalPage("s1", "run-1", null, null, null, 2).getBody();
@@ -212,7 +222,7 @@ class PostgresJournalStorageTest {
     assertThat(first.items().get(0).get("type")).isEqualTo("t-4");
     assertThat(first.items().get(1).get("type")).isEqualTo("t-3");
 
-    JournalPageResponse.Cursor cursor = first.nextCursor();
+    JournalCursor cursor = first.nextCursor();
     JournalPageResponse second = ctrl.hiveJournalPage("s1", "run-1", null, cursor.ts(), cursor.id(), 2).getBody();
     assertThat(second).isNotNull();
     assertThat(second.items()).hasSize(2);
@@ -299,8 +309,11 @@ class PostgresJournalStorageTest {
         "t-2");
 
     SwarmJournalController ctrl = new SwarmJournalController(
-        mapper, jdbc, store, endpointAuthorization(store),
-        new SwarmFileJournalQuery(store, new FileSwarmJournalReader(mapper, runtimeLayout())));
+        new SwarmJournalPinning(new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store),
+            new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)),
+            new PostgresJournalCaptures(jdbc)), endpointAuthorization(store),
+        new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), new FileSwarmJournalReader(mapper, runtimeLayout())),
+        new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store), new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, "run-1", null, null).getBody();
@@ -318,8 +331,11 @@ class PostgresJournalStorageTest {
     insertSwarmJournalEvent(base.plusSeconds(1), "sw-filter", "run-filter", "ERROR", "error-event");
 
     SwarmJournalController ctrl = new SwarmJournalController(
-        mapper, jdbc, store, endpointAuthorization(store),
-        new SwarmFileJournalQuery(store, new FileSwarmJournalReader(mapper, runtimeLayout())));
+        new SwarmJournalPinning(new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store),
+            new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)),
+            new PostgresJournalCaptures(jdbc)), endpointAuthorization(store),
+        new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), new FileSwarmJournalReader(mapper, runtimeLayout())),
+        new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store), new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
     JournalPageResponse page = ctrl.journalPage("sw-filter", null, null, 10, "run-filter", null, "ERROR").getBody();
@@ -538,12 +554,15 @@ class PostgresJournalStorageTest {
     }
 
     SwarmJournalController ctrl = new SwarmJournalController(
-        mapper, jdbc, store, endpointAuthorization(store),
-        new SwarmFileJournalQuery(store, new FileSwarmJournalReader(mapper, runtimeLayout())));
+        new SwarmJournalPinning(new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store),
+            new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)),
+            new PostgresJournalCaptures(jdbc)), endpointAuthorization(store),
+        new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), new FileSwarmJournalReader(mapper, runtimeLayout())),
+        new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store), new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
-    ResponseEntity<SwarmJournalController.PinRunResponse> pinned =
-        ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "SLIM", null));
+    ResponseEntity<PinRunResponse> pinned =
+        ctrl.pinSwarmJournalRun("sw1", new PinRunRequest("run-1", "SLIM", null));
     assertThat(pinned.getStatusCode().value()).isEqualTo(200);
     assertThat(pinned.getBody()).isNotNull();
     assertThat(pinned.getBody().runId()).isEqualTo("run-1");
@@ -600,11 +619,14 @@ class PostgresJournalStorageTest {
         "run-1");
 
     SwarmJournalController ctrl = new SwarmJournalController(
-        mapper, jdbc, store, endpointAuthorization(store),
-        new SwarmFileJournalQuery(store, new FileSwarmJournalReader(mapper, runtimeLayout())));
+        new SwarmJournalPinning(new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store),
+            new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)),
+            new PostgresJournalCaptures(jdbc)), endpointAuthorization(store),
+        new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), new FileSwarmJournalReader(mapper, runtimeLayout())),
+        new SwarmStoredJournalQuery(store, new SwarmJournalRunSelector(store), new PostgresJournalEventQueries(jdbc, mapper), new PostgresJournalRunQueries(jdbc, mapper)));
     ReflectionTestUtils.setField(ctrl, "journalSink", "postgres");
 
-    ctrl.pinSwarmJournalRun("sw1", new SwarmJournalController.PinRunRequest("run-1", "FULL", null));
+    ctrl.pinSwarmJournalRun("sw1", new PinRunRequest("run-1", "FULL", null));
     jdbc.update("DELETE FROM journal_event WHERE scope='SWARM' AND swarm_id='sw1' AND run_id='run-1'");
 
     JournalPageResponse page = ctrl.journalPage("sw1", null, null, 10, null, null, null).getBody();

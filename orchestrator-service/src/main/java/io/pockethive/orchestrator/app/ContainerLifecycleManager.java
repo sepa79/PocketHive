@@ -18,7 +18,7 @@ import io.pockethive.orchestrator.config.OrchestratorProperties;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
-import io.pockethive.orchestrator.infra.JournalRunMetadataWriter;
+import io.pockethive.orchestrator.app.JournalRunRegistration;
 import io.pockethive.orchestrator.runtime.RuntimeCleanupPorts.RuntimeOwnershipManifestStore;
 import io.pockethive.orchestrator.runtime.RuntimeManifestObject;
 import io.pockethive.orchestrator.runtime.RuntimeOwnershipManifestFactory;
@@ -71,7 +71,7 @@ public class ContainerLifecycleManager {
     private final ControlPlaneProperties controlPlaneProperties;
     private final WorkAdapterEnvironment workEnvironment;
     private final RabbitConnectionSettings rabbitConnection;
-    private final JournalRunMetadataWriter runMetadataWriter;
+    private final JournalRunRegistration runMetadataWriter;
     private final ClickHouseSinkProperties clickHouseSink;
     private final RuntimeOwnershipManifestStore manifestStore;
     private final RuntimeOwnershipManifestFactory manifestFactory;
@@ -96,7 +96,7 @@ public class ContainerLifecycleManager {
         OrchestratorProperties properties,
         ControlPlaneProperties controlPlaneProperties,
         RabbitConnectionSettings rabbitConnection,
-        JournalRunMetadataWriter runMetadataWriter,
+        JournalRunRegistration runMetadataWriter,
         ClickHouseSinkProperties clickHouseSink,
         RuntimeOwnershipManifestStore manifestStore,
         RuntimeFilesystemMount runtimeFilesystemMount,

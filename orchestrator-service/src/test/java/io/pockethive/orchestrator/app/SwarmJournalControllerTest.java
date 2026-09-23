@@ -33,7 +33,7 @@ class SwarmJournalControllerTest {
         Files.writeString(file, "{\"severity\":\"INFO\"}\n{\"severity\":\"ERROR\"}\n");
         SwarmJournalController controller = controller(mapper, store,
             mock(OrchestratorEndpointAuthorization.class),
-            new SwarmFileJournalQuery(store, new FileSwarmJournalReader(mapper, layout)));
+            new SwarmFileJournalQuery(new SwarmJournalRunSelector(store), new FileSwarmJournalReader(mapper, layout)));
         var result = controller.journal("alpha", "run-1", " error ");
         assertThat(result.getStatusCode().value()).isEqualTo(200);
         assertThat(result.getBody()).hasSize(1);
@@ -67,7 +67,7 @@ class SwarmJournalControllerTest {
 
     private SwarmJournalController controller(ObjectMapper mapper, SwarmStore store,
         OrchestratorEndpointAuthorization auth, SwarmFileJournalQuery query) {
-        var controller = new SwarmJournalController(mapper, mock(JdbcTemplate.class), store, auth, query);
+        var controller = new SwarmJournalController(mock(SwarmJournalPinning.class), auth, query, mock(SwarmStoredJournalQuery.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
         return controller;
     }
