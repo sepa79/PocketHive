@@ -1,5 +1,6 @@
-package io.pockethive.worker.sdk.diagnostics;
+package io.pockethive.redis.api;
 
+import io.pockethive.redis.api.RedisDebugCaptureStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -11,7 +12,7 @@ import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
-import io.pockethive.worker.sdk.config.RedisSequenceProperties;
+import io.pockethive.redis.config.RedisConfigurationParser;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -34,10 +35,8 @@ class RedisDebugCaptureStoreTest {
         when(factory.apply(any())).thenReturn(client);
         when(client.connect()).thenReturn(connection);
         when(connection.sync()).thenReturn(commands);
-        RedisSequenceProperties properties = new RedisSequenceProperties();
-        properties.setHost("127.0.0.1");
-        properties.setPort(6379);
-        return new RedisDebugCaptureStore(properties.connectionSettings(RedisSequenceProperties.PREFIX), factory);
+        return new RedisDebugCaptureStore(new RedisConfigurationParser().parseRedisConnection(
+            "127.0.0.1", 6379, null, null, false, "redis"), factory);
     }
 
     @Test

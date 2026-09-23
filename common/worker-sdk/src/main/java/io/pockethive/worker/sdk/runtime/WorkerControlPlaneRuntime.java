@@ -114,6 +114,8 @@ public final class WorkerControlPlaneRuntime {
 
     private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
 
+    private final RedisSequenceConfiguration sequences;
+
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
         WorkerStateStore stateStore,
@@ -123,8 +125,10 @@ public final class WorkerControlPlaneRuntime {
         WorkerControlTopology controlPlane,
         TemplateRenderer templateRenderer,
         io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
-        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser
+        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser,
+        RedisSequenceConfiguration sequences
     ) {
+        this.sequences = Objects.requireNonNull(sequences, "sequences");
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
@@ -457,7 +461,7 @@ public final class WorkerControlPlaneRuntime {
                 Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
                     ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), candidatePrivateConfig))
                     : mergeResult.typedConfig();
-                RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
+                sequences.configureFromWorkerConfig(mergeResult.rawConfig());
                 if (filtered.reseedRequested() && templateRenderer != null) {
                     templateRenderer.resetSeededSelections();
                 }

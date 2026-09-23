@@ -4,6 +4,10 @@ This directory contains only work that is actively being implemented or is waiti
 
 ## Current plans
 
+- [Redis adapter inventory/API proposal](redis-adapter-extraction.md) — F01 started
+  on `codex/redis-adapter`: five client implementations and all current callers
+  mapped; lifetime/sequence design checkpoints identified. No implementation yet.
+
 - [Nowy framework E2E](e2e-test-system.md) — N0/N1 zakończone; macierz N2:
   42 PASS / 0 PARTIAL po NW-4 między hostami Swarm/NFS (2026-09-22). Lokalna analiza N3 i poprawka
   DA-3 przeszły osobny review bez uwag. Końcowy review N3 zakończony bez blokujących ustaleń (2026-09-22).

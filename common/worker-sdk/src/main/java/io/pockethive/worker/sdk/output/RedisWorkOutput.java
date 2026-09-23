@@ -34,7 +34,7 @@ public final class RedisWorkOutput implements WorkOutput {
 
     private final WorkerDefinition definition;
     private final RedisPushSupport pushSupport;
-    private final AtomicReference<RedisPushSupport.PushRequest> pushRequest;
+    private final AtomicReference<io.pockethive.worker.sdk.runtime.RedisPushRequest> pushRequest;
 
     public RedisWorkOutput(
         WorkerDefinition definition,
@@ -54,14 +54,14 @@ public final class RedisWorkOutput implements WorkOutput {
         RedisPushSupport pushSupport
     ) {
         this.definition = Objects.requireNonNull(definition, "definition");
-        this.pushSupport = pushSupport == null ? new RedisPushSupport() : pushSupport;
+        this.pushSupport = java.util.Objects.requireNonNull(pushSupport, "pushSupport");
         this.pushRequest = new AtomicReference<>(fromProperties(Objects.requireNonNull(properties, "properties")));
     }
 
     @Override
     public void publish(WorkItem item, WorkDelivery delivery) {
         WorkerOutputType.REDIS.requireDelivery(delivery);
-        RedisPushSupport.PushRequest request = pushRequest.get();
+        io.pockethive.worker.sdk.runtime.RedisPushRequest request = pushRequest.get();
         String host = request.connection().host();
         if (host == null || host.isBlank()) {
             throw new IllegalStateException("Redis output host must be configured for worker " + this.definition.beanName());
@@ -95,22 +95,22 @@ public final class RedisWorkOutput implements WorkOutput {
             return;
         }
         try {
-            RedisPushSupport.PushRequest current = pushRequest.get();
-            RedisPushSupport.PushRequest merged = mergeWithRawConfig(current, redisMap);
+            io.pockethive.worker.sdk.runtime.RedisPushRequest current = pushRequest.get();
+            io.pockethive.worker.sdk.runtime.RedisPushRequest merged = mergeWithRawConfig(current, redisMap);
             pushRequest.set(merged);
         } catch (Exception ex) {
             log.warn("Ignoring invalid outputs.redis update for {}: {}", definition.beanName(), ex.getMessage());
         }
     }
 
-    private RedisPushSupport.PushRequest fromProperties(RedisOutputProperties properties) {
+    private io.pockethive.worker.sdk.runtime.RedisPushRequest fromProperties(RedisOutputProperties properties) {
         var connection = properties.connectionSettings("outputs.redis");
         var settings = CONFIGURATION.parseRedisWriteSettings(properties.getSourceStep(), properties.getPushDirection(),
             properties.getMaxLen(), "outputs.redis");
         var targets = CONFIGURATION.parseRedisOutputTargets(properties.getRoutes(), properties.getDefaultList(),
             properties.getTargetListTemplate(), "outputs.redis");
 
-        return new RedisPushSupport.PushRequest(
+        return new io.pockethive.worker.sdk.runtime.RedisPushRequest(
             connection,
             settings,
             targets.routes(),
@@ -119,8 +119,8 @@ public final class RedisWorkOutput implements WorkOutput {
         );
     }
 
-    private RedisPushSupport.PushRequest mergeWithRawConfig(
-        RedisPushSupport.PushRequest base,
+    private io.pockethive.worker.sdk.runtime.RedisPushRequest mergeWithRawConfig(
+        io.pockethive.worker.sdk.runtime.RedisPushRequest base,
         Map<?, ?> redisMap
     ) {
         var connection = CONFIGURATION.mergeRedisConnection(base.connection(), redisMap, "outputs.redis");
@@ -136,7 +136,7 @@ public final class RedisWorkOutput implements WorkOutput {
             redisMap.containsKey("targetListTemplate") ? redisMap.get("targetListTemplate") : base.targetListTemplate(),
             "outputs.redis");
 
-        return new RedisPushSupport.PushRequest(
+        return new io.pockethive.worker.sdk.runtime.RedisPushRequest(
             connection,
             settings,
             targets.routes(),

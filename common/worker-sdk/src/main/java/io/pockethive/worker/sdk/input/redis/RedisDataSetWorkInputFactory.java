@@ -1,6 +1,7 @@
 package io.pockethive.worker.sdk.input.redis;
 
 import io.pockethive.controlplane.ControlPlaneIdentity;
+import io.pockethive.redis.api.RedisListClients;
 import io.pockethive.worker.sdk.config.RedisDataSetInputProperties;
 import io.pockethive.work.config.binding.WorkInputConfig;
 import io.pockethive.work.config.WorkerInputType;
@@ -15,7 +16,9 @@ import org.slf4j.LoggerFactory;
 import org.springframework.core.Ordered;
 
 /**
- * Creates {@link RedisDataSetWorkInput} instances for {@link WorkerInputType#REDIS_DATASET} workers.
+ * Responsibility: compose Redis dataset inputs with the selected worker runtime and Redis list API.
+ * Must not: create Redis clients, resolve settings or own intake state.
+ * Contract: RESP-WORK-REDIS-DATASET — docs/architecture/runtime-responsibilities.md#resp-work-redis-dataset.
  */
 public final class RedisDataSetWorkInputFactory implements WorkInputFactory, Ordered {
 
@@ -44,7 +47,7 @@ public final class RedisDataSetWorkInputFactory implements WorkInputFactory, Ord
         if (!(config instanceof RedisDataSetInputProperties properties)) {
             throw new IllegalStateException("Redis dataset inputs require RedisDataSetInputProperties configuration");
         }
-        return new RedisDataSetWorkInput(definition, controlPlaneRuntime, workerRuntime, identity, properties, logger, null);
+        return new RedisDataSetWorkInput(definition, controlPlaneRuntime, workerRuntime, identity, properties, logger, RedisListClients::reader);
     }
 
     @Override

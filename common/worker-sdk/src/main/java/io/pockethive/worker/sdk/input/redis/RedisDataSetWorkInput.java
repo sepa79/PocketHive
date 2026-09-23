@@ -1,10 +1,8 @@
 package io.pockethive.worker.sdk.input.redis;
 
-import io.lettuce.core.RedisClient;
-import io.lettuce.core.RedisURI;
 import io.pockethive.redis.config.RedisConnectionSettings;
-import io.lettuce.core.api.StatefulRedisConnection;
-import io.lettuce.core.api.sync.RedisCommands;
+import io.pockethive.redis.api.RedisListReader;
+import io.pockethive.redis.api.RedisListClients;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.observability.ObservabilityContextUtil;
 import io.pockethive.work.api.StatusPublisher;
@@ -53,7 +51,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final RedisDataSetInputProperties properties;
-    private final RedisClientFactory clientFactory;
+    private final java.util.function.Function<RedisConnectionSettings, RedisListReader> clientFactory;
     private final DoubleSupplier randomUnit;
     private final Logger log;
 
@@ -62,7 +60,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
     private volatile boolean running;
     private volatile boolean enabled;
     private volatile ScheduledExecutorService schedulerExecutor;
-    private volatile RedisListClient redisClient;
+    private volatile RedisListReader redisClient;
     private volatile long tickIntervalMs;
     private double carryOver;
     private volatile StatusPublisher statusPublisher;
@@ -89,7 +87,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             identity,
             properties,
             defaultLog,
-            new LettuceRedisClientFactory(),
+            RedisListClients::reader,
             () -> ThreadLocalRandom.current().nextDouble()
         );
     }
@@ -101,7 +99,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         ControlPlaneIdentity identity,
         RedisDataSetInputProperties properties,
         Logger log,
-        RedisClientFactory clientFactory
+        java.util.function.Function<RedisConnectionSettings, RedisListReader> clientFactory
     ) {
         this(
             workerDefinition,
@@ -122,7 +120,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         ControlPlaneIdentity identity,
         RedisDataSetInputProperties properties,
         Logger log,
-        RedisClientFactory clientFactory,
+        java.util.function.Function<RedisConnectionSettings, RedisListReader> clientFactory,
         DoubleSupplier randomUnit
     ) {
         this.workerDefinition = Objects.requireNonNull(workerDefinition, "workerDefinition");
@@ -131,7 +129,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         this.identity = Objects.requireNonNull(identity, "identity");
         this.properties = Objects.requireNonNull(properties, "properties");
         this.log = log == null ? defaultLog : log;
-        this.clientFactory = clientFactory == null ? new LettuceRedisClientFactory() : clientFactory;
+        this.clientFactory = Objects.requireNonNull(clientFactory, "clientFactory");
         this.randomUnit = randomUnit == null ? () -> ThreadLocalRandom.current().nextDouble() : randomUnit;
     }
 
@@ -269,7 +267,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
             return true;
         }
         try {
-            redisClient = clientFactory.create(datasetSettings.connection());
+            redisClient = clientFactory.apply(datasetSettings.connection());
             clearConfigError();
             return true;
         } catch (Exception ex) {
@@ -494,76 +492,7 @@ public final class RedisDataSetWorkInput implements WorkInput {
         }
     }
 
-    interface RedisListClient extends AutoCloseable {
-        String pop(String listName);
-    }
-
     private record PopResult(String listName, String payload) {
     }
 
-    interface RedisClientFactory {
-        RedisListClient create(RedisConnectionSettings settings);
-    }
-
-    private static final class LettuceRedisClientFactory implements RedisClientFactory {
-
-        @Override
-        public RedisListClient create(RedisConnectionSettings settings) {
-            RedisURI uri = buildUri(settings);
-            RedisClient client = RedisClient.create(uri);
-            StatefulRedisConnection<String, String> connection = client.connect();
-            RedisCommands<String, String> commands = connection.sync();
-            connection.setTimeout(Duration.ofSeconds(10));
-            return new LettuceRedisListClient(client, connection, commands);
-        }
-
-        private static RedisURI buildUri(RedisConnectionSettings settings) {
-            RedisURI.Builder builder = RedisURI.builder()
-                .withHost(settings.host())
-                .withPort(settings.port());
-            if (settings.ssl()) {
-                builder.withSsl(true);
-            }
-            String username = settings.username();
-            String password = settings.password();
-            if (username != null && password != null) {
-                builder.withAuthentication(username, password.toCharArray());
-            } else if (password != null) {
-                builder.withPassword(password.toCharArray());
-            }
-            return builder.build();
-        }
-    }
-
-    private static final class LettuceRedisListClient implements RedisListClient {
-
-        private final RedisClient client;
-        private final StatefulRedisConnection<String, String> connection;
-        private final RedisCommands<String, String> commands;
-
-        private LettuceRedisListClient(
-            RedisClient client,
-            StatefulRedisConnection<String, String> connection,
-            RedisCommands<String, String> commands
-        ) {
-            this.client = client;
-            this.connection = connection;
-            this.commands = commands;
-        }
-
-        @Override
-        public String pop(String listName) {
-            return commands.lpop(listName);
-        }
-
-        @Override
-        public void close() {
-            if (connection != null) {
-                connection.close();
-            }
-            if (client != null) {
-                client.shutdown();
-            }
-        }
-    }
 }
