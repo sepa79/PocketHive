@@ -63,7 +63,7 @@ separated from historical findings that still require revalidation.
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
 | Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
-| ClickHouse | `ClickHouseMetricsSink` and `ClickHouseTxOutcomeSink` each construct HTTP clients and INSERT queries | Existing sink-clickhouse owns transport mechanics, separate explicit domain/buffering policies |
+| ClickHouse | Both sinks use `ClickHouseJsonEachRowTransport`; shared ENV projections and property-owned defaults replace service copies | F05 implemented, tested and reviewed; separate domain/buffering policies preserved |
 | Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
 | UI network projection | `ui-v2/src/lib/networkProxy.ts` maps every unknown mode to DIRECT | Separate contract/behavior decision; do not silently change acceptance during extraction |
@@ -274,14 +274,60 @@ Do not reopen the completed exporter-directory fix.
 
 ### F05 — ClickHouse
 
-Add the confirmed duplicate ENV export in ContainerLifecycleManager and
-SwarmWorkerSpecFactory to this dedicated refactor. One sink-owned codec must export
-endpoint/table/credentials/timeouts/batching; both launch paths consume it, retaining
-the current precedence and values. This is plan-only during F03.
+**F05 implementation, verification and separate review complete** on `codex/journal-filesystem`, after
+F04 commit `1aa5e3d1`. Ownership is recorded in RESP-CLICKHOUSE-INSERT and
+RESP-CLICKHOUSE-ENVIRONMENT in the runtime responsibility records.
 
-Move repeated HTTP/auth/INSERT construction into sink-clickhouse. Metrics and
-transaction event construction stay with their domain owners. Their flush,
-buffering and failure policies remain explicitly distinct, not unified defaults.
+- `ClickHouseJsonEachRowTransport` owns HTTP client construction, INSERT URI,
+  UTF-8 JSONEachRow framing, authentication, timeout use and HTTP success checking.
+  Both sinks consume a prepared `ClickHouseInsert`; the old HTTP implementations
+  are deleted. Existing properties expose a read-only connection view without a
+  second configuration/defaults owner.
+- `ClickHouseSinkEnvironment` replaces transaction ENV mapping in
+  ContainerLifecycleManager and SwarmWorkerSpecFactory. Existing keys (including
+  blank/null) retain precedence. `ClickHouseMetricsEnvironment` replaces both
+  copies of metrics fields in ControlPlaneContainerEnvironmentFactory, preserving
+  runtime/controller prefixes and metrics overwrite semantics.
+- Bootstrap slice: service YAML no longer repeats ClickHouse defaults or ENV
+  aliases. Existing property classes remain the only defaults/validation owners.
+  Spring's `@Name("clickhouse")` fixes constructor binding for nested metrics;
+  Controller metrics settings are extracted into their own implementation unit.
+  Full service binding tests cover the original ENV names, all settings, source
+  precedence, omitted defaults and rejected invalid metrics configuration.
+- Metrics and transaction event construction, their separate clocks, buffering,
+  validation/clamping, requeue and shutdown behavior remain with their existing
+  policy owners. Tests verify full buffers, partial flush failures, invalid URI
+  preparation before draining, failure diagnostics and exact requests.
+- The existing import gate now forbids JDK HTTP clients in postprocessor production
+  code. Repository searches found no other Java production JSONEachRow request or
+  ClickHouse ENV field builder outside `sink-clickhouse`. Historical storage tools
+  and deployment config are not runtime consumers of this Java API.
+
+Verification (2026-09-23): affected reactor
+`AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl ./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service,postprocessor-service -am test`
+passed: **1853 tests, 1849 passed, 4 skipped, no failures/errors**
+(`/tmp/ph-f05-bootstrap-reactor-final.log`). Skips are the existing externally
+configured Redis fixtures. Transport/sink behavior, both launch consumers, full
+service binding and RepositoryImportBoundaryTest ran. The 17 bootstrap tests also
+passed separately (`/tmp/ph-f05-bootstrap-binding.log`). The earlier YAML-removal
+failure was traced to constructor `clickHouse` being bound as `click-house`;
+`@Name("clickhouse")` now preserves the canonical property path without aliases.
+Deployed acceptance: rebuilt the local stack from this worktree through
+`COMPOSE_PROJECT_NAME=pockethive-redis ./build-hive.sh --quick` (existing data kept;
+no swarms were active). `./run-acceptance-tests.sh
+acceptance-tests/targets/local-tx-outcome-artemis.properties tx-outcome` passed
+DA-3 on Artemis through the public ingress/Grafana: no rows with sink NONE,
+then matching trace/call IDs, status, success and duration after enabling
+CLICKHOUSE_V2 by config-update. The normal stop/remove lifecycle completed and
+public list-swarms returned empty. Evidence:
+`acceptance-tests/runs/tx-outcome-a51fa251-47dd-4d43-a4c0-c462cac25bc3/`;
+logs `/tmp/ph-f05-local-deploy.log` and `/tmp/ph-f05-da3.log`.
+The acceptance invocation ran 388 tests including dependencies/framework tests
+and one deployed DA-3, all passing. No remote Swarm or Rabbit deployment repeated.
+Final separate whole-F05 review: no actionable findings. 115 focused tests passed,
+zero failures/errors/skips (`/tmp/ph-f05-complete-review.log`). Review traced both
+sink paths, startup/launch ENV precedence and repository-wide alternative owners;
+checked the existing DA-3 artifacts without repeating deployment. Ready for commit.
 
 Gate: no consumer builds ClickHouse URLs/queries/credentials; exact requests and
 queue-full/flush-error behavior covered; DA-3 still proves persisted outcomes.
@@ -337,4 +383,4 @@ change lifecycle timing during F03.
 Original plan review (PR #519): that update removed stale prerequisites, preserved existing owners,
 added the omitted Redis capture consumer and split implementation from behavioral
 redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
-F01 and F03 were subsequently authorized explicitly by the user; the other entries remain plans.
+F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other entries remain plans.

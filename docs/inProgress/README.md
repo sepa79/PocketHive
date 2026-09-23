@@ -38,8 +38,9 @@ The serial CONTROL admission model remains documented in
   Does not expand the behavior-preserving SSOT extraction scope.
 
 - [Functional module boundaries](functional-module-boundaries.md) — F01 Redis and
-  F03 Docker are implemented and reviewed. Next proposed dedicated refactors:
-  F04 journal/filesystem is implemented and reviewed; next is F05 ClickHouse. F08 freshness/lifecycle needs a
+  F03 Docker and F04 journal/filesystem are implemented and reviewed.
+  F05 ClickHouse is implemented, verified (full affected reactor and local Artemis
+  DA-3) and reviewed. F08 freshness/lifecycle needs a
   separate behavior decision. Existing Work API, history-policy fixes and exporter
   paths are not reopened; remaining auth/MCP/service leads require revalidation.
 - [Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) — historical

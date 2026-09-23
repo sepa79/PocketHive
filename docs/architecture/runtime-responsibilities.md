@@ -1821,7 +1821,9 @@ compute adapter, records the resulting Swarm runtime identity and stores the own
 constructed by RuntimeOwnershipManifestFactory,
 pre-pulls requested images and removes controller compute/control queues. It consumes
 RESP-RABBIT-CONNECTION through the participant environment factory, plus the existing
-runtime filesystem mount, metrics and compute contracts. Swarm operation handlers invoke
+runtime filesystem mount, metrics and compute contracts. ClickHouse launch fields
+consume RESP-CLICKHOUSE-ENVIRONMENT; the lifecycle manager does not map them.
+Swarm operation handlers invoke
 these infrastructure operations; public operation terminalization remains with its owner.
 
 **Forbidden:** independently validate/encode Rabbit connections, redefine control routing
@@ -1862,9 +1864,10 @@ mapping and broader plan/transport separation remain debt outside RATE-R1.
 **Current module:** `swarm-controller-service`.
 
 SwarmWorkerSpecFactory maps Bee and SUT environment into PlannedSwarmWorker. It owns
-worker identity, base participant/ClickHouse/network environment, SUT enrichment,
+worker identity, participant/network environment composition, SUT enrichment,
 volumes and spec assembly. Work configuration is supplied by WorkerWorkConfigurationPort;
 the factory does not construct settings implementations or interpret Work fields.
+ClickHouse launch values delegate to RESP-CLICKHOUSE-ENVIRONMENT.
 SwarmRuntimeCore consumes the plan and owns lifecycle/state; compute executes the spec.
 
 **Forbidden:** provision workers, publish bootstrap, mutate Bee/runtime state, decode Work
@@ -2925,5 +2928,71 @@ DockerWorkloadProvisioner/WorkloadProvisioner path is removed.
 
 Lifecycle decisions, service-drain behavior, cleanup approvals/postconditions, image
 repository resolution and CP transport ownership remain at their existing owners.
-ClickHouse ENV, journal layout and worker freshness are explicitly deferred to F05,
-F04 and F08 respectively. Implementation/verification progress is recorded in the plan.
+ClickHouse ENV and journal layout are transferred by F05/F04; worker freshness remains
+deferred to F08. Implementation/verification progress is recorded in the plan.
+
+
+## RESP-CLICKHOUSE-INSERT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseJsonEachRowTransport` owns
+HTTP client construction, INSERT URL encoding, JSONEachRow framing, Basic auth,
+timeouts and the 2xx success condition. `ClickHouseInsert` is its prepared-operation
+port: resolve the destination once before draining a flush, then send each batch.
+`ClickHouseConnectionSettings` is a read-only view implemented by the existing
+transaction and metrics properties; it has no defaults or independent state.
+`ClickHouseInsertException` owns bounded failure-body presentation. Metrics retains
+its existing diagnostic prefix and truncation marker.
+
+`ClickHouseMetricsSink` retains metrics projection, label validation, bounded queue,
+flush timing and requeue policy. `ClickHouseTxOutcomeSink` retains transaction
+serialization, its own bounded queue/flush policy and best-effort shutdown flush.
+The transaction sink starts its flush clock at zero; metrics starts at construction.
+Transaction batch/interval/capacity clamps remain local existing behavior; metrics
+properties retain their validation. Neither policy is silently unified.
+
+**Forbidden:** consumer construction of ClickHouse HTTP requests, URLs, credentials
+or INSERT statements; transport-owned domain events, buffers or retry scheduling.
+
+**Required effect:** identical URL, UTF-8 body, auth and timeout settings; rejected
+HTTP batches remain queued under the existing sink policy. Preparing an invalid
+URI fails before draining. The transport adds no retries or configuration defaults.
+
+**Verification:** transport request/response tests, both sink behavior tests,
+launch environment tests; deployed DA-3 is the persistence acceptance path.
+
+## RESP-CLICKHOUSE-ENVIRONMENT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseSinkEnvironment` owns the
+transaction sink ENV names and export from `ClickHouseSinkProperties`, including
+endpoint/table/credentials/timeouts/batching/capacity. ContainerLifecycleManager
+and SwarmWorkerSpecFactory apply this projection at their existing launch step.
+`ClickHouseMetricsEnvironment` separately owns the metrics field mapping, exposing
+runtime and controller-inheritance projections over the same properties. Configured
+metrics entries overwrite the destination; blank credentials are omitted. These
+existing rules deliberately differ from transaction-sink apply-missing semantics.
+ControlPlaneContainerEnvironmentFactory consumes both projections without mapping
+ClickHouse fields itself.
+
+**Required effect:** unconfigured properties export nothing; configured values are
+trimmed and blank values omitted. An existing key, even blank or null, wins. The
+codec mutates only missing sink entries in the supplied environment; no defaults
+or validation are added. Property classes remain the configuration authorities.
+Spring binds the existing ENV names directly; service YAML must not duplicate
+ClickHouse defaults or field aliases. Nested Orchestrator and Controller metrics
+constructors explicitly name their ClickHouse parameter `clickhouse` via Spring's
+`@Name`, preserving the public property prefix independently of Java camel-case.
+Controller metrics binding is a separate `SwarmControllerMetricsProperties` unit.
+Direct sink properties and full nested service configurations are tested separately,
+including source precedence, absent values and existing validation. No new parser,
+configuration defaults or compatibility path is added.
+
+**Forbidden:** service-local sink ENV mapping or independent effective settings.
+
+**Verification:** codec value/precedence tests, full nested service bootstrap tests
+with actual application YAML and original ENV names, and both launch-path behavior
+tests. Deployed DA-3 proves persisted outcomes; execution evidence lives in F05 of
+`docs/inProgress/functional-module-boundaries.md`.

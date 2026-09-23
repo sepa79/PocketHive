@@ -79,8 +79,18 @@ class ContainerLifecycleManagerTest {
         OrchestratorProperties properties = defaultProperties();
         ControlPlaneProperties controlPlane = controlPlaneProperties();
         when(computeAdapter.startManager(any(ManagerSpec.class))).thenReturn("cid");
+        ClickHouseSinkProperties sinkProperties = new ClickHouseSinkProperties();
+        sinkProperties.setEndpoint(" http://tx-clickhouse:8123 ");
+        sinkProperties.setTable(" outcomes ");
+        sinkProperties.setUsername(" writer ");
+        sinkProperties.setPassword(" password ");
+        sinkProperties.setConnectTimeoutMs(123);
+        sinkProperties.setReadTimeoutMs(456);
+        sinkProperties.setBatchSize(7);
+        sinkProperties.setFlushIntervalMs(89);
+        sinkProperties.setMaxBufferedEvents(999);
         ContainerLifecycleManager manager = new ContainerLifecycleManager(
-            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, new ClickHouseSinkProperties(), new RecordingManifestStore(), runtimeMount(), topologyResolver(), workEnvironment(), manifestFactory(controlPlane));
+            docker, computeAdapter, registry, amqp, properties, controlPlane, rabbitConnection(), runMetadataWriter, sinkProperties, new RecordingManifestStore(), runtimeMount(), topologyResolver(), workEnvironment(), manifestFactory(controlPlane));
 
         Swarm swarm = manager.startSwarm(
             "sw1",
@@ -145,6 +155,15 @@ class ContainerLifecycleManagerTest {
         assertEquals("/var/run/docker.sock", env.get("POCKETHIVE_CONTROL_PLANE_SWARM_CONTROLLER_DOCKER_SOCKET_PATH"));
         assertEquals("/var/run/docker.sock", env.get("DOCKER_SOCKET_PATH"));
         assertEquals("unix:///var/run/docker.sock", env.get("DOCKER_HOST"));
+        assertEquals("http://tx-clickhouse:8123", env.get("POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT"));
+        assertEquals("outcomes", env.get("POCKETHIVE_SINK_CLICKHOUSE_TABLE"));
+        assertEquals("writer", env.get("POCKETHIVE_SINK_CLICKHOUSE_USERNAME"));
+        assertEquals("password", env.get("POCKETHIVE_SINK_CLICKHOUSE_PASSWORD"));
+        assertEquals("123", env.get("POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS"));
+        assertEquals("456", env.get("POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS"));
+        assertEquals("7", env.get("POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE"));
+        assertEquals("89", env.get("POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS"));
+        assertEquals("999", env.get("POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS"));
         List<String> volumes = spec.volumes();
         assertNotNull(volumes);
         assertIterableEquals(

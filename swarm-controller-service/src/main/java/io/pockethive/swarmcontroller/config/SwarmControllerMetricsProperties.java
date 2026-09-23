@@ -1,4 +1,4 @@
-package io.pockethive.orchestrator.config;
+package io.pockethive.swarmcontroller.config;
 
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
@@ -10,18 +10,17 @@ import org.springframework.boot.context.properties.bind.Name;
 import org.springframework.validation.annotation.Validated;
 
 /**
- * Responsibility: Validate Orchestrator product-metrics settings.
- * Must not: Resolve control-plane topology or provision runtime resources.
+ * Responsibility: bind and validate Controller product-metrics settings.
+ * Must not: duplicate ClickHouse defaults, export ENV fields or publish metrics.
  * Contract: RESP-CLICKHOUSE-ENVIRONMENT — docs/architecture/runtime-responsibilities.md#resp-clickhouse-environment.
  */
 @Validated
-public final class OrchestratorMetricsProperties {
-
+public final class SwarmControllerMetricsProperties {
     private final PocketHiveMetricsAdapter adapter;
     private final Duration publishInterval;
     private final @Valid ClickHouseMetricsSinkProperties clickHouse;
 
-    public OrchestratorMetricsProperties(@NotNull PocketHiveMetricsAdapter adapter,
+    public SwarmControllerMetricsProperties(@NotNull PocketHiveMetricsAdapter adapter,
                    @NotNull Duration publishInterval,
                    @Name("clickhouse") @Valid ClickHouseMetricsSinkProperties clickHouse) {
         this.adapter = Objects.requireNonNull(adapter, "adapter");
@@ -35,15 +34,15 @@ public final class OrchestratorMetricsProperties {
         }
     }
 
-    public PocketHiveMetricsAdapter getAdapter() {
+    public PocketHiveMetricsAdapter adapter() {
         return adapter;
     }
 
-    public Duration getPublishInterval() {
+    public Duration publishInterval() {
         return publishInterval;
     }
 
-    public ClickHouseMetricsSinkProperties getClickHouse() {
+    public ClickHouseMetricsSinkProperties clickHouse() {
         return clickHouse;
     }
 }

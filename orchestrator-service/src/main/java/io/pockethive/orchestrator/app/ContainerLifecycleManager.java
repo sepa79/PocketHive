@@ -27,6 +27,7 @@ import io.pockethive.rabbit.api.RabbitResourceBeans;
 import io.pockethive.rabbit.api.RabbitResourceNames;
 import io.pockethive.rabbit.api.RabbitResources;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.sink.clickhouse.ClickHouseSinkEnvironment;
 import io.pockethive.swarm.model.NetworkMode;
 import io.pockethive.swarm.model.RuntimeFilesystemContract;
 import io.pockethive.swarm.model.SwarmStartupArtifactContract;
@@ -52,6 +53,7 @@ import org.springframework.stereotype.Service;
 /**
  * Responsibility: adapt swarm container lifecycle operations to the configured runtime infrastructure.
  * Must not: resolve Rabbit connection fields or duplicate their container environment encoding.
+ * ClickHouse sink environment delegates to RESP-CLICKHOUSE-ENVIRONMENT.
  * Contract: RESP-ORCHESTRATOR-CONTAINER-LIFECYCLE — docs/architecture/runtime-responsibilities.md#resp-orchestrator-container-lifecycle.
  * Consumes RESP-RABBIT-CONNECTION for validated base settings and their shared export.
  * Existing compute, manifest and resource cleanup concerns remain CP-N05/C02 debt.
@@ -154,7 +156,7 @@ public class ContainerLifecycleManager {
                 rabbitConnection));
         env.putAll(workEnvironment.connectionEnvironment());
         env.putAll(workTopology.controllerEnvironment());
-        applyClickHouseSinkEnv(env);
+        ClickHouseSinkEnvironment.applyMissing(env, clickHouseSink);
         env.put(
             RuntimeFilesystemContract.HOST_ROOT_ENV,
             runtimeFilesystemMount.hostRoot().toString());
@@ -234,26 +236,6 @@ public class ContainerLifecycleManager {
             metrics.getAdapter(),
             metrics.getPublishInterval(),
             metrics.getClickHouse());
-    }
-
-    private void applyClickHouseSinkEnv(Map<String, String> targetEnv) {
-        if (!clickHouseSink.configured()) {
-            return;
-        }
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", clickHouseSink.getEndpoint());
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_TABLE", clickHouseSink.getTable());
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", clickHouseSink.getUsername());
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", clickHouseSink.getPassword());
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS",
-            Integer.toString(clickHouseSink.getConnectTimeoutMs()));
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
-            Integer.toString(clickHouseSink.getReadTimeoutMs()));
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE",
-            Integer.toString(clickHouseSink.getBatchSize()));
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS",
-            Integer.toString(clickHouseSink.getFlushIntervalMs()));
-        putEnvIfMissing(targetEnv, "POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS",
-            Integer.toString(clickHouseSink.getMaxBufferedEvents()));
     }
 
     private static Map<String, String> redactEnv(Map<String, String> env) {

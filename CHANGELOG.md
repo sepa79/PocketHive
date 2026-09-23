@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- ClickHouse isolation: share JSONEachRow HTTP transport and sink-owned launch
+  environment projections while preserving metrics/transaction buffering, failure
+  policies and environment precedence. Bind existing ClickHouse ENV settings
+  directly through Spring; remove duplicate service YAML defaults and aliases.
+  Keep defaults and validation in the existing sink properties and preserve
+  runtime sink enablement; verified persisted outcomes through local Artemis DA-3.
+
 - Journal isolation: share runtime journal paths and move SQL reads, run summaries,
   metadata updates, pinned archives and retention behind journal ports. Keep
   Hive/swarm append contracts distinct and preserve existing HTTP, buffering,
