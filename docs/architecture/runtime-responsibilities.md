@@ -3276,3 +3276,32 @@ does not change it.
 
 **Verification entrypoints:** WorkspaceServiceTest for catalogue transitions and
 isolation; WorkspaceControllerTest for existing wire fields and response codes.
+
+## RESP-TCP-MOCK-MAPPING-FILES
+
+**Current module(s):** `tcp-mock-server`.
+
+MappingFileStore owns authored mapping file writes/deletes under `/app/data/mappings`:
+path construction, JSON/YAML serialization and removal of json/yaml/yml variants.
+FileBasedMappingLoader owns the separate startup import from `/app/mappings`,
+including extension-based decoding and registration. Startup imports and authored
+files retain their existing distinct roots; this extraction does not make saved
+mappings reload on restart. JSON/YAML readers/writers are transport codecs using
+the shared MessageTypeMapping shape, not new domain validation authorities.
+
+MessageTypeRegistry retains in-memory matching and its existing save/delete facade,
+but delegates file effects to MappingFileStore rather than back to the startup
+loader. The old lazy registry/loader cycle and loader write/delete methods disappear.
+Controller sequencing (register then save, remove then delete) remains unchanged.
+
+Preserve default JSON writes and the existing exact `yaml` format selection,
+pretty printing, directory creation, variant deletion order and diagnostic text.
+IOException remains logged/suppressed; runtime errors still propagate to existing
+callers. Do not reinterpret an attempted save as verified durability or repair
+partial changes, file-name validation, restart recovery or API success in this slice.
+
+**Forbidden:** write/delete mechanics in startup loading or registry; catalogue
+mutation, protocol matching or HTTP responses in MappingFileStore.
+
+**Verification entrypoints:** MappingFileStoreTest exercises real temporary files,
+serialization, replacement, deletion variants and existing IO failure behaviour.

@@ -555,7 +555,7 @@ This does not close the broader TCP mock/F09 audit.
 
 ### F09 — TCP mock workspace slice
 
-**Implemented, pending separate review.** Base: `a5daf11c`.
+**Implemented and reviewed; committed in `08efc686`.** Base: `a5daf11c`.
 Extract the active global catalogue from WorkspaceController into WorkspaceService;
 replace the unused user/member-aware implementation and model. Preserve existing
 upsert/body-ID mismatch, default handling, generated IDs and wire shape. Repository
@@ -579,3 +579,20 @@ Both failed with InvalidDefinitionException before the fix
 (`/tmp/ph-workspace-json-red.log`); all 23 selected tests pass after it
 (`/tmp/ph-workspace-json-green.log`). No new field validation, HTTP fields or
 catalogue policy. These remain mapper/controller tests, not deployed HTTP checks.
+
+### F09 — TCP mock authored mapping files
+
+**Implemented, pending separate review.** Base: `08efc686`.
+Extract save/delete mechanics from FileBasedMappingLoader into MappingFileStore.
+Registry delegates to the store; loader only imports at startup. Remove their
+lazy cycle, preserve existing distinct roots and error/ordering semantics.
+See RESP-TCP-MOCK-MAPPING-FILES. Controller orchestration, registry matching,
+filename validation and durability/restart behaviour remain separate work.
+Verification: 30 tests passed, zero failures/errors/skips
+(`/tmp/ph-f09-mapping-files.log`): 7 new file-store behavior tests, 20 prior TCP mock
+tests and 3 existing import checks. Real temporary files cover non-default root,
+JSON/YAML values, overwrite, all deletion variants, missing files, suppressed IO
+failures and propagated runtime failures. Existing format-selection semantics
+remain unchanged, including non-yaml values selecting JSON. No deployment,
+new architecture scanner or test of bean identity; startup composition was traced
+in source. This slice does not close controller orchestration or all F09.

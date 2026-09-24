@@ -12,23 +12,26 @@ import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: import startup mapping files into the runtime registry.
+ * Must not: save/delete authored files or decide mapping execution/HTTP outcomes.
+ * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
+ */
 @Component
 public class FileBasedMappingLoader {
     private final MessageTypeRegistry registry;
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     private final String mappingsDir;
-    private final String dataDir;
 
     @Autowired
     public FileBasedMappingLoader(MessageTypeRegistry registry) {
-        this(registry, "/app/mappings", "/app/data");
+        this(registry, "/app/mappings");
     }
 
-    FileBasedMappingLoader(MessageTypeRegistry registry, String mappingsDir, String dataDir) {
+    FileBasedMappingLoader(MessageTypeRegistry registry, String mappingsDir) {
         this.registry = registry;
         this.mappingsDir = mappingsDir;
-        this.dataDir = dataDir;
         System.out.println("=== FileBasedMappingLoader constructed ===");
     }
 
@@ -87,53 +90,4 @@ public class FileBasedMappingLoader {
         return fileName.endsWith(".yaml") || fileName.endsWith(".yml");
     }
 
-    public void saveMappingToFile(MessageTypeMapping mapping) {
-        saveMappingToFile(mapping, "json");
-    }
-
-    public void saveMappingToFile(MessageTypeMapping mapping, String format) {
-        try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Files.createDirectories(mappingsPath);
-
-            ObjectMapper mapper = "yaml".equals(format) ? yamlMapper : jsonMapper;
-            String extension = "yaml".equals(format) ? ".yaml" : ".json";
-
-            Path file = mappingsPath.resolve(mapping.getId() + extension);
-            String content = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(mapping);
-            Files.writeString(file, content);
-            System.out.println("Saved mapping to file: " + file.getFileName());
-        } catch (IOException e) {
-            System.err.println("Failed to save mapping: " + e.getMessage());
-        }
-    }
-
-    public void deleteMappingFile(String id) {
-        try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Path jsonFile = mappingsPath.resolve(id + ".json");
-            Path yamlFile = mappingsPath.resolve(id + ".yaml");
-            Path ymlFile = mappingsPath.resolve(id + ".yml");
-
-            boolean deleted = false;
-            if (Files.exists(jsonFile)) {
-                Files.delete(jsonFile);
-                deleted = true;
-            }
-            if (Files.exists(yamlFile)) {
-                Files.delete(yamlFile);
-                deleted = true;
-            }
-            if (Files.exists(ymlFile)) {
-                Files.delete(ymlFile);
-                deleted = true;
-            }
-
-            if (deleted) {
-                System.out.println("Deleted mapping file: " + id);
-            }
-        } catch (IOException e) {
-            System.err.println("Failed to delete mapping file: " + e.getMessage());
-        }
-    }
 }

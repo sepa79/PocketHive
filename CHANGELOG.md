@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock mapping storage: separate authored file writes/deletes from startup
+  imports and remove the registry/loader dependency cycle, preserving file paths
+  and existing IO failure behavior.
+
 - TCP mock workspace isolation: move the global catalogue and mutation policy
   into one service, remove the unused user-aware implementation, and preserve
   existing HTTP fields, default protection and update semantics.

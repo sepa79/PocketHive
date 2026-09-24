@@ -6,12 +6,16 @@ import io.pockethive.tcpmock.model.ProcessedResponse;
 import io.pockethive.tcpmock.util.PatternCache;
 import io.pockethive.tcpmock.util.AdvancedRequestMatcher;
 import io.pockethive.tcpmock.handler.Iso8583Handler;
-import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Service;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Responsibility: hold and match runtime mappings and coordinate their response execution.
+ * Must not: implement authored file IO or startup file loading.
+ * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
+ */
 @Service
 public class MessageTypeRegistry {
     private final ConcurrentHashMap<String, MessageTypeMapping> mappings = new ConcurrentHashMap<>();
@@ -23,7 +27,7 @@ public class MessageTypeRegistry {
     private final StateManager stateManager;
     private final EnhancedTemplateEngine templateEngine;
     private final RequestVerificationService verificationService;
-    private final FileBasedMappingLoader fileLoader;
+    private final MappingFileStore fileStore;
 
     public MessageTypeRegistry(PatternCache patternCache,
                              AdvancedRequestMatcher advancedMatcher,
@@ -32,7 +36,7 @@ public class MessageTypeRegistry {
                              StateManager stateManager,
                              EnhancedTemplateEngine templateEngine,
                              RequestVerificationService verificationService,
-                             @Lazy FileBasedMappingLoader fileLoader) {
+                             MappingFileStore fileStore) {
         this.patternCache = patternCache;
         this.advancedMatcher = advancedMatcher;
         this.paymentEngine = paymentEngine;
@@ -40,7 +44,7 @@ public class MessageTypeRegistry {
         this.stateManager = stateManager;
         this.templateEngine = templateEngine;
         this.verificationService = verificationService;
-        this.fileLoader = fileLoader;
+        this.fileStore = fileStore;
         initializeDefaultMappings();
     }
 
@@ -148,10 +152,10 @@ public class MessageTypeRegistry {
     }
 
     public void saveMappingToFile(MessageTypeMapping mapping) {
-        fileLoader.saveMappingToFile(mapping);
+        fileStore.saveMappingToFile(mapping);
     }
 
     public void deleteMappingFile(String id) {
-        fileLoader.deleteMappingFile(id);
+        fileStore.deleteMappingFile(id);
     }
 }
