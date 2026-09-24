@@ -414,7 +414,7 @@ Separate F07 review found no actionable findings and reran 112 tests successfull
 
 ### F09 — processor pacing slice
 
-**Implemented, pending separate review.** Base: F07 commit `02b97665`.
+**Implemented and reviewed; committed in `476f8dc5`.** Base: F07 commit `02b97665`.
 Re-tracing confirmed duplicate ownership:
 HttpProtocolHandler, TcpProtocolHandler and Iso8583ProtocolHandler each implement
 applyExecutionMode against the same per-worker AtomicLong. All three callers now
@@ -440,7 +440,36 @@ processor tests and 3 repository import tests (`/tmp/ph-f09-processor-pacing.log
 The 11 pacing cases cover initial/queued/idle reservations, mode/rate updates,
 fractional waits and reported durations, interruption, concurrent reservations and
 per-worker isolation. Existing HTTP/TCP/ISO8583 result/error and logging/security
-tests passed. No full repository reactor or deployed E2E was repeated.
+tests passed. Separate pacing review reran 67 tests successfully
+(`/tmp/ph-f09-pacing-review.log`) with no actionable findings. No full repository
+reactor or deployed E2E was repeated.
+
+### F09 — processor HTTP client slice
+
+**Implemented, pending separate review.** Base: pacing commit `476f8dc5`.
+ApacheProcessorHttpClient now owns HTTP pool/TLS client construction, selection and
+status capacity behind ProcessorHttpClient. ProcessorConfiguration injects that API;
+WorkerImpl no longer imports Apache clients or constructs them, and the handler no
+longer selects a client. Old raw-client constructors and helpers are removed.
+Request/response callbacks remain on the same Apache execution path. Architecture
+owner: RESP-PROCESSOR-HTTP-CLIENT.
+
+No generic cross-service HTTP framework, configuration/default changes, new shutdown
+hooks or TLS/ACK changes. HTTP Sequence ownership and TCP transport lifetime remain
+separate. TLS acceptance/rejection is tested through the real owner, reflective
+proxy checks are replaced by actual proxy requests, and processor response/error
+coverage is retained through the port. The API is intentionally local and Apache
+HTTP-specific; it accepts a response decoder but does not expose raw clients.
+
+Verification: **88 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-processor-http-final.log`). This includes 23 owner cases for request/
+response effects, decoder errors, GLOBAL/PER_THREAD/NONE and keepAlive precedence,
+thread isolation, configured capacity, verified/unverified TLS and actual system
+proxy routing. Existing processor/pacing/transport/security suites plus the 3 import
+checks pass. Worker status consumes the owner's capacity projection. No new module,
+artifact dependency or import exemption was introduced; this local package boundary
+is documented and reviewed in source, not enforced by a new scanner.
+No full repository reactor or deployed E2E was repeated. This does not close F09.
 
 ### F08 and separate correctness work
 

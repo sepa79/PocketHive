@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Processor HTTP isolation: move client pool construction, TLS/reuse selection and
+  capacity reporting behind one local API; preserve transport behavior and verify
+  proxy routing, connection reuse and TLS through real HTTP tests.
+
 - Processor pacing: consolidate HTTP, TCP and ISO8583 rate scheduling into one
   per-worker owner, preserving wait timing, configuration updates, interruption
   and metrics behavior.

@@ -30,7 +30,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import org.apache.hc.client5.http.classic.HttpClient;
+import io.pockethive.processor.http.ProcessorHttpClient;
 import org.apache.hc.client5.http.classic.methods.HttpUriRequestBase;
 import org.apache.hc.core5.http.ClassicHttpResponse;
 import org.apache.hc.core5.http.Header;
@@ -40,8 +40,9 @@ import org.slf4j.Logger;
 
 /**
  * Responsibility: execute HTTP requests and construct HTTP result observations.
- * Must not: own pacing state, provision Work/CP topology or reinterpret another protocol's result.
+ * Must not: select/create HTTP clients, own pacing state, provision topology or reinterpret another protocol's result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * client operations delegate to RESP-PROCESSOR-HTTP-CLIENT — docs/architecture/runtime-responsibilities.md#resp-processor-http-client;
  * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class HttpProtocolHandler implements ProtocolHandler {
@@ -49,21 +50,11 @@ public class HttpProtocolHandler implements ProtocolHandler {
   private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final HttpClient httpClient;
-  private final HttpClient noKeepAliveClient;
-  private final ThreadLocal<HttpClient> perThreadClient;
-  private final HttpClient insecureHttpClient;
-  private final HttpClient insecureNoKeepAliveClient;
-  private final ThreadLocal<HttpClient> insecurePerThreadClient;
+  private final ProcessorHttpClient httpClient;
   private final ProcessorPacer pacer;
 
   public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
-                             HttpClient httpClient,
-                             HttpClient noKeepAliveClient,
-                             ThreadLocal<HttpClient> perThreadClient,
-                             HttpClient insecureHttpClient,
-                             HttpClient insecureNoKeepAliveClient,
-                             ThreadLocal<HttpClient> insecurePerThreadClient,
+                             ProcessorHttpClient httpClient,
                              ProcessorPacer pacer) {
     this.mapper = mapper;
     this.strictEnvelopeReader = mapper.readerFor(HttpRequestEnvelope.class)
@@ -71,11 +62,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
     this.httpClient = httpClient;
-    this.noKeepAliveClient = noKeepAliveClient;
-    this.perThreadClient = perThreadClient;
-    this.insecureHttpClient = insecureHttpClient;
-    this.insecureNoKeepAliveClient = insecureNoKeepAliveClient;
-    this.insecurePerThreadClient = insecurePerThreadClient;
     this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
   }
 
@@ -116,7 +102,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     try {
       pacingMillis = pacer.await(config);
       final long pacingMillisForHandler = pacingMillis;
-      HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
       requestInfo.headers().forEach(apacheRequest::addHeader);
       body.ifPresent(value -> apacheRequest.setEntity(new org.apache.hc.core5.http.io.entity.StringEntity(value, StandardCharsets.UTF_8)));
@@ -143,7 +128,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
         return new CallOutcome(statusCode, convertHeaders(response), responseBody, metrics);
       };
 
-      CallOutcome outcome = client.execute(apacheRequest, handler);
+      CallOutcome outcome = httpClient.execute(apacheRequest, handler, config);
       HttpResultEnvelope resultEnvelope = HttpResultEnvelope.of(
           mapper.convertValue(requestMeta, HttpRequestInfo.class),
           new HttpOutcome(
@@ -243,19 +228,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     } catch (IllegalArgumentException ex) {
       return false;
     }
-  }
-
-  private HttpClient selectClient(ProcessorWorkerConfig config) {
-    boolean sslVerify = Boolean.TRUE.equals(config.sslVerify());
-    ProcessorWorkerConfig.ConnectionReuse reuse = config.connectionReuse();
-    boolean keepAliveEnabled = Boolean.TRUE.equals(config.keepAlive());
-    if (!keepAliveEnabled || reuse == ProcessorWorkerConfig.ConnectionReuse.NONE) {
-      return sslVerify ? noKeepAliveClient : insecureNoKeepAliveClient;
-    }
-    if (reuse == ProcessorWorkerConfig.ConnectionReuse.PER_THREAD) {
-      return sslVerify ? perThreadClient.get() : insecurePerThreadClient.get();
-    }
-    return sslVerify ? httpClient : insecureHttpClient;
   }
 
   private Map<String, List<String>> convertHeaders(ClassicHttpResponse response) {

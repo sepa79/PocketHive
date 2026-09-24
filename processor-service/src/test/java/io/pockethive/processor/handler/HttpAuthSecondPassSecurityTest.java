@@ -26,7 +26,7 @@ import java.util.List;
 import java.util.Map;
 import io.pockethive.processor.ProcessorPacer;
 import java.util.concurrent.atomic.AtomicReference;
-import org.apache.hc.client5.http.classic.HttpClient;
+import io.pockethive.processor.http.ProcessorHttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -44,9 +44,9 @@ class HttpAuthSecondPassSecurityTest {
     @SuppressWarnings({"rawtypes", "unchecked"})
     void debugLogsNeverExposeDownstreamBearerToken(String authorizationName) throws Exception {
         ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
-        HttpClient transport = mock(HttpClient.class);
+        ProcessorHttpClient transport = mock(ProcessorHttpClient.class);
         AtomicReference<ClassicHttpRequest> transmitted = new AtomicReference<>();
-        when(transport.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class)))
+        when(transport.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class)))
             .thenAnswer(invocation -> {
                 transmitted.set(invocation.getArgument(0, ClassicHttpRequest.class));
                 HttpClientResponseHandler<?> responseHandler = invocation.getArgument(1, HttpClientResponseHandler.class);
@@ -74,8 +74,7 @@ class HttpAuthSecondPassSecurityTest {
             CallMetricsRecorder metrics = new CallMetricsRecorder();
             HttpProtocolHandler handler = new HttpProtocolHandler(mapper,
                 Clock.fixed(Instant.parse("2026-09-14T12:00:00Z"), ZoneOffset.UTC), metrics,
-                transport, transport, ThreadLocal.withInitial(() -> transport),
-                transport, transport, ThreadLocal.withInitial(() -> transport), new ProcessorPacer());
+                transport, new ProcessorPacer());
             ProcessorWorkerConfig config = new ProcessorWorkerConfig("https://audit-resource.invalid",
                 ProcessorWorkerConfig.Mode.THREAD_COUNT, 1, null,
                 ProcessorWorkerConfig.ConnectionReuse.GLOBAL, true, 5000, true, null);

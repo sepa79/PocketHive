@@ -1776,7 +1776,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1817,6 +1817,40 @@ alternate owners of processor request pacing and are outside this transfer.
 **Verification entrypoints:** ProcessorPacerTest for clock/wait effects, updates,
 concurrent reservations and interruption; existing ProcessorTest and protocol
 transport tests for result/error behavior. No wire/config field is added.
+
+## RESP-PROCESSOR-HTTP-CLIENT
+
+**Current module(s):** `processor-service`.
+
+ApacheProcessorHttpClient owns verified/unverified pool construction, selection and
+capacity projection behind the local ProcessorHttpClient API. ProcessorConfiguration
+supplies one owner to ProcessorWorkerImpl and HttpProtocolHandler. The worker consumes only its capacity
+projection; the handler submits a request and decodes a response through the API.
+This is a service-local Apache HTTP boundary, not a transport-neutral Work contract.
+Response callbacks receive only responses, never a raw client or connection manager.
+
+Preserve four eager clients (verified/unverified, pooled/non-reusing) and two lazy
+per-thread clients. Preserve system proxy/properties, verified TLS and the existing
+explicit sslVerify=false behavior, pool limits of 200 total/route, keepAlive=false
+precedence over connectionReuse, and PER_THREAD selection. Status keeps the existing
+configured capacity projection (200 GLOBAL, threadCount PER_THREAD, zero when reuse
+is off); this projection is not a live connection count. Configuration validation
+and defaults remain in ProcessorWorkerConfig.
+
+HttpProtocolHandler retains envelope parsing, target/body/header preparation,
+response decoding, timing/metrics and result extraction. Preserve callback timing
+(before body read), response release and exception propagation by retaining Apache's
+response-handler execution API. Do not add retries, timeouts or client shutdown
+hooks in this extraction; existing client lifetime behavior remains separate debt.
+HTTP Sequence has its own functional client and policy, outside this transfer.
+
+**Forbidden:** raw HTTP clients or pool construction in ProcessorWorkerImpl;
+client selection or capacity formulas outside the owner; config normalization,
+protocol result construction or pacing inside the HTTP client owner.
+
+**Verification entrypoints:** ApacheProcessorHttpClientTest for real request/proxy,
+reuse, TLS and capacity behavior; ProcessorTest and HttpAuthSecondPassSecurityTest
+for response/metrics/error and diagnostic redaction. Observable proxy traffic replaces the old reflective route-planner identity assertion.
 
 ## RESP-HTTP-SEQUENCE-WORK
 
