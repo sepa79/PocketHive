@@ -1,9 +1,9 @@
-package io.pockethive.worker.sdk.auth;
+package io.pockethive.redis.api;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.lettuce.core.RedisClient;
 import io.pockethive.redis.config.RedisConnectionSettings;
-import io.lettuce.core.RedisURI;
+import io.pockethive.worker.sdk.auth.*;
 import io.lettuce.core.ScriptOutputType;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
@@ -58,13 +58,7 @@ public final class RedisTokenStore implements TokenStore {
 
     public RedisTokenStore(String swarmId, RedisConnectionSettings settings) {
         this.swarmId = requireTokenSegment(swarmId, "swarmId");
-        RedisURI.Builder builder = RedisURI.builder().withHost(settings.host()).withPort(settings.port()).withSsl(settings.ssl());
-        if (settings.username() != null) {
-            builder.withAuthentication(settings.username(), settings.password());
-        } else if (settings.password() != null) {
-            builder.withPassword(settings.password().toCharArray());
-        }
-        this.client = RedisClient.create(builder.build());
+        this.client = RedisConnections.client(settings);
         try {
             this.connection = client.connect();
             this.commands = connection.sync();
@@ -163,7 +157,7 @@ public final class RedisTokenStore implements TokenStore {
     }
 
     @Override
-    public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) {
+    public List<TokenDueRef> listDueRefreshes(Instant now, int limit) {
         List<String> due = commands.zrangebyscore(dueKey(), "-inf", String.valueOf(now.toEpochMilli()), 0, Math.max(1, limit));
         List<TokenDueRef> refs = new ArrayList<>();
         for (String tokenKey : due) {

@@ -355,7 +355,7 @@ class OAuth2HttpSignatureConcurrencyTest {
         }
         @Override public void store(TokenRecord token, RefreshClaim claim, Duration cleanupGrace) { delegate.store(token, claim, cleanupGrace); }
         @Override public void releaseClaim(String key, String fingerprint, RefreshClaim claim) { delegate.releaseClaim(key, fingerprint, claim); }
-        @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return delegate.claimDueRefreshes(now, limit, lease); }
+        @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return delegate.listDueRefreshes(now, limit); }
         @Override public void close() { delegate.close(); }
     }
 
@@ -379,7 +379,7 @@ class OAuth2HttpSignatureConcurrencyTest {
             owner.compareAndSet(claim, null);
         }
         @Override public void releaseClaim(String key, String fingerprint, RefreshClaim claim) { owner.compareAndSet(claim, null); }
-        @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return List.of(); }
+        @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return List.of(); }
         @Override public void close() { }
     }
 }

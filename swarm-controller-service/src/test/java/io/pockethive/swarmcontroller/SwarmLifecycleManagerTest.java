@@ -15,7 +15,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import com.github.dockerjava.api.DockerClient;
+import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.manager.runtime.QueueStats;
@@ -70,8 +70,6 @@ class SwarmLifecycleManagerTest {
   RabbitResources amqp;
   @Mock
   DockerContainerClient docker;
-  @Mock
-  DockerClient dockerClient;
   @Mock
   RabbitPublisher rabbit;
 
@@ -1240,7 +1238,7 @@ class SwarmLifecycleManagerTest {
     var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
     return new SwarmLifecycleManager(amqp, new io.pockethive.rabbit.work.RabbitWorkResources(amqp, rabbitConnection),
         mapper,
-        dockerClient,
+        new DockerSingleNodeComputeAdapter(docker),
         docker,
         rabbit,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),

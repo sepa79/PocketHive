@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory;
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  * Consumes RESP-WORK-REDIS-TARGETS, RESP-WORK-REDIS-WRITE-SETTINGS and RESP-REDIS-CONNECTION-SETTINGS.
  */
-public final class RedisUploaderInterceptor implements WorkerInvocationInterceptor {
+public final class RedisUploaderInterceptor implements WorkerInvocationInterceptor, AutoCloseable {
 
     private static final RedisConfigurationParser CONFIGURATION = new RedisConfigurationParser();
     private static final Logger log = LoggerFactory.getLogger(RedisUploaderInterceptor.class);
@@ -33,24 +33,16 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
 
     private final RedisPushSupport pushSupport;
 
-    public RedisUploaderInterceptor() {
-        this(new RedisPushSupport());
-    }
-
-    RedisUploaderInterceptor(RedisPushSupport.RedisWriterFactory writerFactory) {
-        this(new RedisPushSupport(writerFactory, new PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess())));
-    }
-
     public RedisUploaderInterceptor(TemplateRenderer templateRenderer) {
-        this(new RedisPushSupport(new RedisPushSupport.LettuceRedisWriterFactory(), templateRenderer));
+        this(new RedisPushSupport(io.pockethive.redis.api.RedisListClients::writer, templateRenderer));
     }
 
-    RedisUploaderInterceptor(RedisPushSupport.RedisWriterFactory writerFactory, TemplateRenderer templateRenderer) {
+    RedisUploaderInterceptor(java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListWriter> writerFactory, TemplateRenderer templateRenderer) {
         this(new RedisPushSupport(writerFactory, templateRenderer));
     }
 
     RedisUploaderInterceptor(RedisPushSupport pushSupport) {
-        this.pushSupport = pushSupport == null ? new RedisPushSupport() : pushSupport;
+        this.pushSupport = java.util.Objects.requireNonNull(pushSupport, "pushSupport");
     }
 
     @Override
@@ -73,7 +65,7 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         return result;
     }
 
-    private void pushIfPossible(RedisPushSupport.PushRequest request, WorkItem message) {
+    private void pushIfPossible(io.pockethive.worker.sdk.runtime.RedisPushRequest request, WorkItem message) {
         if (message == null) {
             return;
         }
@@ -109,7 +101,7 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         var targets = CONFIGURATION.parseRedisOutputTargets(uploaderMap.get(FIELD_ROUTES),
             uploaderMap.get(FIELD_DEFAULT_LIST), uploaderMap.get(FIELD_TARGET_LIST_TEMPLATE), "interceptors.redisUploader");
 
-        RedisPushSupport.PushRequest request = new RedisPushSupport.PushRequest(
+        io.pockethive.worker.sdk.runtime.RedisPushRequest request = new io.pockethive.worker.sdk.runtime.RedisPushRequest(
             connection,
             settings,
             targets.routes(),
@@ -178,6 +170,7 @@ public final class RedisUploaderInterceptor implements WorkerInvocationIntercept
         AFTER
     }
 
-    record ResolvedConfig(boolean enabled, Phase phase, RedisPushSupport.PushRequest pushRequest) {
+    record ResolvedConfig(boolean enabled, Phase phase, io.pockethive.worker.sdk.runtime.RedisPushRequest pushRequest) {
     }
+    @Override public void close() { pushSupport.close(); }
 }

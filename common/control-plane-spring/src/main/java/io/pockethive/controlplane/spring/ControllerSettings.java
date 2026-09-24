@@ -12,12 +12,10 @@ import static io.pockethive.controlplane.spring.ControlPlaneContainerEnvironment
  * Contract: RESP-RABBIT-CONNECTION — docs/architecture/runtime-responsibilities.md#resp-rabbit-connection.
  */
 public record ControllerSettings(MetricsSettings metrics,
-                                 String runId,
-                                 String dockerSocketPath) {
+                                 String runId) {
     public ControllerSettings {
         Objects.requireNonNull(metrics, "metrics");
         requireArgument(runId, "runId");
-        requireArgument(dockerSocketPath, "dockerSocketPath");
     }
 
 }

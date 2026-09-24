@@ -26,7 +26,10 @@ import io.pockethive.control.ConfirmationScope;
 import io.pockethive.control.CommandOutcome;
 import io.pockethive.controlplane.ControlPlaneIdentity;
 import io.pockethive.controlplane.spring.ControlPlaneProperties;
-import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.manager.ports.ComputeHost;
+import io.pockethive.manager.ports.ComputeAdapter;
+import io.pockethive.manager.runtime.ComputeAdapterType;
+import io.pockethive.manager.runtime.ManagerSpec;
 import io.pockethive.orchestrator.OrchestratorApplication;
 import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
@@ -88,6 +91,7 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
 
+@org.springframework.context.annotation.Import(SwarmCreationMock1E2ETest.ComputeFixture.class)
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT, classes = OrchestratorApplication.class)
 @Testcontainers
 class SwarmCreationMock1E2ETest {
@@ -127,7 +131,21 @@ class SwarmCreationMock1E2ETest {
     private static int authServicePort;
 
     @MockBean
-    DockerContainerClient docker;
+    ComputeHost docker;
+
+    @org.springframework.boot.test.context.TestConfiguration
+    static class ComputeFixture {
+        @org.springframework.context.annotation.Bean
+        @org.springframework.context.annotation.Primary
+        ComputeAdapter testComputeAdapter() {
+            ComputeAdapter adapter = org.mockito.Mockito.mock(ComputeAdapter.class);
+            org.mockito.Mockito.when(adapter.type()).thenReturn(ComputeAdapterType.DOCKER_SINGLE);
+            return adapter;
+        }
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    ComputeAdapter computeAdapter;
 
     @MockBean(name = io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL)
     RabbitResources amqpAdmin;
@@ -267,7 +285,7 @@ class SwarmCreationMock1E2ETest {
         Assumptions.assumeTrue(dockerAvailable, "Docker is required to run this test");
 
         when(docker.resolveControlNetwork()).thenReturn("ph-test-net");
-        when(docker.createAndStartContainer(anyString(), anyMap(), anyString(), any(), anyMap()))
+        when(computeAdapter.startManager(org.mockito.ArgumentMatchers.any(ManagerSpec.class)))
             .thenReturn("container-123");
 
         RabbitAdmin admin = new RabbitAdmin(connectionFactory);
@@ -309,7 +327,8 @@ class SwarmCreationMock1E2ETest {
 
         assertThat(swarm.startupArtifact().sha256()).matches("[0-9a-f]{64}");
 
-        verify(docker).createAndStartContainer(eq("swarm-controller:latest"), anyMap(), eq(instanceId), any(), anyMap());
+        verify(computeAdapter).startManager(org.mockito.ArgumentMatchers.argThat(spec ->
+            spec.image().equals("swarm-controller:latest") && spec.id().equals(instanceId)));
 
         AnonymousQueue captureQueue = new AnonymousQueue();
         String captureName = admin.declareQueue(captureQueue);

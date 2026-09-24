@@ -58,7 +58,7 @@ class WorkerStatusContractTest {
     var properties = ControlPlaneTestFixtures.workerProperties(identity.swarmId(), role, identity.instanceId());
     var runtime = new WorkerControlPlaneRuntime(
         WorkerControlPlane.builder(codec).identity(identity).build(), states, new ObjectMapper(), emitter, identity,
-        properties.getControlPlane(), null, work.workMutationPolicyRegistry(), work.workConfigurationParser());
+        properties.getControlPlane(), null, work.workMutationPolicyRegistry(), work.workConfigurationParser(), new io.pockethive.worker.sdk.config.RedisSequenceConfiguration(new io.pockethive.worker.sdk.config.RedisSequenceProperties()));
     var config = Map.<String, Object>of("enabled", true, "historyPolicy", HistoryPolicy.LATEST_ONLY.name(),
         "message", Map.of("body", "accepted-status-probe"));
     var signal = ControlSignal.forInstance(ControlPlaneSignals.CONFIG_UPDATE, identity.swarmId(), role,

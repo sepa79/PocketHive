@@ -92,17 +92,17 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
     this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(), templateRenderer, redisProperties);
   }
 
-  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties) {
+  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, TemplateRenderer renderer) {
     this(mapper, properties, newHttpClientBundle(true), newHttpClientBundle(false), Clock.systemUTC(),
-        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()), new RedisSequenceProperties());
+        renderer, new RedisSequenceProperties());
   }
 
-  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock) {
+  ProcessorWorkerImpl(ObjectMapper mapper, ProcessorWorkerProperties properties, HttpClient httpClient, HttpClient noKeepAliveClient, Clock clock, TemplateRenderer renderer) {
     this(mapper, properties,
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         new HttpClientBundle(httpClient, noKeepAliveClient, ThreadLocal.withInitial(() -> httpClient)),
         clock,
-        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()),
+        renderer,
         new RedisSequenceProperties());
   }
 
@@ -112,12 +112,12 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
                       HttpClient verifiedNoKeepAliveClient,
                       HttpClient insecureClient,
                       HttpClient insecureNoKeepAliveClient,
-                      Clock clock) {
+                      Clock clock, TemplateRenderer renderer) {
     this(mapper, properties,
         new HttpClientBundle(verifiedClient, verifiedNoKeepAliveClient, ThreadLocal.withInitial(() -> verifiedClient)),
         new HttpClientBundle(insecureClient, insecureNoKeepAliveClient, ThreadLocal.withInitial(() -> insecureClient)),
         clock,
-        new io.pockethive.templating.PebbleTemplateRenderer(new io.pockethive.templating.ConfiguredRedisSequenceAccess()),
+        renderer,
         new RedisSequenceProperties());
   }
 

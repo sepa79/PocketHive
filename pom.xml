@@ -30,6 +30,7 @@
     <module>common/work-api</module>
     <module>common/work-config</module>
     <module>common/redis-config</module>
+    <module>common/redis-adapter</module>
     <module>common/work-local-config</module>
     <module>common/rabbit-adapter</module>
     <module>common/artemis-broker-extensions</module>

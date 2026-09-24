@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.diagnostics;
+package io.pockethive.redis.api;
 
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.RedisURI;
@@ -26,14 +26,7 @@ public final class RedisDebugCaptureStore implements AutoCloseable {
     RedisDebugCaptureStore(RedisConnectionSettings settings, Function<RedisURI, RedisClient> clientFactory) {
         Objects.requireNonNull(settings, "settings");
         this.clientFactory = Objects.requireNonNull(clientFactory, "clientFactory");
-        RedisURI.Builder builder = RedisURI.builder().withHost(settings.host())
-            .withPort(settings.port()).withSsl(settings.ssl());
-        if (settings.username() != null && settings.password() != null) {
-            builder.withAuthentication(settings.username(), settings.password().toCharArray());
-        } else if (settings.password() != null) {
-            builder.withPassword(settings.password().toCharArray());
-        }
-        this.uri = builder.build();
+        this.uri = RedisConnections.uri(settings);
     }
 
     /** A failed optional diagnostic write must not fail the worker's journey. */
