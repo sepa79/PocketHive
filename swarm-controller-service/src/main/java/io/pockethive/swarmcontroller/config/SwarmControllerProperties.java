@@ -3,12 +3,8 @@ package io.pockethive.swarmcontroller.config;
 import io.pockethive.rabbit.api.RabbitResourceNames;
 
 import io.pockethive.manager.runtime.ComputeAdapterType;
-import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
-import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import java.time.Duration;
 import java.util.Objects;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
@@ -26,7 +22,7 @@ public class SwarmControllerProperties {
     private final String role;
     private final String controlExchange;
     private final String controlQueuePrefixBase;
-    private final Metrics metrics;
+    private final SwarmControllerMetricsProperties metrics;
     private final Docker docker;
     private final Features features;
 
@@ -61,7 +57,7 @@ public class SwarmControllerProperties {
         return controlQueuePrefixBase;
     }
 
-    public Metrics getMetrics() {
+    public SwarmControllerMetricsProperties getMetrics() {
         return metrics;
     }
 
@@ -103,11 +99,11 @@ public class SwarmControllerProperties {
 
     @Validated
     public static final class SwarmController {
-            private final Metrics metrics;
+        private final SwarmControllerMetricsProperties metrics;
         private final Docker docker;
         private final Features features;
 
-        public SwarmController(@Valid Metrics metrics,
+        public SwarmController(@Valid SwarmControllerMetricsProperties metrics,
                                @Valid Docker docker,
                                @Valid Features features) {
             this.metrics = Objects.requireNonNull(metrics, "metrics");
@@ -115,7 +111,7 @@ public class SwarmControllerProperties {
             this.features = features != null ? features : new Features(null);
         }
 
-        public Metrics metrics() {
+        public SwarmControllerMetricsProperties metrics() {
             return metrics;
         }
 
@@ -125,39 +121,6 @@ public class SwarmControllerProperties {
 
         public Features features() {
             return features;
-        }
-    }
-
-    @Validated
-    public static final class Metrics {
-        private final PocketHiveMetricsAdapter adapter;
-        private final Duration publishInterval;
-        private final @Valid ClickHouseMetricsSinkProperties clickHouse;
-
-        public Metrics(@NotNull PocketHiveMetricsAdapter adapter,
-                       @NotNull Duration publishInterval,
-                       @Valid ClickHouseMetricsSinkProperties clickHouse) {
-            this.adapter = Objects.requireNonNull(adapter, "adapter");
-            this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
-            this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;
-            if (this.publishInterval.isZero() || this.publishInterval.isNegative()) {
-                throw new IllegalArgumentException("metrics.publishInterval must be positive");
-            }
-            if (this.adapter == PocketHiveMetricsAdapter.CLICKHOUSE) {
-                this.clickHouse.requireConfigured();
-            }
-        }
-
-        public PocketHiveMetricsAdapter adapter() {
-            return adapter;
-        }
-
-        public Duration publishInterval() {
-            return publishInterval;
-        }
-
-        public ClickHouseMetricsSinkProperties clickHouse() {
-            return clickHouse;
         }
     }
 

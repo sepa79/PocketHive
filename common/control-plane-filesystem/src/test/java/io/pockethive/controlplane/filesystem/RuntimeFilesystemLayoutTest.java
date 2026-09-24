@@ -25,6 +25,8 @@ class RuntimeFilesystemLayoutTest {
         .isEqualTo(localRoot.resolve("alpha/operations/remove/corr-1"));
     assertThat(layout.swarmRunDirectory("alpha", "run-1"))
         .isEqualTo(localRoot.resolve("alpha/run-1"));
+    assertThat(layout.swarmJournalFile("alpha", "run-1"))
+        .isEqualTo(localRoot.resolve("alpha/run-1/journal.ndjson")).doesNotExist();
     assertThat(layout.swarmRoot("alpha")).isEqualTo(localRoot.resolve("alpha"));
   }
 
@@ -42,6 +44,21 @@ class RuntimeFilesystemLayoutTest {
     assertThatThrownBy(() -> layout.swarmRoot("../outside"))
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("single path segment");
+  }
+
+  @Test
+  void journalUsesTheSameIdentifierValidationAndRunIsolation() {
+    RuntimeFilesystemLayout layout = RuntimeFilesystemLayout.of(localRoot.toString(), "/runtime");
+    assertThat(layout.swarmJournalFile(" alpha ", " run-1 "))
+        .isEqualTo(layout.swarmJournalFile("alpha", "run-1"));
+    assertThat(layout.swarmJournalFile("alpha", "run-2"))
+        .isNotEqualTo(layout.swarmJournalFile("alpha", "run-1"));
+    for (String invalid : new String[] {"", "..", "../run", "/outside", "a/b", "a\\b"}) {
+      assertThatThrownBy(() -> layout.swarmJournalFile("alpha", invalid))
+          .isInstanceOf(IllegalArgumentException.class);
+      assertThatThrownBy(() -> layout.swarmJournalFile(invalid, "run-1"))
+          .isInstanceOf(IllegalArgumentException.class);
+    }
   }
 
   @Test

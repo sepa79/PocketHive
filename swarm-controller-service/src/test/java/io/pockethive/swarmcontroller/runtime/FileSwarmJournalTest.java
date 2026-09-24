@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
@@ -81,7 +83,7 @@ class FileSwarmJournalTest {
         "ph.control",
         new SwarmControllerProperties.Manager("swarm-controller"),
         new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Metrics(
+            new SwarmControllerMetricsProperties(
                 PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),
                 ClickHouseMetricsSinkProperties.disabled()),

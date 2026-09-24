@@ -1821,7 +1821,9 @@ compute adapter, records the resulting Swarm runtime identity and stores the own
 constructed by RuntimeOwnershipManifestFactory,
 pre-pulls requested images and removes controller compute/control queues. It consumes
 RESP-RABBIT-CONNECTION through the participant environment factory, plus the existing
-runtime filesystem mount, metrics and compute contracts. Swarm operation handlers invoke
+runtime filesystem mount, metrics and compute contracts. ClickHouse launch fields
+consume RESP-CLICKHOUSE-ENVIRONMENT; the lifecycle manager does not map them.
+Swarm operation handlers invoke
 these infrastructure operations; public operation terminalization remains with its owner.
 
 **Forbidden:** independently validate/encode Rabbit connections, redefine control routing
@@ -1862,9 +1864,10 @@ mapping and broader plan/transport separation remain debt outside RATE-R1.
 **Current module:** `swarm-controller-service`.
 
 SwarmWorkerSpecFactory maps Bee and SUT environment into PlannedSwarmWorker. It owns
-worker identity, base participant/ClickHouse/network environment, SUT enrichment,
+worker identity, participant/network environment composition, SUT enrichment,
 volumes and spec assembly. Work configuration is supplied by WorkerWorkConfigurationPort;
 the factory does not construct settings implementations or interpret Work fields.
+ClickHouse launch values delegate to RESP-CLICKHOUSE-ENVIRONMENT.
 SwarmRuntimeCore consumes the plan and owns lifecycle/state; compute executes the spec.
 
 **Forbidden:** provision workers, publish bootstrap, mutate Bee/runtime state, decode Work
@@ -2439,8 +2442,9 @@ Both Rabbit and Artemis observations currently omit oldest-message age.
 **Current module:** `common/control-plane-filesystem`; environment names and container
 root are declared by `RuntimeFilesystemContract` in `common/swarm-model`.
 
-`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation and
-worker-output paths. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
+`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation,
+swarm-journal and worker-output paths. `swarmJournalFile` owns the journal artifact
+name and derives it from the validated swarm/run directory. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
 The local and published views derive from the same relative path; consumers must not
 reconstruct that path or introduce a second output root. `RuntimeFilesystemMount`
 owns host-to-container mounts. The layout does not create, read or delete files.
@@ -2455,6 +2459,163 @@ relative file names inside a single worker output directory.
 consumer-local reconstruction of output paths; a second output-directory cleanup owner.
 
 **Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
+
+
+## RESP-SWARM-FILE-JOURNAL
+
+**F04 file slice:** `FileSwarmJournal` in swarm-controller remains the append owner.
+`SwarmFileJournalQuery` in Orchestrator delegates run selection to
+`SwarmJournalRunSelector` and reads through the `SwarmJournalFiles` port;
+`FileSwarmJournalReader` implements file discovery, reading and decoding. Both file implementations consume `RuntimeFilesystemLayout` paths;
+neither reconstructs the journal filename or run path. Swarm tree deletion remains
+with `FilesystemSwarmRemoveStore`, not the reader or writer.
+
+The query preserves existing selection: an explicit nonblank run wins, otherwise
+use the registry's active run, otherwise the most recently modified directory.
+A selected run with no journal does not cause a second selection. This is existing
+file-query behavior, not a new recovery policy. The file reader preserves append
+order, empty files, severity matching, and skipping malformed lines. Missing or
+unreadable files return the existing absence result. Run identifiers now use the
+same layout validation as the writer; invalid run paths are not read and retain
+the endpoint's existing exception-to-500 mapping. No new HTTP error contract is added.
+
+`SwarmJournalController` authorizes access and maps the file query to HTTP; it must
+not discover runs on disk or read/decode journal files. Capture writes now follow
+RESP-JOURNAL-WRITES below. Sink selection, severity normalization, Postgres
+behavior and public response shapes are unchanged.
+
+**Forbidden:** file-query state writes, independent path/default resolution,
+reader-owned retention, changes to append/ACK semantics, or merging Hive and swarm
+journal contracts.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FileSwarmJournalTest`,
+`FileSwarmJournalReaderTest`, `SwarmFileJournalQueryTest`, `SwarmJournalControllerTest`,
+`PostgresJournalStorageTest`, `OrchestratorAdminAuthTest` and existing swarm-tree
+removal tests. SQL event reads follow RESP-JOURNAL-EVENT-QUERIES below; run lists
+follow RESP-JOURNAL-RUN-QUERIES. Archive writes and retention follow RESP-JOURNAL-WRITES.
+
+
+## RESP-JOURNAL-EVENT-QUERIES
+
+**F04 event-read slice:** `common/journal-postgres` owns the `JournalEventQueries`
+port and `JournalPageResponse`/`JournalCursor` projection in its `api` package.
+`PostgresJournalEventQueries` owns event SELECTs, live/archive row decoding and
+cursor construction. `JournalEventRowMapper` is the sole SQL-event-to-timeline/page
+mapper; it keeps the existing distinction that only paged entries expose eventId,
+and the existing null timestamp handling for each projection. These are read-only
+projections of journal storage, not a second event/state authority.
+
+Orchestrator composes the adapter with its existing JdbcTemplate and ObjectMapper.
+`SwarmJournalRunSelector` is the single owner of explicit/registry/observed run
+precedence for both file and SQL reads. Each query supplies only its adapter observation.
+`SwarmStoredJournalQuery` owns pinned-read precedence and the existing
+registered-vs-unknown swarm absence semantics. It delegates all event SQL
+to the port. The pin endpoint also uses this same run resolver. Hive queries retain
+explicit optional swarm/run filters and do not inherit swarm run selection.
+Controllers authorize and normalize HTTP parameters, invoke the query/port, and
+map results; they no longer decode SQL event rows or calculate next cursors.
+
+Preserve: newest-first `(ts,id)` pages with limit+1 lookahead; oldest-first swarm
+timelines; filters; pinned capture precedence; empty archived reads vs absent live
+reads for unknown swarms; existing best-effort lookup failures and JSON-map parsing;
+HTTP statuses, payload fields, and live/archive write behavior. This extraction
+adds no fallback or adapter-selection policy. `JournalPageResponse` and its cursor
+move internally without adding a second wire shape or changing serialization.
+
+Run listing/summary merging follows RESP-JOURNAL-RUN-QUERIES below.
+Metadata/pinning writes and retention follow RESP-JOURNAL-WRITES. They remain
+separate capabilities from the read ports.
+
+**Forbidden:** lifecycle/registry state, authorization, run-selection policy or
+writes in the SQL reader; SQL/row mapping in event query consumers; new retention
+or pinning policy; merging Hive and swarm semantics into one state machine.
+
+**Verification:** JournalEventRowMapperTest, PostgresJournalEventQueriesFailureTest,
+PostgresJournalEventQueriesTest (real Postgres), SwarmJournalRunSelectorTest,
+SwarmStoredJournalQueryTest, existing PostgresJournalStorageTest, HTTP mapping/auth
+tests and RepositoryImportBoundaryTest. Deployed E2E is separate.
+
+
+## RESP-JOURNAL-RUN-QUERIES
+
+**F04 run-list slice:** `JournalRunQueries` in `common/journal-postgres/api` exposes
+per-swarm and deployment-wide run lists and the existing metadata summary read.
+`PostgresJournalRunQueries` owns their SQL. `JournalRunRowMapper` owns summary row
+mapping and persisted tags decoding. `JournalRunSummaries` owns the read-only merge
+of live and pinned summaries by `(swarmId,runId)`; it must not alter stored state.
+`SwarmRunSummary` and the smaller `JournalRunSummary` retain their existing JSON
+fields as named read projections, moved from controller-nested types to the API.
+The smaller projection is derived from the merged summary, never independently merged.
+
+Orchestrator authorizes and normalizes list requests. SwarmStoredJournalQuery
+retains the per-swarm empty/unknown distinction using SwarmStore; the SQL module
+never accesses the registry. The metadata update endpoint consumes the same summary
+reader after its existing write, eliminating a second mapper without changing writes.
+
+Preserve the existing details: per-swarm reads live before pinned; global reads
+pinned before live; pinnedOnly ignores afterTs and preserves SQL NULLS LAST order;
+afterTs filters only live events before aggregation; the SQL live limit precedes
+the global merge/final limit. Merged ordering retains the existing reversed
+nullsLast comparator (null lastTs first). Pinned firstTs/metadata win when present;
+only a newer live lastTs (or a null pinned lastTs) triggers replacement, using the
+larger entry count. These rules describe inherited behavior, not new fallback policy.
+
+**Forbidden:** summary state writes, lifecycle decisions, SQL in list consumers,
+consumer-local tag parsing/summary merging, or changes to pinning/retention policy.
+Metadata writes and run identity lookup, capture/pinning writes and retention follow
+RESP-JOURNAL-WRITES; controller contract bags have been removed. No migration or wire change.
+
+**Verification:** pure merge and mapping tests; real PostgreSQL listing tests for
+pinned/live overlap, shared run IDs across swarms, null timestamps, afterTs/limits,
+pinnedOnly and metadata-only summaries; existing journal/auth/file regression tests.
+
+
+## RESP-JOURNAL-WRITES
+
+**F04 implemented and reviewed:** `common/journal-postgres`
+owns separate metadata, capture and retention ports. `JournalRunMetadata` owns both
+startup registration and operator edits; `PostgresJournalRunMetadata` is their sole
+SQL writer. Startup registration retains its best-effort semantics and scenario-id
+projection from the Orchestrator template via `JournalRunRegistration`. Operator updates retain metadata/event/
+capture identity lookup precedence, ambiguity handling, tag trimming/deduplication
+and limits, null-body clearing, and the shared `JournalRunQueries` response projection.
+No new transaction, identity rule or recovery path is introduced.
+
+`JournalCaptures`/`PostgresJournalCaptures` own mode parsing, capture creation,
+archive copying and capture-stat refresh. The request/response records move out of
+REST without wire changes. `SwarmJournalPinning` resolves the selected run through
+the existing shared selector before calling the capture port; REST only authorizes
+and maps success, absence, mode conflict and storage errors. Preserve default/invalid
+mode => SLIM, FULL/SLIM/ERRORS_ONLY behavior, repeated pin idempotency, existing
+mode-conflict response, statement order and existing nontransactional semantics.
+These inherited policies are not new compatibility or fallback mechanisms.
+
+`JournalRetention`/`PostgresJournalRetention` own partition naming, creation,
+batched default-partition rehoming and retention deletion. Orchestrator's `JournalRetentionSchedule`
+only calls the port. `JournalRetentionSettings` owns effective bounds;
+Spring composition binds the existing environment/property defaults once. Preserve
+UTC day calculations, phase order, cutoff comparisons, exception/logging policy,
+partition name recognition and pinned archive survival. No change to retention
+algorithm or concurrent pin/retention semantics is included.
+
+**Append/query/retention separation:** existing `BufferedPostgresJournalWriter` is
+the sole journal_event INSERT/buffering/backpressure implementation. HiveJournal
+and SwarmJournal retain distinct producer contracts and project their own events
+into that writer; query ports are read-only projections. Only retention performs
+partition/default-row deletion and only captures write pinned archives/statistics.
+Metadata registration and edits share one SQL owner, updating distinct fields.
+File journal reads/writes/deletion continue to use RESP-RUNTIME-FILESYSTEM-LAYOUT;
+exporter directory behavior is not reopened. Database bootstrap stays with existing
+Flyway migrations; this extraction introduces no schema or migration change.
+
+**Forbidden:** journal SQL in REST or lifecycle consumers; capture state or outcomes
+constructed by controllers; another tag normalizer, partition naming/retention owner,
+or a shared Hive/swarm lifecycle state machine. No module/bean identity tests.
+
+**Acceptance:** existing append/read/pin regressions plus real PostgreSQL tests for
+metadata registration/edit/clearing and ambiguity, all capture modes/conflicts/repeat,
+retention cutoffs, default rows and archive survival; behavior tests for normalization,
+run selection and failure mapping; repository import rules and targeted module suites.
 
 
 ## RESP-WORK-DELIVERY
@@ -2767,5 +2928,71 @@ DockerWorkloadProvisioner/WorkloadProvisioner path is removed.
 
 Lifecycle decisions, service-drain behavior, cleanup approvals/postconditions, image
 repository resolution and CP transport ownership remain at their existing owners.
-ClickHouse ENV, journal layout and worker freshness are explicitly deferred to F05,
-F04 and F08 respectively. Implementation/verification progress is recorded in the plan.
+ClickHouse ENV and journal layout are transferred by F05/F04; worker freshness remains
+deferred to F08. Implementation/verification progress is recorded in the plan.
+
+
+## RESP-CLICKHOUSE-INSERT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseJsonEachRowTransport` owns
+HTTP client construction, INSERT URL encoding, JSONEachRow framing, Basic auth,
+timeouts and the 2xx success condition. `ClickHouseInsert` is its prepared-operation
+port: resolve the destination once before draining a flush, then send each batch.
+`ClickHouseConnectionSettings` is a read-only view implemented by the existing
+transaction and metrics properties; it has no defaults or independent state.
+`ClickHouseInsertException` owns bounded failure-body presentation. Metrics retains
+its existing diagnostic prefix and truncation marker.
+
+`ClickHouseMetricsSink` retains metrics projection, label validation, bounded queue,
+flush timing and requeue policy. `ClickHouseTxOutcomeSink` retains transaction
+serialization, its own bounded queue/flush policy and best-effort shutdown flush.
+The transaction sink starts its flush clock at zero; metrics starts at construction.
+Transaction batch/interval/capacity clamps remain local existing behavior; metrics
+properties retain their validation. Neither policy is silently unified.
+
+**Forbidden:** consumer construction of ClickHouse HTTP requests, URLs, credentials
+or INSERT statements; transport-owned domain events, buffers or retry scheduling.
+
+**Required effect:** identical URL, UTF-8 body, auth and timeout settings; rejected
+HTTP batches remain queued under the existing sink policy. Preparing an invalid
+URI fails before draining. The transport adds no retries or configuration defaults.
+
+**Verification:** transport request/response tests, both sink behavior tests,
+launch environment tests; deployed DA-3 is the persistence acceptance path.
+
+## RESP-CLICKHOUSE-ENVIRONMENT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseSinkEnvironment` owns the
+transaction sink ENV names and export from `ClickHouseSinkProperties`, including
+endpoint/table/credentials/timeouts/batching/capacity. ContainerLifecycleManager
+and SwarmWorkerSpecFactory apply this projection at their existing launch step.
+`ClickHouseMetricsEnvironment` separately owns the metrics field mapping, exposing
+runtime and controller-inheritance projections over the same properties. Configured
+metrics entries overwrite the destination; blank credentials are omitted. These
+existing rules deliberately differ from transaction-sink apply-missing semantics.
+ControlPlaneContainerEnvironmentFactory consumes both projections without mapping
+ClickHouse fields itself.
+
+**Required effect:** unconfigured properties export nothing; configured values are
+trimmed and blank values omitted. An existing key, even blank or null, wins. The
+codec mutates only missing sink entries in the supplied environment; no defaults
+or validation are added. Property classes remain the configuration authorities.
+Spring binds the existing ENV names directly; service YAML must not duplicate
+ClickHouse defaults or field aliases. Nested Orchestrator and Controller metrics
+constructors explicitly name their ClickHouse parameter `clickhouse` via Spring's
+`@Name`, preserving the public property prefix independently of Java camel-case.
+Controller metrics binding is a separate `SwarmControllerMetricsProperties` unit.
+Direct sink properties and full nested service configurations are tested separately,
+including source precedence, absent values and existing validation. No new parser,
+configuration defaults or compatibility path is added.
+
+**Forbidden:** service-local sink ENV mapping or independent effective settings.
+
+**Verification:** codec value/precedence tests, full nested service bootstrap tests
+with actual application YAML and original ENV names, and both launch-path behavior
+tests. Deployed DA-3 proves persisted outcomes; execution evidence lives in F05 of
+`docs/inProgress/functional-module-boundaries.md`.

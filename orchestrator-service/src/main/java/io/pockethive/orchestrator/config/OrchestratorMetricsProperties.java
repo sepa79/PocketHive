@@ -6,12 +6,13 @@ import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotNull;
 import java.time.Duration;
 import java.util.Objects;
+import org.springframework.boot.context.properties.bind.Name;
 import org.springframework.validation.annotation.Validated;
 
 /**
  * Responsibility: Validate Orchestrator product-metrics settings.
  * Must not: Resolve control-plane topology or provision runtime resources.
- * Contract: docs/orchestrator/configuration.md.
+ * Contract: RESP-CLICKHOUSE-ENVIRONMENT — docs/architecture/runtime-responsibilities.md#resp-clickhouse-environment.
  */
 @Validated
 public final class OrchestratorMetricsProperties {
@@ -22,7 +23,7 @@ public final class OrchestratorMetricsProperties {
 
     public OrchestratorMetricsProperties(@NotNull PocketHiveMetricsAdapter adapter,
                    @NotNull Duration publishInterval,
-                   @Valid ClickHouseMetricsSinkProperties clickHouse) {
+                   @Name("clickhouse") @Valid ClickHouseMetricsSinkProperties clickHouse) {
         this.adapter = Objects.requireNonNull(adapter, "adapter");
         this.publishInterval = Objects.requireNonNull(publishInterval, "publishInterval");
         this.clickHouse = clickHouse == null ? ClickHouseMetricsSinkProperties.disabled() : clickHouse;

@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
@@ -143,7 +145,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
-    SwarmControllerProperties.Metrics propertiesMetrics = properties.getMetrics();
+    SwarmControllerMetricsProperties propertiesMetrics = properties.getMetrics();
     var metrics = new MetricsSettings(
         propertiesMetrics.adapter(),
         propertiesMetrics.publishInterval(),
