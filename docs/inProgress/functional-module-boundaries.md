@@ -386,7 +386,7 @@ reactor or deployed E2E repeated.
 
 ### F07 — first producer-contract slice
 
-**Implemented, pending separate review.** Base: F02 commit `b0f92340`.
+**Implemented and reviewed; committed in `02b97665`.** Base: F02 commit `b0f92340`.
 Re-tracing confirmed exact copies of RuntimeRequest,
 ScenarioRuntimeResponse and VariablesResolveResponse in Scenario Manager and its
 Orchestrator client. Producer-owned records now live in `common/scenario-api`,
@@ -409,7 +409,38 @@ values through the actual HTTP client and cover request fields, nested variables
 warnings, request context, existing empty-collection projection, rejected null
 metadata/missing runtime directory, HTTP errors and auth retry. Existing producer
 controller/variables/materializer suites and the repository import gate also pass.
-No deployed acceptance or full repository reactor was repeated.
+Separate F07 review found no actionable findings and reran 112 tests successfully
+(`/tmp/ph-f07-review.log`). No deployed acceptance or full repository reactor was repeated.
+
+### F09 — processor pacing slice
+
+**Implemented, pending separate review.** Base: F07 commit `02b97665`.
+Re-tracing confirmed duplicate ownership:
+HttpProtocolHandler, TcpProtocolHandler and Iso8583ProtocolHandler each implement
+applyExecutionMode against the same per-worker AtomicLong. All three callers now
+use one ProcessorPacer owning both state and waiting; the old methods and externally
+writable counter are removed. First-call delay, shared slots, rate/mode updates,
+interruption and reported pacing duration are preserved. Configuration stays
+with ProcessorWorkerConfig. See RESP-PROCESSOR-PACING for exact semantics.
+
+This is a local processor responsibility, not a universal rate limiter. Moderator
+shaping and scheduler quotas differ and remain separate. HTTP client construction,
+TCP transport lifetime, Scenario Manager/MCP/TCP-mock boundaries remain to audit;
+this slice does not close F09 as a whole. No TLS/security or ACK behavior change.
+
+All constructor call sites were traced: the worker supplies the same non-null
+pacer to all handlers, and the existing HTTP test supplies its own pacer. Old
+AtomicLong constructors are removed rather than retained as compatibility paths;
+handlers cannot create private schedules when a dependency is absent. Production
+uses System.nanoTime/Thread.sleep; a package-private clock/wait seam permits
+behavior tests without real delays. No new dependency or import exemption is needed.
+
+Verification: **67 tests passed, zero failures/errors/skips**, including all 64
+processor tests and 3 repository import tests (`/tmp/ph-f09-processor-pacing.log`).
+The 11 pacing cases cover initial/queued/idle reservations, mode/rate updates,
+fractional waits and reported durations, interruption, concurrent reservations and
+per-worker isolation. Existing HTTP/TCP/ISO8583 result/error and logging/security
+tests passed. No full repository reactor or deployed E2E was repeated.
 
 ### F08 and separate correctness work
 

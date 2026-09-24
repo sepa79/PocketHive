@@ -63,7 +63,7 @@ import org.springframework.stereotype.Component;
  * Configuration is supplied by the control plane on the {@code processor.control.*} routing keys.
  * <p>
  * Responsibility: dispatch a request to its selected protocol handler and return the resulting Work item.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
+ * Must not: implement pacing policy, provision Work/CP topology or reinterpret a protocol result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
  */
 @Component("processorWorker")
@@ -129,7 +129,7 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
                               TemplateRenderer templateRenderer,
                               RedisSequenceProperties redisProperties) {
     this.mapper = Objects.requireNonNull(mapper, "mapper");
-    java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos = new java.util.concurrent.atomic.AtomicLong(0L);
+    ProcessorPacer pacer = new ProcessorPacer();
     this.protocolHandlers = Map.of(
         "HTTP", new HttpProtocolHandler(
             mapper,
@@ -141,14 +141,14 @@ class ProcessorWorkerImpl implements PocketHiveWorkerFunction {
             insecureClients.pooled(),
             insecureClients.noKeepAlive(),
             insecureClients.perThread(),
-            nextAllowedTimeNanos),
-        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, nextAllowedTimeNanos,
+            pacer),
+        "TCP", new TcpProtocolHandler(mapper, clock, metricsRecorder, pacer,
             templateRenderer, redisProperties),
         "ISO8583", new Iso8583ProtocolHandler(
             mapper,
             clock,
             metricsRecorder,
-            nextAllowedTimeNanos,
+            pacer,
             templateRenderer,
             redisProperties)
     );

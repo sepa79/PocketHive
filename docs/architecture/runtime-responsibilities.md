@@ -1776,7 +1776,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1787,6 +1787,36 @@ Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket
 **Verification entrypoints:** `ProcessorTest`, `ProcessorTopologyProvisioningTest`.
 
 **Migration status:** Current service contains concrete transports; B07 extraction remains. Protocol scopes are distinct, not multiple writers for one transaction.
+
+## RESP-PROCESSOR-PACING
+
+**Current module(s):** `processor-service`.
+
+ProcessorPacer owns the processor pacing state and algorithm, instantiated once per
+ProcessorWorkerImpl and supplied to all three protocol handlers. Its `await`
+operation consumes the already validated ProcessorWorkerConfig and returns the
+existing planned pacing duration in whole milliseconds. Handlers retain the call
+at their existing pre-transport point and retain metrics/error handling.
+
+The processor reserves one interval before every RATE_PER_SEC call, including
+the first. Concurrent calls reserve successive slots atomically. Rate changes use
+the new interval after any outstanding reservations; THREAD_COUNT neither waits
+nor clears reservations. After an idle period the schedule starts from the current
+monotonic time. Interrupted waiting propagates InterruptedException and does not
+roll back the reservation. Integer truncation, the initial zero timestamp and
+existing nanoTime arithmetic remain unchanged.
+
+**Forbidden:** independent pacing state or interval calculations in protocol
+handlers; configuration defaults/validation, protocol IO, ACK policy or result
+construction in ProcessorPacer. No global limiter shared between worker instances.
+
+Moderator OperationModeLimiter and work-local RateSchedulePolicy are different
+policies (moderator resets/shaping and scheduler per-tick quotas). They are not
+alternate owners of processor request pacing and are outside this transfer.
+
+**Verification entrypoints:** ProcessorPacerTest for clock/wait effects, updates,
+concurrent reservations and interruption; existing ProcessorTest and protocol
+transport tests for result/error behavior. No wire/config field is added.
 
 ## RESP-HTTP-SEQUENCE-WORK
 

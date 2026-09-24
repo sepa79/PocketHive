@@ -24,7 +24,7 @@ import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicLong;
+import io.pockethive.processor.ProcessorPacer;
 import java.util.concurrent.atomic.AtomicReference;
 import org.apache.hc.client5.http.classic.HttpClient;
 import org.apache.hc.core5.http.ClassicHttpRequest;
@@ -75,7 +75,7 @@ class HttpAuthSecondPassSecurityTest {
             HttpProtocolHandler handler = new HttpProtocolHandler(mapper,
                 Clock.fixed(Instant.parse("2026-09-14T12:00:00Z"), ZoneOffset.UTC), metrics,
                 transport, transport, ThreadLocal.withInitial(() -> transport),
-                transport, transport, ThreadLocal.withInitial(() -> transport), new AtomicLong());
+                transport, transport, ThreadLocal.withInitial(() -> transport), new ProcessorPacer());
             ProcessorWorkerConfig config = new ProcessorWorkerConfig("https://audit-resource.invalid",
                 ProcessorWorkerConfig.Mode.THREAD_COUNT, 1, null,
                 ProcessorWorkerConfig.ConnectionReuse.GLOBAL, true, 5000, true, null);

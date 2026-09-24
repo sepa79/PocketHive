@@ -6,6 +6,7 @@ import io.pockethive.work.api.HttpRequest;
 import io.pockethive.work.api.HttpRequestInfo;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ProcessorPacer;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.metrics.*;
 import io.pockethive.processor.exception.ProcessorCallException;
@@ -39,8 +40,9 @@ import org.slf4j.Logger;
 
 /**
  * Responsibility: execute HTTP requests and construct HTTP result observations.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
- * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ * Must not: own pacing state, provision Work/CP topology or reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class HttpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
@@ -53,7 +55,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
   private final HttpClient insecureHttpClient;
   private final HttpClient insecureNoKeepAliveClient;
   private final ThreadLocal<HttpClient> insecurePerThreadClient;
-  private final java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos;
+  private final ProcessorPacer pacer;
 
   public HttpProtocolHandler(ObjectMapper mapper, Clock clock, CallMetricsRecorder metricsRecorder,
                              HttpClient httpClient,
@@ -62,7 +64,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
                              HttpClient insecureHttpClient,
                              HttpClient insecureNoKeepAliveClient,
                              ThreadLocal<HttpClient> insecurePerThreadClient,
-                             java.util.concurrent.atomic.AtomicLong nextAllowedTimeNanos) {
+                             ProcessorPacer pacer) {
     this.mapper = mapper;
     this.strictEnvelopeReader = mapper.readerFor(HttpRequestEnvelope.class)
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
@@ -74,7 +76,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
     this.insecureHttpClient = insecureHttpClient;
     this.insecureNoKeepAliveClient = insecureNoKeepAliveClient;
     this.insecurePerThreadClient = insecurePerThreadClient;
-    this.nextAllowedTimeNanos = nextAllowedTimeNanos;
+    this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
   }
 
   @Override
@@ -112,7 +114,7 @@ public class HttpProtocolHandler implements ProtocolHandler {
     long start = clock.millis();
     long pacingMillis = 0L;
     try {
-      pacingMillis = applyExecutionMode(config);
+      pacingMillis = pacer.await(config);
       final long pacingMillisForHandler = pacingMillis;
       HttpClient client = selectClient(config);
       HttpUriRequestBase apacheRequest = new HttpUriRequestBase(method, target);
@@ -210,31 +212,6 @@ public class HttpProtocolHandler implements ProtocolHandler {
     } catch (Exception ex) {
       return "";
     }
-  }
-
-  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
-    ProcessorWorkerConfig.Mode mode = config.mode();
-    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
-      double rate = config.ratePerSec();
-      if (rate <= 0.0) return 0L;
-      long intervalNanos = (long) (1_000_000_000L / rate);
-      long now = System.nanoTime();
-      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
-        long base = Math.max(current, now);
-        return base + intervalNanos;
-      });
-      long base = Math.max(prev, now);
-      long scheduled = base + intervalNanos;
-      long sleepNanos = scheduled - now;
-      if (sleepNanos > 0L) {
-        long millis = sleepNanos / 1_000_000L;
-        int nanos = (int) (sleepNanos % 1_000_000L);
-        Thread.sleep(millis, nanos);
-        return sleepNanos / 1_000_000L;
-      }
-      return 0L;
-    }
-    return 0L;
   }
 
   private URI resolveTarget(String baseUrl, String path) {

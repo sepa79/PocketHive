@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.ObjectReader;
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ProcessorPacer;
 import io.pockethive.processor.TcpTransportConfig;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.exception.ProcessorCallException;
@@ -40,19 +41,19 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Responsibility: execute ISO8583 exchanges and construct ISO result observations.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
- * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ * Must not: own pacing state, provision Work/CP topology or reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class Iso8583ProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final AtomicLong nextAllowedTimeNanos;
+  private final ProcessorPacer pacer;
   private final TemplateRenderer templateRenderer;
   private final RedisSequenceProperties redisProperties;
   private final Object transportLock = new Object();
@@ -64,7 +65,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
   public Iso8583ProtocolHandler(ObjectMapper mapper,
                                 Clock clock,
                                 CallMetricsRecorder metricsRecorder,
-                                AtomicLong nextAllowedTimeNanos,
+                                ProcessorPacer pacer,
                                 TemplateRenderer templateRenderer,
                                 RedisSequenceProperties redisProperties) {
     this.mapper = mapper;
@@ -72,7 +73,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
-    this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
+    this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
     this.templateRenderer = templateRenderer;
     this.redisProperties = redisProperties;
   }
@@ -132,7 +133,7 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     TcpTransport transport = null;
     boolean closeAfter = false;
     try {
-      pacingMillis = applyExecutionMode(config);
+      pacingMillis = pacer.await(config);
 
       TcpTransportConfig transportConfig = activeConfig;
       byte[] framedPayload = wireProfile.frame(payloadBytes);
@@ -326,32 +327,6 @@ public class Iso8583ProtocolHandler implements ProtocolHandler {
     if (previousPerThread != null) {
       previousPerThread.closeAll();
     }
-  }
-
-  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
-    ProcessorWorkerConfig.Mode mode = config.mode();
-    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
-      double rate = config.ratePerSec();
-      if (rate <= 0.0) {
-        return 0L;
-      }
-      long intervalNanos = (long) (1_000_000_000L / rate);
-      long now = System.nanoTime();
-      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
-        long base = Math.max(current, now);
-        return base + intervalNanos;
-      });
-      long base = Math.max(prev, now);
-      long scheduled = base + intervalNanos;
-      long sleepNanos = scheduled - now;
-      if (sleepNanos > 0L) {
-        long millis = sleepNanos / 1_000_000L;
-        int nanos = (int) (sleepNanos % 1_000_000L);
-        Thread.sleep(millis, nanos);
-        return sleepNanos / 1_000_000L;
-      }
-    }
-    return 0L;
   }
 
   private record Endpoint(String scheme, String host, int port) {

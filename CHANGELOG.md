@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Processor pacing: consolidate HTTP, TCP and ISO8583 rate scheduling into one
+  per-worker owner, preserving wait timing, configuration updates, interruption
+  and metrics behavior.
+
 - Scenario contract isolation: share runtime preparation and resolved-variable
   HTTP records between Scenario Manager and Orchestrator through `scenario-api`;
   remove local wire copies while preserving payloads and client error behavior.
