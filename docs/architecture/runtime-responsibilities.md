@@ -3289,7 +3289,8 @@ files retain their existing distinct roots; this extraction does not make saved
 mappings reload on restart. JSON/YAML readers/writers are transport codecs using
 the shared MessageTypeMapping shape, not new domain validation authorities.
 
-MessageTypeRegistry retains in-memory matching. MappingAuthoringService calls the
+MessageTypeRegistry retains the in-memory catalogue; execution belongs to
+MappingExecutor (RESP-TCP-MOCK-EXECUTION). MappingAuthoringService calls the
 registry and MappingFileStore directly, preserving register-then-save and
 remove-then-delete order. Registry storage forwarding and the former lazy loader
 cycle are removed. FileBasedMappingLoader only imports at startup.
@@ -3332,3 +3333,65 @@ effects in the registry/parser; response execution or catalogue state in authori
 imports, registry state and temporary files, including partial failure and deletion;
 the same suite covers controller response/error mapping via that service.
 MappingAuthoringParserTest covers format acceptance and deferred per-entry binding.
+
+## RESP-TCP-MOCK-STUB-CONVERSION
+
+**Current module(s):** `tcp-mock-server`.
+
+StubMappingConverter owns conversion between the unchanged StubMapping contract
+and MessageTypeMapping. AdminMappingService (called by AdminController) and
+WireMockImporter delegate to it;
+callers retain their distinct source-description text. Reverse conversion preserves
+the existing lossy id/request.bodyPattern/response.body export. Runtime mapping
+defaults remain in MessageTypeMapping; missing nested values fail as before.
+No wire fields, DTO constructors, DTO visibility or nesting change in this slice.
+Splitting the existing public nested types requires separate contract approval.
+
+The `/__admin` diagnostic projection and `/api/mappings` authored format are
+distinct existing boundaries. Importer filesystem lifecycle remains separate; admin orchestration belongs to
+RESP-TCP-MOCK-ADMIN; this extraction adds no validation, compatibility path,
+IO policy or full WireMock support.
+
+**Forbidden:** duplicate stub conversion in consumers, registry/filesystem effects
+in the converter, or inferred extra mapping settings.
+
+**Verification entrypoints:** StubMappingConverterTest for values/defaults/wire
+shape; StubMappingBoundaryTest for admin and real file import/export effects.
+
+## RESP-TCP-MOCK-EXECUTION
+
+MessageTypeRegistry owns the runtime catalogue, defaults and enabled/priority ordering.
+MappingExecutor owns pattern/advanced matching, scenario guards, verification recording,
+template execution and match counters; scenario transitions delegate to StateManager.
+Text, binary and manual-test requests use this executor. TextRequestProcessor owns text
+validation, latency, metric classification and request recording. Netty handlers retain
+scheduling, framing, faults, proxies and channel replies. TcpMockServer composes these
+collaborators. This extraction preserves execution order and existing concurrency semantics.
+
+**Forbidden:** execution in the catalogue/controllers; alternate mapping storage or
+scenario state in execution collaborators. Verification: behavior tests at the executor
+and text processor, plus the repository import check.
+
+## RESP-TCP-MOCK-ADMIN
+
+AdminMappingService coordinates existing `/api/__admin` mapping operations through
+StubMappingConverter and MessageTypeRegistry. CompatibilityQueries owns the distinct
+`/__admin` diagnostic projections; CompatibilityCommands owns its reset/scenario command
+sequence through RequestStore and ScenarioManager. Controllers bind HTTP and delegate.
+Existing exception handling, null-state behavior, reset ordering and persistence semantics
+are preserved. Compatibility projections are not the StubMapping wire format.
+
+**Forbidden:** independent mapping/scenario storage, duplicate conversion, or filesystem
+policy in these application collaborators.
+
+## RESP-TCP-MOCK-WEB-TOOLS
+
+ManualTestService owns manual execution and mock recording through MappingExecutor or
+existing TcpClientService transport methods. WebController retains boundary defaults,
+validation and HTTP exception mapping. RequestLogProjection owns the UI view and its
+existing matched predicate, distinct from the unmatched request journal.
+DocumentationReader owns existing disk/classpath reads, preserving locations and lookup
+order; WebController retains filename validation and HTTP responses.
+
+**Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
+independent request storage or mapping execution in its collaborators.

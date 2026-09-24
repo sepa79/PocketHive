@@ -4,7 +4,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
-import io.pockethive.tcpmock.service.MessageTypeRegistry;
+import io.pockethive.tcpmock.service.MappingExecutor;
 import io.pockethive.tcpmock.service.ValidationService;
 import io.pockethive.tcpmock.model.ProcessedResponse;
 import io.pockethive.tcpmock.util.TcpMetrics;
@@ -13,20 +13,25 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.util.HexFormat;
 
+/**
+ * Responsibility: decode binary requests and apply validation and transport responses.
+ * Must not: select mappings or mutate scenario state.
+ * Contract: RESP-TCP-MOCK-EXECUTION — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-execution.
+ */
 @Component
 public class BinaryMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
-    private final MessageTypeRegistry messageTypeRegistry;
+    private final MappingExecutor mappingExecutor;
     private final ValidationService validationService;
     private final TcpMetrics metrics;
     private final FaultInjectionHandler faultHandler;
     private final TcpProxyHandler proxyHandler;
 
-    public BinaryMessageHandler(MessageTypeRegistry messageTypeRegistry,
+    public BinaryMessageHandler(MappingExecutor mappingExecutor,
                                 ValidationService validationService,
                                 TcpMetrics metrics,
                                 FaultInjectionHandler faultHandler,
                                 TcpProxyHandler proxyHandler) {
-        this.messageTypeRegistry = messageTypeRegistry;
+        this.mappingExecutor = mappingExecutor;
         this.validationService = validationService;
         this.metrics = metrics;
         this.faultHandler = faultHandler;
@@ -50,7 +55,7 @@ public class BinaryMessageHandler extends SimpleChannelInboundHandler<ByteBuf> {
         }
         
         // Process through mapping registry
-        ProcessedResponse response = messageTypeRegistry.processMessage(hexMessage);
+        ProcessedResponse response = mappingExecutor.processMessage(hexMessage);
         
         // Handle delay
         if (response.hasDelay()) {

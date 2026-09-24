@@ -599,7 +599,7 @@ in source. This slice does not close controller orchestration or all F09.
 
 ### F09 — TCP mock mapping authoring
 
-**Implemented, pending separate review.** Base: `7e75105e`.
+**Implemented and reviewed; committed in `d45bcc13`.** Base: `7e75105e`.
 Extract controller parsing and import/delete orchestration into MappingAuthoringParser
 and MappingAuthoringService. Remove registry storage forwarding/dependency; keep
 startup and WireMock boundaries distinct. Preserve dual-format decode, sequential
@@ -613,3 +613,67 @@ entry retaining earlier effects, initial rejection, suppressed file IO failure,
 delete effects and unchanged HTTP response mapping. No deployed HTTP/full reactor
 repeated. Startup import and WireMock admin remain distinct; registry execution
 and wider TCP mock separation are not closed by this slice.
+
+### F09 — TCP mock stub conversion
+
+**Implemented, pending separate review.** Base: `d45bcc13`.
+Share duplicated admin/file StubMapping conversion and reverse file export.
+Public DTOs remain unchanged; nested-type extraction was blocked by automatic
+approval review as a protected contract change and is outside this narrower slice.
+Preserve source-specific descriptions and defaults. See RESP-TCP-MOCK-STUB-CONVERSION.
+Verification: 47 tests passed, zero failures/errors/skips
+(`/tmp/ph-f09-stub-conversion.log`): 6 conversion/boundary tests plus 38 existing
+TCP mock tests and 3 import checks. Covers unchanged JSON, defaults and nulls,
+missing nested object rejection, distinct source descriptions, registry effects
+and real temp-file import/export. Direct controller calls do not claim deployed
+HTTP acceptance; no full reactor/deployment repeated. Admin orchestration and
+importer filesystem lifecycle remain separate F09 work.
+
+### F09 TCP mock closure — implemented and reviewed
+
+Implemented catalogue/execution separation for text, binary and manual requests;
+extracted text processing, admin orchestration/diagnostic projections and web
+test/documentation operations. Preserve public DTOs and behavior. Reset semantics, durability, startup
+versus authored mapping roots and nested DTO cleanup remain separate debt.
+Acceptance: behavior tests at extracted owners, repository import check, then separate
+review of complete call paths.
+
+Verification at `d45bcc13` plus this uncommitted slice:
+`./mvnw -ntp -pl tcp-mock-server,common/control-plane-core -am test -Dtest='*Test' -Dsurefire.failIfNoSpecifiedTests=false`
+passed 405 tests (58 TCP mock, including 14 new behavioral tests; 3 repository
+import checks included in the dependency reactor), no failures/errors/skips.
+Local log: `/tmp/ph-tcp-closure-tests.log`. No deployed/E2E acceptance claimed.
+The mapping execution body and ten compatibility methods were compared to HEAD:
+only delegation/signature annotations and the unused registry counter changed.
+Repository search confirms a single runtime mapping map and a single caller of
+EnhancedTemplateEngine. AdvancedTemplateEngine, AdvancedMatcher and PaymentLogicEngine
+have no Java consumers in the inspected tree; their existing inactive code is not a
+second active execution path. Separate review still required.
+
+This closes the agreed admin/execution slice, not all historical TCP debt. Existing
+reset persistence/null semantics, importer file lifecycle, documentation resource
+handling and public nested types remain unchanged. Direct controller tests do not
+verify deployed Spring/Netty lifecycle or scenario persistence behavior.
+
+Review follow-up: CompatibilityCommandsTest adds nine behavioral cases covering
+both journal clears before scenario reset, retained partial effects on reset failure,
+no scenario reset after journal failure, exact update/delete commands and payloads,
+null/missing-state rejection propagation and update/delete failures. Real RequestStore;
+ScenarioManager is mocked to avoid constructor IO against `/app` (test-scoped Mockito,
+version from the existing Spring Boot BOM).
+These tests verify command-boundary behavior, not scenario persistence internals.
+No production code or reset semantics changed. Full TCP suite: 67 passed, zero
+failures/errors/skips (`/tmp/ph-tcp-commands-fix.log`); diff check clean.
+
+Mockito review fix: module test resources select `mock-maker-subclass` and
+`member-accessor-reflection`; redundant per-mock selection removed. Selecting only
+the mock maker still triggered instrumentation through the default member accessor.
+Both settings are now explicit in `src/test/resources/mockito-extensions`.
+Full TCP suite with `-DargLine=-XX:-EnableDynamicAgentLoading`: 67 passed,
+zero failures/errors/skips, no self-attach warning (`/tmp/ph-tcp-subclass-fix.log`).
+Production code unchanged; diff check clean.
+
+Separate follow-up review accepted the bounded TCP slice after both test fixes.
+Fresh agent-disabled run: 67 tests passed (`/tmp/ph-tcp-subclass-review.log`), no
+self-attach warnings; no remaining findings in the reviewed scope. Deployment
+and explicitly deferred TCP debt remain outside this acceptance.

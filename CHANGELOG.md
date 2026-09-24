@@ -4,6 +4,13 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock execution/admin separation: one mapping executor for text, binary and
+  manual requests; dedicated text processing, admin commands, diagnostic projections
+  and documentation reader. Preserve existing HTTP, matching, recording and reset behavior.
+
+- TCP mock stub conversion: share admin/file import and export mapping logic,
+  preserving the existing wire DTOs, source descriptions and runtime defaults.
+
 - TCP mock mapping authoring: separate body decoding and sequential import/delete
   coordination from HTTP handling; remove registry storage forwarding while
   preserving partial-import effects and existing responses.

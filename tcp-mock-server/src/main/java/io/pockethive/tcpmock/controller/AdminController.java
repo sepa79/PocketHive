@@ -1,62 +1,48 @@
 package io.pockethive.tcpmock.controller;
 
-import io.pockethive.tcpmock.service.MessageTypeRegistry;
+import io.pockethive.tcpmock.service.AdminMappingService;
 import io.pockethive.tcpmock.service.ScenarioManager;
-import io.pockethive.tcpmock.model.MessageTypeMapping;
 import io.pockethive.tcpmock.model.StubMapping;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import java.util.Map;
 
+/**
+ * Responsibility: expose existing admin mapping and scenario operations.
+ * Must not: coordinate mapping mutations, implement conversion or access files.
+ * Contract: RESP-TCP-MOCK-ADMIN — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-admin.
+ */
 @RestController
 @RequestMapping("/api/__admin")
 public class AdminController {
 
-    private final MessageTypeRegistry registry;
+    private final AdminMappingService mappings;
     private final ScenarioManager scenarioManager;
 
-    public AdminController(MessageTypeRegistry registry, ScenarioManager scenarioManager) {
-        this.registry = registry;
+    public AdminController(AdminMappingService mappings, ScenarioManager scenarioManager) {
+        this.mappings = mappings;
         this.scenarioManager = scenarioManager;
     }
 
     @PostMapping("/mappings")
     public ResponseEntity<Map<String, String>> createStubMapping(@RequestBody StubMapping stub) {
-        MessageTypeMapping mapping = new MessageTypeMapping(
-            stub.getId(),
-            stub.getRequest().getBodyPattern(),
-            stub.getResponse().getBody(),
-            "WireMock-style stub"
-        );
-        registry.addMapping(mapping);
-        return ResponseEntity.ok(Map.of("status", "Created", "id", stub.getId()));
+        return ResponseEntity.ok(mappings.create(stub));
     }
 
     @GetMapping("/mappings")
     public ResponseEntity<Map<String, Object>> getAllStubMappings() {
-        return ResponseEntity.ok(Map.of(
-            "mappings", registry.getAllMappings(),
-            "meta", Map.of("total", registry.getAllMappings().size())
-        ));
+        return ResponseEntity.ok(mappings.list());
     }
 
     @DeleteMapping("/mappings/{id}")
     public ResponseEntity<Void> deleteStubMapping(@PathVariable("id") String id) {
-        try {
-            registry.removeMapping(id);
-        } catch (Exception ignored) {
-            // Idempotent deletion; ignore missing entries.
-        }
+        mappings.delete(id);
         return ResponseEntity.noContent().build();
     }
 
     @PostMapping("/mappings/reset")
     public ResponseEntity<Void> resetAllStubMappings() {
-        try {
-            registry.getAllMappings().forEach(m -> registry.removeMapping(m.getId()));
-        } catch (Exception ignored) {
-            // Idempotent reset; ignore missing entries.
-        }
+        mappings.reset();
         return ResponseEntity.noContent().build();
     }
 

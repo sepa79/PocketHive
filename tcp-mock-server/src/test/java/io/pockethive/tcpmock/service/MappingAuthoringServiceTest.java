@@ -15,7 +15,7 @@ class MappingAuthoringServiceTest {
 
     private MappingAuthoringService service() {
         // Authoring uses real registry CRUD only; protocol execution collaborators are outside this fixture.
-        var registry = new MessageTypeRegistry(null, null, null, null, null, null, null);
+        var registry = new MessageTypeRegistry();
         return new MappingAuthoringService(registry, new MappingFileStore(root.toString()), new MappingAuthoringParser());
     }
 
