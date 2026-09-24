@@ -49,7 +49,8 @@ or embed defaults in individual clients/tests.
 `ApiSurface` owns the public service prefixes (`/orchestrator`, `/scenario-manager`,
 `/auth-service`, `/network-proxy-manager`, `/tcp-mock`, `/redis`, `/grafana`) and projects rooted service-relative links, including operationUrl.
 `ApiSurface.pathSegment` encodes opaque identifiers once; clients do not add product ID grammar.
-`ApiResponse` holds HTTP status/body, `ApiException` identifies an unexpected status.
+`ApiResponse` holds HTTP status/body and the Location header (null when absent);
+it does not retain cookies or other response headers. `ApiException` identifies an unexpected status.
 **Effect:** preserve expected denial responses as data, reject off-origin operation
 links and redirects, propagate interruption and request failures. The HTTP budget
 covers response headers and the complete body; timeout/interruption cancels the
@@ -57,6 +58,29 @@ in-flight exchange before returning control to resource cleanup. **Must not:**
 infer domain success, log credentials, retry mutations or use direct backend ports.
 Callers can explicitly select the Accept media type for text/raw endpoints; existing
 JSON callers retain application/json. Both use the same bounded request implementation.
+An explicit GET-with-headers operation uses that same ingress and full-body timeout
+boundary for protocol acceptance checks. It never follows the returned Location.
+
+### OAuth ingress redirect acceptance
+
+`OAuthIngressAcceptanceIT` uses an explicit `ApiTarget` and the `oauth-ingress` tag.
+It sends valid, unauthenticated PKCE authorization requests for the built-in
+`pockethive-vscode` public client through `/auth-service/oauth/authorize` and requires
+the login redirect to retain the selected public origin and `/auth-service` prefix
+(an explicit default `:80`/`:443` is equivalent to its omission).
+It tests ordinary requests and injected `Forwarded`, `X-Forwarded-Port`, host,
+protocol and prefix headers, individually and together. Only after the exact
+expected redirect is verified does it fetch that selected-origin login path through the same
+transport. No login, consent, authorization code, token or swarm is created.
+Evidence retains request-case names, response statuses and the pre-authentication
+Location; it never records cookies, login-page CSRF values or authentication bodies.
+The selected target determines HTTP/HTTPS, port and IPv6 authority; the suite does
+not replace them with a backend address. Deployed runs, including mapped HTTP
+ports and TLS ingress, remain separate from component HTTP tests.
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-smoke.properties oauth-ingress
+```
 
 ## RESP-ACCEPTANCE-API
 

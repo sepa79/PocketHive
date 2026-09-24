@@ -5,7 +5,7 @@ package io.pockethive.acceptance.api;
  * Must not: decide domain outcomes or expose response bodies in toString.
  * Contract: RESP-ACCEPTANCE-HTTP — docs/architecture/acceptance-tests.md#resp-acceptance-http.
  */
-public record ApiResponse(String method, String path, int status, String body) {
+public record ApiResponse(String method, String path, int status, String body, String location) {
   public ApiResponse expect(int expected) {
     if (status != expected) throw new ApiException(this, expected);
     return this;

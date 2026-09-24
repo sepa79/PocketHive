@@ -78,6 +78,8 @@ class RepositoryImportBoundaryTest {
       rule("docker-client-owner",
           outside("common/docker-client|e2e-tests"),
           "com\\.github\\.dockerjava\\..*"),
+      rule("postprocessor-no-http-client", "postprocessor-service",
+          "java\\.net\\.http\\..*"),
       rule("clickhouse-client-owner", outside("common/sink-clickhouse|e2e-tests"),
           "(com\\.clickhouse|ru\\.yandex\\.clickhouse)\\..*"),
       rule("jdbc-owner", outside("common/journal-postgres|db-query-service|e2e-tests"),
@@ -110,6 +112,9 @@ class RepositoryImportBoundaryTest {
 
   @Test
   void importRulesRejectViolationsAndAllowTheirOwners() {
+    assertThat(violations("postprocessor-service", "import java.net.http.HttpClient;"))
+        .containsExactly("1 [postprocessor-no-http-client] java.net.http.HttpClient");
+    assertThat(violations("common/sink-clickhouse", "import java.net.http.HttpClient;")).isEmpty();
     assertThat(violations("trigger-service", "import io.lettuce.core.RedisClient;"))
         .containsExactly("1 [redis-client-owner] io.lettuce.core.RedisClient");
     assertThat(violations("common/redis-adapter", "import io.lettuce.core.RedisClient;")).isEmpty();

@@ -407,8 +407,10 @@ row per inventoried file: `path`, `status`, `observationCount`,
 `unextractedScalarCount`, `sensitiveScalarCount` and `reviewRequired`. Status is
 `structured`, `not-extracted` or `unreadable`. Counts are null for files whose
 structured contents were not read; a parsed file has exact counts from the
-canonical allowlist traversal. Sensitive contents and their pointers are never
-emitted. A structured file needs source review if it has omitted values or no
+canonical allowlist traversal. Values under sensitive field names and their
+pointers are never emitted. Otherwise-allowlisted strings also pass the value
+boundary below; withheld values are counted as sensitive and retain only their
+known allowlisted pointer in a value-free limitation. A structured file needs source review if it has omitted values or no
 observations; every not-extracted/unreadable file needs source review. A false
 `reviewRequired` only means all scalar values were emitted by extraction, not
 that the source has passed QA review. Non-structured files remain references;
@@ -663,6 +665,9 @@ operation are administrative identities, not client requirements. Unsupported
 source shapes and absent declarations remain visible gaps. The operation does
 not evaluate path templates, resolve endpoint context, copy authentication
 payloads or select a different source when the recorded source is unavailable.
+Only strings admitted by the inspector's value boundary are copied verbatim.
+A withheld path stays unknown and produces an explicit extraction gap; population
+never substitutes a truncated URL, a redacted placeholder or an inferred path.
 
 The descriptor's explicit `plan.endpoints[].description` can supply a display
 name only when `callId`, `method` and `path` exactly match one supported HTTP
@@ -778,6 +783,34 @@ API protocol and endpoint kind are different contracts: reference validation
 checks the selected endpoint's identity, not string equality between those fields.
 The canonical runtime owner validates transport compatibility during authoring.
 Endpoints can retain the optional `upstreamBaseUrl` without resolving it.
+
+### Observation string value boundary
+
+An allowed field name alone does not make its string value safe to publish.
+`BundleInspector` applies one conservative rule to every otherwise-allowlisted
+string, including template paths, endpoint paths/descriptions and identifiers.
+It withholds the entire value if it contains any marker declared in
+`bundle-observations.json.withheldStringMarkers` (`?`, `#`, `%`, backslash or
+`//`), an ASCII control character, a URI scheme or a malformed URI. Thus queries
+and fragments are withheld regardless of parameter names; URI authorities,
+userinfo and percent-encoded content cannot bypass the boundary. This includes
+markers inside prose or template expressions. Benign strings with these forms
+also require source review: intake does not guess which values are credentials.
+
+Withholding adds `OBSERVATION_VALUE_WITHHELD` with a static message, source-file
+reference and the known allowlisted pointer, never the original value, parameter
+names or parser error text. The file's hash remains in the inventory;
+`sensitiveScalarCount` increases and `reviewRequired` is true. The value is absent
+from observations, saved initial inspections, population and both sides of source
+comparison. Population and comparison always reinspect the source with this
+owner; saved inspection JSON is not trusted input.
+
+Admitted strings, such as `/accounts/{{ vars.accountId }}`, retain their exact
+values. Inspection does not decode escapes, evaluate templates, resolve variable
+values, strip URL components or mutate source files. This boundary prevents
+automatic copying of these potentially credential-bearing forms; it is not an
+arbitrary-secret detector. Previously created intake artifacts are not silently
+rewritten: review any outputs produced by an older package before sharing them.
 
 Requirements version 3 uses canonical `bearer-token`, not the former intake
 spelling `bearer`. Existing custom-provider requirements retain their explicit

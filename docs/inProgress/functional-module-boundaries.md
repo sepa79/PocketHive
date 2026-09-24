@@ -62,8 +62,8 @@ separated from historical findings that still require revalidation.
 | Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
-| Journal/files | `SwarmJournalController` and `FileSwarmJournal` each assemble `journal.ndjson`; RuntimeFilesystemLayout already owns swarm/run directories | Extend the layout owner; journal API owns storage operations, REST delegates |
-| ClickHouse | `ClickHouseMetricsSink` and `ClickHouseTxOutcomeSink` each construct HTTP clients and INSERT queries | Existing sink-clickhouse owns transport mechanics, separate explicit domain/buffering policies |
+| Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
+| ClickHouse | Both sinks use `ClickHouseJsonEachRowTransport`; shared ENV projections and property-owned defaults replace service copies | F05 implemented, tested and reviewed; separate domain/buffering policies preserved |
 | Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
 | Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
 | UI network projection | `ui-v2/src/lib/networkProxy.ts` maps every unknown mode to DIRECT | Separate contract/behavior decision; do not silently change acceptance during extraction |
@@ -202,14 +202,75 @@ at the caller boundary; no new approval flow and no live cleanup during this ref
 
 ### F04 — Runtime filesystem and journal
 
-Confirmed on the startup/read paths: FileSwarmJournal and SwarmJournalController
-both own `journal.ndjson`; the reader also reconstructs the run directory. Fix in
-this dedicated refactor, not F03.
+**First F04 slice reviewed and committed** as `a651d468`, branch `codex/journal-filesystem`,
+based on `7c6c402d` after all four PR #521 CI checks passed. The complete file-read
+path now leaves REST through SwarmFileJournalQuery → SwarmJournalFiles →
+FileSwarmJournalReader. RuntimeFilesystemLayout owns the journal artifact path
+used by both reader and writer.
+See `RESP-SWARM-FILE-JOURNAL` in the runtime responsibility records for the preserved
+selection/error behavior and the remaining ownership debt.
 
-Extend RuntimeFilesystemLayout for journal artifact paths; remove reader/writer
-path reconstruction. Then extract journal append/query/retention capabilities,
-using journal-postgres for SQL and a named file implementation. Keep CP and swarm
-journal contracts distinct; do not create one global journal state machine.
+Pre-extraction baseline: FileSwarmJournal and SwarmJournalController both owned
+`journal.ndjson`; the reader also reconstructed the run directory.
+
+Validation: 45 tests passed, zero failures/errors/skips, including file read/write,
+run selection, HTTP mapping, removal isolation, Postgres storage/pinning, authorization
+and RepositoryImportBoundaryTest. Test log: `/tmp/ph-f04-tests.log` (local evidence).
+No deployed E2E was repeated for this slice. Invalid file-query run identifiers now
+follow the existing layout validation; no new HTTP response contract was introduced.
+
+**Event reads reviewed, uncommitted:** Hive/swarm/live/archive event SELECTs,
+row mapping and cursor construction now use JournalEventQueries in journal-postgres.
+SwarmJournalRunSelector is the sole explicit/active/observed run selector for file
+and stored reads, including pinning. SwarmStoredJournalQuery retains archive
+precedence and registry-aware empty/absent results. JournalPageResponse and its
+cursor moved to the shared API with unchanged JSON fields; the old DTO was removed.
+See RESP-JOURNAL-EVENT-QUERIES; no wire or write-policy change.
+
+Validation: 58 tests passed, zero failures/errors/skips, including real PostgreSQL
+live/archive paging with equal timestamps, filters, mapping, storage lookup failures,
+run selection, authorization, prior file behavior and import boundaries.
+Command: `./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with the focused journal/filesystem/auth/import test selection; local log
+`/tmp/ph-f04-sql-tests.log`. No deployed E2E or full reactor repeat in this slice.
+
+**Run lists reviewed, uncommitted:** list SQL, summary/tag mapping and live/pinned
+merge now use JournalRunQueries; ordering/filter/limit semantics are preserved. The
+metadata update response uses the same summary reader. See RESP-JOURNAL-RUN-QUERIES.
+
+Validation: 69 focused tests passed, zero failures/errors/skips, including real
+PostgreSQL run merging, swarm isolation, afterTs aggregation, null-date ordering,
+metadata-only summaries, prior event/file behavior and import boundaries.
+Log: `/tmp/ph-f04-runs-tests.log`. No deployed E2E or full-suite run.
+
+**F04 implementation complete and reviewed:**
+metadata registration/operator edits, capture/pinning and retention now use the
+separate ports and adapters in RESP-JOURNAL-WRITES. REST contains no journal SQL,
+archive outcome construction or nested request/response records. Lifecycle startup
+projects template metadata through JournalRunRegistration; the scheduled trigger
+calls JournalRetention. Removed JournalRunMetadataWriter/JournalPartitionManager
+and their SQL implementations from Orchestrator. One shared adapter owns each write.
+
+Existing BufferedPostgresJournalWriter still owns event INSERT/buffering for the
+separate Hive/swarm producer contracts. File append/read/remove paths use the shared
+RuntimeFilesystemLayout; the completed exporter-directory fix was not reopened.
+All existing policies, mode defaults, HTTP payloads and nontransactional statement
+ordering remain unchanged. No database/schema or migration change.
+
+Validation: **111 tests, zero failures/errors/skips**, including real PostgreSQL
+metadata registration/edit/clearing/ambiguity, all pin modes and repeat/conflict,
+retention cutoffs and pinned archive survival, HTTP error/authorization mapping,
+producer append/durable behavior, file queries/removal, run/cursor projections,
+ContainerLifecycleManager and RepositoryImportBoundaryTest. Command:
+`./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with `-Dtest='*Journal*Test,PinModeTest,RuntimeFilesystemLayoutTest,FilesystemSwarmRemoveStoreTest,RepositoryImportBoundaryTest,OrchestratorAdminAuthTest,ContainerLifecycleManagerTest'`
+and `-Dsurefire.failIfNoSpecifiedTests=false`.
+Log: `/tmp/ph-f04-complete-tests.log`. Full reactor/deployed E2E not repeated.
+Final whole-F04 review: no blocking findings. Full Orchestrator/Swarm Controller
+and dependency tests passed with `AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl`:
+1806 tests, 1802 passed, 4 skipped for missing explicit Redis fixture configuration,
+zero failures/errors. Log: `/tmp/ph-f04-review-configured-tests.log`.
+No deployed stack/Swarm E2E was repeated.
 
 Gate: read/write/export/delete use identical resolved paths; invalid identifiers
 follow one owner contract; REST maps requests and delegates; retention has one writer.
@@ -217,14 +278,60 @@ Do not reopen the completed exporter-directory fix.
 
 ### F05 — ClickHouse
 
-Add the confirmed duplicate ENV export in ContainerLifecycleManager and
-SwarmWorkerSpecFactory to this dedicated refactor. One sink-owned codec must export
-endpoint/table/credentials/timeouts/batching; both launch paths consume it, retaining
-the current precedence and values. This is plan-only during F03.
+**F05 implementation, verification and separate review complete** on `codex/journal-filesystem`, after
+F04 commit `1aa5e3d1`. Ownership is recorded in RESP-CLICKHOUSE-INSERT and
+RESP-CLICKHOUSE-ENVIRONMENT in the runtime responsibility records.
 
-Move repeated HTTP/auth/INSERT construction into sink-clickhouse. Metrics and
-transaction event construction stay with their domain owners. Their flush,
-buffering and failure policies remain explicitly distinct, not unified defaults.
+- `ClickHouseJsonEachRowTransport` owns HTTP client construction, INSERT URI,
+  UTF-8 JSONEachRow framing, authentication, timeout use and HTTP success checking.
+  Both sinks consume a prepared `ClickHouseInsert`; the old HTTP implementations
+  are deleted. Existing properties expose a read-only connection view without a
+  second configuration/defaults owner.
+- `ClickHouseSinkEnvironment` replaces transaction ENV mapping in
+  ContainerLifecycleManager and SwarmWorkerSpecFactory. Existing keys (including
+  blank/null) retain precedence. `ClickHouseMetricsEnvironment` replaces both
+  copies of metrics fields in ControlPlaneContainerEnvironmentFactory, preserving
+  runtime/controller prefixes and metrics overwrite semantics.
+- Bootstrap slice: service YAML no longer repeats ClickHouse defaults or ENV
+  aliases. Existing property classes remain the only defaults/validation owners.
+  Spring's `@Name("clickhouse")` fixes constructor binding for nested metrics;
+  Controller metrics settings are extracted into their own implementation unit.
+  Full service binding tests cover the original ENV names, all settings, source
+  precedence, omitted defaults and rejected invalid metrics configuration.
+- Metrics and transaction event construction, their separate clocks, buffering,
+  validation/clamping, requeue and shutdown behavior remain with their existing
+  policy owners. Tests verify full buffers, partial flush failures, invalid URI
+  preparation before draining, failure diagnostics and exact requests.
+- The existing import gate now forbids JDK HTTP clients in postprocessor production
+  code. Repository searches found no other Java production JSONEachRow request or
+  ClickHouse ENV field builder outside `sink-clickhouse`. Historical storage tools
+  and deployment config are not runtime consumers of this Java API.
+
+Verification (2026-09-23): affected reactor
+`AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl ./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service,postprocessor-service -am test`
+passed: **1853 tests, 1849 passed, 4 skipped, no failures/errors**
+(`/tmp/ph-f05-bootstrap-reactor-final.log`). Skips are the existing externally
+configured Redis fixtures. Transport/sink behavior, both launch consumers, full
+service binding and RepositoryImportBoundaryTest ran. The 17 bootstrap tests also
+passed separately (`/tmp/ph-f05-bootstrap-binding.log`). The earlier YAML-removal
+failure was traced to constructor `clickHouse` being bound as `click-house`;
+`@Name("clickhouse")` now preserves the canonical property path without aliases.
+Deployed acceptance: rebuilt the local stack from this worktree through
+`COMPOSE_PROJECT_NAME=pockethive-redis ./build-hive.sh --quick` (existing data kept;
+no swarms were active). `./run-acceptance-tests.sh
+acceptance-tests/targets/local-tx-outcome-artemis.properties tx-outcome` passed
+DA-3 on Artemis through the public ingress/Grafana: no rows with sink NONE,
+then matching trace/call IDs, status, success and duration after enabling
+CLICKHOUSE_V2 by config-update. The normal stop/remove lifecycle completed and
+public list-swarms returned empty. Evidence:
+`acceptance-tests/runs/tx-outcome-a51fa251-47dd-4d43-a4c0-c462cac25bc3/`;
+logs `/tmp/ph-f05-local-deploy.log` and `/tmp/ph-f05-da3.log`.
+The acceptance invocation ran 388 tests including dependencies/framework tests
+and one deployed DA-3, all passing. No remote Swarm or Rabbit deployment repeated.
+Final separate whole-F05 review: no actionable findings. 115 focused tests passed,
+zero failures/errors/skips (`/tmp/ph-f05-complete-review.log`). Review traced both
+sink paths, startup/launch ENV precedence and repository-wide alternative owners;
+checked the existing DA-3 artifacts without repeating deployment. Ready for commit.
 
 Gate: no consumer builds ClickHouse URLs/queries/credentials; exact requests and
 queue-full/flush-error behavior covered; DA-3 still proves persisted outcomes.
@@ -280,4 +387,4 @@ change lifecycle timing during F03.
 Original plan review (PR #519): that update removed stale prerequisites, preserved existing owners,
 added the omitted Redis capture consumer and split implementation from behavioral
 redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
-F01 and F03 were subsequently authorized explicitly by the user; the other entries remain plans.
+F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other entries remain plans.

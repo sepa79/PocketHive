@@ -6,6 +6,7 @@ import io.pockethive.controlplane.spring.WorkerSettings;
 import io.pockethive.manager.runtime.WorkerSpec;
 import io.pockethive.docker.DockerRuntimeNames;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
+import io.pockethive.sink.clickhouse.ClickHouseSinkEnvironment;
 import io.pockethive.swarm.model.Bee;
 import io.pockethive.swarm.model.SutEndpoint;
 import io.pockethive.swarm.model.SutEnvironment;
@@ -23,6 +24,7 @@ import io.pockethive.rabbit.api.RabbitConnectionSettings;
 /**
  * Responsibility: assemble worker identity, base environment, SUT context, mounts and the delegated Work result into a spec.
  * Must not: interpret Work settings, construct Work providers, provision workers or mutate accepted state.
+ * ClickHouse sink environment delegates to RESP-CLICKHOUSE-ENVIRONMENT.
  * Contract: RESP-CONTROLLER-WORKER-PLAN — docs/architecture/runtime-responsibilities.md#resp-controller-worker-plan.
  * Consumes: RESP-CONTROLLER-WORK-CONFIGURATION through WorkerWorkConfigurationPort.
  */
@@ -71,7 +73,7 @@ public final class SwarmWorkerSpecFactory {
     environment.put(
         DockerRuntimeNames.STACK_NAME_ENV,
         DockerRuntimeNames.stackName(properties.getSwarmId()));
-    applyClickHouseSinkEnvironment(environment);
+    ClickHouseSinkEnvironment.applyMissing(environment, clickHouseSink);
     String network = controlNetwork.get();
     if (hasText(network)) {
       environment.put("CONTROL_NETWORK", network);
@@ -90,36 +92,6 @@ public final class SwarmWorkerSpecFactory {
         work.environment(),
         List.copyOf(volumes));
     return new PlannedSwarmWorker(spec, effectiveConfig);
-  }
-
-  private void applyClickHouseSinkEnvironment(Map<String, String> environment) {
-    if (!clickHouseSink.configured()) {
-      return;
-    }
-    putEnvIfMissing(environment, "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", clickHouseSink.getEndpoint());
-    putEnvIfMissing(environment, "POCKETHIVE_SINK_CLICKHOUSE_TABLE", clickHouseSink.getTable());
-    putEnvIfMissing(environment, "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", clickHouseSink.getUsername());
-    putEnvIfMissing(environment, "POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", clickHouseSink.getPassword());
-    putEnvIfMissing(
-        environment,
-        "POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS",
-        Integer.toString(clickHouseSink.getConnectTimeoutMs()));
-    putEnvIfMissing(
-        environment,
-        "POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS",
-        Integer.toString(clickHouseSink.getReadTimeoutMs()));
-    putEnvIfMissing(
-        environment,
-        "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE",
-        Integer.toString(clickHouseSink.getBatchSize()));
-    putEnvIfMissing(
-        environment,
-        "POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS",
-        Integer.toString(clickHouseSink.getFlushIntervalMs()));
-    putEnvIfMissing(
-        environment,
-        "POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS",
-        Integer.toString(clickHouseSink.getMaxBufferedEvents()));
   }
 
   static List<String> resolveVolumes(Map<String, Object> config) {
@@ -205,16 +177,6 @@ public final class SwarmWorkerSpecFactory {
       return;
     }
     String text = value.toString().trim();
-    if (!text.isBlank()) {
-      environment.put(key, text);
-    }
-  }
-
-  private static void putEnvIfMissing(Map<String, String> environment, String key, String value) {
-    if (environment.containsKey(key) || value == null) {
-      return;
-    }
-    String text = value.trim();
     if (!text.isBlank()) {
       environment.put(key, text);
     }

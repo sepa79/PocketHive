@@ -3,6 +3,7 @@
   "numberKeys": ["rate", "perSecond", "requestsPerSecond", "durationSeconds", "timeoutMs", "retries", "maxInFlight", "concurrency", "tps", "thinkTimeMs"],
   "booleanKeys": ["enabled", "keepAlive", "tlsVerify", "fireAndForget"],
   "topLevelStringKeys": ["serviceId", "callId", "pathTemplate"],
+  "withheldStringMarkers": ["?", "#", "%", "\\", "//"],
   "templatePopulation": {
     "protocol": "HTTP",
     "identityKeys": ["serviceId", "callId"],

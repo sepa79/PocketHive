@@ -24,7 +24,7 @@ class BindingRecoveryAssertionsTest {
         "tester", applied, List.of(new ResolvedSutEndpoint("selected", "http", "http://proxy:18090", authority, "sut:8080")));
   }
   private static ApiResponse response(int status) {
-    return new ApiResponse("POST", "/network-proxy-manager/api/network/bindings/owned", status, "response");
+    return new ApiResponse("POST", "/network-proxy-manager/api/network/bindings/owned", status, "response", null);
   }
   @Test void acceptsTimedApplyFailureWithExactlyTheSameRetainedBinding() {
     var previous = binding(APPLIED, "proxy:18090");

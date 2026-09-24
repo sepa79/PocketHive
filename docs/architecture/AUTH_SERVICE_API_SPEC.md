@@ -175,6 +175,17 @@ OAuth child endpoints retain the validated issuer's ownership checks.
 Companion metadata, OAuth, MCP and archive-upload requests reject HTTP redirects;
 a redirect cannot change the selected endpoint or transport.
 
+Public ingress preserves the request's external authority, including its port,
+when forwarding `/auth-service/`. It supplies `Host` and `X-Forwarded-Host` from
+the received Host header, `X-Forwarded-Proto` from its accepted connection and
+`X-Forwarded-Prefix: /auth-service`. It removes incoming `Forwarded` and
+`X-Forwarded-Port` headers so neither client-supplied forwarding metadata nor
+the ingress container's listening port overrides that authority. Auth Service's
+framework forwarding support owns authority parsing, including IPv6. Browser
+login redirects therefore retain the public scheme, host, port and auth prefix
+when the published port differs from the container port. HTTP remains subject
+to the explicit allowance above; this does not change OAuth callback validation.
+
 Public HTTP carries passwords and bearer/refresh tokens without TLS. This is an
 explicit insecure deployment exception, not standards-compliant production OAuth
 transport or a promise of support in other MCP clients. Prefer HTTPS at public

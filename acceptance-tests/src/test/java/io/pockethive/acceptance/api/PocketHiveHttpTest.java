@@ -8,6 +8,7 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.time.Duration;
 import java.util.Map;
@@ -77,6 +78,7 @@ class PocketHiveHttpTest {
       ingress.reply("GET", "/api/protected", 403, Map.of("message", "denied"));
       var response = http.request("GET", "/api/protected", null, "");
       assertEquals(403, response.status());
+      assertNull(response.location());
       assertEquals("denied", http.tree(response).required("message").asText());
     }
   }
@@ -98,6 +100,38 @@ class PocketHiveHttpTest {
       ingress.reply("POST", "/api/action", 302, Map.of("message", "redirect"));
       assertEquals(302, http.request("POST", "/api/action", Map.of(), "").status());
     }
+  }
+
+  @Test void preservesLocationAndExplicitHeadersWithoutFollowingOrRetainingCookies() throws Exception {
+    var followed = new AtomicInteger();
+    var server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+    String location = origin(server).resolve("/unexpected").toString();
+    server.createContext("/redirect", exchange -> {
+      boolean valid = "GET".equals(exchange.getRequestMethod())
+          && "text/html".equals(exchange.getRequestHeaders().getFirst("Accept"))
+          && "65534".equals(exchange.getRequestHeaders().getFirst("X-Forwarded-Port"))
+          && exchange.getRequestHeaders().getFirst("Authorization") == null;
+      exchange.getResponseHeaders().add("Location", location);
+      exchange.getResponseHeaders().add("Set-Cookie", "session=synthetic-cookie-secret");
+      exchange.sendResponseHeaders(valid ? 302 : 400, -1);
+      exchange.close();
+    });
+    server.createContext("/unexpected", exchange -> {
+      followed.incrementAndGet();
+      exchange.sendResponseHeaders(200, -1);
+      exchange.close();
+    });
+    server.start();
+    try (var http = new PocketHiveHttp(origin(server), Duration.ofSeconds(1))) {
+      var response = http.getWithHeaders("/redirect", "text/html", Map.of("X-Forwarded-Port", "65534"));
+      assertEquals(302, response.status());
+      assertEquals(location, response.location());
+      assertEquals(0, followed.get());
+      assertFalse(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(response)
+          .contains("synthetic-cookie-secret"));
+      assertThrows(IllegalArgumentException.class,
+          () -> http.getWithHeaders("https://unrelated.invalid/redirect", "text/html", Map.of()));
+    } finally { server.stop(0); }
   }
 
   @Test void timesOutAndClosesWhileTheBodyIsStillBlocked() throws Exception {

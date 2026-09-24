@@ -58,7 +58,11 @@ source snapshots, not as verified Git history.
    It reinspects the recorded bundle source and requires its inventory hash to
    remain unchanged. Explicit top-level HTTP request templates populate
    `requirements.templates`: `serviceId`, `callId`, `protocol`, `method` and
-   `pathTemplate` (retained verbatim as `path`). New API identifiers are
+   `pathTemplate` (retained verbatim as `path` only when admitted by the inspector's
+   [string value boundary](../contract/intake-contract.md#observation-string-value-boundary)).
+   Potentially credential-bearing URI forms are withheld in full, with a
+   value-free limitation and source pointer; the path stays unknown. Do not copy
+   a withheld value from the source or invent a replacement. New API identifiers are
    administrative links derived from the explicit service/call identity.
    Existing matching rows retain their identifiers; only null fields are filled.
    Repeating the operation is idempotent. Conflicting populated values,

@@ -146,7 +146,10 @@ allowlisted observations; `inspection_coverage` projects that traversal's covera
 `source_comparison` compares explicit snapshots and their evidence targets.
 **Consumers:** inspection, population, evidence checks and review projections.
 **Effect:** source hashes exclude the owner-resolved intake subtree; unknown content
-and extraction gaps remain visible. Runtime vocabulary is consumed from its existing
+and extraction gaps remain visible. The inspector alone withholds potentially
+credential-bearing string forms before observation emission, retaining value-free
+limitations and extraction coverage. Population and comparison consume this boundary;
+they do not add redactors or trust saved inspection JSON. Runtime vocabulary is consumed from its existing
 [projection owner](runtime-responsibilities.md#resp-intake-runtime-vocabulary).
 **Must not:** execute source content, resolve endpoints, infer adapters or semantic impact.
 **Contract:** `bundle-observations.json`; **verification:** `test_runtime_observations.py`,

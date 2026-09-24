@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
+
 import io.pockethive.observability.metrics.PocketHiveMetricsAdapter;
 import io.pockethive.sink.clickhouse.metrics.ClickHouseMetricsSinkProperties;
 import io.pockethive.swarmcontroller.config.SwarmControllerProperties;
@@ -28,7 +30,7 @@ final class SwarmControllerTestProperties {
             CONTROL_QUEUE_PREFIX_BASE,
             new SwarmControllerProperties.Manager("swarm-controller"),
             new SwarmControllerProperties.SwarmController(
-                    new SwarmControllerProperties.Metrics(
+                    new SwarmControllerMetricsProperties(
                     PocketHiveMetricsAdapter.DISABLED,
                     Duration.ofSeconds(10),
                     ClickHouseMetricsSinkProperties.disabled()),

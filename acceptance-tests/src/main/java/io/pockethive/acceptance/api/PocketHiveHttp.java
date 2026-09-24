@@ -12,6 +12,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpTimeoutException;
 import java.time.Duration;
+import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -53,12 +54,17 @@ public final class PocketHiveHttp implements AutoCloseable {
 
   private ApiResponse request(String method, String path, Object body, String token, Duration budget, String accept)
       throws IOException, InterruptedException {
-    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), bearer(token), budget, accept, "application/json");
+    return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), bearer(token), budget, accept, "application/json", Map.of());
   }
 
   public ApiResponse requestText(String method, String path, String body, String token)
       throws IOException, InterruptedException {
-    return exchange(method, path, body.getBytes(StandardCharsets.UTF_8), bearer(token), requestTimeout, "text/plain", "text/plain");
+    return exchange(method, path, body.getBytes(StandardCharsets.UTF_8), bearer(token), requestTimeout, "text/plain", "text/plain", Map.of());
+  }
+
+  public ApiResponse getWithHeaders(String path, String accept, Map<String, String> headers)
+      throws IOException, InterruptedException {
+    return exchange("GET", path, null, "", requestTimeout, accept, "application/json", headers);
   }
 
   public ApiResponse getWithBasicAuth(String path, String username, String password)
@@ -71,13 +77,14 @@ public final class PocketHiveHttp implements AutoCloseable {
     String credentials = java.util.Base64.getEncoder().encodeToString(
         (username + ":" + password).getBytes(StandardCharsets.UTF_8));
     return exchange(method, path, body == null ? null : json.writeValueAsBytes(body), "Basic " + credentials,
-        budget, "application/json", "application/json");
+        budget, "application/json", "application/json", Map.of());
   }
 
   private static String bearer(String token) { return token.isEmpty() ? "" : "Bearer " + token; }
 
   private ApiResponse exchange(String method, String path, byte[] body, String authorization, Duration budget,
-                               String accept, String contentType) throws IOException, InterruptedException {
+                               String accept, String contentType, Map<String, String> headers)
+      throws IOException, InterruptedException {
     URI destination = ingress.resolve(path);
     if (!Objects.equals(ingress.getScheme(), destination.getScheme())
         || !Objects.equals(ingress.getRawAuthority(), destination.getRawAuthority())
@@ -87,6 +94,7 @@ public final class PocketHiveHttp implements AutoCloseable {
     Duration timeout = budget.compareTo(requestTimeout) < 0 ? budget : requestTimeout;
     if (timeout.isNegative() || timeout.isZero()) throw new IllegalArgumentException("HTTP budget exhausted");
     var request = HttpRequest.newBuilder(destination).timeout(timeout).header("Accept", accept);
+    headers.forEach(request::header);
     if (!authorization.isEmpty()) request.header("Authorization", authorization);
     var publisher = HttpRequest.BodyPublishers.noBody();
     if (body != null) {
@@ -96,7 +104,8 @@ public final class PocketHiveHttp implements AutoCloseable {
     var exchange = client.sendAsync(request.method(method, publisher).build(), HttpResponse.BodyHandlers.ofString());
     try {
       var response = exchange.get(timeout.toNanos(), TimeUnit.NANOSECONDS);
-      return new ApiResponse(method, destination.getRawPath(), response.statusCode(), response.body());
+      return new ApiResponse(method, destination.getRawPath(), response.statusCode(), response.body(),
+          response.headers().firstValue("Location").orElse(null));
     } catch (TimeoutException failure) {
       exchange.cancel(true);
       throw new HttpTimeoutException(method + " " + destination.getRawPath() + " exceeded " + timeout);

@@ -1,11 +1,12 @@
 """Responsibility: inventory scenario source outside reserved intake artifacts and report safe observations.
-Must not: resolve endpoints, infer adapters or execute source content.
+Must not: emit withheld source values, resolve endpoints, infer adapters or execute source content.
 Local contract: bundle-observations.json; intake-contract.md#runtime-vocabulary-ownership.
 Contract: RESP-INTAKE-INSPECTION — docs/architecture/intake-runtime.md#resp-intake-inspection.
 """
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from .errors import IntakeError
 from .inspection_coverage import NOT_EXTRACTED, STRUCTURED, UNREADABLE, coverage_view, file_coverage
@@ -70,6 +71,14 @@ class BundleInspector:
                         or endpoint_field
                     )
                     if allowed:
+                        if isinstance(scalar, str) and self._withheld_string(scalar):
+                            sensitive += 1
+                            limitations.append(IntakeError(
+                                "OBSERVATION_VALUE_WITHHELD",
+                                "String observation withheld because its form may contain credentials; review the source without copying the value.",
+                                relative, pointer,
+                            ).issue)
+                            continue
                         observations.append({"artifactRef": relative, "pointer": pointer, "value": scalar,
                                              "sha256": digest, "kind": "bundle-observation"})
                         observed += 1
@@ -84,6 +93,16 @@ class BundleInspector:
                 "observations": observations, "limitations": limitations,
                 "coverage": coverage_view(coverage),
                 "claims": {"clientIntentConfirmed": False, "scenarioValidated": False, "scriptsExecuted": False}}
+
+    def _withheld_string(self, value: str) -> bool:
+        if any(marker in value for marker in self.rules["withheldStringMarkers"]):
+            return True
+        if any(ord(character) < 32 or ord(character) == 127 for character in value):
+            return True
+        try:
+            return bool(urlsplit(value).scheme)
+        except ValueError:
+            return True
 
     def _source_paths(self, root: Path, intake: Path):
         pending = [root]
