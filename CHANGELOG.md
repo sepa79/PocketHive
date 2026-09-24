@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Local input isolation: move CSV dataset loading/cursor and scheduler rate policy,
+  runtime limits, reset and diagnostics to `common/work-local`. Preserve settings
+  parsing, ordering, failure accounting and dispatch behavior; remove the unused
+  control-plane snapshot callback from the SDK input lifecycle contract.
+
 - ClickHouse isolation: share JSONEachRow HTTP transport and sink-owned launch
   environment projections while preserving metrics/transaction buffering, failure
   policies and environment precedence. Bind existing ClickHouse ENV settings

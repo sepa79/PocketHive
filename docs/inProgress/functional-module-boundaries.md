@@ -59,7 +59,7 @@ separated from historical findings that still require revalidation.
 | Area | Current evidence | Next boundary |
 | --- | --- | --- |
 | Redis | All five paths use `common/redis-adapter`; settings remain in `redis-config` | F01 implemented; see Redis extraction evidence |
-| Work integration | SDK `input/WorkInput.update` still takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; SDK factories take WorkerDefinition; neutral output transport already exists | Move only contracts necessary for the selected consumer; retain SDK composition and accepted-state ownership |
+| Work integration | F02 removed the unused snapshot-typed `WorkInput.update`; SDK factories retain WorkerDefinition within composition; local mechanics consume settings/neutral policy contracts | Retain SDK composition and accepted-state ownership; do not move unused abstractions into work-api |
 | Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
 | Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
 | Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
@@ -334,6 +334,39 @@ queue-full/flush-error behavior covered; DA-3 still proves persisted outcomes.
 Vendor-import restrictions alone cannot detect duplicated JDK HTTP implementations.
 
 ### F02 / F06 / F07 / F09 — selected follow-up slices
+
+Current work: `codex/worker-inputs`, based on F04/F05 commit `2d763660` (PR #522).
+User selected smaller follow-ups before F06: F02, then bounded F07/F09 changes;
+F08 state semantics require separate decisions. No F06 auth code was changed.
+
+**F02 selected extraction implemented and reviewed.**
+`common/work-local` now owns CSV loading/formatting/cursor (`CsvDatasetCursor`),
+scheduler rate quota (`RateSchedulePolicy`) and runtime rate/max/reset projection,
+finite-run count and derived diagnostics (`SchedulerRunState`). Canonical settings
+and field parsers retain their existing owners. The old SDK implementations are
+removed; SDK keeps worker lifecycle, scheduling clock, snapshot projection, seed
+metadata and dispatch. CSV intake pacing remains in the SDK coordinator; its
+interval-scaled arithmetic is distinct from the scheduler's existing per-tick quota.
+No timing reinterpretation, ACK or wire change is included.
+
+Repository tracing found no implementations or callers of WorkInput.update(snapshot).
+That unused method was removed; WorkInput retains only lifecycle methods. Factory
+WorkerDefinition arguments stay inside SDK composition and are not needed by the
+extracted owners. No unused neutral interface or compatibility copy was added.
+
+The CSV review P3 is corrected: documentation states the caller's serialization
+requirement, without claiming stop waits for an in-flight tick. Runtime behavior
+was not changed for that finding.
+
+Verification: clean affected reactor through worker-sdk and trigger-service,
+83 selected tests, zero failures/errors/skips (`/tmp/ph-f02-local-inputs-clean.log`).
+Coverage includes CSV format/charset/EOF/rotation/reload, rejected settings,
+fractional quota, finite/unlimited/long limits, reset, disabled/re-enabled state,
+seed/dispatch/result failures, trigger behavior, other existing inputs and the
+repository import gate. Separate previous CSV review ran 30 tests successfully
+(`/tmp/ph-f02-csv-review.log`). Separate complete F02 review found no actionable
+issues; its fresh 83 tests passed (`/tmp/ph-f02-scheduler-review.log`). No full
+reactor or deployed E2E repeated.
 
 - **F02 local input/SDK:** CSV and scheduler execution behind minimal input
   contracts; preserve cursor/EOF/rotation/rate/reset semantics. SDK keeps execution,

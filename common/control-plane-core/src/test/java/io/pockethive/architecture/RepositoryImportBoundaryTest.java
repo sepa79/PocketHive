@@ -41,6 +41,8 @@ class RepositoryImportBoundaryTest {
           "org\\.springframework\\.amqp\\.(core\\.AmqpTemplate|rabbit\\.core\\.RabbitTemplate)"),
       rule("rabbit-internals-owner", outside("common/rabbit-adapter"),
           "io\\.pockethive\\.rabbit\\.(topology|transport|config)\\..*"),
+      rule("local-input-no-runtime-or-control-plane", "common/(work-local|work-local-config)",
+          "io\\.pockethive\\.(worker\\.sdk|controlplane)\\..*"),
       rule("rabbit-no-worker-runtime", "common/rabbit-adapter",
           "io\\.pockethive\\.worker\\.sdk\\..*"),
       rule("worker-sdk-no-rabbit-work", "common/worker-sdk",

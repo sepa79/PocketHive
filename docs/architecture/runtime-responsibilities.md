@@ -919,11 +919,11 @@ policy; omitted patch fields preserve accepted values. No new runtime effect is 
 execution/state ownership is B03. Existing live-mutability classification stays with
 WorkPatchPolicy: only maxMessages is live-mutable among these fields.
 
-TIM-R1 correction: SchedulerWorkInput resolves its initial maxMessages from startup
-properties once, then owns the accepted runtime long. Valid updates replace that value
-only after both mutable settings pass canonical validation; they do not rewrite the
-startup limit declaration. Ticks and diagnostics consume the accepted value without
-parsing configuration. This corrects the existing consumer, without adding a state layer.
+TIM-R1 semantics, retained by F02: SchedulerRunState resolves initial maxMessages
+from canonical startup settings once and owns its runtime projection. Valid updates
+replace it only after rate/limit/reset pass canonical validation; they do not rewrite
+the startup declaration. Ticks and diagnostics consume that projection without
+parsing configuration. WorkerState remains the accepted-configuration writer.
 
 **Forbidden:** local timing/limit decoders or range repair, accepting a rejected setting,
 or presenting metadata validation as an implemented scheduling/backlog effect.
@@ -932,8 +932,9 @@ finite-run scheduling behavior. Full candidate acceptance and other IO settings 
 
 ## RESP-WORK-SCHEDULER-RESET
 
-**B02 transfer accepted within scope on 2026-09-10:** `common/work-config`, `input.SchedulerResetParser` owns
-the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerWorkInput and
+**B02 transfer accepted within scope on 2026-09-10; current owner:**
+`common/work-local-config`, `io.pockethive.work.local.scheduler.SchedulerResetParser` owns
+the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerRunState and
 Scenario Manager consume it; the runtime's separate string decoder is removed.
 
 A declared value must be a boolean: true requests a finite-run counter reset, false
@@ -1032,6 +1033,13 @@ configuration without WorkerDefinition. MessageWorkInputFactory and TransportWor
 wrap these providers for the existing registries; Rabbit factory implementations live in
 rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
 NONE is an explicit output implementation.
+
+`WorkInput` is the SDK composition lifecycle handle (start/stop/close), consumed by
+WorkInputLifecycle. Control updates reach input coordinators through their existing
+registered WorkerControlPlaneRuntime listeners; they are not a second lifecycle
+callback on WorkInput. The unused snapshot-typed update method was removed in F02.
+Factory WorkerDefinition parameters stay inside SDK composition; local execution
+owners consume canonical settings and the existing neutral scheduling policy port.
 
 WorkPlaneSelection owns the explicit pockethive.work.type / POCKETHIVE_WORK_TYPE
 bootstrap projection; CurrentWorkPlaneSelection declares the current deployable
@@ -1198,39 +1206,72 @@ runtime tests; no new boundary scanner or wiring tests.
 
 **Current module(s):** `common/worker-sdk`.
 
-SchedulerWorkInput owns timed intake, finite-run count and dispatch; its factory/builder wire the selected policy and callbacks.
+`SchedulerWorkInput` owns timed intake and dispatch; its factory/builder wire the
+selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
+into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
+Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
+Its builder consumes validated timing without local defaults or clamping.
 
-It projects WorkerControlPlaneRuntime snapshots, delivers each revision to the policy, and dispatches the returned quota through WorkerRuntime.
-Source rates and timing/limits come from RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
-Rate, maxMessages and declared reset flags are parsed before any setting is changed; a valid
-changed maxMessages resets the finite-run counter. Its builder consumes validated timing
-without local defaults or clamping. SchedulerWorkInput owns the accepted runtime limit
-as a long initialized from startup properties; ticks never reparse its declaration.
-Reset flags consume RESP-WORK-SCHEDULER-RESET; explicit true resets the existing counter.
+A tick obtains policy quota before applying the current run limit. Seed creation
+precedes counting; counting precedes dispatch. Worker/result-handler failures
+continue through the existing error callback and never undo the count or retry.
+The SDK maps the owner's remaining value to the existing WorkItem header and
+forwards its diagnostic projection. It does not own a second counter/limit.
 
-**Forbidden:** reimplement trigger interval/single-request rules or select a policy by worker role.
+**Forbidden:** reimplement rate/trigger rules, finite-run/reset arithmetic or
+select a policy by worker role.
 
-**Required effect:** Each state revision reaches the policy before a subsequent tick; finite-run intake dispatches through WorkerRuntime.
+**Required effect:** Each state revision reaches the policy before a subsequent
+tick; finite-run intake dispatches through WorkerRuntime with unchanged accounting.
 
-**Verification entrypoints:** `WorkControlCompositionTest`, `TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
+**Verification entrypoints:** `WorkControlCompositionTest`,
+`TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
 
-**Migration status:** Current input still applies raw scheduling overrides; B02 owns that parsing migration, B03/B07 lifecycle/packaging.
+**Migration status:** F02 run accounting and rate policy extracted; SDK retains
+worker composition, snapshot projection, clock and execution.
+
+## RESP-WORK-SCHEDULER-RUN
+
+**Current module(s):** `common/work-local`.
+
+`SchedulerRunState` owns the runtime projection of rate/maxMessages controls and
+finite-run dispatch count. Startup consumes canonical `SchedulerSettings`. Raw
+runtime controls delegate to the existing rate/integer/reset field parsers before
+any field or count changes. WorkerState remains the accepted-config writer; this
+projection never mutates the Spring property carrier or accepted worker state.
+
+Changing maxMessages or explicit reset=true clears the count; repeated unchanged
+limits, reset=false and enablement alone do not. A zero limit remains unlimited.
+Quota clipping, per-dispatch remaining and diagnostic fields are derived here.
+A tick captures its diagnostic limit before dispatch, while each dispatch samples
+the then-current limit before incrementing. This preserves the existing behavior
+when a config update arrives during dispatch; no new whole-tick lock is introduced.
+Control updates are serialized by the SDK's projection lock; this API does not
+promise atomicity between config updates and a whole dispatch batch.
+
+**Forbidden:** own accepted worker configuration, reimplement field parsing, read
+Control Plane/Worker SDK, run timers, build seeds or dispatch work.
+
+**Verification entrypoints:** `SchedulerRunStateTest`, `SchedulerWorkInputTest`.
 
 ## RESP-WORK-RATE-POLICY
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/work-local`.
 
-RateSchedulePolicy owns fractional rate quota accumulation and reset on disabled revisions.
-
+`RateSchedulePolicy` implements the existing ScheduledInvocationPolicy port and
+owns fractional rate quota accumulation and reset on disabled revisions.
 SchedulerWorkInput supplies monotonic tick time and ordered SchedulingState updates.
+The existing quota is per policy tick; this extraction does not reinterpret it as
+elapsed-time compensation or change non-default tick interval behavior.
 
 **Forbidden:** read CP, mutate settings or dispatch messages.
 
-**Required effect:** Fractional quotas accumulate at the configured rate and disabled updates reset carry, including between ticks.
+**Required effect:** Fractional quotas accumulate at the configured rate and disabled
+updates reset carry, including between ticks.
 
 **Verification entrypoints:** `RateSchedulePolicyTest`.
 
-**Migration status:** Current B01 policy.
+**Migration status:** F02 rate policy moved out of SDK without a compatibility copy.
 
 ## RESP-TRIGGER-POLICY
 
@@ -1430,26 +1471,55 @@ record/rotation/disable behavior. Full B02 acceptance and phase simplification a
 
 ## RESP-WORK-CSV-INPUT
 
-Consumes RESP-WORK-CSV-SETTINGS for one immutable resolved settings snapshot; bootstrap
-and raw updates delegate parsing before replacement. Dataset file reads and cursor /
-initialization failures stay here. A rate change does not reload the file; the existing
-patch policy still requires rematerialization for CSV source/format/timing changes.
-
 **Current module(s):** `common/worker-sdk`.
 
-CsvDataSetWorkInput owns file-backed dataset iteration and intake lifecycle in the current SDK.
+`CsvDataSetWorkInput` owns CSV intake lifecycle, control-state subscription, rate
+planning, WorkItem metadata and dispatch through WorkerRuntime. It consumes
+RESP-WORK-CSV-SETTINGS for its read-only resolved settings projection; bootstrap
+and raw updates delegate parsing before replacement. Accepted configuration stays
+with WorkerState. Timing/rate validation and seconds-to-milliseconds conversion
+remain with RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE.
 
-It consumes selected CSV settings, observes worker state and dispatches records through WorkerRuntime.
-Timing/rate validation and the seconds-to-milliseconds conversion delegate to
-RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE; intake does not repair invalid timing.
+Dataset loading, formatting and cursor operations delegate to
+RESP-WORK-CSV-DATASET. Loading remains lazy on enablement. Disable/re-enable does
+not reload the file or reset the cursor; stop/start reloads the file without
+resetting the cursor. Rate updates do not reload data. Existing patch policy still
+requires rematerialization for CSV source/format/timing changes.
 
-**Forbidden:** declare broker resources or own accepted worker configuration.
+**Forbidden:** read/split/format dataset files, maintain a second dataset cursor,
+declare broker resources or own accepted worker configuration.
 
-**Required effect:** Records are read in the configured order and exhaustion/stop is observed without broker provisioning.
+**Required effect:** Configured records reach WorkerRuntime in order, with unchanged
+CSV headers, rate, enablement and exhaustion behavior.
 
 **Verification entrypoints:** `CsvDataSetWorkInputTest`.
 
-**Migration status:** Local adapter packaging B07; raw configuration/lifecycle consolidation B02/B03.
+**Migration status:** F02 CSV dataset mechanics extracted. Scheduler extraction is
+described separately under RESP-WORK-SCHEDULE-INPUT; SDK retains input composition.
+
+## RESP-WORK-CSV-DATASET
+
+**Current module(s):** `common/work-local`.
+
+`CsvDatasetCursor` is the sole owner of loaded CSV rows, JSON record formatting and
+cursor movement. Its API accepts canonical `CsvDatasetSettings` from
+`common/work-local-config`; it does not parse configuration. The SDK consumes its
+row index, JSON and read-only size/position/remaining projections.
+
+The reader preserves the existing charset and regex-delimiter contract, skips blank
+lines, retains trailing empty fields and trims JSON field names/values. Headerless
+rows use col0, col1, etc.; header rows map only the common field count. No quoted-CSV
+parser is introduced. Each selection attempt advances the cursor, including EOF;
+rotation returns row zero and sets the next position to one. Reloading data does
+not reset cursor position. Normal ticks run on one scheduler thread. Callers must
+serialize loading and iteration; the cursor does not support concurrent operations.
+The existing SDK stop requests interruption without waiting for an in-flight tick,
+so stop/start does not itself guarantee that serialization.
+
+**Forbidden:** depend on Worker SDK/control-plane state, schedule ticks, dispatch
+WorkItems, resolve configuration defaults or mutate accepted configuration.
+
+**Verification entrypoints:** `CsvDatasetCursorTest`, plus SDK CSV intake tests.
 
 ## RESP-WORK-REDIS-DATASET
 

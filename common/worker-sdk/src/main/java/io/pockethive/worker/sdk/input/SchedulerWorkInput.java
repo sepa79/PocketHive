@@ -1,9 +1,6 @@
 package io.pockethive.worker.sdk.input;
 
-import io.pockethive.work.config.input.InputRateParser;
-import io.pockethive.work.config.input.InputScheduleField;
-import io.pockethive.work.config.input.InputScheduleParser;
-import io.pockethive.work.local.scheduler.SchedulerResetParser;
+import io.pockethive.work.local.scheduler.SchedulerRunState;
 
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.work.api.SchedulingState;
@@ -36,11 +33,11 @@ import org.slf4j.LoggerFactory;
  *
  * @param <C> configuration type managed by the associated scheduler state
  * <p>
- * Responsibility: coordinate scheduled intake and its accepted runtime limit using its invocation policy and runtime.
- * Must not: implement trigger semantics or access Rabbit/Redis clients.
+ * Responsibility: coordinate scheduled intake, worker-state projection and dispatch.
+ * Must not: own run counters, parse scheduler controls or implement rate/trigger policies.
  * Consumes: RESP-WORK-INPUT-SCHEDULE — docs/architecture/runtime-responsibilities.md#resp-work-input-schedule.
  * Consumes: RESP-WORK-INPUT-RATE — docs/architecture/runtime-responsibilities.md#resp-work-input-rate.
- * Consumes: RESP-WORK-SCHEDULER-RESET — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-reset.
+ * Consumes: RESP-WORK-SCHEDULER-RUN — docs/architecture/runtime-responsibilities.md#resp-work-scheduler-run.
  * Consumes RESP-WORK-SCHEDULER-SETTINGS for immutable startup settings; runtime controls remain projections.
  * Contract: RESP-WORK-SCHEDULE-INPUT — docs/architecture/runtime-responsibilities.md#resp-work-schedule-input.
  */
@@ -54,16 +51,13 @@ public final class SchedulerWorkInput<C> implements WorkInput {
     private final WorkerRuntime workerRuntime;
     private final ControlPlaneIdentity identity;
     private final ScheduledInvocationPolicy<C> schedulerState;
-    private volatile double ratePerSec;
+    private final SchedulerRunState runState;
     private final BiFunction<WorkerDefinition, ControlPlaneIdentity, WorkItem> seedFactory;
     private final BiConsumer<WorkItem, WorkerDefinition> resultHandler;
     private final Consumer<Exception> dispatchErrorHandler;
     private final Logger log;
     private final long initialDelayMs;
     private final long tickIntervalMs;
-    private volatile long maxMessages;
-
-    private final java.util.concurrent.atomic.AtomicLong dispatchedCount = new java.util.concurrent.atomic.AtomicLong();
 
     private SchedulingState<C> schedulingState;
     private final Object projectionLock = new Object();
@@ -80,7 +74,7 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.identity = builder.identity;
         this.schedulerState = builder.schedulerState;
         var scheduling = builder.scheduling.settings();
-        this.ratePerSec = scheduling.ratePerSec();
+        this.runState = new SchedulerRunState(scheduling, workerDefinition.beanName(), builder.log);
         this.schedulingState = new SchedulingState<>(false, 0, SchedulingConfigState.UNCONFIGURED, null, scheduling.ratePerSec());
         this.schedulerState.update(this.schedulingState);
         this.seedFactory = builder.seedFactory;
@@ -89,7 +83,6 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         this.log = builder.log;
         this.initialDelayMs = scheduling.initialDelayMs();
         this.tickIntervalMs = scheduling.tickIntervalMs();
-        this.maxMessages = scheduling.maxMessages();
     }
 
     /**
@@ -112,31 +105,24 @@ public final class SchedulerWorkInput<C> implements WorkInput {
             }
             return;
         }
-        long limit = maxMessages;
-        if (limit > 0L) {
-            long remaining = Math.max(0L, limit - dispatchedCount.get());
-            if (remaining <= 0L) {
-                if (log.isDebugEnabled()) {
-                    log.debug(
-                        "{} scheduler finite-run exhausted at tick {} (maxMessages={}, dispatched={})",
-                        workerDefinition.beanName(), nowMillis, limit, dispatchedCount.get());
-                }
-                publishDiagnostics(limit);
-                return;
+        long limit = runState.maxMessages();
+        quota = runState.limitQuota(quota, limit);
+        if (quota <= 0) {
+            if (log.isDebugEnabled()) {
+                log.debug(
+                    "{} scheduler finite-run exhausted at tick {} (maxMessages={}, dispatched={})",
+                    workerDefinition.beanName(), nowMillis, limit, runState.dispatchedCount());
             }
-            if (quota > remaining) {
-                quota = (int) remaining;
-            }
+            publishDiagnostics(limit);
+            return;
         }
         if (log.isDebugEnabled()) {
             log.debug("{} scheduler dispatching {} invocation(s) at tick {}", workerDefinition.beanName(), quota, nowMillis);
         }
         for (int i = 0; i < quota; i++) {
             WorkItem seed = seedFactory.apply(workerDefinition, identity);
-            long messageLimit = maxMessages;
-            long after = dispatchedCount.incrementAndGet();
-            if (messageLimit > 0L) {
-                long remainingAfter = Math.max(0L, messageLimit - after);
+            long remainingAfter = runState.recordDispatch();
+            if (remainingAfter >= 0L) {
                 seed = seed.toBuilder()
                     .header("x-ph-scheduler-remaining", remainingAfter)
                     .build();
@@ -209,11 +195,11 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         controlPlaneRuntime.registerStateListener(workerDefinition.beanName(), snapshot -> {
           synchronized (projectionLock) {
             boolean previouslyEnabled = schedulingState.enabled();
-            applyRawConfigOverrides(snapshot.rawConfig());
+            runState.applyControls(snapshot.rawConfig());
             C configuration = snapshot.config(schedulerState.configurationType()).orElse(null);
             SchedulingState<C> next = new SchedulingState<>(snapshot.enabled(), ++projectionRevision,
                 configuration == null ? SchedulingConfigState.UNCONFIGURED : SchedulingConfigState.CONFIGURED,
-                configuration, ratePerSec);
+                configuration, runState.ratePerSec());
             schedulerState.update(next);
             schedulingState = next;
             boolean currentlyEnabled = next.enabled();
@@ -227,50 +213,6 @@ public final class SchedulerWorkInput<C> implements WorkInput {
           }
         });
         listenersRegistered = true;
-    }
-
-    private void applyRawConfigOverrides(Map<String, Object> rawConfig) {
-        if (rawConfig == null || rawConfig.isEmpty()) {
-            return;
-        }
-        Object inputs = rawConfig.get("inputs");
-        if (!(inputs instanceof Map<?, ?> inputsMap)) {
-            return;
-        }
-        Object scheduler = inputsMap.get("scheduler");
-        if (!(scheduler instanceof Map<?, ?> schedulerMap)) {
-            return;
-        }
-
-        double rate = schedulerMap.containsKey(InputRateParser.FIELD)
-            ? new InputRateParser().parse(schedulerMap.get(InputRateParser.FIELD), InputRateParser.SCHEDULER_PATH)
-            : ratePerSec;
-        long currentMax = maxMessages;
-        long newMax = schedulerMap.containsKey(InputScheduleField.MAX_MESSAGES.key())
-            ? new InputScheduleParser().parse(schedulerMap.get(InputScheduleField.MAX_MESSAGES.key()),
-                InputScheduleField.MAX_MESSAGES, InputScheduleParser.SCHEDULER_MAX_MESSAGES_PATH)
-            : currentMax;
-        boolean explicitReset = schedulerMap.containsKey(SchedulerResetParser.FIELD)
-            && new SchedulerResetParser().parse(schedulerMap.get(SchedulerResetParser.FIELD), SchedulerResetParser.PATH);
-
-        // Validate all requested scheduler controls before changing settings or counters.
-        if (rate != ratePerSec) {
-            ratePerSec = rate;
-            log.info("{} scheduler ratePerSec updated via config: {}", workerDefinition.beanName(), rate);
-        }
-        if (newMax != currentMax) {
-            maxMessages = newMax;
-            log.info("{} scheduler maxMessages updated via config: {} (previous={})",
-                workerDefinition.beanName(), newMax, currentMax);
-        }
-        if (newMax != currentMax || explicitReset) {
-            long before = dispatchedCount.getAndSet(0L);
-            if (log.isInfoEnabled()) {
-                log.info(
-                    "{} scheduler finite-run counters reset via config (previousDispatched={})",
-                    workerDefinition.beanName(), before);
-            }
-        }
     }
 
     static WorkItem defaultSeed(WorkerDefinition definition, ControlPlaneIdentity identity) {
@@ -309,21 +251,8 @@ public final class SchedulerWorkInput<C> implements WorkInput {
         if (publisher == null) {
             return;
         }
-        long dispatched = dispatchedCount.get();
-        long remaining = limit > 0L ? Math.max(0L, limit - dispatched) : -1L;
-        boolean exhausted = limit > 0L && remaining == 0L;
-        double rate = ratePerSec;
-        publisher.update(status -> {
-            Map<String, Object> data = new java.util.LinkedHashMap<>();
-            data.put("ratePerSec", rate);
-            data.put("maxMessages", limit);
-            data.put("dispatched", dispatched);
-            if (remaining >= 0L) {
-                data.put("remaining", remaining);
-            }
-            data.put("exhausted", exhausted);
-            status.data("scheduler", data);
-        });
+        Map<String, Object> data = runState.diagnostics(limit);
+        publisher.update(status -> status.data("scheduler", data));
     }
 
 }
