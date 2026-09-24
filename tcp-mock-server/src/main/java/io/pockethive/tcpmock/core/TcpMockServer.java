@@ -7,6 +7,7 @@ import io.pockethive.tcpmock.handler.FaultInjectionHandler;
 import io.pockethive.tcpmock.handler.TcpProxyHandler;
 import io.pockethive.tcpmock.config.TcpMockConfig;
 import io.pockethive.tcpmock.service.MessageTypeRegistry;
+import io.pockethive.tcpmock.service.MappingExecutor;
 import io.pockethive.tcpmock.service.ValidationService;
 import io.pockethive.tcpmock.util.TcpMetrics;
 import io.netty.bootstrap.ServerBootstrap;
@@ -23,11 +24,17 @@ import org.springframework.stereotype.Component;
 import javax.net.ssl.SSLException;
 import java.security.cert.CertificateException;
 
+/**
+ * Responsibility: compose and run TCP server pipelines.
+ * Must not: execute mappings or own their catalogue.
+ * Contract: RESP-TCP-MOCK-EXECUTION — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-execution.
+ */
 @Component
 public class TcpMockServer implements CommandLineRunner {
     private final TcpMockConfig config;
     private final UnifiedTcpRequestHandler requestHandler;
     private final MessageTypeRegistry messageTypeRegistry;
+    private final MappingExecutor mappingExecutor;
     private final ValidationService validationService;
     private final TcpMetrics tcpMetrics;
     private final FaultInjectionHandler faultInjectionHandler;
@@ -37,6 +44,7 @@ public class TcpMockServer implements CommandLineRunner {
     public TcpMockServer(TcpMockConfig config,
                         UnifiedTcpRequestHandler requestHandler,
                         MessageTypeRegistry messageTypeRegistry,
+                        MappingExecutor mappingExecutor,
                         ValidationService validationService,
                         TcpMetrics tcpMetrics,
                         FaultInjectionHandler faultInjectionHandler,
@@ -44,6 +52,7 @@ public class TcpMockServer implements CommandLineRunner {
         this.config = config;
         this.requestHandler = requestHandler;
         this.messageTypeRegistry = messageTypeRegistry;
+        this.mappingExecutor = mappingExecutor;
         this.validationService = validationService;
         this.tcpMetrics = tcpMetrics;
         this.faultInjectionHandler = faultInjectionHandler;
@@ -93,7 +102,7 @@ public class TcpMockServer implements CommandLineRunner {
                         // Dual handler: String for text, ByteBuf for binary
                         pipeline.addLast("textHandler", requestHandler);
                         pipeline.addLast("binaryHandler", new BinaryMessageHandler(
-                            messageTypeRegistry, validationService, tcpMetrics,
+                            mappingExecutor, validationService, tcpMetrics,
                             faultInjectionHandler, tcpProxyHandler));
                     }
                 })

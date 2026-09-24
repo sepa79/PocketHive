@@ -1,63 +1,43 @@
 package io.pockethive.tcpmock.controller;
 
-import org.springframework.web.bind.annotation.*;
+import io.pockethive.tcpmock.model.Workspace;
+import io.pockethive.tcpmock.model.WorkspaceRequest;
+import io.pockethive.tcpmock.service.WorkspaceService;
+import java.util.List;
 import org.springframework.http.ResponseEntity;
-import java.util.*;
+import org.springframework.web.bind.annotation.*;
 
+/**
+ * Responsibility: map workspace HTTP operations to the catalogue owner.
+ * Must not: store workspaces, allocate IDs or decide default protection.
+ * Contract: RESP-TCP-MOCK-WORKSPACES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-workspaces.
+ */
 @RestController
 @RequestMapping("/api/workspaces")
 public class WorkspaceController {
+    private final WorkspaceService workspaces;
 
-  private final Map<String, Workspace> workspaces = new HashMap<>();
-
-  public WorkspaceController() {
-    workspaces.put("default", new Workspace("default", "Default Workspace", "system", false));
-  }
-
-  @GetMapping
-  public List<Workspace> getAll() {
-    return new ArrayList<>(workspaces.values());
-  }
-
-  @PostMapping
-  public ResponseEntity<Workspace> create(@RequestBody WorkspaceRequest request) {
-    String id = "ws-" + System.currentTimeMillis();
-    Workspace workspace = new Workspace(id, request.name, "current-user", request.shared);
-    workspaces.put(id, workspace);
-    return ResponseEntity.ok(workspace);
-  }
-
-  @DeleteMapping("/{id}")
-  public ResponseEntity<Void> delete(@PathVariable("id") String id) {
-    if ("default".equals(id)) {
-      return ResponseEntity.badRequest().build();
+    public WorkspaceController(WorkspaceService workspaces) {
+        this.workspaces = workspaces;
     }
-    workspaces.remove(id);
-    return ResponseEntity.ok().build();
-  }
 
-  @PutMapping("/{id}")
-  public ResponseEntity<Workspace> update(@PathVariable("id") String id, @RequestBody Workspace workspace) {
-    workspaces.put(id, workspace);
-    return ResponseEntity.ok(workspace);
-  }
-
-  static class Workspace {
-    public String id;
-    public String name;
-    public String owner;
-    public boolean shared;
-
-    public Workspace(String id, String name, String owner, boolean shared) {
-      this.id = id;
-      this.name = name;
-      this.owner = owner;
-      this.shared = shared;
+    @GetMapping
+    public List<Workspace> getAll() {
+        return workspaces.findAll();
     }
-  }
 
-  static class WorkspaceRequest {
-    public String name;
-    public boolean shared;
-  }
+    @PostMapping
+    public ResponseEntity<Workspace> create(@RequestBody WorkspaceRequest request) {
+        return ResponseEntity.ok(workspaces.create(request.name, request.shared));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable("id") String id) {
+        return workspaces.delete(id) ? ResponseEntity.ok().build() : ResponseEntity.badRequest().build();
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<Workspace> update(@PathVariable("id") String id, @RequestBody Workspace workspace) {
+        return ResponseEntity.ok(workspaces.update(id, workspace));
+    }
 }

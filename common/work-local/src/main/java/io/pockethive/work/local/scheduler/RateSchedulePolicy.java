@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.input;
+package io.pockethive.work.local.scheduler;
 
 import io.pockethive.work.api.ScheduledInvocationPolicy;
 import io.pockethive.work.api.SchedulingState;

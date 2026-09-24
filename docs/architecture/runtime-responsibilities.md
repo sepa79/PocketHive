@@ -919,11 +919,11 @@ policy; omitted patch fields preserve accepted values. No new runtime effect is 
 execution/state ownership is B03. Existing live-mutability classification stays with
 WorkPatchPolicy: only maxMessages is live-mutable among these fields.
 
-TIM-R1 correction: SchedulerWorkInput resolves its initial maxMessages from startup
-properties once, then owns the accepted runtime long. Valid updates replace that value
-only after both mutable settings pass canonical validation; they do not rewrite the
-startup limit declaration. Ticks and diagnostics consume the accepted value without
-parsing configuration. This corrects the existing consumer, without adding a state layer.
+TIM-R1 semantics, retained by F02: SchedulerRunState resolves initial maxMessages
+from canonical startup settings once and owns its runtime projection. Valid updates
+replace it only after rate/limit/reset pass canonical validation; they do not rewrite
+the startup declaration. Ticks and diagnostics consume that projection without
+parsing configuration. WorkerState remains the accepted-configuration writer.
 
 **Forbidden:** local timing/limit decoders or range repair, accepting a rejected setting,
 or presenting metadata validation as an implemented scheduling/backlog effect.
@@ -932,8 +932,9 @@ finite-run scheduling behavior. Full candidate acceptance and other IO settings 
 
 ## RESP-WORK-SCHEDULER-RESET
 
-**B02 transfer accepted within scope on 2026-09-10:** `common/work-config`, `input.SchedulerResetParser` owns
-the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerWorkInput and
+**B02 transfer accepted within scope on 2026-09-10; current owner:**
+`common/work-local-config`, `io.pockethive.work.local.scheduler.SchedulerResetParser` owns
+the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerRunState and
 Scenario Manager consume it; the runtime's separate string decoder is removed.
 
 A declared value must be a boolean: true requests a finite-run counter reset, false
@@ -1032,6 +1033,13 @@ configuration without WorkerDefinition. MessageWorkInputFactory and TransportWor
 wrap these providers for the existing registries; Rabbit factory implementations live in
 rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
 NONE is an explicit output implementation.
+
+`WorkInput` is the SDK composition lifecycle handle (start/stop/close), consumed by
+WorkInputLifecycle. Control updates reach input coordinators through their existing
+registered WorkerControlPlaneRuntime listeners; they are not a second lifecycle
+callback on WorkInput. The unused snapshot-typed update method was removed in F02.
+Factory WorkerDefinition parameters stay inside SDK composition; local execution
+owners consume canonical settings and the existing neutral scheduling policy port.
 
 WorkPlaneSelection owns the explicit pockethive.work.type / POCKETHIVE_WORK_TYPE
 bootstrap projection; CurrentWorkPlaneSelection declares the current deployable
@@ -1198,39 +1206,72 @@ runtime tests; no new boundary scanner or wiring tests.
 
 **Current module(s):** `common/worker-sdk`.
 
-SchedulerWorkInput owns timed intake, finite-run count and dispatch; its factory/builder wire the selected policy and callbacks.
+`SchedulerWorkInput` owns timed intake and dispatch; its factory/builder wire the
+selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
+into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
+Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
+Its builder consumes validated timing without local defaults or clamping.
 
-It projects WorkerControlPlaneRuntime snapshots, delivers each revision to the policy, and dispatches the returned quota through WorkerRuntime.
-Source rates and timing/limits come from RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
-Rate, maxMessages and declared reset flags are parsed before any setting is changed; a valid
-changed maxMessages resets the finite-run counter. Its builder consumes validated timing
-without local defaults or clamping. SchedulerWorkInput owns the accepted runtime limit
-as a long initialized from startup properties; ticks never reparse its declaration.
-Reset flags consume RESP-WORK-SCHEDULER-RESET; explicit true resets the existing counter.
+A tick obtains policy quota before applying the current run limit. Seed creation
+precedes counting; counting precedes dispatch. Worker/result-handler failures
+continue through the existing error callback and never undo the count or retry.
+The SDK maps the owner's remaining value to the existing WorkItem header and
+forwards its diagnostic projection. It does not own a second counter/limit.
 
-**Forbidden:** reimplement trigger interval/single-request rules or select a policy by worker role.
+**Forbidden:** reimplement rate/trigger rules, finite-run/reset arithmetic or
+select a policy by worker role.
 
-**Required effect:** Each state revision reaches the policy before a subsequent tick; finite-run intake dispatches through WorkerRuntime.
+**Required effect:** Each state revision reaches the policy before a subsequent
+tick; finite-run intake dispatches through WorkerRuntime with unchanged accounting.
 
-**Verification entrypoints:** `WorkControlCompositionTest`, `TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
+**Verification entrypoints:** `WorkControlCompositionTest`,
+`TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
 
-**Migration status:** Current input still applies raw scheduling overrides; B02 owns that parsing migration, B03/B07 lifecycle/packaging.
+**Migration status:** F02 run accounting and rate policy extracted; SDK retains
+worker composition, snapshot projection, clock and execution.
+
+## RESP-WORK-SCHEDULER-RUN
+
+**Current module(s):** `common/work-local`.
+
+`SchedulerRunState` owns the runtime projection of rate/maxMessages controls and
+finite-run dispatch count. Startup consumes canonical `SchedulerSettings`. Raw
+runtime controls delegate to the existing rate/integer/reset field parsers before
+any field or count changes. WorkerState remains the accepted-config writer; this
+projection never mutates the Spring property carrier or accepted worker state.
+
+Changing maxMessages or explicit reset=true clears the count; repeated unchanged
+limits, reset=false and enablement alone do not. A zero limit remains unlimited.
+Quota clipping, per-dispatch remaining and diagnostic fields are derived here.
+A tick captures its diagnostic limit before dispatch, while each dispatch samples
+the then-current limit before incrementing. This preserves the existing behavior
+when a config update arrives during dispatch; no new whole-tick lock is introduced.
+Control updates are serialized by the SDK's projection lock; this API does not
+promise atomicity between config updates and a whole dispatch batch.
+
+**Forbidden:** own accepted worker configuration, reimplement field parsing, read
+Control Plane/Worker SDK, run timers, build seeds or dispatch work.
+
+**Verification entrypoints:** `SchedulerRunStateTest`, `SchedulerWorkInputTest`.
 
 ## RESP-WORK-RATE-POLICY
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/work-local`.
 
-RateSchedulePolicy owns fractional rate quota accumulation and reset on disabled revisions.
-
+`RateSchedulePolicy` implements the existing ScheduledInvocationPolicy port and
+owns fractional rate quota accumulation and reset on disabled revisions.
 SchedulerWorkInput supplies monotonic tick time and ordered SchedulingState updates.
+The existing quota is per policy tick; this extraction does not reinterpret it as
+elapsed-time compensation or change non-default tick interval behavior.
 
 **Forbidden:** read CP, mutate settings or dispatch messages.
 
-**Required effect:** Fractional quotas accumulate at the configured rate and disabled updates reset carry, including between ticks.
+**Required effect:** Fractional quotas accumulate at the configured rate and disabled
+updates reset carry, including between ticks.
 
 **Verification entrypoints:** `RateSchedulePolicyTest`.
 
-**Migration status:** Current B01 policy.
+**Migration status:** F02 rate policy moved out of SDK without a compatibility copy.
 
 ## RESP-TRIGGER-POLICY
 
@@ -1430,26 +1471,55 @@ record/rotation/disable behavior. Full B02 acceptance and phase simplification a
 
 ## RESP-WORK-CSV-INPUT
 
-Consumes RESP-WORK-CSV-SETTINGS for one immutable resolved settings snapshot; bootstrap
-and raw updates delegate parsing before replacement. Dataset file reads and cursor /
-initialization failures stay here. A rate change does not reload the file; the existing
-patch policy still requires rematerialization for CSV source/format/timing changes.
-
 **Current module(s):** `common/worker-sdk`.
 
-CsvDataSetWorkInput owns file-backed dataset iteration and intake lifecycle in the current SDK.
+`CsvDataSetWorkInput` owns CSV intake lifecycle, control-state subscription, rate
+planning, WorkItem metadata and dispatch through WorkerRuntime. It consumes
+RESP-WORK-CSV-SETTINGS for its read-only resolved settings projection; bootstrap
+and raw updates delegate parsing before replacement. Accepted configuration stays
+with WorkerState. Timing/rate validation and seconds-to-milliseconds conversion
+remain with RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE.
 
-It consumes selected CSV settings, observes worker state and dispatches records through WorkerRuntime.
-Timing/rate validation and the seconds-to-milliseconds conversion delegate to
-RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE; intake does not repair invalid timing.
+Dataset loading, formatting and cursor operations delegate to
+RESP-WORK-CSV-DATASET. Loading remains lazy on enablement. Disable/re-enable does
+not reload the file or reset the cursor; stop/start reloads the file without
+resetting the cursor. Rate updates do not reload data. Existing patch policy still
+requires rematerialization for CSV source/format/timing changes.
 
-**Forbidden:** declare broker resources or own accepted worker configuration.
+**Forbidden:** read/split/format dataset files, maintain a second dataset cursor,
+declare broker resources or own accepted worker configuration.
 
-**Required effect:** Records are read in the configured order and exhaustion/stop is observed without broker provisioning.
+**Required effect:** Configured records reach WorkerRuntime in order, with unchanged
+CSV headers, rate, enablement and exhaustion behavior.
 
 **Verification entrypoints:** `CsvDataSetWorkInputTest`.
 
-**Migration status:** Local adapter packaging B07; raw configuration/lifecycle consolidation B02/B03.
+**Migration status:** F02 CSV dataset mechanics extracted. Scheduler extraction is
+described separately under RESP-WORK-SCHEDULE-INPUT; SDK retains input composition.
+
+## RESP-WORK-CSV-DATASET
+
+**Current module(s):** `common/work-local`.
+
+`CsvDatasetCursor` is the sole owner of loaded CSV rows, JSON record formatting and
+cursor movement. Its API accepts canonical `CsvDatasetSettings` from
+`common/work-local-config`; it does not parse configuration. The SDK consumes its
+row index, JSON and read-only size/position/remaining projections.
+
+The reader preserves the existing charset and regex-delimiter contract, skips blank
+lines, retains trailing empty fields and trims JSON field names/values. Headerless
+rows use col0, col1, etc.; header rows map only the common field count. No quoted-CSV
+parser is introduced. Each selection attempt advances the cursor, including EOF;
+rotation returns row zero and sets the next position to one. Reloading data does
+not reset cursor position. Normal ticks run on one scheduler thread. Callers must
+serialize loading and iteration; the cursor does not support concurrent operations.
+The existing SDK stop requests interruption without waiting for an in-flight tick,
+so stop/start does not itself guarantee that serialization.
+
+**Forbidden:** depend on Worker SDK/control-plane state, schedule ticks, dispatch
+WorkItems, resolve configuration defaults or mutate accepted configuration.
+
+**Verification entrypoints:** `CsvDatasetCursorTest`, plus SDK CSV intake tests.
 
 ## RESP-WORK-REDIS-DATASET
 
@@ -1706,7 +1776,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1717,6 +1787,106 @@ Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket
 **Verification entrypoints:** `ProcessorTest`, `ProcessorTopologyProvisioningTest`.
 
 **Migration status:** Current service contains concrete transports; B07 extraction remains. Protocol scopes are distinct, not multiple writers for one transaction.
+
+## RESP-PROCESSOR-PACING
+
+**Current module(s):** `processor-service`.
+
+ProcessorPacer owns the processor pacing state and algorithm, instantiated once per
+ProcessorWorkerImpl and supplied to all three protocol handlers. Its `await`
+operation consumes the already validated ProcessorWorkerConfig and returns the
+existing planned pacing duration in whole milliseconds. Handlers retain the call
+at their existing pre-transport point and retain metrics/error handling.
+
+The processor reserves one interval before every RATE_PER_SEC call, including
+the first. Concurrent calls reserve successive slots atomically. Rate changes use
+the new interval after any outstanding reservations; THREAD_COUNT neither waits
+nor clears reservations. After an idle period the schedule starts from the current
+monotonic time. Interrupted waiting propagates InterruptedException and does not
+roll back the reservation. Integer truncation, the initial zero timestamp and
+existing nanoTime arithmetic remain unchanged.
+
+**Forbidden:** independent pacing state or interval calculations in protocol
+handlers; configuration defaults/validation, protocol IO, ACK policy or result
+construction in ProcessorPacer. No global limiter shared between worker instances.
+
+Moderator OperationModeLimiter and work-local RateSchedulePolicy are different
+policies (moderator resets/shaping and scheduler per-tick quotas). They are not
+alternate owners of processor request pacing and are outside this transfer.
+
+**Verification entrypoints:** ProcessorPacerTest for clock/wait effects, updates,
+concurrent reservations and interruption; existing ProcessorTest and protocol
+transport tests for result/error behavior. No wire/config field is added.
+
+## RESP-PROCESSOR-HTTP-CLIENT
+
+**Current module(s):** `processor-service`.
+
+ApacheProcessorHttpClient owns verified/unverified pool construction, selection and
+capacity projection behind the local ProcessorHttpClient API. ProcessorConfiguration
+supplies one owner to ProcessorWorkerImpl and HttpProtocolHandler. The worker consumes only its capacity
+projection; the handler submits a request and decodes a response through the API.
+This is a service-local Apache HTTP boundary, not a transport-neutral Work contract.
+Response callbacks receive only responses, never a raw client or connection manager.
+
+Preserve four eager clients (verified/unverified, pooled/non-reusing) and two lazy
+per-thread clients. Preserve system proxy/properties, verified TLS and the existing
+explicit sslVerify=false behavior, pool limits of 200 total/route, keepAlive=false
+precedence over connectionReuse, and PER_THREAD selection. Status keeps the existing
+configured capacity projection (200 GLOBAL, threadCount PER_THREAD, zero when reuse
+is off); this projection is not a live connection count. Configuration validation
+and defaults remain in ProcessorWorkerConfig.
+
+HttpProtocolHandler retains envelope parsing, target/body/header preparation,
+response decoding, timing/metrics and result extraction. Preserve callback timing
+(before body read), response release and exception propagation by retaining Apache's
+response-handler execution API. Do not add retries, timeouts or client shutdown
+hooks in this extraction; existing client lifetime behavior remains separate debt.
+HTTP Sequence has its own functional client and policy, outside this transfer.
+
+**Forbidden:** raw HTTP clients or pool construction in ProcessorWorkerImpl;
+client selection or capacity formulas outside the owner; config normalization,
+protocol result construction or pacing inside the HTTP client owner.
+
+**Verification entrypoints:** ApacheProcessorHttpClientTest for real request/proxy,
+reuse, TLS and capacity behavior; ProcessorTest and HttpAuthSecondPassSecurityTest
+for response/metrics/error and diagnostic redaction. Observable proxy traffic replaces the old reflective route-planner identity assertion.
+
+## RESP-PROCESSOR-TCP-RUNTIME
+
+**Current module(s):** `processor-service`.
+
+TcpTransportRuntime owns transport configuration/replacement and GLOBAL/PER_THREAD/NONE
+selection for TCP and ISO8583. Each handler retains its own runtime instance; sharing
+one implementation does not merge the previously independent protocol pools.
+
+The runtime owns active configuration, the eager GLOBAL transport and lazily created
+per-thread transports. `configure` retains the current equality check, locking and
+replacement/close order. `currentConfig` supplies the existing read-only projection.
+`acquire` returns a TcpTransportLease that executes through TcpTransport and releases
+only a NONE transport when the handler finishes its complete result/error path.
+Close exceptions remain suppressed as before. Retrying remains in the handlers and
+uses the same lease; no new retries, reconnection, framing or timeout behavior.
+
+Preserve update timing: TCP configures before target/auth work; ISO8583 configures
+after its protocol/auth validation. Handlers read the active config after pacing as
+before. This extraction does not make configuration replacement atomic across
+in-flight work, roll back failed construction, or add shutdown hooks. Those existing
+lifecycle/concurrency limitations need a separate behavior decision.
+
+TcpTransportFactory remains the sole concrete Socket/NIO/Netty constructor selector,
+internal to the transport package. Its active config-based behavior is unchanged.
+The uncalled string/global-pool helpers and TcpTransportPool are removed; they are
+not an alternate runtime API. TcpPerThreadTransports owns only lazy per-thread
+construction and release for one configuration generation.
+
+**Forbidden:** pool state, transport construction/selection/replacement or release
+policy in protocol handlers; protocol parsing, authentication, pacing, retries,
+metrics or result construction in TcpTransportRuntime.
+
+**Verification entrypoints:** TcpTransportRuntimeTest for execution/release effects,
+reconfiguration and per-thread isolation; existing processor TCP/ISO8583 tests for
+framing, auth options, results and failures; existing transport IO tests.
 
 ## RESP-HTTP-SEQUENCE-WORK
 
@@ -2043,6 +2213,52 @@ rollback for infrastructure failures after validation.
 **Verification entrypoints:** `SwarmSignalListenerTest`, `SwarmLifecycleManagerTest`, `ControlTopologyOwnershipTest`.
 
 **Migration status:** CP transport is registered through the Rabbit API. Existing domain handlers remain their owners; explicit connection isolation remains open in the Rabbit migration.
+
+## RESP-SCENARIO-HTTP-CONTRACT
+
+**Current module(s):** `common/scenario-api` (producer-owned Java contracts).
+
+Scenario Manager owns the existing runtime materialization and variable-resolution
+HTTP shapes: `RuntimeRequest`, `ScenarioRuntimeResponse` and
+`VariablesResolveResponse`, under `io.pockethive.scenarios.api`. Each has one Java
+definition used by ScenarioController and ScenarioManagerClient. The wire contract
+remains in `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and
+`docs/scenarios/SCENARIO_VARIABLES.md`; moving the records does not add validation,
+defaults, fields or unknown-field policy.
+
+These records carry boundary values only. ScenarioRuntimeMaterializer and
+ScenarioVariablesService retain runtime effects and variable resolution. The
+Orchestrator application port's `ResolvedVariables` is a local normalized view,
+constructed from the shared wire response with the existing empty-map/list policy;
+it is not independently decoded from HTTP or an alternative variable resolver.
+
+**Forbidden:** service-local copies of these request/response records, domain
+behavior in the shared contracts or importing service implementations into this module.
+
+**Verification entrypoints:** ScenarioManagerClientTest (producer-contract payloads
+through the actual client), ScenarioControllerTest and ScenarioVariablesServiceTest.
+
+## RESP-SCENARIO-HTTP-CLIENT
+
+**Current module(s):** `orchestrator-service`.
+
+ScenarioManagerClient implements ScenarioClient over the Scenario Manager HTTP
+interface. It owns requests, response decoding and the existing transport error and
+auth-refresh handling; contract records come from RESP-SCENARIO-HTTP-CONTRACT.
+It checks the required runtimeDir before returning it and preserves the existing
+resolved-variable projection. No variable resolution or runtime materialization is
+performed by the client.
+
+ScenarioTemplateDescriptor is the application's read-only subset of template
+metadata. The client decodes that existing projection directly, ignoring additional
+template fields as before, without changing ObjectMapper behavior for other responses.
+ScenarioPlan is a separate, intentional plan projection; it is not replaced by a
+copy of the producer's full authoring model in this slice.
+
+**Forbidden:** local copies of the shared wire records, domain configuration or
+filesystem decisions, global changes to decoder unknown-field policy.
+
+**Verification entrypoints:** ScenarioManagerClientTest, ScenarioManagerClientAuthRetryTest.
 
 ## RESP-SCENARIO-VALIDATE
 
@@ -2996,3 +3212,192 @@ configuration defaults or compatibility path is added.
 with actual application YAML and original ENV names, and both launch-path behavior
 tests. Deployed DA-3 proves persisted outcomes; execution evidence lives in F05 of
 `docs/inProgress/functional-module-boundaries.md`.
+
+## RESP-TCP-MOCK-NOTIFICATIONS
+
+**Current module(s):** `tcp-mock-server`.
+
+NotificationService owns the mock UI's global, in-memory notification feed: IDs,
+creation time, newest-first retention, unread state and clear/read operations.
+NotificationController maps the existing `/api/notifications` HTTP surface and
+delegates. Notification is a read-only response projection; NotificationRequest
+is the existing request shape. No consumer may mutate the stored state.
+
+Preserve the active controller semantics: IDs start at 1 and are not reset by
+clear; creation uses Instant.now; retain the newest 100 entries; missing IDs on
+mark-read succeed; mark-all-read and clear succeed on an empty feed. The accepted
+`persistent` field remains ignored. The feed remains global, without username
+filtering, persistence or new validation. JSON fields and HTTP statuses do not change.
+The unused former per-user NotificationService/model are replaced, not retained
+as a second owner. The UI's browser-local notifications are presentation state,
+not an alternate backend store. Existing weakly consistent concurrent iteration
+and retention operations are not redesigned by this extraction.
+
+**Forbidden:** controller-owned collection/ID/read state, transport or user/auth
+policy in the service, or writable response aliases to stored state.
+
+**Verification entrypoints:** NotificationServiceTest for ordering, retention,
+read/clear state, IDs and detached projections; NotificationControllerTest for
+existing JSON shape and HTTP return values through the controller and real service.
+
+## RESP-TCP-MOCK-WORKSPACES
+
+**Current module(s):** `tcp-mock-server`.
+
+WorkspaceService owns the global, in-memory mock UI workspace catalogue.
+WorkspaceController maps `/api/workspaces` and delegates all state changes.
+Workspace and WorkspaceRequest carry the existing wire fields; service copies
+mutable boundary values on entry/exit, so they cannot mutate stored state.
+The unused former member/user-aware service/model are replaced, not merged into
+the active behaviour. Browser workspace state is a presentation cache.
+
+Preserve the active controller semantics: initial default workspace, timestamp
+IDs prefixed `ws-`, create owner `current-user`, HashMap iteration/storage, and
+no validation or uniqueness repair. Delete rejects only the path ID `default`
+with HTTP 400; missing other IDs return 200. Update is an upsert keyed by the
+path ID and preserves the body ID (even if different), name, owner and shared
+flag; it also permits replacing the default entry. These are existing policies,
+not new recommendations. No permissions/membership, persistence, timestamp
+metadata or concurrency redesign is introduced. HTTP fields/statuses stay unchanged.
+
+Approved follow-up correctness fix: Workspace provides a no-argument constructor
+for Jackson field binding. The inherited PUT decode failure is corrected without
+changing field names, catalogue policy or adding required-field validation.
+Missing strings remain null and missing shared remains false.
+
+**Forbidden:** controller-owned catalogue, independent ID/default/deletion policy
+in Java consumers, or writable aliases to stored state.
+
+**Remaining F07 debt:** `static/workspace.js` still repeats default workspace data
+on load failure and blocks default deletion locally. That is an existing UI policy
+copy, not proof of end-to-end SSOT completion. Removing its fallback and consuming
+owner-derived policy requires a separate UI/contract slice; this backend extraction
+does not change it.
+
+**Verification entrypoints:** WorkspaceServiceTest for catalogue transitions and
+isolation; WorkspaceControllerTest for existing wire fields and response codes.
+
+## RESP-TCP-MOCK-MAPPING-FILES
+
+**Current module(s):** `tcp-mock-server`.
+
+MappingPersistence is the runtime catalogue storage port. MappingFileStore owns its
+single JSON snapshot `/app/data/mapping-catalogue.json`: an array using the existing
+MessageTypeMapping contract, including a valid empty array. It writes a complete
+candidate to a temporary sibling file, forces its contents and atomically replaces
+the snapshot; it does not silently fall back to a non-atomic replacement. IO errors
+propagate. No per-id path construction, legacy-file merge or migration is provided.
+The existing `/app/data` mount must be retained across restarts; one mock instance
+owns each data root. This does not introduce cross-process catalogue coordination.
+
+MessageTypeRegistry owns initialization and accepted runtime configuration. If a
+snapshot exists it is loaded as the complete authority, without startup-source reads.
+Otherwise built-in defaults plus StartupMappingSource initialize the catalogue and
+are persisted before startup succeeds. FileBasedMappingLoader implements that seed
+port using existing `/app/mappings` JSON/YAML files; it does not mutate the registry.
+A missing seed directory supplies no additions to defaults. Malformed/unreadable seed
+files or an invalid saved snapshot fail initialization, never persist a partial seed.
+An empty saved snapshot is initialized state, not permission to recreate defaults.
+
+Every add/replace/delete/clear goes through the registry's serialized mutation path:
+prepare candidate, save through the port, then publish the in-memory catalogue.
+Save failure retains the accepted configuration and propagates to the caller. Reads
+see the preceding or next catalogue, not a partly applied clear. Startup and restart
+reconstruct the same configuration; live match counters remain diagnostic and are
+not promised crash-durable after each request. Existing matching/execution remains
+in MappingExecutor. Bulk authoring remains sequential (earlier successful entries
+survive a later failed entry). Explicit clear is one durable operation. Catalogue order breaks equal-priority ties and
+is preserved in the snapshot array and on restart. Replacing an existing id keeps
+its position; a newly added id is appended.
+
+**Forbidden:** direct filesystem effects in the registry, competing persisted copies
+or write paths in authoring/admin/importers, successful mutation reports on save failure.
+No scenario-PH promotion, defaults resurrection, implicit migration or reset of the
+separate scenario state machine belongs to this contract.
+
+**Verification entrypoints:** MappingFileStoreTest for round trip/atomic replacement
+and IO failures; MessageTypeRegistryTest for restart and accepted-state guarantees;
+existing authoring/admin/import tests exercise the same durable mutation path.
+
+## RESP-TCP-MOCK-MAPPING-AUTHORING
+
+MappingAuthoringParser owns existing JSON/YAML request decoding. MappingAuthoringService
+coordinates sequential decoded entries through MessageTypeRegistry and constructs
+existing success payloads; it has no independent file-store dependency. Delete uses
+the same durable registry. Missing ids remain idempotent; persistence errors propagate.
+MessageMappingController retains current routes/success payloads and authoring error
+mapping. Admin stub create/delete/reset and WireMockImporter likewise use registry
+mutations, so no accepted change bypasses durability. Reset clears mappings atomically;
+it does not reset ScenarioManager or request journals.
+
+**Forbidden:** import iteration or persistence coordination in HTTP controllers;
+filesystem access, a parallel catalogue or suppression of persistence failures in
+application callers.
+
+**Verification entrypoints:** MappingAuthoringServiceTest for accepted imports,
+partial batch failure, delete, restart and rejected IO; StubMappingBoundaryTest and
+AdminMappingServiceTest for alternate entrypoints.
+
+## RESP-TCP-MOCK-STUB-CONVERSION
+
+**Current module(s):** `tcp-mock-server`.
+
+StubMappingConverter owns conversion between the unchanged StubMapping contract
+and MessageTypeMapping. AdminMappingService (called by AdminController) and
+WireMockImporter delegate to it;
+callers retain their distinct source-description text. Reverse conversion preserves
+the existing lossy id/request.bodyPattern/response.body export. Runtime mapping
+defaults remain in MessageTypeMapping; missing nested values fail as before.
+No wire fields, DTO constructors, DTO visibility or nesting change in this slice.
+Splitting the existing public nested types requires separate contract approval.
+
+The `/__admin` diagnostic projection and `/api/mappings` authored format are
+distinct existing boundaries. Importer filesystem lifecycle remains separate; admin orchestration belongs to
+RESP-TCP-MOCK-ADMIN; this extraction adds no validation, compatibility path,
+IO policy or full WireMock support.
+
+**Forbidden:** duplicate stub conversion in consumers, registry/filesystem effects
+in the converter, or inferred extra mapping settings.
+
+**Verification entrypoints:** StubMappingConverterTest for values/defaults/wire
+shape; StubMappingBoundaryTest for admin and real file import/export effects.
+
+## RESP-TCP-MOCK-EXECUTION
+
+MessageTypeRegistry owns the durable runtime catalogue, initialization and enabled/priority ordering
+through RESP-TCP-MOCK-MAPPING-FILES.
+MappingExecutor owns pattern/advanced matching, scenario guards, verification recording,
+template execution and match counters; scenario transitions delegate to StateManager.
+Text, binary and manual-test requests use this executor. TextRequestProcessor owns text
+validation, latency, metric classification and request recording. Netty handlers retain
+scheduling, framing, faults, proxies and channel replies. TcpMockServer composes these
+collaborators. This extraction preserves execution order and existing concurrency semantics.
+
+**Forbidden:** execution in the catalogue/controllers; alternate mapping storage or
+scenario state in execution collaborators. Verification: behavior tests at the executor
+and text processor, plus the repository import check.
+
+## RESP-TCP-MOCK-ADMIN
+
+AdminMappingService coordinates existing `/api/__admin` mapping operations through
+StubMappingConverter and MessageTypeRegistry. CompatibilityQueries owns the distinct
+`/__admin` diagnostic projections; CompatibilityCommands owns its reset/scenario command
+sequence through RequestStore and ScenarioManager. Controllers bind HTTP and delegate.
+Scenario command null-state behavior, reset ordering and persistence semantics remain
+unchanged. Mapping mutations now persist through the canonical registry; mapping
+reset is one durable clear and persistence errors must not be suppressed. Compatibility projections are not the StubMapping wire format.
+
+**Forbidden:** independent mapping/scenario storage, duplicate conversion, or filesystem
+policy in these application collaborators.
+
+## RESP-TCP-MOCK-WEB-TOOLS
+
+ManualTestService owns manual execution and mock recording through MappingExecutor or
+existing TcpClientService transport methods. WebController retains boundary defaults,
+validation and HTTP exception mapping. RequestLogProjection owns the UI view and its
+existing matched predicate, distinct from the unmatched request journal.
+DocumentationReader owns existing disk/classpath reads and closes opened resource
+streams, preserving locations and lookup order; WebController retains filename validation and HTTP responses.
+
+**Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
+independent request storage or mapping execution in its collaborators.

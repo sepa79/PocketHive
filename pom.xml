@@ -32,6 +32,7 @@
     <module>common/redis-config</module>
     <module>common/redis-adapter</module>
     <module>common/work-local-config</module>
+    <module>common/work-local</module>
     <module>common/rabbit-adapter</module>
     <module>common/artemis-adapter</module>
     <module>common/work-config-composition</module>
@@ -40,6 +41,7 @@
     <module>common/topology-core</module>
     <module>common/auth-contracts</module>
     <module>common/scenario-validation-contracts</module>
+    <module>common/scenario-api</module>
     <module>common/templating</module>
     <module>common/auth-client</module>
     <module>common/control-plane-core</module>

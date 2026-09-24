@@ -1,52 +1,56 @@
 package io.pockethive.tcpmock.service;
 
 import io.pockethive.tcpmock.model.Workspace;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-
+/**
+ * Responsibility: own the global mock UI workspace catalogue and mutation policy.
+ * Must not: map HTTP, enforce new user policies or persist workspaces.
+ * Contract: RESP-TCP-MOCK-WORKSPACES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-workspaces.
+ */
 @Service
 public class WorkspaceService {
-    private final Map<String, Workspace> workspaces = new ConcurrentHashMap<>();
+    private static final String DEFAULT_ID = "default";
+    private static final String DEFAULT_OWNER = "system";
+    private static final String CREATE_OWNER = "current-user";
+    private static final String ID_PREFIX = "ws-";
+    private final Map<String, Workspace> workspaces = new HashMap<>();
 
     public WorkspaceService() {
-        Workspace defaultWorkspace = new Workspace("default", "Default Workspace", "system", false);
-        workspaces.put("default", defaultWorkspace);
+        workspaces.put(DEFAULT_ID, new Workspace(DEFAULT_ID, "Default Workspace", DEFAULT_OWNER, false));
     }
 
     public List<Workspace> findAll() {
-        return new ArrayList<>(workspaces.values());
+        List<Workspace> result = new ArrayList<>();
+        workspaces.values().forEach(workspace -> result.add(copy(workspace)));
+        return result;
     }
 
-    public List<Workspace> findByUsername(String username) {
-        return workspaces.values().stream()
-            .filter(w -> w.getOwner().equals(username) || w.isShared() || w.getMembers().contains(username))
-            .toList();
-    }
-
-    public Optional<Workspace> findById(String id) {
-        return Optional.ofNullable(workspaces.get(id));
-    }
-
-    public Workspace create(Workspace workspace) {
-        if (workspace.getId() == null) {
-            workspace.setId("ws-" + System.currentTimeMillis());
-        }
-        workspaces.put(workspace.getId(), workspace);
-        return workspace;
+    public Workspace create(String name, boolean shared) {
+        String id = ID_PREFIX + System.currentTimeMillis();
+        Workspace workspace = new Workspace(id, name, CREATE_OWNER, shared);
+        workspaces.put(id, workspace);
+        return copy(workspace);
     }
 
     public Workspace update(String id, Workspace workspace) {
-        workspace.setId(id);
-        workspaces.put(id, workspace);
-        return workspace;
+        workspaces.put(id, copy(workspace));
+        return copy(workspace);
     }
 
     public boolean delete(String id) {
-        if ("default".equals(id)) {
+        if (DEFAULT_ID.equals(id)) {
             return false;
         }
-        return workspaces.remove(id) != null;
+        workspaces.remove(id);
+        return true;
+    }
+
+    private static Workspace copy(Workspace workspace) {
+        return new Workspace(workspace.id, workspace.name, workspace.owner, workspace.shared);
     }
 }

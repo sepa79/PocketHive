@@ -53,6 +53,7 @@
       <artifactId>redis-config</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-local</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-local-config</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>

@@ -1,4 +1,4 @@
-package io.pockethive.worker.sdk.input;
+package io.pockethive.work.local.scheduler;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

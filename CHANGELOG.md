@@ -4,6 +4,60 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock runtime mappings now survive restarts through one atomic catalogue
+  snapshot shared by authoring, admin operations and imports. Persist deletions and
+  empty state; fail writes without accepting changes and reject corrupt saved state.
+  Preserve equal-priority selection across edits and restarts through catalogue order.
+  Startup mappings seed fresh runtimes only; no legacy-file migration or scenario export.
+
+- TCP mock housekeeping: close documentation/import streams and remove unused
+  template, matching and payment implementations.
+
+- TCP mock execution/admin separation: one mapping executor for text, binary and
+  manual requests; dedicated text processing, admin commands, diagnostic projections
+  and documentation reader. Preserve existing HTTP, matching, recording and reset behavior.
+
+- TCP mock stub conversion: share admin/file import and export mapping logic,
+  preserving the existing wire DTOs, source descriptions and runtime defaults.
+
+- TCP mock mapping authoring: separate body decoding and sequential import/delete
+  coordination from HTTP handling; remove registry storage forwarding while
+  preserving partial-import effects and existing responses.
+
+- TCP mock mapping storage: separate persistence and startup-source ports from
+  the registry and remove the registry/loader dependency cycle.
+
+- TCP mock workspace isolation: move the global catalogue and mutation policy
+  into one service, remove the unused user-aware implementation, and preserve
+  existing HTTP fields, default protection and update semantics.
+- Fix TCP mock workspace updates failing JSON deserialization; cover request
+  decoding through catalogue updates without adding field validation.
+
+- TCP mock notification isolation: move the existing global feed and read state
+  out of the HTTP controller into one service, replace the unused per-user store,
+  and keep response snapshots detached without changing the HTTP fields or statuses.
+
+- Processor TCP isolation: share transport replacement, reuse and scoped release
+  mechanics between TCP and ISO8583 while retaining separate protocol pools and
+  existing retry/result behavior; remove the unused global transport pool API.
+
+- Processor HTTP isolation: move client pool construction, TLS/reuse selection and
+  capacity reporting behind one local API; preserve transport behavior and verify
+  proxy routing, connection reuse and TLS through real HTTP tests.
+
+- Processor pacing: consolidate HTTP, TCP and ISO8583 rate scheduling into one
+  per-worker owner, preserving wait timing, configuration updates, interruption
+  and metrics behavior.
+
+- Scenario contract isolation: share runtime preparation and resolved-variable
+  HTTP records between Scenario Manager and Orchestrator through `scenario-api`;
+  remove local wire copies while preserving payloads and client error behavior.
+
+- Local input isolation: move CSV dataset loading/cursor and scheduler rate policy,
+  runtime limits, reset and diagnostics to `common/work-local`. Preserve settings
+  parsing, ordering, failure accounting and dispatch behavior; remove the unused
+  control-plane snapshot callback from the SDK input lifecycle contract.
+
 - ClickHouse isolation: share JSONEachRow HTTP transport and sink-owned launch
   environment projections while preserving metrics/transaction buffering, failure
   policies and environment precedence. Bind existing ClickHouse ENV settings

@@ -3,137 +3,58 @@ package io.pockethive.tcpmock.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.tcpmock.model.MessageTypeMapping;
-import jakarta.annotation.PostConstruct;
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
 import java.util.stream.Stream;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
+/**
+ * Responsibility: decode seed mapping files for a fresh runtime catalogue.
+ * Must not: mutate the registry, persist mappings or reload seeds over saved runtime state.
+ * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
+ */
 @Component
-public class FileBasedMappingLoader {
-    private final MessageTypeRegistry registry;
+public class FileBasedMappingLoader implements StartupMappingSource {
     private final ObjectMapper jsonMapper = new ObjectMapper();
     private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    private final String mappingsDir;
-    private final String dataDir;
+    private final Path mappingsDir;
 
     @Autowired
-    public FileBasedMappingLoader(MessageTypeRegistry registry) {
-        this(registry, "/app/mappings", "/app/data");
+    public FileBasedMappingLoader() {
+        this(Path.of("/app/mappings"));
     }
 
-    FileBasedMappingLoader(MessageTypeRegistry registry, String mappingsDir, String dataDir) {
-        this.registry = registry;
+    FileBasedMappingLoader(Path mappingsDir) {
         this.mappingsDir = mappingsDir;
-        this.dataDir = dataDir;
-        System.out.println("=== FileBasedMappingLoader constructed ===");
     }
 
-    @PostConstruct
-    public void loadMappingsOnStartup() {
-        System.out.println("=== PostConstruct triggered, loading mappings ===");
-        loadMappingsFromDirectory();
-    }
-
-    public void loadMappingsFromDirectory() {
-        Path mappingsPath = Paths.get(mappingsDir);
-        if (!Files.exists(mappingsPath)) {
-            System.err.println("Mappings directory not found: " + mappingsDir);
-            return;
+    @Override
+    public List<MessageTypeMapping> load() {
+        if (Files.notExists(mappingsDir)) {
+            return List.of();
         }
-
-        System.out.println("Loading mappings from: " + mappingsPath.toAbsolutePath());
-        try (Stream<Path> files = Files.walk(mappingsPath)) {
-            long count = files.filter(Files::isRegularFile)
-                 .filter(path -> path.toString().endsWith(".json") || path.toString().endsWith(".yaml") || path.toString().endsWith(".yml"))
-                 .peek(this::loadMappingFile)
-                 .count();
-            System.out.println("Loaded " + count + " mapping files");
-        } catch (IOException e) {
-            System.err.println("Failed to load mappings: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private void loadMappingFile(Path file) {
-        try {
-            String content = Files.readString(file);
-            ObjectMapper mapper = isYamlFile(file) ? yamlMapper : jsonMapper;
-
-            if (content.trim().startsWith("[") || content.trim().startsWith("-")) {
-                // Array of mappings
-                MessageTypeMapping[] mappings = mapper.readValue(content, MessageTypeMapping[].class);
-                for (MessageTypeMapping mapping : mappings) {
-                    registry.addMapping(mapping);
-                    System.out.println("  Added mapping: " + mapping.getId() + " (priority " + mapping.getPriority() + ")");
+        List<MessageTypeMapping> mappings = new ArrayList<>();
+        try (Stream<Path> files = Files.walk(mappingsDir)) {
+            for (Path file : files.filter(Files::isRegularFile)
+                    .filter(path -> path.toString().endsWith(".json") || path.toString().endsWith(".yaml")
+                        || path.toString().endsWith(".yml")).toList()) {
+                String content = Files.readString(file);
+                ObjectMapper mapper = file.toString().endsWith(".json") ? jsonMapper : yamlMapper;
+                if (content.trim().startsWith("[") || content.trim().startsWith("-")) {
+                    mappings.addAll(Arrays.asList(mapper.readValue(content, MessageTypeMapping[].class)));
+                } else {
+                    mappings.add(mapper.readValue(content, MessageTypeMapping.class));
                 }
-            } else {
-                // Single mapping
-                MessageTypeMapping mapping = mapper.readValue(content, MessageTypeMapping.class);
-                registry.addMapping(mapping);
-                System.out.println("  Added mapping: " + mapping.getId() + " (priority " + mapping.getPriority() + ")");
             }
+            return mappings;
         } catch (IOException e) {
-            System.err.println("Failed to load mapping from " + file + ": " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
-
-    private boolean isYamlFile(Path file) {
-        String fileName = file.toString().toLowerCase();
-        return fileName.endsWith(".yaml") || fileName.endsWith(".yml");
-    }
-
-    public void saveMappingToFile(MessageTypeMapping mapping) {
-        saveMappingToFile(mapping, "json");
-    }
-
-    public void saveMappingToFile(MessageTypeMapping mapping, String format) {
-        try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Files.createDirectories(mappingsPath);
-
-            ObjectMapper mapper = "yaml".equals(format) ? yamlMapper : jsonMapper;
-            String extension = "yaml".equals(format) ? ".yaml" : ".json";
-
-            Path file = mappingsPath.resolve(mapping.getId() + extension);
-            String content = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(mapping);
-            Files.writeString(file, content);
-            System.out.println("Saved mapping to file: " + file.getFileName());
-        } catch (IOException e) {
-            System.err.println("Failed to save mapping: " + e.getMessage());
-        }
-    }
-
-    public void deleteMappingFile(String id) {
-        try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Path jsonFile = mappingsPath.resolve(id + ".json");
-            Path yamlFile = mappingsPath.resolve(id + ".yaml");
-            Path ymlFile = mappingsPath.resolve(id + ".yml");
-
-            boolean deleted = false;
-            if (Files.exists(jsonFile)) {
-                Files.delete(jsonFile);
-                deleted = true;
-            }
-            if (Files.exists(yamlFile)) {
-                Files.delete(yamlFile);
-                deleted = true;
-            }
-            if (Files.exists(ymlFile)) {
-                Files.delete(ymlFile);
-                deleted = true;
-            }
-
-            if (deleted) {
-                System.out.println("Deleted mapping file: " + id);
-            }
-        } catch (IOException e) {
-            System.err.println("Failed to delete mapping file: " + e.getMessage());
+            throw new UncheckedIOException("Cannot read startup mappings: " + mappingsDir, e);
         }
     }
 }

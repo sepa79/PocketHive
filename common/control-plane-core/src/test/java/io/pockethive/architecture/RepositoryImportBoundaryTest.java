@@ -30,9 +30,11 @@ class RepositoryImportBoundaryTest {
           "io\\.pockethive\\.(e2e|orchestrator|scenarios|rabbit|artemis)\\..*"),
       rule("core-no-infrastructure",
           "common/(work-api|work-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
-              + "|topology-core|swarm-model|scenario-validation-contracts)",
+              + "|topology-core|swarm-model|scenario-validation-contracts|scenario-api)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),
+      rule("scenario-api-no-service-implementation", "common/scenario-api",
+          "io\\.pockethive\\.(orchestrator|worker|capabilities)\\..*|io\\.pockethive\\.scenarios\\.(?!api\\.).*"),
       rule("scenario-no-adapter-settings", "scenario-manager-service",
           "io\\.pockethive\\.(rabbit\\.config|redis\\.config|work\\.local)\\..*"),
       rule("rabbit-resource-client-owner", outside("common/rabbit-adapter|e2e-tests"),
@@ -41,6 +43,8 @@ class RepositoryImportBoundaryTest {
           "org\\.springframework\\.amqp\\.(core\\.AmqpTemplate|rabbit\\.core\\.RabbitTemplate)"),
       rule("rabbit-internals-owner", outside("common/rabbit-adapter"),
           "io\\.pockethive\\.rabbit\\.(topology|transport|config)\\..*"),
+      rule("local-input-no-runtime-or-control-plane", "common/(work-local|work-local-config)",
+          "io\\.pockethive\\.(worker\\.sdk|controlplane)\\..*"),
       rule("rabbit-no-worker-runtime", "common/rabbit-adapter",
           "io\\.pockethive\\.worker\\.sdk\\..*"),
       rule("worker-sdk-no-rabbit-work", "common/worker-sdk",
