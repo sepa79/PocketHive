@@ -41,6 +41,7 @@
     <module>common/topology-core</module>
     <module>common/auth-contracts</module>
     <module>common/scenario-validation-contracts</module>
+    <module>common/scenario-api</module>
     <module>common/templating</module>
     <module>common/auth-client</module>
     <module>common/control-plane-core</module>

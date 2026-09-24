@@ -384,6 +384,33 @@ reactor or deployed E2E repeated.
   DbStatementExecutor and ClearingExportSink. HTTP-library reuse alone is not
   evidence that unrelated functional clients should share an owner.
 
+### F07 — first producer-contract slice
+
+**Implemented, pending separate review.** Base: F02 commit `b0f92340`.
+Re-tracing confirmed exact copies of RuntimeRequest,
+ScenarioRuntimeResponse and VariablesResolveResponse in Scenario Manager and its
+Orchestrator client. Producer-owned records now live in `common/scenario-api`,
+consumed by both boundaries; all local wire copies are removed. Endpoint paths,
+JSON fields, null handling, required runtimeDir checks and auth/error behavior
+are preserved.
+
+Template metadata and ScenarioPlan are deliberate partial views, not evidence for
+merging the full authoring model into Orchestrator. The redundant intermediate
+template response record is removed; the existing application projection is decoded directly;
+unknown-field tolerance remains local to that projection. ResolvedVariables remains
+a named local normalized view of the shared wire response. UI grant/network-mode
+policies and broader scenario model sharing remain outside this first slice.
+
+Verification: affected reactor through Scenario Manager and Orchestrator compiled
+cleanly after the moves. Final 112 selected tests passed, zero failures/errors/skips
+(`/tmp/ph-f07-scenario-contract-final.log`; clean build:
+`/tmp/ph-f07-scenario-contract-clean.log`). Tests consume serialized producer-contract
+values through the actual HTTP client and cover request fields, nested variables,
+warnings, request context, existing empty-collection projection, rejected null
+metadata/missing runtime directory, HTTP errors and auth retry. Existing producer
+controller/variables/materializer suites and the repository import gate also pass.
+No deployed acceptance or full repository reactor was repeated.
+
 ### F08 and separate correctness work
 
 Readiness, freshness, reset, registration, orphan cleanup and lifecycle outcomes

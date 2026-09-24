@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Scenario contract isolation: share runtime preparation and resolved-variable
+  HTTP records between Scenario Manager and Orchestrator through `scenario-api`;
+  remove local wire copies while preserving payloads and client error behavior.
+
 - Local input isolation: move CSV dataset loading/cursor and scheduler rate policy,
   runtime limits, reset and diagnostics to `common/work-local`. Preserve settings
   parsing, ordering, failure accounting and dispatch behavior; remove the unused

@@ -30,9 +30,11 @@ class RepositoryImportBoundaryTest {
           "io\\.pockethive\\.(e2e|orchestrator|scenarios|rabbit|artemis)\\..*"),
       rule("core-no-infrastructure",
           "common/(work-api|work-config|request-templates|templating-api|observability-core|auth-contracts|control-plane-core"
-              + "|topology-core|swarm-model|scenario-validation-contracts)",
+              + "|topology-core|swarm-model|scenario-validation-contracts|scenario-api)",
           "(org\\.springframework|io\\.lettuce|redis\\.clients|com\\.rabbitmq|com\\.clickhouse"
               + "|com\\.github\\.dockerjava|java\\.sql|javax\\.sql)\\..*"),
+      rule("scenario-api-no-service-implementation", "common/scenario-api",
+          "io\\.pockethive\\.(orchestrator|worker|capabilities)\\..*|io\\.pockethive\\.scenarios\\.(?!api\\.).*"),
       rule("scenario-no-adapter-settings", "scenario-manager-service",
           "io\\.pockethive\\.(rabbit\\.config|redis\\.config|work\\.local)\\..*"),
       rule("rabbit-resource-client-owner", outside("common/rabbit-adapter|e2e-tests"),

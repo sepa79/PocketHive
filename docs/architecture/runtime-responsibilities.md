@@ -2114,6 +2114,52 @@ rollback for infrastructure failures after validation.
 
 **Migration status:** CP transport is registered through the Rabbit API. Existing domain handlers remain their owners; explicit connection isolation remains open in the Rabbit migration.
 
+## RESP-SCENARIO-HTTP-CONTRACT
+
+**Current module(s):** `common/scenario-api` (producer-owned Java contracts).
+
+Scenario Manager owns the existing runtime materialization and variable-resolution
+HTTP shapes: `RuntimeRequest`, `ScenarioRuntimeResponse` and
+`VariablesResolveResponse`, under `io.pockethive.scenarios.api`. Each has one Java
+definition used by ScenarioController and ScenarioManagerClient. The wire contract
+remains in `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and
+`docs/scenarios/SCENARIO_VARIABLES.md`; moving the records does not add validation,
+defaults, fields or unknown-field policy.
+
+These records carry boundary values only. ScenarioRuntimeMaterializer and
+ScenarioVariablesService retain runtime effects and variable resolution. The
+Orchestrator application port's `ResolvedVariables` is a local normalized view,
+constructed from the shared wire response with the existing empty-map/list policy;
+it is not independently decoded from HTTP or an alternative variable resolver.
+
+**Forbidden:** service-local copies of these request/response records, domain
+behavior in the shared contracts or importing service implementations into this module.
+
+**Verification entrypoints:** ScenarioManagerClientTest (producer-contract payloads
+through the actual client), ScenarioControllerTest and ScenarioVariablesServiceTest.
+
+## RESP-SCENARIO-HTTP-CLIENT
+
+**Current module(s):** `orchestrator-service`.
+
+ScenarioManagerClient implements ScenarioClient over the Scenario Manager HTTP
+interface. It owns requests, response decoding and the existing transport error and
+auth-refresh handling; contract records come from RESP-SCENARIO-HTTP-CONTRACT.
+It checks the required runtimeDir before returning it and preserves the existing
+resolved-variable projection. No variable resolution or runtime materialization is
+performed by the client.
+
+ScenarioTemplateDescriptor is the application's read-only subset of template
+metadata. The client decodes that existing projection directly, ignoring additional
+template fields as before, without changing ObjectMapper behavior for other responses.
+ScenarioPlan is a separate, intentional plan projection; it is not replaced by a
+copy of the producer's full authoring model in this slice.
+
+**Forbidden:** local copies of the shared wire records, domain configuration or
+filesystem decisions, global changes to decoder unknown-field policy.
+
+**Verification entrypoints:** ScenarioManagerClientTest, ScenarioManagerClientAuthRetryTest.
+
 ## RESP-SCENARIO-VALIDATE
 
 **Current module(s):** `scenario-manager-service`, `tools/scenario-templating-check`.

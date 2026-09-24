@@ -1,5 +1,9 @@
 package io.pockethive.scenarios;
 
+import io.pockethive.scenarios.api.RuntimeRequest;
+import io.pockethive.scenarios.api.ScenarioRuntimeResponse;
+import io.pockethive.scenarios.api.VariablesResolveResponse;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
