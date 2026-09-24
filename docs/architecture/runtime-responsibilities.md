@@ -3212,3 +3212,30 @@ configuration defaults or compatibility path is added.
 with actual application YAML and original ENV names, and both launch-path behavior
 tests. Deployed DA-3 proves persisted outcomes; execution evidence lives in F05 of
 `docs/inProgress/functional-module-boundaries.md`.
+
+## RESP-TCP-MOCK-NOTIFICATIONS
+
+**Current module(s):** `tcp-mock-server`.
+
+NotificationService owns the mock UI's global, in-memory notification feed: IDs,
+creation time, newest-first retention, unread state and clear/read operations.
+NotificationController maps the existing `/api/notifications` HTTP surface and
+delegates. Notification is a read-only response projection; NotificationRequest
+is the existing request shape. No consumer may mutate the stored state.
+
+Preserve the active controller semantics: IDs start at 1 and are not reset by
+clear; creation uses Instant.now; retain the newest 100 entries; missing IDs on
+mark-read succeed; mark-all-read and clear succeed on an empty feed. The accepted
+`persistent` field remains ignored. The feed remains global, without username
+filtering, persistence or new validation. JSON fields and HTTP statuses do not change.
+The unused former per-user NotificationService/model are replaced, not retained
+as a second owner. The UI's browser-local notifications are presentation state,
+not an alternate backend store. Existing weakly consistent concurrent iteration
+and retention operations are not redesigned by this extraction.
+
+**Forbidden:** controller-owned collection/ID/read state, transport or user/auth
+policy in the service, or writable response aliases to stored state.
+
+**Verification entrypoints:** NotificationServiceTest for ordering, retention,
+read/clear state, IDs and detached projections; NotificationControllerTest for
+existing JSON shape and HTTP return values through the controller and real service.

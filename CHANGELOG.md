@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock notification isolation: move the existing global feed and read state
+  out of the HTTP controller into one service, replace the unused per-user store,
+  and keep response snapshots detached without changing the HTTP fields or statuses.
+
 - Processor TCP isolation: share transport replacement, reuse and scoped release
   mechanics between TCP and ISO8583 while retaining separate protocol pools and
   existing retry/result behavior; remove the unused global transport pool API.

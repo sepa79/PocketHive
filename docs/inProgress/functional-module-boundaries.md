@@ -475,7 +475,7 @@ This does not close F09.
 
 ### F09 — TCP/ISO8583 runtime slice
 
-**Implemented, pending separate review.** Base: HTTP commit `f6e55c31`.
+**Implemented and reviewed; committed in `a29bae54`.** Base: HTTP commit `f6e55c31`.
 TcpTransportRuntime owns configuration/reload and selection, TcpPerThreadTransports
 owns each generation's lazy per-thread resources, and TcpTransportLease owns scoped
 release. Both handlers delegate through this API with separate runtime instances.
@@ -533,3 +533,22 @@ Original plan review (PR #519): that update removed stale prerequisites, preserv
 added the omitted Redis capture consumer and split implementation from behavioral
 redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
 F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other entries remain plans.
+
+### F09 — TCP mock notification slice
+
+**Implemented, pending separate review.** Base: `a29bae54`.
+Transfer the active global notification feed from NotificationController into
+NotificationService; replace its uncalled per-user implementation and model.
+Repository-wide Java search found no consumers of that old service/model.
+Preserve the existing HTTP contract, retention, ignored persistent flag and
+ID/read behavior; expose detached response projections. See
+RESP-TCP-MOCK-NOTIFICATIONS. No workspace, mapping, mock protocol or security change.
+Verification: all 10 TCP mock tests passed, including 6 feed behavior tests and
+2 controller/JSON tests using the real service (`/tmp/ph-f09-notifications.log`).
+Coverage: creation/order/time, retention, missing/repeated reads, clear without ID
+reset, ignored persistent input, null fields, detached projections and unchanged
+response fields/statuses. Controller tests call Java methods and serialize values;
+they do not claim deployed HTTP/security acceptance. No security config changed.
+The existing repository import gate also passed (3 tests,
+`/tmp/ph-f09-notifications-imports.log`). No deployment or full reactor repeated.
+This does not close the broader TCP mock/F09 audit.
