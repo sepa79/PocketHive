@@ -536,7 +536,7 @@ F01, F03, F04 and F05 were subsequently authorized explicitly by the user; other
 
 ### F09 — TCP mock notification slice
 
-**Implemented, pending separate review.** Base: `a29bae54`.
+**Implemented and reviewed; committed in `a5daf11c`.** Base: `a29bae54`.
 Transfer the active global notification feed from NotificationController into
 NotificationService; replace its uncalled per-user implementation and model.
 Repository-wide Java search found no consumers of that old service/model.
@@ -552,3 +552,30 @@ they do not claim deployed HTTP/security acceptance. No security config changed.
 The existing repository import gate also passed (3 tests,
 `/tmp/ph-f09-notifications-imports.log`). No deployment or full reactor repeated.
 This does not close the broader TCP mock/F09 audit.
+
+### F09 — TCP mock workspace slice
+
+**Implemented, pending separate review.** Base: `a5daf11c`.
+Extract the active global catalogue from WorkspaceController into WorkspaceService;
+replace the unused user/member-aware implementation and model. Preserve existing
+upsert/body-ID mismatch, default handling, generated IDs and wire shape. Repository
+Java reference search finds no consumers of the unused implementation. See
+RESP-TCP-MOCK-WORKSPACES. No permissions, persistence or concurrency repair.
+Verification: 21 tests passed with zero failures/errors/skips
+(`/tmp/ph-f09-workspaces.log`): 8 new workspace tests, 10 existing TCP mock tests
+and 3 existing import checks. Tests exercise default creation/protection, generated
+IDs/owner, missing deletion, upsert/path-versus-body-ID behaviour, null fields and
+input/output snapshot isolation. Controller tests use direct calls/serialization,
+not deployed HTTP. No full reactor/deployment was repeated.
+Remaining F07: static/workspace.js repeats default data on load failure and blocks
+default deletion; explicitly defer that existing UI policy duplication instead of
+claiming end-to-end SSOT. Broader F09 remains open.
+
+Workspace review follow-up: the user approved fixing the inherited PUT JSON decode
+failure. Workspace now supports Jackson field binding via a no-argument constructor.
+Two new tests begin with JSON (complete and omitted fields), update through the real
+controller/service and verify stored values, response serialization and isolation.
+Both failed with InvalidDefinitionException before the fix
+(`/tmp/ph-workspace-json-red.log`); all 23 selected tests pass after it
+(`/tmp/ph-workspace-json-green.log`). No new field validation, HTTP fields or
+catalogue policy. These remain mapper/controller tests, not deployed HTTP checks.

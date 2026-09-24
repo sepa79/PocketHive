@@ -4,6 +4,12 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock workspace isolation: move the global catalogue and mutation policy
+  into one service, remove the unused user-aware implementation, and preserve
+  existing HTTP fields, default protection and update semantics.
+- Fix TCP mock workspace updates failing JSON deserialization; cover request
+  decoding through catalogue updates without adding field validation.
+
 - TCP mock notification isolation: move the existing global feed and read state
   out of the HTTP controller into one service, replace the unused per-user store,
   and keep response snapshots detached without changing the HTTP fields or statuses.

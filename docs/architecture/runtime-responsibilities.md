@@ -3239,3 +3239,40 @@ policy in the service, or writable response aliases to stored state.
 **Verification entrypoints:** NotificationServiceTest for ordering, retention,
 read/clear state, IDs and detached projections; NotificationControllerTest for
 existing JSON shape and HTTP return values through the controller and real service.
+
+## RESP-TCP-MOCK-WORKSPACES
+
+**Current module(s):** `tcp-mock-server`.
+
+WorkspaceService owns the global, in-memory mock UI workspace catalogue.
+WorkspaceController maps `/api/workspaces` and delegates all state changes.
+Workspace and WorkspaceRequest carry the existing wire fields; service copies
+mutable boundary values on entry/exit, so they cannot mutate stored state.
+The unused former member/user-aware service/model are replaced, not merged into
+the active behaviour. Browser workspace state is a presentation cache.
+
+Preserve the active controller semantics: initial default workspace, timestamp
+IDs prefixed `ws-`, create owner `current-user`, HashMap iteration/storage, and
+no validation or uniqueness repair. Delete rejects only the path ID `default`
+with HTTP 400; missing other IDs return 200. Update is an upsert keyed by the
+path ID and preserves the body ID (even if different), name, owner and shared
+flag; it also permits replacing the default entry. These are existing policies,
+not new recommendations. No permissions/membership, persistence, timestamp
+metadata or concurrency redesign is introduced. HTTP fields/statuses stay unchanged.
+
+Approved follow-up correctness fix: Workspace provides a no-argument constructor
+for Jackson field binding. The inherited PUT decode failure is corrected without
+changing field names, catalogue policy or adding required-field validation.
+Missing strings remain null and missing shared remains false.
+
+**Forbidden:** controller-owned catalogue, independent ID/default/deletion policy
+in Java consumers, or writable aliases to stored state.
+
+**Remaining F07 debt:** `static/workspace.js` still repeats default workspace data
+on load failure and blocks default deletion locally. That is an existing UI policy
+copy, not proof of end-to-end SSOT completion. Removing its fallback and consuming
+owner-derived policy requires a separate UI/contract slice; this backend extraction
+does not change it.
+
+**Verification entrypoints:** WorkspaceServiceTest for catalogue transitions and
+isolation; WorkspaceControllerTest for existing wire fields and response codes.
