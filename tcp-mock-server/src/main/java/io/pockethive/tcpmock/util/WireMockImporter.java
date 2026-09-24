@@ -32,9 +32,10 @@ public class WireMockImporter {
         Path dir = Paths.get(mappingsDirectory);
         if (!Files.exists(dir)) return;
 
-        Files.walk(dir)
-            .filter(path -> path.toString().endsWith(".json"))
-            .forEach(this::importMapping);
+        try (var paths = Files.walk(dir)) {
+            paths.filter(path -> path.toString().endsWith(".json"))
+                .forEach(this::importMapping);
+        }
     }
 
     public void exportToWireMock(String outputDirectory) throws IOException {

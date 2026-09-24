@@ -1,82 +1,83 @@
 package io.pockethive.tcpmock.service;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import io.pockethive.tcpmock.model.MessageTypeMapping;
 import java.io.IOException;
+import java.io.UncheckedIOException;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
+import java.util.Collection;
+import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 /**
- * Responsibility: serialize authored mapping files and delete their stored variants.
- * Must not: load startup mappings, mutate the registry or decide HTTP success.
+ * Responsibility: read and atomically replace the durable runtime mapping snapshot.
+ * Must not: select defaults, mutate the registry or suppress storage failures.
  * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
  */
 @Component
-public class MappingFileStore {
-    private final ObjectMapper jsonMapper = new ObjectMapper();
-    private final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    private final String dataDir;
+public class MappingFileStore implements MappingPersistence {
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final Path snapshot;
 
     @Autowired
     public MappingFileStore() {
-        this("/app/data");
+        this(Path.of("/app/data"));
     }
 
-    MappingFileStore(String dataDir) {
-        this.dataDir = dataDir;
+    MappingFileStore(Path dataRoot) {
+        snapshot = dataRoot.resolve("mapping-catalogue.json");
     }
 
-    public void saveMappingToFile(MessageTypeMapping mapping) {
-        saveMappingToFile(mapping, "json");
+    @Override
+    public boolean hasSnapshot() {
+        // An inaccessible path must proceed to load and fail, not masquerade as fresh state.
+        return !Files.notExists(snapshot);
     }
 
-    public void saveMappingToFile(MessageTypeMapping mapping, String format) {
+    @Override
+    public List<MessageTypeMapping> load() {
         try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Files.createDirectories(mappingsPath);
-
-            ObjectMapper mapper = "yaml".equals(format) ? yamlMapper : jsonMapper;
-            String extension = "yaml".equals(format) ? ".yaml" : ".json";
-
-            Path file = mappingsPath.resolve(mapping.getId() + extension);
-            String content = mapper.writerWithDefaultPrettyPrinter().writeValueAsString(mapping);
-            Files.writeString(file, content);
-            System.out.println("Saved mapping to file: " + file.getFileName());
+            List<MessageTypeMapping> mappings = mapper.readValue(Files.readAllBytes(snapshot), new TypeReference<>() {});
+            if (mappings == null) {
+                throw new IOException("Mapping catalogue must be a JSON array");
+            }
+            return mappings;
         } catch (IOException e) {
-            System.err.println("Failed to save mapping: " + e.getMessage());
+            throw new UncheckedIOException("Cannot load mapping catalogue: " + snapshot, e);
         }
     }
 
-    public void deleteMappingFile(String id) {
+    @Override
+    public void save(Collection<MessageTypeMapping> mappings) {
+        Path temporary = null;
         try {
-            Path mappingsPath = Paths.get(dataDir, "mappings");
-            Path jsonFile = mappingsPath.resolve(id + ".json");
-            Path yamlFile = mappingsPath.resolve(id + ".yaml");
-            Path ymlFile = mappingsPath.resolve(id + ".yml");
-
-            boolean deleted = false;
-            if (Files.exists(jsonFile)) {
-                Files.delete(jsonFile);
-                deleted = true;
+            byte[] content = mapper.writerWithDefaultPrettyPrinter().writeValueAsBytes(mappings);
+            Files.createDirectories(snapshot.getParent());
+            temporary = Files.createTempFile(snapshot.getParent(), ".mapping-catalogue-", ".tmp");
+            try (FileChannel channel = FileChannel.open(temporary, StandardOpenOption.WRITE)) {
+                ByteBuffer buffer = ByteBuffer.wrap(content);
+                while (buffer.hasRemaining()) {
+                    channel.write(buffer);
+                }
+                channel.force(true);
             }
-            if (Files.exists(yamlFile)) {
-                Files.delete(yamlFile);
-                deleted = true;
-            }
-            if (Files.exists(ymlFile)) {
-                Files.delete(ymlFile);
-                deleted = true;
-            }
-
-            if (deleted) {
-                System.out.println("Deleted mapping file: " + id);
-            }
+            Files.move(temporary, snapshot, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
         } catch (IOException e) {
-            System.err.println("Failed to delete mapping file: " + e.getMessage());
+            if (temporary != null) {
+                try {
+                    Files.deleteIfExists(temporary);
+                } catch (IOException cleanupFailure) {
+                    e.addSuppressed(cleanupFailure);
+                }
+            }
+            throw new UncheckedIOException("Cannot save mapping catalogue: " + snapshot, e);
         }
     }
 }

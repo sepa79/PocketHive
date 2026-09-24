@@ -3281,58 +3281,62 @@ isolation; WorkspaceControllerTest for existing wire fields and response codes.
 
 **Current module(s):** `tcp-mock-server`.
 
-MappingFileStore owns authored mapping file writes/deletes under `/app/data/mappings`:
-path construction, JSON/YAML serialization and removal of json/yaml/yml variants.
-FileBasedMappingLoader owns the separate startup import from `/app/mappings`,
-including extension-based decoding and registration. Startup imports and authored
-files retain their existing distinct roots; this extraction does not make saved
-mappings reload on restart. JSON/YAML readers/writers are transport codecs using
-the shared MessageTypeMapping shape, not new domain validation authorities.
+MappingPersistence is the runtime catalogue storage port. MappingFileStore owns its
+single JSON snapshot `/app/data/mapping-catalogue.json`: an array using the existing
+MessageTypeMapping contract, including a valid empty array. It writes a complete
+candidate to a temporary sibling file, forces its contents and atomically replaces
+the snapshot; it does not silently fall back to a non-atomic replacement. IO errors
+propagate. No per-id path construction, legacy-file merge or migration is provided.
+The existing `/app/data` mount must be retained across restarts; one mock instance
+owns each data root. This does not introduce cross-process catalogue coordination.
 
-MessageTypeRegistry retains the in-memory catalogue; execution belongs to
-MappingExecutor (RESP-TCP-MOCK-EXECUTION). MappingAuthoringService calls the
-registry and MappingFileStore directly, preserving register-then-save and
-remove-then-delete order. Registry storage forwarding and the former lazy loader
-cycle are removed. FileBasedMappingLoader only imports at startup.
+MessageTypeRegistry owns initialization and accepted runtime configuration. If a
+snapshot exists it is loaded as the complete authority, without startup-source reads.
+Otherwise built-in defaults plus StartupMappingSource initialize the catalogue and
+are persisted before startup succeeds. FileBasedMappingLoader implements that seed
+port using existing `/app/mappings` JSON/YAML files; it does not mutate the registry.
+A missing seed directory supplies no additions to defaults. Malformed/unreadable seed
+files or an invalid saved snapshot fail initialization, never persist a partial seed.
+An empty saved snapshot is initialized state, not permission to recreate defaults.
 
-Preserve default JSON writes and the existing exact `yaml` format selection,
-pretty printing, directory creation, variant deletion order and diagnostic text.
-IOException remains logged/suppressed; runtime errors still propagate to existing
-callers. Do not reinterpret an attempted save as verified durability or repair
-partial changes, file-name validation, restart recovery or API success in this slice.
+Every add/replace/delete/clear goes through the registry's serialized mutation path:
+prepare candidate, save through the port, then publish the in-memory catalogue.
+Save failure retains the accepted configuration and propagates to the caller. Reads
+see the preceding or next catalogue, not a partly applied clear. Startup and restart
+reconstruct the same configuration; live match counters remain diagnostic and are
+not promised crash-durable after each request. Existing matching/execution remains
+in MappingExecutor. Bulk authoring remains sequential (earlier successful entries
+survive a later failed entry). Explicit clear is one durable operation. Catalogue order breaks equal-priority ties and
+is preserved in the snapshot array and on restart. Replacing an existing id keeps
+its position; a newly added id is appended.
 
-**Forbidden:** write/delete mechanics in startup loading or registry; catalogue
-mutation, protocol matching or HTTP responses in MappingFileStore.
+**Forbidden:** direct filesystem effects in the registry, competing persisted copies
+or write paths in authoring/admin/importers, successful mutation reports on save failure.
+No scenario-PH promotion, defaults resurrection, implicit migration or reset of the
+separate scenario state machine belongs to this contract.
 
-**Verification entrypoints:** MappingFileStoreTest exercises real temporary files,
-serialization, replacement, deletion variants and existing IO failure behaviour.
+**Verification entrypoints:** MappingFileStoreTest for round trip/atomic replacement
+and IO failures; MessageTypeRegistryTest for restart and accepted-state guarantees;
+existing authoring/admin/import tests exercise the same durable mutation path.
 
 ## RESP-TCP-MOCK-MAPPING-AUTHORING
 
-**Current module(s):** `tcp-mock-server`.
+MappingAuthoringParser owns existing JSON/YAML request decoding. MappingAuthoringService
+coordinates sequential decoded entries through MessageTypeRegistry and constructs
+existing success payloads; it has no independent file-store dependency. Delete uses
+the same durable registry. Missing ids remain idempotent; persistence errors propagate.
+MessageMappingController retains current routes/success payloads and authoring error
+mapping. Admin stub create/delete/reset and WireMockImporter likewise use registry
+mutations, so no accepted change bypasses durability. Reset clears mappings atomically;
+it does not reset ScenarioManager or request journals.
 
-MappingAuthoringParser owns the existing `/api/mappings` body decoding: try JSON,
-then YAML on parse exception; convert each item using YAMLMapper. This is preserved
-existing dual-format acceptance, not a new fallback rule. Startup extension-based
-import and WireMock StubMapping conversion are distinct boundaries.
+**Forbidden:** import iteration or persistence coordination in HTTP controllers;
+filesystem access, a parallel catalogue or suppression of persistence failures in
+application callers.
 
-MappingAuthoringService owns sequential single/batch import and delete coordination.
-It decodes each entry immediately before register-then-save; later failures retain
-earlier effects. Empty arrays return count zero; single imports return the id.
-It constructs the existing plain success payload. File-store IO suppression remains
-unchanged. Delete suppresses existing exceptions around remove-then-delete.
-MessageMappingController maps HTTP, delegates, and retains its current 400 error
-payload/diagnostic and 204 delete response. No new validation, rollback, public
-fields, success guarantee or routing. Registry solely holds runtime mappings;
-authoring does not own a parallel map or build file paths.
-
-**Forbidden:** import iteration/persistence coordination in the controller; file
-effects in the registry/parser; response execution or catalogue state in authoring.
-
-**Verification entrypoints:** MappingAuthoringServiceTest exercises actual decoded
-imports, registry state and temporary files, including partial failure and deletion;
-the same suite covers controller response/error mapping via that service.
-MappingAuthoringParserTest covers format acceptance and deferred per-entry binding.
+**Verification entrypoints:** MappingAuthoringServiceTest for accepted imports,
+partial batch failure, delete, restart and rejected IO; StubMappingBoundaryTest and
+AdminMappingServiceTest for alternate entrypoints.
 
 ## RESP-TCP-MOCK-STUB-CONVERSION
 
@@ -3360,7 +3364,8 @@ shape; StubMappingBoundaryTest for admin and real file import/export effects.
 
 ## RESP-TCP-MOCK-EXECUTION
 
-MessageTypeRegistry owns the runtime catalogue, defaults and enabled/priority ordering.
+MessageTypeRegistry owns the durable runtime catalogue, initialization and enabled/priority ordering
+through RESP-TCP-MOCK-MAPPING-FILES.
 MappingExecutor owns pattern/advanced matching, scenario guards, verification recording,
 template execution and match counters; scenario transitions delegate to StateManager.
 Text, binary and manual-test requests use this executor. TextRequestProcessor owns text
@@ -3378,8 +3383,9 @@ AdminMappingService coordinates existing `/api/__admin` mapping operations throu
 StubMappingConverter and MessageTypeRegistry. CompatibilityQueries owns the distinct
 `/__admin` diagnostic projections; CompatibilityCommands owns its reset/scenario command
 sequence through RequestStore and ScenarioManager. Controllers bind HTTP and delegate.
-Existing exception handling, null-state behavior, reset ordering and persistence semantics
-are preserved. Compatibility projections are not the StubMapping wire format.
+Scenario command null-state behavior, reset ordering and persistence semantics remain
+unchanged. Mapping mutations now persist through the canonical registry; mapping
+reset is one durable clear and persistence errors must not be suppressed. Compatibility projections are not the StubMapping wire format.
 
 **Forbidden:** independent mapping/scenario storage, duplicate conversion, or filesystem
 policy in these application collaborators.
@@ -3390,8 +3396,8 @@ ManualTestService owns manual execution and mock recording through MappingExecut
 existing TcpClientService transport methods. WebController retains boundary defaults,
 validation and HTTP exception mapping. RequestLogProjection owns the UI view and its
 existing matched predicate, distinct from the unmatched request journal.
-DocumentationReader owns existing disk/classpath reads, preserving locations and lookup
-order; WebController retains filename validation and HTTP responses.
+DocumentationReader owns existing disk/classpath reads and closes opened resource
+streams, preserving locations and lookup order; WebController retains filename validation and HTTP responses.
 
 **Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
 independent request storage or mapping execution in its collaborators.

@@ -8,19 +8,17 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 
 /**
- * Responsibility: coordinate sequential authored mapping registration, persistence and deletion.
+ * Responsibility: coordinate sequential authored mapping registration and deletion through the durable registry.
  * Must not: own catalogue state, construct paths or execute mock responses.
  * Contract: RESP-TCP-MOCK-MAPPING-AUTHORING — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-authoring.
  */
 @Service
 public class MappingAuthoringService {
     private final MessageTypeRegistry registry;
-    private final MappingFileStore files;
     private final MappingAuthoringParser parser;
 
-    public MappingAuthoringService(MessageTypeRegistry registry, MappingFileStore files, MappingAuthoringParser parser) {
+    public MappingAuthoringService(MessageTypeRegistry registry, MappingAuthoringParser parser) {
         this.registry = registry;
-        this.files = files;
         this.parser = parser;
     }
 
@@ -45,16 +43,10 @@ public class MappingAuthoringService {
     private MessageTypeMapping registerAndSave(JsonNode item) throws IOException {
         MessageTypeMapping mapping = parser.readMapping(item);
         registry.addMapping(mapping);
-        files.saveMappingToFile(mapping);
         return mapping;
     }
 
     public void removeMapping(String id) {
-        try {
-            registry.removeMapping(id);
-            files.deleteMappingFile(id);
-        } catch (Exception ignored) {
-            // Preserve the existing idempotent deletion response.
-        }
+        registry.removeMapping(id);
     }
 }

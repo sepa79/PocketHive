@@ -12,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class ManualTestServiceTest {
     private final RequestStore requests = new RequestStore();
     private final RecordingMode recording = new RecordingMode();
-    private final MappingExecutor executor = new MappingExecutor(new MessageTypeRegistry(), new PatternCache(),
+    private final MappingExecutor executor = new MappingExecutor(TestMappingCatalogues.fresh(), new PatternCache(),
         new AdvancedRequestMatcher(), null, new EnhancedTemplateEngine(), new RequestVerificationService());
 
     @Test

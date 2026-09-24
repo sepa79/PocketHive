@@ -20,7 +20,7 @@ class StubMappingBoundaryTest {
 
     private MessageTypeRegistry registry() {
         // Exercise registry CRUD; protocol execution and scenario operations are outside this fixture.
-        return new MessageTypeRegistry();
+        return new MessageTypeRegistry(new MappingFileStore(root.resolve("data")), java.util.List::of);
     }
 
     @Test
@@ -30,7 +30,7 @@ class StubMappingBoundaryTest {
         var response = controller.createStubMapping(json.readValue(BODY, StubMapping.class));
         assertEquals(200, response.getStatusCode().value());
         assertEquals(Map.of("status", "Created", "id", "sample"), response.getBody());
-        var mapping = registry.getAllMappings().stream().filter(m -> m.getId().equals("sample")).findFirst().orElseThrow();
+        var mapping = registry().getAllMappings().stream().filter(m -> m.getId().equals("sample")).findFirst().orElseThrow();
         assertEquals("WireMock-style stub", mapping.getDescription());
         assertEquals("^HELLO$", mapping.getRequestPattern());
         assertEquals("OK", mapping.getResponseTemplate());
@@ -43,7 +43,7 @@ class StubMappingBoundaryTest {
         Path input = Files.createDirectories(root.resolve("input"));
         Files.writeString(input.resolve("sample.json"), BODY);
         importer.importWireMockMappings(input.toString());
-        var mapping = registry.getAllMappings().stream().filter(m -> m.getId().equals("sample")).findFirst().orElseThrow();
+        var mapping = registry().getAllMappings().stream().filter(m -> m.getId().equals("sample")).findFirst().orElseThrow();
         assertEquals("Imported from WireMock", mapping.getDescription());
         Path output = root.resolve("output");
         importer.exportToWireMock(output.toString());

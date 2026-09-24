@@ -9,7 +9,7 @@ import org.junit.jupiter.api.Test;
 import static org.junit.jupiter.api.Assertions.*;
 
 class MappingExecutorTest {
-    private final MessageTypeRegistry registry = new MessageTypeRegistry();
+    private final MessageTypeRegistry registry = TestMappingCatalogues.fresh();
     private final RequestVerificationService verification = new RequestVerificationService();
 
     private MappingExecutor executor(StateManager state) {

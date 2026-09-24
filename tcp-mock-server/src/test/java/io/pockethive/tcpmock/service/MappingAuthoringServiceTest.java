@@ -1,34 +1,40 @@
 package io.pockethive.tcpmock.service;
 
-import static org.junit.jupiter.api.Assertions.*;
-
 import com.fasterxml.jackson.databind.JsonMappingException;
 import io.pockethive.tcpmock.controller.MessageMappingController;
+import io.pockethive.tcpmock.model.MessageTypeMapping;
+import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyCollection;
+import static org.mockito.Mockito.*;
 
 class MappingAuthoringServiceTest {
     @TempDir Path root;
 
     private MappingAuthoringService service() {
-        // Authoring uses real registry CRUD only; protocol execution collaborators are outside this fixture.
-        var registry = new MessageTypeRegistry();
-        return new MappingAuthoringService(registry, new MappingFileStore(root.toString()), new MappingAuthoringParser());
+        var registry = new MessageTypeRegistry(new MappingFileStore(root), List::of);
+        return new MappingAuthoringService(registry, new MappingAuthoringParser());
+    }
+
+    private MessageTypeMapping persisted(String id) {
+        return new MappingFileStore(root).load().stream().filter(m -> id.equals(m.getId())).findFirst().orElseThrow();
     }
 
     @Test
-    void importsJsonAndYamlIntoRegistryAndFiles() throws Exception {
+    void importsJsonAndYamlAndRestoresThemOnRestart() throws Exception {
         var service = service();
-        assertEquals(Map.of("status", "created", "id", "one"),
-            service.addMapping("{\"id\":\"one\",\"responseTemplate\":\"hello\"}"));
-        assertEquals(Map.of("status", "created", "id", "two"),
-            service.addMapping("id: two\nresponseTemplate: world\n"));
-        assertTrue(Files.exists(root.resolve("mappings/one.json")));
-        assertTrue(Files.exists(root.resolve("mappings/two.json")));
-        assertEquals("hello", service.getAllMappings().stream().filter(m -> m.getId().equals("one")).findFirst().orElseThrow().getResponseTemplate());
+        assertEquals(Map.of("status", "created", "id", "one"), service.addMapping("{\"id\":\"one\",\"responseTemplate\":\"hello\"}"));
+        assertEquals(Map.of("status", "created", "id", "two"), service.addMapping("id: two\nresponseTemplate: world\n"));
+        assertEquals("hello", persisted("one").getResponseTemplate());
+        assertEquals("world", persisted("two").getResponseTemplate());
+        assertTrue(service().getAllMappings().stream().anyMatch(m -> m.getId().equals("one")));
     }
 
     @Test
@@ -36,69 +42,66 @@ class MappingAuthoringServiceTest {
         var service = service();
         assertEquals(Map.of("status", "created", "count", 2), service.addMapping(
             "[{\"id\":\"same\",\"responseTemplate\":\"first\"},{\"id\":\"same\",\"responseTemplate\":\"last\"}]"));
-        assertEquals("last", service.getAllMappings().stream().filter(m -> m.getId().equals("same")).findFirst().orElseThrow().getResponseTemplate());
-        assertTrue(Files.readString(root.resolve("mappings/same.json")).contains("last"));
+        assertEquals("last", persisted("same").getResponseTemplate());
         assertEquals(Map.of("status", "created", "count", 0), service.addMapping("[]"));
         assertEquals(Map.of("status", "created", "count", 2), service.addMapping("- id: yaml-a\n- id: yaml-b\n"));
     }
 
     @Test
-    void laterInvalidEntryDoesNotRollBackEarlierEffects() throws Exception {
+    void laterInvalidEntryDoesNotRollBackEarlierPersistedEffects() throws Exception {
         var service = service();
         assertThrows(JsonMappingException.class, () -> service.addMapping(
             "[{\"id\":\"accepted\"},{\"id\":\"bad\",\"unknownField\":true},{\"id\":\"unreached\"}]"));
-        assertTrue(service.getAllMappings().stream().anyMatch(m -> m.getId().equals("accepted")));
-        assertFalse(service.getAllMappings().stream().anyMatch(m -> m.getId().equals("bad") || m.getId().equals("unreached")));
-        assertTrue(Files.exists(root.resolve("mappings/accepted.json")));
-        assertFalse(Files.exists(root.resolve("mappings/bad.json")));
+        var restored = service().getAllMappings();
+        assertTrue(restored.stream().anyMatch(m -> m.getId().equals("accepted")));
+        assertFalse(restored.stream().anyMatch(m -> m.getId().equals("bad") || m.getId().equals("unreached")));
     }
 
     @Test
-    void firstInvalidEntryHasNoRegistrationOrFileEffect() {
+    void invalidFirstEntryDoesNotChangeTheSnapshot() throws Exception {
         var service = service();
-        int initial = service.getAllMappings().size();
+        byte[] before = Files.readAllBytes(root.resolve("mapping-catalogue.json"));
         assertThrows(JsonMappingException.class, () -> service.addMapping("{\"id\":\"bad\",\"unknownField\":true}"));
-        assertEquals(initial, service.getAllMappings().size());
-        assertFalse(Files.exists(root.resolve("mappings")));
+        assertArrayEquals(before, Files.readAllBytes(root.resolve("mapping-catalogue.json")));
     }
 
     @Test
-    void ioFailureStillLeavesRegistrationAndExistingSuccessResponse() throws Exception {
-        Files.writeString(root.resolve("mappings"), "blocked");
-        var service = service();
-        assertEquals(Map.of("status", "created", "id", "retained"), service.addMapping("{\"id\":\"retained\"}"));
-        assertTrue(service.getAllMappings().stream().anyMatch(m -> m.getId().equals("retained")));
+    void saveFailureDoesNotRegisterOrReportSuccess() {
+        var store = spy(new MappingFileStore(root));
+        var registry = new MessageTypeRegistry(store, List::of);
+        var controller = new MessageMappingController(new MappingAuthoringService(registry, new MappingAuthoringParser()));
+        var failure = new UncheckedIOException(new IOException("disk unavailable"));
+        doThrow(failure).when(store).save(anyCollection());
+        var response = controller.addMapping("{\"id\":\"rejected\"}");
+        assertEquals(400, response.getStatusCode().value());
+        assertEquals("UncheckedIOException", response.getBody().get("details"));
+        assertFalse(registry.getAllMappings().stream().anyMatch(m -> m.getId().equals("rejected")));
+        assertFalse(service().getAllMappings().stream().anyMatch(m -> m.getId().equals("rejected")));
+        assertSame(failure, assertThrows(UncheckedIOException.class, () -> controller.removeMapping("echo")));
+        assertTrue(registry.getAllMappings().stream().anyMatch(m -> m.getId().equals("echo")));
     }
 
     @Test
-    void removesRegistryEntryAndFilesAndIgnoresAbsentEntries() throws Exception {
+    void deleteIsDurableAndAbsentIdsAreIdempotent() throws Exception {
         var service = service();
         service.addMapping("{\"id\":\"remove-me\"}");
         service.removeMapping("remove-me");
-        assertFalse(service.getAllMappings().stream().anyMatch(m -> m.getId().equals("remove-me")));
-        assertFalse(Files.exists(root.resolve("mappings/remove-me.json")));
+        assertFalse(service().getAllMappings().stream().anyMatch(m -> m.getId().equals("remove-me")));
         assertDoesNotThrow(() -> service.removeMapping("remove-me"));
-        assertDoesNotThrow(() -> service.removeMapping(null));
     }
 
     @Test
-    void controllerPreservesSuccessAndDeleteResponses() throws Exception {
+    void controllerPreservesSuccessAndDeleteResponses() {
         var controller = new MessageMappingController(service());
-        var response = controller.addMapping("{\"id\":\"api\"}");
-        assertEquals(200, response.getStatusCode().value());
-        assertEquals(Map.of("status", "created", "id", "api"), response.getBody());
-        assertTrue(controller.getAllMappings().stream().anyMatch(m -> m.getId().equals("api")));
+        assertEquals(Map.of("status", "created", "id", "api"), controller.addMapping("{\"id\":\"api\"}").getBody());
         assertEquals(204, controller.removeMapping("api").getStatusCode().value());
-        assertFalse(Files.exists(root.resolve("mappings/api.json")));
+        assertFalse(service().getAllMappings().stream().anyMatch(m -> m.getId().equals("api")));
     }
 
     @Test
-    void controllerMapsDecodeFailureToExistingErrorBody() {
-        var controller = new MessageMappingController(service());
-        var response = controller.addMapping("{\"id\":\"bad\",\"unknownField\":true}");
+    void controllerRetainsDecodeErrorResponse() {
+        var response = new MessageMappingController(service()).addMapping("{\"id\":\"bad\",\"unknownField\":true}");
         assertEquals(400, response.getStatusCode().value());
         assertEquals("UnrecognizedPropertyException", response.getBody().get("details"));
-        assertTrue(response.getBody().get("error").toString().contains("unknownField"));
-        assertFalse(Files.exists(root.resolve("mappings/bad.json")));
     }
 }

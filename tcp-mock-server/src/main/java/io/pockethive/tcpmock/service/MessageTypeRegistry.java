@@ -1,37 +1,61 @@
 package io.pockethive.tcpmock.service;
 
 import io.pockethive.tcpmock.model.MessageTypeMapping;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Responsibility: own runtime mappings, defaults and enabled/priority ordering.
- * Must not: execute requests or implement file IO.
- * Contract: RESP-TCP-MOCK-EXECUTION — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-execution.
+ * Responsibility: initialize and commit the durable mapping catalogue through its persistence port.
+ * Must not: implement filesystem IO, execute requests or acknowledge an unpersisted change.
+ * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
  */
 @Service
 public class MessageTypeRegistry {
-    private final ConcurrentHashMap<String, MessageTypeMapping> mappings = new ConcurrentHashMap<>();
-    public MessageTypeRegistry() {
-        initializeDefaultMappings();
+    private final MappingPersistence persistence;
+    private volatile Map<String, MessageTypeMapping> mappings;
+
+    public MessageTypeRegistry(MappingPersistence persistence, StartupMappingSource startup) {
+        this.persistence = Objects.requireNonNull(persistence);
+        Map<String, MessageTypeMapping> initial;
+        if (persistence.hasSnapshot()) {
+            initial = new LinkedHashMap<>();
+            for (MessageTypeMapping mapping : persistence.load()) {
+                String id = Objects.requireNonNull(mapping.getId(), "Saved mapping id");
+                if (initial.putIfAbsent(id, mapping) != null) {
+                    throw new IllegalStateException("Duplicate mapping id in saved catalogue: " + id);
+                }
+            }
+        } else {
+            initial = defaultMappings();
+            for (MessageTypeMapping mapping : startup.load()) {
+                initial.put(Objects.requireNonNull(mapping.getId(), "Startup mapping id"), mapping);
+            }
+            persistence.save(initial.values());
+        }
+        mappings = Collections.unmodifiableMap(new LinkedHashMap<>(initial));
     }
 
-    private void initializeDefaultMappings() {
+    private Map<String, MessageTypeMapping> defaultMappings() {
+        Map<String, MessageTypeMapping> initial = new LinkedHashMap<>();
         MessageTypeMapping echoMapping = new MessageTypeMapping("echo", "^ECHO.*", "{{message}}", "Echo response");
         echoMapping.setPriority(10);
-        addMapping(echoMapping);
+        initial.put(echoMapping.getId(), echoMapping);
 
         MessageTypeMapping jsonMapping = new MessageTypeMapping("json", "^\\{.*\\}$",
             "{\"status\":\"success\",\"timestamp\":\"{{timestamp}}\",\"echo\":{{message}}}", "JSON response");
         jsonMapping.setPriority(10);
-        addMapping(jsonMapping);
+        initial.put(jsonMapping.getId(), jsonMapping);
 
         MessageTypeMapping defaultMapping = new MessageTypeMapping("default", ".*", "OK", "Default response");
         defaultMapping.setPriority(1);
-        addMapping(defaultMapping);
+        initial.put(defaultMapping.getId(), defaultMapping);
 
-        System.out.println("Initialized 3 default mappings (echo, json, default)");
+        return initial;
     }
 
     public List<MessageTypeMapping> getSortedMappings() {
@@ -41,20 +65,34 @@ public class MessageTypeRegistry {
             .toList();
     }
 
-    public void addMapping(MessageTypeMapping mapping) {
-        mappings.put(mapping.getId(), mapping);
+    public synchronized void addMapping(MessageTypeMapping mapping) {
+        String id = Objects.requireNonNull(mapping.getId(), "Mapping id");
+        Map<String, MessageTypeMapping> candidate = new LinkedHashMap<>(mappings);
+        candidate.put(id, mapping);
+        commit(candidate);
     }
 
-    public void removeMapping(String id) {
-        mappings.remove(id);
+    public synchronized void removeMapping(String id) {
+        Objects.requireNonNull(id, "Mapping id");
+        if (!mappings.containsKey(id)) {
+            return;
+        }
+        Map<String, MessageTypeMapping> candidate = new LinkedHashMap<>(mappings);
+        candidate.remove(id);
+        commit(candidate);
+    }
+
+    public synchronized void clearMappings() {
+        commit(Map.of());
+    }
+
+    private void commit(Map<String, MessageTypeMapping> candidate) {
+        Map<String, MessageTypeMapping> accepted = Collections.unmodifiableMap(new LinkedHashMap<>(candidate));
+        persistence.save(accepted.values());
+        mappings = accepted;
     }
 
     public Collection<MessageTypeMapping> getAllMappings() {
-        return new ArrayList<>(mappings.values());
+        return List.copyOf(mappings.values());
     }
-
-
-
-
-
 }

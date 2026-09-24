@@ -32,19 +32,10 @@ public class AdminMappingService {
     }
 
     public void delete(String id) {
-        try {
-            registry.removeMapping(id);
-        } catch (Exception ignored) {
-            // Preserve the existing idempotent admin deletion policy.
-        }
+        registry.removeMapping(id);
     }
 
     public void reset() {
-        try {
-            registry.getAllMappings().forEach(m -> registry.removeMapping(m.getId()));
-        } catch (Exception ignored) {
-            // Preserve the existing idempotent admin reset policy.
-        }
+        registry.clearMappings();
     }
-
 }

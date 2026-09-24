@@ -1,9 +1,15 @@
 # Functional module boundaries — next refactors
 
-Status: F01 implemented in `9a12dd50`; F03 implemented in `3116364c`,
-reviewed on 2026-09-23 on `codex/redis-adapter`. Prepared for review and integration
-alongside PR #520. This work follows PR #519. Historical
-baseline analysis remains in Git history.
+Status (2026-09-24): F01/F03 are in PR #521; F04/F05 are in PR #522.
+The next reviewed delivery on `codex/worker-inputs`, based on PR #522, includes
+F02 local inputs, F07 producer-owned Scenario Manager contracts, and selected F09
+processor and TCP mock boundaries. TCP mapping persistence and the equal-priority
+restart fix are implemented, tested and accepted in separate review.
+
+This closes the selected delivery, not every F07/F09 audit lead. F06 auth/rendering,
+F08 state/correctness decisions, remaining F07/F09 service work and promotion of TCP
+runtime mappings into PocketHive scenarios remain separate follow-ups. Historical
+baseline analysis and intermediate verification remain below and in Git history.
 
 ## Objective and rules
 
@@ -616,7 +622,7 @@ and wider TCP mock separation are not closed by this slice.
 
 ### F09 — TCP mock stub conversion
 
-**Implemented, pending separate review.** Base: `d45bcc13`.
+**Implemented and accepted in the subsequent TCP closure review.** Base: `d45bcc13`.
 Share duplicated admin/file StubMapping conversion and reverse file export.
 Public DTOs remain unchanged; nested-type extraction was blocked by automatic
 approval review as a protected contract change and is outside this narrower slice.
@@ -677,3 +683,77 @@ Separate follow-up review accepted the bounded TCP slice after both test fixes.
 Fresh agent-disabled run: 67 tests passed (`/tmp/ph-tcp-subclass-review.log`), no
 self-attach warnings; no remaining findings in the reviewed scope. Deployment
 and explicitly deferred TCP debt remain outside this acceptance.
+
+### TCP mock housekeeping
+
+After the bounded extraction review, remove unused AdvancedTemplateEngine,
+AdvancedMatcher and PaymentLogicEngine (including its unused nested payment models).
+Repository-wide name/bean/reflection searches found no consumers; runtime still uses
+EnhancedTemplateEngine and AdvancedRequestMatcher. Close classpath documentation
+streams and WireMockImporter directory walks with try-with-resources. Preserve lookup
+order, parsing, import results and public HTTP contracts. Reset semantics, scenario
+persistence and live public DTOs remain outside this cleanup.
+
+Verification: clean TCP module build and all 67 tests passed with dynamic agent
+loading disabled (`/tmp/ph-tcp-housekeeping.log`); no stale compiled classes used.
+Existing documentation HTTP and real-file stub import/export tests passed.
+No new runtime dependencies or ownership boundaries; no deployment/commit.
+
+### TCP mock runtime mapping persistence — implemented and reviewed
+
+Human decision: runtime mapping changes must survive restarts of the same mock
+instance with its retained data volume. Exporting/promoting those changes into a
+PocketHive scenario is a separate task and is not part of this change.
+
+Required behavior:
+- Fresh runtime initializes its mapping catalogue from built-in defaults and the
+  existing startup mapping source. Once initialized, the persisted runtime catalogue
+  is authoritative; startup files must not overwrite edits or resurrect deletions.
+- Additions, replacements, deletions and an explicitly empty catalogue survive
+  restart. This applies to authored mappings, admin stub operations and imports.
+- One persistence owner serves all mutation entrypoints. A successful mutation
+  must have been persisted; an IO failure cannot become a successful API response.
+- Existing data mounts already retain `/app/data` in local Compose and HiveForge.
+  A fresh deployment with no retained data remains a fresh runtime.
+- No automatic promotion to scenario files and no implicit migration of historical
+  per-file writes. Any migration requires a separate explicit decision.
+
+Implemented: a complete persisted catalogue snapshot, atomically
+replaced on accepted mutation. An empty snapshot is valid initialized state, not
+an instruction to reload startup defaults. Fail explicitly on an unreadable or
+corrupt saved catalogue. The storage contract is recorded in
+RESP-TCP-MOCK-MAPPING-FILES/AUTHORING.
+Acceptance must exercise restart with the same data root after add/edit/delete/reset,
+including a modified startup source, plus write failure retaining the accepted state.
+The former startup/write directory divergence is removed.
+
+Implementation contract: RESP-TCP-MOCK-MAPPING-FILES/AUTHORING now specify a full
+atomic snapshot at `/app/data/mapping-catalogue.json`. One registry mutation owner
+serves authoring/admin/import paths; no legacy per-file migration or PH scenario export.
+Existing local and HiveForge data mounts already cover this path. Request acceptance
+requires persistence; saved state, including an empty catalogue, overrides seed loading.
+
+Verification: 73 TCP tests passed with dynamic agent loading disabled; 3 repository
+import-boundary tests passed separately. Tests cover restart after authoring, admin
+creation/delete/clear and file imports, seed bypass for saved/empty state, parallel
+mutations, failed serialization/replacement, failed admin writes and corrupt snapshots.
+Logs: `/tmp/ph-tcp-durability.log`, `/tmp/ph-tcp-import-boundary.log`.
+A broader invocation failed in Rabbit Mockito initialization because the TCP-specific
+no-attach JVM option was applied there too; that run is not a passing reactor result.
+No deployment performed. Separate review found the ordering issue below; the follow-up
+review accepted its fix.
+
+Review fix: preserve catalogue encounter order through immutable LinkedHashMap
+snapshots instead of Map.copyOf. Equal-priority matching uses persisted catalogue
+order; replacements keep their position, new ids append. Regression exercises both
+id orders, saved array order, response selection before/after restart, replacement,
+unrelated insertion and deletion. It failed before the fix (expected updated,
+received b); all 74 TCP tests pass after the fix. Evidence:
+`/tmp/ph-tcp-order-red.log`, `/tmp/ph-tcp-order-green.log`. No commit/deployment.
+
+Final review (2026-09-24): no findings after the ordering fix. All 74 TCP tests
+passed again (`/tmp/ph-tcp-order-review.log`); eight independent JVM reloads selected
+the same response. `git diff --check` passed. The prior 3 import-boundary tests remain
+applicable; this fix changed no module dependencies. Ready for publication as the
+next PR based on `codex/journal-filesystem` (#522). No full-reactor or deployed
+acceptance rerun is claimed for this delivery.

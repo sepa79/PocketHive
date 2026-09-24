@@ -4,6 +4,15 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock runtime mappings now survive restarts through one atomic catalogue
+  snapshot shared by authoring, admin operations and imports. Persist deletions and
+  empty state; fail writes without accepting changes and reject corrupt saved state.
+  Preserve equal-priority selection across edits and restarts through catalogue order.
+  Startup mappings seed fresh runtimes only; no legacy-file migration or scenario export.
+
+- TCP mock housekeeping: close documentation/import streams and remove unused
+  template, matching and payment implementations.
+
 - TCP mock execution/admin separation: one mapping executor for text, binary and
   manual requests; dedicated text processing, admin commands, diagnostic projections
   and documentation reader. Preserve existing HTTP, matching, recording and reset behavior.
@@ -15,9 +24,8 @@ All notable changes to this project will be documented in this file.
   coordination from HTTP handling; remove registry storage forwarding while
   preserving partial-import effects and existing responses.
 
-- TCP mock mapping storage: separate authored file writes/deletes from startup
-  imports and remove the registry/loader dependency cycle, preserving file paths
-  and existing IO failure behavior.
+- TCP mock mapping storage: separate persistence and startup-source ports from
+  the registry and remove the registry/loader dependency cycle.
 
 - TCP mock workspace isolation: move the global catalogue and mutation policy
   into one service, remove the unused user-aware implementation, and preserve

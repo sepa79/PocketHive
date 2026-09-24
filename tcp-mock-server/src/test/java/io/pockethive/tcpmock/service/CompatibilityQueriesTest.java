@@ -13,7 +13,7 @@ class CompatibilityQueriesTest {
         var store = new RequestStore();
         var request = new TcpRequest("id", "client", "hello", Map.of(), "MAPPING", Instant.EPOCH, "OK");
         store.addRequest(request);
-        var queries = new CompatibilityQueries(store, new MessageTypeRegistry(), null);
+        var queries = new CompatibilityQueries(store, TestMappingCatalogues.fresh(), null);
         assertEquals(Map.of("total", 0), queries.getUnmatchedRequests().get("meta"));
         store.addUnmatchedRequest(request);
         assertEquals(Map.of("total", 1), queries.getUnmatchedRequests().get("meta"));
