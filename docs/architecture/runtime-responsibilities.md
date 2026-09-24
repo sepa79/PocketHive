@@ -1776,7 +1776,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1851,6 +1851,42 @@ protocol result construction or pacing inside the HTTP client owner.
 **Verification entrypoints:** ApacheProcessorHttpClientTest for real request/proxy,
 reuse, TLS and capacity behavior; ProcessorTest and HttpAuthSecondPassSecurityTest
 for response/metrics/error and diagnostic redaction. Observable proxy traffic replaces the old reflective route-planner identity assertion.
+
+## RESP-PROCESSOR-TCP-RUNTIME
+
+**Current module(s):** `processor-service`.
+
+TcpTransportRuntime owns transport configuration/replacement and GLOBAL/PER_THREAD/NONE
+selection for TCP and ISO8583. Each handler retains its own runtime instance; sharing
+one implementation does not merge the previously independent protocol pools.
+
+The runtime owns active configuration, the eager GLOBAL transport and lazily created
+per-thread transports. `configure` retains the current equality check, locking and
+replacement/close order. `currentConfig` supplies the existing read-only projection.
+`acquire` returns a TcpTransportLease that executes through TcpTransport and releases
+only a NONE transport when the handler finishes its complete result/error path.
+Close exceptions remain suppressed as before. Retrying remains in the handlers and
+uses the same lease; no new retries, reconnection, framing or timeout behavior.
+
+Preserve update timing: TCP configures before target/auth work; ISO8583 configures
+after its protocol/auth validation. Handlers read the active config after pacing as
+before. This extraction does not make configuration replacement atomic across
+in-flight work, roll back failed construction, or add shutdown hooks. Those existing
+lifecycle/concurrency limitations need a separate behavior decision.
+
+TcpTransportFactory remains the sole concrete Socket/NIO/Netty constructor selector,
+internal to the transport package. Its active config-based behavior is unchanged.
+The uncalled string/global-pool helpers and TcpTransportPool are removed; they are
+not an alternate runtime API. TcpPerThreadTransports owns only lazy per-thread
+construction and release for one configuration generation.
+
+**Forbidden:** pool state, transport construction/selection/replacement or release
+policy in protocol handlers; protocol parsing, authentication, pacing, retries,
+metrics or result construction in TcpTransportRuntime.
+
+**Verification entrypoints:** TcpTransportRuntimeTest for execution/release effects,
+reconfiguration and per-thread isolation; existing processor TCP/ISO8583 tests for
+framing, auth options, results and failures; existing transport IO tests.
 
 ## RESP-HTTP-SEQUENCE-WORK
 

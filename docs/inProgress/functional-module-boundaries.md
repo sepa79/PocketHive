@@ -446,7 +446,7 @@ reactor or deployed E2E was repeated.
 
 ### F09 — processor HTTP client slice
 
-**Implemented, pending separate review.** Base: pacing commit `476f8dc5`.
+**Implemented and reviewed; committed in `f6e55c31`.** Base: pacing commit `476f8dc5`.
 ApacheProcessorHttpClient now owns HTTP pool/TLS client construction, selection and
 status capacity behind ProcessorHttpClient. ProcessorConfiguration injects that API;
 WorkerImpl no longer imports Apache clients or constructs them, and the handler no
@@ -469,7 +469,36 @@ proxy routing. Existing processor/pacing/transport/security suites plus the 3 im
 checks pass. Worker status consumes the owner's capacity projection. No new module,
 artifact dependency or import exemption was introduced; this local package boundary
 is documented and reviewed in source, not enforced by a new scanner.
-No full repository reactor or deployed E2E was repeated. This does not close F09.
+Separate HTTP review reran 88 tests successfully (`/tmp/ph-f09-http-review.log`)
+with no actionable findings. No full repository reactor or deployed E2E was repeated.
+This does not close F09.
+
+### F09 — TCP/ISO8583 runtime slice
+
+**Implemented, pending separate review.** Base: HTTP commit `f6e55c31`.
+TcpTransportRuntime owns configuration/reload and selection, TcpPerThreadTransports
+owns each generation's lazy per-thread resources, and TcpTransportLease owns scoped
+release. Both handlers delegate through this API with separate runtime instances.
+Retry/result scopes and existing update/close order are preserved. The unused
+TcpTransportPool and string/global-pool factory helpers are removed after repository
+caller search; the remaining factory is package-private. See RESP-PROCESSOR-TCP-RUNTIME.
+
+Existing non-atomic replacement, failed-construction state and lack of shutdown
+cleanup are deliberately outside this extraction; no lifecycle repair is implied.
+Socket/NIO/Netty IO implementations, protocol framing and auth remain unchanged.
+The active factory's existing config-based selection/fallback behavior is preserved,
+not expanded or reinterpreted in this extraction.
+
+Verification: **96 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-tcp-runtime.log`): 93 processor tests plus 3 repository import checks.
+Eight owner tests exercise request/config propagation, GLOBAL/NONE/PER_THREAD reuse,
+per-thread and protocol isolation, replacement release, close failures, missing
+configuration and caller-controlled retry through one lease. Existing handler and
+real HTTP/TCP/ISO8583 transport tests remain green. The existing ProcessorTest fake
+transport injection fixture was adapted to the new owner; owner tests themselves
+exercise the API without inspecting private state. No new module/dependency/import
+exception or scanner was added. No full repository reactor or deployed E2E repeated.
+This completes the selected pool-mechanics transfer, not all F09 or lifetime repair.
 
 ### F08 and separate correctness work
 

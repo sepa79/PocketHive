@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- Processor TCP isolation: share transport replacement, reuse and scoped release
+  mechanics between TCP and ISO8583 while retaining separate protocol pools and
+  existing retry/result behavior; remove the unused global transport pool API.
+
 - Processor HTTP isolation: move client pool construction, TLS/reuse selection and
   capacity reporting behind one local API; preserve transport behavior and verify
   proxy routing, connection reuse and TLS through real HTTP tests.

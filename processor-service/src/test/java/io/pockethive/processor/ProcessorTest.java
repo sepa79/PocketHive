@@ -984,17 +984,20 @@ class ProcessorTest {
             throw new IllegalStateException(protocol + " handler not registered");
         }
 
-        Field globalTransportField = tcpHandler.getClass().getDeclaredField("globalTransport");
+        Field runtimeField = tcpHandler.getClass().getDeclaredField("transportRuntime");
+        runtimeField.setAccessible(true);
+        Object runtime = runtimeField.get(tcpHandler);
+        Field globalTransportField = runtime.getClass().getDeclaredField("globalTransport");
         globalTransportField.setAccessible(true);
-        Object previous = globalTransportField.get(tcpHandler);
+        Object previous = globalTransportField.get(runtime);
         if (previous instanceof TcpTransport previousTransport) {
             previousTransport.close();
         }
-        globalTransportField.set(tcpHandler, transport);
+        globalTransportField.set(runtime, transport);
 
-        Field activeConfigField = tcpHandler.getClass().getDeclaredField("activeConfig");
+        Field activeConfigField = runtime.getClass().getDeclaredField("activeConfig");
         activeConfigField.setAccessible(true);
-        activeConfigField.set(tcpHandler, TcpTransportConfig.defaults());
+        activeConfigField.set(runtime, TcpTransportConfig.defaults());
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

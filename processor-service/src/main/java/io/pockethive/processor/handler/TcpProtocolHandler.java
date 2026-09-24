@@ -35,12 +35,12 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * Responsibility: execute TCP exchanges and construct TCP result observations.
- * Must not: own pacing state, provision Work/CP topology or reinterpret another protocol's result.
+ * Must not: own transport pools or pacing state, provision topology or reinterpret another protocol's result.
  * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * transport lifetime delegates to RESP-PROCESSOR-TCP-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-processor-tcp-runtime;
  * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class TcpProtocolHandler implements ProtocolHandler {
@@ -51,11 +51,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
   private final ProcessorPacer pacer;
   private final TemplateRenderer templateRenderer;
   private final RedisSequenceProperties redisProperties;
-  private final Object transportLock = new Object();
-
-  private volatile TcpTransportConfig activeConfig;
-  private volatile TcpTransport globalTransport;
-  private volatile PerThreadTransportPool perThreadTransportPool;
+  private final TcpTransportRuntime transportRuntime = new TcpTransportRuntime();
 
   public TcpProtocolHandler(ObjectMapper mapper,
                             Clock clock,
@@ -89,7 +85,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
     TcpTransportConfig desired = Objects.requireNonNull(
         processorConfig.tcpTransport(),
         "processor tcpTransport config must be provided by runtime config");
-    ensureTransportConfig(desired);
+    transportRuntime.configure(desired);
 
     requestMeta = requestMetadata(baseUrl, null, null, request.behavior(), null);
     if (baseUrl == null || baseUrl.isBlank()) {
@@ -141,12 +137,11 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
     long start = clock.millis();
     long pacingMillis = 0L;
-    TcpTransport transport = null;
-    boolean closeAfter = false;
+    TcpTransportLease transport = null;
     try {
       pacingMillis = pacer.await(processorConfig);
 
-      TcpTransportConfig config = activeConfig;
+      TcpTransportConfig config = transportRuntime.currentConfig();
       var options = new java.util.HashMap<String, Object>();
       if (endTag != null) {
         options.put("endTag", endTag);
@@ -160,14 +155,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       TcpRequest tcpRequest = new TcpRequest(host, port, requestBody.getBytes(StandardCharsets.UTF_8), options);
 
       // Connection reuse strategy
-      transport = switch (config.connectionReuse()) {
-        case PER_THREAD -> perThreadTransportPool.get();
-        case GLOBAL -> globalTransport;
-        case NONE -> {
-          closeAfter = true;
-          yield TcpTransportFactory.create(config);
-        }
-      };
+      transport = transportRuntime.acquire(config);
 
       // Retry logic
       TcpResponse response = null;
@@ -230,11 +218,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
       metricsRecorder.record(metrics);
       throw new ProcessorCallException(metrics, ex, requestMeta);
     } finally {
-      if (closeAfter && transport != null) {
-        try {
-          transport.close();
-        } catch (Exception ignored) {
-        }
+      if (transport != null) {
+        transport.close();
       }
     }
   }
@@ -285,62 +270,4 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return Optional.of(mapper.writeValueAsString(bodyValue));
   }
 
-  private void ensureTransportConfig(TcpTransportConfig desired) {
-    desired = Objects.requireNonNull(desired, "processor tcpTransport config must be provided by runtime config");
-    TcpTransportConfig current = activeConfig;
-    if (desired.equals(current)) {
-      return;
-    }
-    synchronized (transportLock) {
-      if (!desired.equals(activeConfig)) {
-        reloadTransports(desired);
-      }
-    }
-  }
-
-  private void reloadTransports(TcpTransportConfig config) {
-    TcpTransport previousGlobal = this.globalTransport;
-    PerThreadTransportPool previousPerThread = this.perThreadTransportPool;
-
-    this.activeConfig = config;
-    this.globalTransport = TcpTransportFactory.create(config);
-    this.perThreadTransportPool = new PerThreadTransportPool(config);
-
-    if (previousGlobal != null) {
-      try {
-        previousGlobal.close();
-      } catch (Exception ignored) {
-      }
-    }
-    if (previousPerThread != null) {
-      previousPerThread.closeAll();
-    }
-  }
-
-  private static final class PerThreadTransportPool {
-    private final ConcurrentLinkedQueue<TcpTransport> created = new ConcurrentLinkedQueue<>();
-    private final ThreadLocal<TcpTransport> transport;
-
-    private PerThreadTransportPool(TcpTransportConfig config) {
-      this.transport = ThreadLocal.withInitial(() -> {
-        TcpTransport createdTransport = TcpTransportFactory.create(config);
-        created.add(createdTransport);
-        return createdTransport;
-      });
-    }
-
-    private TcpTransport get() {
-      return transport.get();
-    }
-
-    private void closeAll() {
-      for (TcpTransport transport : created) {
-        try {
-          transport.close();
-        } catch (Exception ignored) {
-        }
-      }
-      created.clear();
-    }
-  }
 }
