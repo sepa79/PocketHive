@@ -582,7 +582,7 @@ catalogue policy. These remain mapper/controller tests, not deployed HTTP checks
 
 ### F09 — TCP mock authored mapping files
 
-**Implemented, pending separate review.** Base: `08efc686`.
+**Implemented and reviewed; committed in `7e75105e`.** Base: `08efc686`.
 Extract save/delete mechanics from FileBasedMappingLoader into MappingFileStore.
 Registry delegates to the store; loader only imports at startup. Remove their
 lazy cycle, preserve existing distinct roots and error/ordering semantics.
@@ -596,3 +596,20 @@ failures and propagated runtime failures. Existing format-selection semantics
 remain unchanged, including non-yaml values selecting JSON. No deployment,
 new architecture scanner or test of bean identity; startup composition was traced
 in source. This slice does not close controller orchestration or all F09.
+
+### F09 — TCP mock mapping authoring
+
+**Implemented, pending separate review.** Base: `7e75105e`.
+Extract controller parsing and import/delete orchestration into MappingAuthoringParser
+and MappingAuthoringService. Remove registry storage forwarding/dependency; keep
+startup and WireMock boundaries distinct. Preserve dual-format decode, sequential
+partial effects, response fields and error suppression. See
+RESP-TCP-MOCK-MAPPING-AUTHORING. Verification: 41 tests passed, zero failures/errors/
+skips (`/tmp/ph-f09-authoring-final.log`): 11 parser/authoring/controller behavior
+cases plus 27 existing TCP mock cases and 3 import checks. Tests use actual registry
+CRUD and temporary files; protocol execution dependencies are outside the authoring
+fixture. They cover JSON/YAML, batches, replacements, empty batches, late invalid
+entry retaining earlier effects, initial rejection, suppressed file IO failure,
+delete effects and unchanged HTTP response mapping. No deployed HTTP/full reactor
+repeated. Startup import and WireMock admin remain distinct; registry execution
+and wider TCP mock separation are not closed by this slice.

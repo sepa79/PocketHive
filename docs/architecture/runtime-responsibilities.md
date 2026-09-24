@@ -3289,10 +3289,10 @@ files retain their existing distinct roots; this extraction does not make saved
 mappings reload on restart. JSON/YAML readers/writers are transport codecs using
 the shared MessageTypeMapping shape, not new domain validation authorities.
 
-MessageTypeRegistry retains in-memory matching and its existing save/delete facade,
-but delegates file effects to MappingFileStore rather than back to the startup
-loader. The old lazy registry/loader cycle and loader write/delete methods disappear.
-Controller sequencing (register then save, remove then delete) remains unchanged.
+MessageTypeRegistry retains in-memory matching. MappingAuthoringService calls the
+registry and MappingFileStore directly, preserving register-then-save and
+remove-then-delete order. Registry storage forwarding and the former lazy loader
+cycle are removed. FileBasedMappingLoader only imports at startup.
 
 Preserve default JSON writes and the existing exact `yaml` format selection,
 pretty printing, directory creation, variant deletion order and diagnostic text.
@@ -3305,3 +3305,30 @@ mutation, protocol matching or HTTP responses in MappingFileStore.
 
 **Verification entrypoints:** MappingFileStoreTest exercises real temporary files,
 serialization, replacement, deletion variants and existing IO failure behaviour.
+
+## RESP-TCP-MOCK-MAPPING-AUTHORING
+
+**Current module(s):** `tcp-mock-server`.
+
+MappingAuthoringParser owns the existing `/api/mappings` body decoding: try JSON,
+then YAML on parse exception; convert each item using YAMLMapper. This is preserved
+existing dual-format acceptance, not a new fallback rule. Startup extension-based
+import and WireMock StubMapping conversion are distinct boundaries.
+
+MappingAuthoringService owns sequential single/batch import and delete coordination.
+It decodes each entry immediately before register-then-save; later failures retain
+earlier effects. Empty arrays return count zero; single imports return the id.
+It constructs the existing plain success payload. File-store IO suppression remains
+unchanged. Delete suppresses existing exceptions around remove-then-delete.
+MessageMappingController maps HTTP, delegates, and retains its current 400 error
+payload/diagnostic and 204 delete response. No new validation, rollback, public
+fields, success guarantee or routing. Registry solely holds runtime mappings;
+authoring does not own a parallel map or build file paths.
+
+**Forbidden:** import iteration/persistence coordination in the controller; file
+effects in the registry/parser; response execution or catalogue state in authoring.
+
+**Verification entrypoints:** MappingAuthoringServiceTest exercises actual decoded
+imports, registry state and temporary files, including partial failure and deletion;
+the same suite covers controller response/error mapping via that service.
+MappingAuthoringParserTest covers format acceptance and deferred per-entry binding.

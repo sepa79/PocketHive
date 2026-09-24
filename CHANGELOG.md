@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+- TCP mock mapping authoring: separate body decoding and sequential import/delete
+  coordination from HTTP handling; remove registry storage forwarding while
+  preserving partial-import effects and existing responses.
+
 - TCP mock mapping storage: separate authored file writes/deletes from startup
   imports and remove the registry/loader dependency cycle, preserving file paths
   and existing IO failure behavior.

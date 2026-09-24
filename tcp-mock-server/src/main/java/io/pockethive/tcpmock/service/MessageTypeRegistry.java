@@ -27,7 +27,6 @@ public class MessageTypeRegistry {
     private final StateManager stateManager;
     private final EnhancedTemplateEngine templateEngine;
     private final RequestVerificationService verificationService;
-    private final MappingFileStore fileStore;
 
     public MessageTypeRegistry(PatternCache patternCache,
                              AdvancedRequestMatcher advancedMatcher,
@@ -35,8 +34,7 @@ public class MessageTypeRegistry {
                              Iso8583Handler iso8583Handler,
                              StateManager stateManager,
                              EnhancedTemplateEngine templateEngine,
-                             RequestVerificationService verificationService,
-                             MappingFileStore fileStore) {
+                             RequestVerificationService verificationService) {
         this.patternCache = patternCache;
         this.advancedMatcher = advancedMatcher;
         this.paymentEngine = paymentEngine;
@@ -44,7 +42,6 @@ public class MessageTypeRegistry {
         this.stateManager = stateManager;
         this.templateEngine = templateEngine;
         this.verificationService = verificationService;
-        this.fileStore = fileStore;
         initializeDefaultMappings();
     }
 
@@ -151,11 +148,4 @@ public class MessageTypeRegistry {
         return stateManager.getScenarioManager();
     }
 
-    public void saveMappingToFile(MessageTypeMapping mapping) {
-        fileStore.saveMappingToFile(mapping);
-    }
-
-    public void deleteMappingFile(String id) {
-        fileStore.deleteMappingFile(id);
-    }
 }
