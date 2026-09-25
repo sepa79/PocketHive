@@ -1,9 +1,16 @@
-# Documentation Status - Verification Report
+# Documentation Status - Historical Report
 
-## ✅ All Documentation Up-to-Date
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
 
-**Verification Date**: 2024  
-**Status**: CONFIRMED - All documentation is current and accurate
+## Historical documentation inventory
+
+**Historical report date**: 2024
+
+**Current status**: Runtime examples and feature assertions below are unqualified.
 
 ---
 
@@ -30,7 +37,7 @@
 
 ---
 
-## Feature Coverage Verification
+## Historical feature coverage inventory
 
 ### UI Features Documented
 - ✅ Requests Tab - Covered in UI-USER-GUIDE.md
@@ -89,7 +96,7 @@
 - Troubleshooting
 - Best practices
 
-**Status**: ✅ Complete and accurate
+**Status**: Historical description; accuracy requires qualification
 
 ### CAPABILITIES.md
 **Purpose**: Comprehensive feature overview  
@@ -107,14 +114,14 @@
 - Comparison with alternatives
 - Roadmap
 
-**Status**: ✅ Complete and accurate
+**Status**: Historical description; accuracy requires qualification
 
 ---
 
 ## Documentation Links Verification
 
 ### Internal Links
-All internal documentation links verified:
+Historical link checklist; these entries do not record a current verification:
 - ✅ START-HERE.md → All 12 doc links valid
 - ✅ README.md → All doc links valid
 - ✅ UI-USER-GUIDE.md → All cross-references valid
@@ -122,7 +129,7 @@ All internal documentation links verified:
 - ✅ DOCUMENTATION-INDEX-FINAL.md → All links valid
 
 ### UI Documentation Viewer
-Verified all docs accessible in UI:
+Historical UI-access checklist; not current runtime evidence:
 - ✅ START-HERE.md loads correctly
 - ✅ UI-USER-GUIDE.md loads correctly
 - ✅ CAPABILITIES.md loads correctly
@@ -135,25 +142,24 @@ Verified all docs accessible in UI:
 ## Accuracy Verification
 
 ### Technical Accuracy
-- ✅ All API endpoints match implementation
-- ✅ All features match current codebase
-- ✅ All examples tested and working
-- ✅ All configuration options valid
-- ✅ All environment variables correct
+
+- [ ] Verify API descriptions against the canonical capability assessment
+- [ ] Verify feature descriptions against the actual listener path
+- [ ] Test examples through supported ingress
+- [ ] Validate configuration examples and environment settings
 
 ### UI Accuracy
 - ✅ All UI features documented match implementation
 - ✅ All screenshots descriptions accurate
 - ✅ All keyboard shortcuts correct
 - ✅ All menu items and buttons documented
-- ✅ All workflows match actual UI flow
+- [ ] All workflows match actual UI flow — requires current evidence
 
 ### Code Examples
-- ✅ All JSON examples valid
-- ✅ All bash commands tested
-- ✅ All curl commands working
-- ✅ All Docker commands verified
-- ✅ All configuration examples valid
+
+- [ ] Validate JSON and configuration examples
+- [ ] Verify commands against repository usage and ingress rules
+- [ ] Record actual results when commands are run
 
 ---
 
@@ -178,36 +184,12 @@ Verified all docs accessible in UI:
 
 ---
 
-## Recommendations
+## Current qualification
 
-### Documentation is Production-Ready ✅
-All documentation is:
-- ✅ Complete
-- ✅ Accurate
-- ✅ Up-to-date
-- ✅ Well-organized
-- ✅ Cross-referenced
-- ✅ Accessible in UI
-- ✅ Ready for users
+[TCP capability qualification](WIREMOCK-PARITY.md) owns the supported-workflow
+assessment and acceptance requirements. Legacy documentation examples require
+verification against that contract and the repository's supported ingress.
 
-### No Action Required
-The documentation suite is comprehensive and ready for production use.
-
----
-
-## Summary
-
-**Total Documentation Files**: 14  
-**Status**: ✅ All Current  
-**New Files Added**: 2 (UI-USER-GUIDE.md, CAPABILITIES.md)  
-**Files Updated**: 1 (README.md)  
-**Broken Links**: 0  
-**Missing Content**: 0  
-
-**Overall Status**: ✅ DOCUMENTATION COMPLETE AND VERIFIED
-
----
-
-**Verified By**: Development Team  
-**Date**: 2024  
-**Next Review**: After major feature additions
+No runtime, UI, example-command or performance tests were run for this
+documentation update. Earlier completeness and verification claims do not
+establish current qualification.

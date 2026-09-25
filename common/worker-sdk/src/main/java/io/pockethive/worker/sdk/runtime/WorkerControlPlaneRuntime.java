@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory;
  * <p>
  * Responsibility: apply worker control updates and assemble current configuration/status projections.
  * Must not: let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
- * Validates typed/private and Redis connection candidates before accepted-state writes or reseeding.
+ * Consumes validated runtime-policy, typed/private and Redis connection candidates before accepted-state writes or reseeding.
  * Contract: RESP-WORK-STATE — docs/architecture/runtime-responsibilities.md#resp-work-state.
  * Consumes RESP-WORK-CONFIGURATION-DIAGNOSTICS for config logs and status projections only.
  * Consumes RESP-WORK-CSV-SETTINGS for the immutable startup baseline used by patch validation.
@@ -114,6 +114,8 @@ public final class WorkerControlPlaneRuntime {
 
     private final AtomicReference<String> lastWorkInputState = new AtomicReference<>(null);
 
+    private final RedisSequenceConfiguration sequences;
+
     public WorkerControlPlaneRuntime(
         WorkerControlPlane workerControlPlane,
         WorkerStateStore stateStore,
@@ -123,8 +125,10 @@ public final class WorkerControlPlaneRuntime {
         WorkerControlTopology controlPlane,
         TemplateRenderer templateRenderer,
         io.pockethive.work.config.WorkMutationPolicyRegistry mutationPolicies,
-        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser
+        io.pockethive.work.config.WorkConfigurationParser workConfigurationParser,
+        RedisSequenceConfiguration sequences
     ) {
+        this.sequences = Objects.requireNonNull(sequences, "sequences");
         this.workerControlPlane = Objects.requireNonNull(workerControlPlane, "workerControlPlane");
         this.stateStore = Objects.requireNonNull(stateStore, "stateStore");
         this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper");
@@ -419,13 +423,14 @@ public final class WorkerControlPlaneRuntime {
         for (WorkerState state : targets) {
             ensureStatusPublisher(state);
             WorkerConfigPatch patch = workerConfigFor(state, sanitized);
-            FilteredConfigUpdate filtered = preprocessConfigUpdate(patch.values());
-            Map<String, Object> filteredUpdate = filtered.values();
-            Map<String, Object> canonicalSource = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
-            Map<String, Object> privateUpdate = privateConfigFrom(canonicalSource);
-            Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
             boolean previousEnabled = state.enabled();
             try {
+                WorkerRuntimeConfiguration.validatePatch(patch.values());
+                FilteredConfigUpdate filtered = preprocessConfigUpdate(patch.values());
+                Map<String, Object> filteredUpdate = filtered.values();
+                Map<String, Object> canonicalSource = ConfigKeyCanonicalizer.canonicalise(filteredUpdate);
+                Map<String, Object> privateUpdate = privateConfigFrom(canonicalSource);
+                Map<String, Object> canonicalUpdate = publicConfigFrom(canonicalSource);
                 WorkPatchPolicy patchPolicy = new WorkPatchPolicy(state.definition().beanName(),
                     mutationPolicies.inputPolicy(state.definition().input()), state.inputStartup(),
                     mutationPolicies.outputPolicy(state.definition().outputType()), Map.of());
@@ -438,7 +443,7 @@ public final class WorkerControlPlaneRuntime {
                         previousEnabled
                     );
                 }
-                ConfigMerger.ConfigMergeResult mergeResult = configMerger.merge(
+                ConfigMergeResult mergeResult = configMerger.merge(
                     state.definition(),
                     state.rawConfig(),
                     canonicalUpdate,
@@ -456,13 +461,13 @@ public final class WorkerControlPlaneRuntime {
                 Object typedConfig = mergeResult.replaced() && !mergeResult.rawConfig().isEmpty()
                     ? configMerger.toTypedConfig(state.definition(), configForTypedWorker(mergeResult.rawConfig(), candidatePrivateConfig))
                     : mergeResult.typedConfig();
-                RedisSequenceConfiguration.configureFromWorkerConfig(mergeResult.rawConfig());
+                sequences.configureFromWorkerConfig(mergeResult.rawConfig());
                 if (filtered.reseedRequested() && templateRenderer != null) {
                     templateRenderer.resetSeededSelections();
                 }
                 state.updatePrivateConfig(candidatePrivateConfig);
                 state.updateConfig(typedConfig, mergeResult.replaced(), enabled);
-                state.updateRawConfig(mergeResult.rawConfig());
+                state.updateRuntimeConfiguration(mergeResult.configuration());
                 Map<String, Object> appliedConfig = mergeResult.replaced()
                     ? mergeResult.rawConfig()
                     : mergeResult.previousRaw();

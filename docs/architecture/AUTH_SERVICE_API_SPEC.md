@@ -91,14 +91,17 @@ The interoperability choices are explicit:
   MCP scope allow-list owned by `PocketHiveMcpScopes` so clients can negotiate
   their explicit requested scope during authorization;
 - PKCE `S256` is mandatory; `plain` and missing challenges fail;
-- exact redirect URI matching; no wildcard, prefix, pattern, or alternate-port
-  matching;
+- exact redirect URI matching, except for the bounded native-client loopback
+  port rule below; no wildcard, prefix, or pattern matching;
 - the `resource` parameter is mandatory and identical in authorization and
   token requests;
-- opaque access tokens expire after the configured short lifetime;
-- the default access-token lifetime is 15 minutes and the default rotating
+- opaque access tokens expire after the configured bounded lifetime;
+- the default access-token lifetime is eight hours and the default rotating
   companion refresh-token lifetime is 30 days; deployments may shorten either
-  through the canonical Auth Service properties;
+  through the canonical Auth Service properties. The eight-hour default is a
+  Phase 1 interoperability mitigation for native MCP clients that refresh only
+  when their MCP connection is reinitialized; it does not permit expired-token
+  grace or remove refresh-token rotation;
 - an interactive MCP client requests its declared non-cleanup intent once:
   `pockethive:mcp:discover`, `pockethive:mcp:read`,
   `pockethive:mcp:operate`, `pockethive:mcp:author`, and
@@ -131,10 +134,13 @@ registered loopback callback is exactly `http://127.0.0.1/callback`, without a
 port. For each interactive sign-in, the extension binds an available
 operating-system-assigned port before opening the browser and sends the exact
 runtime callback `http://127.0.0.1:<port>/callback`. Authorization permits only
-that port substitution for an explicitly registered IP-loopback redirect;
-scheme, host, path, query, and fragment rules remain exact. The authorization
-code remains bound to the complete runtime redirect URI and token exchange must
-repeat it exactly. A conforming external MCP client obtains its own opaque
+that port substitution for an explicitly registered HTTP loopback redirect.
+This includes the exact `localhost` host used by native clients whose callback
+listener receives a new operating-system-assigned port on a later session;
+scheme, exact host, path, and query remain equal, while user information and a
+fragment remain forbidden. The authorization code remains bound to the complete
+runtime redirect URI and token exchange must repeat it exactly. A conforming
+external MCP client obtains its own opaque
 client ID through dynamic registration. Dynamic
 registration is bounded, expires with the configured registration lifetime,
 and never grants cleanup. A registration is client metadata, not a user grant,
@@ -146,9 +152,44 @@ supported MCP OAuth metadata routes return their canonical JSON contracts;
 every other route under that prefix returns `404` and must never fall through
 to the PocketHive HTML application.
 
-Remote authorization and token endpoints require HTTPS. Loopback HTTP is
-permitted only for an explicitly configured local development issuer and
-resource whose resolved hosts remain loopback.
+### Public endpoint transport policy
+
+HTTPS is the default for remote endpoints. `POCKETHIVE_ALLOW_REMOTE_HTTP=true`
+is an explicit deployment exception for unencrypted remote HTTP; it defaults to
+`false`. Auth Service and MCP bind that same environment setting and delegate
+public endpoint validation to `PublicEndpointTransportPolicy` in `auth-contracts`.
+No independent service-specific remote-HTTP allowance or automatic downgrade exists.
+The allowance applies only to explicitly configured public ingress, issuer and
+resource URLs. It does not change redirect registration, PKCE, resource matching,
+scopes, origin/host allow-lists, internal service routing or token handling.
+Public URLs must be absolute HTTP(S) URLs with a host and without user information,
+query or fragment. Existing explicit loopback HTTP remains supported without the
+remote allowance, including IPv6 loopback.
+
+The companion independently requires the saved `REMOTE_HTTP` profile mode, labelled
+**Remote HTTP (unencrypted)**. `REMOTE_HTTPS` remains the new-profile default;
+`LOCAL_LOOPBACK_HTTP` remains loopback-only. A profile's MCP and authorization
+server URLs must use its selected transport. `endpointSecurityPolicy.ts` is the
+companion's single mode/transport validator; form labels are presentation only.
+OAuth child endpoints retain the validated issuer's ownership checks.
+Companion metadata, OAuth, MCP and archive-upload requests reject HTTP redirects;
+a redirect cannot change the selected endpoint or transport.
+
+Public ingress preserves the request's external authority, including its port,
+when forwarding `/auth-service/`. It supplies `Host` and `X-Forwarded-Host` from
+the received Host header, `X-Forwarded-Proto` from its accepted connection and
+`X-Forwarded-Prefix: /auth-service`. It removes incoming `Forwarded` and
+`X-Forwarded-Port` headers so neither client-supplied forwarding metadata nor
+the ingress container's listening port overrides that authority. Auth Service's
+framework forwarding support owns authority parsing, including IPv6. Browser
+login redirects therefore retain the public scheme, host, port and auth prefix
+when the published port differs from the container port. HTTP remains subject
+to the explicit allowance above; this does not change OAuth callback validation.
+
+Public HTTP carries passwords and bearer/refresh tokens without TLS. This is an
+explicit insecure deployment exception, not standards-compliant production OAuth
+transport or a promise of support in other MCP clients. Prefer HTTPS at public
+ingress, even when internal services use HTTP.
 
 ### 3.2 MCP OAuth scopes and grants
 
@@ -173,8 +214,8 @@ response always reports the actual granted scope when Auth Service narrows the
 request, as required by the OAuth scope contract.
 
 Scopes constrain discovery and invocation but do not replace resource-level
-PocketHive grants or HiveGate policy. Auth Service returns the principal's full
-grants to the MCP introspection client so the MCP can apply the canonical folder
+PocketHive grants. Auth Service returns the principal's full grants to the MCP
+introspection client so the MCP can apply the canonical folder
 and bundle selectors at invocation time. A scope never grants a broader
 resource selector than the underlying grant.
 
@@ -462,10 +503,11 @@ values. It contains:
 ```
 
 OAuth discovery advertises exactly the canonical interactive scope set accepted
-by public dynamic registration. Governed cleanup is deliberately absent: it is
-not an interactive-client bootstrap capability and remains available only
-through the HiveGate-governed execution path. A client may safely use the
-published `scopes_supported` value as its RFC 7591 registration request without
+by public dynamic registration. The cleanup scope is deliberately absent: it is
+not an interactive-client bootstrap capability. Cleanup execution still requires
+the cleanup scope and explicit human approval of the plan; public registration
+does not grant that scope. A client may safely use the published
+`scopes_supported` value as its RFC 7591 registration request without
 encountering a discover/register contract mismatch.
 
 The service must not derive the issuer or endpoints from `Host`, `Forwarded`, or
@@ -481,9 +523,9 @@ pre-registered. It requires:
 - one bounded, non-blank `client_name`;
 - one to eight exact registered `redirect_uris` with no fragment, user
   information, or wildcard; each URI is either HTTPS or HTTP on an explicit
-  loopback host. At authorization time, an IP-loopback URI may substitute only
-  its port with the exact runtime listener port; this is not a wildcard in
-  registered metadata;
+  loopback host. At authorization time, an HTTP IP-loopback or exact
+  `localhost` URI may substitute only its port with the exact runtime listener
+  port; this is not a wildcard in registered metadata;
 - `grant_types` containing `authorization_code` and optionally
   `refresh_token`, with no other value;
 - `response_types=["code"]`;
@@ -505,17 +547,31 @@ exact normalized metadata accepted by Auth Service; it returns no client
 secret. Exact redirect and scope values become the registered-client contract
 used by the authorization server.
 
-Dynamic registrations use one canonical in-memory registry shared with OAuth
-authorization. The registry has an explicit configured capacity and inactivity
-lifetime. A successful lookup of an active dynamic client renews that
-inactivity deadline; registrations that receive no successful lookup expire.
-The registry prunes expired registrations before reads and writes, and fails
-with a bounded OAuth registration error when capacity is exhausted. Auth
-Service restart invalidates dynamic registrations together with its other
-in-memory OAuth state. Dynamic registration does not authenticate a user, grant
-a permission, or imply client conformance. Client ID Metadata Document fetching
-is not implemented; accepting attacker-selected metadata URLs would add an
-unrelated outbound trust and SSRF boundary.
+Dynamic registrations use one canonical Auth Service registry shared with OAuth
+authorization. The registry has an explicit configured capacity, inactivity
+lifetime, and durable state file. A successful lookup of an active dynamic
+client renews that inactivity deadline; registrations that receive no
+successful lookup expire. The registry atomically replaces its versioned state
+file before publishing an in-memory mutation, prunes expired registrations
+before reads and writes, and fails explicitly when configured state cannot be
+read, validated, or written. A missing state file represents an empty
+first-start registry; malformed, duplicate, over-capacity, or unsupported state
+blocks Auth Service startup. The file must contain exactly one JSON document;
+trailing whitespace is allowed, but trailing values or garbage are rejected.
+`schemaVersion` must be a JSON integer, without string or floating-point coercion.
+Rejected reads leave the file unchanged. The persisted projection contains public client
+metadata and expiry only. It contains no client secret, authorization code,
+access token, refresh token, consent, user identity, or permission grant.
+
+An Auth Service restart retains active dynamic registrations, allowing a native
+MCP client to reuse the client ID issued for the same configured issuer. Other
+OAuth authorization state remains in memory in this phase: restart invalidates
+authorization codes, access tokens, refresh tokens, and consent, so the client
+must re-authorize using its retained registration. Dynamic registration does
+not authenticate a user, grant a permission, or imply client conformance.
+Client ID Metadata Document fetching is not implemented; accepting
+attacker-selected metadata URLs would add an unrelated outbound trust and SSRF
+boundary.
 
 `POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY` is the required positive
 instance capacity and defaults to `256`. The required positive
@@ -523,7 +579,9 @@ instance capacity and defaults to `256`. The required positive
 strictly longer than the configured refresh-token lifetime, which defaults to
 `P30D`. The default one-day margin and lookup renewal keep an actively used
 refresh session's client registration available while still reclaiming inactive
-registrations.
+registrations. `POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH` is the required
+absolute path of the versioned registry state file. Deployment configuration
+must mount its parent directory as durable writable state owned by Auth Service.
 
 ### 6.10 OAuth authorization endpoint
 
@@ -534,7 +592,8 @@ Required query parameters:
 - `response_type=code`;
 - registered `client_id`;
 - registered `redirect_uri`, matched exactly except that an explicitly
-  registered IP-loopback URI may use its runtime listener port;
+  registered HTTP IP-loopback or exact `localhost` URI may use its runtime
+  listener port;
 - non-empty `state`;
 - `code_challenge` and `code_challenge_method=S256`;
 - exact configured MCP `resource`; and
@@ -545,8 +604,33 @@ and consent page. The page shows client display name, redirect host, resource,
 and requested scopes. It posts only to Auth Service using the one-time bound
 authorization-request handle. User approval issues one authorization code and
 redirects with the unchanged client `state`. Decline redirects with
-`error=access_denied` and the unchanged `state`. Invalid requests return the
-OAuth error directly and do not redirect to an untrusted URI.
+`error=access_denied` and the unchanged `state`. The consent form's optional
+`consent_action` accepts exactly one `approve` or `cancel` value. `cancel`
+denies the whole request even when scope checkboxes remain checked or the
+principal previously granted scopes to the client. After Spring Authorization
+Server validates the pending client, principal, state and scopes, the consent
+customizer clears the proposed authorities; Spring revokes existing consent,
+consumes the pending request and issues no code. Scope-only submissions retain
+Spring's standard consent semantics. Unknown or repeated actions fail explicitly.
+Neither an approved nor a denied one-time consent handle can be replayed.
+
+Authorization failures with a callback validated by Spring Authorization Server
+return only the bounded OAuth `error` and unchanged client `state` to that
+callback. The response owner consumes Spring's exception token; it must not
+derive redirect or state from the failed HTTP request or revalidate consent.
+When Spring supplies no validated callback, the error stays at Auth Service as
+a non-cacheable, bounded PocketHive-themed HTML page with the canonical OAuth
+error code and safe recovery guidance. It never redirects to an untrusted URI,
+renders the framework Whitelabel page, or echoes client IDs, redirect URIs,
+state, PKCE values, tokens, exception messages, or other request data into HTML.
+
+This browser-failure contract also applies to the DEV sign-in and consent
+endpoints. An unauthenticated consent request enters the same DEV sign-in flow;
+an invalid or expired consent client, an unknown or inactive DEV user, a
+disabled DEV provider, or a rejected browser CSRF check returns the themed,
+non-cacheable failure page with the appropriate HTTP status. These paths must
+not dispatch to the framework `/error` page. Machine-facing registration and
+token errors retain their documented JSON OAuth responses.
 
 The DEV provider asks for one configured active username. A future LDAP or OIDC
 provider changes only the principal-authentication adapter; it does not change
@@ -573,7 +657,7 @@ Success returns:
   "access_token": "phmcp_opaque_value",
   "refresh_token": "phrfr_opaque_value",
   "token_type": "Bearer",
-  "expires_in": 900,
+  "expires_in": 28800,
   "scope": "pockethive:mcp:discover pockethive:mcp:read pockethive:mcp:operate pockethive:mcp:author"
 }
 ```

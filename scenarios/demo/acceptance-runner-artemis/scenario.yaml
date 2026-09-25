@@ -1,0 +1,73 @@
+protocolVersion: "2.0.0"
+id: acceptance-runner-artemis
+name: Scoped runner acceptance journey (Artemis)
+description: Independent fixture inside the demo folder for scoped RUN authorization.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 2.0, maxMessages: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        message:
+          bodyType: HTTP
+          method: POST
+          path: /api/test
+          body: acceptance-http-probe
+          headers: {}
+      work:
+        out: { out: requests }
+      ports:
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+      work:
+        in: { in: requests }
+        out: { out: responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in: { in: responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: request-processing
+      from: { role: generator, port: out }
+      to: { role: processor, port: in }
+    - id: response-consumption
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }

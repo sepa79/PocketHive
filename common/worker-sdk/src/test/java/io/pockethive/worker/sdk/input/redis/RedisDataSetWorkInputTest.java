@@ -43,6 +43,14 @@ class RedisDataSetWorkInputTest {
     }
 
     @Test
+    void productionFactoryCreatesDatasetInputWithoutOpeningAConnection() {
+        var factory = new RedisDataSetWorkInputFactory(new RecordingWorkerRuntime(),
+            mock(WorkerControlPlaneRuntime.class), identity());
+        input = (RedisDataSetWorkInput) factory.create(definition(), baseProperties());
+        assertThat(input).isNotNull();
+    }
+
+    @Test
     void intakeFollowsWorkerEnablementAcrossUpdatesAndRestart() throws Exception {
         var properties = baseProperties();
         properties.setInitialDelayMs(600_000L);
@@ -439,7 +447,7 @@ class RedisDataSetWorkInputTest {
         return new RedisDatasetSource(listName, weight);
     }
 
-    private static final class QueueRedisClientFactory implements RedisDataSetWorkInput.RedisClientFactory {
+    private static final class QueueRedisClientFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListReader> {
 
         private final Queue<String> queue;
 
@@ -448,12 +456,12 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
+        public io.pockethive.redis.api.RedisListReader apply(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new QueueRedisListClient(queue);
         }
     }
 
-    private static final class QueueRedisListClient implements RedisDataSetWorkInput.RedisListClient {
+    private static final class QueueRedisListClient implements io.pockethive.redis.api.RedisListReader {
 
         private final Queue<String> queue;
 
@@ -472,7 +480,7 @@ class RedisDataSetWorkInputTest {
         }
     }
 
-    private static final class MultiQueueRedisClientFactory implements RedisDataSetWorkInput.RedisClientFactory {
+    private static final class MultiQueueRedisClientFactory implements java.util.function.Function<io.pockethive.redis.config.RedisConnectionSettings, io.pockethive.redis.api.RedisListReader> {
 
         private final Map<String, Queue<String>> queues;
 
@@ -481,12 +489,12 @@ class RedisDataSetWorkInputTest {
         }
 
         @Override
-        public RedisDataSetWorkInput.RedisListClient create(io.pockethive.redis.config.RedisConnectionSettings settings) {
+        public io.pockethive.redis.api.RedisListReader apply(io.pockethive.redis.config.RedisConnectionSettings settings) {
             return new MultiQueueRedisListClient(queues);
         }
     }
 
-    private static final class MultiQueueRedisListClient implements RedisDataSetWorkInput.RedisListClient {
+    private static final class MultiQueueRedisListClient implements io.pockethive.redis.api.RedisListReader {
 
         private final Map<String, Queue<String>> queues;
 

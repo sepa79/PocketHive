@@ -34,6 +34,9 @@
     </dependencies>
   </dependencyManagement>
   <dependencies>
+    <dependency><groupId>io.pockethive</groupId><artifactId>redis-adapter</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>artemis-adapter</artifactId><version>${project.version}</version></dependency>
+    <dependency><groupId>org.apache.activemq</groupId><artifactId>artemis-server</artifactId><scope>test</scope></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>rabbit-adapter</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
@@ -50,6 +53,7 @@
       <artifactId>redis-config</artifactId>
       <version>${project.version}</version>
     </dependency>
+    <dependency><groupId>io.pockethive</groupId><artifactId>work-local</artifactId><version>${project.version}</version></dependency>
     <dependency><groupId>io.pockethive</groupId><artifactId>work-local-config</artifactId><version>${project.version}</version></dependency>
     <dependency>
       <groupId>io.pockethive</groupId>
@@ -100,6 +104,7 @@
     <dependency>
       <groupId>io.lettuce</groupId>
       <artifactId>lettuce-core</artifactId>
+      <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.springframework.boot</groupId>

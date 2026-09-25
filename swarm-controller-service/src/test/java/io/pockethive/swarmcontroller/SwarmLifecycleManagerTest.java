@@ -15,7 +15,7 @@ import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import io.pockethive.controlplane.ControlPlaneSignals;
 import io.pockethive.controlplane.routing.ControlPlaneRouting;
-import com.github.dockerjava.api.DockerClient;
+import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
 import io.pockethive.docker.DockerContainerClient;
 import io.pockethive.docker.compute.PocketHiveDockerLabels;
 import io.pockethive.manager.runtime.QueueStats;
@@ -70,8 +70,6 @@ class SwarmLifecycleManagerTest {
   RabbitResources amqp;
   @Mock
   DockerContainerClient docker;
-  @Mock
-  DockerClient dockerClient;
   @Mock
   RabbitPublisher rabbit;
 
@@ -922,6 +920,58 @@ class SwarmLifecycleManagerTest {
   }
 
   @Test
+  void startupFailureCanWriteRemoveResultForPartialTopology(
+      @org.junit.jupiter.api.io.TempDir java.nio.file.Path runtimeRoot) {
+    var manager = newManager();
+    var plan = new SwarmPlan(TEST_SWARM_ID, List.of(new Bee("gen", null,
+        Work.ofDefaults("qin", "qout"), null, Map.of(
+            "inputs", Map.of("type", "SCHEDULER", "scheduler", Map.of("ratePerSec", 1.0, "maxMessages", 0)),
+            "outputs", Map.of("type", "NONE")))));
+    var bound = new java.util.ArrayList<String>();
+    doAnswer(call -> {
+      RabbitBindingSpec binding = call.getArgument(0);
+      if (!bound.isEmpty()) throw new IllegalStateException("injected topology failure");
+      bound.add(binding.queue());
+      return null;
+    }).when(amqp).bind(any());
+    var loader = mock(io.pockethive.controlplane.filesystem.FilesystemSwarmStartupArtifactLoader.class);
+    when(loader.expectedSha256()).thenReturn("a".repeat(64));
+    when(loader.load(TEST_SWARM_ID)).thenReturn(
+        io.pockethive.swarm.model.SwarmStartupArtifact.v1(plan, Map.of()));
+
+    var initializer = new SwarmControllerStartupInitializer(
+        manager, mapper, SwarmControllerTestProperties.defaults(), loader);
+
+    assertThat(initializer.isInitialized()).isFalse();
+    assertThat(manager.getWorkloadState()).isEqualTo(WorkloadState.UNKNOWN);
+    assertThat(manager.snapshotQueueStats()).containsOnlyKeys(bound.getFirst());
+    var readiness = new SwarmCommandReadiness(manager, initializer::isInitialized);
+    assertThat(readiness.snapshot().accepts(false)).isFalse();
+    verify(amqp, never()).deleteQueue(anyString());
+    var store = new io.pockethive.controlplane.filesystem.FilesystemSwarmRemoveStore(mapper,
+        io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout.of(runtimeRoot.toString(), "/runtime"));
+    store.saveRequest(io.pockethive.swarm.model.lifecycle.RemoveRequest.create(
+        TEST_SWARM_ID, "run-1", "inst", "remove-corr", "remove-idem", java.time.Instant.now()));
+    var handler = new SwarmRemoveCommandHandler(
+        manager, store, SwarmControllerTestProperties.defaults(), "inst");
+    var signal = io.pockethive.control.ControlSignal.forInstance(
+        ControlPlaneSignals.SWARM_REMOVE, TEST_SWARM_ID, "swarm-controller", "inst",
+        "orchestrator-1", "remove-corr", "remove-idem", null);
+
+    handler.handle(signal);
+    var result = store.findResult(TEST_SWARM_ID, "remove-corr").orElseThrow();
+    assertThat(result.status()).isEqualTo(io.pockethive.swarm.model.lifecycle.TerminalStatus.SUCCEEDED);
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.targetResources()).anySatisfy(resource ->
+        assertThat(resource.id()).isEqualTo(bound.getFirst()));
+    verify(amqp).deleteQueue(bound.getFirst());
+    assertThat(manager.snapshotQueueStats()).isEmpty();
+    handler.handle(signal);
+    assertThat(store.findResult(TEST_SWARM_ID, "remove-corr")).contains(result);
+    verify(amqp).deleteQueue(bound.getFirst());
+  }
+
+  @Test
   void startAssignsDistinctRuntimeInstancesForWorkersWithDistinctRolesWithoutBeeIdEnv() throws Exception {
     SwarmLifecycleManager manager = newManager();
     SwarmPlan plan = new SwarmPlan("swarm", List.of(
@@ -1188,7 +1238,7 @@ class SwarmLifecycleManagerTest {
     var properties = SwarmControllerTestProperties.defaults(bufferGuardEnabled);
     return new SwarmLifecycleManager(amqp, new io.pockethive.rabbit.work.RabbitWorkResources(amqp, rabbitConnection),
         mapper,
-        dockerClient,
+        new DockerSingleNodeComputeAdapter(docker),
         docker,
         rabbit,
         io.pockethive.controlplane.codec.ControlPlaneCodec.create(),
@@ -1201,7 +1251,7 @@ class SwarmLifecycleManagerTest {
         new io.pockethive.swarmcontroller.config.WorkerWorkConfigurationComposition()
             .workerWorkConfiguration(new io.pockethive.rabbit.work.RabbitWorkBootstrapEnvironment(new io.pockethive.rabbit.api.RabbitConnectionSettings("work-broker", 5673, "worker", "worksecret", "/work"))),
         new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new RabbitResourceNames(), swarm ->
-            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(properties.getTraffic().queuePrefix(), properties.getTraffic().hiveExchange())));
+            new io.pockethive.rabbit.api.RabbitWorkTopologySettings(SwarmControllerTestProperties.TRAFFIC_PREFIX, SwarmControllerTestProperties.HIVE_EXCHANGE)));
   }
 
   private static io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeMount() {

@@ -723,3 +723,45 @@ function json(body: unknown, status = 200): Response {
     headers: { 'Content-Type': 'application/json' },
   });
 }
+
+
+test('explicit remote HTTP supports PKCE sign-in, rotating refresh and revocation on the same issuer', async () => {
+  const remote = createConnectionProfile({ id: 'remote', displayName: 'HTTP lab',
+    mcpUrl: 'http://lab.example:8088/mcp', endpointSecurityMode: 'REMOTE_HTTP', secretKey: 'remote' });
+  const issuer = 'http://lab.example:8088/auth-service';
+  const remoteEndpoint = { mcpUrl: remote.mcpUrl, authorizationServer: issuer,
+    resourceMetadataUrl: 'http://lab.example:8088/.well-known/oauth-protected-resource' };
+  let refreshCount = 0;
+  let revokeCount = 0;
+  const oauth = new PocketHiveOAuthAuthentication(async (url, init) => {
+    assert.equal(init?.redirect, 'error');
+    assert.ok(String(url).startsWith(issuer + '/'));
+    if (String(url).endsWith('/.well-known/oauth-authorization-server')) {
+      return json({ ...metadata(), issuer, authorization_endpoint: issuer + '/oauth/authorize',
+        token_endpoint: issuer + '/oauth/token', revocation_endpoint: issuer + '/oauth/revoke' });
+    }
+    const body = new URLSearchParams(String(init?.body));
+    if (String(url).endsWith('/oauth/revoke')) { revokeCount++; return new Response('', { status: 200 }); }
+    assert.equal(body.get('resource'), remote.mcpUrl);
+    if (body.get('grant_type') === 'refresh_token') {
+      assert.equal(body.get('refresh_token'), 'refresh');
+      refreshCount++;
+      return json({ ...validToken(), access_token: 'renewed-access', refresh_token: 'renewed-refresh' });
+    }
+    assert.ok(body.get('code_verifier'));
+    return json(validToken());
+  }, browserAuthorization(async url => {
+    const opened = new URL(url);
+    assert.equal(opened.origin, 'http://lab.example:8088');
+    assert.equal(opened.searchParams.get('resource'), remote.mcpUrl);
+    assert.equal(opened.searchParams.get('code_challenge_method'), 'S256');
+    return new URL(`${TEST_REDIRECT_URI}?code=code&state=${opened.searchParams.get('state')}`);
+  }), store(new Map()), length => Buffer.alloc(length, 3), () => NOW);
+  const signal = new AbortController().signal;
+  const signedIn = await oauth.authenticate(remote, remoteEndpoint, signal);
+  const renewed = await oauth.refresh(remote, remoteEndpoint, signedIn, signal);
+  await oauth.revoke(remote, remoteEndpoint, renewed, signal);
+  assert.equal(refreshCount, 1);
+  assert.equal(revokeCount, 2);
+  assert.equal((await oauth.session(remote))?.accessToken, 'renewed-access');
+});

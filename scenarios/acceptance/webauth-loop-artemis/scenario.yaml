@@ -1,0 +1,175 @@
+protocolVersion: 2.0.0
+id: acceptance-webauth-loop-artemis
+name: Acceptance five-customer WebAuth loop (artemis)
+description: Owned RED/BAL/TOP/RED Redis loop with exact TCP request observations.
+template:
+  image: swarm-controller:latest
+  bees:
+  - role: generator
+    image: generator:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: REDIS_DATASET
+        redis:
+          host: redis
+          port: 6379
+          ssl: false
+          sources:
+          - listName: REPLACE_LIST_0
+            weight: 1
+          - listName: REPLACE_LIST_1
+            weight: 1
+          - listName: REPLACE_LIST_2
+            weight: 1
+          - listName: REPLACE_LIST_3
+            weight: 1
+          - listName: REPLACE_LIST_4
+            weight: 1
+          - listName: REPLACE_LIST_5
+            weight: 1
+          - listName: REPLACE_LIST_6
+            weight: 1
+          pickStrategy: ROUND_ROBIN
+          ratePerSec: 10
+          initialDelayMs: 0
+          tickIntervalMs: 100
+      outputs:
+        type: ARTEMIS
+        artemis:
+          persistent: true
+      message:
+        bodyType: SIMPLE
+        body: '{{ payload }}'
+        headers:
+          x-ph-call-id: acceptance-webauth
+    work:
+      out:
+        out: seeds
+    ports:
+    - id: out
+      direction: out
+  - role: request-builder
+    image: request-builder:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: ARTEMIS
+        artemis:
+          consumerWindowBytes: 0
+      outputs:
+        type: ARTEMIS
+        artemis:
+          persistent: true
+      templateRoot: /app/scenario/templates/http
+      serviceId: default
+      passThroughOnMissingTemplate: false
+    work:
+      in:
+        in: seeds
+      out:
+        out: requests
+    ports:
+    - id: in
+      direction: in
+    - id: out
+      direction: out
+  - role: processor
+    image: processor:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      baseUrl: '{{ sut.endpoints[''default''].baseUrl }}'
+      mode: THREAD_COUNT
+      threadCount: 1
+      inputs:
+        type: ARTEMIS
+        artemis:
+          consumerWindowBytes: 0
+      outputs:
+        type: ARTEMIS
+        artemis:
+          persistent: true
+      tcpTransport:
+        type: socket
+        connectTimeoutMs: 3000
+        readTimeoutMs: 3000
+        maxBytes: 1024
+        keepAlive: false
+        workerThreads: 1
+        tcpNoDelay: true
+        sslVerify: false
+        connectionReuse: NONE
+        maxRetries: 0
+    work:
+      in:
+        in: requests
+      out:
+        out: responses
+    ports:
+    - id: in
+      direction: in
+    - id: out
+      direction: out
+  - role: postprocessor
+    image: postprocessor:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: ARTEMIS
+        artemis:
+          consumerWindowBytes: 0
+      outputs:
+        type: REDIS
+        redis:
+          host: redis
+          port: 6379
+          ssl: false
+          sourceStep: FIRST
+          pushDirection: RPUSH
+          maxLen: -1
+          routes:
+          - header: x-ph-redis-list
+            headerMatch: ^REPLACE_RED_KEYS$
+            list: REPLACE_LIST_5
+          - header: x-ph-redis-list
+            headerMatch: ^REPLACE_LIST_5$
+            list: REPLACE_LIST_6
+          targetListTemplate: '{{ payloadAsJson.ReturnList }}'
+          defaultList: ''
+      forwardToOutput: true
+      txOutcomeSinkMode: NONE
+      dropTxOutcomeWithoutCallId: true
+    work:
+      in:
+        in: responses
+    ports:
+    - id: in
+      direction: in
+topology:
+  version: 1
+  edges:
+  - id: dataset-build
+    from:
+      role: generator
+      port: out
+    to:
+      role: request-builder
+      port: in
+  - id: request-processing
+    from:
+      role: request-builder
+      port: out
+    to:
+      role: processor
+      port: in
+  - id: response-consumption
+    from:
+      role: processor
+      port: out
+    to:
+      role: postprocessor
+      port: in

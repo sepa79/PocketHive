@@ -31,6 +31,31 @@ import org.mockito.ArgumentCaptor;
 class OperationDispatchServiceTest {
 
   @Test
+  void exactKeyReplayDoesNotDispatchAgainBeforeOrAfterCompletion() {
+    var coordinator = new SwarmOperationCoordinator();
+    var service = new OperationDispatchService(
+        coordinator, mock(OperationOutcomePublisher.class), new SwarmStore());
+    var target = new Target("swarm-controller", "controller-1");
+    var runtime = new RuntimeMetadata("template-1", "run-1");
+    var dispatches = new java.util.concurrent.atomic.AtomicInteger();
+    var original = service.dispatch("alpha", OperationType.START, target, "original", "same-key",
+        Duration.ofSeconds(30), runtime, ignored -> dispatches.incrementAndGet());
+    var pendingReplay = service.dispatch("alpha", OperationType.START, target, "ignored-pending", "same-key",
+        Duration.ofSeconds(30), runtime, ignored -> dispatches.incrementAndGet());
+    assertThat(pendingReplay.reused()).isTrue();
+    assertThat(pendingReplay.operation().correlationId()).isEqualTo(original.operation().correlationId());
+    assertThat(coordinator.recordResult("alpha", OperationType.START, target, "original", "same-key",
+        OperationState.SUCCEEDED, new TerminalResult(TerminalStatus.SUCCEEDED, false, Map.of()), Instant.now()))
+        .isEqualTo(OperationCompletion.COMPLETED);
+    var terminalReplay = service.dispatch("alpha", OperationType.START, target, "ignored-terminal", "same-key",
+        Duration.ofSeconds(30), runtime, ignored -> dispatches.incrementAndGet());
+    assertThat(terminalReplay.reused()).isTrue();
+    assertThat(terminalReplay.operation().correlationId()).isEqualTo(original.operation().correlationId());
+    assertThat(terminalReplay.operation().state()).isEqualTo(OperationState.SUCCEEDED);
+    assertThat(dispatches.get()).isEqualTo(1);
+  }
+
+  @Test
   void resultArrivingInsideTransportDispatchCannotRaceTheDispatchedTransition() {
     SwarmOperationCoordinator coordinator = new SwarmOperationCoordinator();
     OperationDispatchService service = new OperationDispatchService(

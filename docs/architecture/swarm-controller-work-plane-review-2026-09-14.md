@@ -3,7 +3,7 @@
 Stan: HEAD `4062be40` z bieżącymi lokalnymi zmianami; nie jest to review diffu.
 Nazwa „swarm manager” została odniesiona do `swarm-controller-service` i jego konsumentów
 `common/manager-sdk`. Po doprecyzowaniu celu zakres ograniczono do przygotowania kolejnego PR:
-WorkPlane Rabbit + Artemis delayed publish dla 3DS (plik w repozytorium: `docs/todo/work-plane-artemis-3ds.md`).
+WorkPlane Rabbit + Artemis delayed publish dla 3DS (plik w repozytorium: `docs/inProgress/work-plane-artemis-3ds.md`).
 Późniejsze doprecyzowanie zakresu: najpierw izolacja Rabbit (plik w repozytorium: `docs/inProgress/work-plane-module-boundaries.md`)
 z adapterem testowym, potem Artemis/3DS. WP1–WP3 i granica I/O z WP4 wyznaczają miejsca do
 domknięcia teraz; sam adapter Artemis i kontrakt opóźnienia są poza obecnym refaktorem.

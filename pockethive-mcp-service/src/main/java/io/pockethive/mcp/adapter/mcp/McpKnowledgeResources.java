@@ -159,8 +159,7 @@ public final class McpKnowledgeResources {
             "authorities", Map.of(
                 "scenarioBundles", "Scenario Manager",
                 "swarmsAndRuntime", "Orchestrator",
-                "sourceAndHistory", "Git",
-                "approvalAndEvidence", "HiveGate"),
+                "sourceAndHistory", "Git"),
             "safeStart", List.of(
                 "Read pockethive://capabilities/current",
                 "Read pockethive://tools/catalogue",
@@ -187,7 +186,6 @@ public final class McpKnowledgeResources {
             "ScenarioManager", "Authority for deployed bundle validation and catalogue state",
             "Swarm", "Runtime instance created from a deployed Scenario Bundle",
             "Orchestrator", "Authority for swarm lifecycle, status, diagnostics, and live configuration",
-            "HiveGate", "Authority for operational policy, approval, execution tickets, and evidence",
             "AgentSession", "Principal-bound MCP authoring container for multiple independent workflows",
             "ScenarioWorkflow", "QA-led no-inference authoring coordination for one Scenario Bundle");
     }

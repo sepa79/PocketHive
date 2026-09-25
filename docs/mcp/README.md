@@ -45,16 +45,25 @@ Interactive clients use one consented, renewable environment session rather
 than a browser grant per tool. They declare a bounded subset of discover, read,
 operate, author, and publish; Auth Service limits the granted token to the
 principal's existing PocketHive permissions and never includes cleanup. Access
-tokens remain short-lived, refresh tokens rotate, and commands do not initiate
-browser auth. Registration alone is neither authentication nor a support
-claim; the client still completes browser authorization and the relevant
-capability conformance checks.
+tokens have a bounded eight-hour default lifetime, refresh tokens rotate, and
+commands do not initiate browser auth. Deployments may explicitly shorten the
+access-token lifetime through the canonical Auth Service property. Registration
+alone is neither authentication nor a support claim; the client still completes
+browser authorization and the relevant capability conformance checks.
 
 Dynamic client registration has one bounded inactivity lifetime. Successful
 use renews an active registration; inactive registrations expire after a
 duration configured to be strictly longer than refresh-token lifetime. This
 keeps long-running native MCP clients seamless without making abandoned client
-registrations permanent.
+registrations permanent. Active public-client registrations are stored in the
+Auth Service's configured durable state file, so a client such as Amazon Q may
+reuse its issuer-bound client ID after Auth Service restarts. Authorization
+codes, tokens, consent, and browser sessions remain transient and are never
+written to that file; after a restart the client re-authorizes with its retained
+registration. Invalid authorization requests render a bounded PocketHive page
+and never expose Spring's default error page or untrusted request values. The
+first upgrade cannot reconstruct registrations issued by the former in-memory
+registry; affected clients must remove and re-add the MCP server once.
 
 Both OAuth protected-resource discovery and authorization-server discovery
 publish that same interactive scope set. Governed cleanup is intentionally not
@@ -72,6 +81,15 @@ For HiveForge, deploy the same published `pockethive-mcp` and `auth-service`
 images through the governed workflow in `docs/HIVEFORGE.md`. Configure each
 agent or IDE profile with the public MCP URL; neither `build-hive.sh` nor the VS
 Code extension writes user MCP-client configuration.
+
+The current HiveForge adapter targets the Phase 1 Auth Service `DEV` provider
+and supplies a fixed, known development credential pair to Auth Service and MCP;
+operators do not provide those values through HiveForge runtime environment.
+They are not confidential credentials and must be replaced through an approved
+HiveForge secret capability before any non-`DEV` authentication deployment.
+The downstream credential follows the existing Orchestrator service-account
+pattern: Auth Service owns the named account and MCP receives the matching
+principal name and credential. MCP does not reuse Orchestrator's identity.
 
 Use the client's native Streamable HTTP configuration and OAuth support; an
 NPM proxy is neither required nor supported. For example, VS Code/Copilot uses
@@ -126,8 +144,10 @@ The server publishes one immutable complete tool list. Invocation still enforces
 the required scope from the canonical descriptor, while catalogue resources may
 present a principal-scoped projection. Connected, versioned skills cover every
 tool. Owner services remain authoritative for live state and operations.
-HiveGate remains authoritative for approval, execution tickets, and governed
-evidence. HiveMind is optional agent-host memory and is not an MCP dependency.
+Auth Service owns identity and grants; MCP enforces tool scopes and owner services
+enforce their operation contracts. Destructive cleanup requires explicit human
+approval of the current plan. The MCP and agent cannot approve their own actions.
+HiveMind is optional agent-host memory and is not an MCP dependency.
 
 Runtime invocation has one scope-enforcing facade. It delegates by the
 descriptor's explicit owner to separate Scenario Manager, Orchestrator, and MCP
@@ -346,3 +366,28 @@ Node wizard/import/clone/enrich APIs are not supported authoring paths.
 - Scenario Manager bundle contract:
   `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md`
 - VS Code client and package usage: `vscode-pockethive/README.md`
+
+## Explicit remote HTTP deployments
+
+Remote HTTP is disabled unless `POCKETHIVE_ALLOW_REMOTE_HTTP=true` is passed to
+both Auth Service and MCP. The [public endpoint transport contract](../architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy)
+owns this allowance. Set public ingress, issuer, resource, allowed origin and
+allowed host to the exact externally reachable HTTP environment; an extension
+selection cannot enable the server setting. No client or server silently
+switches protocols. Restart the services after changing deployment settings.
+
+For the repository Compose deployment, set in `.env`:
+
+```dotenv
+POCKETHIVE_ALLOW_REMOTE_HTTP=true
+POCKETHIVE_PUBLIC_INGRESS=http://pockethive.example:8088
+PH_MCP_ALLOWED_HOSTS=pockethive.example:8088
+```
+
+Use an origin without a trailing slash. Compose projects ingress, `/auth-service`
+issuer, `/mcp` resource and allowed origin from `POCKETHIVE_PUBLIC_INGRESS`; `PH_MCP_ALLOWED_HOSTS` is the exact public host header
+including its port when present. These settings default to the existing localhost deployment.
+In HiveForge explicitly set `POCKETHIVE_ALLOW_REMOTE_HTTP` (`false` for HTTPS,
+`true` for HTTP) alongside its existing
+explicit `pockethive_public_ingress` and allowed host settings.
+In the companion select **Remote HTTP (unencrypted)** explicitly and connect.

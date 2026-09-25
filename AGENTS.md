@@ -40,8 +40,11 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Use shared constants/enums/contract types.
   - String parsing is allowed only at system boundaries, then normalize/map once.
 - **Git safety (agents):**
-  - **No pushes:** agents must not run `git push` (ever).
-  - **No commits by default:** agents must not create commits unless a human makes an **EXPLICIT REQUEST TO COMMIT**.
+  - **Development repository pushes:** agents may run `git push` to an explicitly identified development/test repository when publishing source is required for a user-requested deployment or development workflow (for example the HiveForge Dev repository). This authorization persists throughout that task; do not request it again for each push.
+  - **GitHub and other repositories:** pushing to GitHub or any repository outside that authorized development target requires a separate, explicit human request to push to that destination. A Dev deployment does not authorize a GitHub push. Verify the destination URL; do not assume `origin` is the development repository.
+  - **No destructive pushes by default:** force pushes and remote branch/tag deletion require explicit approval for that operation.
+  - **Deployment commits:** authorization to deploy/update a development/test environment includes the scoped commits and Dev repository pushes needed to carry out that workflow. Continue through fixes and verification without requesting permission again for each commit or push. This does not authorize GitHub publication, unrelated commits, destructive pushes, or deployment outside the authorized environment.
+  - **Other commits:** outside an authorized development/test deployment workflow, agents must not create commits unless a human explicitly requests a commit.
 - **Tests must use only official ingress/API paths.**
   - Do not point tests, E2E checks, or test diagnostics at direct service ports as a substitute for the supported entrypoint.
   - Use the official public path/interface for the environment under test (for example the UI ingress / documented API base), not backend container ports.
@@ -151,7 +154,7 @@ This file is a **navigation and guardrails** page for both human and AI contribu
   - Connect only through the selected environment's public ingress, for example `http://localhost:8088/mcp` locally or `https://<environment>/mcp` remotely.
   - Use its generated knowledge, capabilities, complete tool catalogue, and connected skills for scenario authoring, swarm lifecycle, environment status, runtime diagnostics, evidence, and governed cleanup. See `docs/mcp/README.md`.
   - It is Java 21 Streamable HTTP only. The removed Node server, stdio transport, local process spawning, dotted aliases, and bundle-root configuration are not compatibility paths.
-  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires the governed HiveGate path; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
+  - Runtime cleanup remains plan-first. `runtime_cleanup_execute` requires explicit human approval for the exact reviewed plan and the required cleanup scope; do not treat the MCP, an agent, HiveMind, or local telemetry as approval.
 - `tools/mcp-orchestrator-debug/` is lower-level debug tooling for Orchestrator / Scenario Manager / RabbitMQ:
   - `client.mjs` talks directly to the Orchestrator REST API, Scenario Manager API, and control‑plane via AMQP (no MCP needed).
   - `server.mjs` is legacy/additive debug MCP tooling. Do not configure it as the product PocketHive MCP surface for normal agent work.

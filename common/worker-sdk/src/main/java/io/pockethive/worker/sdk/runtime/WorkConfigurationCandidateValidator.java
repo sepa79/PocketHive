@@ -1,5 +1,7 @@
 package io.pockethive.worker.sdk.runtime;
 
+import io.pockethive.work.config.WorkDeliveryParser;
+
 import io.pockethive.work.config.WorkConfigurationException;
 import io.pockethive.work.config.WorkConfigurationFields;
 import io.pockethive.work.config.WorkConfigurationMode;
@@ -38,6 +40,11 @@ public final class WorkConfigurationCandidateValidator {
                 "Resolved Work configuration must not contain deferred paths: " + validation.deferredPaths())));
         }
         var configuration = validation.configuration();
+        if (!configuration.outputDelivery().equals(state.definition().io().outputDelivery())) {
+            throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(
+                WorkDeliveryParser.PATH,
+                "Delivery policy is fixed at startup; restart the worker/swarm to change it.")));
+        }
         if (!configuration.inputType().equals(state.definition().input())
             || !configuration.outputType().equals(state.definition().outputType())) {
             throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(WorkConfigurationFields.path(

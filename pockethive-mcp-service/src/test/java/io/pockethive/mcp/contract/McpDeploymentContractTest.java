@@ -35,7 +35,7 @@ class McpDeploymentContractTest {
         assertThat(compose)
             .contains("  pockethive-mcp:")
             .contains("image: ${DOCKER_REGISTRY:-}pockethive-mcp:${POCKETHIVE_VERSION:-latest}")
-            .contains("PH_MCP_POCKETHIVE_INGRESS: http://localhost:8088")
+            .contains("PH_MCP_POCKETHIVE_INGRESS: ${POCKETHIVE_PUBLIC_INGRESS:-http://localhost:8088}")
             .contains("PH_MCP_OWNER_API_BASE: http://ui:8088")
             .contains("PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S")
             .contains("POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D")
@@ -92,6 +92,47 @@ class McpDeploymentContractTest {
             .contains("POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D");
         assertThat(text("deploy/hiveforge/components/stack/ansible/swarm-stack.yml"))
             .contains("state/pockethive-mcp");
+    }
+
+    @Test
+    void hiveForgePhaseOneDevAuthDoesNotRequireSecretRuntimeInputs() throws IOException {
+        String componentManifest = text("deploy/hiveforge/components/stack/hiveforge.yaml");
+        String deployPlaybook = text("deploy/hiveforge/components/stack/ansible/deploy.yml");
+        String updatePlaybook = text("deploy/hiveforge/components/stack/ansible/update.yml");
+        String stackTasks = text("deploy/hiveforge/components/stack/ansible/swarm-stack.yml");
+        String stackTemplate = text(
+            "deploy/hiveforge/components/stack/ansible/templates/stack-compose.yml.j2");
+
+        assertThat(componentManifest)
+            .doesNotContain(
+                "POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET",
+                "POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET");
+        assertThat(deployPlaybook).doesNotContain(
+            "POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET",
+            "POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET");
+        assertThat(updatePlaybook).doesNotContain(
+            "POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET",
+            "POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET");
+
+        assertThat(stackTasks)
+            .contains("pockethive_phase_one_dev_auth:")
+            .containsOnlyOnce("provider: DEV")
+            .containsOnlyOnce("introspection_credential: pockethive-mcp-local-introspection-secret")
+            .containsOnlyOnce("service_credential: pockethive-mcp-local-service-secret");
+        assertThat(stackTemplate)
+            .contains(
+                "POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: orchestrator-local-secret",
+                "POCKETHIVE_AUTH_SERVICE_PRINCIPAL_NAME: orchestrator-service",
+                "POCKETHIVE_AUTH_SERVICE_PRINCIPAL_SECRET: orchestrator-local-secret",
+                "POCKETHIVE_AUTH_SERVICE_PROVIDER: {{ pockethive_phase_one_dev_auth.provider }}",
+                "POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}",
+                "POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}",
+                "PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}",
+                "PH_MCP_DOWNSTREAM_SERVICE_NAME: pockethive-mcp",
+                "PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}")
+            .doesNotContain(
+                "pockethive-mcp-local-introspection-secret",
+                "pockethive-mcp-local-service-secret");
     }
 
     private static String text(String relativePath) throws IOException {

@@ -1,26 +1,31 @@
 package io.pockethive.auth.service.config;
 
 import java.net.URI;
+import java.nio.file.Path;
 import java.time.Duration;
 
 /**
  * Responsibility: Bind the canonical OAuth issuer, client, capacity, and token-lifetime configuration.
  * Must not: Register clients, issue tokens, or infer missing deployment endpoints.
- * Contract: docs/architecture/AUTH_SERVICE_API_SPEC.md and docs/AUTH-BEHAVIOR.md.
+ * Contract: RESP-OAUTH-CONFIGURATION — docs/architecture/runtime-responsibilities.md#resp-oauth-configuration.
  */
 public final class AuthServiceOAuthProperties {
+    private boolean allowRemoteHttp;
     private URI issuer;
     private URI resource;
     private Duration authorizationCodeTtl = Duration.ofMinutes(2);
-    private Duration accessTokenTtl = Duration.ofMinutes(15);
+    private Duration accessTokenTtl = Duration.ofHours(8);
     private Duration refreshTokenTtl = Duration.ofDays(30);
     private Duration dynamicClientTtl = Duration.ofDays(31);
     private int dynamicClientCapacity = 256;
+    private Path dynamicClientStatePath;
     private String vscodeClientId;
     private URI vscodeRedirectUri;
     private String introspectionClientId;
     private String introspectionClientSecret;
 
+    public boolean isAllowRemoteHttp() { return allowRemoteHttp; }
+    public void setAllowRemoteHttp(boolean value) { this.allowRemoteHttp = value; }
     public URI getIssuer() { return issuer; }
     public void setIssuer(URI issuer) { this.issuer = issuer; }
     public URI getResource() { return resource; }
@@ -35,6 +40,8 @@ public final class AuthServiceOAuthProperties {
     public void setDynamicClientTtl(Duration value) { this.dynamicClientTtl = value; }
     public int getDynamicClientCapacity() { return dynamicClientCapacity; }
     public void setDynamicClientCapacity(int value) { this.dynamicClientCapacity = value; }
+    public Path getDynamicClientStatePath() { return dynamicClientStatePath; }
+    public void setDynamicClientStatePath(Path value) { this.dynamicClientStatePath = value; }
     public String getVscodeClientId() { return vscodeClientId; }
     public void setVscodeClientId(String value) { this.vscodeClientId = value; }
     public URI getVscodeRedirectUri() { return vscodeRedirectUri; }

@@ -26,7 +26,11 @@ public final class InMemoryWorkTransport {
     public WorkInputChannel input(String address) { return required(address); }
 
     public WorkOutput output(String address) {
-        return required(address)::publish;
+        var channel = required(address);
+        return (item, delivery) -> {
+            InMemoryWorkType.MEMORY.requireDelivery(delivery);
+            channel.publish(item);
+        };
     }
 
     public List<WorkItem> pending(String address) { return required(address).pending(); }

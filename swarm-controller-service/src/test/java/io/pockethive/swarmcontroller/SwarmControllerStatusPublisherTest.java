@@ -33,7 +33,8 @@ class SwarmControllerStatusPublisherTest {
   private static final String INSTANCE = "controller-1";
   private static final String STARTUP_SHA256 = "a".repeat(64);
   private static final Map<String, Object> RUNTIME =
-      Map.of("templateId", "template-1", "runId", "run-1");
+      Map.of("templateId", "template-1", "runId", "run-1",
+          "containerId", "controller-container", "image", "swarm-controller:acceptance", "stackName", "test-stack");
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
   private final SwarmLifecycle lifecycle = mock(SwarmLifecycle.class);
@@ -69,7 +70,10 @@ class SwarmControllerStatusPublisherTest {
     publisher().publishFull();
 
     EventMessage event = publishedEvent();
-    JsonNode payload = mapper.valueToTree(event.payload());
+    var codec = io.pockethive.controlplane.codec.ControlPlaneCodec.create();
+    var status = codec.decode(codec.encode(event.payload(), event.routingKey()), event.routingKey(), StatusMetric.class);
+    assertThat(status.runtime()).isEqualTo(RUNTIME);
+    JsonNode payload = mapper.valueToTree(status);
     JsonNode context = payload.path("data").path("context");
     assertThat(event.routingKey()).isEqualTo(
         "event.metric.status-full." + TEST_SWARM_ID + ".swarm-controller." + INSTANCE);

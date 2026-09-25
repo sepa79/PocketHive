@@ -5,6 +5,7 @@ import io.pockethive.work.api.TcpOutcome;
 import io.pockethive.work.api.TcpRequestInfo;
 
 import io.pockethive.processor.ProcessorWorkerConfig;
+import io.pockethive.processor.ProcessorPacer;
 import io.pockethive.processor.ResultRulesExtractor;
 import io.pockethive.processor.TcpTransportConfig;
 import io.pockethive.processor.metrics.CallMetrics;
@@ -34,32 +35,28 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
-import java.util.concurrent.ConcurrentLinkedQueue;
-import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * Responsibility: execute TCP exchanges and construct TCP result observations.
- * Must not: provision Work/CP topology or let one protocol handler reinterpret another protocol's result.
- * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute.
+ * Must not: own transport pools or pacing state, provision topology or reinterpret another protocol's result.
+ * Contract: RESP-PROCESSOR-EXECUTE — docs/architecture/runtime-responsibilities.md#resp-processor-execute;
+ * transport lifetime delegates to RESP-PROCESSOR-TCP-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-processor-tcp-runtime;
+ * pacing delegates to RESP-PROCESSOR-PACING — docs/architecture/runtime-responsibilities.md#resp-processor-pacing.
  */
 public class TcpProtocolHandler implements ProtocolHandler {
   private final ObjectMapper mapper;
   private final ObjectReader strictEnvelopeReader;
   private final Clock clock;
   private final CallMetricsRecorder metricsRecorder;
-  private final AtomicLong nextAllowedTimeNanos;
+  private final ProcessorPacer pacer;
   private final TemplateRenderer templateRenderer;
   private final RedisSequenceProperties redisProperties;
-  private final Object transportLock = new Object();
-
-  private volatile TcpTransportConfig activeConfig;
-  private volatile TcpTransport globalTransport;
-  private volatile PerThreadTransportPool perThreadTransportPool;
+  private final TcpTransportRuntime transportRuntime = new TcpTransportRuntime();
 
   public TcpProtocolHandler(ObjectMapper mapper,
                             Clock clock,
                             CallMetricsRecorder metricsRecorder,
-                            AtomicLong nextAllowedTimeNanos,
+                            ProcessorPacer pacer,
                             TemplateRenderer templateRenderer,
                             RedisSequenceProperties redisProperties) {
     this.mapper = mapper;
@@ -67,7 +64,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
         .with(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
     this.clock = clock;
     this.metricsRecorder = metricsRecorder;
-    this.nextAllowedTimeNanos = nextAllowedTimeNanos == null ? new AtomicLong(0L) : nextAllowedTimeNanos;
+    this.pacer = java.util.Objects.requireNonNull(pacer, "pacer");
     this.templateRenderer = templateRenderer;
     this.redisProperties = redisProperties;
   }
@@ -88,7 +85,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
     TcpTransportConfig desired = Objects.requireNonNull(
         processorConfig.tcpTransport(),
         "processor tcpTransport config must be provided by runtime config");
-    ensureTransportConfig(desired);
+    transportRuntime.configure(desired);
 
     requestMeta = requestMetadata(baseUrl, null, null, request.behavior(), null);
     if (baseUrl == null || baseUrl.isBlank()) {
@@ -140,12 +137,11 @@ public class TcpProtocolHandler implements ProtocolHandler {
 
     long start = clock.millis();
     long pacingMillis = 0L;
-    TcpTransport transport = null;
-    boolean closeAfter = false;
+    TcpTransportLease transport = null;
     try {
-      pacingMillis = applyExecutionMode(processorConfig);
+      pacingMillis = pacer.await(processorConfig);
 
-      TcpTransportConfig config = activeConfig;
+      TcpTransportConfig config = transportRuntime.currentConfig();
       var options = new java.util.HashMap<String, Object>();
       if (endTag != null) {
         options.put("endTag", endTag);
@@ -159,14 +155,7 @@ public class TcpProtocolHandler implements ProtocolHandler {
       TcpRequest tcpRequest = new TcpRequest(host, port, requestBody.getBytes(StandardCharsets.UTF_8), options);
 
       // Connection reuse strategy
-      transport = switch (config.connectionReuse()) {
-        case PER_THREAD -> perThreadTransportPool.get();
-        case GLOBAL -> globalTransport;
-        case NONE -> {
-          closeAfter = true;
-          yield TcpTransportFactory.create(config);
-        }
-      };
+      transport = transportRuntime.acquire(config);
 
       // Retry logic
       TcpResponse response = null;
@@ -229,11 +218,8 @@ public class TcpProtocolHandler implements ProtocolHandler {
       metricsRecorder.record(metrics);
       throw new ProcessorCallException(metrics, ex, requestMeta);
     } finally {
-      if (closeAfter && transport != null) {
-        try {
-          transport.close();
-        } catch (Exception ignored) {
-        }
+      if (transport != null) {
+        transport.close();
       }
     }
   }
@@ -284,89 +270,4 @@ public class TcpProtocolHandler implements ProtocolHandler {
     return Optional.of(mapper.writeValueAsString(bodyValue));
   }
 
-  private void ensureTransportConfig(TcpTransportConfig desired) {
-    desired = Objects.requireNonNull(desired, "processor tcpTransport config must be provided by runtime config");
-    TcpTransportConfig current = activeConfig;
-    if (desired.equals(current)) {
-      return;
-    }
-    synchronized (transportLock) {
-      if (!desired.equals(activeConfig)) {
-        reloadTransports(desired);
-      }
-    }
-  }
-
-  private void reloadTransports(TcpTransportConfig config) {
-    TcpTransport previousGlobal = this.globalTransport;
-    PerThreadTransportPool previousPerThread = this.perThreadTransportPool;
-
-    this.activeConfig = config;
-    this.globalTransport = TcpTransportFactory.create(config);
-    this.perThreadTransportPool = new PerThreadTransportPool(config);
-
-    if (previousGlobal != null) {
-      try {
-        previousGlobal.close();
-      } catch (Exception ignored) {
-      }
-    }
-    if (previousPerThread != null) {
-      previousPerThread.closeAll();
-    }
-  }
-
-  private long applyExecutionMode(ProcessorWorkerConfig config) throws InterruptedException {
-    ProcessorWorkerConfig.Mode mode = config.mode();
-    if (mode == ProcessorWorkerConfig.Mode.RATE_PER_SEC) {
-      double rate = config.ratePerSec();
-      if (rate <= 0.0) {
-        return 0L;
-      }
-      long intervalNanos = (long) (1_000_000_000L / rate);
-      long now = System.nanoTime();
-      long prev = nextAllowedTimeNanos.getAndUpdate(current -> {
-        long base = Math.max(current, now);
-        return base + intervalNanos;
-      });
-      long base = Math.max(prev, now);
-      long scheduled = base + intervalNanos;
-      long sleepNanos = scheduled - now;
-      if (sleepNanos > 0L) {
-        long millis = sleepNanos / 1_000_000L;
-        int nanos = (int) (sleepNanos % 1_000_000L);
-        Thread.sleep(millis, nanos);
-        return sleepNanos / 1_000_000L;
-      }
-      return 0L;
-    }
-    return 0L;
-  }
-
-  private static final class PerThreadTransportPool {
-    private final ConcurrentLinkedQueue<TcpTransport> created = new ConcurrentLinkedQueue<>();
-    private final ThreadLocal<TcpTransport> transport;
-
-    private PerThreadTransportPool(TcpTransportConfig config) {
-      this.transport = ThreadLocal.withInitial(() -> {
-        TcpTransport createdTransport = TcpTransportFactory.create(config);
-        created.add(createdTransport);
-        return createdTransport;
-      });
-    }
-
-    private TcpTransport get() {
-      return transport.get();
-    }
-
-    private void closeAll() {
-      for (TcpTransport transport : created) {
-        try {
-          transport.close();
-        } catch (Exception ignored) {
-        }
-      }
-      created.clear();
-    }
-  }
 }

@@ -45,6 +45,18 @@ class RabbitWorkOutputTest {
         assertThat(sent.persistent()).isEqualTo(persistent);
     }
     @Test
+    void rejectsDelayedIntentWithoutSending() {
+        var publisher = mock(RabbitPublisher.class);
+        var output = new RabbitWorkOutput(publisher, new RabbitOutputSettings("exchange", "route", true, false));
+        var info = new WorkerInfo("processor", "swarm", "instance", null, null);
+        var item = WorkItem.text(info, "payload").build();
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> output.publish(item,
+            new io.pockethive.work.config.WorkDelivery(io.pockethive.work.config.WorkDeliveryMode.DELAYED, 1000)))
+            .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("does not support DELAYED");
+        org.mockito.Mockito.verifyNoInteractions(publisher);
+    }
+
+    @Test
     void publisherConfirmsSettingRetainsSubmissionOnlyBehavior() {
         var publisher = mock(RabbitPublisher.class);
         var settings = new RabbitOutputSettings("exchange", "route", true, true);

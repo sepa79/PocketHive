@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.auth;
 
+import io.pockethive.redis.api.RedisTokenStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
@@ -233,7 +234,7 @@ class OAuth2SecondPassWireTest {
                 }
                 @Override public void store(TokenRecord token, RefreshClaim claim, Duration grace) { redis.store(token, claim, grace); }
                 @Override public void releaseClaim(String key, String fp, RefreshClaim claim) { redis.releaseClaim(key, fp, claim); }
-                @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return redis.claimDueRefreshes(now, limit, lease); }
+                @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return redis.listDueRefreshes(now, limit); }
                 @Override public void close() { }
             };
             AuthRuntime runtime = endpoint.runtime(TARGET, observed);
@@ -503,7 +504,7 @@ class OAuth2SecondPassWireTest {
         @Override public synchronized void releaseClaim(String key, String fingerprint, RefreshClaim claim) {
             if (claim.equals(owner)) { owner = null; }
         }
-        @Override public List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease) { return List.of(); }
+        @Override public List<TokenDueRef> listDueRefreshes(Instant now, int limit) { return List.of(); }
         @Override public void close() { }
     }
 }

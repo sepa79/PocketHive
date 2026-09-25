@@ -1,5 +1,7 @@
 package io.pockethive.swarmcontroller.runtime;
 
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
+
 import io.pockethive.rabbit.api.RabbitResourceNames;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -266,7 +268,14 @@ class SwarmWorkerSpecFactoryTest {
   void plansCanonicalWorkerEnvironmentConfigAndVolumeOrder() {
     ClickHouseSinkProperties clickHouse = new ClickHouseSinkProperties();
     clickHouse.setEndpoint("http://clickhouse:8123");
-    clickHouse.setTable("events");
+    clickHouse.setTable(" events ");
+    clickHouse.setUsername(" writer ");
+    clickHouse.setPassword(" pass ");
+    clickHouse.setConnectTimeoutMs(123);
+    clickHouse.setReadTimeoutMs(456);
+    clickHouse.setBatchSize(7);
+    clickHouse.setFlushIntervalMs(89);
+    clickHouse.setMaxBufferedEvents(999);
     SwarmWorkerSpecFactory factory = factory(clickHouse);
     SutEndpoint endpoint = new SutEndpoint("HTTP", "http://wiremock:8080", null);
     SutEnvironment sutEnvironment = new SutEnvironment(
@@ -280,7 +289,9 @@ class SwarmWorkerSpecFactoryTest {
         Work.ofDefaults("generator-in", "generator-out"),
         Map.of(
             "CONTROL_NETWORK", "worker-network",
-            "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123"), Map.of("outputs", Map.of("type", "NONE"),
+            "POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123",
+            "POCKETHIVE_SINK_CLICKHOUSE_USERNAME", "",
+            "POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE", "42"), Map.of("outputs", Map.of("type", "NONE"),
             "inputs", Map.of("type", "csv_dataset", "csv", csvSettings()),
             "docker", Map.of("volumes", List.of(" /host/input:/data:ro ")),
             "sut", Map.of("targetEndpointId", "default")));
@@ -300,7 +311,14 @@ class SwarmWorkerSpecFactoryTest {
         .containsEntry("POCKETHIVE_RUNTIME_STACK_NAME", "ph-test-swarm")
         .containsEntry("CONTROL_NETWORK", "worker-network")
         .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_ENDPOINT", "http://worker-clickhouse:8123")
-        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_TABLE", "events");
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_TABLE", "events")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_USERNAME", "")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_PASSWORD", "pass")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_CONNECT_TIMEOUT_MS", "123")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_READ_TIMEOUT_MS", "456")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_BATCH_SIZE", "42")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_FLUSH_INTERVAL_MS", "89")
+        .containsEntry("POCKETHIVE_SINK_CLICKHOUSE_MAX_BUFFERED_EVENTS", "999");
     assertThat(planned.spec().volumes()).containsExactly(
         "/opt/pockethive/scenarios-runtime:/app/scenarios-runtime",
         "/host/input:/data:ro");
@@ -583,9 +601,8 @@ class SwarmWorkerSpecFactoryTest {
   }
 
   private static io.pockethive.topology.work.ResolvedWorkTopology topology(Bee bee) {
-    var traffic = properties().getTraffic();
     return new io.pockethive.rabbit.work.RabbitWorkTopologyResolver(new io.pockethive.rabbit.api.RabbitResourceNames(),
-        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings(traffic.queuePrefix(), traffic.hiveExchange()))
+        swarm -> new io.pockethive.rabbit.api.RabbitWorkTopologySettings("ph.test", "ph.test.hive"))
         .resolve(properties().getSwarmId(), io.pockethive.topology.work.WorkTopologyChannels.from(java.util.List.of(bee)));
   }
 
@@ -602,8 +619,7 @@ class SwarmWorkerSpecFactoryTest {
         "ph.control",
         new SwarmControllerProperties.Manager("swarm-controller"),
         new SwarmControllerProperties.SwarmController(
-            new SwarmControllerProperties.Traffic("ph.test.hive", "ph.test"),
-            new SwarmControllerProperties.Metrics(
+            new SwarmControllerMetricsProperties(
                 PocketHiveMetricsAdapter.DISABLED,
                 Duration.ofSeconds(10),
                 ClickHouseMetricsSinkProperties.disabled()),

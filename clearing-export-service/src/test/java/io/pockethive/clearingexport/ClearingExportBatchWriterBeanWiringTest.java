@@ -1,5 +1,7 @@
 package io.pockethive.clearingexport;
 
+import io.pockethive.controlplane.filesystem.RuntimeOutputDirectory;
+
 import io.pockethive.templating.api.DisabledSequenceAccess;
 
 import io.pockethive.templating.PebbleTemplateRenderer;
@@ -15,7 +17,7 @@ class ClearingExportBatchWriterBeanWiringTest {
       .withBean(TemplateRenderer.class, () -> new PebbleTemplateRenderer(DisabledSequenceAccess.INSTANCE))
       .withBean(XmlOutputFormatter.class, XmlOutputFormatter::new)
       .withBean(ClearingExportFileAssembler.class)
-      .withBean(ClearingExportSink.class, LocalDirectoryClearingExportSink::new)
+      .withBean(ClearingExportSink.class, () -> new LocalDirectoryClearingExportSink(new RuntimeOutputDirectory(java.nio.file.Path.of("/tmp/clearing-wiring-test"))))
       .withBean(ClearingExportBatchWriter.class);
 
   @Test

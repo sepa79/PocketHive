@@ -22,7 +22,9 @@ public final class RabbitWorkBootstrapEnvironment implements WorkAdapterEnvironm
     this.connection = Objects.requireNonNull(connection, "connection");
   }
   @Override public Map<String, String> connectionEnvironment() {
-    return RabbitConnectionEnvironment.encodeWork(connection);
+    var result = new LinkedHashMap<>(RabbitConnectionEnvironment.encodeWork(connection));
+    result.putAll(new WorkPlaneSelection(WorkerInputType.RABBITMQ).environment());
+    return Map.copyOf(result);
   }
   @Override public void validateConnection(Function<String, String> properties) {
     RabbitConnectionEnvironment.decodeWork(properties);

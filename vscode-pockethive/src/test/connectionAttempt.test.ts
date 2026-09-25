@@ -12,6 +12,7 @@ import {
   EndpointValidationPort,
   McpConnectionTestPort,
   OAuthSession,
+  ValidatedEndpoint,
 } from '../connection/contracts';
 import { createConnectionProfile } from '../connection/profile';
 
@@ -36,6 +37,69 @@ const evidence: ConnectionEvidence = {
   observedAt: NOW.toISOString(),
 };
 
+for (const action of ['connect', 'reconnect'] as const) {
+  for (const completion of ['success', 'failure'] as const) {
+    test(`${action} cancellation during discovery ignores late ${completion}`, async () => {
+      let finish!: (value: ValidatedEndpoint) => void;
+      let reject!: (reason: unknown) => void;
+      let receivedSignal!: AbortSignal;
+      let downstreamCalls = 0;
+      const endpoint = {
+        mcpUrl: profile.mcpUrl,
+        resourceMetadataUrl: 'https://nft-lab.example/.well-known/oauth-protected-resource',
+        authorizationServer: 'https://nft-lab.example/auth-service',
+      };
+      const pendingEndpoint = new Promise<typeof endpoint>((resolve, fail) => { finish = resolve; reject = fail; });
+      const attempt = new ConnectionAttempt(profile,
+        { validate: async (_profile, signal) => { receivedSignal = signal; return pendingEndpoint; } },
+        { authenticate: async () => { downstreamCalls++; return session; },
+          session: async () => { downstreamCalls++; return session; } },
+        { test: async () => { downstreamCalls++; return evidence; } },
+        { changed: () => {} });
+      const pending = attempt[action]();
+      assert.equal(attempt.view().state, 'DISCOVERING');
+      assert.equal(attempt.cancel().state, 'CANCELLED');
+      assert.equal(receivedSignal.aborted, true);
+      if (completion === 'success') finish(endpoint); else reject(new Error('late discovery failure'));
+      const result = await pending;
+      assert.equal(result.state, 'CANCELLED');
+      assert.equal(result.endpointValidated, false);
+      assert.equal(result.failure, undefined);
+      assert.equal(downstreamCalls, 0);
+      assert.throws(() => attempt.save(), /CONNECTION_ATTEMPT_TRANSITION_INVALID/);
+    });
+  }
+}
+
+for (const action of ['retryTest', 'reconnect'] as const) {
+  for (const lateSession of [undefined, session]) {
+    test(`${action} cancellation ignores a late ${lateSession ? 'valid' : 'missing'} stored session`, async () => {
+      let finish!: (value: OAuthSession | undefined) => void;
+      let lookupStarted!: () => void;
+      const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+      const pendingSession = new Promise<OAuthSession | undefined>(resolve => { finish = resolve; });
+      let mcpCalls = 0;
+      const attempt = new ConnectionAttempt(profile,
+        { validate: async () => ({ mcpUrl: profile.mcpUrl,
+          resourceMetadataUrl: 'https://nft-lab.example/.well-known/oauth-protected-resource',
+          authorizationServer: 'https://nft-lab.example/auth-service' }) },
+        { authenticate: async () => session,
+          session: async () => { lookupStarted(); return pendingSession; } },
+        { test: async () => { mcpCalls++; throw new Error('initial connection test fails'); } },
+        { changed: () => {} }, () => NOW);
+      if (action === 'retryTest') await attempt.connect();
+      const callsBefore = mcpCalls;
+      const pending = attempt[action]();
+      await started;
+      const cancelled = attempt.cancel();
+      assert.equal(cancelled.state, 'CANCELLED');
+      finish(lateSession);
+      assert.deepEqual(await pending, cancelled);
+      assert.equal(mcpCalls, callsBefore);
+    });
+  }
+}
+
 test('a new connection attempt exposes only explicit unvalidated and unauthenticated state', () => {
   const attempt = createAttempt([], async () => session, async () => evidence);
   assert.deepEqual(attempt.view(), {
@@ -47,6 +111,42 @@ test('a new connection attempt exposes only explicit unvalidated and unauthentic
     evidence: undefined,
   });
 });
+
+for (const action of ['retryTest', 'reconnect'] as const) {
+  for (const cancel of [false, true]) {
+    test(`${action} handles stored-credential read failure${cancel ? ' after cancellation' : ''}`, async () => {
+      let fail!: (error: Error) => void;
+      let lookupStarted!: () => void;
+      const started = new Promise<void>(resolve => { lookupStarted = resolve; });
+      const pendingSession = new Promise<OAuthSession | undefined>((_resolve, reject) => { fail = reject; });
+      let mcpCalls = 0;
+      const attempt = new ConnectionAttempt(profile,
+        { validate: async () => ({ mcpUrl: profile.mcpUrl,
+          resourceMetadataUrl: 'https://nft-lab.example/.well-known/oauth-protected-resource',
+          authorizationServer: 'https://nft-lab.example/auth-service' }) },
+        { authenticate: async () => session,
+          session: async () => { lookupStarted(); return pendingSession; } },
+        { test: async () => { mcpCalls++; throw new Error('initial MCP failure'); } },
+        { changed: () => {} }, () => NOW);
+      if (action === 'retryTest') await attempt.connect();
+      const callsBefore = mcpCalls;
+      const pending = attempt[action]();
+      await started;
+      const cancelled = cancel ? attempt.cancel() : undefined;
+      fail(new Error('credential store unavailable'));
+      const result = await pending;
+      if (cancelled) {
+        assert.deepEqual(result, cancelled);
+      } else {
+        assert.equal(result.state, 'AUTHENTICATION_FAILED');
+        assert.equal(result.authenticated, false);
+        assert.equal(result.failure?.message, 'credential store unavailable');
+        assert.equal((await attempt.signInAgain()).state, 'CONNECTION_TEST_FAILED');
+      }
+      assert.equal(mcpCalls, callsBefore + (cancel ? 0 : 1));
+    });
+  }
+}
 
 test('the production clock records an ISO observation time when no clock is injected', async () => {
   const attempt = new ConnectionAttempt(profile,
@@ -77,7 +177,7 @@ test('connect validates endpoint, authenticates, then tests MCP and gates save',
   assert.equal(ready.evidence, evidence);
   assert.equal(attempt.save().state, 'SAVED');
   assert.deepEqual(changes.map(change => change.state), [
-    'AUTHENTICATING', 'TESTING', 'READY_TO_SAVE', 'SAVED',
+    'DISCOVERING', 'AUTHENTICATING', 'TESTING', 'READY_TO_SAVE', 'SAVED',
   ]);
 });
 
@@ -132,8 +232,8 @@ test('endpoint failure is emitted without authentication or MCP calls', async ()
 
   assert.equal(result.state, 'EDITING');
   assert.equal(result.failure?.code, 'ENDPOINT_REJECTED');
-  assert.equal(changes.length, 1);
-  assert.equal(changes[0].failure?.message, 'ENDPOINT_REJECTED: unsafe endpoint');
+  assert.equal(changes.length, 2);
+  assert.equal(changes[1].failure?.message, 'ENDPOINT_REJECTED: unsafe endpoint');
 });
 
 test('explicit cancellation aborts an in-progress authentication and never runs the MCP test', async () => {
@@ -366,7 +466,7 @@ test('saved-profile reconnect emits endpoint validation failure and stops', asyn
   const result = await attempt.reconnect();
   assert.equal(result.state, 'EDITING');
   assert.equal(result.failure?.code, 'ENDPOINT_REJECTED');
-  assert.equal(changes.length, 1);
+  assert.equal(changes.length, 2);
 });
 
 test('saved-profile reconnect rejects an expired session before MCP testing', async () => {

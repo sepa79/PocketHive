@@ -62,7 +62,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
-import org.apache.hc.client5.http.classic.HttpClient;
+import io.pockethive.processor.http.ProcessorHttpClient;
+import io.pockethive.worker.sdk.config.RedisSequenceProperties;
 import org.apache.hc.core5.http.ClassicHttpRequest;
 import org.apache.hc.core5.http.io.HttpClientResponseHandler;
 import org.apache.hc.core5.http.io.entity.StringEntity;
@@ -94,14 +95,15 @@ class ProcessorTest {
     void workerInvokesHttpAndPropagatesResponse() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
+        when(httpClient.maxConnections(config)).thenReturn(17);
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class))).thenAnswer(invocation -> {
             ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
             HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             requestRef.set(request);
@@ -150,6 +152,7 @@ class ProcessorTest {
         assertThat(context.statusData())
                 .containsEntry("baseUrl", "http://sut")
                 .containsEntry("enabled", true)
+                .containsEntry("httpMaxConnections", 17)
                 .containsEntry("transactions", 1L)
                 .containsEntry("successRatio", 1.0)
                 .containsEntry("avgLatencyMs", 0.0);
@@ -159,13 +162,13 @@ class ProcessorTest {
     void workerExtractsBusinessOutcomeHeadersFromResultRules() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-03-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class))).thenAnswer(invocation -> {
             HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
             response.setEntity(new StringEntity("{\"resultCode\":\"00\"}", java.nio.charset.StandardCharsets.UTF_8));
@@ -220,14 +223,14 @@ class ProcessorTest {
     void workerConcatenatesBaseUrlAndMessagePath() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut/api"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-02-02T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut/api");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicReference<ClassicHttpRequest> requestRef = new AtomicReference<>();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class))).thenAnswer(invocation -> {
             ClassicHttpRequest request = invocation.getArgument(0, ClassicHttpRequest.class);
             HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
             requestRef.set(request);
@@ -249,14 +252,14 @@ class ProcessorTest {
     void workerTracksRollingMetricsAcrossCalls() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         SequenceClock clock = new SequenceClock(0, 50, 100, 250);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
         AtomicInteger invocation = new AtomicInteger();
-        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocationOnMock -> {
+        when(httpClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class))).thenAnswer(invocationOnMock -> {
             HttpClientResponseHandler<?> handler = invocationOnMock.getArgument(1, HttpClientResponseHandler.class);
             if (invocation.getAndIncrement() == 0) {
                 BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
@@ -291,51 +294,13 @@ class ProcessorTest {
         assertThat((Double) status.get("avgLatencyMs")).isEqualTo(100.0);
     }
 
-    @Test
-    void workerSelectsHttpClientFromSslVerifyFlag() throws Exception {
-        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(processorConfig("https://sut"));
-        HttpClient verifiedClient = mock(HttpClient.class);
-        HttpClient insecureClient = mock(HttpClient.class);
-        Clock clock = Clock.fixed(Instant.parse("2024-03-03T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(
-            MAPPER,
-            properties,
-            verifiedClient,
-            verifiedClient,
-            insecureClient,
-            insecureClient,
-            clock
-        );
-
-        when(verifiedClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
-            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
-            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
-            response.setEntity(new StringEntity("verified", java.nio.charset.StandardCharsets.UTF_8));
-            return handler.handleResponse(response);
-        });
-        when(insecureClient.execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class))).thenAnswer(invocation -> {
-            HttpClientResponseHandler<?> handler = invocation.getArgument(1, HttpClientResponseHandler.class);
-            BasicClassicHttpResponse response = new BasicClassicHttpResponse(200, "OK");
-            response.setEntity(new StringEntity("insecure", java.nio.charset.StandardCharsets.UTF_8));
-            return handler.handleResponse(response);
-        });
-
-        WorkItem inbound = inboundItem(Map.of("path", "/tls"));
-
-        worker.onMessage(inbound, new TestWorkerContext(processorRuntimeConfig("https://sut", Boolean.FALSE)));
-        worker.onMessage(inbound, new TestWorkerContext(processorRuntimeConfig("https://sut", Boolean.TRUE)));
-
-        verify(insecureClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
-        verify(verifiedClient).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
-    }
 
     @Test
     void workerFailsWhenRuntimeConfigMissing() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.fixed(Instant.parse("2024-01-01T00:00:00Z"), ZoneOffset.UTC);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         TestWorkerContext context = new TestWorkerContext(null);
 
         WorkItem inbound = inboundItem(Map.of("path", "/defaults"));
@@ -343,7 +308,7 @@ class ProcessorTest {
         assertThatThrownBy(() -> worker.onMessage(inbound, context))
             .isInstanceOf(IllegalStateException.class)
             .hasMessageContaining("Missing runtime config for " + ProcessorWorkerConfig.class.getName());
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -367,9 +332,9 @@ class ProcessorTest {
     void workerEmitsTcpResultEnvelope() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -400,7 +365,7 @@ class ProcessorTest {
         assertThat(result.stepHeaders())
             .containsEntry("x-ph-processor-success", "true")
             .containsEntry("x-ph-processor-status", "200");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -422,8 +387,8 @@ class ProcessorTest {
             """);
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
         injectGlobalTransport(worker, "TCP", new TcpTransport() {
             @Override
@@ -467,7 +432,7 @@ class ProcessorTest {
             .containsEntry("keyStorePassword", "changeit")
             .containsEntry("keyStoreType", "PKCS12");
         assertThat(request.options()).doesNotContainKey("Authorization");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -479,9 +444,9 @@ class ProcessorTest {
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
-            HttpClient httpClient = mock(HttpClient.class);
+            ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
             Clock clock = Clock.fixed(Instant.parse("2024-02-20T12:00:00Z"), ZoneOffset.UTC);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
             ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
@@ -505,7 +470,7 @@ class ProcessorTest {
                 .containsEntry("x-ph-processor-status", "200");
             assertThat(server.awaitHandled()).isTrue();
             assertThat(server.lastRequestPayload()).containsExactly(requestPayload);
-            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
         }
     }
 
@@ -521,8 +486,8 @@ class ProcessorTest {
             """);
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://iso.example:5000"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         AtomicReference<TcpRequest> capturedRequest = new AtomicReference<>();
         injectGlobalTransport(worker, "ISO8583", new TcpTransport() {
             @Override
@@ -558,7 +523,7 @@ class ProcessorTest {
         assertThat(Arrays.copyOfRange(framed, 2, 8)).containsExactly(hex("0200A1B2C3D4"));
         JsonNode payload = MAPPER.readTree(result.asString());
         assertThat(payload.path("request").path("payloadBytes").asInt()).isEqualTo(38);
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -570,8 +535,8 @@ class ProcessorTest {
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
-            HttpClient httpClient = mock(HttpClient.class);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+            ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
             ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:" + server.port());
             TestWorkerContext context = new TestWorkerContext(config);
 
@@ -603,7 +568,7 @@ class ProcessorTest {
                 .containsEntry("x-ph-dim-segment", "retail");
             assertThat(server.awaitHandled()).isTrue();
             assertThat(server.lastRequestPayload()).containsExactly(requestPayload);
-            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
         }
     }
 
@@ -611,8 +576,8 @@ class ProcessorTest {
     void workerExtractsOutcomeHeadersFromTcpResultRules() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -653,15 +618,15 @@ class ProcessorTest {
             .containsEntry("x-ph-business-code", "pong")
             .containsEntry("x-ph-business-success", "true")
             .containsEntry("x-ph-dim-segment", "retail");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
     void workerFailsLoudOnInvalidResultRulesRegex() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -695,8 +660,8 @@ class ProcessorTest {
     void workerFailsLoudWhenHeaderSourceIsMissingHeaderName() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -733,8 +698,8 @@ class ProcessorTest {
     void workerFailsLoudOnDuplicateDimensionsAfterNormalization() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://tcp.example:9100"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         injectGlobalTcpTransport(worker, new TcpTransport() {
             @Override
             public TcpResponse execute(TcpRequest request, TcpBehavior behavior) {
@@ -772,8 +737,8 @@ class ProcessorTest {
     void workerRejectsIso8583RawHexPayloadContainingWhitespace() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -782,15 +747,15 @@ class ProcessorTest {
         assertThatThrownBy(() -> worker.onMessage(inbound, context))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessageContaining("must not contain whitespace");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
     void workerRejectsUnsupportedIso8583PayloadAdapter() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -799,7 +764,7 @@ class ProcessorTest {
         assertThatThrownBy(() -> worker.onMessage(inbound, context))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Unsupported ISO8583 payloadAdapter: UNSUPPORTED_ADAPTER");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -810,8 +775,8 @@ class ProcessorTest {
 
             ProcessorWorkerProperties properties = newProcessorWorkerProperties();
             properties.setConfig(processorConfig("tcp://127.0.0.1:" + server.port()));
-            HttpClient httpClient = mock(HttpClient.class);
-            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+            ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+            ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
 
             TcpTransportConfig transport = new TcpTransportConfig(
                 "socket",
@@ -837,7 +802,7 @@ class ProcessorTest {
             assertThat(payload.path("outcome").path("responseHex").asText()).isEqualTo("0210A0B1C2D3");
             assertThat(server.awaitHandled()).isTrue();
             assertThat(server.connectionAttempts()).isEqualTo(2);
-            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+            verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
         }
     }
 
@@ -845,8 +810,8 @@ class ProcessorTest {
     void workerRejectsUnknownIso8583WireProfile() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("tcp://127.0.0.1:6036"));
-        HttpClient httpClient = mock(HttpClient.class);
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, Clock.systemUTC());
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, Clock.systemUTC(), new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("tcp://127.0.0.1:6036");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -855,7 +820,7 @@ class ProcessorTest {
         assertThatThrownBy(() -> worker.onMessage(inbound, context))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Unsupported ISO8583 wireProfileId: UNKNOWN_PROFILE");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
     @Test
@@ -872,9 +837,9 @@ class ProcessorTest {
     void workerRejectsLegacyPayloadWithoutKind() throws Exception {
         ProcessorWorkerProperties properties = newProcessorWorkerProperties();
         properties.setConfig(processorConfig("http://sut"));
-        HttpClient httpClient = mock(HttpClient.class);
+        ProcessorHttpClient httpClient = mock(ProcessorHttpClient.class);
         Clock clock = Clock.systemUTC();
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties, httpClient, httpClient, clock);
+        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, httpClient, clock, new io.pockethive.templating.PebbleTemplateRenderer(io.pockethive.templating.api.DisabledSequenceAccess.INSTANCE), new RedisSequenceProperties());
         ProcessorWorkerConfig config = processorRuntimeConfig("http://sut");
         TestWorkerContext context = new TestWorkerContext(config);
 
@@ -886,35 +851,9 @@ class ProcessorTest {
         assertThatThrownBy(() -> worker.onMessage(legacyInbound, context))
             .isInstanceOf(IllegalArgumentException.class)
             .hasMessage("Missing request kind");
-        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class));
+        verify(httpClient, never()).execute(any(ClassicHttpRequest.class), any(HttpClientResponseHandler.class), any(ProcessorWorkerConfig.class));
     }
 
-    @Test
-    void perThreadClientUsesSystemProxyRoutePlanner() throws Exception {
-        ProcessorWorkerProperties properties = newProcessorWorkerProperties();
-        properties.setConfig(processorConfig("http://sut"));
-        ProcessorWorkerImpl worker = new ProcessorWorkerImpl(MAPPER, properties);
-
-        Field handlersField = ProcessorWorkerImpl.class.getDeclaredField("protocolHandlers");
-        handlersField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        Map<String, Object> handlers = (Map<String, Object>) handlersField.get(worker);
-        Object httpHandler = handlers.get("HTTP");
-
-        Field perThreadField = httpHandler.getClass().getDeclaredField("perThreadClient");
-        perThreadField.setAccessible(true);
-        @SuppressWarnings("unchecked")
-        ThreadLocal<HttpClient> perThreadClient = (ThreadLocal<HttpClient>) perThreadField.get(httpHandler);
-        HttpClient client = perThreadClient.get();
-
-        Field routePlannerField = client.getClass().getDeclaredField("routePlanner");
-        routePlannerField.setAccessible(true);
-        Object routePlanner = routePlannerField.get(client);
-
-        assertThat(routePlanner).isNotNull();
-        assertThat(routePlanner.getClass().getName())
-            .isEqualTo("org.apache.hc.client5.http.impl.routing.SystemDefaultRoutePlanner");
-    }
 
     private WorkItem invokeThroughObservabilityInterceptor(ProcessorWorkerImpl worker,
                                                            TestWorkerContext context,
@@ -1045,17 +984,20 @@ class ProcessorTest {
             throw new IllegalStateException(protocol + " handler not registered");
         }
 
-        Field globalTransportField = tcpHandler.getClass().getDeclaredField("globalTransport");
+        Field runtimeField = tcpHandler.getClass().getDeclaredField("transportRuntime");
+        runtimeField.setAccessible(true);
+        Object runtime = runtimeField.get(tcpHandler);
+        Field globalTransportField = runtime.getClass().getDeclaredField("globalTransport");
         globalTransportField.setAccessible(true);
-        Object previous = globalTransportField.get(tcpHandler);
+        Object previous = globalTransportField.get(runtime);
         if (previous instanceof TcpTransport previousTransport) {
             previousTransport.close();
         }
-        globalTransportField.set(tcpHandler, transport);
+        globalTransportField.set(runtime, transport);
 
-        Field activeConfigField = tcpHandler.getClass().getDeclaredField("activeConfig");
+        Field activeConfigField = runtime.getClass().getDeclaredField("activeConfig");
         activeConfigField.setAccessible(true);
-        activeConfigField.set(tcpHandler, TcpTransportConfig.defaults());
+        activeConfigField.set(runtime, TcpTransportConfig.defaults());
     }
 
     private static <T> T withScenarioRoot(Path scenarioRoot, ThrowingSupplier<T> action) throws Exception {

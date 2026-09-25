@@ -1,6 +1,8 @@
 package io.pockethive.docker.compute;
 
 import com.github.dockerjava.api.DockerClient;
+import io.pockethive.docker.DockerRuntimeNames;
+import io.pockethive.docker.DockerControllerEnvironment;
 import com.github.dockerjava.api.command.CreateServiceResponse;
 import com.github.dockerjava.api.model.ContainerSpec;
 import com.github.dockerjava.api.model.Mount;
@@ -35,7 +37,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * {@link ComputeAdapter} implementation backed by Docker Swarm services.
+ * Responsibility: implement compute provisioning/removal using Docker Swarm services.
+ * Must not: choose application lifecycle state or independently derive stack identity.
+ * Contract: RESP-DOCKER-RUNTIME — docs/architecture/runtime-responsibilities.md#resp-docker-runtime.
  * <p>
  * This adapter is deliberately minimal: it creates one service per manager or worker
  * with a single replica and does not yet attempt full reconciliation beyond basic
@@ -46,7 +50,6 @@ import org.slf4j.LoggerFactory;
 public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
 
   private static final Logger log = LoggerFactory.getLogger(DockerSwarmServiceComputeAdapter.class);
-  public static final String PLACEMENT_CONSTRAINTS_ENV = "POCKETHIVE_DOCKER_SWARM_PLACEMENT_CONSTRAINTS";
   static final int DOCKER_SERVICE_NAME_MAX_LENGTH = 63;
 
   private final DockerClient dockerClient;
@@ -260,7 +263,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
         .withReplicated(new ServiceReplicatedModeOptions().withReplicas(1));
 
     Map<String, String> labels = new HashMap<>();
-    String stackNamespace = stackNamespace(swarmId);
+    String stackNamespace = DockerRuntimeNames.stackName(swarmId);
     labels.put("com.docker.stack.namespace", stackNamespace);
     labels.put("ph.swarmId", swarmId);
     labels.put("ph.logicalName", logicalName);
@@ -349,7 +352,7 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
     if (managerOnly) {
       constraints.add("node.role == manager");
     }
-    String configured = System.getenv(PLACEMENT_CONSTRAINTS_ENV);
+    String configured = System.getenv(DockerControllerEnvironment.PLACEMENT_CONSTRAINTS_ENV);
     if (configured == null || configured.isBlank()) {
       return List.copyOf(constraints);
     }
@@ -378,11 +381,6 @@ public final class DockerSwarmServiceComputeAdapter implements ComputeAdapter {
       throw new IllegalArgumentException("POCKETHIVE_CONTROL_PLANE_SWARM_ID must not be null or blank");
     }
     return swarmId;
-  }
-
-  private static String stackNamespace(String swarmId) {
-    String normalized = requireNonBlank(swarmId, "swarmId");
-    return "ph-" + normalized.toLowerCase(Locale.ROOT);
   }
 
   static String dockerServiceName(String requestedName) {

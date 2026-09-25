@@ -136,6 +136,14 @@ jobs:
       - name: Check VSIX contents
         run: npm run package:check
 
+      - name: Set up minimum supported VS Code runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18.15.0'
+
+      - name: Check endpoint discovery on minimum runtime
+        run: node --test out/test/endpointValidator.test.js out/test/endpointSecurityPolicy.test.js
+
       - name: Set up Node 22 for Stryker
         if: runner.os == 'Linux'
         uses: actions/setup-node@v4

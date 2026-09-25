@@ -16,7 +16,7 @@ import org.springframework.core.Ordered;
  * Must not: turn capture into business output or independently reimplement the shared Redis push operation.
  * Contract: RESP-WORK-REDIS-PUSH — docs/architecture/runtime-responsibilities.md#resp-work-redis-push.
  */
-public final class RedisWorkOutputFactory implements WorkOutputFactory, Ordered {
+public final class RedisWorkOutputFactory implements AutoCloseable, WorkOutputFactory, Ordered {
 
     private final WorkerControlPlaneRuntime controlPlaneRuntime;
     private final RedisPushSupport pushSupport;
@@ -43,4 +43,5 @@ public final class RedisWorkOutputFactory implements WorkOutputFactory, Ordered 
     public int getOrder() {
         return Ordered.LOWEST_PRECEDENCE;
     }
+    @Override public void close() { pushSupport.close(); }
 }

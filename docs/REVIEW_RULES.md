@@ -163,6 +163,12 @@ perform work, tests and evidence, then hand off; they do not run a self-review l
    derived projections, update ordering, concurrency, disable/re-enable and completion
    postconditions. Check changes occurring between ticks/callbacks, not just one steady
    snapshot. Require regression evidence for the reported defect and affected behavior.
+   For a concurrency finding, identify the actual entrypoints, caller threads and
+   applicable configuration that permit the interleaving. A test that invokes public
+   methods from extra threads demonstrates conditional behavior; it does not alone
+   establish a reachable application defect. Check the documented
+   [worker CONTROL execution model](architecture/work-plane-boundaries.md#worker-control-command-execution)
+   where applicable. Revalidate that model when the change alters callers or concurrency.
 6. **State the evidence and limits.** Report inspected owners/call paths, relevant
    before/after behavior, tests run and unverified boundaries. A passing build, scanner,
    negative fixture or lack of findings is not proof of complete IO/SSOT isolation.
@@ -213,8 +219,10 @@ Human approval: 2026-09-08, clarified to cover all Java modules. Keep only
 (`common/control-plane-core/src/test/java/io/pockethive/architecture/RepositoryImportBoundaryTest.java`)
 as the custom architecture source-scanning exception. Its one inline rule table owns
 the source import restrictions: module-path regex, forbidden-import regex and rule ID.
-It scans conventional `src/main/java` sources in repository Maven modules, including
-new/untracked sources. Test-source imports are outside this production check; fixture
+It reads module declarations from the root `pom.xml` (and nested module POMs), then
+scans only their conventional `src/main/java` trees, including new/untracked sources.
+It does not traverse unrelated repository/runtime/build trees; source/POM read failures
+remain test errors. Test-source imports are outside this production check; fixture
 modules have explicit scope in the rules. Its location in control-plane-core is only
 the Maven execution host, not its scan scope. Normal root `mvn test` runs it.
 

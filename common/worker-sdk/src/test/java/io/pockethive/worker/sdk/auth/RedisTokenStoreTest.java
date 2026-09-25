@@ -1,5 +1,6 @@
 package io.pockethive.worker.sdk.auth;
 
+import io.pockethive.redis.api.RedisTokenStore;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -65,7 +66,7 @@ class RedisTokenStoreTest {
             assertThat(store.get("shared-token", FINGERPRINT))
                 .extracting(TokenRecord::accessToken, TokenRecord::tokenType, TokenRecord::fingerprint)
                 .containsExactly("access-token", "Bearer", FINGERPRINT);
-            assertThat(store.claimDueRefreshes(Instant.now(), 10, Duration.ofSeconds(5)))
+            assertThat(store.listDueRefreshes(Instant.now(), 10))
                 .containsExactly(new TokenDueRef("shared-token", FINGERPRINT, refreshAt));
             assertThat(redisPttl(recordKey("shared-token"))).isPositive();
             assertThat(redisZscore(dueKey(), "shared-token")).isEqualTo((double) refreshAt.toEpochMilli());
@@ -160,7 +161,7 @@ class RedisTokenStoreTest {
         try (RedisTokenStore store = newStore()) {
             redisZadd(dueKey(), Instant.now().minusSeconds(1).toEpochMilli(), "missing-token");
 
-            assertThat(store.claimDueRefreshes(Instant.now(), 10, Duration.ofSeconds(5))).isEmpty();
+            assertThat(store.listDueRefreshes(Instant.now(), 10)).isEmpty();
             assertThat(redisZscore(dueKey(), "missing-token")).isNull();
         }
     }

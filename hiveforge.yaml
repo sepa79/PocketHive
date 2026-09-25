@@ -43,6 +43,10 @@ components:
     manifest: deploy/hiveforge/components/stack/hiveforge.yaml
 artifacts:
   managedPaths:
+    - name: runtime-dev-tls
+      source: deploy/hiveforge/runtime/dev-tls
+      target: artifacts/runtime/config/nginx/dev-tls
+      mode: replace
     - name: runtime-nginx-swarm
       source: deploy/hiveforge/runtime/nginx.swarm.conf
       target: artifacts/runtime/config/nginx/nginx.swarm.conf

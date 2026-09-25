@@ -41,6 +41,7 @@ register_pockethive_image() {
 }
 
 register_pockethive_image jvm-base "" "" docker/base/Dockerfile docker/base "" base
+register_pockethive_image artemis artemis common/artemis-broker-extensions common/artemis-broker-extensions/Dockerfile . "" static
 register_pockethive_image auth-service auth-service auth-service auth-service/Dockerfile.runtime . "" runtime
 register_pockethive_image pockethive-mcp pockethive-mcp pockethive-mcp-service pockethive-mcp-service/Dockerfile.runtime . "" runtime
 register_pockethive_image scenario-manager scenario-manager scenario-manager-service scenario-manager-service/Dockerfile.runtime . "" runtime

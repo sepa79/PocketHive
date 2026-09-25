@@ -1,0 +1,176 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PocketHive intake requirements draft contract",
+  "$comment": "Structural draft validation only. Nulls and incomplete optional sections are legitimate. The shared intake semantic validator owns provenance, applicability, reference checks and readiness; this schema is not a runtime scenario contract.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 3
+    },
+    "templateType": {
+      "const": "bundle-generation-input"
+    },
+    "ownership": {
+      "type": "object",
+      "properties": {
+        "stakeholderFills": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "nftTeamOrMcpFills": {
+          "$ref": "common.schema.json#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "requirementId": {
+      "$ref": "common.schema.json#/definitions/text"
+    },
+    "project": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "owner": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "objective": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "outOfScope": {
+          "$ref": "common.schema.json#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "properties": {
+        "notes": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "suts": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/sut"
+      }
+    },
+    "templates": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/api"
+      }
+    },
+    "productionUsage": {
+      "type": "object",
+      "properties": {
+        "available": {
+          "$ref": "common.schema.json#/definitions/boolean"
+        },
+        "graphUrl": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "measurements": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/productionMeasurement"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "testData": {
+      "type": "object",
+      "properties": {
+        "entities": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/entity"
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "databases": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/database"
+      }
+    },
+    "successCriteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "criterionId": {
+            "$ref": "common.schema.json#/definitions/text"
+          },
+          "description": {
+            "$ref": "common.schema.json#/definitions/text"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "kpis": {
+      "type": "array",
+      "items": {
+        "$ref": "common.schema.json#/definitions/kpi"
+      }
+    },
+    "openQuestions": {
+      "$ref": "common.schema.json#/definitions/textList",
+      "description": "Generated read-only projection of unresolved traceability.instance.questions."
+    },
+    "templateMapping": {
+      "type": "object",
+      "properties": {
+        "testPlanTemplate": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "testExecutionResultsTemplate": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "traceabilityMap": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "mcpAutomation": {
+      "type": "object",
+      "properties": {
+        "inputs": {
+          "$ref": "common.schema.json#/definitions/textList"
+        },
+        "rules": {
+          "$ref": "common.schema.json#/definitions/textList"
+        }
+      },
+      "additionalProperties": false
+    },
+    "bundleGeneration": {
+      "type": "object",
+      "properties": {
+        "bundleId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "scenarioId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "testPlanRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "templateType"
+  ]
+}

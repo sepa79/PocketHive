@@ -23,7 +23,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Responsibility: manage temporary Work debug taps and their captured samples.
- * Must not: reconstruct source addresses, map Rabbit queue arguments or mutate swarm topology and lifecycle state.
+ * Must not: reconstruct source addresses, map Rabbit queue arguments, mutate swarm topology/lifecycle,
+ * or report a failed explicit close as successful.
  * Contract: RESP-WORK-RESOURCE-NAMES — docs/architecture/runtime-responsibilities.md#resp-work-resource-names;
  * source destinations and capture operations come from the explicitly selected Work owner.
  */
@@ -83,7 +84,12 @@ public class DebugTapService {
         if (tap == null) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "debug tap not found");
         }
-        safeClose(tap);
+        try {
+            tap.transport().close();
+        } catch (RuntimeException failure) {
+            throw new ResponseStatusException(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Cannot close debug tap " + tapId, failure);
+        }
         return tap.snapshot();
     }
 

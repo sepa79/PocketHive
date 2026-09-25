@@ -1,0 +1,213 @@
+version: 1
+templateType: bundle-generation-input
+
+ownership:
+  stakeholderFills:
+    - requirementId
+    - project
+    - environment
+    - suts
+    - templates
+    - productionUsage
+    - testData
+    - databases
+    - successCriteria
+    - kpis
+    - openQuestions
+  nftTeamOrMcpFills:
+    - templateMapping
+    - mcpAutomation
+    - bundleGeneration
+
+
+requirementId: "REQ-<project>-001"
+
+# Stakeholders/API and data owners fill the sections below. Null means unknown, not zero.
+# NFT-owned sections are marked at the bottom. Do not enter passwords or live tokens.
+project:
+  name: "<project name>"
+  owner: "<team/contact>"
+  objective: "<what the test must demonstrate>"
+  outOfScope: []
+
+environment:
+  notes: "<approved environments, test windows with timezone, access restrictions>"
+
+# Alternative SUT profiles share the API templates. Add WireMock, NFT, etc. as needed.
+suts:
+  - sutId: "SUT-001"
+    name: "<environment name>"
+    type: "uat"
+    endpoints:
+      api:
+        kind: "HTTP"
+        baseUrl: "https://<host>"
+    access:
+      owner: "<environment contact>"
+      networkPrerequisites: ["<VPN, allowlist, or private route needed by workers>"]
+      caCertificateRef: null
+      clientCertificateRef: null
+    # Omit oauth2 if no API uses it. Actual secret resolution is defined in the NFT plan.
+    oauth2:
+      tokenUrl: "https://<identity-host>/oauth/token"
+      credentialRef: "<secret reference containing client ID and secret>"
+
+# Generate each templates/<serviceId>/<callId>.yaml once, not once per SUT.
+templates:
+  - apiId: "API-001"
+    name: "<API name>"
+    serviceId: "<service-id>"
+    callId: "<call-id>"
+    endpointRef: "api"
+    protocol: "HTTP"
+    method: "POST"
+    path: "/api/v1/<resource>"
+    headersSample:
+      Content-Type: "application/json"
+    requestSample: {}
+    responseSample: {}
+    authorization:
+      type: "none"
+    # OAuth alternative: type: oauth2-client-credentials, scope: <scope>,
+    # clientAuthentication: client_secret_basic or client_secret_post,
+    # tokenRequestSample: <form body>, tokenResponseSample: <redacted JSON>,
+    # reuse: per-credential-set, refreshBeforeExpirySeconds: <seconds>.
+    # Token URL/credentials come from the selected SUT; only protected APIs get a bearer header.
+    # Custom upstream token API alternative: type: bearer, tokenSource:
+    # {apiRef: <shared API id>, tokenJsonPointer: /access_token,
+    #  expiresInJsonPointer: /expires_in, reuse: per-credential-set, refreshBeforeExpirySeconds: 30}.
+    # Declare that provider in templates[], mark its purpose: authentication, and exclude it from business load.
+    payloadBindings:
+      - location: "body" # body, path, query, or header
+        path: "/accountId" # JSON Pointer for body; exact parameter/header name otherwise.
+        source:
+          type: "dataset"
+          entityRef: "DATA-001"
+          column: "account_id"
+      # Other sources: {type: constant, value: <typed value>} or
+      # {type: generated, generator: uuid, scope: logical-request}.
+      # Explicitly map every variable and fixed payload field; samples are not binding instructions.
+    expectedResponse:
+      httpStatuses: [200]
+      bodyChecks:
+        - path: "/status" # JSON Pointer, not JSONPath.
+          operator: "equals" # equals or exists
+          value: "<expected business status>"
+    idempotency:
+      required: null # API owner must confirm true/false for state-changing APIs.
+      headerName: null
+      rule: "<key generation, retry reuse, retention window, or reason not applicable>"
+
+# Optional production evidence only. This is not a requested load profile.
+# May be omitted, or left as unavailable. Unknown measurements are null, not zero.
+productionUsage:
+  available: false
+  graphUrl: null # Link to a production traffic graph, dashboard, or report.
+  measurements: []
+  # Optional measurement:
+  # - apiRef: API-001 # null for a clearly identified system total
+  #   sourceEnvironment: Production
+  #   source: <report or data owner>
+  #   periodStart: <timestamp with timezone>
+  #   periodEnd: <timestamp with timezone>
+  #   dailyRequestCount: null
+  #   averageRequestsPerSecond: null
+  #   peakRequestsPerSecond: null
+  #   peakWindowSeconds: null
+  #   notes: <seasonality, scope, and known gaps>
+
+testData:
+  entities:
+    - entityId: "DATA-001"
+      name: "<accounts or other entity>"
+      owner: "<data owner>"
+      requiredCount: null
+      columns:
+        - name: "account_id"
+          type: "string"
+      # One retrieval definition for each environment used in the plan.
+      sources:
+        - sutRef: "SUT-001"
+          type: "database-export"
+          databaseRef: "DB-001"
+          queryRef: "SQL-EXPORT-001"
+          # csv alternative: type: csv, location: <approved file>, delimiter: ",", hasHeader: true.
+          # redis alternative: type: redis, location: <list name>, connectionRef: <secure config>.
+          # generated alternative: type: generated, generatedColumns:
+          #   account_id: {type: sequence, prefix: MOCK-, start: 1, padTo: 8}
+      usage:
+        reuseAllowed: null
+        maxConcurrentRequestsPerRecord: null
+        onExhaustion: "stop" # Never silently recycle state-changing data.
+      sideEffects:
+        mutatesState: null
+        description: "<what the requests change and any account limits>"
+        resetRequired: null
+        resetInstructions: "<approved preparation/reset procedure or not applicable>"
+        owner: "<person/team responsible for cleanup>"
+
+# Database details and optional SQL only; no automatic execution is implied.
+# Leave [] if no database is needed. Queries are scoped to their SUT.
+databases:
+  - dbId: "DB-001"
+    sutRef: "SUT-001"
+    engine: "postgres"
+    host: "<host>"
+    port: 5432
+    databaseName: "<database>"
+    schema: "<schema>"
+    credentialRef: "<read-only secret reference>"
+    sqlQueries:
+      - queryId: "SQL-EXPORT-001"
+        purpose: "Retrieve eligible test records, not just a record count."
+        sql: "<read-only SELECT returning the declared dataset columns>"
+      - queryId: "SQL-CHECK-001"
+        purpose: "<optional data check>"
+        sql: "<read-only SELECT>"
+
+# Project-specific goals, not a fixed set of KPIs. NFT plan defines measurable pass/fail rules.
+successCriteria:
+  - criterionId: "CRIT-001"
+    description: "<business or performance outcome to demonstrate>"
+
+# Stakeholder performance goals, not a load schedule. NFT team agrees the test plan.
+# Add one entry per API/SUT being assessed; null targets need clarification before that KPI is tested.
+kpis:
+  - criterionRef: "CRIT-001"
+    apiRef: "API-001"
+    sutRef: "SUT-001"
+    transactionDefinition: "<what counts as one successful business transaction>"
+    targetTps: null # Minimum successful transactions/second over the measurement window, not offered requests.
+    responseTimePercentile: 95
+    maxResponseTimeMs: null # Upper limit at the chosen percentile; not an average.
+    measurementWindow: "<phase/duration and latency boundaries, e.g. processor request-to-response>"
+
+openQuestions: ["<unresolved requirement, owner, and affected SUT/API; [] if none>"]
+
+# NOTE (NFT team): link the new-version documents; stakeholders do not maintain these paths.
+templateMapping:
+  testPlanTemplate: "docs/ai/TEST_PLAN_TEMPLATE_FOR_REQUIREMENT_V1.yaml"
+  testExecutionResultsTemplate: "docs/ai/TEST_EXECUTION_RESULTS_TEMPLATE_FOR_REQUIREMENT_V1.yaml"
+  traceabilityMap: "docs/ai/TEMPLATE_TRACEABILITY_MAP_V1.yaml"
+
+# NOTE (NFT team / MCP): generation contract only, not an implemented tool.
+mcpAutomation:
+  inputs: ["completed requirements", "approved NFT test plan", "secure environment/data configuration"]
+  rules:
+    - "Optional productionUsage is evidence only; never infer workload, API scheduling, or approvals."
+    - "Reject missing required inputs, unresolved placeholders, unsupported capabilities, and circular token dependencies."
+    - "Generate shared API templates and one bundle-local SUT profile per environment; preserve endpoint routing."
+    - "Map intake fields to supported runtime fields; do not copy this document directly into scenario.yaml."
+    - "Apply payload bindings and explicit assertions; do not repeatedly replay illustrative sample records."
+    - "Resolve OAuth configuration via supported variables/secure injection; nested auth does not resolve sut.endpoints."
+    - "Acquire/refresh tokens only for protected APIs; isolate caches by SUT/credentials/scope; fail protected calls on auth failure."
+    - "Use selected-SUT data only; count queries are not dataset exports; check types, eligibility, counts and uniqueness."
+    - "Secrets, mocks, DB access and cleanup require configured mechanisms and approval, not just descriptive references."
+    - "Run paths.check then bundle.validate and poll bundle.validate.result; do not claim readiness from YAML parsing alone."
+    - "Deployment and load execution require separate approval and live readiness checks."
+
+# NOTE (NFT team / MCP): fill after agreeing the test plan. Choose the SUT in that plan.
+bundleGeneration:
+  bundleId: "<bundle-folder-name>"
+  scenarioId: "<same-as-bundleId>"
+  testPlanRef: "<path to the completed V1 test plan>"

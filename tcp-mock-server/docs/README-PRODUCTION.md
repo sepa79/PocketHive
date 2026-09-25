@@ -1,6 +1,12 @@
-# TCP Mock Server - Production Ready
+# TCP Mock Server - Historical Deployment Overview
 
-A production-grade TCP mock server with complete WireMock parity, built for testing TCP-based systems including payment processors, banking systems, and binary protocols.
+> Historical guide. Examples, UI/API descriptions, compatibility statements and
+> deployment steps below are unverified and are not the current runtime contract.
+> Use [TCP capability qualification](WIREMOCK-PARITY.md) for supported workflows,
+> known gaps and required evidence. Use the repository [usage guide](../../docs/USAGE.md)
+> for runtime commands and supported ingress paths.
+
+Historical deployment notes for TCP-based test systems. Functional qualification and production suitability remain unproven; see [TCP capability qualification](WIREMOCK-PARITY.md).
 
 ## 🚀 Quick Start
 
@@ -180,7 +186,7 @@ curl http://localhost:8080/actuator/health
 
 ## 🤝 Contributing
 
-This is a production-ready system. For enhancements:
+For qualification work and enhancements:
 1. Review architecture in `src/main/java/io/pockethive/tcpmock/`
 2. Add tests for new features
 3. Update documentation
@@ -213,7 +219,7 @@ Internal use - PocketHive project
 
 ## 🔄 Version History
 
-- **v1.0.0** - Production release with full WireMock parity
+- **v1.0.0** - Historical version label; not a qualified release
   - Complete UI with all enterprise features
   - Binary protocol support
   - Recording and playback
@@ -230,4 +236,4 @@ Future enhancements (not in current scope):
 
 ---
 
-**Status**: ✅ Production Ready | **WireMock Parity**: 100% | **Test Coverage**: 85%
+**Qualification status:** Incomplete. No runtime test coverage or performance result is asserted here.

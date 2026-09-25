@@ -1,0 +1,5 @@
+Synthetic API owner statement for skill qualification only.
+
+For serviceId status and callId read, the documented operation is POST /status
+over HTTP. This statement and the supplied bundle need reconciliation if their
+methods differ. No change or load test has been approved.

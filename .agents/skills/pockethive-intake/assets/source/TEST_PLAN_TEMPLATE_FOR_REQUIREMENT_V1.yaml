@@ -1,0 +1,157 @@
+version: 3
+templateType: test-plan
+planId: PLAN-<project>-001
+revision: 1
+requirementId: REQ-<project>-001
+requirementsRef: null # Required: path to a FILLED requirements V1 document, not its template.
+requirementsSnapshot:
+  version: 1
+  sha256: null # Hash of the filled requirements file used for generation.
+owner: null # NFT team/person responsible for the executable choices below.
+sutId: null # Exactly one requirements.suts[].sutId per plan/run.
+approval:
+  status: draft
+  approvedBy: null
+  approvedAt: null
+
+contract:
+  purpose: Generation input contract only; not implemented runtime configuration.
+  missingValues: Required nulls, empty lists and placeholder strings block generation.
+  applicability: Optional or inapplicable settings must be explicitly explained, not guessed.
+  workloadAuthority: Only this approved plan defines load; productionUsage is context only.
+  referenceDocuments:
+    requirementsTemplate: docs/ai/PERFORMANCE_TEST_REQUIREMENTS_TEMPLATE_V1.yaml
+    executionTemplate: docs/ai/TEST_EXECUTION_RESULTS_TEMPLATE_FOR_REQUIREMENT_V1.yaml
+    traceabilityMap: docs/ai/TEMPLATE_TRACEABILITY_MAP_V1.yaml
+
+generation:
+  status: blocked
+  bundleId: null
+  scenarioId: null
+  workerVersion: null # Required supported pinned image tag; never infer latest.
+  pipeline: [generator, request-builder, processor, postprocessor]
+  prerequisites:
+    - Filled requirements V1 and approved plan snapshots are available.
+    - Every API and endpoint reference resolves in the selected SUT.
+    - Pinned worker version supports the requested scheduling and runtime settings.
+    - Selected-SUT data strategy is complete and respects requirements usage limits.
+    - NFT-owned secret injection mechanism is supported and validated.
+    - Any required mock blueprint is approved and implementable.
+  blockers:
+    - Complete required fields and obtain generation approval before generating a bundle.
+  approval:
+    status: pending
+    approvedBy: null
+
+executionModel:
+  relationship: null # independent | sequential
+  rateUnit: null # requests-per-second | journeys-per-second
+  arrivalModel: null # open-loop | closed-loop; describe implementation feasibility.
+  sequence: [] # For sequential: ordered entries {apiRef, thinkTimeMs, correlations: []}.
+  # Each correlation: {fromApiRef, responsePath, toApiRef, location, path, required}.
+  correlationFailureAction: null # Required for sequential correlated calls, e.g. abort-journey.
+  note: >
+    API timelines below apply to independent request rates. For sequential execution,
+    supply journeyTimeline and sequence; mark load API timelines inapplicable.
+    State expected requests per journey per API; retries never count as logical operations.
+  journeyTimeline: [] # Same timeline shape below, with rates in journeys-per-second.
+
+apiExecution:
+  - apiRef: null # requirements.templates[].apiId; list EVERY API, including exclusions.
+    mode: null # load | readiness-only | excluded
+    reason: null # Required for excluded or readiness-only.
+    requestsPerJourney: null # Sequential load only.
+    readiness:
+      requestCount: null # Readiness-only: explicit bounded count.
+      beforeLoad: true
+      requiredAssertion: null # Reference requirements expectedResponse, or stricter approved rule.
+    timeline:
+      - phase: ramp # Repeat for constant, peak (if requested) and cooldown.
+        durationSeconds: null
+        startRate: null
+        endRate: null
+        interpolation: linear # Constant phases must have equal start/end rates.
+    runtime:
+      maxInFlight: null # Per processor; declare shared limits below if processors are shared.
+      timeoutMs: null
+      retries: 0 # Mutation-safe default; any increase needs idempotency/replay evidence.
+      keepAlive: true
+      connectionReuse: GLOBAL
+      tlsVerify: true
+  # Excluded APIs need no readiness, timeline or runtime fields.
+processorAllocation:
+  strategy: null # per-api | shared
+  sharedMaxInFlight: null # Required for shared processors.
+  onCapacityExceeded: null # E.g. bounded queue then abort; never silently change arrival model.
+
+dataPreparation:
+  - entityRef: null # requirements.testData.entities[].entityId
+    sourceSutRef: null # Must equal this plan's sutId; select ONLY that entity's matching source.
+    sourceType: null # generated | database-export | csv | redis
+    bundleDatasetPath: null # E.g. datasets/accounts.csv; mapped to /app/scenario/... at runtime.
+    rowCount: null
+    preparation: null # Use requirements source mapping/queryRef; no cross-SUT fallback.
+    usageOverride:
+      reuseAllowed: null
+      maxConcurrentRequestsPerRecord: null
+      onExhaustion: stop
+    constraints: Overrides may tighten, never loosen, requirements usage and side-effect limits.
+    readinessChecks: [] # Expected count, columns, eligibility, uniqueness and capacity.
+
+secretInjection:
+  owner: null # NFT-owned; credentialRef alone is not a working resolver.
+  type: null # env | vault
+  implementationRef: null # Supported injector/resolver definition; required when auth is used.
+  bindings: []
+  # env entry: {credentialRef, environmentVariables: {clientId: ENV_NAME, clientSecret: ENV_NAME}}
+  # vault entry: {credentialRef, resolverRef, fieldMapping: {clientId: field, clientSecret: field}}
+  validationStatus: pending
+  persistencePolicy: Never put credential values or issued tokens in bundles, stubs or evidence.
+  notRequiredReason: null # Required instead of bindings only when selected SUT needs no secrets.
+
+mockSetup:
+  mode: null # existing | generate-stubs | not-required
+  approvalStatus: pending
+  existingStubsRef: null # Required for existing; verify behavior rather than assume provisioning.
+  blueprint: null # Required for generate-stubs: instructions, NOT a runtime configuration.
+  # For OAuth2 mocks specify token POST, application/x-www-form-urlencoded,
+  # client_secret_basic, grant/scope checks, JSON access_token/token_type/expires_in and lifetime.
+  # Protected calls must match authorization AND valid bound input; public calls accept no auth.
+  # Generate ephemeral credentials/tokens via validated injection; never persist their values.
+  securityClaim: Mock success verifies wiring and contract behavior, not real security controls.
+
+readiness:
+  status: pending
+  prerequisites:
+    - Explicit operator authorization to run; generation never starts load automatically.
+    - Target access, mock provisioning if applicable, data and auth are verified.
+    - Monitoring evidence collection and required assertion evaluation are ready.
+    - Applicable side-effect/reset responsibilities are confirmed.
+  prechecks: [] # Bounded checks with expected outcome; SQL only by selected sutRef/dbId/queryId.
+  failureAction: block-run
+safety:
+  maxRunDurationSeconds: null
+  maxTotalRequests: null # State whether readiness/auth/retries are included.
+  requestBudgetScope: null
+  observationIntervalSeconds: null
+  abortConditions: [] # {metric, operator, threshold, observedForSeconds, action}
+  evidenceUnavailableAction: abort
+  loadStart: explicit-operator-action-only
+entryExit:
+  entry: All readiness checks and approvals complete; safety observer active.
+  exit: Timeline complete or explicit abort; stop producers and drain within an approved timeout.
+  drainTimeoutSeconds: null
+
+acceptanceCriteria:
+  # Map applicable requirements.kpis by criterionRef/apiRef/sutRef to explicit rules below.
+  # Preserve transaction definition, percentile, units and observation window.
+  # Offered request rate is not achieved successful TPS; never silently weaken a stakeholder target.
+  - criterionRef: null # requirements.successCriteria[].criterionId; cover every criterion.
+    measurableRules: [] # {metric, operator, threshold, window, minimumSamples}
+    missingEvidenceResult: inconclusive
+  # NFT owners supply real thresholds; the template invents none.
+cleanup:
+  owner: null
+  actions: [] # Scope to run-created resources; preserve required redacted evidence first.
+  dataReset: null # Selected-SUT requirements reset instructions/approval, or explicit not-applicable.
+  safety: No destructive SQL or shared-resource removal without separate explicit authorization.

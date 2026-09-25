@@ -3,6 +3,7 @@
  * Must not: Contact PocketHive owner services directly or reimplement their domain outcomes.
  * Contract: vscode-pockethive/README.md and docs/mcp/README.md.
  */
+import type { EndpointSecurityMode } from '../connection/endpointSecurityPolicy';
 import { randomUUID } from 'node:crypto';
 import * as vscode from 'vscode';
 
@@ -474,7 +475,7 @@ export class PocketHiveCompanionProvider implements vscode.WebviewViewProvider, 
   private async connect(
     displayName: string,
     mcpUrl: string,
-    endpointSecurityMode: 'REMOTE_HTTPS' | 'LOCAL_LOOPBACK_HTTP',
+    endpointSecurityMode: EndpointSecurityMode,
   ): Promise<void> {
     const id = randomUUID();
     this.draft = createConnectionProfile({

@@ -8,7 +8,8 @@ import static io.pockethive.swarmcontroller.SwarmControllerTestProperties.TEST_S
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import io.pockethive.docker.DockerContainerClient;
+import io.pockethive.manager.ports.ComputeHost;
+import io.pockethive.manager.ports.ComputeAdapter;
 import io.pockethive.swarm.model.SwarmPlan;
 import io.pockethive.swarm.model.SwarmStartupArtifact;
 import io.pockethive.swarm.model.SwarmStartupArtifactContract;
@@ -46,6 +47,7 @@ import org.testcontainers.containers.PostgreSQLContainer;
 import static org.junit.jupiter.api.Assertions.*;
 
 @SpringBootTest(properties = {
+    "pockethive.work.type=RABBITMQ",
     "pockethive.control-plane.manager.role=swarm-controller",
     // SDK is on the test classpath for the single-process WorkPlaneFlowTest, not in the deployed Controller.
     "spring.autoconfigure.exclude=io.pockethive.worker.sdk.autoconfigure.PocketHiveWorkerSdkAutoConfiguration"
@@ -169,7 +171,10 @@ import static org.junit.jupiter.api.Assertions.*;
   String instanceId;
 
   @MockBean
-  DockerContainerClient docker;
+  ComputeHost docker;
+
+  @MockBean
+  ComputeAdapter computeAdapter;
 
   @AfterEach
   void cleanup() {

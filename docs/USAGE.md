@@ -116,6 +116,21 @@ configuration and authentication behaviour.
 - If authentication has expired or was declined, use the explicit **Sign in**
   action. Ordinary tab and swarm commands must not open a separate browser
   authorization flow.
+- In Amazon Q Developer, if an MCP access token expires while the existing
+  connection remains open, use **Refresh MCP servers**. Amazon Q then
+  reinitialises the connection and silently exchanges its cached rotating
+  refresh token. If Auth Service restarted after the token was issued, its
+  transient token state is no longer available and one interactive sign-in is
+  expected; do not delete the retained client registration unless dynamic
+  registration itself fails.
+- If an agent client retained an OAuth registration across a local restart, it
+  can re-authorize with that same client ID. Do not clear or recreate the client
+  configuration merely because Auth Service restarted; active dynamic client
+  registrations are retained in the `pockethive-auth-state` volume.
+- The first upgrade from the earlier in-memory registry cannot reconstruct a
+  client ID that was issued before durable state existed. Remove and re-add that
+  MCP server once so the client performs dynamic registration; later Auth
+  Service restarts retain the replacement registration.
 
 Scenario Bundle source remains in Git. From the Scenarios tab select a committed
 bundle directory; the extension uploads the exact committed regular files for
@@ -362,10 +377,10 @@ Manual checks:
 
 ### Worker configuration overrides
 - Scenario definitions provide per-role overrides directly inside each bee's `config` map. The Scenario Manager passes those maps into the `SwarmPlan.bees[*].config` payload and the Swarm Controller immediately broadcasts them as `config-update` signals during bootstrap. No environment variables are used for logical scenario settings.
-- The `WorkItem` history policy is also configurable per worker via `config.historyPolicy` (values: `FULL`, `LATEST_ONLY`, `DISABLED`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
+- The `WorkItem` history policy is declared per worker via `config.historyPolicy` (values: `FULL`, `LATEST_ONLY`); it defaults to `FULL` when omitted. In all modes the current payload is treated as the last recorded step:
   - `FULL` – every logical stage (scheduler seed, templating, worker onMessage, processor) appends a new step; history is preserved end-to-end.
   - `LATEST_ONLY` – previous steps are collapsed so only the latest step remains (reindexed to `0`).
-  - `DISABLED` – history snapshots are dropped after each hop, but the current step is still retained as a single baseline.
+  - Runtime uses the accepted worker `config.historyPolicy`, including scenario configuration and later control updates. Missing means `FULL`; an update without this field preserves the current policy. Explicit worker-config reset restores the default. Invalid policy values reject the update. The separate `pockethive.worker.history-policy` service setting has been removed.
 - Example snippet:
   ```yaml
   config:
@@ -384,9 +399,45 @@ Manual checks:
 - **WSL2/Docker restarts**: if services suddenly time out talking to each other after a Docker restart, rebuild the compose network: `docker compose down --remove-orphans && docker compose up -d`.
 - **WSL2 flakiness / “is it networking or the app?”**: run `tools/diag/docker-triage.sh` to collect container status, logs, and basic inter-container connectivity checks.
 
+### WorkPlane selection and local Artemis
+
+Declare `POCKETHIVE_WORK_TYPE` explicitly in the Orchestrator deployment:
+`RABBITMQ` or `ARTEMIS`. It selects one WorkPlane for the deployment and is exported
+to Controllers by the selected owner. Worker input/output choices remain explicit
+in scenario config. No selection is inferred from available brokers or credentials.
+
+The local compose stack uses the release-matched PocketHive `artemis` image, based
+on Apache Artemis 2.40.0 and including its diagnostic-copy transformer, with credentials,
+volume and healthcheck declared in `docker-compose.yml`; it publishes no host ports.
+The normal `build-hive.sh` stack refresh includes this service. This branch now selects
+`POCKETHIVE_WORK_TYPE: ARTEMIS` locally after the Rabbit E2E baseline passed.
+`scenarios/e2e/artemis-rest` provides an explicit Artemis input/output scenario with
+SUT `wiremock-local` and network mode `DIRECT`. Its full create, traffic and remove
+path has been verified through the public ingress. Existing Rabbit scenario declarations
+are not converted by the deployment selector. To run the existing normal Rabbit E2E suite,
+explicitly set the local compose selector to `RABBITMQ` and recreate Orchestrator first.
+The ownership manifest covers Rabbit resources only; see the scope clarification in
+[the REST contract](ORCHESTRATOR-REST.md#296-runtime-ownership-manifest).
+
+Artemis WORK requires these explicit environment fields:
+`POCKETHIVE_WORK_ARTEMIS_BROKERURL`, `POCKETHIVE_WORK_ARTEMIS_USERNAME`,
+`POCKETHIVE_WORK_ARTEMIS_PASSWORD`, `POCKETHIVE_WORK_ARTEMIS_CALLTIMEOUTMILLIS`
+and `POCKETHIVE_WORK_ARTEMIS_NAMESPACE`. Orchestrator/Controller composition reads
+those fields through the adapter owner; worker launch receives the same connection
+and resolved destinations. Authoring/settings are described in
+[the Artemis boundary contract](architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15).
+CONTROL continues to use Rabbit independently. Orchestrator/Controller Work port
+composition does not connect to Artemis or wait for its healthcheck. The first WORK
+operation requiring a native session opens the connection; an unavailable broker
+fails that operation explicitly. There are no background connection retries. After
+a failed initial connection, another explicit operation can try again once the broker
+is available. Configuration and topology projections remain usable without the broker.
+Deployment manifests outside local compose must explicitly declare the selector before
+using these binaries.
+
 ### Rabbit Control and Work connections
 
-Rabbit runtime now requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
+A deployment selecting Rabbit WORK requires two explicit connection configurations. `SPRING_RABBITMQ_HOST`,
 `SPRING_RABBITMQ_PORT`, `SPRING_RABBITMQ_USERNAME`, `SPRING_RABBITMQ_PASSWORD` and
 `SPRING_RABBITMQ_VIRTUAL_HOST` configure Control. Work uses `POCKETHIVE_RABBIT_WORK_HOST`,
 `POCKETHIVE_RABBIT_WORK_PORT`, `POCKETHIVE_RABBIT_WORK_USERNAME`,
@@ -400,8 +451,106 @@ individual `bee.env` entries: provisioning and worker execution must use the sam
 For physical resource separation, configure distinct brokers or vhosts; separate client
 instances do not isolate two identical queue names within the same broker/vhost.
 
-There is no inheritance from Control to Work. Missing Work fields stop startup. The current
+There is no inheritance from Control to Work. Missing selected Rabbit WORK fields stop startup. The current
 connection contract covers host, port, username, password and virtual-host; TLS/address-list
 propagation is not included. `spring.rabbitmq.addresses` is rejected because it would override
 the exact endpoint used to bind cleanup approval. After changing a Rabbit connection,
 request a fresh cleanup plan. This code change does not update or deploy environment manifests.
+
+## Delayed Work delivery (Artemis)
+
+Set the neutral policy on the producer's output:
+
+```yaml
+outputs:
+  type: ARTEMIS
+  artemis: { persistent: true }
+  delivery:
+    mode: DELAYED
+    delayMs: 180000
+```
+
+Artemis receives the result immediately and makes it available no earlier than the
+publication time plus the delay. Worker execution does not wait. This is a minimum
+wait, not a delivery deadline. The next worker uses its own output policy.
+
+An absent `delivery` block means IMMEDIATE. An explicit immediate block is
+`delivery: { mode: IMMEDIATE }`, with no `delayMs`. DELAYED requires a positive
+integer. This first version is startup-only: restart the swarm to change it.
+Rabbit, Redis and NONE reject delayed output. Do not set broker scheduling headers
+in WorkItem. See the [canonical contract](architecture/work-plane-boundaries.md#12-delayed-work-delivery).
+
+The local acceptance test measures generator-to-processor hop timestamps through
+the public ingress, then verifies ordinary stop/remove:
+
+```bash
+./run-acceptance-tests.sh acceptance-tests/targets/local-delayed-delivery-artemis.properties delayed-delivery
+```
+
+## Independent acceptance framework
+
+The new `acceptance-tests` module is independent of the frozen `e2e-tests`.
+Framework component tests use their own HTTP stub; deployed tests use public ingress.
+
+```bash
+./mvnw -B -ntp -pl acceptance-tests -am test
+./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties lifecycle
+# Only the target-state lifecycle case (STOP before START; repeated STOP/START):
+./run-acceptance-tests.sh acceptance-tests/targets/local-artemis.properties target-state
+# Read-only authoring checks; requires ingress, auth and Scenario Manager only:
+./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties scenarios
+./run-acceptance-tests.sh acceptance-tests/targets/local-scenarios.properties auth-read
+./run-acceptance-tests.sh acceptance-tests/targets/local-viewer.properties auth-viewer
+./run-acceptance-tests.sh acceptance-tests/targets/local-runner.properties auth-runner
+./run-acceptance-tests.sh acceptance-tests/targets/local-network-access.properties auth-network
+# Worker history configuration and processor header separation:
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-artemis.properties workers
+./run-acceptance-tests.sh acceptance-tests/targets/local-templating-artemis.properties templating
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-artemis.properties worker-config
+./run-acceptance-tests.sh acceptance-tests/targets/local-worker-overrides-artemis.properties worker-overrides
+# Binding rejection/rollback, real proxy traffic, and explicit clear (NW-4):
+./run-acceptance-tests.sh acceptance-tests/targets/local-binding-recovery-artemis.properties network-binding-recovery
+# On a stack already configured for Rabbit WORK:
+./run-acceptance-tests.sh acceptance-tests/targets/local-rabbit.properties lifecycle
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-rabbit.properties workers
+./run-acceptance-tests.sh acceptance-tests/targets/local-templating-rabbit.properties templating
+./run-acceptance-tests.sh acceptance-tests/targets/local-workers-rabbit.properties worker-config
+./run-acceptance-tests.sh acceptance-tests/targets/local-worker-overrides-rabbit.properties worker-overrides
+```
+
+Both runner arguments are required: an explicit target file and a JUnit tag expression.
+Every target declares ingress, local dev actor, request timeout and evidence directory.
+Lifecycle targets additionally require their HTTP fixture, SUT, operation/capture/poll
+limits, tap lifetime and expected HTTP response. The `local-scenarios` target instead
+requires only `scenarioId`; it needs no swarm, SUT, broker or lifecycle/capture settings.
+Use the matching target and group; mixing target kinds fails explicitly. Missing/unknown
+settings fail; no fallback to ENV or the old harness. Lifecycle targets require the
+existing WireMock SUT; all local targets use explicit dev login.
+The target selects a fixture; it does not reconfigure the deployed WorkPlane.
+
+Before first use, make the new `scenarios/acceptance` bundles available to Scenario
+Manager. For the local bind-mounted stack, refresh its catalogue through ingress:
+
+```bash
+AUTH_SERVICE_BASE_URL=http://localhost:8088/auth-service POCKETHIVE_AUTH_USERNAME=local-admin \
+  node tools/mcp-orchestrator-debug/client.mjs reload-scenarios
+```
+
+This is explicit environment setup, not a dependency invoked by the new framework.
+It does not create compatibility/delegation to the legacy test suite. Lifecycle tests
+verify the fixture before creating a uniquely named swarm. Scenario read tests only
+fetch the dedicated `acceptance-scenario-authoring` fixture and assert its authored
+rate, templating and history policies. A missing fixture fails the test, never skips it.
+JUnit reports are in `acceptance-tests/target/surefire-reports` (framework) and
+`acceptance-tests/target/failsafe-reports` (deployed tests). Scenario, canonical operation and tap
+artifacts are written under the target's evidence directory, resolved relative to the
+target file. Supplied local targets write to `acceptance-tests/runs`, outside Maven
+clean output and excluded from Git and Docker build contexts. Archive selected run
+directories together with their JUnit reports before manually deleting evidence.
+No authentication response or token is intentionally logged. Cleanup
+failure is reported alongside the original error, not discarded as a warning. Artifact
+write failures are retained and reported when the test scope closes, after resource
+cleanup; a broken evidence destination still makes the test fail.
+
+See the [coverage ledger](ci/acceptance-coverage.md) before claiming the new system
+replaces the old suite. The first HTTP journey and failure cleanup do not close all groups.

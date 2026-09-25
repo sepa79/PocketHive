@@ -1,0 +1,85 @@
+protocolVersion: 2.0.0
+id: acceptance-clearing-artemis
+name: Acceptance clearing export (artemis)
+description: Twenty owned Redis records form two finalized clearing files.
+template:
+  image: swarm-controller:latest
+  bees:
+  - role: generator
+    image: generator:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: REDIS_DATASET
+        redis:
+          host: redis
+          port: 6379
+          ssl: false
+          sources:
+          - listName: REPLACE_LIST
+            weight: 1
+          pickStrategy: ROUND_ROBIN
+          ratePerSec: 5
+          initialDelayMs: 0
+          tickIntervalMs: 100
+      outputs:
+        type: ARTEMIS
+        artemis:
+          persistent: true
+      message:
+        bodyType: SIMPLE
+        body: '{{ payload }}'
+        headers:
+          x-ph-call-id: acceptance-dataset
+    work:
+      out:
+        out: records
+    ports:
+    - id: out
+      direction: out
+  - role: clearing-export
+    image: clearing-export:latest
+    config:
+      enabled: false
+      historyPolicy: FULL
+      inputs:
+        type: ARTEMIS
+        artemis:
+          consumerWindowBytes: 0
+      outputs:
+        type: NONE
+      mode: template
+      streamingAppendEnabled: false
+      streamingWindowMs: 0
+      maxRecordsPerFile: 10
+      flushIntervalMs: 60000
+      maxBufferedRecords: 100
+      strictTemplate: true
+      recordSourceStep: latest
+      recordSourceStepIndex: -1
+      recordBuildFailurePolicy: stop
+      lineSeparator: \n
+      fileNameTemplate: ACCEPTANCE_{{ now }}.txt
+      headerTemplate: H|acceptance
+      recordTemplate: D|{{ steps.selected.payload }}
+      footerTemplate: T|{{ recordCount }}
+      localTempSuffix: .tmp
+      writeManifest: false
+      businessCodeFilterEnabled: false
+    work:
+      in:
+        in: records
+    ports:
+    - id: in
+      direction: in
+topology:
+  version: 1
+  edges:
+  - id: export
+    from:
+      role: generator
+      port: out
+    to:
+      role: clearing-export
+      port: in

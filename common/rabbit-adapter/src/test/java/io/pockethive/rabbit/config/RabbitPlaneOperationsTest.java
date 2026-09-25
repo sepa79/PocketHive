@@ -48,7 +48,7 @@ class RabbitPlaneOperationsTest {
                     RabbitConnectionConfiguration.class, RabbitResourceAutoConfiguration.class,
                     RabbitTransportAutoConfiguration.class))
                 .withBean(ConnectionFactory.class, () -> control)
-                .withPropertyValues("spring.rabbitmq.host=control", "spring.rabbitmq.port=5672",
+                .withPropertyValues("pockethive.work.type=RABBITMQ", "spring.rabbitmq.host=control", "spring.rabbitmq.port=5672",
                     "spring.rabbitmq.username=control-user", "spring.rabbitmq.password=control-secret",
                     "spring.rabbitmq.virtual-host=/control", "pockethive.rabbit.work.host=work",
                     "pockethive.rabbit.work.port=5673", "pockethive.rabbit.work.username=work-user",

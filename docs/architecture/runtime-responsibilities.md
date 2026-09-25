@@ -38,6 +38,12 @@ in the applicable current plan; archived adoption reports describe their origina
 
 WorkItem owns immutable payload/step history; WorkItemBuilder constructs it and WorkStep/HistoryPolicy/WorkPayloadEncoding express that model.
 
+HistoryPolicy contains FULL (retain all recorded steps) and LATEST_ONLY (retain the
+current step, reindexed to zero). These operations preserve the current payload and
+its headers. The redundant DISABLED value was removed by user decision on 2026-09-16;
+there is no compatibility alias. Retention operations remain unchanged; selection of
+the effective policy belongs to RESP-WORK-STATE, not to the WorkItem model.
+
 Worker functions and transport codecs use the same item model; payload JSON convenience conversion is distinct from envelope serialization.
 
 **Forbidden:** perform transport IO or reimplement the Work envelope codec.
@@ -135,12 +141,20 @@ SDK composition supplies the Spring bean inventory and IO binders; WorkerInfo is
 DefaultWorkerContextFactory implements WorkerContextFactory and creates the read view passed to business workers.
 
 The view exposes the selected worker state, history policy and observability facilities; it does not own accepted configuration.
+It captures the already parsed HistoryPolicy from WorkerState when an invocation starts.
+It must not parse scenario fields or consult a separate service-level policy setting.
+
+The executing worker's swarm and instance come exclusively from the required configured
+ControlPlaneIdentity (the workerControlPlaneIdentity bean in Spring composition).
+Incoming WorkItem headers describe message origin and cannot override WorkerInfo.
+New steps use the executing identity; existing step authors and incoming trace context
+remain unchanged. The factory has no identity-less construction path.
 
 **Forbidden:** mutate accepted configuration, select IO implementations or provision resources.
 
 **Required effect:** An invocation receives the selected worker's state and facilities; reading the view does not apply a configuration update.
 
-**Verification entrypoints:** `DefaultWorkerContextFactoryTest`.
+**Verification entrypoints:** `DefaultWorkerContextFactoryTest`, `WorkerInvocationTest`; deployed producer identity in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current SDK implementation; narrower runtime ports are B03/B07.
 
@@ -156,7 +170,8 @@ Worker functions contribute data; WorkerControlPlaneRuntime builds/emits the con
 
 **Required effect:** Worker contributions appear in emitted status without overriding the runtime's reserved control state.
 
-**Verification entrypoints:** `WorkerStatusPublisherTest`.
+**Verification entrypoints:** `WorkerStatusPublisherTest`, `WorkerStatusContractTest`
+(SDK → emitter → canonical codec: full/config/runtime, delta without config, next full preserves config).
 
 **Migration status:** Current; canonical worker state is separately scoped under RESP-WORK-STATE.
 
@@ -186,9 +201,12 @@ including profile serialization and preparation round trips.
 
 ## RESP-AUTH-TOKEN-STORE
 
-**Current module(s):** `common/auth-contracts`, `common/worker-sdk`.
+**Current module(s):** `common/auth-contracts`, `common/redis-adapter`;
+`common/worker-sdk` composes the store for AuthRuntime.
 
-TokenStore owns the worker token storage/claim port; token keys and claim/result values define its shared contract. RedisTokenStore remains its Redis implementation.
+TokenStore owns the worker token storage/claim port; token keys and claim/result
+values define its shared contract. `RedisTokenStore` in redis-adapter implements
+that port through the shared `RedisConnections` owner (RESP-REDIS-ADAPTER).
 
 AuthRuntime calls the selected store for cached credentials and refresh claims; profile validation is outside the store contract.
 
@@ -198,7 +216,8 @@ AuthRuntime calls the selected store for cached credentials and refresh claims; 
 
 **Verification entrypoints:** `RedisTokenStoreTest`, `AuthRuntimeTest`.
 
-**Migration status:** Port/values moved in B01. Redis implementation and connection ownership remain B06.
+**Migration status:** Port/values moved in B01; implementation and connection
+ownership transferred in F01. Auth profile/refresh policy remains outside the adapter.
 
 ## RESP-OBS-CONTEXT
 
@@ -282,19 +301,34 @@ SDK and service consumers supply templates/context. Sequence calls use the injec
 
 ## RESP-TEMPLATE-SEQUENCE
 
-**Current module(s):** `common/templating-api`, `common/templating`.
+**Current modules:** `common/templating-api`, `common/templating`, `common/redis-adapter`, `common/worker-sdk`.
 
-SequenceAccess defines next/reset; SequenceFunctions maps expression arguments; ConfiguredRedisSequenceAccess delegates to the existing RedisSequenceGenerator. DisabledSequenceAccess rejects effects explicitly.
+SequenceAccess defines next/reset; SequenceFunctions maps expression arguments.
+Pebble/SpEL use the injected port. SDK ConfiguredSequenceAccess delegates to one
+application-owned RedisSequenceConfiguration, which selects explicitly configured
+RedisSequenceGenerator instances from redis-adapter. Worker configuration updates
+validate through RedisConfigurationParser before changing that same selection.
+RedisSequenceGenerator owns INCR/DEL and the sequence key prefix; SequenceFormatter
+and its internal pattern/token/mode types own formatting without Redis effects.
+DisabledSequenceAccess rejects effects explicitly.
 
-Pebble/SpEL invoke the selected port. RedisSequenceConfiguration/RedisSequenceGenerator still own existing global configuration/generation outside the API.
+**Forbidden:** process-global connection selection, another generator, hidden renderer
+constructors selecting Redis, or switching from a disabled port to Redis.
 
-**Forbidden:** create a second generator or switch from a disabled port to Redis.
+**Required effect:** application configuration changes cannot redirect another
+application's sequence requests. Invalid configuration leaves accepted selection intact.
+Formatting, offsets, wrapping and reset retain existing behavior.
 
-**Required effect:** Arguments and reset reach the injected port; selecting DisabledSequenceAccess never activates Redis.
+**Approved legacy exception (2026-09-22):** `redis.enabled=false` skips supplied
+startup settings but sequences still use canonical RedisSequenceProperties defaults.
+It does not disable sequence effects; later validated updates still apply. The human
+explicitly approved preserving this behavior during extraction; it is not a general
+permission to introduce defaults or fallback paths.
 
-**Verification entrypoints:** `SequencePortRenderingTest` (argument/reset behavior and effect-free syntax validation).
-
-**Migration status:** B01 injects the port on the SDK renderer path. Global Redis generator/configuration removal remains B06. Convenience constructors in RedisPushSupport, RedisUploaderInterceptor and ProcessorWorkerImpl still construct a configured sequence adapter directly; they do not prove application-wide selection isolation.
+**Verification:** SequencePortRenderingTest, SequenceFormatterTest,
+RedisSequenceConfigurationTest (including actual Redis effects and isolated selection).
+**Migration status:** F01 removes the global sequence configuration/cache and hidden
+configured-renderer constructors. The SDK owner closes all generators at shutdown.
 
 ## RESP-CP-COMPOSITION
 
@@ -578,9 +612,9 @@ and the sequence connection unchanged; subsequent commands use the last accepted
 RedisConnectionProperties is the shared SDK bootstrap carrier; dataset/output/sequence
 properties delegate to it. Dataset, output, uploader, sequence and token consumers use
 the resolved contract. Scenario Manager projects the same rules for selected Work IO;
-full token/sequence/capture authoring remains open. Redis client/URI construction stays in the existing
-adapters pending B06. Existing sequence bootstrap defaults, global sequence ownership,
-token/sequence scope composition and producer migration remain open B02/B06 work.
+full token/sequence/capture authoring remains open. RESP-REDIS-ADAPTER owns all
+Redis client/URI construction. Sequence scope and its approved bootstrap semantics
+are defined by RESP-TEMPLATE-SEQUENCE; no process-global connection selection remains.
 
 RedisConnectionEnvironmentCodec in `common/redis-config`, namespace
 `io.pockethive.redis.config`, owns encoding connection candidates for
@@ -885,11 +919,11 @@ policy; omitted patch fields preserve accepted values. No new runtime effect is 
 execution/state ownership is B03. Existing live-mutability classification stays with
 WorkPatchPolicy: only maxMessages is live-mutable among these fields.
 
-TIM-R1 correction: SchedulerWorkInput resolves its initial maxMessages from startup
-properties once, then owns the accepted runtime long. Valid updates replace that value
-only after both mutable settings pass canonical validation; they do not rewrite the
-startup limit declaration. Ticks and diagnostics consume the accepted value without
-parsing configuration. This corrects the existing consumer, without adding a state layer.
+TIM-R1 semantics, retained by F02: SchedulerRunState resolves initial maxMessages
+from canonical startup settings once and owns its runtime projection. Valid updates
+replace it only after rate/limit/reset pass canonical validation; they do not rewrite
+the startup declaration. Ticks and diagnostics consume that projection without
+parsing configuration. WorkerState remains the accepted-configuration writer.
 
 **Forbidden:** local timing/limit decoders or range repair, accepting a rejected setting,
 or presenting metadata validation as an implemented scheduling/backlog effect.
@@ -898,8 +932,9 @@ finite-run scheduling behavior. Full candidate acceptance and other IO settings 
 
 ## RESP-WORK-SCHEDULER-RESET
 
-**B02 transfer accepted within scope on 2026-09-10:** `common/work-config`, `input.SchedulerResetParser` owns
-the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerWorkInput and
+**B02 transfer accepted within scope on 2026-09-10; current owner:**
+`common/work-local-config`, `io.pockethive.work.local.scheduler.SchedulerResetParser` owns
+the `inputs.scheduler.reset` value contract. WorkPatchPolicy, SchedulerRunState and
 Scenario Manager consume it; the runtime's separate string decoder is removed.
 
 A declared value must be a boolean: true requests a finite-run counter reset, false
@@ -959,6 +994,8 @@ WorkerDefinitionDiscovery binds that class and consumes its route projection; it
 switches on Rabbit properties. RabbitInputProperties/RabbitOutputProperties retain their typed
 fields, Rabbit-owned defaults and canonical parser delegation in `io.pockethive.rabbit.work`.
 WorkIoBindingConfiguration declares the SDK-owned Scheduler/CSV/Redis/NONE bindings.
+PocketHiveWorkerProperties holds worker business configuration binding. It no longer
+contains a separate history-policy value; accepted runtime policy belongs to RESP-WORK-STATE.
 WorkIoType carries the declared IO name/settings key. Existing enums implement this contract;
 test composition can explicitly supply its own type. WorkIoTypeParser owns boundary name
 normalization and rejects absent/ambiguous definitions. Startup type properties retain raw
@@ -986,7 +1023,7 @@ MessageWorkInputFactoryTest, WorkOutputRegistryInitializerTest.
 
 ## RESP-WORK-ADAPTER-SELECTION
 
-**Current module(s):** `common/worker-sdk`; neutral IO type/parser in `common/work-config`.
+**Current module(s):** `common/worker-sdk`; neutral selection/IO types in `common/work-config`; deployment inventory in `common/work-config-composition`.
 
 WorkInputRegistryInitializer selects one input factory; WorkOutputRegistryInitializer selects one output factory. Each owns its distinct direction; WorkOutputRegistry retains the selected outputs and dispatches publication.
 
@@ -997,13 +1034,26 @@ wrap these providers for the existing registries; Rabbit factory implementations
 rabbit-adapter. Local input/Redis output factories retain their existing SDK composition.
 NONE is an explicit output implementation.
 
+`WorkInput` is the SDK composition lifecycle handle (start/stop/close), consumed by
+WorkInputLifecycle. Control updates reach input coordinators through their existing
+registered WorkerControlPlaneRuntime listeners; they are not a second lifecycle
+callback on WorkInput. The unused snapshot-typed update method was removed in F02.
+Factory WorkerDefinition parameters stay inside SDK composition; local execution
+owners consume canonical settings and the existing neutral scheduling policy port.
+
+WorkPlaneSelection owns the explicit pockethive.work.type / POCKETHIVE_WORK_TYPE
+bootstrap projection; CurrentWorkPlaneSelection declares the current deployable
+WorkPlane inventory using the existing adapter identities. One deployment selects
+Rabbit or Artemis; no per-swarm registry is introduced. Adapter connection ENV
+includes that owner's selection and is passed through existing provisioning.
+
 **Forbidden:** choose by ordering, suppress missing factories or independently reopen adapter selection at dispatch.
 
 **Required effect:** Each direction has exactly one matching factory; missing and duplicate matches fail, including NONE cases.
 
 **Verification entrypoints:** `WorkInputRegistryInitializerTest`, `WorkOutputRegistryInitializerTest`; source review against the selection contract. `WorkControlCompositionTest` covers only Scheduler/NONE startup, not factory rejection.
 
-**Migration status:** Current B01 exact-match selection.
+**Migration status:** Current exact-match IO selection and A3 explicit deployment WorkPlane selection.
 
 ## RESP-WORK-STATE
 
@@ -1012,6 +1062,8 @@ NONE is an explicit output implementation.
 WorkerControlPlaneRuntime owns accepted worker control updates over WorkerState; WorkerControlQueueListener receives/dispatches CP messages. WorkerState also stores invocation counters and status contributions with separate callers.
 
 State snapshots feed inputs and WorkerContext; counters and contributed status are not additional configuration writers.
+The current command execution assumptions are defined in
+[Worker CONTROL command execution](work-plane-boundaries.md#worker-control-command-execution).
 Workers start disabled in WorkerState and input registration receives that state before
 intake. Only accepted worker-level control enablement updates may enable intake;
 input properties and container environment must not provide a second enablement flag.
@@ -1029,11 +1081,29 @@ must match WorkerDefinition. Problems or deferred RESOLVED paths reject the comm
 preserve state/listener-visible configuration. A candidate containing only non-Work roots
 does not invoke the Work parser and passes through this boundary unchanged.
 
+WorkerRuntimeConfiguration owns parsing the common runtime field `config.historyPolicy`
+from the complete merged worker configuration. It accepts the exact HistoryPolicy names
+FULL and LATEST_ONLY, defaults an absent field to FULL, and rejects invalid values before
+any accepted-state write, enablement, reseeding or ready result. Explicit runtime fields
+in an incoming patch pass through the same policy parser before general null filtering;
+`historyPolicy: null` is invalid, not an omitted field. Rejected candidates
+never reach listener-visible configuration; the existing failure notification may
+republish the previously accepted snapshot.
+ConfigMerger builds that immutable candidate; WorkerControlPlaneRuntime remains the
+accepted-state writer. WorkerState stores the raw map and its parsed policy together;
+the latter is a read-only derivation, never independently writable. Partial updates
+preserve an accepted policy; explicit worker-config reset returns to the absent-field
+default. Each invocation retains the policy captured when its context was created.
+The former `pockethive.worker.history-policy` property and startup-bean selection are
+removed without a compatibility path. Worker property beans must not maintain a
+second effective-policy value or default outside accepted configuration.
+
 **Forbidden:** let a listener introduce its own configuration state machine or infer control success from attempted Work effects.
 
 **Required effect:** Accepted control updates reach the worker state and its snapshots; one accepted revision/state owner must survive B03 extraction.
 
-**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`.
+**Verification entrypoints:** `WorkerControlPlaneRuntimeTest`, `WorkerStateTest`,
+`WorkerHistoryPolicyTest`, `WorkerRuntimeConfigurationTest`; real retained steps in `WorkerRuntimeAcceptanceIT`.
 
 **Migration status:** Current implementation mixes control update, status and configuration concerns. B02/B03 separate them; this record does not certify that separation.
 
@@ -1136,39 +1206,72 @@ runtime tests; no new boundary scanner or wiring tests.
 
 **Current module(s):** `common/worker-sdk`.
 
-SchedulerWorkInput owns timed intake, finite-run count and dispatch; its factory/builder wire the selected policy and callbacks.
+`SchedulerWorkInput` owns timed intake and dispatch; its factory/builder wire the
+selected `ScheduledInvocationPolicy` and callbacks. It projects worker snapshots
+into ordered `SchedulingState` revisions and invokes the policy's update/plan port.
+Runtime controls and finite-run accounting delegate to RESP-WORK-SCHEDULER-RUN.
+Its builder consumes validated timing without local defaults or clamping.
 
-It projects WorkerControlPlaneRuntime snapshots, delivers each revision to the policy, and dispatches the returned quota through WorkerRuntime.
-Source rates and timing/limits come from RESP-WORK-INPUT-RATE and RESP-WORK-INPUT-SCHEDULE.
-Rate, maxMessages and declared reset flags are parsed before any setting is changed; a valid
-changed maxMessages resets the finite-run counter. Its builder consumes validated timing
-without local defaults or clamping. SchedulerWorkInput owns the accepted runtime limit
-as a long initialized from startup properties; ticks never reparse its declaration.
-Reset flags consume RESP-WORK-SCHEDULER-RESET; explicit true resets the existing counter.
+A tick obtains policy quota before applying the current run limit. Seed creation
+precedes counting; counting precedes dispatch. Worker/result-handler failures
+continue through the existing error callback and never undo the count or retry.
+The SDK maps the owner's remaining value to the existing WorkItem header and
+forwards its diagnostic projection. It does not own a second counter/limit.
 
-**Forbidden:** reimplement trigger interval/single-request rules or select a policy by worker role.
+**Forbidden:** reimplement rate/trigger rules, finite-run/reset arithmetic or
+select a policy by worker role.
 
-**Required effect:** Each state revision reaches the policy before a subsequent tick; finite-run intake dispatches through WorkerRuntime.
+**Required effect:** Each state revision reaches the policy before a subsequent
+tick; finite-run intake dispatches through WorkerRuntime with unchanged accounting.
 
-**Verification entrypoints:** `WorkControlCompositionTest`, `TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
+**Verification entrypoints:** `WorkControlCompositionTest`,
+`TriggerSchedulerIntegrationTest`, `SchedulerWorkInputTest`.
 
-**Migration status:** Current input still applies raw scheduling overrides; B02 owns that parsing migration, B03/B07 lifecycle/packaging.
+**Migration status:** F02 run accounting and rate policy extracted; SDK retains
+worker composition, snapshot projection, clock and execution.
+
+## RESP-WORK-SCHEDULER-RUN
+
+**Current module(s):** `common/work-local`.
+
+`SchedulerRunState` owns the runtime projection of rate/maxMessages controls and
+finite-run dispatch count. Startup consumes canonical `SchedulerSettings`. Raw
+runtime controls delegate to the existing rate/integer/reset field parsers before
+any field or count changes. WorkerState remains the accepted-config writer; this
+projection never mutates the Spring property carrier or accepted worker state.
+
+Changing maxMessages or explicit reset=true clears the count; repeated unchanged
+limits, reset=false and enablement alone do not. A zero limit remains unlimited.
+Quota clipping, per-dispatch remaining and diagnostic fields are derived here.
+A tick captures its diagnostic limit before dispatch, while each dispatch samples
+the then-current limit before incrementing. This preserves the existing behavior
+when a config update arrives during dispatch; no new whole-tick lock is introduced.
+Control updates are serialized by the SDK's projection lock; this API does not
+promise atomicity between config updates and a whole dispatch batch.
+
+**Forbidden:** own accepted worker configuration, reimplement field parsing, read
+Control Plane/Worker SDK, run timers, build seeds or dispatch work.
+
+**Verification entrypoints:** `SchedulerRunStateTest`, `SchedulerWorkInputTest`.
 
 ## RESP-WORK-RATE-POLICY
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/work-local`.
 
-RateSchedulePolicy owns fractional rate quota accumulation and reset on disabled revisions.
-
+`RateSchedulePolicy` implements the existing ScheduledInvocationPolicy port and
+owns fractional rate quota accumulation and reset on disabled revisions.
 SchedulerWorkInput supplies monotonic tick time and ordered SchedulingState updates.
+The existing quota is per policy tick; this extraction does not reinterpret it as
+elapsed-time compensation or change non-default tick interval behavior.
 
 **Forbidden:** read CP, mutate settings or dispatch messages.
 
-**Required effect:** Fractional quotas accumulate at the configured rate and disabled updates reset carry, including between ticks.
+**Required effect:** Fractional quotas accumulate at the configured rate and disabled
+updates reset carry, including between ticks.
 
 **Verification entrypoints:** `RateSchedulePolicyTest`.
 
-**Migration status:** Current B01 policy.
+**Migration status:** F02 rate policy moved out of SDK without a compatibility copy.
 
 ## RESP-TRIGGER-POLICY
 
@@ -1191,7 +1294,8 @@ SchedulerWorkInput delivers revisions even between ticks; TriggerWorkerImpl exec
 **Current module(s):** `common/rabbit-adapter`, internal `SpringRabbitListeners`.
 
 The module owns Work listener containers and their virtual-thread executor.
-Work uses AUTO acknowledgement on callback return, preserving pre-extraction delivery behavior.
+Work uses AUTO acknowledgement on callback return after SDK executor admission.
+Only WorkNotAcceptedException maps to native requeue; accepted-task failures never reach settlement.
 The SDK supplies
 validated RabbitSubscription values and applies desired state through RabbitListeners.
 Prefetch, fixed consumer count, exclusive and explicit startup intent reach the container.
@@ -1270,28 +1374,42 @@ rules shared by parsers and snapshots. Aggregate review pending.
 WorkInputChannel exposes an already configured subscription without broker types or WorkerDefinition.
 WorkDeliveryHandler separates decoded delivery from decode failure reporting. MessageWorkInput
 applies accepted enabled state and max-in-flight configuration; MessageWorkExecution owns the
-existing synchronous/asynchronous dispatch and error reporting. It uses WorkMessageDispatcher;
+dispatch through MessageWorkExecutor and error reporting for every concurrency limit. It uses WorkMessageDispatcher;
 the redundant RabbitWorkDispatcher is removed. WorkOutput accepts only a WorkItem, with the
 selected target already captured by its instance. DefaultWorkerRuntime remains the sole result
 publication path through WorkOutputRegistry. Local scheduled WorkInput lifecycle is unchanged.
+For the application callers and ordering of enable/disable callbacks, see
+[Worker CONTROL command execution](work-plane-boundaries.md#worker-control-command-execution).
 
-**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path, retry,
-requeue, completion-based ACK or an added drain policy.
+**Forbidden:** broker-specific state in this seam, a second dispatcher/publication path,
+inline worker dispatch, retry of accepted work, completion-based ACK or a drain policy.
 
-**Required effect:** the same SDK execution path accepts input from Rabbit or a test-only stateful
+**Required effect:** the same SDK execution path accepts input from Rabbit, Artemis or a test-only stateful
 in-memory channel; disabled workers return null, worker/decode failures are reported and swallowed,
-and executor rejection retains synchronous dispatch.
+and successful admission returns without waiting for task completion, even at maxInFlight=1.
+WorkNotAcceptedException is the neutral not-submitted outcome, not a worker failure.
+MessageWorkExecutor owns capacity, pause/resume and executor lifetime. Pausing wakes
+capacity waiters before channel stop; accepted tasks are not cancelled. Core executor
+threads remain alive while idle to preserve PER_THREAD resources; pool dimensions
+are a projection of the single admission limit. MessageWorkInput records desired
+state under a short lock distinct from serialized transport start/stop, so disable
+can pause admission even during synchronous channel start. Close prevents subsequent
+enablement. Its canonical
+policy is the human-approved correction in work-plane-boundaries.md, 2026-09-15.
 
-**Verification:** MessageWorkInputTest, MessageWorkExecutionTest, DefaultWorkerRuntimeTest;
-stateful fake consumer-path coverage is added with the extraction.
+**Verification:** MessageWorkExecutorTest, MessageWorkExecutionTest, MessageWorkInputTest,
+ArtemisWorkAdmissionTest, RabbitWorkAdmissionTest and DefaultWorkerRuntimeTest.
+Admission component tests use the real SDK path with an embedded Artemis broker or
+the real Spring Rabbit listener backed by a mocked AMQP client, respectively.
 
 The test-only InMemoryWorkTransport indexes explicit single-process resources;
 InMemoryWorkChannel owns each resource's pending items, listener state and removal.
 Concurrent publication, intake and lifecycle operations must preserve that state. A handler
-runs outside resource/index locks; taking an item from pending admits it for dispatch, so
-already admitted work may finish after stop/removal. Removing a stopped resource discards
+runs outside resource/index locks; taking an item from pending reserves a delivery,
+while the handler owns execution admission. Already admitted work may finish after stop/removal. Removing a stopped resource discards
 pending items and invalidates its input/output handles, including after address reuse.
-The fixture does not add retry, requeue, cancellation or a wait for admitted work to finish.
+A delivery rejected before SDK admission is restored to pending without a retry loop.
+The fixture does not retry failures of accepted work, cancel them or wait for them to finish.
 InMemoryWorkTransportTest verifies these effects through its public API.
 
 ## RESP-WORK-RABBIT-TRANSPORT
@@ -1309,8 +1427,9 @@ worker definitions or control snapshots. RabbitWorkInputFactory/RabbitWorkOutput
 rabbit-adapter, mutable output destination or an SDK dependency from rabbit-adapter.
 
 **Required effect:** Work envelopes preserve their canonical format; callback-return AUTO ACK
-is unchanged. publisherConfirms remains represented and inactive. No new input requeue or
-shutdown/drain policy is introduced.
+follows successful executor admission at every limit. Only explicit not-submitted
+admission is returned to the broker. publisherConfirms remains represented and inactive;
+CONTROL and accepted-work failure policy are unchanged.
 
 **Verification:** MessageWorkInputFactoryTest, RabbitWorkItemConverterTest, RabbitWorkOutputTest,
 SpringRabbitTransportTest and SpringRabbitListenersTest.
@@ -1352,26 +1471,55 @@ record/rotation/disable behavior. Full B02 acceptance and phase simplification a
 
 ## RESP-WORK-CSV-INPUT
 
-Consumes RESP-WORK-CSV-SETTINGS for one immutable resolved settings snapshot; bootstrap
-and raw updates delegate parsing before replacement. Dataset file reads and cursor /
-initialization failures stay here. A rate change does not reload the file; the existing
-patch policy still requires rematerialization for CSV source/format/timing changes.
-
 **Current module(s):** `common/worker-sdk`.
 
-CsvDataSetWorkInput owns file-backed dataset iteration and intake lifecycle in the current SDK.
+`CsvDataSetWorkInput` owns CSV intake lifecycle, control-state subscription, rate
+planning, WorkItem metadata and dispatch through WorkerRuntime. It consumes
+RESP-WORK-CSV-SETTINGS for its read-only resolved settings projection; bootstrap
+and raw updates delegate parsing before replacement. Accepted configuration stays
+with WorkerState. Timing/rate validation and seconds-to-milliseconds conversion
+remain with RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE.
 
-It consumes selected CSV settings, observes worker state and dispatches records through WorkerRuntime.
-Timing/rate validation and the seconds-to-milliseconds conversion delegate to
-RESP-WORK-INPUT-SCHEDULE and RESP-WORK-INPUT-RATE; intake does not repair invalid timing.
+Dataset loading, formatting and cursor operations delegate to
+RESP-WORK-CSV-DATASET. Loading remains lazy on enablement. Disable/re-enable does
+not reload the file or reset the cursor; stop/start reloads the file without
+resetting the cursor. Rate updates do not reload data. Existing patch policy still
+requires rematerialization for CSV source/format/timing changes.
 
-**Forbidden:** declare broker resources or own accepted worker configuration.
+**Forbidden:** read/split/format dataset files, maintain a second dataset cursor,
+declare broker resources or own accepted worker configuration.
 
-**Required effect:** Records are read in the configured order and exhaustion/stop is observed without broker provisioning.
+**Required effect:** Configured records reach WorkerRuntime in order, with unchanged
+CSV headers, rate, enablement and exhaustion behavior.
 
 **Verification entrypoints:** `CsvDataSetWorkInputTest`.
 
-**Migration status:** Local adapter packaging B07; raw configuration/lifecycle consolidation B02/B03.
+**Migration status:** F02 CSV dataset mechanics extracted. Scheduler extraction is
+described separately under RESP-WORK-SCHEDULE-INPUT; SDK retains input composition.
+
+## RESP-WORK-CSV-DATASET
+
+**Current module(s):** `common/work-local`.
+
+`CsvDatasetCursor` is the sole owner of loaded CSV rows, JSON record formatting and
+cursor movement. Its API accepts canonical `CsvDatasetSettings` from
+`common/work-local-config`; it does not parse configuration. The SDK consumes its
+row index, JSON and read-only size/position/remaining projections.
+
+The reader preserves the existing charset and regex-delimiter contract, skips blank
+lines, retains trailing empty fields and trims JSON field names/values. Headerless
+rows use col0, col1, etc.; header rows map only the common field count. No quoted-CSV
+parser is introduced. Each selection attempt advances the cursor, including EOF;
+rotation returns row zero and sets the next position to one. Reloading data does
+not reset cursor position. Normal ticks run on one scheduler thread. Callers must
+serialize loading and iteration; the cursor does not support concurrent operations.
+The existing SDK stop requests interruption without waiting for an in-flight tick,
+so stop/start does not itself guarantee that serialization.
+
+**Forbidden:** depend on Worker SDK/control-plane state, schedule ticks, dispatch
+WorkItems, resolve configuration defaults or mutate accepted configuration.
+
+**Verification entrypoints:** `CsvDatasetCursorTest`, plus SDK CSV intake tests.
 
 ## RESP-WORK-REDIS-DATASET
 
@@ -1398,7 +1546,7 @@ Redis input properties do not supply an independent startup flag.
 
 **Current module(s):** `common/worker-sdk`.
 
-RedisPushSupport owns route/payload selection and Redis list write execution; RedisWorkOutput applies output policy, while RedisUploaderInterceptor applies diagnostic-capture policy.
+RedisPushSupport owns route/payload selection and delegates list writes to RedisListWriter; RedisWorkOutput applies output policy, while RedisUploaderInterceptor applies diagnostic-capture policy.
 
 Both consumers delegate the push operation; RedisWorkOutputFactory wires the selected output. Diagnostic capture and business output are distinct uses, not duplicate authority for one result.
 
@@ -1411,9 +1559,11 @@ Both consumers delegate the push operation; RedisWorkOutputFactory wires the sel
 **Migration status:** Write settings and their enum decoding now belong to
 RESP-WORK-REDIS-WRITE-SETTINGS; destination validation belongs to RESP-WORK-REDIS-TARGETS.
 RedisPushSupport consumes their resolved products and RESP-REDIS-CONNECTION-SETTINGS.
-Its nested ConnectionConfig was removed. Connection defaults, scope composition and
-remaining nested writer/request contracts remain B02/B06 work; complete Redis settings
-are not yet consolidated.
+RedisPushRequest carries the resolved selection inputs; RedisListWriter belongs to
+redis-adapter. RedisWorkOutputFactory and RedisUploaderInterceptor own their respective
+RedisPushSupport lifetimes; Spring shutdown closes every cached writer, including
+writers retained across settings updates. Push and trim remain separate operations.
+No per-message close, retry or failure-policy change is introduced.
 
 ## RESP-WORK-NONE-OUTPUT
 
@@ -1626,7 +1776,7 @@ Shared request/transport contracts and TemplateRenderer carry values; schema loa
 
 **Current module(s):** `processor-service`.
 
-ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes.
+ProcessorWorkerImpl dispatches a request to ProtocolHandler; Http/Tcp/Iso8583 handlers each own their distinct protocol execution; ResponseBuilder constructs shared result envelopes. All three handlers delegate processor request pacing to RESP-PROCESSOR-PACING, sharing one instance per worker. HTTP client construction/selection and capacity projection belong to RESP-PROCESSOR-HTTP-CLIENT; the worker receives its API through composition. TCP/ISO8583 pool replacement and selection delegate to RESP-PROCESSOR-TCP-RUNTIME with separate protocol instances.
 
 Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket effects and produce observations consumed downstream.
 
@@ -1637,6 +1787,106 @@ Request/result DTOs come from work-api; protocol handlers own actual HTTP/socket
 **Verification entrypoints:** `ProcessorTest`, `ProcessorTopologyProvisioningTest`.
 
 **Migration status:** Current service contains concrete transports; B07 extraction remains. Protocol scopes are distinct, not multiple writers for one transaction.
+
+## RESP-PROCESSOR-PACING
+
+**Current module(s):** `processor-service`.
+
+ProcessorPacer owns the processor pacing state and algorithm, instantiated once per
+ProcessorWorkerImpl and supplied to all three protocol handlers. Its `await`
+operation consumes the already validated ProcessorWorkerConfig and returns the
+existing planned pacing duration in whole milliseconds. Handlers retain the call
+at their existing pre-transport point and retain metrics/error handling.
+
+The processor reserves one interval before every RATE_PER_SEC call, including
+the first. Concurrent calls reserve successive slots atomically. Rate changes use
+the new interval after any outstanding reservations; THREAD_COUNT neither waits
+nor clears reservations. After an idle period the schedule starts from the current
+monotonic time. Interrupted waiting propagates InterruptedException and does not
+roll back the reservation. Integer truncation, the initial zero timestamp and
+existing nanoTime arithmetic remain unchanged.
+
+**Forbidden:** independent pacing state or interval calculations in protocol
+handlers; configuration defaults/validation, protocol IO, ACK policy or result
+construction in ProcessorPacer. No global limiter shared between worker instances.
+
+Moderator OperationModeLimiter and work-local RateSchedulePolicy are different
+policies (moderator resets/shaping and scheduler per-tick quotas). They are not
+alternate owners of processor request pacing and are outside this transfer.
+
+**Verification entrypoints:** ProcessorPacerTest for clock/wait effects, updates,
+concurrent reservations and interruption; existing ProcessorTest and protocol
+transport tests for result/error behavior. No wire/config field is added.
+
+## RESP-PROCESSOR-HTTP-CLIENT
+
+**Current module(s):** `processor-service`.
+
+ApacheProcessorHttpClient owns verified/unverified pool construction, selection and
+capacity projection behind the local ProcessorHttpClient API. ProcessorConfiguration
+supplies one owner to ProcessorWorkerImpl and HttpProtocolHandler. The worker consumes only its capacity
+projection; the handler submits a request and decodes a response through the API.
+This is a service-local Apache HTTP boundary, not a transport-neutral Work contract.
+Response callbacks receive only responses, never a raw client or connection manager.
+
+Preserve four eager clients (verified/unverified, pooled/non-reusing) and two lazy
+per-thread clients. Preserve system proxy/properties, verified TLS and the existing
+explicit sslVerify=false behavior, pool limits of 200 total/route, keepAlive=false
+precedence over connectionReuse, and PER_THREAD selection. Status keeps the existing
+configured capacity projection (200 GLOBAL, threadCount PER_THREAD, zero when reuse
+is off); this projection is not a live connection count. Configuration validation
+and defaults remain in ProcessorWorkerConfig.
+
+HttpProtocolHandler retains envelope parsing, target/body/header preparation,
+response decoding, timing/metrics and result extraction. Preserve callback timing
+(before body read), response release and exception propagation by retaining Apache's
+response-handler execution API. Do not add retries, timeouts or client shutdown
+hooks in this extraction; existing client lifetime behavior remains separate debt.
+HTTP Sequence has its own functional client and policy, outside this transfer.
+
+**Forbidden:** raw HTTP clients or pool construction in ProcessorWorkerImpl;
+client selection or capacity formulas outside the owner; config normalization,
+protocol result construction or pacing inside the HTTP client owner.
+
+**Verification entrypoints:** ApacheProcessorHttpClientTest for real request/proxy,
+reuse, TLS and capacity behavior; ProcessorTest and HttpAuthSecondPassSecurityTest
+for response/metrics/error and diagnostic redaction. Observable proxy traffic replaces the old reflective route-planner identity assertion.
+
+## RESP-PROCESSOR-TCP-RUNTIME
+
+**Current module(s):** `processor-service`.
+
+TcpTransportRuntime owns transport configuration/replacement and GLOBAL/PER_THREAD/NONE
+selection for TCP and ISO8583. Each handler retains its own runtime instance; sharing
+one implementation does not merge the previously independent protocol pools.
+
+The runtime owns active configuration, the eager GLOBAL transport and lazily created
+per-thread transports. `configure` retains the current equality check, locking and
+replacement/close order. `currentConfig` supplies the existing read-only projection.
+`acquire` returns a TcpTransportLease that executes through TcpTransport and releases
+only a NONE transport when the handler finishes its complete result/error path.
+Close exceptions remain suppressed as before. Retrying remains in the handlers and
+uses the same lease; no new retries, reconnection, framing or timeout behavior.
+
+Preserve update timing: TCP configures before target/auth work; ISO8583 configures
+after its protocol/auth validation. Handlers read the active config after pacing as
+before. This extraction does not make configuration replacement atomic across
+in-flight work, roll back failed construction, or add shutdown hooks. Those existing
+lifecycle/concurrency limitations need a separate behavior decision.
+
+TcpTransportFactory remains the sole concrete Socket/NIO/Netty constructor selector,
+internal to the transport package. Its active config-based behavior is unchanged.
+The uncalled string/global-pool helpers and TcpTransportPool are removed; they are
+not an alternate runtime API. TcpPerThreadTransports owns only lazy per-thread
+construction and release for one configuration generation.
+
+**Forbidden:** pool state, transport construction/selection/replacement or release
+policy in protocol handlers; protocol parsing, authentication, pacing, retries,
+metrics or result construction in TcpTransportRuntime.
+
+**Verification entrypoints:** TcpTransportRuntimeTest for execution/release effects,
+reconfiguration and per-thread isolation; existing processor TCP/ISO8583 tests for
+framing, auth options, results and failures; existing transport IO tests.
 
 ## RESP-HTTP-SEQUENCE-WORK
 
@@ -1699,6 +1949,13 @@ Existing sink adapters consume the projected transaction; upstream protocol outc
 
 ClearingExportWorkerImpl coordinates batch records; StructuredRecordProjector maps/validates record fields; ClearingExportFileAssembler renders file content/name and delegates XML formatting.
 
+Output location is runtime-owned, not scenario configuration: `ClearingExportStorageConfiguration`
+uses `RuntimeFilesystemLayout` with the mounted container root and current swarm/run/worker
+identity. `LocalDirectoryClearingExportSink` receives that immutable directory. The
+`localTargetDir` field is removed; config updates cannot change the base directory.
+File names, temporary suffixes and manifest paths must resolve inside that directory.
+No migration or compatibility alias is provided. Relative manifest subdirectories remain supported.
+
 The existing batch writer owns file persistence; TemplateRenderer owns expression evaluation. Record mapping and final file assembly are distinct steps.
 
 **Forbidden:** make rendering helpers persist files or create a second template evaluator.
@@ -1734,7 +1991,9 @@ compute adapter, records the resulting Swarm runtime identity and stores the own
 constructed by RuntimeOwnershipManifestFactory,
 pre-pulls requested images and removes controller compute/control queues. It consumes
 RESP-RABBIT-CONNECTION through the participant environment factory, plus the existing
-runtime filesystem mount, metrics and compute contracts. Swarm operation handlers invoke
+runtime filesystem mount, metrics and compute contracts. ClickHouse launch fields
+consume RESP-CLICKHOUSE-ENVIRONMENT; the lifecycle manager does not map them.
+Swarm operation handlers invoke
 these infrastructure operations; public operation terminalization remains with its owner.
 
 **Forbidden:** independently validate/encode Rabbit connections, redefine control routing
@@ -1775,9 +2034,10 @@ mapping and broader plan/transport separation remain debt outside RATE-R1.
 **Current module:** `swarm-controller-service`.
 
 SwarmWorkerSpecFactory maps Bee and SUT environment into PlannedSwarmWorker. It owns
-worker identity, base participant/ClickHouse/network environment, SUT enrichment,
+worker identity, participant/network environment composition, SUT enrichment,
 volumes and spec assembly. Work configuration is supplied by WorkerWorkConfigurationPort;
 the factory does not construct settings implementations or interpret Work fields.
+ClickHouse launch values delegate to RESP-CLICKHOUSE-ENVIRONMENT.
 SwarmRuntimeCore consumes the plan and owns lifecycle/state; compute executes the spec.
 
 **Forbidden:** provision workers, publish bootstrap, mutate Bee/runtime state, decode Work
@@ -1937,6 +2197,15 @@ SwarmControllerControlPlaneConfiguration wires controller collaborators; SwarmSi
 
 SwarmRuntimeCore owns local runtime state; SwarmLifecycleCommandHandler, SwarmConfigUpdateHandler and SwarmRemoveCommandHandler own their command workflows. QueueStatsPort reads observations; SwarmQueueMetrics is only a Micrometer projection.
 
+SwarmControllerStartupInitializer verifies the artifact before applying its plans.
+If applying a verified plan fails, it records failure through the lifecycle owner
+and retains `initialized=false`, allowing status and explicit REMOVE while readiness
+gates reject workload commands. It must not retry preparation, change adapters,
+delete resources automatically or suppress artifact-verification failures.
+SwarmOperationObservationHandler (RESP-ORCHESTRATOR-INGRESS) completes CREATE as
+failed on an accepted failed Controller observation with the matching launch digest;
+the existing removal handshake and verified postconditions remain authoritative.
+
 For preparation, SwarmRuntimeCore first builds all PlannedSwarmWorker candidates through
 RESP-CONTROLLER-WORKER-PLAN and validates their identities in a local SwarmRuntimeState.
 Only after that succeeds may it replace the accepted template/context/traffic policy,
@@ -1953,6 +2222,52 @@ rollback for infrastructure failures after validation.
 **Verification entrypoints:** `SwarmSignalListenerTest`, `SwarmLifecycleManagerTest`, `ControlTopologyOwnershipTest`.
 
 **Migration status:** CP transport is registered through the Rabbit API. Existing domain handlers remain their owners; explicit connection isolation remains open in the Rabbit migration.
+
+## RESP-SCENARIO-HTTP-CONTRACT
+
+**Current module(s):** `common/scenario-api` (producer-owned Java contracts).
+
+Scenario Manager owns the existing runtime materialization and variable-resolution
+HTTP shapes: `RuntimeRequest`, `ScenarioRuntimeResponse` and
+`VariablesResolveResponse`, under `io.pockethive.scenarios.api`. Each has one Java
+definition used by ScenarioController and ScenarioManagerClient. The wire contract
+remains in `docs/scenarios/SCENARIO_MANAGER_BUNDLE_REST.md` and
+`docs/scenarios/SCENARIO_VARIABLES.md`; moving the records does not add validation,
+defaults, fields or unknown-field policy.
+
+These records carry boundary values only. ScenarioRuntimeMaterializer and
+ScenarioVariablesService retain runtime effects and variable resolution. The
+Orchestrator application port's `ResolvedVariables` is a local normalized view,
+constructed from the shared wire response with the existing empty-map/list policy;
+it is not independently decoded from HTTP or an alternative variable resolver.
+
+**Forbidden:** service-local copies of these request/response records, domain
+behavior in the shared contracts or importing service implementations into this module.
+
+**Verification entrypoints:** ScenarioManagerClientTest (producer-contract payloads
+through the actual client), ScenarioControllerTest and ScenarioVariablesServiceTest.
+
+## RESP-SCENARIO-HTTP-CLIENT
+
+**Current module(s):** `orchestrator-service`.
+
+ScenarioManagerClient implements ScenarioClient over the Scenario Manager HTTP
+interface. It owns requests, response decoding and the existing transport error and
+auth-refresh handling; contract records come from RESP-SCENARIO-HTTP-CONTRACT.
+It checks the required runtimeDir before returning it and preserves the existing
+resolved-variable projection. No variable resolution or runtime materialization is
+performed by the client.
+
+ScenarioTemplateDescriptor is the application's read-only subset of template
+metadata. The client decodes that existing projection directly, ignoring additional
+template fields as before, without changing ObjectMapper behavior for other responses.
+ScenarioPlan is a separate, intentional plan projection; it is not replaced by a
+copy of the producer's full authoring model in this slice.
+
+**Forbidden:** local copies of the shared wire records, domain configuration or
+filesystem decisions, global changes to decoder unknown-field policy.
+
+**Verification entrypoints:** ScenarioManagerClientTest, ScenarioManagerClientAuthRetryTest.
 
 ## RESP-SCENARIO-VALIDATE
 
@@ -2097,6 +2412,12 @@ ResolvedWorkTopology with native resource identities and channel ENV/status proj
 RabbitWorkTopologyResolver is the production implementation in rabbit.work; RabbitResourceNames
 remains the only Rabbit physical-name formula owner. Explicit settings are supplied at composition.
 
+RabbitControllerTopologyEnvironment owns the existing Controller traffic property
+mapping and delegates validation to RabbitResourceNames. SwarmControllerProperties
+no longer binds this adapter-specific block; selected Rabbit composition consumes
+it. Artemis requires only its own connection/namespace for WORK, while CONTROL
+keeps its existing Rabbit configuration. No wire rename or compatibility path.
+
 Controller worker planning, resource creation, bindings and statistics consume that resolved
 result. WorkPlaneResources exposes native ensure/observe/remove operations; RabbitWorkResources
 owns the existing declaration cache and Rabbit operation mapping. appliedResources is a read-only
@@ -2114,9 +2435,8 @@ Guard consumes accepted channel addresses; external downstream observation alias
 by the same selected owner without being declared as swarm resources. Guard math remains in manager-sdk.
 
 Orchestrator controller bootstrap consumes the selected environment/topology projection.
-RuntimeOwnershipManifestFactory owns projection of that result to the existing public manifest;
-its current Rabbit-only shape is an R4 boundary, not a generic native manifest. Unsupported native
-target kinds must be rejected before compute effects rather than stored as invented Rabbit objects.
+RuntimeOwnershipManifestFactory consumes that result for the Rabbit-only diagnostic projection
+under RESP-RUNTIME-CLEANUP; it does not gate native Work startup.
 RuntimeRemovalPostconditionVerifier reads WORK absence through WorkPlaneResources and CONTROL
 through the existing scoped Rabbit port; it alone classifies observations into removal evidence.
 AmqpRabbitTopologyAdapter projects the current Rabbit cleanup contract through selected WorkPlaneResources
@@ -2127,7 +2447,10 @@ WorkResourceNamesPort is removed. RabbitWorkAddress and RabbitWorkTopologySettin
 types; neutral consumers use ResolvedWorkTopology. WorkDebugTaps/WorkDebugTap now carry selected
 capture operations. RabbitWorkDebugTaps delegates TTL/capacity mapping to RabbitDebugTapSpec;
 Orchestrator DebugTapSession owns bounded samples/lifetime, and DebugTapService maps an explicitly
-unsupported selected capture to HTTP 501 without activating Rabbit.
+unsupported selected capture to HTTP 501 without activating Rabbit. Explicit close
+propagates adapter failure as HTTP 500 instead of claiming success after registry removal;
+the removed registration is not proof of native cleanup. Scheduled expiry keeps its
+existing best-effort policy.
 Neither transfer changes addresses, delivery/ACK, or the accepted environment override policy.
 
 Control names use the neutral ControlResourceNamesPort from topology-core. RabbitResourceNames
@@ -2195,6 +2518,17 @@ and valid type/plane combinations. CleanupScope carries request scope; Candidate
 CandidateResult carry the planner/execution projections, never a second outcome calculation.
 ScopedRabbitName and RabbitQueueSnapshot/RabbitExchangeSnapshot preserve that identity.
 
+`RuntimeOwnershipManifestFactory` owns projection of compute identity and Rabbit resource intent
+into the existing diagnostic ownership manifest. WORK_RESOURCE targets stay in the resolved
+topology and normal lifecycle removal evidence; the factory excludes them from `rabbit` with
+an explicit coverage warning. It must not gate native Work startup or claim complete native
+inventory. Invalid planes and owner mapping failures still fail before compute effects.
+`rabbit`, its topology snapshot/assessment check and orphan cleanup cover Rabbit resources only.
+Empty Rabbit WORK lists are not evidence that Artemis resources are absent. Native orphan
+cleanup and diagnostic completeness remain deferred; no second inventory or public field is added.
+Verification: `RuntimeOwnershipManifestFactoryTest`, existing `ContainerLifecycleManagerTest`
+and the Artemis A4 public-ingress create/traffic/remove evidence in the active plan.
+
 `RuntimeRabbitResourcePlanner` owns Rabbit cleanup target selection and debug projections
 from the ownership manifest's distinct Control/Work lists. `RuntimeReconciliationService`
 retains request validation, plan hashing, authorization handoff and execution coordination.
@@ -2239,6 +2573,318 @@ starting STOMP when schema compilation fails, or treating a root-only digest as 
 
 **Required effect:** Canonical lifecycle refs compile in the browser; malformed events remain
 rejected. Conditional requests reuse the validator only for identical complete schema content.
+
+## RESP-ARTEMIS-CONFIGURATION
+
+`ArtemisConnectionSettings`, `ArtemisInputSettings` and `ArtemisOutputSettings` in
+`common/artemis-adapter` own validation of their disjoint typed values. The input
+and output records are the immutable Work settings and bound configuration values.
+`ArtemisSettingValues` owns shared scalar rules. `ArtemisWorkIoType` owns ARTEMIS
+selection identity; `ArtemisEnvironmentKeys` owns its setting/property key literals.
+They must not open connections, reconstruct topology or independently select an
+adapter. `ArtemisConfiguration` provides the public parser/policy projection,
+`ArtemisInputSettingsParser` and `ArtemisOutputSettingsParser` for boundary maps,
+and `ArtemisInputTuning`/`ArtemisOutputTuning` for AUTHORING without physical destinations.
+All scalar rules remain in ArtemisSettingValues; consumerWindowBytes and persistent
+are explicit required values, including startup binding. `ArtemisConnectionEnvironment`
+owns connection property/ENV mapping; `ArtemisWorkBootstrapEnvironment` combines
+owner-resolved destinations with authored tuning and exports that same resolved result.
+Per-worker overrides of owned Artemis connection/destination/tuning fields are rejected.
+Spring composition supplies these existing ports only for explicit adapter selection;
+parsing a scenario never opens a broker connection.
+Contract: `docs/architecture/work-plane-boundaries.md#11-artemis-adapter--approved-implementation-slice-2026-09-15`.
+
+## RESP-ARTEMIS-CONNECTION
+
+`ArtemisSessions` owns the Core locator, session factory and opened session lifetime.
+Construction validates/configures the client without opening a broker connection;
+the first explicit session request opens the factory, which subsequent requests reuse.
+A failed initial connection fails that WORK operation. A later explicit operation may
+attempt its own connection; there is no background retry, readiness wait or failover.
+Closing an unused or used owner is terminal and must not open a connection.
+`ArtemisWorkPlane` is the explicit composition entrypoint returning existing Work
+ports; it closes the owned infrastructure. Orchestrator/Controller port composition,
+configuration export, name resolution and removal-target mapping need no live Artemis.
+CONTROL startup still requires Rabbit independently; Artemis availability is checked
+by operations that use it. This deferred activation was approved for A3-REV-1 on
+2026-09-15 instead of adding an Artemis startup dependency/profile in Compose.
+Broker client types must not escape to SDK/services. No per-message connection,
+implicit Rabbit fallback or swarm lifecycle state.
+
+## RESP-ARTEMIS-RESOURCE-NAMES
+
+`ArtemisResourceNames` owns physical channel names and resource URI encoding/decoding.
+`ArtemisResourceKind` owns the supported native kinds and owner check.
+`ArtemisWorkTopologyResolver` projects those values into ResolvedWorkTopology and
+WorkChannelAddress for transport, ENV, status and resource operations. It must not
+create resources or maintain a second mutable topology registry.
+
+## RESP-ARTEMIS-RESOURCES
+
+`ArtemisWorkResources` implements WorkPlaneResources using Core resource operations,
+including observations and removal. It obtains its reusable resource session only
+when ensure/observe/remove performs broker I/O, after validating the request. An
+unavailable broker is an operation error, never an absent resource or successful
+removal. `ArtemisManagement` owns bounded Core management
+request/response encoding for native resource and debug-tap operations, using the library management address
+and requiring a successful reply; it does not discover targets. The resource owner's
+applied set is only a receipt for completed
+bindings during partial prepare, following the existing WorkPlane contract. Broker
+state is read live; absence differs from an observation error. It must not construct
+physical names, persist manifests, implement orphan cleanup or decide swarm outcomes.
+
+## RESP-WORK-ARTEMIS-TRANSPORT
+
+`ArtemisWorkInputChannel` owns subscription state, canonical WorkItem decoding and
+delivery settlement after callback return. Its channel state is a read-only projection
+of handler registration and the native consumer lifetime: a closed consumer cannot
+remain RUNNING. Explicit start discards a dead subscription and either opens a new
+one or fails; it does not enable automatic recovery. AR-REV-2 correction approved
+2026-09-15. The subsequent approved uniform-admission correction pauses SDK admission
+before channel stop and distinguishes not-submitted deliveries from accepted tasks.
+Native acknowledgements are individual: consuming a later malformed or admitted
+message must never settle an earlier unaccepted message (WA-REV-1 correction).
+`ArtemisWorkOutput` owns canonical
+encoding and sends to its captured resolved address. Their transport factories
+consume typed settings and return the existing Work ports. They must not own worker
+state/execution, select fallback adapters, merge broker headers or add another result
+publication. A3 supplies service/SDK activation. RESP-WORK-DELIVERY owns neutral delivery intent; the Artemis output realizes its native scheduled timestamp.
+
+ArtemisWorkDebugTaps opens diagnostic copies of owner-resolved channels;
+ArtemisWorkDebugTap owns the native non-exclusive divert, temporary capture queue,
+message TTL/ring limit and explicit release. Diagnostic copies are immediately
+eligible for capture even when the source publication is scheduled. The divert
+clears scheduled delivery on its copy before routing to the capture ring; the
+source timestamp, source queue and WorkItem bytes remain unchanged. This keeps
+`maxItems` effective for delayed traffic rather than retaining an unbounded
+scheduled-message buffer outside the ring. Its exact capture-address settings
+must explicitly disable expiry forwarding: expired diagnostic copies are discarded,
+including when the broker supplies a wildcard expiry address. The source WORK
+expiry policy remains unchanged. It never consumes the source queue.
+ArtemisResourceNames owns capture names. Request expiry remains with the existing
+Orchestrator debug service. Explicit close releases the divert, queue, address and
+address settings; it reports management failures. This is not a crash-recovery or
+orphan-cleanup mechanism: broker-side divert/settings may remain after process loss.
+Both Rabbit and Artemis observations currently omit oldest-message age.
+
+## RESP-ARTEMIS-CAPTURE-TRANSFORM
+
+`DiagnosticCaptureTransformer` in `common/artemis-broker-extensions` owns clearing
+scheduled delivery on a diagnostic divert's message copy, through the Artemis
+`Message.setScheduledDeliveryTime(null)` API. It must not change the source message,
+WorkItem bytes, expiry, routing, or any other message properties. The broker creates
+the independent copy before invoking the transformer; the adapter owns the divert
+configuration and references this explicit transformer class.
+
+This Java 21 extension is packaged into the PocketHive `artemis` broker image.
+Artemis server APIs are provided by the broker; the extension does not package the
+server or depend on services, worker SDK, or the client adapter. Embedded broker
+tests consume the same extension as a test dependency. Broker classpath availability
+is required: failed transformer loading rejects tap creation, with no unbounded
+capture fallback. The real-broker capture regression verifies the ring bound,
+unchanged source count, preserved bytes, and delivery no earlier than the source
+publication's scheduled time.
+
+## RESP-RUNTIME-FILESYSTEM-LAYOUT
+
+**Current module:** `common/control-plane-filesystem`; environment names and container
+root are declared by `RuntimeFilesystemContract` in `common/swarm-model`.
+
+`RuntimeFilesystemLayout` owns validated swarm, run, startup, remove-operation,
+swarm-journal and worker-output paths. `swarmJournalFile` owns the journal artifact
+name and derives it from the validated swarm/run directory. Worker outputs use `<root>/<swarmId>/<runId>/outputs/<workerInstance>`.
+The local and published views derive from the same relative path; consumers must not
+reconstruct that path or introduce a second output root. `RuntimeFilesystemMount`
+owns host-to-container mounts. The layout does not create, read or delete files.
+
+`FilesystemSwarmRemoveStore.deleteSwarmRuntime` remains the existing deletion owner
+for the complete swarm tree, including worker outputs. File observers must collect
+content before REMOVE. Clearing exporter composition consumes this projection directly; scenarios do not own
+the output root. `RuntimeOutputDirectory` is its immutable projection for resolving
+relative file names inside a single worker output directory.
+
+**Forbidden:** environment discovery, file IO or lifecycle decisions in the layout;
+consumer-local reconstruction of output paths; a second output-directory cleanup owner.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FilesystemSwarmRemoveStoreTest`.
+
+
+## RESP-SWARM-FILE-JOURNAL
+
+**F04 file slice:** `FileSwarmJournal` in swarm-controller remains the append owner.
+`SwarmFileJournalQuery` in Orchestrator delegates run selection to
+`SwarmJournalRunSelector` and reads through the `SwarmJournalFiles` port;
+`FileSwarmJournalReader` implements file discovery, reading and decoding. Both file implementations consume `RuntimeFilesystemLayout` paths;
+neither reconstructs the journal filename or run path. Swarm tree deletion remains
+with `FilesystemSwarmRemoveStore`, not the reader or writer.
+
+The query preserves existing selection: an explicit nonblank run wins, otherwise
+use the registry's active run, otherwise the most recently modified directory.
+A selected run with no journal does not cause a second selection. This is existing
+file-query behavior, not a new recovery policy. The file reader preserves append
+order, empty files, severity matching, and skipping malformed lines. Missing or
+unreadable files return the existing absence result. Run identifiers now use the
+same layout validation as the writer; invalid run paths are not read and retain
+the endpoint's existing exception-to-500 mapping. No new HTTP error contract is added.
+
+`SwarmJournalController` authorizes access and maps the file query to HTTP; it must
+not discover runs on disk or read/decode journal files. Capture writes now follow
+RESP-JOURNAL-WRITES below. Sink selection, severity normalization, Postgres
+behavior and public response shapes are unchanged.
+
+**Forbidden:** file-query state writes, independent path/default resolution,
+reader-owned retention, changes to append/ACK semantics, or merging Hive and swarm
+journal contracts.
+
+**Verification:** `RuntimeFilesystemLayoutTest`, `FileSwarmJournalTest`,
+`FileSwarmJournalReaderTest`, `SwarmFileJournalQueryTest`, `SwarmJournalControllerTest`,
+`PostgresJournalStorageTest`, `OrchestratorAdminAuthTest` and existing swarm-tree
+removal tests. SQL event reads follow RESP-JOURNAL-EVENT-QUERIES below; run lists
+follow RESP-JOURNAL-RUN-QUERIES. Archive writes and retention follow RESP-JOURNAL-WRITES.
+
+
+## RESP-JOURNAL-EVENT-QUERIES
+
+**F04 event-read slice:** `common/journal-postgres` owns the `JournalEventQueries`
+port and `JournalPageResponse`/`JournalCursor` projection in its `api` package.
+`PostgresJournalEventQueries` owns event SELECTs, live/archive row decoding and
+cursor construction. `JournalEventRowMapper` is the sole SQL-event-to-timeline/page
+mapper; it keeps the existing distinction that only paged entries expose eventId,
+and the existing null timestamp handling for each projection. These are read-only
+projections of journal storage, not a second event/state authority.
+
+Orchestrator composes the adapter with its existing JdbcTemplate and ObjectMapper.
+`SwarmJournalRunSelector` is the single owner of explicit/registry/observed run
+precedence for both file and SQL reads. Each query supplies only its adapter observation.
+`SwarmStoredJournalQuery` owns pinned-read precedence and the existing
+registered-vs-unknown swarm absence semantics. It delegates all event SQL
+to the port. The pin endpoint also uses this same run resolver. Hive queries retain
+explicit optional swarm/run filters and do not inherit swarm run selection.
+Controllers authorize and normalize HTTP parameters, invoke the query/port, and
+map results; they no longer decode SQL event rows or calculate next cursors.
+
+Preserve: newest-first `(ts,id)` pages with limit+1 lookahead; oldest-first swarm
+timelines; filters; pinned capture precedence; empty archived reads vs absent live
+reads for unknown swarms; existing best-effort lookup failures and JSON-map parsing;
+HTTP statuses, payload fields, and live/archive write behavior. This extraction
+adds no fallback or adapter-selection policy. `JournalPageResponse` and its cursor
+move internally without adding a second wire shape or changing serialization.
+
+Run listing/summary merging follows RESP-JOURNAL-RUN-QUERIES below.
+Metadata/pinning writes and retention follow RESP-JOURNAL-WRITES. They remain
+separate capabilities from the read ports.
+
+**Forbidden:** lifecycle/registry state, authorization, run-selection policy or
+writes in the SQL reader; SQL/row mapping in event query consumers; new retention
+or pinning policy; merging Hive and swarm semantics into one state machine.
+
+**Verification:** JournalEventRowMapperTest, PostgresJournalEventQueriesFailureTest,
+PostgresJournalEventQueriesTest (real Postgres), SwarmJournalRunSelectorTest,
+SwarmStoredJournalQueryTest, existing PostgresJournalStorageTest, HTTP mapping/auth
+tests and RepositoryImportBoundaryTest. Deployed E2E is separate.
+
+
+## RESP-JOURNAL-RUN-QUERIES
+
+**F04 run-list slice:** `JournalRunQueries` in `common/journal-postgres/api` exposes
+per-swarm and deployment-wide run lists and the existing metadata summary read.
+`PostgresJournalRunQueries` owns their SQL. `JournalRunRowMapper` owns summary row
+mapping and persisted tags decoding. `JournalRunSummaries` owns the read-only merge
+of live and pinned summaries by `(swarmId,runId)`; it must not alter stored state.
+`SwarmRunSummary` and the smaller `JournalRunSummary` retain their existing JSON
+fields as named read projections, moved from controller-nested types to the API.
+The smaller projection is derived from the merged summary, never independently merged.
+
+Orchestrator authorizes and normalizes list requests. SwarmStoredJournalQuery
+retains the per-swarm empty/unknown distinction using SwarmStore; the SQL module
+never accesses the registry. The metadata update endpoint consumes the same summary
+reader after its existing write, eliminating a second mapper without changing writes.
+
+Preserve the existing details: per-swarm reads live before pinned; global reads
+pinned before live; pinnedOnly ignores afterTs and preserves SQL NULLS LAST order;
+afterTs filters only live events before aggregation; the SQL live limit precedes
+the global merge/final limit. Merged ordering retains the existing reversed
+nullsLast comparator (null lastTs first). Pinned firstTs/metadata win when present;
+only a newer live lastTs (or a null pinned lastTs) triggers replacement, using the
+larger entry count. These rules describe inherited behavior, not new fallback policy.
+
+**Forbidden:** summary state writes, lifecycle decisions, SQL in list consumers,
+consumer-local tag parsing/summary merging, or changes to pinning/retention policy.
+Metadata writes and run identity lookup, capture/pinning writes and retention follow
+RESP-JOURNAL-WRITES; controller contract bags have been removed. No migration or wire change.
+
+**Verification:** pure merge and mapping tests; real PostgreSQL listing tests for
+pinned/live overlap, shared run IDs across swarms, null timestamps, afterTs/limits,
+pinnedOnly and metadata-only summaries; existing journal/auth/file regression tests.
+
+
+## RESP-JOURNAL-WRITES
+
+**F04 implemented and reviewed:** `common/journal-postgres`
+owns separate metadata, capture and retention ports. `JournalRunMetadata` owns both
+startup registration and operator edits; `PostgresJournalRunMetadata` is their sole
+SQL writer. Startup registration retains its best-effort semantics and scenario-id
+projection from the Orchestrator template via `JournalRunRegistration`. Operator updates retain metadata/event/
+capture identity lookup precedence, ambiguity handling, tag trimming/deduplication
+and limits, null-body clearing, and the shared `JournalRunQueries` response projection.
+No new transaction, identity rule or recovery path is introduced.
+
+`JournalCaptures`/`PostgresJournalCaptures` own mode parsing, capture creation,
+archive copying and capture-stat refresh. The request/response records move out of
+REST without wire changes. `SwarmJournalPinning` resolves the selected run through
+the existing shared selector before calling the capture port; REST only authorizes
+and maps success, absence, mode conflict and storage errors. Preserve default/invalid
+mode => SLIM, FULL/SLIM/ERRORS_ONLY behavior, repeated pin idempotency, existing
+mode-conflict response, statement order and existing nontransactional semantics.
+These inherited policies are not new compatibility or fallback mechanisms.
+
+`JournalRetention`/`PostgresJournalRetention` own partition naming, creation,
+batched default-partition rehoming and retention deletion. Orchestrator's `JournalRetentionSchedule`
+only calls the port. `JournalRetentionSettings` owns effective bounds;
+Spring composition binds the existing environment/property defaults once. Preserve
+UTC day calculations, phase order, cutoff comparisons, exception/logging policy,
+partition name recognition and pinned archive survival. No change to retention
+algorithm or concurrent pin/retention semantics is included.
+
+**Append/query/retention separation:** existing `BufferedPostgresJournalWriter` is
+the sole journal_event INSERT/buffering/backpressure implementation. HiveJournal
+and SwarmJournal retain distinct producer contracts and project their own events
+into that writer; query ports are read-only projections. Only retention performs
+partition/default-row deletion and only captures write pinned archives/statistics.
+Metadata registration and edits share one SQL owner, updating distinct fields.
+File journal reads/writes/deletion continue to use RESP-RUNTIME-FILESYSTEM-LAYOUT;
+exporter directory behavior is not reopened. Database bootstrap stays with existing
+Flyway migrations; this extraction introduces no schema or migration change.
+
+**Forbidden:** journal SQL in REST or lifecycle consumers; capture state or outcomes
+constructed by controllers; another tag normalizer, partition naming/retention owner,
+or a shared Hive/swarm lifecycle state machine. No module/bean identity tests.
+
+**Acceptance:** existing append/read/pin regressions plus real PostgreSQL tests for
+metadata registration/edit/clearing and ambiguity, all capture modes/conflicts/repeat,
+retention cutoffs, default rows and archive survival; behavior tests for normalization,
+run selection and failure mapping; repository import rules and targeted module suites.
+
+
+## RESP-WORK-DELIVERY
+
+**Owner:** `work-config` owns `WorkDelivery`, its modes, validation, default and
+`WorkDeliveryEnvironment` projection. See the approved [delivery contract](work-plane-boundaries.md#12-delayed-work-delivery).
+`WorkIoType` declares the adapter's delivery capability; Artemis alone currently
+supports DELAYED. Scenario validation and direct transport calls consult that same declaration.
+
+**Consumers:** `WorkConfigurationParser` aggregates the neutral parser with adapter
+settings. Controller worker composition exports the validated policy. SDK startup
+binding delegates scalar parsing to the same owner and retains the immutable result
+in `WorkIoBindings`. Candidate validation compares against that startup value before
+accepted worker state changes. `WorkOutputRegistry` passes it alongside each result
+through the existing `WorkOutput` port. `ArtemisWorkOutput` alone converts it to a
+native scheduled delivery timestamp. `work-api` exposes that shared type; it does
+not define another delivery DTO or serialize intent into WorkItem.
+
+**Forbidden:** duplicated delivery defaults/parsers, inherited per-hop delivery headers,
+worker timers, second publication paths, unsupported-mode fallback, or changes to
+input admission/ACK and failure consumption.
 
 
 ## RESP-WORK-AUTH-HTTP-HEADERS
@@ -2421,11 +3067,12 @@ diagnostic sink while sent requests and received responses remain unchanged.
 
 ## RESP-WORK-REDIS-DEBUG-CAPTURE
 
-**Current module(s):** `common/worker-sdk`.
+**Current module(s):** `common/redis-adapter`.
 
 RedisDebugCaptureStore owns expiring diagnostic value writes and the lifetime of
 its lazily allocated Redis client and single shared connection. It consumes
-canonical RedisConnectionSettings. Writes and close are serialized; close is
+canonical RedisConnectionSettings and delegates client realization to
+RedisConnections (RESP-REDIS-ADAPTER). Writes and close are serialized; close is
 idempotent and attempts connection and client cleanup even if one fails. A failed
 connection attempt releases acquired resources. No capture allocates resources
 until an actual write; a closed owner cannot allocate again. Write failure remains
@@ -2446,7 +3093,8 @@ are released by worker shutdown without deleting captured records before TTL.
 HttpSequenceDebugCapture owns the existing capture key and JSON projection,
 including configured request/response inclusion and body truncation. Header
 projection delegates to HttpHeaderRedactor. HttpSequenceRunner retains capture
-selection and journey budgets, delegates expiring storage to the SDK owner and
+selection and journey budgets, delegates expiring storage to
+RESP-WORK-REDIS-DEBUG-CAPTURE in redis-adapter and
 closes it. HttpSequenceWorkerImpl owns runner and pooled HTTP client shutdown;
 both resources are attempted even if one close fails.
 
@@ -2457,3 +3105,658 @@ auth schemas or profile resolution, or change debug capture defaults.
 credential/session headers are redacted, and worker-owned resources have a close path.
 
 **Verification entrypoints:** `HttpSequenceDebugCaptureTest`, `RedisDebugCaptureStoreTest`.
+
+## RESP-PUBLIC-ENDPOINT-TRANSPORT
+
+**Current owners:** `common/auth-contracts` — `PublicEndpointTransportPolicy`
+for Java services; `vscode-pockethive/src/connection/endpointSecurityPolicy.ts`
+for the companion boundary in its TypeScript runtime.
+
+Auth Service and MCP bind the same `POCKETHIVE_ALLOW_REMOTE_HTTP` deployment
+setting and delegate to the Java policy. The companion requires an independent,
+explicit saved transport selection. Profile creation, persisted profile decoding,
+command decoding and metadata validation consume its canonical policy. UI labels
+are a read-only presentation of the available modes.
+
+**Forbidden:** automatic protocol downgrade, another Java endpoint transport
+validator, or interpreting an HTTP URL as permission to enable remote HTTP.
+
+**Contract:** [public endpoint transport policy](AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
+**Verification:** endpoint policy tests, service configuration tests, remote HTTP
+OAuth workflow tests and companion profile/metadata/command tests.
+
+## RESP-OAUTH-CONFIGURATION
+
+**Current roles:** `AuthServiceOAuthProperties` binds OAuth settings beneath
+`AuthServiceProperties`; `PocketHiveOAuthConfiguration.requireValid` validates
+them before composition. Public endpoint transport delegates to
+`RESP-PUBLIC-ENDPOINT-TRANSPORT`. Token, registry and browser owners consume these
+settings rather than reading environment variables independently.
+
+**Forbidden:** registration, token issuance, file IO or another transport policy.
+**Contract:** [Auth Service API](AUTH_SERVICE_API_SPEC.md).
+**Verification:** `DynamicClientRegistrationServiceTest`, `RemoteHttpOAuthTest`.
+This records existing configuration roles; no ownership transfer is introduced.
+
+## RESP-MCP-CONFIGURATION
+
+**Current owner:** `PocketHiveMcpProperties` binds and validates the MCP service's
+owner endpoints, security, storage paths and capacity settings. Application,
+transport, security and state composition consume it; public endpoint transport
+delegates to `RESP-PUBLIC-ENDPOINT-TRANSPORT`. Environment-health-specific settings
+remain a distinct concern in `EnvironmentHealthProperties`.
+
+**Forbidden:** domain transitions, infrastructure IO or alternate config resolution.
+**Contract:** [MCP configuration](../mcp/README.md).
+**Verification:** `PocketHiveMcpPropertiesTest`. Existing ownership, now indexed.
+
+## RESP-COMPANION-CONNECTION-PROFILE
+
+**Current roles:** `connection/profile.ts` constructs the validated immutable
+profile; `storage/profileRepository.ts` owns stored profile decoding, persistence,
+selection and removal through VS Code storage ports. Decoding delegates profile
+construction; both consume `RESP-PUBLIC-ENDPOINT-TRANSPORT`. The companion provider
+and connection flow use these owners; secret contents remain in the session store.
+
+**Forbidden:** authentication, endpoint discovery or a second transport policy.
+**Contract:** [companion profiles](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion profile/repository tests. Existing, disjoint roles.
+
+## RESP-COMPANION-ENDPOINT-DISCOVERY
+
+**Current owner:** `connection/endpointValidator.ts` checks the selected endpoint,
+loopback resolution and protected-resource metadata for the connection flow.
+It consumes the explicit profile and delegates transport checks to
+`RESP-PUBLIC-ENDPOINT-TRANSPORT`; it does not choose another URL or protocol.
+One ten-second discovery budget covers DNS, metadata headers and body. Callers
+pass their cancellation signal; late DNS results cannot initiate an HTTP request.
+
+**Forbidden:** authentication, profile persistence or protocol downgrade.
+**Contract:** [public endpoints](AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy).
+**Verification:** companion endpoint validation tests. Existing ownership.
+
+## RESP-COMPANION-CONNECTION-ATTEMPT
+
+Stored-session lookup during a test retry belongs to `TESTING` and remains
+cancellable. A late session result must not change terminal cancellation.
+The attempt owner shares stored-session checking between retry and reconnect;
+read failures become actionable authentication failures, unless cancelled.
+
+**Owner:** `connection/connectionAttempt.ts` owns connection-attempt transitions.
+`DISCOVERING` is observable and cancellable for connect/reconnect. Discovery failure
+returns to `EDITING`; cancellation is terminal and late results cannot authenticate,
+test or enable saving. Endpoint discovery remains delegated to its boundary owner.
+
+**Must not:** perform transport IO, persist profiles or introduce another session owner.
+**Contract:** [companion connection flow](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `connectionAttempt.test.ts`.
+
+## RESP-COMPANION-OAUTH-CALLBACK
+
+**Owner:** `connection/loopbackBrowser.ts` owns the temporary loopback listener,
+callback receipt, cancellation and resource release. It flushes the callback page
+before closing connections; cancellation/timeout closes all listener connections.
+`connection/callbackPage.ts` only renders escaped callback presentation.
+
+**Must not:** validate OAuth state, exchange tokens or infer successful MCP connection.
+**Contract:** [companion connection flow](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `loopbackBrowser.test.ts`, live browser OAuth qualification.
+
+## RESP-COMPANION-AUTHORIZED-SESSION
+
+**Owner:** `connection/authorizedMcpSession.ts` owns authenticated session renewal
+and availability. It passes caller cancellation to endpoint discovery and delegates
+OAuth, secret persistence and MCP transport effects to their ports.
+
+**Must not:** own profile persistence, parse OAuth wire responses or define another
+endpoint-discovery policy.
+**Contract:** [companion session lifecycle](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** `authorizedMcpSession.test.ts`. Existing session ownership.
+
+## RESP-COMPANION-MCP-HTTP
+
+**Current owner:** `mcp/httpClient.ts` owns MCP HTTP exchange/session transport and
+same-origin archive upload. Connection and operation callers consume it with an
+already selected endpoint and token. Its transport session ID is not domain state.
+
+**Forbidden:** following redirects, selecting security modes, authenticating users
+or deciding PocketHive domain outcomes.
+**Contract:** [MCP](../mcp/README.md).
+**Verification:** `mcpHttpClient.test.ts`, `mcpHttpRedirect.test.ts`. Existing ownership.
+
+## RESP-COMPANION-COMMAND-INPUT
+
+**Current owner:** `webview/messages.ts` defines and strictly decodes webview
+commands before the companion provider dispatches them. Endpoint modes and swarm
+operations are consumed from their existing value owners, not redefined here.
+
+**Forbidden:** command execution, UI state mutation or inferred missing fields.
+**Contract:** [companion](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion message-decoding tests. Existing ownership.
+
+## RESP-COMPANION-ENVIRONMENT-VIEW
+
+**Current owner:** `webview/environmentViews.ts` renders onboarding, account and
+ingress-health views using the webview's supplied model and presentation ports.
+The transport selector presents explicit choices; it does not grant permission.
+
+**Forbidden:** authentication, network probes or inferred environment settings.
+**Contract:** [companion](https://github.com/sepa79/PocketHive/blob/main/vscode-pockethive/README.md).
+**Verification:** companion UI checks. Existing presentation responsibility.
+
+## RESP-INTAKE-RUNTIME-VOCABULARY
+
+**Canonical value owners:** `AuthType` under `RESP-AUTH-VALUES` and
+`RequestTemplateProtocol` under `RESP-REQUEST-TEMPLATE-PARSE`.
+
+**Projection owner:** `tools/intake-contracts/ExportRuntimeVocabulary.java`
+exports those compiled types into the intake package's local
+`contract/schemas/runtime-vocabulary.schema.json`. The schema validator and
+bundle inspector consume that sealed read-only projection. The dedicated intake
+workflow compares its exact bytes with output from the compiled owners through
+`generate.sh --check`; package integrity checks protect the delivered snapshot.
+Normal Maven tests and product image publication do not depend on intake package
+files. These checks do not prove deployed worker capabilities.
+
+**Intake consumers:** [schema validation](intake-runtime.md#resp-intake-schema),
+[reference rules](intake-runtime.md#resp-intake-references),
+[readiness rules](intake-runtime.md#resp-intake-readiness) and
+[bundle inspection](intake-runtime.md#resp-intake-inspection) retain their own
+document responsibilities and consume the vocabulary projection.
+They do not validate runtime auth profiles or decide endpoint transport support.
+An accepted type without a complete intake representation remains a handoff gap.
+
+**Forbidden:** hand-maintained runtime value lists, Java source parsing, runtime
+schema downloads, implicit aliases/migrations, or inferring readiness from a type.
+
+**Contract:** [intake vocabulary ownership](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#runtime-vocabulary-ownership).
+**Verification:** `tools/intake-contracts/generate.sh --check` in the dedicated
+[intake workflow](https://github.com/sepa79/PocketHive/blob/main/.github/workflows/intake-skill.yml), public-CLI
+auth/protocol regressions, and the relocated offline package suite.
+
+## RESP-INTAKE-RESULT-EVIDENCE
+
+**Owner:** `measurement_rules.py` in the intake skill checks recorded outcome
+evidence and run identity. The lifecycle contract's `RuntimeMetadata.runId` is
+the canonical runtime identity; intake records it alongside `swarmId`, which
+may be reused. Executed reports require both through the existing result checks.
+
+**Forbidden:** deriving a run ID from another identifier, querying a live run,
+calculating a pass, or inferring execution from an allocated run ID.
+
+**Contract:** [recorded results](https://github.com/sepa79/PocketHive/blob/main/.agents/skills/pockethive-intake/contract/intake-contract.md#measurement-mappings-and-recorded-results)
+and [lifecycle schema](../spec/swarm-lifecycle.schema.json).
+**Verification:** public-CLI result identity and measurement tests.
+
+## RESP-OAUTH-CLIENT-REGISTRY
+
+**Current owner:** `auth-service` — `PocketHiveRegisteredClientRepository` owns
+registered-client lookup, dynamic capacity, inactivity renewal/expiry and the
+single in-memory registry. Spring Authorization Server and
+`DynamicClientRegistrationService` consume its repository API. Mutations replace
+the durable projection through `DynamicClientStateStore` before becoming visible.
+
+**Forbidden:** storing authorization codes, tokens or consent; filesystem IO;
+another registry or an independent expiry/capacity decision in the storage adapter.
+**Required effect:** active dynamic registrations survive restart; invalid state
+fails startup and failed persistence does not publish a registry mutation.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** registry behavior in `DynamicClientRegistrationServiceTest` and
+`OAuthAuthorizationServerTest`. This is implemented ownership, not a migration.
+
+## RESP-OAUTH-CLIENT-STATE
+
+**Current owner:** `auth-service` — `JsonFileDynamicClientStateStore` implements
+the `DynamicClientStateStore` persistence port for the registry above. It owns
+versioned JSON reads and atomic replacement at the one configured absolute path.
+`DynamicClientStateEntry` and `DynamicClientStateDocument` are immutable, read-only
+persistence projections; they do not own registry state or OAuth decisions.
+
+**Forbidden:** alternate paths/formats, client expiry or metadata policy, and
+persistence of secrets, principals, grants, consent or session artifacts.
+**Required effect:** missing first-start state is empty; malformed/unsupported
+state and failed writes are explicit failures; replacement preserves the prior
+file until the complete candidate is ready.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** `JsonFileDynamicClientStateStoreTest` and
+`DynamicClientRegistrationServiceTest`. Current implementation.
+
+## RESP-OAUTH-CLIENT-REGISTRATION
+
+**Current owner:** `auth-service` — `DynamicClientRegistrationService` validates
+public registration metadata and constructs the canonical Spring RegisteredClient.
+The registration controller delegates to it; the registry owns acceptance,
+capacity, persistence and expiry. Restored public metadata uses the same factory.
+
+**Forbidden:** client authentication, user grants, session issuance, metadata URL
+fetching or an independent client registry.
+**Required effect:** accepted metadata defines one bounded public PKCE client;
+invalid metadata is rejected before registry publication.
+**Contract:** [dynamic registration](AUTH_SERVICE_API_SPEC.md#69-oauth-dynamic-client-registration).
+**Verification:** `DynamicClientRegistrationServiceTest` and
+`OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-AUTHORIZATION-INPUT
+
+**Current owner:** `auth-service` — `PocketHiveInteractiveAuthorizationRequestConverter`
+delegates request parsing to Spring and narrows declared interactive MCP scopes
+to the authenticated principal's current ceiling from `McpScopeAuthorizationValidator`.
+`PocketHiveOAuthConfiguration` installs this boundary converter.
+
+**Forbidden:** consent/client validation, authorization state mutation, a second
+scope policy or widening declared scopes.
+**Required effect:** canonical request validation still runs after narrowing;
+anonymous requests and non-interactive input retain Spring's validation path.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-LOOPBACK-REDIRECT
+
+**Current owner:** `auth-service` — `LocalhostLoopbackRedirectValidator` adapts
+only the runtime port of a registered HTTP `localhost` callback before delegating
+to the canonical authorization validator. Configuration installs it around
+`McpScopeAuthorizationValidator`; Spring retains its IP-loopback behavior.
+
+**Forbidden:** changes to scheme, host, path, query, fragment or user-info;
+accepting remote callbacks or bypassing PKCE/resource/scope validation.
+**Required effect:** a native localhost listener can rotate its port; every other
+callback component and all other authorization requirements remain enforced.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** localhost callback cases in `OAuthAuthorizationServerTest`.
+Current implementation.
+
+## RESP-OAUTH-CONSENT-ACTION
+
+**Current owner:** `auth-service` — `PocketHiveAuthorizationConsentCustomizer`
+adapts the optional browser action after Spring's consent provider validates the
+pending request. `OAuthConsentAction` owns the browser field and wire values;
+the renderer consumes them. Decline clears proposed authorities, including prior
+consent; approval and scope-only submissions retain Spring's consent semantics.
+
+Spring's `OAuth2AuthorizationConsentAuthenticationProvider` remains the sole
+authority for client/principal/state/scope validation, consent persistence or
+revocation, pending-request consumption and code issuance. The customizer is not
+a parallel consent validator or state machine.
+
+**Forbidden:** manual authorization/consent-store mutations, trusting request
+redirects, bypassing validation, or treating unknown/repeated actions as approval.
+**Required effect:** Decline grants no code or consent even with checked scopes
+or prior consent; valid denial returns access_denied and both decisions consume
+the pending handle once.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthConsentFlowTest`. Implemented with this change.
+
+## RESP-OAUTH-BROWSER-FAILURE
+
+**Current owner:** `auth-service` — `OAuthBrowserAuthorizationFailureHandler`
+owns browser failure responses. It projects only bounded error and original state
+from Spring's validated authorization exception into a callback. Without a
+validated callback it delegates bounded HTML markup to the page renderer. The
+security chains and browser controller consume this owner for their failures.
+
+**Forbidden:** client/consent/redirect revalidation, raw request redirect/state,
+unbounded exception text or session artifacts in HTML, and framework error-page
+dispatch. Spring owns whether a callback is validated; this owner only presents it.
+**Required effect:** valid denials reach the client's callback; unsafe or unbound
+requests stay on a non-cacheable local failure page without parameter disclosure.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthConsentFlowTest`, `OAuthBrowserAuthorizationFailureHandlerTest`
+and browser failure cases in `OAuthAuthorizationServerTest`. Current implementation.
+
+## RESP-OAUTH-BROWSER-PAGES
+
+**Current owners:** `auth-service` — `OAuthBrowserController` maps DEV sign-in
+and consent-page requests to the user store, Spring security context, registered
+client repository and failure owner. `OAuthBrowserPageRenderer` owns escaped HTML
+presentation and consumes the consent action values; it makes no consent decision.
+
+**Forbidden:** independent scope/client/token policy, state transitions in the
+renderer, or unsafe values rendered without escaping.
+**Required effect:** public issuer routes, bounded failures and escaped forms
+remain consistent with the configured environment and canonical auth owners.
+**Contract:** [authorization endpoint](AUTH_SERVICE_API_SPEC.md#610-oauth-authorization-endpoint).
+**Verification:** `OAuthBrowserControllerTest`, `OAuthAuthorizationServerTest`
+and `OAuthConsentFlowTest`. Current implementation.
+
+## RESP-OAUTH-SERVER-COMPOSITION
+
+**Current owner:** `auth-service` — `PocketHiveOAuthConfiguration` constructs
+the OAuth security chains, repositories, token services and boundary adapters
+from validated properties. It selects the persistence port and installs the
+authorization converter, redirect adapter, consent customizer and failure owner.
+
+**Forbidden:** registry IO or lifecycle decisions, inline consent validation,
+another public endpoint transport policy, or bypassing Spring authorization rules.
+**Required effect:** public API behavior uses the configured owners with one
+registry/persistence path and the canonical authorization state machine.
+**Contract:** [Auth Service API](AUTH_SERVICE_API_SPEC.md).
+**Verification:** public behavior in `OAuthAuthorizationServerTest`,
+`RemoteHttpOAuthTest` and `OAuthConsentFlowTest`; no bean-identity gate. Current implementation.
+
+## RESP-REDIS-ADAPTER
+
+**Current implementation transfer:** F01, common/redis-adapter.
+
+RedisConnections is the single settings-to-client realization owner. Redis list
+read/write, token storage, expiring diagnostics and sequences execute inside this
+module. Only validated redis-config settings enter it; raw Lettuce clients and
+command callbacks are internal. Existing token/sequence ports remain canonical.
+List writers now have an explicit close operation owned by their SDK factory or
+interceptor; closing never changes message publication, routing or retry policy.
+TokenStore.listDueRefreshes lists candidates, not leases; claimRefresh alone claims.
+
+SDK RedisSequenceConfiguration composes application-owned sequence instances and
+validated updates; no process-global selection remains. Formatting semantics,
+sequence key construction, token claims, diagnostic best-effort writes and list
+push-then-trim ordering are preserved. Rejected configuration is not applied.
+
+**Forbidden:** SDK/templating/service Lettuce imports; duplicate connection parsers;
+implicit global Redis selection; converting diagnostic failure to business failure.
+
+**Verification:** adapter operation/lifetime tests and SDK/HTTP Sequence integration;
+RepositoryImportBoundaryTest rejects direct vendor imports outside the adapter.
+
+Redis resource shutdown is terminal: the SDK writer and sequence owners allow
+concurrent operations while open, wait for operations already inside their API
+before releasing clients, and reject subsequent operations without creating clients.
+This does not drain the worker executor or change stop/ACK/redelivery semantics.
+An accepted WorkItem reaching Redis only after this owner has closed receives the
+existing caller's operation-error handling. Cleanup still attempts all cached resources.
+
+## RESP-DOCKER-RUNTIME
+
+**Current modules:** `common/manager-sdk`, `common/docker-client`, `orchestrator-service`,
+`swarm-controller-service`.
+
+`DockerRuntimeClient` owns raw Docker inventory, inspect, log retrieval and explicit
+force-container/service removal operations. `DockerRuntimeResource` is its read-only
+inventory projection; `DockerRuntimeKind` identifies the Docker resource kind.
+`DockerRuntimeAdapter` maps this projection to existing Orchestrator ports and
+selects the already-resolved compute mode. It does not issue Docker commands.
+
+**Forbidden:** decide cleanup eligibility, approvals, lifecycle completion or change
+compute selection. Removal exceptions propagate unchanged; command completion is
+not a new domain-level verification of absence. Inspect retains the application
+ObjectMapper configuration and existing REST response shape. `ComputeRuntimeDebugPort`
+and its read-only `RuntimeInspection`, `RuntimeInspectionState`, `RuntimeMountInspection`
+values live in manager-sdk. `DockerInspectMapper` alone interprets Docker inspect
+fields, including existing alias precedence and scalar values. No raw Docker inspect
+map leaves docker-client. `RuntimeInspectResponseMapper` in Orchestrator owns HTTP
+response fields and source redaction; target eligibility remains in RuntimeDebugService.
+The mount projection records whether propagation was reported, preserving the existing
+container field versus service omission. Existing container RW inversion is preserved
+as diagnostic behavior; correcting it is not part of this extraction.
+
+**Connection, compute and naming ownership:** `DockerEngine` owns one application-scoped connection
+and construction of compute/runtime implementations. `DockerConnections` owns SDK
+configuration and client realization. Orchestrator retains environment-based daemon
+configuration and AUTO manager detection; Controller retains explicit host/socket
+selection and requires a concrete mode. No new probing or selection fallback is added.
+`ComputeHost` exposes network resolution/image pull without container or SDK types;
+service lifecycle consumers receive this port and `ComputeAdapter` rather than raw clients.
+`DockerControllerEnvironment` owns Docker-specific controller ENV and socket-mount
+encoding. `DockerRuntimeNames` owns the existing stack-name rule; all four consumers
+use its result, including status metadata and Docker labels. Existing trimming at
+caller boundaries stays unchanged. Docker SDK/model/implementation imports are forbidden
+outside docker-client (legacy E2E remains explicitly excluded). The uncalled
+DockerWorkloadProvisioner/WorkloadProvisioner path is removed.
+
+Lifecycle decisions, service-drain behavior, cleanup approvals/postconditions, image
+repository resolution and CP transport ownership remain at their existing owners.
+ClickHouse ENV and journal layout are transferred by F05/F04; worker freshness remains
+deferred to F08. Implementation/verification progress is recorded in the plan.
+
+
+## RESP-CLICKHOUSE-INSERT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseJsonEachRowTransport` owns
+HTTP client construction, INSERT URL encoding, JSONEachRow framing, Basic auth,
+timeouts and the 2xx success condition. `ClickHouseInsert` is its prepared-operation
+port: resolve the destination once before draining a flush, then send each batch.
+`ClickHouseConnectionSettings` is a read-only view implemented by the existing
+transaction and metrics properties; it has no defaults or independent state.
+`ClickHouseInsertException` owns bounded failure-body presentation. Metrics retains
+its existing diagnostic prefix and truncation marker.
+
+`ClickHouseMetricsSink` retains metrics projection, label validation, bounded queue,
+flush timing and requeue policy. `ClickHouseTxOutcomeSink` retains transaction
+serialization, its own bounded queue/flush policy and best-effort shutdown flush.
+The transaction sink starts its flush clock at zero; metrics starts at construction.
+Transaction batch/interval/capacity clamps remain local existing behavior; metrics
+properties retain their validation. Neither policy is silently unified.
+
+**Forbidden:** consumer construction of ClickHouse HTTP requests, URLs, credentials
+or INSERT statements; transport-owned domain events, buffers or retry scheduling.
+
+**Required effect:** identical URL, UTF-8 body, auth and timeout settings; rejected
+HTTP batches remain queued under the existing sink policy. Preparing an invalid
+URI fails before draining. The transport adds no retries or configuration defaults.
+
+**Verification:** transport request/response tests, both sink behavior tests,
+launch environment tests; deployed DA-3 is the persistence acceptance path.
+
+## RESP-CLICKHOUSE-ENVIRONMENT
+
+**Module:** `common/sink-clickhouse`.
+
+**F05 implementation (reviewed):** `ClickHouseSinkEnvironment` owns the
+transaction sink ENV names and export from `ClickHouseSinkProperties`, including
+endpoint/table/credentials/timeouts/batching/capacity. ContainerLifecycleManager
+and SwarmWorkerSpecFactory apply this projection at their existing launch step.
+`ClickHouseMetricsEnvironment` separately owns the metrics field mapping, exposing
+runtime and controller-inheritance projections over the same properties. Configured
+metrics entries overwrite the destination; blank credentials are omitted. These
+existing rules deliberately differ from transaction-sink apply-missing semantics.
+ControlPlaneContainerEnvironmentFactory consumes both projections without mapping
+ClickHouse fields itself.
+
+**Required effect:** unconfigured properties export nothing; configured values are
+trimmed and blank values omitted. An existing key, even blank or null, wins. The
+codec mutates only missing sink entries in the supplied environment; no defaults
+or validation are added. Property classes remain the configuration authorities.
+Spring binds the existing ENV names directly; service YAML must not duplicate
+ClickHouse defaults or field aliases. Nested Orchestrator and Controller metrics
+constructors explicitly name their ClickHouse parameter `clickhouse` via Spring's
+`@Name`, preserving the public property prefix independently of Java camel-case.
+Controller metrics binding is a separate `SwarmControllerMetricsProperties` unit.
+Direct sink properties and full nested service configurations are tested separately,
+including source precedence, absent values and existing validation. No new parser,
+configuration defaults or compatibility path is added.
+
+**Forbidden:** service-local sink ENV mapping or independent effective settings.
+
+**Verification:** codec value/precedence tests, full nested service bootstrap tests
+with actual application YAML and original ENV names, and both launch-path behavior
+tests. Deployed DA-3 proves persisted outcomes; execution evidence lives in F05 of
+`docs/inProgress/functional-module-boundaries.md`.
+
+## RESP-TCP-MOCK-NOTIFICATIONS
+
+**Current module(s):** `tcp-mock-server`.
+
+NotificationService owns the mock UI's global, in-memory notification feed: IDs,
+creation time, newest-first retention, unread state and clear/read operations.
+NotificationController maps the existing `/api/notifications` HTTP surface and
+delegates. Notification is a read-only response projection; NotificationRequest
+is the existing request shape. No consumer may mutate the stored state.
+
+Preserve the active controller semantics: IDs start at 1 and are not reset by
+clear; creation uses Instant.now; retain the newest 100 entries; missing IDs on
+mark-read succeed; mark-all-read and clear succeed on an empty feed. The accepted
+`persistent` field remains ignored. The feed remains global, without username
+filtering, persistence or new validation. JSON fields and HTTP statuses do not change.
+The unused former per-user NotificationService/model are replaced, not retained
+as a second owner. The UI's browser-local notifications are presentation state,
+not an alternate backend store. Existing weakly consistent concurrent iteration
+and retention operations are not redesigned by this extraction.
+
+**Forbidden:** controller-owned collection/ID/read state, transport or user/auth
+policy in the service, or writable response aliases to stored state.
+
+**Verification entrypoints:** NotificationServiceTest for ordering, retention,
+read/clear state, IDs and detached projections; NotificationControllerTest for
+existing JSON shape and HTTP return values through the controller and real service.
+
+## RESP-TCP-MOCK-WORKSPACES
+
+**Current module(s):** `tcp-mock-server`.
+
+WorkspaceService owns the global, in-memory mock UI workspace catalogue.
+WorkspaceController maps `/api/workspaces` and delegates all state changes.
+Workspace and WorkspaceRequest carry the existing wire fields; service copies
+mutable boundary values on entry/exit, so they cannot mutate stored state.
+The unused former member/user-aware service/model are replaced, not merged into
+the active behaviour. Browser workspace state is a presentation cache.
+
+Preserve the active controller semantics: initial default workspace, timestamp
+IDs prefixed `ws-`, create owner `current-user`, HashMap iteration/storage, and
+no validation or uniqueness repair. Delete rejects only the path ID `default`
+with HTTP 400; missing other IDs return 200. Update is an upsert keyed by the
+path ID and preserves the body ID (even if different), name, owner and shared
+flag; it also permits replacing the default entry. These are existing policies,
+not new recommendations. No permissions/membership, persistence, timestamp
+metadata or concurrency redesign is introduced. HTTP fields/statuses stay unchanged.
+
+Approved follow-up correctness fix: Workspace provides a no-argument constructor
+for Jackson field binding. The inherited PUT decode failure is corrected without
+changing field names, catalogue policy or adding required-field validation.
+Missing strings remain null and missing shared remains false.
+
+**Forbidden:** controller-owned catalogue, independent ID/default/deletion policy
+in Java consumers, or writable aliases to stored state.
+
+**Remaining F07 debt:** `static/workspace.js` still repeats default workspace data
+on load failure and blocks default deletion locally. That is an existing UI policy
+copy, not proof of end-to-end SSOT completion. Removing its fallback and consuming
+owner-derived policy requires a separate UI/contract slice; this backend extraction
+does not change it.
+
+**Verification entrypoints:** WorkspaceServiceTest for catalogue transitions and
+isolation; WorkspaceControllerTest for existing wire fields and response codes.
+
+## RESP-TCP-MOCK-MAPPING-FILES
+
+**Current module(s):** `tcp-mock-server`.
+
+MappingPersistence is the runtime catalogue storage port. MappingFileStore owns its
+single JSON snapshot `/app/data/mapping-catalogue.json`: an array using the existing
+MessageTypeMapping contract, including a valid empty array. It writes a complete
+candidate to a temporary sibling file, forces its contents and atomically replaces
+the snapshot; it does not silently fall back to a non-atomic replacement. IO errors
+propagate. No per-id path construction, legacy-file merge or migration is provided.
+The existing `/app/data` mount must be retained across restarts; one mock instance
+owns each data root. This does not introduce cross-process catalogue coordination.
+
+MessageTypeRegistry owns initialization and accepted runtime configuration. If a
+snapshot exists it is loaded as the complete authority, without startup-source reads.
+Otherwise built-in defaults plus StartupMappingSource initialize the catalogue and
+are persisted before startup succeeds. FileBasedMappingLoader implements that seed
+port using existing `/app/mappings` JSON/YAML files; it does not mutate the registry.
+A missing seed directory supplies no additions to defaults. Malformed/unreadable seed
+files or an invalid saved snapshot fail initialization, never persist a partial seed.
+An empty saved snapshot is initialized state, not permission to recreate defaults.
+
+Every add/replace/delete/clear goes through the registry's serialized mutation path:
+prepare candidate, save through the port, then publish the in-memory catalogue.
+Save failure retains the accepted configuration and propagates to the caller. Reads
+see the preceding or next catalogue, not a partly applied clear. Startup and restart
+reconstruct the same configuration; live match counters remain diagnostic and are
+not promised crash-durable after each request. Existing matching/execution remains
+in MappingExecutor. Bulk authoring remains sequential (earlier successful entries
+survive a later failed entry). Explicit clear is one durable operation. Catalogue order breaks equal-priority ties and
+is preserved in the snapshot array and on restart. Replacing an existing id keeps
+its position; a newly added id is appended.
+
+**Forbidden:** direct filesystem effects in the registry, competing persisted copies
+or write paths in authoring/admin/importers, successful mutation reports on save failure.
+No scenario-PH promotion, defaults resurrection, implicit migration or reset of the
+separate scenario state machine belongs to this contract.
+
+**Verification entrypoints:** MappingFileStoreTest for round trip/atomic replacement
+and IO failures; MessageTypeRegistryTest for restart and accepted-state guarantees;
+existing authoring/admin/import tests exercise the same durable mutation path.
+
+## RESP-TCP-MOCK-MAPPING-AUTHORING
+
+MappingAuthoringParser owns existing JSON/YAML request decoding. MappingAuthoringService
+coordinates sequential decoded entries through MessageTypeRegistry and constructs
+existing success payloads; it has no independent file-store dependency. Delete uses
+the same durable registry. Missing ids remain idempotent; persistence errors propagate.
+MessageMappingController retains current routes/success payloads and authoring error
+mapping. Admin stub create/delete/reset and WireMockImporter likewise use registry
+mutations, so no accepted change bypasses durability. Reset clears mappings atomically;
+it does not reset ScenarioManager or request journals.
+
+**Forbidden:** import iteration or persistence coordination in HTTP controllers;
+filesystem access, a parallel catalogue or suppression of persistence failures in
+application callers.
+
+**Verification entrypoints:** MappingAuthoringServiceTest for accepted imports,
+partial batch failure, delete, restart and rejected IO; StubMappingBoundaryTest and
+AdminMappingServiceTest for alternate entrypoints.
+
+## RESP-TCP-MOCK-STUB-CONVERSION
+
+**Current module(s):** `tcp-mock-server`.
+
+StubMappingConverter owns conversion between the unchanged StubMapping contract
+and MessageTypeMapping. AdminMappingService (called by AdminController) and
+WireMockImporter delegate to it;
+callers retain their distinct source-description text. Reverse conversion preserves
+the existing lossy id/request.bodyPattern/response.body export. Runtime mapping
+defaults remain in MessageTypeMapping; missing nested values fail as before.
+No wire fields, DTO constructors, DTO visibility or nesting change in this slice.
+Splitting the existing public nested types requires separate contract approval.
+
+The `/__admin` diagnostic projection and `/api/mappings` authored format are
+distinct existing boundaries. Importer filesystem lifecycle remains separate; admin orchestration belongs to
+RESP-TCP-MOCK-ADMIN; this extraction adds no validation, compatibility path,
+IO policy or full WireMock support.
+
+**Forbidden:** duplicate stub conversion in consumers, registry/filesystem effects
+in the converter, or inferred extra mapping settings.
+
+**Verification entrypoints:** StubMappingConverterTest for values/defaults/wire
+shape; StubMappingBoundaryTest for admin and real file import/export effects.
+
+## RESP-TCP-MOCK-EXECUTION
+
+MessageTypeRegistry owns the durable runtime catalogue, initialization and enabled/priority ordering
+through RESP-TCP-MOCK-MAPPING-FILES.
+MappingExecutor owns pattern/advanced matching, scenario guards, verification recording,
+template execution and match counters; scenario transitions delegate to StateManager.
+Text, binary and manual-test requests use this executor. TextRequestProcessor owns text
+validation, latency, metric classification and request recording. Netty handlers retain
+scheduling, framing, faults, proxies and channel replies. TcpMockServer composes these
+collaborators. This extraction preserves execution order and existing concurrency semantics.
+
+**Forbidden:** execution in the catalogue/controllers; alternate mapping storage or
+scenario state in execution collaborators. Verification: behavior tests at the executor
+and text processor, plus the repository import check.
+
+## RESP-TCP-MOCK-ADMIN
+
+AdminMappingService coordinates existing `/api/__admin` mapping operations through
+StubMappingConverter and MessageTypeRegistry. CompatibilityQueries owns the distinct
+`/__admin` diagnostic projections; CompatibilityCommands owns its reset/scenario command
+sequence through RequestStore and ScenarioManager. Controllers bind HTTP and delegate.
+Scenario command null-state behavior, reset ordering and persistence semantics remain
+unchanged. Mapping mutations now persist through the canonical registry; mapping
+reset is one durable clear and persistence errors must not be suppressed. Compatibility projections are not the StubMapping wire format.
+
+**Forbidden:** independent mapping/scenario storage, duplicate conversion, or filesystem
+policy in these application collaborators.
+
+## RESP-TCP-MOCK-WEB-TOOLS
+
+ManualTestService owns manual execution and mock recording through MappingExecutor or
+existing TcpClientService transport methods. WebController retains boundary defaults,
+validation and HTTP exception mapping. RequestLogProjection owns the UI view and its
+existing matched predicate, distinct from the unmatched request journal.
+DocumentationReader owns existing disk/classpath reads and closes opened resource
+streams, preserving locations and lookup order; WebController retains filename validation and HTTP responses.
+
+**Forbidden:** execution/recording, projection policy or filesystem reads in WebController;
+independent request storage or mapping execution in its collaborators.

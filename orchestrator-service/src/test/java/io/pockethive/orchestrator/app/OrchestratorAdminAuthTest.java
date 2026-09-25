@@ -1,6 +1,9 @@
 package io.pockethive.orchestrator.app;
 
 import io.pockethive.swarm.model.NetworkMode;
+import io.pockethive.journal.api.JournalEventQueries;
+import io.pockethive.journal.api.JournalRunQueries;
+import io.pockethive.journal.api.JournalRunMetadata;
 import io.pockethive.orchestrator.infra.schema.ControlPlaneSchemaBundle;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -15,7 +18,6 @@ import io.pockethive.auth.contract.AuthProvider;
 import io.pockethive.auth.contract.AuthenticatedUserDto;
 import io.pockethive.auth.contract.PocketHivePermissionIds;
 import io.pockethive.auth.contract.PocketHiveResourceTypes;
-import io.pockethive.controlplane.filesystem.RuntimeFilesystemLayout;
 import io.pockethive.orchestrator.auth.OrchestratorAuthorization;
 import io.pockethive.orchestrator.auth.OrchestratorCurrentUserHolder;
 import io.pockethive.orchestrator.auth.OrchestratorEndpointAuthorization;
@@ -23,7 +25,6 @@ import io.pockethive.orchestrator.domain.Swarm;
 import io.pockethive.orchestrator.domain.SwarmStore;
 import io.pockethive.orchestrator.domain.SwarmTemplateMetadata;
 import java.time.Instant;
-import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -74,9 +75,7 @@ class OrchestratorAdminAuthTest {
     void hiveJournalPageRequiresDeploymentReadForGlobalQuery() {
         SwarmStore store = storeWithSwarm("demo-swarm", "demo/tpl-1", "demo");
         JournalController controller = new JournalController(
-            mock(JdbcTemplate.class),
-            mapper,
-            endpointAuthorization(store));
+            endpointAuthorization(store), mock(JournalEventQueries.class), mock(JournalRunQueries.class), mock(JournalRunMetadata.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {
@@ -95,11 +94,10 @@ class OrchestratorAdminAuthTest {
     void swarmJournalRejectsUserOutsideScope() {
         SwarmStore store = storeWithSwarm("prod-swarm", "prod/tpl-1", "prod");
         SwarmJournalController controller = new SwarmJournalController(
-            mapper,
-            mock(JdbcTemplate.class),
-            store,
+            mock(SwarmJournalPinning.class),
             endpointAuthorization(store),
-            runtimeLayout());
+            mock(SwarmFileJournalQuery.class),
+            mock(SwarmStoredJournalQuery.class));
         ReflectionTestUtils.setField(controller, "journalSink", "file");
 
         try {
@@ -240,11 +238,6 @@ class OrchestratorAdminAuthTest {
         swarm.attachTemplate(new SwarmTemplateMetadata(templateId, "swarm-controller:latest", List.of(), bundlePath, folderPath));
         store.register(swarm);
         return store;
-    }
-
-    private static RuntimeFilesystemLayout runtimeLayout() {
-        String root = Path.of(System.getProperty("java.io.tmpdir")).toAbsolutePath().normalize().toString();
-        return RuntimeFilesystemLayout.of(root, root);
     }
 
     private static AuthenticatedUserDto userWith(String permission, String resourceType, String resourceSelector) {

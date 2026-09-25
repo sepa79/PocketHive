@@ -1,0 +1,21 @@
+{
+  "administrativePointers": {
+    "requirements": ["/version", "/templateType", "/requirementId", "/templateMapping", "/bundleGeneration/testPlanRef", "/openQuestions"],
+    "plan": ["/version", "/templateType", "/planId", "/revision", "/requirementId", "/requirementsRef", "/requirementsSnapshot", "/contract/referenceDocuments", "/generation/status", "/generation/blockers"],
+    "results": ["/version", "/templateType", "/executionResultId", "/requirementId", "/planId", "/references/requirementsRef", "/references/requirementsVersion", "/references/requirementsSha256", "/references/planRef", "/references/planVersion", "/references/planRevision", "/references/planSha256", "/references/traceabilityMap"]
+  },
+  "immutablePointers": {
+    "requirements": ["/ownership", "/mcpAutomation"],
+    "plan": ["/contract/purpose", "/contract/missingValues", "/contract/applicability", "/contract/workloadAuthority", "/generation/prerequisites", "/executionModel/note", "/secretInjection/persistencePolicy", "/mockSetup/securityClaim", "/readiness/prerequisites", "/readiness/failureAction", "/safety/evidenceUnavailableAction", "/safety/loadStart", "/entryExit/entry", "/entryExit/exit", "/cleanup/safety"],
+    "results": ["/contract", "/cleanup/note", "/overallResult/decisionRule"]
+  },
+  "reviewExcludedPointers": {
+    "requirements": ["/templateMapping", "/bundleGeneration/testPlanRef", "/openQuestions"],
+    "plan": ["/requirementsRef", "/requirementsSnapshot", "/contract/referenceDocuments", "/approval", "/generation/approval", "/generation/bundleId", "/generation/scenarioId"],
+    "results": ["/references/requirementsRef", "/references/requirementsVersion", "/references/requirementsSha256", "/references/planRef", "/references/planVersion", "/references/planRevision", "/references/planSha256", "/references/traceabilityMap"]
+  },
+  "reviewLedgerFields": {
+    "questions": ["id", "targets", "question", "owner", "blockingStage"],
+    "proposals": ["id", "targets", "rationale", "sources", "unresolvedPremises"]
+  }
+}

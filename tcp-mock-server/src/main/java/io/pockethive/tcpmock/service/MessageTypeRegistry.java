@@ -1,125 +1,61 @@
 package io.pockethive.tcpmock.service;
 
 import io.pockethive.tcpmock.model.MessageTypeMapping;
-import io.pockethive.tcpmock.model.MockState;
-import io.pockethive.tcpmock.model.ProcessedResponse;
-import io.pockethive.tcpmock.util.PatternCache;
-import io.pockethive.tcpmock.util.AdvancedRequestMatcher;
-import io.pockethive.tcpmock.handler.Iso8583Handler;
-import org.springframework.context.annotation.Lazy;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicLong;
 
+/**
+ * Responsibility: initialize and commit the durable mapping catalogue through its persistence port.
+ * Must not: implement filesystem IO, execute requests or acknowledge an unpersisted change.
+ * Contract: RESP-TCP-MOCK-MAPPING-FILES — docs/architecture/runtime-responsibilities.md#resp-tcp-mock-mapping-files.
+ */
 @Service
 public class MessageTypeRegistry {
-    private final ConcurrentHashMap<String, MessageTypeMapping> mappings = new ConcurrentHashMap<>();
-    private final AtomicLong requestCounter = new AtomicLong(0);
-    private final PatternCache patternCache;
-    private final AdvancedRequestMatcher advancedMatcher;
-    private final PaymentLogicEngine paymentEngine;
-    private final Iso8583Handler iso8583Handler;
-    private final StateManager stateManager;
-    private final EnhancedTemplateEngine templateEngine;
-    private final RequestVerificationService verificationService;
-    private final FileBasedMappingLoader fileLoader;
+    private final MappingPersistence persistence;
+    private volatile Map<String, MessageTypeMapping> mappings;
 
-    public MessageTypeRegistry(PatternCache patternCache,
-                             AdvancedRequestMatcher advancedMatcher,
-                             PaymentLogicEngine paymentEngine,
-                             Iso8583Handler iso8583Handler,
-                             StateManager stateManager,
-                             EnhancedTemplateEngine templateEngine,
-                             RequestVerificationService verificationService,
-                             @Lazy FileBasedMappingLoader fileLoader) {
-        this.patternCache = patternCache;
-        this.advancedMatcher = advancedMatcher;
-        this.paymentEngine = paymentEngine;
-        this.iso8583Handler = iso8583Handler;
-        this.stateManager = stateManager;
-        this.templateEngine = templateEngine;
-        this.verificationService = verificationService;
-        this.fileLoader = fileLoader;
-        initializeDefaultMappings();
+    public MessageTypeRegistry(MappingPersistence persistence, StartupMappingSource startup) {
+        this.persistence = Objects.requireNonNull(persistence);
+        Map<String, MessageTypeMapping> initial;
+        if (persistence.hasSnapshot()) {
+            initial = new LinkedHashMap<>();
+            for (MessageTypeMapping mapping : persistence.load()) {
+                String id = Objects.requireNonNull(mapping.getId(), "Saved mapping id");
+                if (initial.putIfAbsent(id, mapping) != null) {
+                    throw new IllegalStateException("Duplicate mapping id in saved catalogue: " + id);
+                }
+            }
+        } else {
+            initial = defaultMappings();
+            for (MessageTypeMapping mapping : startup.load()) {
+                initial.put(Objects.requireNonNull(mapping.getId(), "Startup mapping id"), mapping);
+            }
+            persistence.save(initial.values());
+        }
+        mappings = Collections.unmodifiableMap(new LinkedHashMap<>(initial));
     }
 
-    private void initializeDefaultMappings() {
+    private Map<String, MessageTypeMapping> defaultMappings() {
+        Map<String, MessageTypeMapping> initial = new LinkedHashMap<>();
         MessageTypeMapping echoMapping = new MessageTypeMapping("echo", "^ECHO.*", "{{message}}", "Echo response");
         echoMapping.setPriority(10);
-        addMapping(echoMapping);
+        initial.put(echoMapping.getId(), echoMapping);
 
         MessageTypeMapping jsonMapping = new MessageTypeMapping("json", "^\\{.*\\}$",
             "{\"status\":\"success\",\"timestamp\":\"{{timestamp}}\",\"echo\":{{message}}}", "JSON response");
         jsonMapping.setPriority(10);
-        addMapping(jsonMapping);
+        initial.put(jsonMapping.getId(), jsonMapping);
 
         MessageTypeMapping defaultMapping = new MessageTypeMapping("default", ".*", "OK", "Default response");
         defaultMapping.setPriority(1);
-        addMapping(defaultMapping);
+        initial.put(defaultMapping.getId(), defaultMapping);
 
-        System.out.println("Initialized 3 default mappings (echo, json, default)");
-    }
-
-    public ProcessedResponse processMessage(String message) {
-        long requestId = requestCounter.incrementAndGet();
-
-        // Record for verification
-        verificationService.recordRequest(message);
-
-        for (MessageTypeMapping mapping : getSortedMappings()) {
-            // Check basic pattern match
-            boolean patternMatch = patternCache.matches(message, mapping.getRequestPattern());
-
-            // Check advanced matching criteria
-            boolean advancedMatch = mapping.getAdvancedMatching() == null ||
-                                   advancedMatcher.matches(message, mapping.getAdvancedMatching());
-
-            if (patternMatch && advancedMatch) {
-                // Check scenario state if required
-                if (mapping.getScenarioName() != null && mapping.getRequiredScenarioState() != null) {
-                    // Ensure state exists before checking — initialises to "Started" if first access
-                    stateManager.getOrCreateScenarioState(mapping.getScenarioName());
-                    if (!stateManager.isInState(mapping.getScenarioName(), mapping.getRequiredScenarioState())) {
-                        continue;
-                    }
-                }
-
-                mapping.incrementMatchCount();
-
-                // Get or create state for template processing
-                MockState state = null;
-                if (mapping.getScenarioName() != null) {
-                    state = stateManager.getOrCreateScenarioState(mapping.getScenarioName());
-                }
-
-                // Process template with enhanced engine
-                ProcessedResponse response = templateEngine.processTemplate(
-                    mapping.getResponseTemplate(),
-                    message,
-                    state,
-                    mapping.getFixedDelayMs()
-                );
-
-                // Override delimiter from mapping
-                ProcessedResponse finalResponse = new ProcessedResponse(
-                    response.getResponse(),
-                    mapping.getResponseDelimiter(),
-                    response.getDelayMs(),
-                    response.getFault(),
-                    response.getProxyTarget()
-                );
-
-                // Update scenario state if specified
-                if (mapping.getScenarioName() != null && mapping.getNewScenarioState() != null) {
-                    stateManager.updateScenarioState(mapping.getScenarioName(), mapping.getNewScenarioState());
-                }
-
-                return finalResponse;
-            }
-        }
-
-        return new ProcessedResponse("UNKNOWN_MESSAGE_TYPE", "\n");
+        return initial;
     }
 
     public List<MessageTypeMapping> getSortedMappings() {
@@ -129,29 +65,34 @@ public class MessageTypeRegistry {
             .toList();
     }
 
-    public void addMapping(MessageTypeMapping mapping) {
-        mappings.put(mapping.getId(), mapping);
+    public synchronized void addMapping(MessageTypeMapping mapping) {
+        String id = Objects.requireNonNull(mapping.getId(), "Mapping id");
+        Map<String, MessageTypeMapping> candidate = new LinkedHashMap<>(mappings);
+        candidate.put(id, mapping);
+        commit(candidate);
     }
 
-    public void removeMapping(String id) {
-        mappings.remove(id);
+    public synchronized void removeMapping(String id) {
+        Objects.requireNonNull(id, "Mapping id");
+        if (!mappings.containsKey(id)) {
+            return;
+        }
+        Map<String, MessageTypeMapping> candidate = new LinkedHashMap<>(mappings);
+        candidate.remove(id);
+        commit(candidate);
+    }
+
+    public synchronized void clearMappings() {
+        commit(Map.of());
+    }
+
+    private void commit(Map<String, MessageTypeMapping> candidate) {
+        Map<String, MessageTypeMapping> accepted = Collections.unmodifiableMap(new LinkedHashMap<>(candidate));
+        persistence.save(accepted.values());
+        mappings = accepted;
     }
 
     public Collection<MessageTypeMapping> getAllMappings() {
-        return new ArrayList<>(mappings.values());
-    }
-
-
-
-    public ScenarioManager getScenarioManager() {
-        return stateManager.getScenarioManager();
-    }
-
-    public void saveMappingToFile(MessageTypeMapping mapping) {
-        fileLoader.saveMappingToFile(mapping);
-    }
-
-    public void deleteMappingFile(String id) {
-        fileLoader.deleteMappingFile(id);
+        return List.copyOf(mappings.values());
     }
 }

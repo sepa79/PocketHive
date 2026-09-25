@@ -1,18 +1,16 @@
 package io.pockethive.swarmcontroller;
 
+import io.pockethive.swarmcontroller.config.SwarmControllerMetricsProperties;
+
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.github.dockerjava.api.DockerClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.pockethive.controlplane.spring.AmqpControlPlanePublisher;
 import io.pockethive.controlplane.codec.ControlPlaneCodec;
 import io.pockethive.controlplane.messaging.ControlPlanePublisher;
 import io.pockethive.controlplane.spring.MetricsSettings;
 import io.pockethive.controlplane.spring.WorkerSettings;
-import io.pockethive.docker.DockerContainerClient;
-import io.pockethive.docker.compute.DockerSingleNodeComputeAdapter;
-import io.pockethive.docker.compute.DockerSwarmServiceComputeAdapter;
+import io.pockethive.manager.ports.ComputeHost;
 import io.pockethive.manager.ports.ComputeAdapter;
-import io.pockethive.manager.runtime.ComputeAdapterType;
 import io.pockethive.manager.runtime.ConfigFanout;
 import io.pockethive.sink.clickhouse.ClickHouseSinkProperties;
 import io.pockethive.swarm.model.TrafficPolicy;
@@ -58,8 +56,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
       io.pockethive.topology.work.WorkPlaneResources workResources,
                                ObjectMapper mapper,
-                               DockerClient dockerClient,
-                               DockerContainerClient docker,
+                               ComputeAdapter computeAdapter,
+                               ComputeHost docker,
                                @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER) RabbitPublisher rabbit,
                                ControlPlaneCodec controlPlaneCodec,
                                RabbitConnectionSettings rabbitConnection,
@@ -71,7 +69,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
                                io.pockethive.controlplane.filesystem.RuntimeFilesystemMount runtimeFilesystemMount,
                                WorkerWorkConfigurationPort workConfiguration,
                         io.pockethive.topology.work.WorkTopologyResolver workTopologyResolver) {
-    this(amqp, workResources, mapper, dockerClient, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
+    this(amqp, workResources, mapper, computeAdapter, docker, rabbit, controlPlaneCodec, rabbitConnection, instanceId, properties, meterRegistry,
         journal,
         deriveWorkerSettings(properties),
         clickHouseSink,
@@ -82,8 +80,8 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
       @Qualifier(io.pockethive.rabbit.api.RabbitResourceBeans.CONTROL) RabbitResources amqp,
       io.pockethive.topology.work.WorkPlaneResources workResources,
                         ObjectMapper mapper,
-                        DockerClient dockerClient,
-                        DockerContainerClient docker,
+                        ComputeAdapter computeAdapter,
+                        ComputeHost docker,
                         @org.springframework.beans.factory.annotation.Qualifier(io.pockethive.rabbit.api.RabbitTransportBeans.CONTROL_PUBLISHER) RabbitPublisher rabbit,
                         ControlPlaneCodec controlPlaneCodec,
                         RabbitConnectionSettings rabbitConnection,
@@ -101,16 +99,6 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
     this.journal = Objects.requireNonNull(journal, "journal");
     ControlPlanePublisher controlPublisher = new AmqpControlPlanePublisher(
         rabbit, properties.getControlExchange(), Objects.requireNonNull(controlPlaneCodec, "controlPlaneCodec"));
-    ComputeAdapter computeAdapter;
-    ComputeAdapterType adapterType = properties.getDocker() == null
-        ? ComputeAdapterType.DOCKER_SINGLE
-        : ComputeAdapterType.defaulted(properties.getDocker().computeAdapter());
-    switch (adapterType) {
-      case DOCKER_SINGLE -> computeAdapter = new DockerSingleNodeComputeAdapter(docker);
-      case SWARM_STACK ->
-          computeAdapter = new DockerSwarmServiceComputeAdapter(dockerClient, docker::resolveControlNetwork);
-      default -> throw new IllegalStateException("Unsupported compute adapter type: " + adapterType);
-    }
     SwarmQueueMetrics queueMetrics = new SwarmQueueMetrics(properties.getSwarmId(), meterRegistry);
     io.pockethive.manager.ports.QueueStatsPort queueStatsPort =
         new io.pockethive.swarmcontroller.runtime.SwarmQueueStatsPortAdapter(workResources);
@@ -157,7 +145,7 @@ public class SwarmLifecycleManager implements SwarmLifecycle {
 
   private static WorkerSettings deriveWorkerSettings(SwarmControllerProperties properties) {
     Objects.requireNonNull(properties, "properties");
-    SwarmControllerProperties.Metrics propertiesMetrics = properties.getMetrics();
+    SwarmControllerMetricsProperties propertiesMetrics = properties.getMetrics();
     var metrics = new MetricsSettings(
         propertiesMetrics.adapter(),
         propertiesMetrics.publishInterval(),

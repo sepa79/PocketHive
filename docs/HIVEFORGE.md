@@ -36,6 +36,30 @@ the HiveForge-managed project root or stateless. Swarm controllers still run on
 manager nodes because they need Docker Swarm API access. Stateful placement
 remains explicit where the runtime profile declares dedicated roots.
 
+## Optional proxy placement for cross-node verification
+
+`POCKETHIVE_HAPROXY_NODE` and `POCKETHIVE_NETWORK_PROXY_MANAGER_NODE` optionally
+pin the two services to explicit Swarm hostnames. Both must be empty (scheduler
+placement) or both must name different hosts (cross-node verification). The shared
+render task validates this pair; the Stack template emits `node.hostname`
+constraints. A missing/ineligible node leaves its service pending; no other host
+is substituted. These settings do not change runtime paths or networking.
+
+For NW-4 on the development Swarm, use HAProxy `docker-swarm-wrk-1` and Network
+Proxy Manager `docker-swarm-mgr-2`. Record actual running task placement before
+and after the ingress test; configured constraints alone are not execution proof.
+
+## Explicit WorkPlane selection
+
+Both Swarm profiles require `POCKETHIVE_WORK_TYPE=RABBITMQ` or `ARTEMIS`.
+With ARTEMIS, the stack provisions the same pinned Core broker as local Compose
+and passes its connection settings to Orchestrator; Rabbit remains CONTROL.
+Artemis has one replica with stop-first updates and shared managed state at
+`/hf/state/artemis/data`, owned by the image UID/GID 1001:1001. The existing
+HiveForge bind-source mapping exposes that directory to Swarm. No new node label
+or dedicated external root is required. This does not configure broker HA.
+With RABBITMQ, Artemis is not deployed and Rabbit WORK settings are explicit.
+
 ## HiveForge Path Contract
 
 PocketHive Ansible actions run inside the HiveForge action container. They must
@@ -96,12 +120,12 @@ requirements so `validate_requirements` can fail before the playbook starts:
 ```text
 DOCKER_REGISTRY
 POCKETHIVE_VERSION
+POCKETHIVE_WORK_TYPE
 POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_IMAGE_REPOSITORY_PREFIX
 POCKETHIVE_STACK_NAME
 POCKETHIVE_PUBLIC_INGRESS
 POCKETHIVE_PUBLIC_HOST
-POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET
-POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
+POCKETHIVE_ALLOW_REMOTE_HTTP
 ```
 
 `DOCKER_REGISTRY` must include the trailing slash and must equal
@@ -110,13 +134,76 @@ POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET
 operator sets it intentionally; HiveForge must not infer it from a missing
 value.
 
-`POCKETHIVE_PUBLIC_INGRESS` is the exact external HTTPS origin without a
-trailing slash, for example `https://lab.example`. `POCKETHIVE_PUBLIC_HOST` is
-its exact host value without a scheme or path. The two MCP/Auth Service secrets
-must be supplied through HiveForge secret-backed runtime configuration, must be
-at least 16 characters, and must not be committed or printed in deployment
-evidence. The rendered stack exposes the MCP only as
+`POCKETHIVE_PUBLIC_INGRESS` is the exact external origin without a trailing
+slash, normally HTTPS, for example `https://lab.example`. An HTTP-only deployment
+must explicitly pass `POCKETHIVE_ALLOW_REMOTE_HTTP=true` in runtime environment
+values. HiveForge requires an explicit `true` or `false`; use `false` for HTTPS.
+Missing or invalid values fail deployment validation. The renderer passes the
+same allowance to Auth Service and MCP and rejects remote HTTP without it. This
+is an unencrypted exception; the [public endpoint transport contract](architecture/AUTH_SERVICE_API_SPEC.md#public-endpoint-transport-policy)
+owns its effects. The companion must independently select **Remote HTTP (unencrypted)**.
+`POCKETHIVE_PUBLIC_HOST` is its exact host value, including a port when present,
+without a scheme or path.
+
+HiveForge does not currently own a secret-provisioning capability. While Auth
+Service remains in Phase 1 with the explicit `DEV` provider, the PocketHive
+HiveForge adapter therefore supplies one fixed, known development credential
+pair to Auth Service and MCP. These values are not confidential and are not
+HiveForge runtime requirements. The canonical pair is owned once by the swarm
+render action and must not be independently reconstructed by the template.
+They do not create another authentication authority: one authenticates MCP
+OAuth introspection, while the other obtains the existing Auth Service bearer
+token used for calls to PocketHive owner APIs. The downstream credential uses
+the same established service-account contract as Orchestrator: Auth Service
+configures the named service account and the calling service receives the
+matching principal name and credential. MCP keeps its own `pockethive-mcp`
+identity and never reuses the Orchestrator identity. The OAuth introspection
+credential remains separate because Orchestrator is not an OAuth resource
+server.
+This temporary contract must not be used with a non-`DEV` authentication
+provider. Adding such a provider requires a contract-first migration to the
+approved HiveForge secret capability before deployment.
+
+The Dev ingress also exposes HTTPS on 8443 using the intentionally public test
+TLS identity in `deploy/hiveforge/runtime/dev-tls`; clients explicitly trust its
+certificate. HTTP on 8088 remains available for the existing UI path. The
+rendered stack exposes the MCP only as
 `<POCKETHIVE_PUBLIC_INGRESS>/mcp`; it does not publish the Java container port.
+
+Both `deploy` and `update` load the public ingress, host, and HTTP allowance from
+`deploy/hiveforge/components/stack/ansible/vars/public-endpoint.yml`.
+Changing the public URL never enables HTTP implicitly. For an HTTP deployment,
+set these values together in the selected profile's runtime environment:
+
+```yaml
+POCKETHIVE_PUBLIC_INGRESS: http://pockethive.example:8088
+POCKETHIVE_PUBLIC_HOST: pockethive.example:8088
+POCKETHIVE_ALLOW_REMOTE_HTTP: "true"
+```
+
+The generated OAuth issuer is `http://pockethive.example:8088/auth-service`
+and the MCP resource is `http://pockethive.example:8088/mcp`. Amazon Q uses that
+public MCP URL in its own configuration; the companion's transport selection
+does not configure Q. Use the deployment's actual external host and port.
+
+Local contract checks (Python requires PyYAML and Jinja2):
+
+```bash
+python3 -B -m unittest discover -s deploy/hiveforge/tests -v
+bash tools/hiveforge-contract-check.sh
+```
+
+The Python checks render both actions and Swarm profiles with Rabbit and Artemis
+WORK, exercise the public endpoint assertions, and preserve the TLS listener,
+proxy placement and writable MCP temporary storage. They do not execute Ansible
+or verify a live deployment.
+
+Artemis deployments use the release-matched PocketHive `artemis` image, based on
+Apache Artemis 2.40.0. It includes the diagnostic-copy transformer needed to bound
+captures of delayed Work without changing source delivery. Build it through the
+existing image manifest/local or remote-image tooling, or consume the image from
+the standard release workflow. Using the unextended upstream image cannot provide
+this capture contract. See the WorkPlane responsibility records for ownership.
 
 Current HiveForge component requirements are global per component, not
 profile-specific. Because of that, `swarm-full` dedicated root variables are
@@ -179,6 +266,7 @@ Agent sequence:
        POCKETHIVE_STACK_NAME: pockethive
        POCKETHIVE_PUBLIC_INGRESS: https://pockethive.example
        POCKETHIVE_PUBLIC_HOST: pockethive.example
+       POCKETHIVE_ALLOW_REMOTE_HTTP: "false"
        POCKETHIVE_RABBITMQ_ROOT: /data/rabbitmq
        POCKETHIVE_POSTGRES_ROOT: /data/postgres
        POCKETHIVE_CLICKHOUSE_ROOT: /data/clickhouse
@@ -188,10 +276,10 @@ Agent sequence:
        NO_PROXY: localhost,127.0.0.1,::1,clickhouse,rabbitmq,postgres,redis,scenario-manager,orchestrator,auth-service,network-proxy-manager,ui,ui-v2
    ```
 
-   Supply `POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET` and
-   `POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET` through the environment's
-   secret mechanism; do not place literal values in the journal or this
-   non-secret runtime map.
+   Do not supply MCP/Auth Service credentials through this map. The current
+   HiveForge adapter is explicitly Phase 1 `DEV` and owns its fixed, known
+   development credential pair. A non-`DEV` deployment remains unsupported
+   until HiveForge provides the approved secret capability.
 
    Set `HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY` only when the target
    environment requires outbound proxy access. PocketHive renders those values
@@ -322,3 +410,17 @@ artifacts/runtime/scenario-manager/capabilities
 artifacts/runtime/scenario-manager/network
 artifacts/runtime/scenario-manager/sut
 ```
+
+## MCP temporary files on Swarm
+
+MCP retains a read-only root filesystem. An explicit `volumes: type: tmpfs`
+entry mounts `/tmp` with a total limit of 128 MiB (the previous two 64 MiB budgets).
+UID10001 creates `/tmp/pockethive-mcp-spool` and applies 0700; the upload coordinator
+retains its separate 64 MiB quota. JVM temporary files and spool share the mount.
+The image's existing `/tmp` permissions allow the non-root process to create its
+private directories. Verify effective permissions after deployment.
+
+The Portainer Stack deployment path omitted the earlier service-level `tmpfs`
+entries entirely. Explicit tmpfs volumes reached Swarm, but their configured
+`mode` did not. Do not rely on that option to make a root-owned mount writable;
+verify actual mounts and successful startup, not just Stack YAML validity.

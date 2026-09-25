@@ -1,0 +1,6 @@
+Synthetic client objective for skill qualification only.
+
+Assess completed-payment throughput during a burst and how quickly processing
+recovers afterwards. The API returns HTTP 202 before work completes. The safe
+load ceiling, burst duration and completion-evidence interface are not supplied.
+No plan has been approved and no test has run.

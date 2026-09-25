@@ -1,0 +1,34 @@
+{
+  "description": "Observation allowlist only, never a scenario schema or endpoint resolver. Paths/hashes preserve evidence when a value is not emitted.",
+  "numberKeys": ["rate", "perSecond", "requestsPerSecond", "durationSeconds", "timeoutMs", "retries", "maxInFlight", "concurrency", "tps", "thinkTimeMs"],
+  "booleanKeys": ["enabled", "keepAlive", "tlsVerify", "fireAndForget"],
+  "topLevelStringKeys": ["serviceId", "callId", "pathTemplate"],
+  "withheldStringMarkers": ["?", "#", "%", "\\", "//"],
+  "templatePopulation": {
+    "protocol": "HTTP",
+    "identityKeys": ["serviceId", "callId"],
+    "fields": {
+      "serviceId": "serviceId",
+      "callId": "callId",
+      "protocol": "protocol",
+      "method": "method",
+      "pathTemplate": "path"
+    }
+  },
+  "protocolSchema": {
+    "$ref": "schemas/runtime-vocabulary.schema.json#/definitions/requestTemplateProtocol"
+  },
+  "enumKeys": {
+    "kind": ["HTTP", "HTTPS", "TCP", "TCPS"],
+    "method": ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
+    "arrivalModel": ["open-loop", "closed-loop"]
+  },
+  "endpointDescriptions": {
+    "pointer": "/plan/endpoints",
+    "fields": ["callId", "method", "path", "description"],
+    "matches": {"callId": "callId", "method": "method", "path": "pathTemplate"},
+    "valueField": "description",
+    "targetField": "name"
+  },
+  "sensitiveSegments": ["secret", "password", "token", "credential", "authorization", "cookie", "payload", "requestsample", "responsesample", "headers", "body"]
+}

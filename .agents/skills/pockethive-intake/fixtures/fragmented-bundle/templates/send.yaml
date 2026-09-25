@@ -1,0 +1,7 @@
+serviceId: fixture-service
+callId: send-record
+protocol: TCP
+payload: 'ACCOUNT={{ variables.accountId }}; ACTION=look up from supplied schema'
+framing:
+  type: delimiter
+  delimiter: "\n"

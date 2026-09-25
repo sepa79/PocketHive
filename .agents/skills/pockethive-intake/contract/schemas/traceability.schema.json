@@ -1,0 +1,184 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PocketHive intake traceability draft contract",
+  "$comment": "Structural draft validation only. Nulls and incomplete optional sections are legitimate. The shared intake semantic validator owns provenance, applicability, reference checks and readiness; this schema is not a runtime scenario contract.",
+  "type": "object",
+  "properties": {
+    "version": {
+      "const": 2
+    },
+    "templateType": {
+      "const": "traceability-map"
+    },
+    "templateRegistry": {
+      "type": "object",
+      "properties": {
+        "requirements": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "requirementsSample": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "testPlan": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "testPlanSample": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "executionResults": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "linking": {
+      "type": "object",
+      "properties": {
+        "requirementId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "requirementsRef": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "planId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "sutId": {
+          "$ref": "common.schema.json#/definitions/text"
+        },
+        "snapshotRule": {
+          "$ref": "common.schema.json#/definitions/text"
+        }
+      },
+      "additionalProperties": false
+    },
+    "references": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "from": {
+            "$ref": "common.schema.json#/definitions/text"
+          },
+          "to": {
+            "$ref": "common.schema.json#/definitions/text"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "generationRules": {
+      "$ref": "common.schema.json#/definitions/textList"
+    },
+    "executionRules": {
+      "$ref": "common.schema.json#/definitions/textList"
+    },
+    "instance": {
+      "type": "object",
+      "properties": {
+        "version": {
+          "const": 1
+        },
+        "intake": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "enum": [
+                "from-bundle",
+                "new-requirements",
+                null
+              ]
+            },
+            "source": {
+              "anyOf": [
+                {
+                  "$ref": "common.schema.json#/definitions/sourceIdentity"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "packageVersion": {
+              "$ref": "common.schema.json#/definitions/text"
+            }
+          },
+          "additionalProperties": false
+        },
+        "documents": {
+          "type": "object",
+          "properties": {
+            "requirements": {
+              "$ref": "common.schema.json#/definitions/documentSnapshot"
+            },
+            "plan": {
+              "$ref": "common.schema.json#/definitions/documentSnapshot"
+            },
+            "results": {
+              "$ref": "common.schema.json#/definitions/documentSnapshot"
+            }
+          },
+          "additionalProperties": false
+        },
+        "projections": {
+          "type": "object",
+          "properties": {
+            "openQuestionsSha256": {
+              "$ref": "common.schema.json#/definitions/hash"
+            }
+          },
+          "additionalProperties": false
+        },
+        "provenance": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/provenance"
+          }
+        },
+        "questions": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/question"
+          }
+        },
+        "proposals": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/proposal"
+          }
+        },
+        "coverage": {
+          "type": "array",
+          "items": {
+            "$ref": "common.schema.json#/definitions/coverage"
+          }
+        },
+        "review": {
+          "type": "object",
+          "properties": {
+            "status": {
+              "enum": [
+                "draft",
+                "confirmed",
+                null
+              ]
+            },
+            "evidenceRef": {
+              "$ref": "common.schema.json#/definitions/text"
+            },
+            "contentSha256": {
+              "$ref": "common.schema.json#/definitions/hash"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "required": [
+    "version",
+    "templateType"
+  ]
+}

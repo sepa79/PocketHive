@@ -22,6 +22,14 @@ verify the connection. The steps below describe an installed extension.
    succeed.
 5. Use the Hive, Buzz, Journal, Scenarios, and Debug tabs for that environment.
 
+Endpoint discovery supports the declared VS Code 1.85 minimum runtime and has a
+ten-second budget covering DNS, response headers and
+the metadata body. The connection form offers **Cancel connection** during discovery;
+cancelled or late results cannot continue to authentication or connection testing.
+The OAuth callback listener closes its connections after flushing the callback
+page, or immediately on cancellation/timeout, without waiting for a browser tab
+or speculative connection to close.
+
 The workspace presents compact bounded rows and empty states rather than raw
 owner responses. Hive groups each swarm into one lifecycle-accented operational
 surface, keeps its status beside its identity, and exposes run history through a
@@ -58,7 +66,7 @@ Orchestrator inspect projection also used by `ui-v2`. Version is the runtime
 image and label projection returned by Orchestrator: it prefers the
 `pockethive.version` label and otherwise uses the image tag, while preserving
 the image and immutable digest. Cleanup execution is shown locked because it
-requires HiveGate approval and is not called directly by the extension.
+is not implemented in the extension; the companion supports planning only.
 
 Every workspace uses the same icon-led tab and action language plus one fixed,
 expandable environment rail. The rail owns the environment identity, uses the
@@ -166,19 +174,22 @@ workspace or operating-system temporary file is created.
 
 The extension remains TypeScript because that is the VS Code extension-host
 platform boundary. Dependencies are pinned and locked.
-The unit/package gate runs on Node 20 on both Linux and Windows in CI; mutation
-testing runs on Linux against the same source and test contracts.
+The unit/package gate runs on Node 20 on both Linux and Windows in CI. Endpoint
+discovery and transport tests also run on Node 18.15, the runtime in VS Code 1.85.
+Mutation testing runs on Linux against the same source and test contracts.
 
 ```bash
 cd vscode-pockethive
 npm ci --ignore-scripts
 npm test
-npm run ui:check
+npm run ui:check -- acceptance-workers-artemis acceptance-http
 npm run mutation
 npm run package
 ```
 
-`npm run ui:check` drives the complete local-loopback add/connect/open flow
+`npm run ui:check -- <template-id> <sut-id>` requires an explicit disposable
+scenario and SUT matching the local deployment's WORK adapter. Use `NONE` for
+a scenario with no SUT. The command drives the complete local-loopback add/connect/open flow
 through `http://localhost:8088/mcp`, including browser OAuth, live MCP reads,
 exact lifecycle/history/debug messages, run-to-Journal navigation, event and
 scenario filters, grouped diagnostics, narrow-width geometry, keyboard tabs,
@@ -221,3 +232,14 @@ under its Content Security Policy, and `npm run assets:check` detects drift.
 
 For the server and agent contract, see `docs/mcp/README.md` and
 `docs/archive/pre-boundary-reset/todo/pockethive-mcp-java-migration.md`.
+
+## Explicit remote HTTP
+
+New environments default to **Remote HTTPS**. For an HTTP-only environment,
+select **Remote HTTP (unencrypted)** explicitly. The saved profile preserves
+that choice across reloads; entering an HTTP URL never changes the selected mode.
+MCP and OAuth discovery must match the selected transport. The server deployment
+must also enable `POCKETHIVE_ALLOW_REMOTE_HTTP=true`; see
+[deployment configuration](../docs/mcp/README.md#explicit-remote-http-deployments).
+Passwords and tokens travel unencrypted in this mode. **Local loopback HTTP**
+continues to allow only local loopback addresses. There is no automatic downgrade.

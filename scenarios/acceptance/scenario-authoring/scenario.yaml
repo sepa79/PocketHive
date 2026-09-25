@@ -1,0 +1,97 @@
+protocolVersion: "2.0.0"
+id: acceptance-scenario-authoring
+name: Acceptance scenario authoring contract
+description: Read-only acceptance fixture for scheduler rate, templating and per-worker history. Not launched by the scenarios suite.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 7.5, maxMessages: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        interceptors:
+          templating:
+            template: "authoring-probe-{{ headers['x-ph-seq'] }}"
+        message:
+          bodyType: HTTP
+          method: POST
+          path: /api/test
+          body: "{{ payload }}"
+          headers: {}
+      work:
+        out: { out: authored-requests }
+      ports:
+        - { id: out, direction: out }
+    - role: moderator
+      image: moderator:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        mode: { type: pass-through, ratePerSec: 0.0 }
+      work:
+        in: { in: authored-requests }
+        out: { out: moderated-requests }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+      work:
+        in: { in: moderated-requests }
+        out: { out: authored-responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in: { in: authored-responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: authored-generation
+      from: { role: generator, port: out }
+      to: { role: moderator, port: in }
+    - id: authored-moderation
+      from: { role: moderator, port: out }
+      to: { role: processor, port: in }
+    - id: authored-processing
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }

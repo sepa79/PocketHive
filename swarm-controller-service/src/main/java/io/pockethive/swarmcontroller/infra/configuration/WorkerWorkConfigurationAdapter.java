@@ -1,5 +1,8 @@
 package io.pockethive.swarmcontroller.infra.configuration;
 
+import io.pockethive.work.config.WorkDeliveryEnvironment;
+import io.pockethive.work.config.WorkDeliveryParser;
+
 import io.pockethive.rabbit.api.RabbitConnectionEnvironment;
 import io.pockethive.redis.config.RedisDatasetEnvironment;
 import io.pockethive.redis.config.RedisOutputEnvironment;
@@ -71,6 +74,10 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
     var selectors = new WorkSelectorEnvironmentPolicy()
         .problems(SpringConnectionEnvironment.raw(bee.env()));
     if (!selectors.isEmpty()) throw new WorkConfigurationException(selectors);
+    if (SpringConnectionEnvironment.containsPropertyTree(bee.env(), WorkDeliveryEnvironment.PREFIX)) {
+      throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(
+          WorkDeliveryParser.PATH, "Delivery belongs in config; ENV overrides are unsupported.")));
+    }
     redisOutputEnvironment.validateOverrides(path -> SpringConnectionEnvironment.containsPropertyTree(bee.env(), path));
     var overrides = workEnvironment.overrideProblems(SpringConnectionEnvironment.raw(bee.env()));
     if (!overrides.isEmpty()) throw new WorkConfigurationException(overrides);
@@ -120,7 +127,11 @@ public final class WorkerWorkConfigurationAdapter implements WorkerWorkConfigura
       throw new WorkConfigurationException(List.of(new WorkConfigurationProblem(WorkConfigurationFields.INPUTS,
           "Resolved Work configuration must not contain deferred paths.")));
     }
-    return new WorkerWorkConfigurationResult(connections.environment(), resolvedConfig);
+    var finalEnvironment = new LinkedHashMap<>(connections.environment());
+    finalEnvironment.remove(WorkDeliveryEnvironment.DELAY_ENV);
+    finalEnvironment.putAll(new WorkDeliveryEnvironment()
+        .encode(validation.configuration().outputDelivery()));
+    return new WorkerWorkConfigurationResult(finalEnvironment, resolvedConfig);
   }
 
   private void applyWorkIoEnvironment(Bee bee, Map<String, String> environment, ResolvedWorkTopology topology) {

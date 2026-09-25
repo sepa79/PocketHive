@@ -10,15 +10,18 @@ import java.util.List;
  * Contract: RESP-AUTH-TOKEN-STORE — docs/architecture/runtime-responsibilities.md#resp-auth-token-store.
  */
 public interface TokenStore extends AutoCloseable {
+    /** Returns null for a missing token; mismatched fingerprint or malformed storage throws. */
     TokenRecord get(String tokenKey, String fingerprint);
 
+    /** Atomically acquire a lease; storage unavailability propagates as an exception. */
     ClaimResult claimRefresh(String tokenKey, String fingerprint, RefreshClaim claim, Duration lease);
 
     void store(TokenRecord token, RefreshClaim claim, Duration cleanupGrace);
 
     void releaseClaim(String tokenKey, String fingerprint, RefreshClaim claim);
 
-    List<TokenDueRef> claimDueRefreshes(Instant now, int limit, Duration lease);
+    /** List due candidates without acquiring a lease. Call claimRefresh before refreshing. */
+    List<TokenDueRef> listDueRefreshes(Instant now, int limit);
 
     @Override
     void close();

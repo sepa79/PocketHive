@@ -44,6 +44,30 @@ services:
       retries: 24
       start_period: 30s
 
+{% if pockethive_work_type == "ARTEMIS" %}
+  artemis:
+    image: {{ pockethive_docker_registry }}artemis:{{ pockethive_version }}
+    environment:
+      ARTEMIS_USER: &artemis-user pockethive
+      ARTEMIS_PASSWORD: &artemis-password pockethive-local
+      ANONYMOUS_LOGIN: "false"
+      EXTRA_ARGS: "--no-autocreate --no-web --no-amqp-acceptor --no-mqtt-acceptor --no-stomp-acceptor --no-hornetq-acceptor"
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/artemis/data:/var/lib/artemis-instance
+    deploy:
+      replicas: 1
+      update_config:
+        order: stop-first
+      rollback_config:
+        order: stop-first
+    healthcheck:
+      test: ["CMD-SHELL", "/var/lib/artemis-instance/bin/artemis check node --up --url tcp://localhost:61616 --user $$ARTEMIS_USER --password $$ARTEMIS_PASSWORD --timeout 3000"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
+{% endif %}
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
@@ -267,6 +291,12 @@ services:
 
   haproxy:
     image: {{ pockethive_docker_registry }}network-proxy-haproxy:{{ pockethive_version }}
+{% if pockethive_haproxy_node | length > 0 %}
+    deploy:
+      placement:
+        constraints:
+          - {{ ("node.hostname == " ~ pockethive_haproxy_node) | to_json }}
+{% endif %}
     environment:
       <<: *haproxy-runtime-environment
       HAPROXY_CONFIG_POLL_INTERVAL_SECONDS: "1"
@@ -285,8 +315,12 @@ services:
       - target: 8088
         published: 8088
         protocol: tcp
+      - target: 8443
+        published: 8443
+        protocol: tcp
     volumes:
       - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/nginx/nginx.swarm.conf:/etc/nginx/conf.d/default.conf:ro
+      - {{ pockethive_bind_source_dir }}/artifacts/runtime/config/nginx/dev-tls:/etc/nginx/dev-tls:ro
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8088/healthz | grep -q ok"]
       interval: 10s
@@ -297,16 +331,20 @@ services:
   auth-service:
     image: {{ pockethive_docker_registry }}auth-service:{{ pockethive_version }}
     environment:
-      POCKETHIVE_AUTH_SERVICE_PROVIDER: DEV
+      POCKETHIVE_AUTH_SERVICE_PROVIDER: {{ pockethive_phase_one_dev_auth.provider }}
       POCKETHIVE_AUTH_SERVICE_SESSION_TTL: PT8H
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_ORCHESTRATOR_SECRET: orchestrator-local-secret
       POCKETHIVE_AUTH_SERVICE_ACCOUNT_NETWORK_PROXY_MANAGER_SECRET: network-proxy-manager-local-secret
-      POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_mcp_service_secret }}
+      POCKETHIVE_AUTH_SERVICE_ACCOUNT_MCP_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}
+      POCKETHIVE_ALLOW_REMOTE_HTTP: "{{ pockethive_allow_remote_http | string | lower }}"
       POCKETHIVE_AUTH_OAUTH_ISSUER: {{ pockethive_public_ingress }}/auth-service
       POCKETHIVE_AUTH_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_TTL: P31D
       POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_CAPACITY: "256"
-      POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_mcp_introspection_secret }}
+      POCKETHIVE_AUTH_OAUTH_DYNAMIC_CLIENT_STATE_PATH: /var/lib/pockethive-auth/state/dynamic-clients.json
+      POCKETHIVE_AUTH_OAUTH_INTROSPECTION_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}
+    volumes:
+      - {{ pockethive_bind_source_dir }}/state/auth-service:/var/lib/pockethive-auth/state
     ports:
       - target: 8080
         published: 1083
@@ -325,12 +363,13 @@ services:
   pockethive-mcp:
     image: {{ pockethive_docker_registry }}pockethive-mcp:{{ pockethive_version }}
     environment:
+      POCKETHIVE_ALLOW_REMOTE_HTTP: "{{ pockethive_allow_remote_http | string | lower }}"
       PH_MCP_POCKETHIVE_INGRESS: {{ pockethive_public_ingress }}
       PH_MCP_OWNER_API_BASE: http://ui:8088
       PH_MCP_ENVIRONMENT_HEALTH_PROBE_TIMEOUT: PT2S
       PH_MCP_STATE_MODE: FILE
       PH_MCP_STATE_PATH: /var/lib/pockethive-mcp/state
-      PH_MCP_UPLOAD_SPOOL_PATH: /var/lib/pockethive-mcp/spool
+      PH_MCP_UPLOAD_SPOOL_PATH: /tmp/pockethive-mcp-spool
       PH_MCP_OPEN_SESSION_TTL: PT2H
       PH_MCP_CLOSED_SESSION_RETENTION: PT24H
       PH_MCP_ATTEMPT_RETENTION: PT24H
@@ -355,20 +394,22 @@ services:
       PH_MCP_OAUTH_RESOURCE: {{ pockethive_public_ingress }}/mcp
       PH_MCP_OAUTH_INTROSPECTION_URI: http://auth-service:8080/oauth/introspect
       PH_MCP_OAUTH_INTROSPECTION_CLIENT_ID: pockethive-mcp
-      PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_mcp_introspection_secret }}
+      PH_MCP_OAUTH_INTROSPECTION_CLIENT_SECRET: {{ pockethive_phase_one_dev_auth.introspection_credential }}
       PH_MCP_DOWNSTREAM_SERVICE_NAME: pockethive-mcp
-      PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_mcp_service_secret }}
+      PH_MCP_DOWNSTREAM_SERVICE_SECRET: {{ pockethive_phase_one_dev_auth.service_credential }}
     volumes:
       - {{ pockethive_bind_source_dir }}/state/pockethive-mcp:/var/lib/pockethive-mcp/state
-    tmpfs:
-      - /tmp:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
-      - /var/lib/pockethive-mcp/spool:rw,noexec,nosuid,nodev,size=64m,uid=10001,gid=10001,mode=0700
+      # Explicit mounts are preserved by the Swarm deployment path.
+      # The non-root process owns its private directories below these mount roots.
+      - type: tmpfs
+        target: /tmp
+        tmpfs:
+          size: 134217728
     read_only: true
     cap_drop:
       - ALL
     security_opt:
       - no-new-privileges:true
-    pids_limit: 128
     deploy:
       placement:
         constraints:
@@ -377,6 +418,7 @@ services:
         limits:
           cpus: "1.0"
           memory: 512M
+          pids: 128
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/actuator/health | grep -q UP"]
       interval: 10s
@@ -423,6 +465,20 @@ services:
       POCKETHIVE_SINK_CLICKHOUSE_TABLE: ph_tx_outcome_v2
       POCKETHIVE_SINK_CLICKHOUSE_USERNAME: pockethive
       POCKETHIVE_SINK_CLICKHOUSE_PASSWORD: pockethive
+      POCKETHIVE_WORK_TYPE: {{ pockethive_work_type }}
+{% if pockethive_work_type == "ARTEMIS" %}
+      POCKETHIVE_WORK_ARTEMIS_BROKERURL: tcp://artemis:61616
+      POCKETHIVE_WORK_ARTEMIS_USERNAME: *artemis-user
+      POCKETHIVE_WORK_ARTEMIS_PASSWORD: *artemis-password
+      POCKETHIVE_WORK_ARTEMIS_CALLTIMEOUTMILLIS: "5000"
+      POCKETHIVE_WORK_ARTEMIS_NAMESPACE: ph.work
+{% else %}
+      POCKETHIVE_RABBIT_WORK_HOST: rabbitmq
+      POCKETHIVE_RABBIT_WORK_PORT: "5672"
+      POCKETHIVE_RABBIT_WORK_USERNAME: guest
+      POCKETHIVE_RABBIT_WORK_PASSWORD: guest
+      POCKETHIVE_RABBIT_WORK_VIRTUAL_HOST: /
+{% endif %}
       RABBITMQ_HOST: rabbitmq
       SPRING_RABBITMQ_HOST: rabbitmq
       POCKETHIVE_CONTROL_PLANE_ORCHESTRATOR_SCENARIO_MANAGER_URL: http://scenario-manager:8080
@@ -471,6 +527,12 @@ services:
 
   network-proxy-manager:
     image: {{ pockethive_docker_registry }}network-proxy-manager:{{ pockethive_version }}
+{% if pockethive_network_proxy_manager_node | length > 0 %}
+    deploy:
+      placement:
+        constraints:
+          - {{ ("node.hostname == " ~ pockethive_network_proxy_manager_node) | to_json }}
+{% endif %}
     environment:
       <<: *haproxy-runtime-environment
       POCKETHIVE_AUTH_SERVICE_URL: http://auth-service:8080

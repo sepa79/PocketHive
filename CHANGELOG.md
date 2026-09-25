@@ -4,6 +4,173 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.15.36]
+Timestamp: 2026-09-22T00:00:00Z
+
+- Portable intake 1.9.1: withhold potentially credential-bearing string
+  observations and retain value-free source pointers and limitations.
+- OAuth ingress: preserve the public host/port and discard competing forwarded
+  headers when constructing browser login redirects.
+- Deployment packaging: include required ClickHouse bootstrap scripts and TCP mock
+  mappings/response files; reject missing or wrong-type required inputs.
+
+- TCP mock runtime mappings now survive restarts through one atomic catalogue
+  snapshot shared by authoring, admin operations and imports. Persist deletions and
+  empty state; fail writes without accepting changes and reject corrupt saved state.
+  Preserve equal-priority selection across edits and restarts through catalogue order.
+  Startup mappings seed fresh runtimes only; no legacy-file migration or scenario export.
+
+- TCP mock housekeeping: close documentation/import streams and remove unused
+  template, matching and payment implementations.
+
+- TCP mock execution/admin separation: one mapping executor for text, binary and
+  manual requests; dedicated text processing, admin commands, diagnostic projections
+  and documentation reader. Preserve existing HTTP, matching, recording and reset behavior.
+
+- TCP mock stub conversion: share admin/file import and export mapping logic,
+  preserving the existing wire DTOs, source descriptions and runtime defaults.
+
+- TCP mock mapping authoring: separate body decoding and sequential import/delete
+  coordination from HTTP handling; remove registry storage forwarding while
+  preserving partial-import effects and existing responses.
+
+- TCP mock mapping storage: separate persistence and startup-source ports from
+  the registry and remove the registry/loader dependency cycle.
+
+- TCP mock workspace isolation: move the global catalogue and mutation policy
+  into one service, remove the unused user-aware implementation, and preserve
+  existing HTTP fields, default protection and update semantics.
+- Fix TCP mock workspace updates failing JSON deserialization; cover request
+  decoding through catalogue updates without adding field validation.
+
+- TCP mock notification isolation: move the existing global feed and read state
+  out of the HTTP controller into one service, replace the unused per-user store,
+  and keep response snapshots detached without changing the HTTP fields or statuses.
+
+- Processor TCP isolation: share transport replacement, reuse and scoped release
+  mechanics between TCP and ISO8583 while retaining separate protocol pools and
+  existing retry/result behavior; remove the unused global transport pool API.
+
+- Processor HTTP isolation: move client pool construction, TLS/reuse selection and
+  capacity reporting behind one local API; preserve transport behavior and verify
+  proxy routing, connection reuse and TLS through real HTTP tests.
+
+- Processor pacing: consolidate HTTP, TCP and ISO8583 rate scheduling into one
+  per-worker owner, preserving wait timing, configuration updates, interruption
+  and metrics behavior.
+
+- Scenario contract isolation: share runtime preparation and resolved-variable
+  HTTP records between Scenario Manager and Orchestrator through `scenario-api`;
+  remove local wire copies while preserving payloads and client error behavior.
+
+- Local input isolation: move CSV dataset loading/cursor and scheduler rate policy,
+  runtime limits, reset and diagnostics to `common/work-local`. Preserve settings
+  parsing, ordering, failure accounting and dispatch behavior; remove the unused
+  control-plane snapshot callback from the SDK input lifecycle contract.
+
+- ClickHouse isolation: share JSONEachRow HTTP transport and sink-owned launch
+  environment projections while preserving metrics/transaction buffering, failure
+  policies and environment precedence. Bind existing ClickHouse ENV settings
+  directly through Spring; remove duplicate service YAML defaults and aliases.
+  Keep defaults and validation in the existing sink properties and preserve
+  runtime sink enablement; verified persisted outcomes through local Artemis DA-3.
+
+- Journal isolation: share runtime journal paths and move SQL reads, run summaries,
+  metadata updates, pinned archives and retention behind journal ports. Keep
+  Hive/swarm append contracts distinct and preserve existing HTTP, buffering,
+  capture-mode and retention behavior.
+
+- Failed startup: retain Controller status and explicit removal after a verified
+  plan fails to apply; fail the matching CREATE promptly and clean partial resources
+  through the existing verified lifecycle without resetting the swarm registry.
+
+- Remove unreleased external governance integration claims from repository docs,
+  MCP knowledge and skill guidance. Keep existing scopes, explicit cleanup-plan
+  approval and owner validation; clarify that companion cleanup is plan-only.
+
+- HTTP Sequence targeting: allow each step to select a SUT HTTP endpoint with
+  `sutEndpointId` or an explicit literal `baseUrl`; steps without an override
+  retain the worker-level target. Validate all declared base targets before
+  execution and reject invalid or conflicting overrides without fallback.
+- HTTP Sequence URL containment: preserve configured base paths and reject
+  literal, encoded and repeatedly encoded path traversal, including encoded
+  slash and backslash separators.
+- HTTP Sequence JSON ownership: use the shared observability mapper and remove
+  the duplicate service configuration; retain the bootstrap SSOT gate.
+- Companion minimum-runtime compatibility: preserve endpoint discovery, cancellation
+  and deadlines on VS Code 1.85; add minimum-runtime CI and endpoint rejection tests.
+- Companion connection reliability: bound and cancel endpoint discovery, keep
+  cancellation terminal during stored-session lookup, and close idle callback
+  connections after flushing the browser response. Separate callback presentation
+  from listener ownership.
+- OAuth registry persistence: reject trailing content and non-integer schema
+  versions in dynamic-client state; fail startup on malformed state without
+  changing the file or the shared JSON mapper.
+- Portable intake 1.9.0: document existing CLI ownership and link runtime headers
+  to canonical responsibility records; keep installed packages independent of
+  repository documentation. Remove resolved branch review/handoff clutter and
+  retain open qualification work with its owning feature.
+- Release metadata: align the Maven reactor and root npm package/lockfile at
+  0.15.36. The VS Code companion remains independently versioned at 1.0.6.
+
+- OAuth consent: make Decline reject all requested permissions, including prior
+  consent, and preserve validated cancellation callbacks with the original state.
+  Document the registry, persistence, redirect and browser-failure owners.
+- Artemis regression coverage: verify partial-start session release, diagnostic
+  settings and resource cleanup, preservation of pre-existing resources, and
+  bootstrap validation and configuration preservation.
+- Artemis diagnostics: bound captures of delayed messages without changing source
+  delivery; ship the required diagnostic transformer in the release-matched broker
+  image through the existing local and release build paths.
+
+- Redis isolation: route dataset input, output/uploader, token storage, diagnostic
+  capture and sequences through `common/redis-adapter`, with settings owned by
+  `redis-config`. Remove process-global sequence client selection and close
+  application-owned writers and sequence resources on shutdown; preserve existing
+  message admission, retry and diagnostic failure policies.
+- Docker isolation: move client construction, compute bootstrap and runtime
+  inventory/inspect/logs/removal behind `common/docker-client`. Orchestrator and
+  Swarm Controller consume compute/host ports; one owner exports Docker launch
+  settings and one stack-name rule serves launch, status and labels. Remove the
+  unused provisioner and enforce the boundary with production import restrictions,
+  preserving compute selection, lifecycle and cleanup behavior.
+- Artemis WorkPlane: add an explicit deployment-wide alternative to RabbitMQ for
+  worker traffic, including resource provisioning, transport and verified removal;
+  CONTROL continues to use RabbitMQ. Rabbit and Artemis acknowledge work on
+  admission, without redelivery of failed worker processing.
+- Delayed delivery: add startup-configured `outputs.delivery` with `IMMEDIATE`
+  or `DELAYED` and a positive `delayMs`. Artemis schedules delivery from broker
+  publication through the existing output path; unsupported adapters reject delay.
+- Acceptance testing: add an independent framework with public-ingress API checks,
+  isolated fixtures, verified cleanup and retained evidence across worker behavior,
+  lifecycle, authorization, data, exports and network scenarios. Verify cross-host
+  Swarm/NFS recovery and fresh deployment. Keep the legacy E2E suite frozen until
+  manual acceptance confirms its removal.
+- Worker configuration: honor scenario history policy at runtime, retain
+  `FULL` and `LATEST_ONLY`, and remove the unsupported `DISABLED` option.
+- Clearing exports: require every exporter to write beneath its swarm runtime
+  directory, including configuration updates, and verify finalized text, XML and
+  streaming output.
+- HiveForge Swarm deployment: support explicit Artemis WORK selection and shared
+  broker state, cross-host proxy placement, and writable MCP temporary storage
+  within the read-only container deployment. Include public Dev TLS/auth fixtures.
+
+- Intake skill CI: reject stale generated schemas or package manifests, run the
+  public CLI suite, and upload a verified portable ZIP with its checksum as a
+  commit-labelled build artifact. Allow 45 minutes for qualification and publication.
+  Projection drift is checked only by the
+  dedicated intake workflow; default Maven tests do not depend on skill files.
+  Generated files are never rewritten by CI.
+- Intake schema ownership: derive auth and request-protocol vocabulary from the
+  canonical Java contracts, accept every auth type in drafts, and retain explicit
+  handoff gaps for unmodeled auth requirements. Requirements v3 uses
+  `bearer-token`; add file-based secret injection and preserve HTTPS endpoint
+  references without equating endpoint kind to request protocol. Consolidate
+  repeated intake vocabularies and runtime-field constraints; retain canonical
+  run identity separately from reusable swarm identity in executed reports.
+- VS Code tooling security: update pinned `fast-uri`, `js-yaml`, and `qs`
+  development dependencies to patched releases; retain Stryker 10 and the
+  existing mutation scope and thresholds.
 - Control/work-plane isolation: move Rabbit connection, topology, resource, and
   transport ownership behind the shared Rabbit adapter and WorkPlane contracts;
   keep CONTROL bootstrap independent of WORK while preserving Rabbit delivery
@@ -62,6 +229,14 @@ All notable changes to this project will be documented in this file.
 - OAuth authoring: preserve complete signed and ordinary OAuth profiles through
   Java MCP scenario generation and upload; validate authored profile storage in
   Scenario Manager without resolving credentials or contacting OAuth providers.
+- MCP OAuth interoperability: align the default opaque access-token lifetime
+  with the eight-hour browser session as a bounded Phase 1 mitigation for native
+  clients that refresh only when their MCP connection is reinitialized; retain
+  expiry enforcement, audience/scope validation, and rotating 30-day refresh
+  tokens.
+- Remote HTTP: support an explicit deployment allowance shared by Auth Service
+  and MCP, with a separate saved companion transport choice. Keep HTTPS as the
+  default and reject redirects that could change the selected endpoint.
 - VS Code: replace the legacy product Tree Views with one narrow environment-first
   HTML WebviewView, local environment profiles, secure OAuth sessions, sticky
   Hive/Buzz/Journal/Scenarios/Debug tabs, and the canonical PocketHive logo.
@@ -88,6 +263,8 @@ All notable changes to this project will be documented in this file.
   clear Account menu for sign-in, retry, and revoking sign-out.
 - Windows extension tooling: canonicalize Git scenario fixture paths and fix
   VSIX package listing checks so the existing test and packaging gates work on Windows.
+- VS Code packaging: resolve the generated-logo script location from the module
+  URL so packaging remains portable across supported Node 20 releases.
 - OAuth browser UX: theme DEV sign-in and consent with the canonical PocketHive
   logo, explicit client/resource/permission context, accessible form semantics,
   responsive styling, and no change to the authorization-code contract.
@@ -113,13 +290,13 @@ All notable changes to this project will be documented in this file.
 - Integration follow-up: inherited Orchestrator executor/controller identity
   validation, reset/registry, and public contract extraction findings remain
   deferred as recorded in the [integration approval](https://github.com/sepa79/PocketHive/pull/517#pullrequestreview-5265316217).
-  Explicit remote HTTP authentication allowance remains separate work.
+- HiveForge Phase 1 authentication: stop requiring unsupported secret runtime
+  inputs and explicitly use one fixed, known `DEV` credential pair until
+  HiveForge provides the approved secret capability required by non-`DEV`
+  deployments.
 - Documentation: add the canonical Java MCP guide, update active deployment and
   extension guidance, supersede the retired Node plugin documents, and record the
   local RST debrief and outstanding governed/human production-release checks.
-
-## [0.15.36]
-Timestamp: 2026-08-19T00:00:00Z
 
 - Release metadata and info endpoints: add a shared `observability` auto-configuration
   that contributes `pockethive.service` and `pockethive.version` to Actuator info,
@@ -133,8 +310,6 @@ Timestamp: 2026-08-19T00:00:00Z
   docs-site lockfiles through `npm update`, clear `npm audit` findings in all active
   Node projects except the remaining upstream `docs-site` `image-size` advisory, and
   pin `uuid` in the docs-site overrides to remove the fixable transitive issue.
-
-Timestamp: 2026-07-22T22:53:54Z
 
 - Lifecycle outcomes: reserve immutable `templateId`/`runId` metadata with every
   operation and allocate CREATE's run id before launch, so failures before swarm

@@ -1,334 +1,670 @@
-# Functional module boundaries — continuation and repair plan
+# Functional module boundaries — next refactors
 
-Status: source analysis and implementation proposal, 2026-09-14. Implementation not started.
-Baseline: `0bfa378c` plus the user-approved removal of legacy Rabbit binding cleanup.
-This continues the existing modularity/SSOT requirement; it does not introduce a new architecture programme.
+Status (2026-09-25): PR #520 integrates F01/F03 from #521, F04/F05 from #522,
+and the reviewed #523 delivery from `codex/worker-inputs`. The latter includes
+F02 local inputs, F07 producer-owned Scenario Manager contracts, and selected F09
+processor and TCP mock boundaries. TCP mapping persistence and the equal-priority
+restart fix are implemented, tested and accepted in separate review.
 
-Delivery priority, clarified 2026-09-14: first close
-[Rabbit SSOT and WorkPlane isolation](work-plane-module-boundaries.md) with Rabbit and a stateful
-test adapter. [Artemis and delayed publish for 3DS](../todo/work-plane-artemis-3ds.md) follow separately.
-Other refactors and service correctness findings are separate PRs. The sequence proposed below
-applies only when that work is selected; it does not add prerequisites to Rabbit isolation or Artemis/3DS.
+This closes the selected delivery, not every F07/F09 audit lead. F06 auth/rendering,
+F08 state/correctness decisions, remaining F07/F09 service work and promotion of TCP
+runtime mappings into PocketHive scenarios remain separate follow-ups. Historical
+baseline analysis and intermediate verification remain below and in Git history.
 
-## Outcome and constraints
+## Current remaining work
 
-Each functionality has one named implementation owner, an explicit supported API, and consumers
-that pass intent or consume the owner's result. A separate Maven directory, Java interface,
-shared DTO, or responsibility header alone does not establish this boundary.
+This is the current backlog after integration into PR #520. Completed slice sections
+below retain implementation evidence; their older test counts are not current gates.
 
-Preserve behavior during extraction. No compatibility aliases, migration hooks, fallback chains,
-new automatic adapter selection, or silent default changes. Where current implementations disagree,
-write down the disagreement and resolve the intended contract before merging them; do not select
-one by convenience. Existing user-approved behavior decisions override historical audit recommendations.
+| ID / area | Current status and next action |
+| --- | --- |
+| F01–F05 | Closed in the selected scope: Redis, local inputs, Docker, journal/filesystem and ClickHouse. Do not repeat these extractions. |
+| F06 | Open: trace worker OAuth/signed OAuth, profile loading/preparation, credential application and token coordination; extract only confirmed ownership leaks. Preserve existing behavior. |
+| F07 | Scenario Manager producer contracts closed. Open: UI grants/network-mode projections and TCP workspace UI policy copies; broader model sharing needs evidence, not automatic consolidation. Unknown network mode handling requires a behavior decision. |
+| F08 | Open: establish observation/freshness ownership and distinguish readiness, health and stale semantics before changing writers or thresholds. |
+| F09 | Processor pacing/HTTP/TCP mechanics and the agreed TCP mock extraction/persistence are closed. Open: trace remaining Scenario Manager and MCP application/projection boundaries. |
+| Separate correctness | Orchestrator reset/registry/recovery and orphan-removal outcomes follow `orchestrator-correctness.md`. Processor transport replacement/failure/shutdown lifecycle is also deferred; extraction did not repair it. |
+| Separate TCP debt/features | Mock scenario-state reset/persistence/null semantics, public nested DTOs and promotion of runtime mappings into PH scenarios are outside the closed TCP slice. Workspace UI duplication belongs to F07. |
 
-Rabbit AUTO ACK on dispatch/submission, swallowed processing failures, disabled input behavior,
-executor-rejection handling and inactive publisher confirms remain as agreed. Legacy binding cleanup
-was explicitly ordered removed and must not be reintroduced elsewhere.
+This backlog does not authorize behavior or public-contract changes. F06 and bounded
+F09 extractions can start with existing behavior; raise concrete conflicting semantics
+or contract changes for review when found. Full-Swarm qualification is not implied by
+unit/component evidence.
 
-Input/output is broader than Work Plane. Rabbit and a future Artemis may connect workers; Redis,
-CSV and scheduler/generator sources do not become Work Plane merely by implementing an input/output
-capability. CSV and scheduler are input-only. Generator business behavior remains in generator-service.
-Do not implement Artemis as part of this repair plan.
+## Objective and rules
 
-## Separate correctness track
+Each functional responsibility has one implementation owner and a supported API.
+Consumers pass intent or consume resolved values/projections; they do not reconstruct
+paths, resource names, defaults, validation or outcomes. A module may contain several
+focused classes. Neither one giant class nor an interface per class proves SSOT.
 
-The 2026-09-14 Orchestrator path review does not expand this extraction plan into a repair of
-Orchestrator behavior. [Orchestrator correctness](orchestrator-correctness.md) owns O1/O2 evidence
-acceptance fixes and the separately pending reset/registry/lifecycle design. O5 journal, O6 metadata
-resolution, O7 Docker and behavior-preserving O8 configuration ownership stay here. O4 permits moving
-existing workflows out of HTTP; changes to their chronology/outcomes require the correctness track.
-O1/O2 fixes await their separate review; that correctness track does not select the next WorkPlane PR's scope.
-Closing this plan proves owner/API/cutover/deletion, not that all Orchestrator behavior is correct.
+Keep domain policy with its domain owner and technology mechanics with its adapter.
+Use ports when a consumer needs a capability independent of that implementation.
+Do not create a generic infrastructure framework, DTO bag, discovery mechanism or
+new adapter selection policy. Extend existing modules before inventing another owner.
 
-## Evidence and confidence
+Extraction preserves behavior. If implementations disagree, record the exact inputs,
+outputs and effects and obtain a behavior decision before consolidation. Do not hide
+fixes, migrations, compatibility aliases, retries or changed defaults in a move.
+Rabbit/Artemis ACK on work admission is intentional: processing failures are reported,
+not redelivered. Do not reopen it. Existing approved CP ENV limitations remain accepted.
 
-Inspected all 44 root Maven module declarations, production import distribution for Rabbit, Redis,
-Docker, HTTP, SQL and files, existing boundary checks, and the concrete call paths below. UI contracts,
-normalization and authorization were also inspected. This is an ownership analysis with targeted
-source tracing, not an exhaustive review of every method or a new live failure reproduction.
+Input/output is broader than WorkPlane: Rabbit and Artemis implement WORK transport;
+Redis, CSV and scheduler inputs do not thereby become inter-worker topology owners.
+Generator business logic remains in its service. CSV and scheduler are input-only.
 
-`RepositoryImportBoundaryTest` passes on this tree. That demonstrates the current restrictions,
-not complete modularity: its Redis allowlist includes worker-sdk and templating; Docker includes
-both controller services. The ClickHouse rule detects a vendor client, but the duplicate HTTP-based
-implementation in postprocessor uses the JDK and passes it.
+## Already completed — do not redo
 
-The previous normal E2E passed 39 scenarios / 463 steps on 2026-09-11. It is a behavioral baseline,
-not proof of boundary ownership; it also missed the browser schema/STOMP failure. After legacy
-binding removal, 30 focused topology/lifecycle tests passed. No full E2E was rerun for this analysis.
-HiveMind is not available in this session; this document is the durable current plan.
+- Rabbit technology API and WorkPlane extraction; Artemis adapter, explicit global
+  WORK selection and delayed delivery through the existing publication path (A1–A5).
+- Neutral transport contracts already exist in `common/work-api`. In particular,
+  `transport/WorkOutput.publish(WorkItem, WorkDelivery)` does not take WorkerDefinition.
+- Redis settings/parser ownership exists in `common/redis-config`; reuse it, do not
+  create a competing parser while extracting transport/client operations.
+- Request-template format parsing has its owner in `request-templates`; filesystem
+  loading is a separate concern in `request-template-files`.
+- Worker executing identity and scenario history-policy propagation were repaired;
+  FULL/LATEST_ONLY remain, DISABLED was removed. These are not pending refactor tasks.
+- Exporters now require swarm-scoped runtime output directories, including updates.
+  Remaining journal layout work must reuse the existing filesystem owner.
+- Independent acceptance framework and final N3 review are complete. Latest large-Swarm
+  evidence covers 57/57 cases across the full run and two corrected image-test reruns.
+  Rabbit WORK has prior local evidence; it was not rerun on the remote Swarm.
+  See [coverage](../ci/acceptance-coverage.md) and [report](artemis-swarm-full-acceptance.md).
 
-Confirmed competing implementations of the *same* rule below are SSOT blockers under AGENTS.md.
-A wrong module dependency, broad class, or unverified area is identified separately; it is not
-invented evidence of duplicate domain state. Historical findings are not accepted without rechecking.
+N4 legacy E2E deletion still requires manual confirmation. A6 full 3DS, APATA/App mock,
+output selector/splitter and CloseLook are separate work. The Dev stack was removed
+through HiveForge on 2026-09-22 after testing; future live verification needs a deployment.
 
-## Current functionality map
+## Revalidated ownership map
 
-| Functionality | Current owner and concrete source evidence | Assessment / target |
+This refresh traces the named current source paths and searches production imports.
+It is not an exhaustive new review of all services. Confirmed extraction seams are
+separated from historical findings that still require revalidation.
+
+| Area | Current evidence | Next boundary |
 | --- | --- | --- |
-| Rabbit technology | `common/rabbit-adapter`, `RabbitResourceNames`, `RabbitConnectionEnvironment`, `SpringRabbitResources`, `SpringRabbitListeners`; SDK and CP bridges use public API | Technology boundary established in inspected Java paths. Keep owner; do not restart extraction. Known exclusions and gates below. |
-| Work values/configuration | `work-api`, `work-config`, `CurrentWorkConfigurationProviders` | Preserve canonical WorkItem, parser and mutation ports. Provider catalogue belongs to composition, not core or every consumer. |
-| Worker execution and I/O | `worker-sdk`: `WorkInput`, `WorkOutput`, factories, `DefaultWorkerRuntime`, `WorkerControlPlaneRuntime`, concrete input/output implementations | API is not independently usable: input update exposes nested runtime state; output/factories expose WorkerDefinition. Cut these specific dependencies before moving concrete I/O. |
-| Redis | `redis-config` now owns settings; Lettuce in `RedisDataSetWorkInput`, `RedisPushSupport`, `RedisTokenStore`, `RedisSequenceGenerator` | Settings consolidation exists. Connection realization/client lifecycle and operations remain scattered. Target one `redis-adapter` owner with supported public API. |
-| CSV and scheduler | `work-local-config` owns settings/rate/schedule parsing; `CsvDataSetWorkInput` and `SchedulerWorkInput` execute inside SDK | Preserve existing rules; move local input execution behind neutral input API into a local-input owner. Do not invent CSV output or Work Plane resources. |
-| Template rendering and sequences | `templating-api` / `templating`; `ConfiguredRedisSequenceAccess` calls global `RedisSequenceGenerator` | Renderer remains in templating. Redis sequence storage/client belongs to Redis; renderer consumes SequenceAccess. Explicit composition replaces hidden global configuration/lifecycle. |
-| Request templates | `RequestTemplateParser` in `request-templates`; `TemplateLoader` in `request-template-files`; Scenario validator delegates to parser | Previously duplicated required-field parsing is now consolidated. Keep these owners. File decoding/provenance and pure format rules are distinct responsibilities, not duplicate parsers. |
-| Worker/SUT auth | values and TokenStore in `auth-contracts` under old `worker.sdk.auth` namespace; `AuthRuntime` in SDK; Scenario `validateAuthProfileStorage` | Same refreshable-type/storage constraints exist in authoring and runtime. Separate worker-auth ownership from product login; one profile parser/validator, runtime coordination and storage port. |
-| Docker/compute | `docker-client`, two service `DockerConfiguration`s, `DockerRuntimeAdapter`, `SwarmLifecycleManager` | Raw clients/model types and client construction escape module. Runtime adapter directly inspects/removes/lists. Target existing docker-client as technology owner; use existing ComputeAdapter and explicit inventory/removal capabilities. |
-| Lifecycle/readiness/cleanup | manager-sdk engine; service lifecycle coordinators; `SwarmReadinessTracker`, `SwarmWorkersAggregator`, `RuntimeReconciliationService` | Application ownership stays in services. Freshness is independently calculated; orphan compute cleanup declares REMOVED after void deletion. Consolidate each fact/postcondition, not all lifecycle state into one singleton. |
-| Runtime files and journal | `control-plane-filesystem`, `journal-postgres`; `FileSwarmJournal`, `SwarmJournalController`, `PostgresHiveJournal`, `PostgresSwarmJournal` | Runtime run path exists, but journal reader rebuilds it; file leaf repeated. REST controllers perform SQL/file queries and mutations. Explicit journal read/write/retention APIs and one layout owner needed. |
-| ClickHouse and metrics | `sink-clickhouse/metrics/ClickHouseMetricsSink`; `postprocessor/ClickHouseTxOutcomeSink` | Both implement HTTP client, INSERT URL/query, credentials and batch delivery. One ClickHouse mechanics owner; metric vs transaction contracts and their distinct buffering policies remain explicit. |
-| Scenario authoring/API | scenario-manager owns bundles/materialization/variables; ScenarioManagerClient duplicates producer records | Preserve service ownership; share or generate canonical runtime request/response contracts. Scenario validator keeps file/reference checks and projects owner diagnostics. |
-| Product auth and UI | `auth-service`, `auth-client`, `PocketHiveGrantChecks`; UI `auth.ts` copies grant/scope predicates | Server is authorization owner. UI should consume effective permissions/capabilities (or generated policy), not maintain an independent predicate. This is SSOT work, not added adversarial hardening. |
-| Network control | network-proxy-manager owns binding operations, HaproxyConfigClient/ToxiproxyHttpClient behind its API; `ui-v2/networkProxy.ts` coerces unknown mode to DIRECT | Keep this functional service; canonical contract/client and exact projection in UI. No generic module for every use of HTTP. |
-| Worker business capabilities | generator, moderator, processor, request-builder, http-sequence, db-query, clearing-export, trigger, postprocessor | Keep business ownership local. Processor constructs HTTP pools/TLS in worker class; extract that infrastructure concern. DB statement executor and clearing sink already provide local seams: harden them rather than mechanically move every class into common. |
-| MCP | OrchestratorToolExecutor and ScenarioManagerToolExecutor delegate to OwnerApiPort; BundleUploadCoordinator calls owner.validate; SwarmReadinessObserver computes ready | Core forwarding path is real. Keep MCP upload coordination distinct from Scenario publication state. Readiness predicate must be an explicit owner projection, not an independently evolving definition. |
-| TCP mock and test tooling | MessageTypeRegistry, StateManager, RequestStore; AdminController vs MessageMappingController | Runtime/transport/mapping concerns exist but endpoints independently choose memory-only vs file-backed deletion. Put operation semantics behind a mapping service, retaining separately specified endpoint behavior. Legacy/E2E exclusions remain explicit. |
+| Redis | All five paths use `common/redis-adapter`; settings remain in `redis-config` | F01 implemented; see Redis extraction evidence |
+| Work integration | F02 removed the unused snapshot-typed `WorkInput.update`; SDK factories retain WorkerDefinition within composition; local mechanics consume settings/neutral policy contracts | Retain SDK composition and accepted-state ownership; do not move unused abstractions into work-api |
+| Sequences | SDK `RedisSequenceConfiguration` owns application-scoped instances; no global sequence client | Implemented with F01 |
+| Docker | Client construction, compute selection mechanics and runtime operations use `common/docker-client`; both services consume compute/host ports; stack naming has one implementation | F03 implemented; applications retain lifecycle decisions and cleanup postconditions |
+| Journal/files | Shared file paths; query, metadata, capture and retention ports implemented; 111 focused tests green | F04 implemented and reviewed; Hive and swarm producer contracts remain distinct |
+| ClickHouse | Both sinks use `ClickHouseJsonEachRowTransport`; shared ENV projections and property-owned defaults replace service copies | F05 implemented, tested and reviewed; separate domain/buffering policies preserved |
+| Worker auth | AuthRuntime now delegates preparation/validation to AuthProfilePreparation; OAuth/signature work changed these paths in PR #517 | Re-trace current authoring/runtime/token flow before alleging duplicate validation or extracting worker-auth |
+| Freshness | `SwarmReadinessTracker.STATUS_TTL_MS` and `SwarmWorkerStatusHandler.WORKER_STATUS_STALE_AFTER_MS` remain separate 15s definitions | First decide whether they describe the same fact; then one owner/projection for that fact |
+| UI network projection | `ui-v2/src/lib/networkProxy.ts` maps every unknown mode to DIRECT | Separate contract/behavior decision; do not silently change acceptance during extraction |
 
-### Rabbit closure status
+Selected Scenario contract copies, processor HTTP client ownership and TCP mapping
+persistence were resolved by the completed slices below. Remaining metadata, UI
+grants, MCP readiness and broader service findings are audit leads: recheck their
+current owners and callers before adding implementation work. Do not reuse old
+MCP/auth inventories or test counts as current evidence.
 
-Production Rabbit/Spring-AMQP imports were found only in rabbit-adapter (excluding test tooling).
-Physical naming, CP/Work connection decoding/export and resource mechanics have named owners.
-The two external string references to RabbitTransportAutoConfiguration are Spring ordering metadata,
-not broker-operation bypasses. Work/CP bridges may remain outside the module if they only translate
-owned domain contracts and invoke its API.
+## Delivery order and stable task IDs
 
-Aggregate review, including the legacy-cleanup deletion, ran on 2026-09-14. Its three findings
-were corrected; residual gate is separate review of those corrections. UI canonical schema
-loading and actual STOMP were repaired and verified through public ingress on 2026-09-14;
-see the Rabbit plan latest verification. E2E/test-fixture naming and legacy Node debug clients remain explicitly
-deferred for replacement, not secretly included as completed migrations. Accepted indirect CP ENV
-overrides remain an accepted limitation. No claim of repository-wide Rabbit closure including those exclusions.
+Keep F identifiers for existing references. F01–F05 and selected F07/F09 slices
+are completed. The proposed next sequence is F06, remaining Scenario Manager F09,
+remaining F07 projections and MCP F09. F08 and separate correctness work need
+behavior decisions first. This sequence does not authorize changes in deferred scope.
 
-### Revalidation of the older audit
+### F01 — Redis, one PR closing the shared technology responsibility
 
-- Redis old duplicate semantic-validation finding is not copied forward unchanged: properties and
-  runtime now delegate to RedisConfigurationParser; transport/client extraction is the remaining task.
-- Request-template required-field disagreement is no longer the old loader-vs-Scenario implementation:
-  both call RequestTemplateParser. Do not reimplement it.
-- Cleanup finding is narrower now: Rabbit delete verifies absence inside its adapter. Compute orphan
-  deletion still returns straight into REMOVED in RuntimeReconciliationService (368–401); the lifecycle
-  path uses RuntimeRemovalPostconditionVerifier. Repair the compute path, do not claim Rabbit lacks verification.
-- Journal paths, duplicate Scenario wire records, worker freshness and UI grant/mode interpretations
-  remain evidenced in current code. UI workload guard now checks STOPPED directly; do not resurrect
-  historical aliases removed elsewhere.
+Implemented in `9a12dd50`; [extraction status and evidence](redis-adapter-extraction.md).
+The requirements below describe the completed extraction, not a fresh task.
 
-## Repair sequence — each slice closes a real path
+Deliver the Redis extraction as **one PR covering all five consumers**. The steps
+below are implementation checkpoints within that PR, not independently mergeable
+transfers. Introducing an adapter for capture alone does not establish SSOT while
+other consumers still construct RedisURI and RedisClient themselves.
 
-The order below is proposed implementation order, not permission to work on everything at once.
-Every slice ends with consumer cutover, deletion of replaced logic, tighter build restrictions and
-behavior evidence. API names below describe responsibilities; do not create empty packages in advance.
+Start with an inventory of connection settings, client lifetime, keys/list names,
+serialization, timeouts and operations in RedisDataSetWorkInput, RedisPushSupport,
+RedisTokenStore, RedisDebugCaptureStore and RedisSequenceGenerator. Record current
+behavior tests before moving implementations. Distinguish Redis mechanics from
+token identity, dataset selection, trace identity and sequence policy.
 
-### F01 — Redis owner, with the minimum I/O contract cut required for extraction
+1. **Shared mechanics and API.** Establish `common/redis-adapter` as the sole owner
+   of connection realization and Redis client operations for all five consumers.
+   Reuse redis-config as the sole pure settings/parser module; do not add fields,
+   defaults or a second parser. Keep raw Lettuce clients, commands and arbitrary
+   client callbacks internal. Expose only the capabilities required by consumers.
+   Shared ownership does not imply one shared connection or identical lifetimes:
+   preserve each consumer's existing eager/lazy initialization and operation policy.
+2. **Diagnostic capture.** HttpSequenceRunner consumes an expiring-write capability
+   instead of constructing the SDK RedisDebugCaptureStore. Keep capture selection,
+   keys and payload with HttpSequenceRunner. Preserve encoding, expiry and best-effort
+   failure behavior. This diagnostic capture is distinct from WorkPlane debug taps.
+3. **Dataset input and output.** Move Redis operations into the adapter and reuse
+   neutral Work transport contracts. If input extraction needs an update view,
+   expose only immutable adapter-facing values, not the complete runtime snapshot
+   or WorkerDefinition. Dataset selection and output target rules each retain their
+   existing canonical owner; SDK composition delegates through the new API.
+4. **Token storage and sequences.** Move Redis implementations behind TokenStore
+   and SequenceAccess, preserving atomic claims, expiry, increment/reset and errors.
+   Inject sequence access explicitly and remove hidden global client configuration.
+   OAuth refresh policy and token-key identity remain with their auth owners.
+5. **Atomic cutover and closure.** All five paths use the adapter before the PR
+   merges. Delete replaced implementations and client constructors/helpers; remove
+   SDK/templating Lettuce import exceptions. No production Lettuce imports remain
+   outside redis-adapter, and there is only one settings-to-connection implementation.
+   Do not publish a partially migrated consumer as a completed SSOT transfer.
 
-Evidence:
-- `RedisDataSetWorkInput.LettuceRedisClientFactory.buildUri`, `RedisPushSupport.LettuceRedisWriterFactory`,
-  `RedisTokenStore` constructor and `RedisSequenceGenerator` constructor repeat connection-to-client realization.
-- `WorkInput.update` takes `WorkerControlPlaneRuntime.WorkerStateSnapshot`; `WorkOutput.publish` and
-  both factory interfaces take WorkerDefinition. Moving adapters wholesale today would depend on SDK runtime.
+Configuration gates use the fields actually present in RedisConnectionSettings:
+non-default host, port, username, password and ssl reach client construction unchanged.
+Database selection is not an existing field and must not be introduced in this
+extraction. Preserve currently effective behavior without adding a database option.
 
-Actions:
-1. Move only adapter-facing contracts needed by these consumers into existing neutral Work API/config
-   owners. Supply an immutable input update projection, dispatch callback and minimal output context.
-   WorkerDefinition's bean/reflection metadata and the mutable state writer stay in runtime. Do not copy
-   all of WorkerStateSnapshot to create another state owner. No new generic plugin/discovery framework.
-2. Absorb redis-config's existing canonical implementation into `common/redis-adapter` with explicit
-   `io.pockethive.redis.api` surface and internal config/client/operations packages. No second parser.
-3. Move Redis input/output implementation, shared push mechanics, token-store implementation and Redis
-   sequence implementation to the owner. Keep token identity/claim contracts in worker-auth and the
-   SequenceAccess contract in templating-api. These ports must not depend on worker-sdk.
-4. Existing worker composition wires adapters to runtime; templating receives SequenceAccess explicitly.
-   Delete replaced implementations/old config artifact after all consumers cut over. No raw Lettuce
-   connection, command object or client callback in public API.
+Failure gates distinguish stages and consumers instead of requiring every failure
+to close the connection. For RedisDebugCaptureStore specifically:
 
-Gate: only redis-adapter imports Lettuce in production; Scenario/worker/update paths consume the same
-settings; actual clients receive identical effective connection fields; list read/write, token claims,
-sequence increment/reset and shutdown preserve current results. Missing adapters fail explicitly.
-Test representative non-default config and runtime operations, not just bean registration.
-The deferred Redis SEL-R1 STOP/update/START race remains a separate behavior decision, not silently fixed.
+- failed connection initialization releases partially created owned resources;
+- an ordinary RuntimeException during an established connection's diagnostic write
+  returns false and retains the connection; do not add close/reconnect or retry;
+- close marks the store closed and attempts connection/client release, preserving
+  existing cleanup-error and interrupt handling; subsequent store calls return false.
 
-### F02 — Local input and worker runtime boundaries
+Record equivalent initialization/operation/shutdown expectations separately for
+input, output, token store and sequences before extraction. Existing differences
+are not permission to unify error policy. If consolidation requires a behavioral
+change, resolve it separately before implementing that part.
 
-Use the neutral adapter contracts from F01. Bring CSV settings + parsing + file reading/cursor execution
-and scheduler settings + input execution under `common/work-local-input` (separate packages/owners),
-absorbing work-local-config. The scheduler/rate policy already in work-config is referenced, not copied.
-Keep generator's message creation in generator-service. Migrate factories and remove SDK copies.
+Use owner tests for non-default settings, operation results and resource lifetime,
+plus affected integration/official-ingress acceptance (DA-1/2/4, token/auth and
+sequence paths as applicable). HTTP Sequence diagnostic-store verification is
+required: successful WorkPlane taps alone do not exercise this Redis path.
+Keep the deferred Redis STOP/update/START race as a separate behavior decision.
 
-Make worker-sdk the execution/state/dispatch owner plus integration composition, not storage, Redis,
-auth refresh or filesystem parsing. Separate composition package from runtime package. Concrete adapter
-factories must not receive the entire WorkerControlPlaneRuntime. Separate worker control transport
-bridges from accepted-state mutation and status projection; one writer per accepted worker state.
+The initial inventory and API review are complete; their implementation and
+verification are recorded in the [Redis extraction report](redis-adapter-extraction.md).
 
-Gate: concrete local inputs build without SDK implementation/Control Plane internals; CSV rotate/EOF,
-rate/cursor updates, scheduler timing/reset and invalid-candidate state preservation retain behavior.
-Rabbit SDK bridges are checked against the same boundary without reopening Rabbit settlement.
+### F03 — Docker/compute
 
-### F03 — Docker technology owner
+Implemented in `3116364c`, after Redis extraction commit `9a12dd50`.
+Ownership is defined by [RESP-DOCKER-RUNTIME](../architecture/runtime-responsibilities.md#resp-docker-runtime).
 
-Extend existing docker-client; do not create another Docker library. Move both client configurations,
-Docker runtime inventory/inspection/removal and compute-adapter construction into it. Public operations
-use neutral specs/results; DockerClient and Docker model types do not escape. Preserve distinct explicit
-compute modes and current connection settings; AUTO selection behavior needs a separately stated decision
-if its current implementations disagree—do not silently introduce a fallback while consolidating.
+- `DockerEngine` owns connection lifetime and compute/runtime construction;
+  `DockerConnections` realizes SDK configuration. Orchestrator and Controller receive
+  `ComputeAdapter` and `ComputeHost`; neither constructs raw SDK clients.
+- `DockerRuntimeClient` owns inventory, inspect, logs and explicit force removal.
+  `DockerInspectMapper` interprets Docker fields and returns manager-sdk's neutral
+  `RuntimeInspection`. Orchestrator retains response construction/redaction and
+  cleanup eligibility, approvals and verified removal postconditions.
+- `DockerControllerEnvironment` owns Docker ENV/socket encoding. `DockerRuntimeNames`
+  replaces all four stack-name formulas used by manager launch, worker launch,
+  controller status and Docker stack labels.
+- The uncalled `DockerWorkloadProvisioner`/`WorkloadProvisioner` path was removed.
+  Existing import restrictions now reject raw Docker SDK and concrete operation
+  implementation imports from both services; legacy E2E keeps its existing exception.
 
-ContainerLifecycleManager/SwarmLifecycleManager retain *when/why* to provision/remove, runtime manifests
-and lifecycle state. Compose through ComputeAdapter and explicit diagnostic ports. The known orphan
-cleanup success defect is recorded in the correctness track; moving this code must not silently change it.
+Preserved behavior: Orchestrator AUTO manager detection, Controller concrete-mode
+selection, connection precedence, lifecycle stop/remove and service-drain policy,
+force-removal exceptions, inspect aliases/nulls/redaction and historical RW diagnostic
+calculation. Naming still yields `ph-` plus the lowercased swarm ID; caller-side
+trimming remains unchanged. No ACK, retry, cleanup approval or lifecycle timing change.
+
+Verification on 2026-09-23: **186 tests passed, zero failures/errors/skips** across
+focused Docker/runtime/lifecycle/environment/architecture tests and the existing
+Orchestrator creation and Controller lifecycle integration tests (four integration
+cases). All affected reactor modules compiled, including tests. Commands:
+
+```sh
+mvn -q -pl orchestrator-service,swarm-controller-service -am test -Dtest=Docker*Test,Runtime*Test,ContainerLifecycleManagerTest,SwarmLifecycleManagerTest,SwarmWorkerSpecFactoryTest,SwarmControllerRuntimeMetadataTest,ControlPlaneContainerEnvironmentFactoryTest,RepositoryImportBoundaryTest -Dsurefire.failIfNoSpecifiedTests=false
+mvn -q -pl orchestrator-service,swarm-controller-service -am test -Dtest=DockerSingleNodeComputeAdapterTest,DockerSwarmServiceComputeAdapterTest,RepositoryImportBoundaryTest,SwarmCreationMock1E2ETest,SwarmLifecycleManagerIntegrationTest -Dsurefire.failIfNoSpecifiedTests=false
+```
+
+Counts include each final test case once across both runs. Adapter effects are verified
+against Docker command doubles; component integrations exercise service wiring and
+control-plane collaboration. No fresh deployed Docker/Swarm acceptance was run for
+F03. Separate source review on 2026-09-23 found no actionable issues in the complete
+change set, including connection/compute composition, naming, diagnostics and removal.
+All six review passes were recorded in HiveMind; deployed acceptance was not rerun.
+
+The startup audit findings assigned to F04/F05 were subsequently implemented.
+F08 observation/freshness work remains open and was not part of F03.
 
 Gate: raw Docker imports allowed only in docker-client/test fixtures; both services use the same client
-construction owner. Removal-result semantics retain the separately approved contract. Keep HiveGate approval
-at its existing boundary; no new approval flow and no live governed cleanup during this refactor.
+construction owner. Removal-result semantics retain the separately approved contract. Keep explicit human approval
+at the caller boundary; no new approval flow and no live cleanup during this refactor.
 
-### F04 — Journal/storage paths and queries
+### F04 — Runtime filesystem and journal
 
-Extend RuntimeFilesystemLayout with canonical journal artifact projection; both writer and reader use it.
-`SwarmJournalController.readJournalEntries` currently uses `swarmRoot().resolve(runId).resolve("journal.ndjson")`,
-while FileSwarmJournal uses swarmRunDirectory then repeats the leaf. Remove local path/sanitizer rules.
+**First F04 slice reviewed and committed** as `a651d468`, branch `codex/journal-filesystem`,
+based on `7c6c402d` after all four PR #521 CI checks passed. The complete file-read
+path now leaves REST through SwarmFileJournalQuery → SwarmJournalFiles →
+FileSwarmJournalReader. RuntimeFilesystemLayout owns the journal artifact path
+used by both reader and writer.
+See `RESP-SWARM-FILE-JOURNAL` in the runtime responsibility records for the preserved
+selection/error behavior and the remaining ownership debt.
 
-Create a journal API owner for append/query/run metadata/retention; extend existing journal-postgres for
-SQL implementation and keep a file implementation behind the corresponding ports. Move SQL/file access
-out of JournalController and SwarmJournalController. CP and swarm journal events remain distinct projections
-of their domain owners; do not merge their event state machines or make one global writer for all journals.
+Pre-extraction baseline: FileSwarmJournal and SwarmJournalController both owned
+`journal.ndjson`; the reader also reconstructed the run directory.
 
-Gate: writer/reader/export/delete agree on paths and record contracts; HTTP only maps requests/results;
-invalid IDs are handled through one layout contract; retention/pinning are not separately mutated in REST.
+Validation: 45 tests passed, zero failures/errors/skips, including file read/write,
+run selection, HTTP mapping, removal isolation, Postgres storage/pinning, authorization
+and RepositoryImportBoundaryTest. Test log: `/tmp/ph-f04-tests.log` (local evidence).
+No deployed E2E was repeated for this slice. Invalid file-query run identifiers now
+follow the existing layout validation; no new HTTP response contract was introduced.
 
-### F05 — ClickHouse mechanics under the existing sink module
+**Event reads implemented and reviewed in `1aa5e3d1`:** Hive/swarm/live/archive event SELECTs,
+row mapping and cursor construction now use JournalEventQueries in journal-postgres.
+SwarmJournalRunSelector is the sole explicit/active/observed run selector for file
+and stored reads, including pinning. SwarmStoredJournalQuery retains archive
+precedence and registry-aware empty/absent results. JournalPageResponse and its
+cursor moved to the shared API with unchanged JSON fields; the old DTO was removed.
+See RESP-JOURNAL-EVENT-QUERIES; no wire or write-policy change.
 
-Move transaction sink transport into sink-clickhouse. Consolidate the repeated INSERT URI, HTTP auth,
-client construction and response handling shared with metrics sink. Keep TxOutcomeEvent construction
-with postprocessor and metric sample construction with observability. Different buffering/flush/failure
-policies are not interchangeable defaults: retain them as explicit separate policies in the owner.
+Validation: 58 tests passed, zero failures/errors/skips, including real PostgreSQL
+live/archive paging with equal timestamps, filters, mapping, storage lookup failures,
+run selection, authorization, prior file behavior and import boundaries.
+Command: `./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with the focused journal/filesystem/auth/import test selection; local log
+`/tmp/ph-f04-sql-tests.log`. No deployed E2E or full reactor repeat in this slice.
 
-Gate: no ClickHouse query/credential/URL construction in postprocessor or other consumers; use metrics
-and transaction fixtures to assert exact wire requests and queue/full/flush-failure behavior. Existing
-vendor-import checks alone are insufficient for JDK HTTP implementations.
+**Run lists implemented and reviewed in `1aa5e3d1`:** list SQL, summary/tag mapping and live/pinned
+merge now use JournalRunQueries; ordering/filter/limit semantics are preserved. The
+metadata update response uses the same summary reader. See RESP-JOURNAL-RUN-QUERIES.
 
-### F06 — Worker auth and rendering
+Validation: 69 focused tests passed, zero failures/errors/skips, including real
+PostgreSQL run merging, swarm isolation, afterTs aggregation, null-date ordering,
+metadata-only summaries, prior event/file behavior and import boundaries.
+Log: `/tmp/ph-f04-runs-tests.log`. No deployed E2E or full-suite run.
 
-Extract worker auth profile parsing/validation and runtime auth coordination from SDK into a named
-worker-auth owner. Split product identity/grants from SUT auth contracts now mixed in auth-contracts;
-move packages with all callers, without old namespace aliases. Share refreshable-type/storage rules
-currently repeated in AuthRuntime.validateProfile and ScenarioBundleValidator.validateAuthProfileStorage.
-AuthTokenKeys remains the sole token-key owner; Redis implements TokenStore through F01.
+**F04 implementation complete and reviewed:**
+metadata registration/operator edits, capture/pinning and retention now use the
+separate ports and adapters in RESP-JOURNAL-WRITES. REST contains no journal SQL,
+archive outcome construction or nested request/response records. Lifecycle startup
+projects template metadata through JournalRunRegistration; the scheduled trigger
+calls JournalRetention. Removed JournalRunMetadataWriter/JournalPartitionManager
+and their SQL implementations from Orchestrator. One shared adapter owns each write.
 
-Rendering stays in templating behind templating-api. Request-template parsing stays where already
-consolidated. TemplateLoader may translate canonical auth failures; its existing `worker.sdk.auth`
-import is a type housed in auth-contracts, not proof of a runtime SDK dependency.
+Existing BufferedPostgresJournalWriter still owns event INSERT/buffering for the
+separate Hive/swarm producer contracts. File append/read/remove paths use the shared
+RuntimeFilesystemLayout; the completed exporter-directory fix was not reopened.
+All existing policies, mode defaults, HTTP payloads and nontransactional statement
+ordering remain unchanged. No database/schema or migration change.
 
-Gate: same profile gives the same diagnostics before authoring/execution effects; refresh/claim/token
-identity and rendering behavior preserved; loading templates cannot start a Redis client implicitly.
+Validation: **111 tests, zero failures/errors/skips**, including real PostgreSQL
+metadata registration/edit/clearing/ambiguity, all pin modes and repeat/conflict,
+retention cutoffs and pinned archive survival, HTTP error/authorization mapping,
+producer append/durable behavior, file queries/removal, run/cursor projections,
+ContainerLifecycleManager and RepositoryImportBoundaryTest. Command:
+`./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service -am test`
+with `-Dtest='*Journal*Test,PinModeTest,RuntimeFilesystemLayoutTest,FilesystemSwarmRemoveStoreTest,RepositoryImportBoundaryTest,OrchestratorAdminAuthTest,ContainerLifecycleManagerTest'`
+and `-Dsurefire.failIfNoSpecifiedTests=false`.
+Log: `/tmp/ph-f04-complete-tests.log`. Full reactor/deployed E2E not repeated.
+Final whole-F04 review: no blocking findings. Full Orchestrator/Swarm Controller
+and dependency tests passed with `AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl`:
+1806 tests, 1802 passed, 4 skipped for missing explicit Redis fixture configuration,
+zero failures/errors. Log: `/tmp/ph-f04-review-configured-tests.log`.
+No deployed stack/Swarm E2E was repeated.
 
-### F07 — Service contracts and UI projections
+Gate: read/write/export/delete use identical resolved paths; invalid identifiers
+follow one owner contract; REST maps requests and delegates; retention has one writer.
+Do not reopen the completed exporter-directory fix.
 
-Consolidate the identical metadata resolver currently in SwarmController and
-OrchestratorEndpointAuthorization (O6): both must consume one resolution of bundle/folder metadata,
-with existing grant checks preserved. Consolidate ClickHouse ENV export in F05. For O8 HTTP timeouts,
-move existing policy first; rejection of previously defaulted invalid settings requires a separate
-correctness decision.
+### F05 — ClickHouse
 
-Move runtime request/response and variables response ownership from ScenarioManagerClient's nested
-copies to canonical Scenario service contracts, reused or generated for clients. Verify product MCP
-and network-profile clients against the same producer contracts; do not extract unrelated domain models
-into a universal DTO bag. Service URL construction remains with each owning client, not individual callers.
+**F05 implementation, verification and separate review complete** on `codex/journal-filesystem`, after
+F04 commit `1aa5e3d1`. Ownership is recorded in RESP-CLICKHOUSE-INSERT and
+RESP-CLICKHOUSE-ENVIRONMENT in the runtime responsibility records.
 
-UI consumes exact network/lifecycle values and server-projected effective permissions/capabilities.
-Remove independent normalizeMode-to-DIRECT and grant/scope implementations once replaced. Repair delivery
-of canonical referenced schemas to UI; do not copy `$defs` manually or disable validation.
-This bootstrap subtask is implemented and browser-verified on 2026-09-14 (Rabbit plan latest verification);
-do not repeat it when executing the rest of F07.
+- `ClickHouseJsonEachRowTransport` owns HTTP client construction, INSERT URI,
+  UTF-8 JSONEachRow framing, authentication, timeout use and HTTP success checking.
+  Both sinks consume a prepared `ClickHouseInsert`; the old HTTP implementations
+  are deleted. Existing properties expose a read-only connection view without a
+  second configuration/defaults owner.
+- `ClickHouseSinkEnvironment` replaces transaction ENV mapping in
+  ContainerLifecycleManager and SwarmWorkerSpecFactory. Existing keys (including
+  blank/null) retain precedence. `ClickHouseMetricsEnvironment` replaces both
+  copies of metrics fields in ControlPlaneContainerEnvironmentFactory, preserving
+  runtime/controller prefixes and metrics overwrite semantics.
+- Bootstrap slice: service YAML no longer repeats ClickHouse defaults or ENV
+  aliases. Existing property classes remain the only defaults/validation owners.
+  Spring's `@Name("clickhouse")` fixes constructor binding for nested metrics;
+  Controller metrics settings are extracted into their own implementation unit.
+  Full service binding tests cover the original ENV names, all settings, source
+  precedence, omitted defaults and rejected invalid metrics configuration.
+- Metrics and transaction event construction, their separate clocks, buffering,
+  validation/clamping, requeue and shutdown behavior remain with their existing
+  policy owners. Tests verify full buffers, partial flush failures, invalid URI
+  preparation before draining, failure diagnostics and exact requests.
+- The existing import gate now forbids JDK HTTP clients in postprocessor production
+  code. Repository searches found no other Java production JSONEachRow request or
+  ClickHouse ENV field builder outside `sink-clickhouse`. Historical storage tools
+  and deployment config are not runtime consumers of this Java API.
 
-Gate: generated/shared contracts have a drift check; invalid values produce explicit diagnostics; actual
-browser login → schema load → owner-projected STOMP subscription → status update is covered. Existing
-39-scenario E2E green is insufficient for this browser path. No broad security hardening is included.
+Verification (2026-09-23): affected reactor
+`AUTH_OPENSSL_TEST_EXECUTABLE=/usr/bin/openssl ./mvnw -B -ntp -pl orchestrator-service,swarm-controller-service,postprocessor-service -am test`
+passed: **1853 tests, 1849 passed, 4 skipped, no failures/errors**
+(`/tmp/ph-f05-bootstrap-reactor-final.log`). Skips are the existing externally
+configured Redis fixtures. Transport/sink behavior, both launch consumers, full
+service binding and RepositoryImportBoundaryTest ran. The 17 bootstrap tests also
+passed separately (`/tmp/ph-f05-bootstrap-binding.log`). The earlier YAML-removal
+failure was traced to constructor `clickHouse` being bound as `click-house`;
+`@Name("clickhouse")` now preserves the canonical property path without aliases.
+Deployed acceptance: rebuilt the local stack from this worktree through
+`COMPOSE_PROJECT_NAME=pockethive-redis ./build-hive.sh --quick` (existing data kept;
+no swarms were active). `./run-acceptance-tests.sh
+acceptance-tests/targets/local-tx-outcome-artemis.properties tx-outcome` passed
+DA-3 on Artemis through the public ingress/Grafana: no rows with sink NONE,
+then matching trace/call IDs, status, success and duration after enabling
+CLICKHOUSE_V2 by config-update. The normal stop/remove lifecycle completed and
+public list-swarms returned empty. Evidence:
+`acceptance-tests/runs/tx-outcome-a51fa251-47dd-4d43-a4c0-c462cac25bc3/`;
+logs `/tmp/ph-f05-local-deploy.log` and `/tmp/ph-f05-da3.log`.
+The acceptance invocation ran 388 tests including dependencies/framework tests
+and one deployed DA-3, all passing. No remote Swarm or Rabbit deployment repeated.
+Final separate whole-F05 review: no actionable findings. 115 focused tests passed,
+zero failures/errors/skips (`/tmp/ph-f05-complete-review.log`). Review traced both
+sink paths, startup/launch ENV precedence and repository-wide alternative owners;
+checked the existing DA-3 artifacts without repeating deployment. Ready for commit.
 
-### F08 — Readiness, status and lifecycle facts
+Gate: no consumer builds ClickHouse URLs/queries/credentials; exact requests and
+queue-full/flush-error behavior covered; DA-3 still proves persisted outcomes.
+Vendor-import restrictions alone cannot detect duplicated JDK HTTP implementations.
 
-SwarmReadinessTracker checks heartbeat age against STATUS_TTL_MS; SwarmWorkerStatusHandler constructs
-SwarmWorkersAggregator with a separate 15,000ms stale threshold and the latter calculates stale itself.
-Define one worker presence/freshness owner with clock/threshold and have readiness/status consume its
-projection. Define intentionally distinct concepts explicitly if readiness and display truly need them;
-do not merely force numbers equal. This decision must precede changing behavior.
+### F02 / F06 / F07 / F09 — selected follow-up slices
 
-Separate lifecycle command coordination, infrastructure effects and outcome construction inside services.
-Keep existing operation chronology/idempotency/wire contracts; preserve roles of manager-sdk's ScenarioEngine
-and service convergence handlers. A coordinator and its delegating service bridge are not automatically
-competing owners (e.g. inspect BufferGuard delegation before deleting either class).
+Current work: `codex/worker-inputs`, based on F04/F05 commit `2d763660` (PR #522).
+User selected smaller follow-ups before F06: F02, then bounded F07/F09 changes;
+F08 state semantics require separate decisions. No F06 auth code was changed.
 
-Gate: an identical heartbeat/clock yields consistent freshness facts; duplicate/stale events do not create
-another writer; terminal success comes from canonical postconditions. State ownership, not class count,
-is the acceptance criterion.
+**F02 selected extraction implemented and reviewed.**
+`common/work-local` now owns CSV loading/formatting/cursor (`CsvDatasetCursor`),
+scheduler rate quota (`RateSchedulePolicy`) and runtime rate/max/reset projection,
+finite-run count and derived diagnostics (`SchedulerRunState`). Canonical settings
+and field parsers retain their existing owners. The old SDK implementations are
+removed; SDK keeps worker lifecycle, scheduling clock, snapshot projection, seed
+metadata and dispatch. CSV intake pacing remains in the SDK coordinator; its
+interval-scaled arithmetic is distinct from the scheduler's existing per-tick quota.
+No timing reinterpretation, ACK or wire change is included.
 
-### F09 — Service-local functional boundaries and residual consumers
+Repository tracing found no implementations or callers of WorkInput.update(snapshot).
+That unused method was removed; WorkInput retains only lifecycle methods. Factory
+WorkerDefinition arguments stay inside SDK composition and are not needed by the
+extracted owners. No unused neutral interface or compatibility copy was added.
 
-Scenario Manager path review is recorded in
-[the 2026-09-14 report](../architecture/scenario-manager-code-path-review-2026-09-14.md).
-Its agreed follow-up separates correctness fixes from behavior-preserving extraction, and is
-outside the Rabbit plan. S6/S7/S5 cover bundle export/layout/authoring metadata; S4 and S8 belong
-to F06/F07. Findings remain open while the service-by-service review continues.
+The CSV review P3 is corrected: documentation states the caller's serialization
+requirement, without claiming stop waits for an in-flight tick. Runtime behavior
+was not changed for that finding.
 
-For processor, move HTTP pool/TLS/client construction out of ProcessorWorkerImpl into its infrastructure
-owner; keep protocol dispatch, envelope/result contract and transport implementation distinct. Compare
-HttpProtocolHandler and http-sequence ApacheHttpCallExecutor before sharing mechanics: a shared HTTP library
-alone does not prove duplicated behavior. Auth-client, Toxiproxy client and SUT request execution remain
-separate functional clients even though all use HTTP.
+Verification: clean affected reactor through worker-sdk and trigger-service,
+83 selected tests, zero failures/errors/skips (`/tmp/ph-f02-local-inputs-clean.log`).
+Coverage includes CSV format/charset/EOF/rotation/reload, rejected settings,
+fractional quota, finite/unlimited/long limits, reset, disabled/re-enabled state,
+seed/dispatch/result failures, trigger behavior, other existing inputs and the
+repository import gate. Separate previous CSV review ran 30 tests successfully
+(`/tmp/ph-f02-csv-review.log`). Separate complete F02 review found no actionable
+issues; its fresh 83 tests passed (`/tmp/ph-f02-scheduler-review.log`). No full
+reactor or deployed E2E repeated.
 
-Preserve and enforce existing DbStatementExecutor and ClearingExportSink seams; don't create a generic SQL
-or filesystem module joining journal persistence, test queries and business exports. Keep request-builder
-assembly, generator message creation, moderator policy, trigger work and postprocessor outcome construction
-in their own services. Inspect API signatures and alternative owners per service before claiming closure.
+- **F02 local input/SDK:** CSV and scheduler execution behind minimal input
+  contracts; preserve cursor/EOF/rotation/rate/reset semantics. SDK keeps execution,
+  admission and accepted-state ownership, with composition separated from mechanics.
+- **F06 worker auth/rendering:** revalidate current signed/ordinary OAuth flows,
+  authoring versus effective-value validation and token coordination after PR #517.
+  Extract only confirmed ownership leaks. Keep product login separate from SUT auth;
+  keep rendering in templating and SequenceAccess in templating-api.
+- **F07 service contracts/UI:** identify producer-owned contracts and independent
+  policy copies. Share/generate contracts where appropriate; UI consumes owner
+  projections. Do not invent a universal DTO module or replace intentional boundary
+  validation merely because similar field names occur in two services.
+- **F09 service-local boundaries:** re-trace Scenario Manager, processor HTTP,
+  MCP and TCP mock entrypoints. Preserve useful existing local ports, including
+  DbStatementExecutor and ClearingExportSink. HTTP-library reuse alone is not
+  evidence that unrelated functional clients should share an owner.
 
-Concrete residual consumer work:
-- MCP: lifecycle/cleanup tools already forward through OwnerApiPort and bundle validation calls Scenario's
-  owner port. Preserve that. SwarmReadinessObserver.status/Status.ready counts non-stale workers and combines
-  READY/STOPPED/startupReady locally. Establish a canonical readiness result or shared predicate with the
-  owner; first specify whether this is startup readiness or readiness to run, rather than assuming all
-  uses of “ready” are the same. Keep upload tickets/QA workflow state separate from Scenario domain state.
-- TCP mock: MessageTypeRegistry holds mappings and delegates scenario state to StateManager/ScenarioManager;
-  RequestStore records observations. UnifiedTcpRequestHandler also coordinates validation, latency, metrics
-  and recording. Move that pipeline behind a request-execution capability, leaving Netty framing/dispatch
-  in the handler. MessageMappingController.removeMapping performs memory + file deletion while AdminController
-  performs memory-only deletion; both swallow all exceptions. Define these as explicit operations in one
-  mapping application service, preserve their documented difference if intentional, and use one failure
-  contract. Do not assume endpoint names authorize changing persistence behavior.
-- Existing debug-tool/E2E broker naming remains its separately selected replacement slice; this analysis
-  does not authorize unrelated test-harness rewrites. Map fixture lifecycle and cleanup through product APIs
-  when that slice is selected.
+### F07 — first producer-contract slice
 
-Gate: MCP tool handlers return owner results for domain facts; TCP REST/Netty boundaries delegate to
-mapping/execution owners, with tests for persistence effects, scenario transition and response framing.
-These inspected paths are evidence for the plan, not blanket acceptance of all 123 MCP or 62 mock classes.
+**Implemented and reviewed; committed in `02b97665`.** Base: F02 commit `b0f92340`.
+Re-tracing confirmed exact copies of RuntimeRequest,
+ScenarioRuntimeResponse and VariablesResolveResponse in Scenario Manager and its
+Orchestrator client. Producer-owned records now live in `common/scenario-api`,
+consumed by both boundaries; all local wire copies are removed. Endpoint paths,
+JSON fields, null handling, required runtimeDir checks and auth/error behavior
+are preserved.
 
-## How the boundaries become enforceable
+Template metadata and ScenarioPlan are deliberate partial views, not evidence for
+merging the full authoring model into Orchestrator. The redundant intermediate
+template response record is removed; the existing application projection is decoded directly;
+unknown-field tolerance remains local to that projection. ResolvedVariables remains
+a named local normalized view of the shared wire response. UI grant/network-mode
+policies and broader scenario model sharing remain outside this first slice.
 
-1. **API dependency direction first:** core/contracts cannot depend on runtime, concrete clients or
-   composition. Adapters implement contract ports; composition depends on both. Minimal projections
-   replace signatures exposing entire runtime objects. No parallel mutable configuration model.
-2. **Actual encapsulation:** implementation types package-private where feasible; explicit `.api`
-   surface and restricted internal imports where cross-package implementation needs public visibility.
-   No public raw clients, arbitrary client callbacks or alternative constructors recreating defaults.
-3. **Build restrictions updated with each move:** extend existing Maven Enforcer/import boundary test,
-   remove worker-sdk/templating from Redis and both services from Docker allowlists on cutover. Keep
-   core transitive restrictions. No new competing source-scan framework. Import checks are guardrails,
-   not semantic proof; review HTTP/SQL/string construction against owner API too.
-4. **One configuration path:** declaration → owner parser → accepted immutable settings → owner execution
-   and projections. Scenario/ENV/property bindings call that owner. Validate candidate before effects;
-   rejected updates leave accepted state intact. Shared constants without shared behavior do not suffice.
-5. **Behavior evidence:** narrow owner tests with real edge cases, consumer integration through public
-   contracts, relevant official-ingress E2E, browser checks where needed. Preserve explicit errors and
-   existing ACK semantics. Do not repeat the whole test suite for documentation-only changes.
-6. **Closure review:** trace at least one create/use/observe/remove or parse/apply/read path end to end;
-   search the repository for alternative owners; delete old callers/helpers; verify restrictions now reject
-   the former bypass. A slice with two active owners is unfinished, even if its new module tests pass.
+Verification: affected reactor through Scenario Manager and Orchestrator compiled
+cleanly after the moves. Final 112 selected tests passed, zero failures/errors/skips
+(`/tmp/ph-f07-scenario-contract-final.log`; clean build:
+`/tmp/ph-f07-scenario-contract-clean.log`). Tests consume serialized producer-contract
+values through the actual HTTP client and cover request fields, nested variables,
+warnings, request context, existing empty-collection projection, rejected null
+metadata/missing runtime directory, HTTP errors and auth retry. Existing producer
+controller/variables/materializer suites and the repository import gate also pass.
+Separate F07 review found no actionable findings and reran 112 tests successfully
+(`/tmp/ph-f07-review.log`). No deployed acceptance or full repository reactor was repeated.
 
-## Suggested order within a separately selected refactor PR
+### F09 — processor pacing slice
 
-O1/O2 are implemented in the separate correctness track and await review. When the Redis refactor is selected,
-start F01 with the Redis connection/operations inventory and the *minimal* adapter-facing contract cut.
-It has four concrete client-construction sites and already consolidated configuration to reuse.
-Do not start the broad worker-runtime rewrite first. Finish Redis consumers and restrictions before claiming
-Redis complete. F03/F05 are independent later technology transfers; F04/F07/F08 require their own domain
-contract work. This plan does not authorize deploying, committing or silently resolving behavior disagreements.
+**Implemented and reviewed; committed in `476f8dc5`.** Base: F07 commit `02b97665`.
+Re-tracing confirmed duplicate ownership:
+HttpProtocolHandler, TcpProtocolHandler and Iso8583ProtocolHandler each implement
+applyExecutionMode against the same per-worker AtomicLong. All three callers now
+use one ProcessorPacer owning both state and waiting; the old methods and externally
+writable counter are removed. First-call delay, shared slots, rate/mode updates,
+interruption and reported pacing duration are preserved. Configuration stays
+with ProcessorWorkerConfig. See RESP-PROCESSOR-PACING for exact semantics.
 
-Plan review: owner/cutover/deletion/gates specified; no new libraries required; boundaries and behavior
-constraints preserved. Security scope remains existing contracts, with indirect CP ENV limitation accepted.
-Maintainability goal is fewer active authorities and smaller public APIs, not fewer lines or more artifacts.
+This is a local processor responsibility, not a universal rate limiter. Moderator
+shaping and scheduler quotas differ and remain separate. HTTP client ownership,
+TCP transport mechanics and the selected TCP mock boundaries were subsequently
+completed below. Scenario Manager/MCP and the explicitly deferred transport lifecycle
+repairs remain open. No TLS/security or ACK behavior change.
+
+All constructor call sites were traced: the worker supplies the same non-null
+pacer to all handlers, and the existing HTTP test supplies its own pacer. Old
+AtomicLong constructors are removed rather than retained as compatibility paths;
+handlers cannot create private schedules when a dependency is absent. Production
+uses System.nanoTime/Thread.sleep; a package-private clock/wait seam permits
+behavior tests without real delays. No new dependency or import exemption is needed.
+
+Verification: **67 tests passed, zero failures/errors/skips**, including all 64
+processor tests and 3 repository import tests (`/tmp/ph-f09-processor-pacing.log`).
+The 11 pacing cases cover initial/queued/idle reservations, mode/rate updates,
+fractional waits and reported durations, interruption, concurrent reservations and
+per-worker isolation. Existing HTTP/TCP/ISO8583 result/error and logging/security
+tests passed. Separate pacing review reran 67 tests successfully
+(`/tmp/ph-f09-pacing-review.log`) with no actionable findings. No full repository
+reactor or deployed E2E was repeated.
+
+### F09 — processor HTTP client slice
+
+**Implemented and reviewed; committed in `f6e55c31`.** Base: pacing commit `476f8dc5`.
+ApacheProcessorHttpClient now owns HTTP pool/TLS client construction, selection and
+status capacity behind ProcessorHttpClient. ProcessorConfiguration injects that API;
+WorkerImpl no longer imports Apache clients or constructs them, and the handler no
+longer selects a client. Old raw-client constructors and helpers are removed.
+Request/response callbacks remain on the same Apache execution path. Architecture
+owner: RESP-PROCESSOR-HTTP-CLIENT.
+
+No generic cross-service HTTP framework, configuration/default changes, new shutdown
+hooks or TLS/ACK changes. HTTP Sequence ownership and TCP transport lifetime remain
+separate. TLS acceptance/rejection is tested through the real owner, reflective
+proxy checks are replaced by actual proxy requests, and processor response/error
+coverage is retained through the port. The API is intentionally local and Apache
+HTTP-specific; it accepts a response decoder but does not expose raw clients.
+
+Verification: **88 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-processor-http-final.log`). This includes 23 owner cases for request/
+response effects, decoder errors, GLOBAL/PER_THREAD/NONE and keepAlive precedence,
+thread isolation, configured capacity, verified/unverified TLS and actual system
+proxy routing. Existing processor/pacing/transport/security suites plus the 3 import
+checks pass. Worker status consumes the owner's capacity projection. No new module,
+artifact dependency or import exemption was introduced; this local package boundary
+is documented and reviewed in source, not enforced by a new scanner.
+Separate HTTP review reran 88 tests successfully (`/tmp/ph-f09-http-review.log`)
+with no actionable findings. No full repository reactor or deployed E2E was repeated.
+This does not close F09.
+
+### F09 — TCP/ISO8583 runtime slice
+
+**Implemented and reviewed; committed in `a29bae54`.** Base: HTTP commit `f6e55c31`.
+TcpTransportRuntime owns configuration/reload and selection, TcpPerThreadTransports
+owns each generation's lazy per-thread resources, and TcpTransportLease owns scoped
+release. Both handlers delegate through this API with separate runtime instances.
+Retry/result scopes and existing update/close order are preserved. The unused
+TcpTransportPool and string/global-pool factory helpers are removed after repository
+caller search; the remaining factory is package-private. See RESP-PROCESSOR-TCP-RUNTIME.
+
+Existing non-atomic replacement, failed-construction state and lack of shutdown
+cleanup are deliberately outside this extraction; no lifecycle repair is implied.
+Socket/NIO/Netty IO implementations, protocol framing and auth remain unchanged.
+The active factory's existing config-based selection/fallback behavior is preserved,
+not expanded or reinterpreted in this extraction.
+
+Verification: **96 tests passed, zero failures/errors/skips**
+(`/tmp/ph-f09-tcp-runtime.log`): 93 processor tests plus 3 repository import checks.
+Eight owner tests exercise request/config propagation, GLOBAL/NONE/PER_THREAD reuse,
+per-thread and protocol isolation, replacement release, close failures, missing
+configuration and caller-controlled retry through one lease. Existing handler and
+real HTTP/TCP/ISO8583 transport tests remain green. The existing ProcessorTest fake
+transport injection fixture was adapted to the new owner; owner tests themselves
+exercise the API without inspecting private state. No new module/dependency/import
+exception or scanner was added. No full repository reactor or deployed E2E repeated.
+This completes the selected pool-mechanics transfer, not all F09 or lifetime repair.
+
+### F08 and separate correctness work
+
+Readiness, freshness, reset, registration, orphan cleanup and lifecycle outcomes
+are domain facts. Define their distinct meanings, writers and postconditions before
+changing them. Do not equate thresholds or merge state machines by convenience.
+[Orchestrator correctness](orchestrator-correctness.md) remains a separate track;
+its historical O1/O2 review status must be checked against current code/evidence
+before selecting further fixes. This refresh does not accept or reopen that work.
+
+Startup audit follow-up for F08: worker status observations write timestamps in both
+SwarmReadinessTracker and SwarmWorkersAggregator, then independently calculate health
+and stale with separate 15s thresholds. Establish one observation/freshness owner
+and derived metrics/worker-list projections in the dedicated state refactor; do not
+change lifecycle timing during F03.
+
+## Required completion evidence for every PR
+
+1. Name the responsibility, existing owners/callers and supported API before edits.
+2. Trace a concrete entrypoint through parse/resolve, effect and readback. Consumers
+   receive resolved values; the owner alone constructs configuration/paths/names.
+3. Cut over every caller in the selected path and delete the replaced code. Make
+   bypasses inaccessible where possible; no raw clients or arbitrary client callbacks.
+4. Tighten existing dependency/import restrictions as ownership transfers. No new
+   source-scanning framework; checks complement review rather than proving semantics.
+5. Verify non-default config, rejected-candidate state preservation and real effects
+   through the appropriate owner/integration/official-ingress tests. Preserve ACK.
+6. Review actual call paths and search the whole repository for competing owners.
+   Record all six required review passes and explicit unverified/deferred scope.
+
+Original plan review (PR #519): that update removed stale prerequisites, preserved existing owners,
+added the omitted Redis capture consumer and split implementation from behavioral
+redesign. That plan-only update changed no production code, public contract, dependencies or deployment.
+F01–F05 and the selected F07/F09 slices were subsequently authorized and implemented.
+Only the current backlog above describes outstanding work.
+
+### F09 — TCP mock notification slice
+
+**Implemented and reviewed; committed in `a5daf11c`.** Base: `a29bae54`.
+Transfer the active global notification feed from NotificationController into
+NotificationService; replace its uncalled per-user implementation and model.
+Repository-wide Java search found no consumers of that old service/model.
+Preserve the existing HTTP contract, retention, ignored persistent flag and
+ID/read behavior; expose detached response projections. See
+RESP-TCP-MOCK-NOTIFICATIONS. No workspace, mapping, mock protocol or security change.
+Verification: all 10 TCP mock tests passed, including 6 feed behavior tests and
+2 controller/JSON tests using the real service (`/tmp/ph-f09-notifications.log`).
+Coverage: creation/order/time, retention, missing/repeated reads, clear without ID
+reset, ignored persistent input, null fields, detached projections and unchanged
+response fields/statuses. Controller tests call Java methods and serialize values;
+they do not claim deployed HTTP/security acceptance. No security config changed.
+The existing repository import gate also passed (3 tests,
+`/tmp/ph-f09-notifications-imports.log`). No deployment or full reactor repeated.
+Later TCP sections close the agreed mock scope; broader F09 remains open.
+
+### F09 — TCP mock workspace slice
+
+**Implemented and reviewed; committed in `08efc686`.** Base: `a5daf11c`.
+Extract the active global catalogue from WorkspaceController into WorkspaceService;
+replace the unused user/member-aware implementation and model. Preserve existing
+upsert/body-ID mismatch, default handling, generated IDs and wire shape. Repository
+Java reference search finds no consumers of the unused implementation. See
+RESP-TCP-MOCK-WORKSPACES. No permissions, persistence or concurrency repair.
+Verification: 21 tests passed with zero failures/errors/skips
+(`/tmp/ph-f09-workspaces.log`): 8 new workspace tests, 10 existing TCP mock tests
+and 3 existing import checks. Tests exercise default creation/protection, generated
+IDs/owner, missing deletion, upsert/path-versus-body-ID behaviour, null fields and
+input/output snapshot isolation. Controller tests use direct calls/serialization,
+not deployed HTTP. No full reactor/deployment was repeated.
+Remaining F07: static/workspace.js repeats default data on load failure and blocks
+default deletion; explicitly defer that existing UI policy duplication instead of
+claiming end-to-end SSOT. Broader F09 remains open.
+
+Workspace review follow-up: the user approved fixing the inherited PUT JSON decode
+failure. Workspace now supports Jackson field binding via a no-argument constructor.
+Two new tests begin with JSON (complete and omitted fields), update through the real
+controller/service and verify stored values, response serialization and isolation.
+Both failed with InvalidDefinitionException before the fix
+(`/tmp/ph-workspace-json-red.log`); all 23 selected tests pass after it
+(`/tmp/ph-workspace-json-green.log`). No new field validation, HTTP fields or
+catalogue policy. These remain mapper/controller tests, not deployed HTTP checks.
+
+### F09 — TCP mock mapping and execution closure
+
+**Implemented, reviewed and integrated into PR #520 through #523.** Extraction
+commits: `7e75105e`, `d45bcc13`, `ebf9b9a5`; persistence/housekeeping: `474912ef`.
+The integration commit is `60c039a5`.
+
+Current ownership:
+- MappingAuthoringParser decodes JSON/YAML; MappingAuthoringService coordinates
+  sequential authoring through the registry. StubMappingConverter owns admin/file
+  conversion and reverse export. HTTP controllers delegate to application owners.
+- MessageTypeRegistry is the sole catalogue mutation owner. MappingPersistence
+  delegates snapshot IO to MappingFileStore; StartupMappingSource delegates fresh
+  initialization to FileBasedMappingLoader. There is no old per-id write path.
+- MappingExecutor serves text, binary and manual execution. TextRequestProcessor,
+  admin services and diagnostic/web projections own their respective boundaries.
+- DocumentationReader and WireMockImporter close their streams. Unused
+  AdvancedTemplateEngine, AdvancedMatcher and PaymentLogicEngine were removed.
+
+See RESP-TCP-MOCK-MAPPING-FILES, RESP-TCP-MOCK-MAPPING-AUTHORING,
+RESP-TCP-MOCK-STUB-CONVERSION and RESP-TCP-MOCK-EXECUTION for canonical contracts.
+Earlier per-file writes, suppressed storage errors and different startup/write roots
+were intermediate behavior, superseded by the approved durability change below.
+They are neither current implementation nor outstanding extraction tasks.
+
+### TCP mock runtime mapping persistence — closed
+
+The runtime retains its complete catalogue at `/app/data/mapping-catalogue.json`.
+Fresh instances initialize from defaults and startup files; an existing snapshot,
+including an empty array, is authoritative. Authoring, admin and imports persist
+through one serialized registry mutation before publishing accepted in-memory state.
+Save failures retain accepted configuration; corrupt saved state fails startup.
+Sequential bulk imports retain earlier successful entries after a later failure.
+
+Catalogue order resolves equal-priority ties and survives edits and restart.
+Replacing an id keeps its position; new ids append. Existing Compose/HiveForge
+mounts retain `/app/data`; one instance owns each data root. Diagnostic counters
+are not guaranteed durable after each request. No legacy per-file migration or
+promotion into PocketHive scenarios is provided.
+
+Mapping clear is durable and does not reset the separate mock scenario state or
+request journals. Scenario-state reset/persistence/null semantics and public nested
+DTO cleanup remain distinct deferred work; they do not reopen mapping persistence.
+
+Final evidence:
+- All 74 TCP tests passed in separate review, including runtime import/edit/delete/
+  empty-state restoration, storage failures and ordered response selection.
+- The ordering regression failed before its fix; eight independent JVM reloads
+  selected the same response after it.
+- Three repository import-boundary tests passed. The module's Mockito subclass
+  maker/reflection accessor also permits the full TCP suite without dynamic attach.
+- After integration into #520: 74 TCP tests and 160 focused input/processor/scenario/
+  import-boundary tests passed. No fresh full-reactor or deployed acceptance claim.
+
+Evidence logs: `/tmp/ph-tcp-order-review.log`, `/tmp/pr520-merge-tcp.log`,
+`/tmp/pr520-merge-tests.log`. Intermediate test counts and superseded implementation
+steps remain in Git history; they are not additional pending work or acceptance gates.

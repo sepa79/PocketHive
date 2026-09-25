@@ -10,6 +10,7 @@
       - state/tcp-mock/data
       - state/tcp-mock/tls-data
       - state/haproxy/runtime
+      - state/auth-service
       - state/pockethive-mcp
     pockethive_swarm_owned_state_dirs:
       - path: state/grafana/data
@@ -28,6 +29,7 @@
       - state/tcp-mock/data
       - state/tcp-mock/tls-data
       - state/haproxy/runtime
+      - state/auth-service
       - state/pockethive-mcp
     pockethive_swarm_owned_state_dirs:
       - path: state/grafana/data
@@ -37,6 +39,39 @@
         owner: "10001"
         group: "10001"
   when: pockethive_profile == "swarm-full"
+
+- name: Read optional proxy placement once for deploy and update
+  ansible.builtin.set_fact:
+    pockethive_haproxy_node: "{{ lookup('env', 'POCKETHIVE_HAPROXY_NODE') }}"
+    pockethive_network_proxy_manager_node: "{{ lookup('env', 'POCKETHIVE_NETWORK_PROXY_MANAGER_NODE') }}"
+
+- name: Require paired distinct proxy placement or scheduler placement
+  ansible.builtin.assert:
+    that:
+      - >-
+        (pockethive_haproxy_node | length == 0 and pockethive_network_proxy_manager_node | length == 0)
+        or (pockethive_haproxy_node | length > 0 and pockethive_network_proxy_manager_node | length > 0
+        and pockethive_haproxy_node != pockethive_network_proxy_manager_node)
+    fail_msg: "Set both POCKETHIVE_HAPROXY_NODE and POCKETHIVE_NETWORK_PROXY_MANAGER_NODE to different Swarm hostnames, or leave both empty for scheduler placement."
+
+- name: Require explicit WorkPlane selection
+  ansible.builtin.assert:
+    that:
+      - pockethive_work_type in ["RABBITMQ", "ARTEMIS"]
+    fail_msg: "POCKETHIVE_WORK_TYPE must explicitly select RABBITMQ or ARTEMIS."
+
+- name: Add shared Artemis state when selected
+  ansible.builtin.set_fact:
+    pockethive_swarm_state_dirs: "{{ pockethive_swarm_state_dirs + ['state/artemis/data'] }}"
+    pockethive_swarm_owned_state_dirs: "{{ pockethive_swarm_owned_state_dirs + [{'path': 'state/artemis/data', 'owner': '1001', 'group': '1001'}] }}"
+  when: pockethive_work_type == "ARTEMIS"
+
+- name: Select explicit Phase 1 DEV authentication
+  ansible.builtin.set_fact:
+    pockethive_phase_one_dev_auth:
+      provider: DEV
+      introspection_credential: pockethive-mcp-local-introspection-secret
+      service_credential: pockethive-mcp-local-service-secret
 
 - name: Require swarm HiveForge runtime environment
   ansible.builtin.assert:
@@ -77,17 +112,16 @@
       - pockethive_version | length > 0
     fail_msg: "POCKETHIVE_VERSION must be set in HiveForge runtime env."
 
-- name: Require explicit PocketHive MCP public identity and secrets
+- name: Require explicit PocketHive MCP public identity
   ansible.builtin.assert:
     that:
-      - pockethive_public_ingress.startswith("https://")
+      - (pockethive_allow_remote_http | string | lower) in ['true', 'false']
+      - pockethive_public_ingress.startswith("https://") or ((pockethive_allow_remote_http | string | lower) == 'true' and pockethive_public_ingress.startswith("http://"))
       - not pockethive_public_ingress.endswith("/")
       - pockethive_public_host | length > 0
       - "'://' not in pockethive_public_host"
       - "'/' not in pockethive_public_host"
-      - pockethive_mcp_introspection_secret | length >= 16
-      - pockethive_mcp_service_secret | length >= 16
-    fail_msg: "PocketHive MCP requires an explicit HTTPS ingress without a trailing slash, its exact Host value, and Auth Service secrets of at least 16 characters."
+    fail_msg: "PocketHive MCP requires POCKETHIVE_ALLOW_REMOTE_HTTP=true or false, an HTTPS ingress (or HTTP with true) without a trailing slash, and its exact Host value."
 
 - name: Require swarm-full dedicated root environment
   ansible.builtin.assert:

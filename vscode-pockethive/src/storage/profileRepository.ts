@@ -1,3 +1,9 @@
+/**
+ * Responsibility: Persist connection profiles, selection and removal through VS Code storage ports.
+ * Must not: Authenticate connections or decide endpoint transport policy.
+ * Contract: RESP-COMPANION-CONNECTION-PROFILE — docs/architecture/runtime-responsibilities.md#resp-companion-connection-profile.
+ */
+import { isEndpointSecurityMode } from '../connection/endpointSecurityPolicy';
 import { ConnectionContractError, McpConnectionProfile, OAuthSessionStore } from '../connection/contracts';
 import { createConnectionProfile } from '../connection/profile';
 
@@ -72,8 +78,7 @@ function decodeProfile(value: unknown): McpConnectionProfile {
   ];
   if (Object.keys(profile).sort().join('|') !== expectedKeys.join('|')
       || profile.authenticationMode !== 'OAUTH_AUTHORIZATION_CODE_PKCE'
-      || (profile.endpointSecurityMode !== 'REMOTE_HTTPS'
-          && profile.endpointSecurityMode !== 'LOCAL_LOOPBACK_HTTP')) {
+      || !isEndpointSecurityMode(profile.endpointSecurityMode)) {
     throw new ConnectionContractError('PROFILE_STORE_CORRUPT', 'PROFILE_STORE_CORRUPT: profile contract mismatch');
   }
   if (typeof profile.id !== 'string' || typeof profile.displayName !== 'string'

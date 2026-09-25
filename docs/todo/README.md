@@ -10,6 +10,8 @@ transport, plugin, and CP repair plans are indexed in `docs/archive/pre-boundary
 ## Architecture and runtime
 
 - `auth-service-followups.md`
+- [Global SUTs, shared mocks and continuous plans (proposed)](global-sut-mocks-spec.md)
+- [Self-contained requirement intake skill and template review (proposed)](pockethive-intake-skills-proposal.md)
 - `network-proxy-followups.md`
 - `scenario-plan-followups.md`
 - `sut-environments-followups.md`

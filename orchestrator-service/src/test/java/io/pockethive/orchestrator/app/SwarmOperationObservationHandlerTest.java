@@ -30,6 +30,8 @@ import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class SwarmOperationObservationHandlerTest {
 
@@ -37,6 +39,7 @@ class SwarmOperationObservationHandlerTest {
   private static final String CONTROLLER = "controller-1";
   private static final String DIGEST = "a".repeat(64);
   private static final Target CONTROLLER_TARGET = new Target("swarm-controller", CONTROLLER);
+  private static final Target CREATE_TARGET = new Target("orchestrator", "orchestrator-1");
 
   private final ObjectMapper mapper = new ObjectMapper().findAndRegisterModules();
   private final SwarmStore store = new SwarmStore();
@@ -57,7 +60,7 @@ class SwarmOperationObservationHandlerTest {
   void readyControllerWithMatchingArtifactCompletesCreate() throws Exception {
     Instant now = Instant.now();
     operations.reserve(
-        SWARM_ID, OperationType.CREATE, CONTROLLER_TARGET,
+        SWARM_ID, OperationType.CREATE, CREATE_TARGET,
         new RuntimeMetadata("template-1", "run-1"),
         "create-corr", "create-idem", now, now.plusSeconds(30));
     operations.markDispatched("create-corr", now.plusMillis(1));
@@ -81,6 +84,48 @@ class SwarmOperationObservationHandlerTest {
           .isEqualTo("event.outcome.swarm-create.swarm-test.orchestrator.orchestrator-1");
       assertThat(event.payload()).isInstanceOf(CommandOutcome.class);
     });
+  }
+
+  @ParameterizedTest
+  @CsvSource({"FAILED,true,controller-1,run-1,template-1,FAILED",
+      "FAILED,false,controller-1,run-1,template-1,DISPATCHED",
+      "PROVISIONING,true,controller-1,run-1,template-1,DISPATCHED",
+      "READY,true,controller-1,run-1,template-1,DISPATCHED",
+      "FAILED,true,old-controller,run-1,template-1,DISPATCHED",
+      "FAILED,true,controller-1,old-run,template-1,DISPATCHED",
+      "FAILED,true,controller-1,run-1,old-template,DISPATCHED",
+      "FAILED,true,controller-1,,template-1,DISPATCHED"})
+  void unreadyObservationFailsCreateOnlyForMatchingFailedStartup(
+      String controllerState, boolean matchingDigest, String instance, String runId,
+      String templateId, OperationState expectedState) throws Exception {
+    Instant now = Instant.now();
+    operations.reserve(SWARM_ID, OperationType.CREATE, CREATE_TARGET,
+        new RuntimeMetadata("template-1", "run-1"),
+        "create-corr", "create-idem", now, now.plusSeconds(30));
+    operations.markDispatched("create-corr", now);
+    var status = mapper.readTree("""
+        {"runtime":{"runId":"%s","templateId":"%s"},"data":{"context":{
+          "startupReady":false,
+          "startupArtifactSha256":"%s",
+          "controllerState":"%s",
+          "workloadState":"UNKNOWN"
+        }}}
+        """.formatted(runId, templateId, matchingDigest ? DIGEST : "b".repeat(64), controllerState));
+    if (runId == null) ((com.fasterxml.jackson.databind.node.ObjectNode) status.path("runtime")).remove("runId");
+
+    handler.handleControllerStatusFull(SWARM_ID, instance, status);
+    handler.handleControllerStatusFull(SWARM_ID, instance, status);
+
+    assertThat(operations.findByCorrelation("create-corr").orElseThrow().state())
+        .isEqualTo(expectedState);
+    assertThat(transport.events).hasSize(expectedState == OperationState.FAILED ? 1 : 0);
+    if (expectedState == OperationState.FAILED) {
+      assertThat(store.find(SWARM_ID)).isPresent();
+      assertThat(operations.activeLifecycle(SWARM_ID)).isEmpty();
+      assertThat(operations.reserve(SWARM_ID, OperationType.REMOVE, CONTROLLER_TARGET,
+          new RuntimeMetadata("template-1", "run-1"), "remove-corr", "remove-idem",
+          now, now.plusSeconds(30)).operation().type()).isEqualTo(OperationType.REMOVE);
+    }
   }
 
   @Test

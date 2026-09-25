@@ -1,5 +1,8 @@
 package io.pockethive.rabbit.work;
 
+import io.pockethive.work.config.WorkDelivery;
+import io.pockethive.work.config.WorkerOutputType;
+
 import io.pockethive.rabbit.api.RabbitMessage;
 import io.pockethive.rabbit.api.RabbitOutputSettings;
 import io.pockethive.rabbit.api.RabbitPublisher;
@@ -25,7 +28,8 @@ public final class RabbitWorkOutput implements WorkOutput {
         this.routingKey = settings.routingKey();
         this.persistent = settings.persistent();
     }
-    @Override public void publish(WorkItem item) {
+    @Override public void publish(WorkItem item, WorkDelivery delivery) {
+        WorkerOutputType.RABBITMQ.requireDelivery(delivery);
         var message = RabbitMessage.json(codec.toJson(item), persistent);
         publisher.send(exchange, routingKey, message);
     }

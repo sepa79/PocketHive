@@ -25,7 +25,8 @@ import org.springframework.stereotype.Component;
 /**
  * Responsibility: Complete CREATE and config-update operations from fresh controller observations.
  * Must not: Consume transport messages, publish status, or handle removal and timeout convergence.
- * Contract: Publish an outcome only after the operation coordinator accepts matching terminal evidence.
+ * Contract: RESP-ORCHESTRATOR-INGRESS — docs/architecture/runtime-responsibilities.md#resp-orchestrator-ingress;
+ * docs/ORCHESTRATOR-REST.md Create swarm. Publish only after the coordinator accepts matching terminal evidence.
  */
 @Component
 public class SwarmOperationObservationHandler {
@@ -75,16 +76,22 @@ public class SwarmOperationObservationHandler {
       return;
     }
     JsonNode context = statusEnvelope.path("data").path("context");
-    if (!context.path("startupReady").asBoolean(false)) {
-      return;
-    }
     String reportedDigest = context.path("startupArtifactSha256").asText(null);
-    String expectedDigest = store.find(swarmId)
+    var registeredSwarm = store.find(swarmId);
+    String expectedDigest = registeredSwarm
         .map(Swarm::startupArtifact)
         .map(reference -> reference.sha256())
         .orElse(null);
     ControllerState controllerState = enumValue(
         ControllerState.class, context.path("controllerState").asText(null), ControllerState.UNKNOWN);
+    boolean failedStartup = controllerState == ControllerState.FAILED
+        && registeredSwarm.map(Swarm::getInstanceId).filter(controllerInstance::equals).isPresent()
+        && operation.runtime().runId().equals(statusEnvelope.path("runtime").path("runId").asText(null))
+        && operation.runtime().templateId().equals(statusEnvelope.path("runtime").path("templateId").asText(null))
+        && expectedDigest != null && expectedDigest.equals(reportedDigest);
+    if (!context.path("startupReady").asBoolean(false) && !failedStartup) {
+      return;
+    }
     boolean ready = controllerState == ControllerState.READY
         && "STOPPED".equals(context.path("workloadState").asText(null))
         && Objects.equals(expectedDigest, reportedDigest);

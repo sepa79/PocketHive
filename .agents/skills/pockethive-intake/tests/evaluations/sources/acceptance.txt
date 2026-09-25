@@ -1,0 +1,7 @@
+Synthetic client acceptance statement for skill qualification only.
+
+For completed payments, p95 processing latency must be strictly less than 250 ms
+over a ten-minute measurement window with at least 1,000 completed payments.
+HTTP acknowledgement is not completed processing. The offered load, measurement
+source and environment are not yet agreed. This statement approves no plan or
+execution, and no measurement has been made.

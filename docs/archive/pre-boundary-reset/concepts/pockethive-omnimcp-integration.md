@@ -7,11 +7,10 @@
 # PocketHive × OmniMCP — Integration Proposal
 
 > **Status: superseded concept.** This proposal describes the removed Node/stdio
-> MCP, bundle-root storage, and pre-HiveGate governance model. It is retained as
+> MCP, bundle-root storage, and an obsolete governance model. It is retained as
 > design history only and must not be used for implementation or configuration.
 > The current PocketHive MCP contract and usage entry point is
-> [`docs/mcp/README.md`](../../../mcp/README.md); governed execution authority belongs
-> to HiveGate.
+> [`docs/mcp/README.md`](../../../mcp/README.md).
 
 ## The idea in one sentence
 

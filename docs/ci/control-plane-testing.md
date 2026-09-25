@@ -61,7 +61,9 @@ Testcontainers PostgreSQL dependency.
 production imports across all repository Maven modules. Its inline table owns these
 source rules; [review rules](../REVIEW_RULES.md#sole-source-scanning-test-exception)
 define the scope and limits. It replaces the former ControlPlane source scanner.
-Maven Surefire supplies the repository root explicitly; no directory guessing is used.
+Maven Surefire supplies the repository root explicitly. Module declarations come from
+the root and nested POMs; traversal is limited to their `src/main/java` trees, so transient
+JVM/build files elsewhere cannot interrupt the scan. No directory guessing is used.
 
 Run through normal root `./mvnw -B -ntp test`, or the focused reactor:
 
@@ -74,5 +76,22 @@ behavior or replace relevant codec, startup, lifecycle or ingress behavior check
 Module ownership/selection is verified by imports/dependencies and source review,
 following [the boundary-verification policy](../REVIEW_RULES.md#boundary-verification-and-test-value).
 
+## New acceptance system
+
+`acceptance-tests` is built independently from the frozen legacy suite. It uses
+Java 21, JUnit 5 and JDK HTTP against official ingress; canonical product contracts
+remain the wire authority. Plain Maven tests verify framework behavior without a
+PocketHive deployment. Live acceptance requires an explicit target file and group.
+No missing-target assumption skips and no automatic legacy execution.
+
+The [framework responsibility records](../architecture/acceptance-tests.md) own the
+implementation boundaries. The [coverage ledger](acceptance-coverage.md) maps current
+requirements to new evidence. The [replacement plan](../inProgress/e2e-test-system.md)
+owns N0–N4, including deletion only after confirmed replacement. This does not alter
+existing control-plane contract tests or authorize direct service-port stack checks.
+
 For worker OAuth fixtures and MCP authoring checks, see
 [Authentication regression tests](auth-testing.md).
+
+For portable intake schema checks, CLI qualification and distributable CI
+artifacts, see [Intake skill checks and artifacts](intake-skill.md).

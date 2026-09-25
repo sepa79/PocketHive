@@ -24,6 +24,11 @@
   </dependencyManagement>
   <dependencies>
     <dependency>
+      <groupId>io.pockethive</groupId>
+      <artifactId>control-plane-filesystem</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
       <groupId>org.springframework.boot</groupId>
       <artifactId>spring-boot-starter</artifactId>
     </dependency>

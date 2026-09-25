@@ -1,0 +1,18 @@
+version: 1
+definitions:
+  - { name: quantity, scope: global, type: int, required: true }
+  - { name: enabled, scope: global, type: bool, required: true }
+  - { name: profileLabel, scope: global, type: string, required: true }
+  - { name: customer, scope: sut, type: string, required: true }
+profiles:
+  - { id: amber, name: Amber }
+  - { id: violet, name: Violet }
+values:
+  global:
+    amber: { quantity: 3, enabled: false, profileLabel: amber-selected }
+    violet: { quantity: 8, enabled: true, profileLabel: violet-selected }
+  sut:
+    amber:
+      acceptance-http: { customer: AMBER-CUSTOMER }
+    violet:
+      acceptance-http: { customer: VIOLET-CUSTOMER }

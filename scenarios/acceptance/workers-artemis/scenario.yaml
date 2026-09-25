@@ -1,0 +1,94 @@
+protocolVersion: "2.0.0"
+id: acceptance-workers-artemis
+name: Acceptance worker contracts (artemis)
+description: Independent runtime history and processor header fixture with both history policies.
+template:
+  image: swarm-controller:latest
+  bees:
+    - role: generator
+      image: generator:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: SCHEDULER
+          scheduler: { ratePerSec: 2.0, maxMessages: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        message:
+          bodyType: HTTP
+          method: POST
+          path: /api/test
+          body: acceptance-worker-probe
+          headers: {}
+      work:
+        out: { out: generated }
+      ports:
+        - { id: out, direction: out }
+    - role: moderator
+      image: moderator:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+        mode: { type: pass-through, ratePerSec: 0.0 }
+      work:
+        in: { in: generated }
+        out: { out: moderated }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: processor
+      image: processor:latest
+      config:
+        enabled: true
+        historyPolicy: LATEST_ONLY
+        baseUrl: "{{ sut.endpoints['default'].baseUrl }}"
+        mode: THREAD_COUNT
+        threadCount: 1
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs:
+          type: ARTEMIS
+          artemis: { persistent: true }
+      work:
+        in: { in: moderated }
+        out: { out: responses }
+      ports:
+        - { id: in, direction: in }
+        - { id: out, direction: out }
+    - role: postprocessor
+      image: postprocessor:latest
+      config:
+        enabled: true
+        historyPolicy: FULL
+        inputs:
+          type: ARTEMIS
+          artemis: { consumerWindowBytes: 0 }
+        outputs: { type: NONE }
+        forwardToOutput: false
+        txOutcomeSinkMode: NONE
+        dropTxOutcomeWithoutCallId: true
+      work:
+        in: { in: responses }
+      ports:
+        - { id: in, direction: in }
+topology:
+  version: 1
+  edges:
+    - id: generation-moderation
+      from: { role: generator, port: out }
+      to: { role: moderator, port: in }
+    - id: moderated-processing
+      from: { role: moderator, port: out }
+      to: { role: processor, port: in }
+    - id: response-consumption
+      from: { role: processor, port: out }
+      to: { role: postprocessor, port: in }
